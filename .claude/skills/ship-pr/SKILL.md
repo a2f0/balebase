@@ -38,6 +38,18 @@ repo's git hooks reinstalled. That cleanup belongs to `squash-merge`, which runs
 it only after GitHub confirms the PR is `MERGED` and that the base branch
 actually contains the merge commit; the final checkout reset belongs to `reset`.
 
+## Compact output and trusted preflight
+
+README.md documents `bun run agent:run` for ordinary development commands.
+That shortcut executes a feature-checkout dependency and must not run in this
+workflow's credential-bearing orchestration shell. Keep the trusted-base
+`runPreflight` invocation below: the public capture package does not replace its
+sandbox, commit-signature checks, or reviewed head/base gates. The trusted-base
+policy currently precludes wrapping that invocation with an external installed
+harness. If an outer caller saves its output, retain the exact exit status and a
+private complete log; inspect bounded failure excerpts and required warnings or
+artifacts. Keep review findings and the complete verdict directly visible.
+
 ## Arguments
 
 - First argument (optional): the conventional-commit title (`type(scope): …`,
