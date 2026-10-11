@@ -1,8 +1,15 @@
 # Dependency upgrades
 
-Bun 1.4.2 owns `bun.lock`. Node.js must be at least 22.22.1 for lint-staged;
-CI installs Node.js 24.21.0. Preserve exact direct dependency pins and keep
-React, React DOM, their types, and the UI peer versions aligned.
+Read the runtime pins from [`.mise.toml`](../.mise.toml), `packageManager` and
+`engines` in [`package.json`](../package.json), and CI. Bun owns `bun.lock`.
+Preserve exact direct dependency pins and keep React, React DOM, their types,
+and the UI peer versions aligned.
+
+Keep reusable procedures and active constraints here. Put each upgrade's dated
+version inventory, migrations, audit/test/preview evidence, and skipped groups
+in its PR. Update or remove guidance when constraints change; do not append run
+journals. Attribute historical findings to their PR and recheck them before
+claiming current upstream status or production safety.
 
 Use the `update-dependencies` skill for either harness. It references the
 published shared workflow at `@a2f0/agent-tool@0.1.11` while keeping this
@@ -14,9 +21,9 @@ repository's trusted-base `packages/agent-tool` shipping implementation.
   The native TypeScript 7 release removes APIs used by language tooling.
   Explicit Bun types in the automation workspace account for TypeScript 6's
   new default type inclusion. See the [TypeScript 6 release notes][typescript].
-- The [Astro 7 guide][astro] covers the Rust compiler, Markdown processor,
-  whitespace defaults, and removed APIs. This website already used Astro 7;
-  7.3.6 includes fixes for the [AVIF image advisory][astro-advisory].
+- Follow the [Astro major upgrade guide][astro] when changing compiler,
+  Markdown, whitespace, or API behavior; verify image handling against the
+  [AVIF advisory][astro-advisory] and the selected release.
 - [Commitlint 21][commitlint] raises its Node requirement and changes diagnostic
   formatting. Its header policy still requires Conventional Commits and a
   maximum of 50 characters; this repository does not parse its diagnostics.
@@ -37,24 +44,32 @@ and warning severity are silently lost. A Bun-generated patch recognizes
 null-prototype objects; `bun run test:markdownlint` exercises the actual CLI
 with TOML, JSON, and the repository JSONC configuration. Remove the override
 when the CLI permits the fixed parser; remove the patch when Markdownlint
-preserves the same six regression cases without it.
+preserves the same regression cases without it. Confirm removal with a fresh audit.
 
 Wrangler and the API's prerelease Miniflare are retained when real resource
 previews or the Workerd integration are unavailable. Their exact Sharp and
 Undici pins can retain security advisories; a blanket override would bypass
-the owner's supported integration. Braces 3.0.3 is still brought in by
-Markdownlint's Micromatch dependency and has no published fixed release for
-[GHSA-vfj7-8cjw-p6xm][braces-advisory]. KaTeX 0.16.47 also remains inside
-Micromark's math extension's supported range;
-its advisory requires 0.18.2, outside that range. Retain it until an owner
-upgrade or a tested, narrowly scoped compatibility patch is available.
+the owner's supported integration. Revisit those groups when complete previews
+and the owning integration checks are available.
 
-HTTP Cache Semantics 4.3.0 satisfies Astro's range, but its [shared cache
-advisory][cache-advisory] has no maintainer-confirmed patched version. Astro's
-cache immediately expires the affected zero-TTL entries and does not pass
-`max-stale`; a package version outside the advisory's published range alone
-does not prove the library flaw fixed. Review the full final audit and exposure
-before claiming the dependency graph is safe.
+[PR #95](https://github.com/a2f0/stealth/pull/95) recorded the following constraints
+and exposure analysis. They explain the retained choices, not a fresh audit or
+a claim about today's available upstream fixes:
+
+- Braces 3.0.3, owned by Markdownlint's Micromatch dependency, had no published
+  fixed release for [GHSA-vfj7-8cjw-p6xm][braces-advisory].
+- KaTeX 0.16.47 remained inside Micromark's math extension's supported range;
+  the advisory required 0.18.2, outside that range.
+- HTTP Cache Semantics 4.3.0 satisfied Astro's range, but its [shared cache
+  advisory][cache-advisory] had no maintainer-confirmed patched version. The
+  inspected Astro cache immediately expired the affected zero-TTL entries and
+  did not pass `max-stale`. Being outside an advisory's published range alone
+  did not prove the library flaw fixed.
+
+Recheck advisories, owner ranges, and exposure when upgrading. Remove a constraint
+when a supported owner upgrade or a tested, narrowly scoped compatibility patch
+resolves it, with a fresh audit and relevant integration checks. Put the resulting
+audit and any remaining exposure in that upgrade's PR.
 
 ## Infrastructure and deployment
 
@@ -84,8 +99,9 @@ It fetches and materializes the trusted base automation, runs its
 credential-free preflight, signs commits, bumps changed API/client packages,
 independently reviews each changed HEAD, and checks CI and the exact fresh
 reviewed head/base before merging. Preserve every gate when resuming a held
-upgrade. Keep a ledger of selected and constrained dependencies, audits,
-checks, warnings, previews, review, PR, merge, and deployment results.
+upgrade. Keep the upgrade PR's ledger of selected and constrained dependencies,
+audits, checks, warnings, previews, review, merge, and deployment results there;
+promote only ongoing procedures or active constraints into this guide.
 
 [typescript]: https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html
 [astro]: https://docs.astro.build/en/guides/upgrade-to/v7/
