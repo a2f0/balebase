@@ -10,6 +10,7 @@
     "backup:shared-data": "bash scripts/backupSharedData.sh",
     "build": "turbo run build",
     "check": "export OPENSSL_CONF=/dev/null; bun run lint && turbo run check && bun run check:scripts",
+    "check:fast": "export OPENSSL_CONF=/dev/null; bun run lint:biome && bun run lint:markdown && bun run lint:files && turbo run check && bun run check:scripts",
     "check:scripts": "tsc --noEmit --project scripts/tsconfig.json",
     "deploy": "bash scripts/deployProduction.sh",
     "deploy:api": "bash scripts/deployApi.sh",
