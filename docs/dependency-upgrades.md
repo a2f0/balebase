@@ -5,7 +5,7 @@ CI installs Node.js 24.21.0. Preserve exact direct dependency pins and keep
 React, React DOM, their types, and the UI peer versions aligned.
 
 Use the `update-dependencies` skill for either harness. It references the
-published shared workflow at `@a2f0/agent-tool@0.1.10` while keeping this
+published shared workflow at `@a2f0/agent-tool@0.1.11` while keeping this
 repository's trusted-base `packages/agent-tool` shipping implementation.
 
 ## Compatibility

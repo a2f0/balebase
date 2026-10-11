@@ -50,6 +50,32 @@ The full check needs ShellCheck, Terraform, and TFLint. Browser tests need
 Chrome or Chromium; set `CHROME_PATH` to its executable when needed. Git's
 pre-commit hook fixes staged formatting; pre-push runs `check` and `test`.
 
+## Compact command output
+
+Use the pinned `@a2f0/agent-tool` capture harness for noisy, finite development
+commands:
+
+```sh
+bun run agent:run --label tests -- bun run test
+bun run agent:run --label checks -- bun run check
+bun run agent:logs /private/path/from-the-receipt.log
+```
+
+The harness preserves the command's exit status and full stdout/stderr in a
+private log. Success returns a compact receipt; failures include a bounded
+excerpt (4 KiB and 40 lines by default). Inspect warnings, timings, and artifacts
+with `agent:logs` or targeted searches before accepting a check. Keep review
+verdicts, structured audit results, and infrastructure previews visible. Do not
+wrap interactive tools or persistent servers, and do not silence warnings or
+reduce test coverage to save output.
+
+The repository-owned shipping skills continue using the trusted-base
+`packages/agent-tool` implementation described under pull requests below.
+Their credential-bearing orchestration shell must not execute the feature
+checkout's `agent:run` script or installed dependency. Continue running validation
+through the trusted `runPreflight` action there. Adopting the public skill bundle
+would replace this repository's shipping policy and is not part of this setup.
+
 ## Keep changes readable
 
 - Keep related behavior together. Extract a module when it has a clear job;

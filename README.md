@@ -54,6 +54,11 @@ bun run build     # production builds
 bun run format    # apply source and Markdown fixes
 ```
 
+Agents can capture noisy finite commands with
+`bun run agent:run --label tests -- bun run test`. See
+[compact output](CONTRIBUTING.md#compact-command-output) for private logs and
+trusted-shipping constraints.
+
 ## Reference
 
 - [Product behavior and integrations](docs/product.md): authentication,

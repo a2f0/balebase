@@ -4,6 +4,8 @@
   "license": "UNLICENSED",
   "packageManager": "bun@1.4.2",
   "scripts": {
+    "agent:run": "agent-tool run",
+    "agent:logs": "agent-tool logs",
     "auth:set-role": "bash scripts/setUserRole.sh",
     "backup:shared-data": "bash scripts/backupSharedData.sh",
     "build": "turbo run build",
@@ -57,6 +59,7 @@
     "*.md": "bun --bun x markdownlint-cli2 --fix"
   },
   "devDependencies": {
+    "@a2f0/agent-tool": "0.1.11",
     "@biomejs/biome": "2.5.15",
     "@commitlint/cli": "21.2.3",
     "@commitlint/config-conventional": "21.2.3",
