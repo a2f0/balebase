@@ -22,6 +22,13 @@ plans from both real stacks; Wrangler bundling alone does not prove remote
 resource safety. Hold a compatibility group when its safety or platform
 validation is unavailable, and record the limitation.
 
+Keep reusable procedures and active constraints, override rationale, and removal
+conditions in `docs/dependency-upgrades.md`; update or remove them as constraints
+change. Put the dated version inventory, migrations, audit/test/preview evidence,
+and skipped groups in the upgrade PR. Keep README to its maintenance link, and
+do not turn the guide into a run journal. Attribute past findings to their PR
+and recheck them before claiming current status.
+
 For infrastructure decisions, use the public package's read-only plan helper:
 
 ```sh

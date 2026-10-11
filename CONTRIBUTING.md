@@ -116,4 +116,10 @@ skills themselves: they load automation from the trusted base before running
 credential-free checks or handling GitHub and reviewer credentials.
 
 Use [the dependency upgrade workflow](docs/dependency-upgrades.md) when changing
-tool or package versions.
+tool or package versions. Keep README focused on purpose, setup, and essential
+safe usage, with a short maintenance link. Reusable upgrade procedures and active
+constraints, override rationale, and removal conditions belong in that guide.
+Put each upgrade's version inventory, migrations, audit/test/preview results,
+and skipped groups in its PR, not README or an accumulating documentation
+journal. Attribute historical findings to their PR and recheck them before
+claiming current status; update or remove guidance as constraints change.
