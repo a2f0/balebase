@@ -121,8 +121,9 @@ Archived. The message toolbar archives email or moves it to Trash; archived
 email leaves the Inbox but keeps its attachments and links, remains available
 from linked records, and can be moved back to Inbox. Linked email cannot be
 moved to Trash, including email with Finance links hidden from the current
-user. Unlinked email in Trash can be restored for 30 days before automatic
-removal. Legacy email already in Trash keeps its links but is hidden from
+user. Email in Trash is eligible for removal by the manual `emails:purge`
+command after 30 days and can be restored until it is purged. Legacy email
+already in Trash keeps its links but is hidden from
 linked records until restored. Links to
 transactions that Plaid has since removed are hidden. Creating, removing, or
 seeing transaction links requires the Finance capability. A folder lists its

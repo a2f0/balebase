@@ -172,9 +172,14 @@ describe("inbound email links", () => {
       ).status,
     ).toBe(400);
 
-    expect(
-      (await financeMember.json("DELETE", "/api/inbox/email-1")).status,
-    ).toBe(200);
+    await financeMember.json("POST", "/api/inbox/email-1/links", {
+      targetId: "folder-1",
+      targetType: "library_folder",
+    });
+    // Before linked emails were protected, they could already be in Trash.
+    fixture.database
+      .query("UPDATE inbound_emails SET deleted_at = ? WHERE id = 'email-1'")
+      .run(timestamp);
     expect(
       (
         await financeMember.json("POST", "/api/inbox/email-1/links", {
@@ -200,7 +205,7 @@ describe("inbound email links", () => {
           "/api/library/folders/folder-1",
         )
       ).body.emails,
-    ).toHaveLength(0);
+    ).toHaveLength(1);
   });
 
   it("protects linked email from Trash, including hidden Finance links", async () => {
