@@ -241,7 +241,7 @@ function LinkedEmailChips({
   return (
     <span className="financeTransactionEmails">
       {emails.map((email) => {
-        const path = inboxEmailPath(email.id);
+        const path = inboxEmailPath(email.id, email.status);
         return (
           <a
             className="financeEmailChip"

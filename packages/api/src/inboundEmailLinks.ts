@@ -35,6 +35,7 @@ interface EmailLinkRow {
 }
 
 interface LinkedEmailRow {
+  archived_at: string | null;
   attachment_count: number;
   envelope_from: string;
   id: string;
@@ -65,7 +66,7 @@ export async function listEmailLinks(
     .flatMap((row) => toEmailLink(row) ?? []);
 }
 
-/** Links an inbox email to a library folder, equipment, or a transaction. */
+/** Links an email outside Trash to a library folder, equipment, or a transaction. */
 export async function createEmailLink(context: LinkContext) {
   const emailId = context.req.param("id");
   const input = linkInput(await context.req.json().catch(() => null));
@@ -101,6 +102,8 @@ export async function createEmailLink(context: LinkContext) {
           created_at)
        SELECT ?, ?, ?, ?, ?, ?, ?
        WHERE EXISTS (${targetQueries[input.targetType]})
+         AND EXISTS (SELECT 1 FROM inbound_emails
+                     WHERE id = ? AND organization_id = ? AND deleted_at IS NULL)
        ON CONFLICT (email_id, target_type, target_id) DO NOTHING`,
     )
     .bind(
@@ -112,6 +115,8 @@ export async function createEmailLink(context: LinkContext) {
       context.get("authSession").user.id,
       new Date().toISOString(),
       input.targetId,
+      organizationId,
+      email.id,
       organizationId,
     )
     .run();
@@ -164,7 +169,7 @@ export async function listLinkedEmails(
   const result = await database
     .prepare(
       `SELECT link.id AS link_id, link.target_id, email.id, email.subject,
-              email.envelope_from, email.received_at,
+              email.envelope_from, email.received_at, email.archived_at,
               (SELECT COUNT(*) FROM inbound_email_attachments AS attachment
                WHERE attachment.email_id = email.id) AS attachment_count
        FROM inbound_email_links AS link
@@ -188,6 +193,7 @@ export function toLinkedEmail(row: LinkedEmailRow) {
     id: row.id,
     linkId: row.link_id,
     receivedAt: row.received_at,
+    status: row.archived_at ? ("archived" as const) : ("inbox" as const),
     subject: row.subject,
   };
 }

@@ -82,5 +82,8 @@ describe("workspace paths", () => {
 
   it("opens a message in the inbox", () => {
     expect(inboxEmailPath("email 1")).toBe("/inbox?email=email+1");
+    expect(inboxEmailPath("email 1", "archived")).toBe(
+      "/inbox?email=email+1&folder=archived",
+    );
   });
 });

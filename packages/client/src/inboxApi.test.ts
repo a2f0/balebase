@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  archiveInboundEmail,
   deleteInboundEmail,
   getInboundEmail,
   inboundAttachmentUrl,
@@ -16,7 +17,7 @@ describe("inbox API", () => {
       const url = input.toString();
       requests.push({ method: init?.method ?? "GET", url });
       expect(init?.credentials).toBe("include");
-      if (url.endsWith("/restore")) {
+      if (url.endsWith("/restore") || url.endsWith("/archive")) {
         return Response.json({ emailId: "message/id" });
       }
       if (init?.method === "DELETE") {
@@ -37,6 +38,9 @@ describe("inbox API", () => {
       await getInboundEmail("message/id", "trash");
       await deleteInboundEmail("message/id");
       await restoreInboundEmail("message/id");
+      await archiveInboundEmail("message/id");
+      await listInboundEmails("archived");
+      await getInboundEmail("message/id", "archived");
       expect(requests).toEqual([
         { method: "GET", url: `${apiUrl}/api/inbox?folder=trash` },
         {
@@ -48,9 +52,20 @@ describe("inbox API", () => {
           method: "POST",
           url: `${apiUrl}/api/inbox/message%2Fid/restore`,
         },
+        { method: "POST", url: `${apiUrl}/api/inbox/message%2Fid/archive` },
+        { method: "GET", url: `${apiUrl}/api/inbox?folder=archived` },
+        {
+          method: "GET",
+          url: `${apiUrl}/api/inbox/message%2Fid?folder=archived`,
+        },
       ]);
       expect(inboundAttachmentUrl("message/id", "attachment/id", "trash")).toBe(
         `${apiUrl}/api/inbox/message%2Fid/attachments/attachment%2Fid?folder=trash`,
+      );
+      expect(
+        inboundAttachmentUrl("message/id", "attachment/id", "archived"),
+      ).toBe(
+        `${apiUrl}/api/inbox/message%2Fid/attachments/attachment%2Fid?folder=archived`,
       );
     } finally {
       globalThis.fetch = originalFetch;

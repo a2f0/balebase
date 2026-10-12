@@ -48,7 +48,7 @@ export function LinkedEmailList({
         <Card flush>
           <ul className="rowList">
             {emails.map((email) => {
-              const path = inboxEmailPath(email.id);
+              const path = inboxEmailPath(email.id, email.status);
               const subject = email.subject || "(no subject)";
               return (
                 <li className="row linkedEmail" key={email.linkId}>

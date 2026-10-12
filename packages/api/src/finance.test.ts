@@ -880,6 +880,7 @@ async function createFixture(options?: { pendingTransition?: boolean }) {
     "0016_soft_delete_inbound_emails.sql",
     "0035_create_library_folders.sql",
     "0036_create_inbound_email_links.sql",
+    "0054_archive_inbound_emails.sql",
   ]) {
     await applyMigration(database, migration);
   }
