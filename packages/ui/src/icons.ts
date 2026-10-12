@@ -4,6 +4,7 @@
  * the client draw identical glyphs.
  */
 import {
+  Archive,
   ArchiveRestore,
   ArrowDown,
   ArrowLeft,
@@ -75,6 +76,7 @@ import {
 
 export const icons = {
   add: Plus,
+  archive: Archive,
   alert: TriangleAlert,
   arrowDown: ArrowDown,
   arrowLeft: ArrowLeft,

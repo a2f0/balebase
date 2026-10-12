@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AttachmentPreviewTile } from "./AttachmentPreview";
 import {
+  archiveInboundEmail,
   deleteInboundEmail,
   getInboundEmail,
   type InboundEmailDetail,
@@ -33,12 +34,24 @@ interface InboxContext {
   onNavigate: (pathname: string) => void;
 }
 
+const folderLabels = { inbox: "Inbox", trash: "Trash", archived: "Archived" };
+const folderIcons = {
+  inbox: "inbox",
+  trash: "trash",
+  archived: "archive",
+} as const;
+
 export function Inbox(context: InboxContext) {
   return <InboxView context={context} model={useInboxModel()} />;
 }
 
 function useInboxModel() {
-  const [folder, setFolder] = useState<InboxFolder>("inbox");
+  const [folder, setFolder] = useState<InboxFolder>(() => {
+    const requested = new URLSearchParams(window.location.search).get("folder");
+    return requested === "archived" || requested === "trash"
+      ? requested
+      : "inbox";
+  });
   const messages = useInboxMessages(folder);
   const actions = useInboxActions(messages);
   function selectFolder(nextFolder: InboxFolder) {
@@ -58,12 +71,15 @@ function useInboxMessages(folder: InboxFolder) {
   const [loadingMessage, setLoadingMessage] = useState(false);
   const [error, setError] = useState<string>();
   const { openedByLink, pending } = useLinkedEmailId();
+  const listRequest = useRef(0);
 
   const refresh = useCallback(async () => {
+    const request = ++listRequest.current;
     setLoadingList(true);
     setError(undefined);
     try {
       const listing = await listInboundEmails(folder);
+      if (request !== listRequest.current) return;
       const nextEmails = listing.emails;
       const requested = pending.current;
       pending.current = undefined;
@@ -73,9 +89,9 @@ function useInboxMessages(folder: InboxFolder) {
         selectEmailId(nextEmails, current, requested, openedByLink),
       );
     } catch (cause) {
-      setError(messageFrom(cause));
+      if (request === listRequest.current) setError(messageFrom(cause));
     } finally {
-      setLoadingList(false);
+      if (request === listRequest.current) setLoadingList(false);
     }
   }, [folder, openedByLink, pending]);
 
@@ -84,11 +100,15 @@ function useInboxMessages(folder: InboxFolder) {
     setSelectedId(undefined);
     setDetail(undefined);
     void refresh();
+    return () => {
+      listRequest.current += 1;
+    };
   }, [refresh]);
 
   useEffect(() => {
     if (!selectedId) {
       setDetail(undefined);
+      setLoadingMessage(false);
       return;
     }
     let active = true;
@@ -150,6 +170,7 @@ function useInboxActions(messages: ReturnType<typeof useInboxMessages>) {
   };
 
   async function moveToTrash(email: InboundEmailDetail) {
+    if (email.linkCount > 0) return;
     const subject = email.subject || "(no subject)";
     if (!(await confirmMoveToTrash(subject))) return;
     await runAction(email.id, deleteInboundEmail, "Email moved to Trash.");
@@ -157,6 +178,10 @@ function useInboxActions(messages: ReturnType<typeof useInboxMessages>) {
 
   async function restore(email: InboundEmailDetail) {
     await runAction(email.id, restoreInboundEmail, "Email restored to Inbox.");
+  }
+
+  async function archive(email: InboundEmailDetail) {
+    await runAction(email.id, archiveInboundEmail, "Email archived.");
   }
 
   async function runAction(
@@ -179,7 +204,7 @@ function useInboxActions(messages: ReturnType<typeof useInboxMessages>) {
       setWorkingId(undefined);
     }
   }
-  return { clear, error, moveToTrash, notice, restore, workingId };
+  return { archive, clear, error, moveToTrash, notice, restore, workingId };
 }
 
 type InboxMessages = ReturnType<typeof useInboxMessages>;
@@ -207,6 +232,7 @@ function InboxView({
         <div className="stack">
           <InboxToolbar
             address={messages.inboundAddress}
+            disabled={Boolean(actions.workingId)}
             folder={folder}
             onSelect={selectFolder}
           />
@@ -245,32 +271,35 @@ function InboxHeader({
       }
       description="Messages and attachments sent to your organization’s inbound address."
       eyebrow="Organization inbox"
-      title={folder === "trash" ? "Trash" : "Inbox"}
+      title={folderLabels[folder]}
     />
   );
 }
 
 function InboxToolbar({
   address,
+  disabled,
   folder,
   onSelect,
 }: {
   address: string | undefined;
+  disabled: boolean;
   folder: InboxFolder;
   onSelect: (folder: InboxFolder) => void;
 }) {
   return (
     <div className="inboxToolbar">
       <nav aria-label="Email folders" className="segmented inboxFolders">
-        {(["inbox", "trash"] as const).map((availableFolder) => (
+        {(["inbox", "trash", "archived"] as const).map((availableFolder) => (
           <button
             aria-pressed={folder === availableFolder}
+            disabled={disabled}
             key={availableFolder}
             onClick={() => onSelect(availableFolder)}
             type="button"
           >
-            <Icon name={availableFolder} size={16} />
-            {availableFolder === "inbox" ? "Inbox" : "Trash"}
+            <Icon name={folderIcons[availableFolder]} size={16} />
+            {folderLabels[availableFolder]}
           </button>
         ))}
       </nav>
@@ -298,7 +327,7 @@ function InboxPanes({
   folder: InboxFolder;
   messages: InboxMessages;
 }) {
-  if (messages.emails.length === 0) {
+  if (messages.emails.length === 0 && !messages.selectedId) {
     if (messages.loadingList) {
       return (
         <div className="card">
@@ -321,32 +350,42 @@ function InboxPanes({
         email={messages.detail}
         folder={folder}
         loading={messages.loadingMessage}
+        onArchive={actions.archive}
         onDelete={actions.moveToTrash}
         onLinksChange={(emailId, update) =>
-          messages.setDetail((current) =>
-            current?.id === emailId
-              ? { ...current, links: update(current.links) }
-              : current,
-          )
+          messages.setDetail((current) => {
+            if (current?.id !== emailId) return current;
+            const links = update(current.links);
+            return {
+              ...current,
+              linkCount:
+                current.linkCount + links.length - current.links.length,
+              links,
+            };
+          })
         }
         onRestore={actions.restore}
         unavailable={Boolean(messages.error && messages.selectedId)}
-        working={messages.detail?.id === actions.workingId}
+        working={Boolean(actions.workingId)}
       />
     </div>
   );
 }
 
 function InboxEmptyState({ folder }: { folder: InboxFolder }) {
-  const trash = folder === "trash";
+  const titles = {
+    inbox: "No messages yet",
+    trash: "Trash is empty",
+    archived: "No archived messages",
+  };
+  const descriptions = {
+    inbox: "New messages will appear here.",
+    trash: "Deleted messages will appear here.",
+    archived: "Archived messages will appear here.",
+  };
   return (
-    <EmptyState
-      icon={trash ? "trash" : "inbox"}
-      title={trash ? "Trash is empty" : "No messages yet"}
-    >
-      {trash
-        ? "Deleted messages will appear here."
-        : "New messages will appear here."}
+    <EmptyState icon={folderIcons[folder]} title={titles[folder]}>
+      {descriptions[folder]}
     </EmptyState>
   );
 }
@@ -426,6 +465,7 @@ function MessageDetail({
   email,
   folder,
   loading,
+  onArchive,
   onDelete,
   onLinksChange,
   onRestore,
@@ -436,6 +476,7 @@ function MessageDetail({
   email?: InboundEmailDetail | undefined;
   folder: InboxFolder;
   loading: boolean;
+  onArchive: (email: InboundEmailDetail) => Promise<void>;
   onDelete: (email: InboundEmailDetail) => Promise<void>;
   onLinksChange: (
     emailId: string,
@@ -460,14 +501,15 @@ function MessageDetail({
           >
             {email.subject || "(no subject)"}
           </h2>
-          <MessageAction
-            email={email}
-            folder={folder}
-            onDelete={onDelete}
-            onRestore={onRestore}
-            working={working}
-          />
         </div>
+        <MessageActions
+          email={email}
+          folder={folder}
+          onArchive={onArchive}
+          onDelete={onDelete}
+          onRestore={onRestore}
+          working={working}
+        />
         {email.deletedAt && (
           <Banner announce={false} icon="trash" tone="warning">
             Deleted {formatDateTime(email.deletedAt)} by {deletedBy(email)}
@@ -483,7 +525,7 @@ function MessageDetail({
         </dl>
         <EmailLinks
           canAccessFinance={context.canAccessFinance}
-          editable={folder === "inbox"}
+          editable={folder !== "trash" && !working}
           emailId={email.id}
           key={email.id}
           links={email.links}
@@ -524,15 +566,17 @@ function MessageDetailPlaceholder({
   return <div className="inboxDetail inboxDetailEmpty">{placeholder}</div>;
 }
 
-function MessageAction({
+function MessageActions({
   email,
   folder,
+  onArchive,
   onDelete,
   onRestore,
   working,
 }: {
   email: InboundEmailDetail;
   folder: InboxFolder;
+  onArchive: (email: InboundEmailDetail) => Promise<void>;
   onDelete: (email: InboundEmailDetail) => Promise<void>;
   onRestore: (email: InboundEmailDetail) => Promise<void>;
   working: boolean;
@@ -551,15 +595,35 @@ function MessageAction({
     );
   }
   return (
-    <Button
-      busy={working}
-      className="inboxMessageAction"
-      icon="trash"
-      onClick={() => void onDelete(email)}
-      variant="danger"
-    >
-      {working ? "Moving…" : "Move to Trash"}
-    </Button>
+    <div className="stack">
+      <section aria-label="Email actions" className="inboxMessageActions">
+        <Button
+          disabled={working}
+          icon={folder === "archived" ? "restore" : "archive"}
+          onClick={() =>
+            void (folder === "archived" ? onRestore(email) : onArchive(email))
+          }
+        >
+          {folder === "archived" ? "Move to Inbox" : "Archive"}
+        </Button>
+        <Button
+          aria-describedby={
+            email.linkCount > 0 ? "linkedEmailTrashHint" : undefined
+          }
+          disabled={working || email.linkCount > 0}
+          icon="trash"
+          onClick={() => void onDelete(email)}
+          variant="danger"
+        >
+          Move to Trash
+        </Button>
+      </section>
+      {email.linkCount > 0 && (
+        <p className="emailLinksEmpty" id="linkedEmailTrashHint">
+          Linked emails cannot be moved to Trash. You can archive them.
+        </p>
+      )}
+    </div>
   );
 }
 

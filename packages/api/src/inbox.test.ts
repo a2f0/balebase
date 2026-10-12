@@ -38,6 +38,86 @@ const rawEmail = [
 ].join("\r\n");
 
 describe("inbox", () => {
+  it("archives messages with attachments and restores them to Inbox", async () => {
+    const fixture = await createFixture();
+    expect(
+      (await fixture.request(`/${emailId}/archive`, { method: "POST" })).status,
+    ).toBe(200);
+    expect(await (await fixture.request("/")).json()).toMatchObject({
+      emails: [],
+    });
+    expect(
+      await (await fixture.request("/?folder=trash")).json(),
+    ).toMatchObject({ emails: [] });
+    expect(
+      await (await fixture.request("/?folder=archived")).json(),
+    ).toMatchObject({
+      emails: [
+        {
+          id: emailId,
+          status: "archived",
+          deletedAt: null,
+          attachmentCount: 1,
+        },
+      ],
+    });
+    expect((await fixture.request(`/${emailId}`)).status).toBe(404);
+    expect((await fixture.request(`/${emailId}?folder=trash`)).status).toBe(
+      404,
+    );
+    expect(
+      (await fixture.request(`/${emailId}/attachments/${attachmentId}`)).status,
+    ).toBe(404);
+    expect((await fixture.request(`/${emailId}?folder=archived`)).status).toBe(
+      200,
+    );
+    const attachment = await fixture.request(
+      `/${emailId}/attachments/${attachmentId}?folder=archived`,
+    );
+    expect(await attachment.text()).toBe("hello attachment");
+    expect(
+      (await fixture.request(`/${otherEmailId}/archive`, { method: "POST" }))
+        .status,
+    ).toBe(404);
+    expect(
+      (await fixture.request(`/${otherEmailId}/restore`, { method: "POST" }))
+        .status,
+    ).toBe(404);
+    expect(
+      (await fixture.request(`/${otherEmailId}?folder=archived`)).status,
+    ).toBe(404);
+    expect(
+      (await fixture.request(`/${emailId}/restore`, { method: "POST" })).status,
+    ).toBe(200);
+    expect(
+      await (await fixture.request("/?folder=archived")).json(),
+    ).toMatchObject({ emails: [] });
+    expect(await (await fixture.request(`/${emailId}`)).json()).toMatchObject({
+      email: { status: "inbox" },
+    });
+  });
+
+  it("trashes unlinked archived email and only restores it to Inbox", async () => {
+    const fixture = await createFixture();
+    await fixture.request(`/${emailId}/archive`, { method: "POST" });
+    expect(
+      (await fixture.request(`/${emailId}`, { method: "DELETE" })).status,
+    ).toBe(200);
+    expect(
+      await (await fixture.request("/?folder=archived")).json(),
+    ).toMatchObject({ emails: [] });
+    expect(
+      await (await fixture.request(`/${emailId}?folder=trash`)).json(),
+    ).toMatchObject({ email: { status: "trash" } });
+    expect(
+      (await fixture.request(`/${emailId}/archive`, { method: "POST" })).status,
+    ).toBe(404);
+    await fixture.request(`/${emailId}/restore`, { method: "POST" });
+    expect(await (await fixture.request(`/${emailId}`)).json()).toMatchObject({
+      email: { status: "inbox" },
+    });
+  });
+
   it("lists messages, renders a body, and downloads attachments", async () => {
     const fixture = await createFixture();
 
@@ -55,9 +135,11 @@ describe("inbox", () => {
           deletedByUserId: null,
           from: "sender@example.com",
           id: emailId,
+          linkCount: 0,
           rawSize: new TextEncoder().encode(rawEmail).byteLength,
           receivedAt: "2026-08-18T12:00:00.000Z",
           subject: "Test attachment",
+          status: "inbox",
           to: "upload@inbox.tearleads.de",
         },
       ],
@@ -288,6 +370,7 @@ async function createFixture() {
     "0036_create_inbound_email_links.sql",
     "0037_create_equipment.sql",
     "0038_link_inbound_emails_to_equipment.sql",
+    "0054_archive_inbound_emails.sql",
   ]) {
     await applyMigration(database, migration);
   }

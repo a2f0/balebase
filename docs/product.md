@@ -116,8 +116,15 @@ finance transactions. Links live in one polymorphic table,
 `inbound_email_links`, whose `target_type` is `library_folder`, `equipment`,
 or `finance_transaction`. A polymorphic reference cannot carry a foreign key,
 so database triggers remove links when their target is deleted, and purging
-an email cascades to its links. An email in Trash keeps its links but is
-hidden from folders and transactions until it is restored, and links to
+an email cascades to its links. Email has three statuses: Inbox, Trash, and
+Archived. The message toolbar archives email or moves it to Trash; archived
+email leaves the Inbox but keeps its attachments and links, remains available
+from linked records, and can be moved back to Inbox. Linked email cannot be
+moved to Trash, including email with Finance links hidden from the current
+user. Email in Trash is eligible for removal by the manual `emails:purge`
+command after 30 days and can be restored until it is purged. Legacy email
+already in Trash keeps its links but is hidden from
+linked records until restored. Links to
 transactions that Plaid has since removed are hidden. Creating, removing, or
 seeing transaction links requires the Finance capability. A folder lists its
 linked emails, and a transaction shows its linked emails in the Finance

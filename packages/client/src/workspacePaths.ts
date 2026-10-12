@@ -107,8 +107,13 @@ export function signingTokenForPath(pathname: string) {
 }
 
 /** Opens one message in the inbox. */
-export function inboxEmailPath(emailId: string) {
-  return `/inbox?${new URLSearchParams({ email: emailId })}`;
+export function inboxEmailPath(
+  emailId: string,
+  folder: "inbox" | "archived" = "inbox",
+) {
+  const query = new URLSearchParams({ email: emailId });
+  if (folder === "archived") query.set("folder", folder);
+  return `/inbox?${query}`;
 }
 
 /**

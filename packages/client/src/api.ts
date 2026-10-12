@@ -25,12 +25,14 @@ export interface InboundEmailSummary {
   from: string;
   id: string;
   rawSize: number;
+  linkCount: number;
+  status: InboxFolder;
   receivedAt: string;
   subject: string | null;
   to: string;
 }
 
-export type InboxFolder = "inbox" | "trash";
+export type InboxFolder = "inbox" | "trash" | "archived";
 
 interface InboundEmailAttachment {
   contentType: string;
@@ -89,6 +91,7 @@ export interface LinkedEmail {
   id: string;
   linkId: string;
   receivedAt: string;
+  status: "inbox" | "archived";
   subject: string | null;
 }
 
@@ -234,6 +237,14 @@ export async function restoreInboundEmail(id: string) {
   return parseResponse<{ emailId: string }>(response);
 }
 
+export async function archiveInboundEmail(id: string) {
+  const response = await fetchApi(
+    `${apiUrl}/api/inbox/${encodeURIComponent(id)}/archive`,
+    { credentials: "include", method: "POST" },
+  );
+  return parseResponse<{ emailId: string }>(response);
+}
+
 export async function linkInboundEmail(
   emailId: string,
   target: InboundEmailLinkTarget,
@@ -262,7 +273,7 @@ export async function unlinkInboundEmail(emailId: string, linkId: string) {
 }
 
 function folderQuery(folder: InboxFolder) {
-  return folder === "trash" ? "?folder=trash" : "";
+  return folder === "inbox" ? "" : `?folder=${folder}`;
 }
 
 /** Lists one folder's files, or the files at the library root. */

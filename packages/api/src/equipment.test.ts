@@ -311,11 +311,16 @@ describe("equipment", () => {
       }),
     ]);
 
-    await member.json("DELETE", "/api/inbox/email-1");
+    expect((await member.json("DELETE", "/api/inbox/email-1")).status).toBe(
+      409,
+    );
+    expect(
+      (await member.json("POST", "/api/inbox/email-1/archive")).status,
+    ).toBe(200);
     expect(
       (await member.json<{ equipment: Equipment[] }>("GET", "/api/equipment"))
         .body.equipment[0]?.emailCount,
-    ).toBe(0);
+    ).toBe(1);
 
     await owner.json("DELETE", `/api/equipment/${id}`);
     expect(database.query("SELECT id FROM inbound_email_links").all()).toEqual(

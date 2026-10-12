@@ -176,7 +176,10 @@ describe("inbound email links", () => {
       targetId: "folder-1",
       targetType: "library_folder",
     });
-    await financeMember.json("DELETE", "/api/inbox/email-1");
+    // Before linked emails were protected, they could already be in Trash.
+    fixture.database
+      .query("UPDATE inbound_emails SET deleted_at = ? WHERE id = 'email-1'")
+      .run(timestamp);
     expect(
       (
         await financeMember.json("POST", "/api/inbox/email-1/links", {
@@ -203,6 +206,104 @@ describe("inbound email links", () => {
         )
       ).body.emails,
     ).toHaveLength(1);
+  });
+
+  it("protects linked email from Trash, including hidden Finance links", async () => {
+    const fixture = await createFixture();
+    const member = fixture.as("member-user");
+    const financeMember = fixture.as("finance-user");
+    for (const target of [
+      { targetId: "folder-1", targetType: "library_folder" },
+      { targetId: "txn-1", targetType: "finance_transaction" },
+    ]) {
+      const created = await financeMember.json<{ link: EmailLink }>(
+        "POST",
+        "/api/inbox/email-1/links",
+        target,
+      );
+      expect(created.status).toBe(201);
+      const detail = await member.json<{
+        email: { linkCount: number; links: EmailLink[] };
+      }>("GET", "/api/inbox/email-1");
+      expect(detail.body.email.linkCount).toBe(1);
+      expect(detail.body.email.links).toHaveLength(
+        target.targetType === "finance_transaction" ? 0 : 1,
+      );
+      expect((await member.json("DELETE", "/api/inbox/email-1")).status).toBe(
+        409,
+      );
+      expect(
+        (await member.json("POST", "/api/inbox/email-1/archive")).status,
+      ).toBe(200);
+      expect((await member.json("DELETE", "/api/inbox/email-1")).status).toBe(
+        409,
+      );
+      expect(
+        (await member.json("POST", "/api/inbox/email-1/restore")).status,
+      ).toBe(200);
+      await financeMember.json(
+        "DELETE",
+        `/api/inbox/email-1/links/${created.body.link.id}`,
+      );
+    }
+    expect((await member.json("DELETE", "/api/inbox/email-1")).status).toBe(
+      200,
+    );
+    expect((await member.json("DELETE", "/api/inbox/email-other")).status).toBe(
+      404,
+    );
+  });
+
+  it("keeps archived email linked, readable, and editable", async () => {
+    const fixture = await createFixture();
+    const member = fixture.as("member-user");
+    await member.json("POST", "/api/inbox/email-1/links", {
+      targetId: "folder-1",
+      targetType: "library_folder",
+    });
+    await member.json("POST", "/api/inbox/email-1/archive");
+    const folder = await member.json<{
+      emails: LinkedEmail[];
+      folder: { emailCount: number };
+    }>("GET", "/api/library/folders/folder-1");
+    expect(folder.body.folder.emailCount).toBe(1);
+    expect(folder.body.emails).toEqual([
+      expect.objectContaining({ id: "email-1", status: "archived" }),
+    ]);
+    const detail = await member.json<{
+      email: { links: EmailLink[]; status: string };
+    }>("GET", "/api/inbox/email-1?folder=archived");
+    expect(detail.body.email.status).toBe("archived");
+    expect(detail.body.email.links).toHaveLength(1);
+    await member.json(
+      "DELETE",
+      `/api/inbox/email-1/links/${detail.body.email.links[0]?.id}`,
+    );
+    expect(
+      (
+        await member.json("POST", "/api/inbox/email-1/links", {
+          targetId: "folder-1",
+          targetType: "library_folder",
+        })
+      ).status,
+    ).toBe(201);
+  });
+
+  it("does not insert a link if the email was trashed after validation", async () => {
+    const fixture = await createFixture((database) => {
+      database
+        .query("UPDATE inbound_emails SET deleted_at = ? WHERE id = 'email-1'")
+        .run(timestamp);
+    });
+    const member = fixture.as("member-user");
+    const result = await member.json("POST", "/api/inbox/email-1/links", {
+      targetId: "folder-1",
+      targetType: "library_folder",
+    });
+    expect(result.status).toBe(404);
+    expect(
+      fixture.database.query("SELECT id FROM inbound_email_links").all(),
+    ).toEqual([]);
   });
 
   it("removes links when either side is deleted", async () => {
@@ -307,7 +408,7 @@ async function linksFor(client: Client, emailId: string) {
 
 type Client = ReturnType<Awaited<ReturnType<typeof createFixture>>["as"]>;
 
-async function createFixture() {
+async function createFixture(beforeLinkInsert?: (database: Database) => void) {
   const database = new Database(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
   await applyMigrations(database);
@@ -318,7 +419,7 @@ async function createFixture() {
     BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
     BETTER_AUTH_URL: "https://api.test",
     CORS_ORIGIN: "https://app.test",
-    DB: toD1(database),
+    DB: toD1(database, beforeLinkInsert),
     EMAIL: {} as SendEmail,
     IMAGES: {} as ImagesBinding,
     INBOUND_EMAIL_DOMAIN: "inbox.tearleads.de",
@@ -551,7 +652,10 @@ async function applyMigrations(database: Database) {
   }
 }
 
-function toD1(database: Database) {
+function toD1(
+  database: Database,
+  beforeLinkInsert?: (database: Database) => void,
+) {
   return {
     prepare: (query: string) => {
       let values: SQLQueryBindings[] = [];
@@ -566,6 +670,9 @@ function toD1(database: Database) {
         },
         first: async () => database.query(query).get(...values),
         run: async () => {
+          if (query.includes("INSERT INTO inbound_email_links")) {
+            beforeLinkInsert?.(database);
+          }
           const result = database.query(query).run(...values);
           return { meta: { changes: result.changes }, success: true };
         },
