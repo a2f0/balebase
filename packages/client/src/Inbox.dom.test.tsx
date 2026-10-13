@@ -8,6 +8,7 @@ import { Inbox } from "./Inbox";
 const dom = new Window({ url: "http://localhost:5173/inbox" });
 const domGlobals = {
   document: dom.document,
+  Element: dom.Element,
   HTMLElement: dom.HTMLElement,
   IS_REACT_ACT_ENVIRONMENT: true,
   navigator: dom.navigator,
@@ -16,6 +17,10 @@ const domGlobals = {
 };
 const saved = new Map<string, PropertyDescriptor | undefined>();
 const originalFetch = globalThis.fetch;
+const originalClipboard = Object.getOwnPropertyDescriptor(
+  dom.navigator,
+  "clipboard",
+);
 let createRoot: (container: Element) => Root;
 let root: Root | undefined;
 let container: HTMLElement;
@@ -37,6 +42,9 @@ afterEach(async () => {
   root = undefined;
   container?.remove();
   globalThis.fetch = originalFetch;
+  if (originalClipboard)
+    Object.defineProperty(dom.navigator, "clipboard", originalClipboard);
+  else Reflect.deleteProperty(dom.navigator, "clipboard");
   dom.history.replaceState(null, "", "/inbox");
 });
 
@@ -77,6 +85,13 @@ function button(label: string) {
 async function click(label: string) {
   await act(async () => button(label).click());
   await settle();
+}
+
+function stubClipboard(writeText?: (value: string) => Promise<void>) {
+  Object.defineProperty(dom.navigator, "clipboard", {
+    configurable: true,
+    value: writeText ? { writeText } : undefined,
+  });
 }
 
 function fixture(linkCount = 0, listed = true) {
@@ -138,6 +153,76 @@ function fixture(linkCount = 0, listed = true) {
 }
 
 describe("Inbox, mounted", () => {
+  it("copies the inbound address on click and announces success", async () => {
+    fixture();
+    const copied: string[] = [];
+    stubClipboard(async (value) => {
+      copied.push(value);
+    });
+    await render();
+    await click("Copy email address upload@example.com");
+    expect(copied).toEqual(["upload@example.com"]);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      "Inbound email address copied.",
+    );
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  it("copies through the shared context menu and restores focus", async () => {
+    fixture();
+    const copied: string[] = [];
+    stubClipboard(async (value) => {
+      copied.push(value);
+    });
+    await render();
+    const address = button("Copy email address upload@example.com");
+    const event = new dom.MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      button: 2,
+    });
+    await act(async () => address.dispatchEvent(event as never));
+    expect(event.defaultPrevented).toBe(true);
+    expect(copied).toEqual([]);
+    const item = document.querySelector<HTMLButtonElement>('[role="menuitem"]');
+    expect(item?.textContent).toBe("Copy email address");
+    await act(async () => item?.click());
+    expect(copied).toEqual(["upload@example.com"]);
+    expect(container.textContent).toContain("Inbound email address copied.");
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(address);
+  });
+
+  it.each(["rejected", "unavailable"])(
+    "reports a %s clipboard and clears the error after retry",
+    async (failure) => {
+      fixture();
+      stubClipboard(
+        failure === "rejected"
+          ? async () => {
+              throw new Error("Permission denied");
+            }
+          : undefined,
+      );
+      await render();
+      await click("Copy email address upload@example.com");
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "Could not copy the email address. Please try again.",
+      );
+      expect(container.textContent).not.toContain(
+        "Inbound email address copied.",
+      );
+      const copied: string[] = [];
+      stubClipboard(async (value) => {
+        copied.push(value);
+      });
+      await click("Copy email address upload@example.com");
+      expect(copied).toEqual(["upload@example.com"]);
+      expect(container.textContent).not.toContain("Could not copy the email");
+      expect(container.textContent).toContain("Inbound email address copied.");
+    },
+  );
+
   it("archives a message, reads it from Archived, and moves it back to Inbox", async () => {
     const { requests } = fixture();
     await render();
