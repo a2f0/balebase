@@ -1,7 +1,6 @@
 import {
   Badge,
   type BadgeTone,
-  Banner,
   Button,
   EmptyState,
   LoadingState,
@@ -9,6 +8,7 @@ import {
   PageBody,
   PageHeader,
   PageSection,
+  Toast,
 } from "@tearleads/ui/react";
 import { useCallback, useEffect, useState } from "react";
 import { formatDate, Identity } from "./adminDisplay";
@@ -74,7 +74,7 @@ export function AdminUsers() {
         title="Users"
       />
       <PageBody>
-        {error && <Banner tone="danger">{error}</Banner>}
+        {error && <Toast tone="danger">{error}</Toast>}
         <UserSection
           busy={busy}
           hasError={Boolean(error)}

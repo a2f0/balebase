@@ -1,10 +1,10 @@
 import {
   Badge,
-  Banner,
   Button,
   Card,
   Field,
   LoadingState,
+  Toast,
 } from "@tearleads/ui/react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import {
@@ -218,8 +218,8 @@ export function EmployeeForms({
           : "Invitees and former members"
       }
     >
-      {error && <Banner tone="danger">{error}</Banner>}
-      {notice && <Banner tone="success">{notice}</Banner>}
+      {error && <Toast tone="danger">{error}</Toast>}
+      {notice && <Toast tone="success">{notice}</Toast>}
       {canManage && scope.kind === "member" && (
         <RequirementAssignmentForm
           action={action}

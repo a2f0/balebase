@@ -7,6 +7,7 @@ import {
   cx,
   PageSection,
   promptDialog,
+  Toast,
 } from "@tearleads/ui/react";
 import { useState } from "react";
 import { fetchApi } from "./apiVersion";
@@ -44,8 +45,8 @@ export function ContractSummary({
   const actions = useSummaryActions(contract, onChanged, onNavigate);
   return (
     <div className="contractSummary">
-      {actions.error && <Banner tone="danger">{actions.error}</Banner>}
-      {actions.notice && <Banner tone="success">{actions.notice}</Banner>}
+      {actions.error && <Toast tone="danger">{actions.error}</Toast>}
+      {actions.notice && <Toast tone="success">{actions.notice}</Toast>}
       <StatusBanner contract={contract} />
       <div className="contractSummaryGrid">
         <div className="stack">

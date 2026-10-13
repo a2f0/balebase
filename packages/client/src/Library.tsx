@@ -12,6 +12,7 @@ import {
   PageBody,
   PageHeader,
   PageSection,
+  Toast,
 } from "@tearleads/ui/react";
 import {
   type FormEvent,
@@ -109,7 +110,7 @@ export function Library({
           initialNotice={initialNotice}
           onResend={onResendVerification}
         />
-        {error && <Banner tone="danger">{error}</Banner>}
+        {error && <Toast tone="danger">{error}</Toast>}
         {actions.folderForm && (
           <FolderNameForm
             busy={actions.busy}
@@ -709,8 +710,9 @@ function VerificationStatus({
 
   if (!notice && emailVerified) return null;
   return (
-    <div className="stack stackMd">
-      {notice && <Banner tone="success">{notice}</Banner>}
+    <>
+      {error && <Toast tone="danger">{error}</Toast>}
+      {notice && <Toast tone="success">{notice}</Toast>}
       {!emailVerified && (
         <Banner
           actions={
@@ -727,10 +729,9 @@ function VerificationStatus({
             You can use Tearleads now, but confirming {email} helps secure your
             account.
           </p>
-          {error && <p className="fieldError">{error}</p>}
         </Banner>
       )}
-    </div>
+    </>
   );
 }
 

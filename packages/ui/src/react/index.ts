@@ -18,4 +18,4 @@ export { Field } from "./Field";
 export { Icon } from "./Icon";
 export { Avatar, Logo } from "./Identity";
 export { Page, PageBody, PageHeader, PageSection } from "./Page";
-export { Toast } from "./Toast";
+export { Toast, ToastProvider } from "./Toast";

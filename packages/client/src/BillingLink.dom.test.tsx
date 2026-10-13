@@ -3,7 +3,7 @@ import { Window } from "happy-dom";
 import { act, type ReactNode } from "react";
 import type { Root } from "react-dom/client";
 import { AuditApiError } from "./auditApi";
-import { ErrorBanner, errorNotice } from "./BillingLink";
+import { ErrorToast, errorNotice } from "./BillingLink";
 import {
   blockingSeatRequirement,
   OrganizationSeatRequired,
@@ -80,7 +80,7 @@ describe("billing links", () => {
       "UPGRADE_REQUIRED",
     );
     await render(
-      <ErrorBanner
+      <ErrorToast
         error={errorNotice(limit, "fallback")}
         onNavigate={(path) => paths.push(path)}
       />,
@@ -98,7 +98,7 @@ describe("billing links", () => {
 
   it("leaves other errors without a link", async () => {
     await render(
-      <ErrorBanner
+      <ErrorToast
         error={errorNotice(new Error("Template not found."), "fallback")}
         onNavigate={() => {}}
       />,

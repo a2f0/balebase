@@ -1,10 +1,10 @@
 import {
   Badge,
-  Banner,
   Button,
   Card,
   confirmDialog,
   Field,
+  Toast,
 } from "@tearleads/ui/react";
 import { QRCodeSVG } from "qrcode.react";
 import { type FormEvent, useState } from "react";
@@ -209,8 +209,8 @@ function AccountSecurityPage({
     enrollment.action !== undefined || maintenance.action !== undefined;
   return (
     <>
-      {error && <Banner tone="danger">{error}</Banner>}
-      {notice && <Banner tone="success">{notice}</Banner>}
+      {error && <Toast tone="danger">{error}</Toast>}
+      {notice && <Toast tone="success">{notice}</Toast>}
       <SecurityContent
         busy={busy}
         enrollment={enrollment}
@@ -423,14 +423,21 @@ function RecoveryCodesCard({
   onAcknowledged: (acknowledged: boolean) => void;
   onDone: () => void;
 }) {
-  const [copyNotice, setCopyNotice] = useState<string>();
+  const [copyNotice, setCopyNotice] = useState<{
+    message: string;
+    tone: "danger" | "success";
+  }>();
 
   async function copyCodes() {
+    setCopyNotice(undefined);
     try {
       await navigator.clipboard.writeText(recoveryCodesText(codes));
-      setCopyNotice("Copied.");
+      setCopyNotice({ message: "Copied.", tone: "success" });
     } catch {
-      setCopyNotice("Copy failed. Download or save the codes manually.");
+      setCopyNotice({
+        message: "Copy failed. Download or save the codes manually.",
+        tone: "danger",
+      });
     }
   }
 
@@ -471,9 +478,9 @@ function RecoveryCodesCard({
         >
           Download
         </Button>
-        <span aria-live="polite" className="recoveryCopyNotice">
-          {copyNotice}
-        </span>
+        {copyNotice && (
+          <Toast tone={copyNotice.tone}>{copyNotice.message}</Toast>
+        )}
       </div>
     </Card>
   );

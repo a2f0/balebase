@@ -1,4 +1,4 @@
-import { Banner, Button, Card } from "@tearleads/ui/react";
+import { Button, Card, Toast } from "@tearleads/ui/react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import type { InlineCheckoutSession } from "./billingApi";
 import {
@@ -87,7 +87,7 @@ export function InlineCheckout({
       onSubmit={(event) => void submit(event)}
       title="Upgrade to Pro"
     >
-      {error && <Banner tone="danger">{error}</Banner>}
+      {error && <Toast tone="danger">{error}</Toast>}
       <div className="billingCheckoutPayment" ref={host} />
     </Card>
   );

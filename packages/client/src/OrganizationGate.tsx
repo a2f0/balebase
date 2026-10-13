@@ -1,10 +1,10 @@
 import {
-  Banner,
   Button,
   EmptyState,
   Page,
   PageBody,
   PageHeader,
+  Toast,
 } from "@tearleads/ui/react";
 import { type ReactNode, useState } from "react";
 import {
@@ -110,7 +110,7 @@ function OrganizationTwoFactorRequired({
               ? "This organization requires you to set up an authenticator before you can use its workspace."
               : "This organization requires a sign-in verified with two-factor authentication. Sign out, then sign in again to continue."}
           </p>
-          {error && <Banner tone="danger">{error}</Banner>}
+          {error && <Toast tone="danger">{error}</Toast>}
         </EmptyState>
       </PageBody>
     </Page>

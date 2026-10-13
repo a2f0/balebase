@@ -1,5 +1,4 @@
 import {
-  Banner,
   Button,
   Card,
   confirmDialog,
@@ -125,7 +124,7 @@ function TemplateList({
         type="file"
       />
       <PageBody>
-        {error && <Banner tone="danger">{error}</Banner>}
+        {error && <Toast tone="danger">{error}</Toast>}
         {!templates ? (
           !error && <LoadingState label="Loading templates…" />
         ) : templates.length === 0 ? (
@@ -226,7 +225,7 @@ function TemplatePage({
         title={template?.name ?? (error ? "Template unavailable" : "Loading…")}
       />
       <PageBody>
-        {error && <Banner tone="danger">{error}</Banner>}
+        {error && <Toast tone="danger">{error}</Toast>}
         {notice && (
           <Toast
             actions={

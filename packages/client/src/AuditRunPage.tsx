@@ -14,6 +14,7 @@ import {
   PageBody,
   PageHeader,
   PageSection,
+  Toast,
 } from "@tearleads/ui/react";
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { ActivityFeed, formatActivityTime } from "./ActivityFeed";
@@ -171,8 +172,8 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
         templateVersion={detail.audit.templateVersion}
       />
       <PageBody className="runBody">
-        {error && <Banner tone="danger">{error}</Banner>}
-        {notice && <Banner tone="success">{notice}</Banner>}
+        {error && <Toast tone="danger">{error}</Toast>}
+        {notice && <Toast tone="success">{notice}</Toast>}
         <p className="runAttribution">
           Started by {detail.audit.createdBy.name} ·{" "}
           {detail.audit.createdBy.email} ·{" "}
@@ -680,7 +681,7 @@ export function FailedItemIssue({
               This item already has {countLabel(openIssueCount, "open issue")}.
             </p>
           )}
-          {draft.error && <Banner tone="danger">{draft.error}</Banner>}
+          {draft.error && <Toast tone="danger">{draft.error}</Toast>}
           <IssueDraftFields draft={draft} members={members} />
           <div className="formActions">
             <Button
@@ -764,7 +765,7 @@ function IssuePanel({
       description="Track follow-up work discovered during this audit."
       title="Issues"
     >
-      {issueError && <Banner tone="danger">{issueError}</Banner>}
+      {issueError && <Toast tone="danger">{issueError}</Toast>}
       {showForm && (
         <IssueForm
           auditId={auditId}
@@ -824,7 +825,7 @@ function IssueForm({
       }
       title="New issue"
     >
-      {draft.error && <Banner tone="danger">{draft.error}</Banner>}
+      {draft.error && <Toast tone="danger">{draft.error}</Toast>}
       <Field label="Checklist item">
         <select
           className="select"
