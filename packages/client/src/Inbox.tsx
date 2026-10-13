@@ -1,6 +1,7 @@
 import {
   Banner,
   Button,
+  ContextMenu,
   confirmDialog,
   cx,
   EmptyState,
@@ -169,6 +170,17 @@ function useInboxActions(messages: ReturnType<typeof useInboxMessages>) {
     setNotice(undefined);
   };
 
+  async function copyAddress() {
+    if (!messages.inboundAddress) return;
+    clear();
+    try {
+      await navigator.clipboard.writeText(messages.inboundAddress);
+      setNotice("Inbound email address copied.");
+    } catch {
+      setError("Could not copy the email address. Please try again.");
+    }
+  }
+
   async function moveToTrash(email: InboundEmailDetail) {
     if (email.linkCount > 0) return;
     const subject = email.subject || "(no subject)";
@@ -204,7 +216,16 @@ function useInboxActions(messages: ReturnType<typeof useInboxMessages>) {
       setWorkingId(undefined);
     }
   }
-  return { archive, clear, error, moveToTrash, notice, restore, workingId };
+  return {
+    archive,
+    clear,
+    copyAddress,
+    error,
+    moveToTrash,
+    notice,
+    restore,
+    workingId,
+  };
 }
 
 type InboxMessages = ReturnType<typeof useInboxMessages>;
@@ -234,6 +255,7 @@ function InboxView({
             address={messages.inboundAddress}
             disabled={Boolean(actions.workingId)}
             folder={folder}
+            onCopyAddress={actions.copyAddress}
             onSelect={selectFolder}
           />
           {folder === "trash" && (
@@ -280,11 +302,13 @@ function InboxToolbar({
   address,
   disabled,
   folder,
+  onCopyAddress,
   onSelect,
 }: {
   address: string | undefined;
   disabled: boolean;
   folder: InboxFolder;
+  onCopyAddress: () => Promise<void>;
   onSelect: (folder: InboxFolder) => void;
 }) {
   return (
@@ -309,7 +333,30 @@ function InboxToolbar({
             <Icon name="mail" size={16} />
             Send inbound email to
           </span>
-          <code className="codeChip inboxAddressValue">{address}</code>
+          <ContextMenu
+            items={[
+              {
+                icon: "copy",
+                id: "copy-address",
+                label: "Copy email address",
+                onSelect: () => void onCopyAddress(),
+              },
+            ]}
+            label="Inbound email address actions"
+          >
+            {(targetProps) => (
+              <button
+                {...targetProps}
+                aria-label={`Copy email address ${address}`}
+                className="codeChip inboxAddressValue"
+                onClick={() => void onCopyAddress()}
+                title="Copy email address"
+                type="button"
+              >
+                {address}
+              </button>
+            )}
+          </ContextMenu>
         </p>
       )}
     </div>

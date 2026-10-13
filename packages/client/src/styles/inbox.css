@@ -23,8 +23,10 @@
   gap: var(--space-1-5);
 }
 
-/* Long addresses wrap instead of truncating, and one click selects them. */
+/* Keep the copyable address readable, including on narrow screens. */
 .inboxAddressValue {
+  min-width: 0;
+  cursor: pointer;
   white-space: normal;
   overflow-wrap: anywhere;
   user-select: all;
