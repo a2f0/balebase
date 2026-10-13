@@ -1,11 +1,11 @@
 import {
-  Banner,
   Button,
   Card,
   Field,
   Page,
   PageBody,
   PageHeader,
+  Toast,
 } from "@tearleads/ui/react";
 import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
 import { AccountDeletion } from "./AccountDeletion";
@@ -190,8 +190,8 @@ function AccountGeneral({
           </select>
         </Field>
       </Card>
-      {error && <Banner tone="danger">{error}</Banner>}
-      {notice && <Banner tone="success">{notice}</Banner>}
+      {error && <Toast tone="danger">{error}</Toast>}
+      {notice && <Toast tone="success">{notice}</Toast>}
       <Card
         description="Match your system, or keep Tearleads light or dark on this device."
         title="Appearance"

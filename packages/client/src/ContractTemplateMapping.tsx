@@ -1,4 +1,4 @@
-import { Banner, Button, Card, Field } from "@tearleads/ui/react";
+import { Button, Card, Field, Toast } from "@tearleads/ui/react";
 import { useEffect, useRef, useState } from "react";
 import { boxStyle, ContractPages } from "./ContractDocument";
 import { fieldTypeLabel, localDate, recipientTone } from "./contractFields";
@@ -23,7 +23,7 @@ export function ContractTemplateMapping({
   return (
     <div className="contractEditor">
       <aside className="contractEditorPanel">
-        {mapping.error && <Banner tone="danger">{mapping.error}</Banner>}
+        {mapping.error && <Toast tone="danger">{mapping.error}</Toast>}
         <Card title={`Use version ${template.version}`}>
           <MappingForm
             mapping={mapping}

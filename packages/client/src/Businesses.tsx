@@ -184,7 +184,7 @@ function BusinessListBody({
   const hasBusinesses = (data?.businesses.length ?? 0) > 0;
   return (
     <>
-      {error && <Banner tone="danger">{error}</Banner>}
+      {error && <Toast tone="danger">{error}</Toast>}
       {notice && <Toast tone="success">{notice}</Toast>}
       {loading && !data ? (
         <LoadingState label="Loading businesses…" />
@@ -594,7 +594,7 @@ function BusinessDetailPage({
         title={business?.name ?? "Business details"}
       />
       <PageBody>
-        {error && <Banner tone="danger">{error}</Banner>}
+        {error && <Toast tone="danger">{error}</Toast>}
         {notice && <Toast tone="success">{notice}</Toast>}
         {!business && !error && <LoadingState label="Loading business…" />}
         {business &&

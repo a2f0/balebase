@@ -9,6 +9,7 @@ import {
   Field,
   Icon,
   LoadingState,
+  Toast,
 } from "@tearleads/ui/react";
 import {
   type FormEvent,
@@ -20,7 +21,7 @@ import {
   useState,
 } from "react";
 import { authClient } from "./authClient";
-import { ErrorBanner, type ErrorNotice, errorNotice } from "./BillingLink";
+import { type ErrorNotice, ErrorToast, errorNotice } from "./BillingLink";
 import {
   EmployeeForms,
   inRequirementScope,
@@ -181,8 +182,8 @@ function PeopleBody({
     ).length;
   return (
     <>
-      {state.error && <Banner tone="danger">{state.error}</Banner>}
-      {state.notice && <Banner tone="success">{state.notice}</Banner>}
+      {state.error && <Toast tone="danger">{state.error}</Toast>}
+      {state.notice && <Toast tone="success">{state.notice}</Toast>}
       <SummaryError summary={summary} />
       {!canManage && data.currentMemberId && (
         <OwnRequestsNotice
@@ -535,10 +536,10 @@ function InviteError({
   onNavigate: (pathname: string) => void;
 }) {
   if (!form.retry || !form.error) {
-    return <ErrorBanner error={form.error} onNavigate={onNavigate} />;
+    return <ErrorToast error={form.error} onNavigate={onNavigate} />;
   }
   return (
-    <Banner
+    <Toast
       actions={
         <Button
           busy={form.busy}
@@ -552,7 +553,7 @@ function InviteError({
       tone="danger"
     >
       {form.error.message}
-    </Banner>
+    </Toast>
   );
 }
 

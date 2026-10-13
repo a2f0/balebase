@@ -7,6 +7,7 @@ import {
   PageBody,
   PageHeader,
   PageSection,
+  Toast,
 } from "@tearleads/ui/react";
 import { useEffect, useState } from "react";
 import {
@@ -53,7 +54,7 @@ export function AdminJobs() {
         description="Run platform maintenance on demand using the same rules as scheduled jobs."
       />
       <PageBody>
-        {error && <Banner tone="danger">{error}</Banner>}
+        {error && <Toast tone="danger">{error}</Toast>}
         {run && <RunResult run={run} />}
         <PageSection title="Maintenance jobs">
           <p className="textSm textSubtle">

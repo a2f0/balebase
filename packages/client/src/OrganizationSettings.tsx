@@ -9,6 +9,7 @@ import {
   Page,
   PageBody,
   PageHeader,
+  Toast,
 } from "@tearleads/ui/react";
 import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
 import { authClient } from "./authClient";
@@ -250,8 +251,8 @@ function OrganizationGeneral({
   return (
     <>
       {accessError && <Banner tone="danger">{accessError}</Banner>}
-      {actions.error && <Banner tone="danger">{actions.error}</Banner>}
-      {actions.notice && <Banner tone="success">{actions.notice}</Banner>}
+      {actions.error && <Toast tone="danger">{actions.error}</Toast>}
+      {actions.notice && <Toast tone="success">{actions.notice}</Toast>}
       <OrganizationDetailsCard
         busy={actions.action !== undefined}
         loadError={accessError}

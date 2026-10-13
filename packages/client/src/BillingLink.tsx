@@ -1,4 +1,4 @@
-import { Banner, ButtonLink } from "@tearleads/ui/react";
+import { ButtonLink, Toast } from "@tearleads/ui/react";
 import { handleNavigation } from "./workspacePaths";
 
 export const billingPath = "/organization/billing";
@@ -42,8 +42,8 @@ export function BillingLink({
   );
 }
 
-/** A danger banner that links to Billing when an upgrade resolves the error. */
-export function ErrorBanner({
+/** An error toast that links to Billing when an upgrade resolves the error. */
+export function ErrorToast({
   error,
   onNavigate,
 }: {
@@ -52,11 +52,11 @@ export function ErrorBanner({
 }) {
   if (!error) return null;
   return (
-    <Banner
+    <Toast
       actions={error.upgrade ? <BillingLink onNavigate={onNavigate} /> : null}
       tone="danger"
     >
       {error.message}
-    </Banner>
+    </Toast>
   );
 }

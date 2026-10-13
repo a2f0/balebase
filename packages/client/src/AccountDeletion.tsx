@@ -1,4 +1,4 @@
-import { Banner, Button, Card, confirmDialog } from "@tearleads/ui/react";
+import { Button, Card, confirmDialog, Toast } from "@tearleads/ui/react";
 import { useEffect, useState } from "react";
 import { fetchApi } from "./apiVersion";
 import { apiUrl } from "./config";
@@ -65,7 +65,7 @@ export function AccountDeletion() {
           can cancel until the account is purged.
         </p>
       )}
-      {error && <Banner tone="danger">{error}</Banner>}
+      {error && <Toast tone="danger">{error}</Toast>}
       <Button
         busy={busy}
         disabled={busy || requestedAt === undefined}

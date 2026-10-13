@@ -11,6 +11,7 @@ import {
   Page,
   PageBody,
   PageHeader,
+  Toast,
 } from "@tearleads/ui/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
@@ -25,7 +26,7 @@ import {
   listAuditTemplateVersions,
   updateAuditTemplate,
 } from "./auditApi";
-import { ErrorBanner, type ErrorNotice, errorNotice } from "./BillingLink";
+import { type ErrorNotice, ErrorToast, errorNotice } from "./BillingLink";
 import { countLabel } from "./labels";
 import { globalAuditsPath } from "./organizationState";
 import { moveEntry, useReorderDrag } from "./useReorderDrag";
@@ -257,8 +258,8 @@ function BuilderNotices({
   const isGlobal = template.scope === "global";
   return (
     <>
-      <ErrorBanner error={error} onNavigate={onNavigate} />
-      {notice && <Banner tone="success">{notice}</Banner>}
+      <ErrorToast error={error} onNavigate={onNavigate} />
+      {notice && <Toast tone="success">{notice}</Toast>}
       {isGlobal && !manageGlobal && (
         <Banner announce={false} icon="copy" tone="info">
           Changes will be saved as a new form for this organization. The global

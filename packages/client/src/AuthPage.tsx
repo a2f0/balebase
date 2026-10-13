@@ -7,6 +7,7 @@ import {
   Icon,
   type IconName,
   Logo,
+  Toast,
 } from "@tearleads/ui/react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { authClient } from "./authClient";
@@ -251,7 +252,6 @@ function CredentialAuthPage({
   onTermsAccepted,
   variant,
 }: CredentialAuthPageProps) {
-  const noticeBanner = notice && <Banner tone={noticeTone}>{notice}</Banner>;
   return (
     <AuthLayout>
       <AuthHeading
@@ -266,7 +266,7 @@ function CredentialAuthPage({
         method="post"
         onSubmit={(event) => void onSubmit(event)}
       >
-        {noticeTone === "info" && noticeBanner}
+        {notice && noticeTone === "info" && <Banner>{notice}</Banner>}
         <AuthFields
           confirmation={confirmation}
           email={email}
@@ -296,8 +296,10 @@ function CredentialAuthPage({
           </Button>
         )}
 
-        {error && <Banner tone="danger">{error}</Banner>}
-        {noticeTone === "success" && noticeBanner}
+        {error && <Toast tone="danger">{error}</Toast>}
+        {notice && noticeTone === "success" && (
+          <Toast tone="success">{notice}</Toast>
+        )}
 
         <Button block busy={busy} size="lg" type="submit" variant="primary">
           {busy ? "One moment…" : copy.button}
@@ -624,7 +626,7 @@ function TwoFactorForm({
         />
         <span>Trust this device for 30 days</span>
       </label>
-      {error && <Banner tone="danger">{error}</Banner>}
+      {error && <Toast tone="danger">{error}</Toast>}
       <Button block busy={busy} size="lg" type="submit" variant="primary">
         {busy ? "Verifying…" : submitLabel}
       </Button>

@@ -26,8 +26,9 @@ primitives, which render those classes.
   `--text-base` (14px); inputs are `--text-md` (15px, 16px on phones).
 - Spacing follows the 4px scale (`--space-1` = 4px … `--space-32` = 128px).
 - One button vocabulary everywhere: `.button` plus a variant and size.
-- Status is communicated with `Badge`/`.badge` tones, feedback with
-  `Banner`/`.banner`; never hand-roll colored pills or alert boxes.
+- Status is communicated with `Badge`/`.badge` tones. Use `Toast` for action
+  feedback so it stays at the bottom without shifting content, and `Banner`
+  for persistent page guidance. Keep field validation beside its input.
 - Class names are camelCase to match the rest of the repository.
 
 ## Tokens
@@ -109,8 +110,10 @@ both themes, so `.onDark` regions need no theme-specific styles.
   `iconOnly`, `block`; `Button` also takes `busy`), plus `buttonClass()`
   for other elements.
 - `Badge` (`tone`, `dot`), `Banner` (`tone`, `title`, `actions`,
-  `announce`), `EmptyState` (`icon`, `title`, `actions`, `compact`,
-  `plain`), and `LoadingState`.
+  `announce`), and `Toast` (the same props as `Banner`). Wrap the app in
+  `ToastProvider` so notifications share a fixed bottom viewport, stack without
+  overlapping, and stay visible while scrolling. `Toast` also works alone.
+- `EmptyState` (`icon`, `title`, `actions`, `compact`, `plain`) and `LoadingState`.
 - `Field` wraps a control with its label, hint, and an `optional` marker.
 - `Icon` renders a name from `@tearleads/ui/icons`; `Avatar` and `Logo`
   render identity.

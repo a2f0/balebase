@@ -1,4 +1,4 @@
-import { Banner, Button, Card, Icon, LoadingState } from "@tearleads/ui/react";
+import { Button, Card, Icon, LoadingState, Toast } from "@tearleads/ui/react";
 import { useEffect, useState } from "react";
 import { authClient } from "./authClient";
 
@@ -92,7 +92,7 @@ export function OrganizationInvitation({
           </h1>
         </header>
         {error && !isRecipientMismatch(error) && (
-          <Banner tone="danger">{error}</Banner>
+          <Toast tone="danger">{error}</Toast>
         )}
         {error && isRecipientMismatch(error) && (
           <WrongAccount onUseAnotherAccount={onUseAnotherAccount} />

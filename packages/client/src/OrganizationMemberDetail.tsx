@@ -7,6 +7,7 @@ import {
   Card,
   EmptyState,
   LoadingState,
+  Toast,
 } from "@tearleads/ui/react";
 import { EmployeeForms } from "./EmployeeForms";
 import {
@@ -92,8 +93,8 @@ export function OrganizationMemberDetail({
   return (
     <>
       {back}
-      {state.error && <Banner tone="danger">{state.error}</Banner>}
-      {state.notice && <Banner tone="success">{state.notice}</Banner>}
+      {state.error && <Toast tone="danger">{state.error}</Toast>}
+      {state.notice && <Toast tone="success">{state.notice}</Toast>}
       <MemberProfile
         busy={state.busy}
         canManage={canManage}

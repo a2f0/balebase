@@ -7,6 +7,7 @@ import {
   EmptyState,
   Field,
   LoadingState,
+  Toast,
 } from "@tearleads/ui/react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import {
@@ -67,7 +68,7 @@ export function OrganizationAccessSettings({
   }
   return (
     <>
-      {error && <Banner tone="danger">{error}</Banner>}
+      {error && <Toast tone="danger">{error}</Toast>}
       <OrganizationGroups
         groups={data.groups}
         members={data.members}
@@ -140,7 +141,7 @@ function OrganizationGroups({
             Add group
           </Button>
         </div>
-        {error && <Banner tone="danger">{error}</Banner>}
+        {error && <Toast tone="danger">{error}</Toast>}
       </form>
       <div className="groupList">
         {groups.length === 0 ? (
@@ -204,8 +205,8 @@ function GroupEditor({
           members={members}
           onToggle={editor.toggleMember}
         />
-        {editor.error && <Banner tone="danger">{editor.error}</Banner>}
-        {editor.notice && <Banner tone="success">{editor.notice}</Banner>}
+        {editor.error && <Toast tone="danger">{editor.error}</Toast>}
+        {editor.notice && <Toast tone="success">{editor.notice}</Toast>}
       </div>
       <div className="groupPanelFooter">
         <Button

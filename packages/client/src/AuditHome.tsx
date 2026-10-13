@@ -27,7 +27,7 @@ import {
   readAuditTemplateView,
   storeAuditTemplateView,
 } from "./auditTemplateView";
-import { ErrorBanner, type ErrorNotice, errorNotice } from "./BillingLink";
+import { type ErrorNotice, ErrorToast, errorNotice } from "./BillingLink";
 import { countLabel, formatLabel } from "./labels";
 
 export function AuditHome({
@@ -110,7 +110,7 @@ export function AuditHome({
     <Page>
       <AuditHomeHeader busy={busy} onCreate={createTemplate} />
       <PageBody>
-        <ErrorBanner error={error} onNavigate={onNavigate} />
+        <ErrorToast error={error} onNavigate={onNavigate} />
         <TemplateLibrary
           busy={busy}
           onBegin={beginAudit}

@@ -1,6 +1,5 @@
 import {
   Badge,
-  Banner,
   Button,
   ButtonLink,
   Card,
@@ -10,6 +9,7 @@ import {
   PageBody,
   PageHeader,
   PageSection,
+  Toast,
 } from "@tearleads/ui/react";
 import { useEffect, useState } from "react";
 import { TemplateStats, templateStatusTone } from "./AuditHome";
@@ -97,7 +97,7 @@ function GlobalAuditList({
         title="Global Audits"
       />
       <PageBody>
-        {error && <Banner tone="danger">{error}</Banner>}
+        {error && <Toast tone="danger">{error}</Toast>}
         <PageSection
           actions={
             templates && (

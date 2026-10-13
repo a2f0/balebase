@@ -10,6 +10,7 @@ import {
   Page,
   PageBody,
   PageHeader,
+  Toast,
 } from "@tearleads/ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AttachmentPreviewTile } from "./AttachmentPreview";
@@ -248,8 +249,8 @@ function InboxView({
         onRefresh={messages.refresh}
       />
       <PageBody>
-        {error && <Banner tone="danger">{error}</Banner>}
-        {actions.notice && <Banner tone="success">{actions.notice}</Banner>}
+        {error && <Toast tone="danger">{error}</Toast>}
+        {actions.notice && <Toast tone="success">{actions.notice}</Toast>}
         <div className="stack">
           <InboxToolbar
             address={messages.inboundAddress}

@@ -1,5 +1,4 @@
 import {
-  Banner,
   Button,
   Card,
   EmptyState,
@@ -9,6 +8,7 @@ import {
   PageBody,
   PageHeader,
   PageSection,
+  Toast,
 } from "@tearleads/ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ContractEditor } from "./ContractEditor";
@@ -137,7 +137,7 @@ function ContractListPage({
         type="file"
       />
       <PageBody>
-        {error && <Banner tone="danger">{error}</Banner>}
+        {error && <Toast tone="danger">{error}</Toast>}
         {!contracts ? (
           !error && <LoadingState label="Loading contracts…" />
         ) : contracts.length === 0 ? (
@@ -273,7 +273,7 @@ function ContractPage({
         title={contract?.title ?? (error ? "Contract unavailable" : "Loading…")}
       />
       <PageBody>
-        {error && <Banner tone="danger">{error}</Banner>}
+        {error && <Toast tone="danger">{error}</Toast>}
         {!contract ? (
           !error && <LoadingState label="Loading contract…" />
         ) : contract.status === "draft" ? (

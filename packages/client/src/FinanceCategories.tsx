@@ -1,5 +1,4 @@
 import {
-  Banner,
   Button,
   Card,
   confirmDialog,
@@ -7,6 +6,7 @@ import {
   Field,
   LoadingState,
   PageSection,
+  Toast,
 } from "@tearleads/ui/react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import {
@@ -59,8 +59,8 @@ export function FinanceCategories({
 
   return (
     <>
-      {error && <Banner tone="danger">{error}</Banner>}
-      {notice && <Banner tone="success">{notice}</Banner>}
+      {error && <Toast tone="danger">{error}</Toast>}
+      {notice && <Toast tone="success">{notice}</Toast>}
       <AddCategoryForm
         busy={busy}
         onAdd={(name) =>

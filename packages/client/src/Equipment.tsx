@@ -12,6 +12,7 @@ import {
   PageBody,
   PageHeader,
   PageSection,
+  Toast,
 } from "@tearleads/ui/react";
 import {
   type FormEvent,
@@ -146,8 +147,8 @@ function EquipmentListPage({
         title="Equipment"
       />
       <PageBody>
-        {error && <Banner tone="danger">{error}</Banner>}
-        {notice && <Banner tone="success">{notice}</Banner>}
+        {error && <Toast tone="danger">{error}</Toast>}
+        {notice && <Toast tone="success">{notice}</Toast>}
         {!listing ? (
           !error && <LoadingState label="Loading equipment…" />
         ) : (
@@ -452,8 +453,8 @@ function EquipmentDetailPage({
         unavailable={Boolean(error)}
       />
       <PageBody>
-        {error && <Banner tone="danger">{error}</Banner>}
-        {notice && <Banner tone="success">{notice}</Banner>}
+        {error && <Toast tone="danger">{error}</Toast>}
+        {notice && <Toast tone="success">{notice}</Toast>}
         {!detail || !item ? (
           !error && <LoadingState label="Loading equipment…" />
         ) : (

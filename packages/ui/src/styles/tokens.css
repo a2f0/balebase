@@ -149,6 +149,7 @@
   --z-sticky: 10;
   --z-overlay: 40;
   --z-popover: 50;
+  --z-toast: 60;
 
   /* Page layout. */
   --page-max: 72rem;

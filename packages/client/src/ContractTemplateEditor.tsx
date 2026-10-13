@@ -1,10 +1,4 @@
-import {
-  Banner,
-  Button,
-  Card,
-  confirmDialog,
-  Field,
-} from "@tearleads/ui/react";
+import { Button, Card, confirmDialog, Field, Toast } from "@tearleads/ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ContractPages } from "./ContractDocument";
 import {
@@ -54,7 +48,7 @@ export function ContractTemplateEditor({
       <div className="contractEditor">
         <FieldHelp />
         <aside className="contractEditorPanel">
-          {editor.error && <Banner tone="danger">{editor.error}</Banner>}
+          {editor.error && <Toast tone="danger">{editor.error}</Toast>}
           <TemplateDetails editor={editor} />
           <TemplateRoles editor={editor} />
           <FieldToolbox editor={editor} />

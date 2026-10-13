@@ -72,11 +72,6 @@
   background: var(--color-surface-sunken);
 }
 
-.recoveryCopyNotice {
-  color: var(--color-text-subtle);
-  font-size: var(--text-sm);
-}
-
 @media (max-width: 720px) {
   .totpSetup {
     grid-template-columns: minmax(0, 1fr);

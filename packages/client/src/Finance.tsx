@@ -6,6 +6,7 @@ import {
   Page,
   PageBody,
   PageHeader,
+  Toast,
 } from "@tearleads/ui/react";
 import {
   type Dispatch,
@@ -360,15 +361,17 @@ function FinanceNotices({
   showDataNotice: boolean;
   unconfigured: boolean;
 }) {
-  if (!error && !notice && !(overview && (unconfigured || showDataNotice)))
-    return null;
   return (
-    <div className="stack stackMd">
-      {error && <Banner tone="danger">{error}</Banner>}
-      {notice && <Banner tone="success">{notice}</Banner>}
-      {overview && unconfigured && <FinanceSetupNotice />}
-      {overview && showDataNotice && <FinanceDataNotice />}
-    </div>
+    <>
+      {error && <Toast tone="danger">{error}</Toast>}
+      {notice && <Toast tone="success">{notice}</Toast>}
+      {overview && (unconfigured || showDataNotice) && (
+        <div className="stack stackMd">
+          {unconfigured && <FinanceSetupNotice />}
+          {showDataNotice && <FinanceDataNotice />}
+        </div>
+      )}
+    </>
   );
 }
 

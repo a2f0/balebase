@@ -1,4 +1,4 @@
-import { Banner, Button, cx, Icon, type IconName } from "@tearleads/ui/react";
+import { Button, cx, Icon, type IconName, Toast } from "@tearleads/ui/react";
 import { type FormEvent, useEffect, useState } from "react";
 import {
   type InboundEmailLink,
@@ -93,7 +93,7 @@ export function EmailLinks({
           </Button>
         )}
       </div>
-      {error && <Banner tone="danger">{error}</Banner>}
+      {error && <Toast tone="danger">{error}</Toast>}
       {links.length > 0 ? (
         <ul className="emailLinkList">
           {links.map((link) => (

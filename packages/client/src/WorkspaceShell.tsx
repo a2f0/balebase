@@ -1,4 +1,10 @@
-import { Icon, type IconName, Logo, promptDialog } from "@tearleads/ui/react";
+import {
+  Icon,
+  type IconName,
+  Logo,
+  promptDialog,
+  Toast,
+} from "@tearleads/ui/react";
 import {
   type CSSProperties,
   type MouseEvent,
@@ -342,7 +348,7 @@ function OrganizationSwitcher({
           <Icon name="add" size={16} />
           {busy ? "Creating…" : "Create organization"}
         </button>
-        {error && <small role="alert">{error}</small>}
+        {error && <Toast tone="danger">{error}</Toast>}
       </div>
     );
   }
@@ -393,7 +399,7 @@ function OrganizationSwitcher({
           <option value="create">Create organization…</option>
         </select>
       </label>
-      {error && <small role="alert">{error}</small>}
+      {error && <Toast tone="danger">{error}</Toast>}
     </div>
   );
 }

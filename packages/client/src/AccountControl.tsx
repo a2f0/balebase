@@ -1,4 +1,4 @@
-import { Avatar, Icon } from "@tearleads/ui/react";
+import { Avatar, Icon, Toast } from "@tearleads/ui/react";
 import { useId, useRef, useState } from "react";
 import { version as appVersion } from "../package.json";
 import type { AccountSession } from "./accountSessions";
@@ -119,11 +119,7 @@ function AccountMenu({
   return (
     <div className="popover accountMenu" role="menu">
       <p className="menuLabel">Accounts</p>
-      {error && (
-        <p className="accountMenuError" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <Toast tone="danger">{error}</Toast>}
       <div className="accountChoices">
         {accounts.map((account) => {
           const active = account.token === activeSessionToken;

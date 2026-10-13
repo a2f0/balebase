@@ -9,6 +9,7 @@ import {
   Icon,
   LoadingState,
   PageSection,
+  Toast,
 } from "@tearleads/ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -86,8 +87,8 @@ export function OrganizationBilling({
   }
   return (
     <>
-      {error && <Banner tone="danger">{error}</Banner>}
-      {notice && <Banner tone={notice.tone}>{notice.message}</Banner>}
+      {error && <Toast tone="danger">{error}</Toast>}
+      {notice && <Toast tone={notice.tone}>{notice.message}</Toast>}
       {status && (
         <>
           <CurrentPlanCard status={status} />

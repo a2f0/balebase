@@ -1,6 +1,5 @@
 import {
   Badge,
-  Banner,
   Button,
   confirmDialog,
   EmptyState,
@@ -9,6 +8,7 @@ import {
   PageBody,
   PageHeader,
   PageSection,
+  Toast,
 } from "@tearleads/ui/react";
 import {
   type Dispatch,
@@ -106,9 +106,9 @@ function AdminOrganizationList({
         title="Organizations"
       />
       <PageBody>
-        {error && <Banner tone="danger">{error}</Banner>}
-        {lifecycle.error && <Banner tone="danger">{lifecycle.error}</Banner>}
-        {lifecycle.notice && <Banner tone="success">{lifecycle.notice}</Banner>}
+        {error && <Toast tone="danger">{error}</Toast>}
+        {lifecycle.error && <Toast tone="danger">{lifecycle.error}</Toast>}
+        {lifecycle.notice && <Toast tone="success">{lifecycle.notice}</Toast>}
         <OrganizationSection
           action={lifecycle.action}
           busy={busy}

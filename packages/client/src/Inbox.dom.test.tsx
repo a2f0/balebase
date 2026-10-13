@@ -162,6 +162,9 @@ describe("Inbox, mounted", () => {
     await render();
     await click("Copy email address upload@example.com");
     expect(copied).toEqual(["upload@example.com"]);
+    expect(container.querySelector(".toast")?.textContent).toContain(
+      "Inbound email address copied.",
+    );
     expect(container.querySelector('[role="status"]')?.textContent).toContain(
       "Inbound email address copied.",
     );
