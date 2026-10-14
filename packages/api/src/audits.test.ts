@@ -2284,6 +2284,101 @@ describe("audit discarding", () => {
     ).toEqual({ images: 1, pending: 0, removals: 0 });
   });
 
+  it("rejects an upload, issue update, or discard that a discard overtakes", async () => {
+    const fixture = await createFixture();
+    const { auditId } = await createActivityAudit(fixture);
+    const created = await jsonRequest<IssueResponse>(
+      fixture,
+      `/runs/${auditId}/issues`,
+      "POST",
+      { itemId: "check", title: "Inspect this" },
+    );
+    const issueId = created.body.issueId;
+    const discardNow = () => {
+      fixture.database
+        .query(
+          `UPDATE audits SET deleted_at = ?, deleted_by_user_id = 'user-2'
+           WHERE id = ?`,
+        )
+        .run(new Date().toISOString(), auditId);
+    };
+    const restore = () => {
+      fixture.database
+        .query("UPDATE audits SET deleted_at = NULL WHERE id = ?")
+        .run(auditId);
+    };
+    const expectDiscarded = async (response: Response) => {
+      expect(response.status).toBe(409);
+      const body: unknown = await response.json();
+      expect(body).toEqual({ error: "This audit was discarded." });
+    };
+
+    // Discarded while the bytes upload: activation refuses the image.
+    fixture.storageControl.beforeNextPut = async () => discardNow();
+    await expectDiscarded(
+      await fixture.app.request(
+        `/issues/${issueId}/images?filename=during.png`,
+        imageUpload(pngBytes()),
+        fixture.bindings,
+      ),
+    );
+    // Discarded between the issue check and the reservation: no bytes upload.
+    restore();
+    let uploadedBytes = false;
+    fixture.storageControl.beforeNextPut = async () => {
+      uploadedBytes = true;
+    };
+    fixture.databaseControl.afterNextIssueRead = discardNow;
+    await expectDiscarded(
+      await fixture.app.request(
+        `/issues/${issueId}/images?filename=before.png`,
+        imageUpload(pngBytes()),
+        fixture.bindings,
+      ),
+    );
+    expect(uploadedBytes).toBe(false);
+    delete fixture.storageControl.beforeNextPut;
+    restore();
+    fixture.databaseControl.afterNextIssueRead = discardNow;
+    await expectDiscarded(
+      await fixture.app.request(
+        `/issues/${issueId}`,
+        {
+          body: JSON.stringify({ status: "resolved" }),
+          headers: { "content-type": "application/json" },
+          method: "PATCH",
+        },
+        fixture.bindings,
+      ),
+    );
+    restore();
+    fixture.databaseControl.afterNextAuditRead = discardNow;
+    await expectDiscarded(
+      await fixture.app.request(
+        `/runs/${auditId}`,
+        { method: "DELETE" },
+        fixture.bindings,
+      ),
+    );
+
+    expect(fixture.stored.size).toBe(0);
+    expect(
+      fixture.database
+        .query(
+          `SELECT
+             (SELECT COUNT(*) FROM audit_issue_images) AS images,
+             (SELECT COUNT(*) FROM objects
+              WHERE kind = 'audit_issue_image') AS objects,
+             (SELECT status FROM audit_issues WHERE id = ?) AS issueStatus,
+             (SELECT COUNT(*) FROM activity_events
+              WHERE root_id = ? AND action IN
+                ('audit.image_uploaded', 'audit.issue_resolved',
+                 'audit.discarded')) AS events`,
+        )
+        .get(issueId, auditId),
+    ).toEqual({ events: 0, images: 0, issueStatus: "open", objects: 0 });
+  });
+
   it("rejects a save or new issue when the audit is discarded after the initial read", async () => {
     const fixture = await createFixture();
     const { auditId } = await createActivityAudit(fixture);
@@ -2976,6 +3071,7 @@ interface DatabaseControl {
   activateBeforeCleanupClaim: boolean;
   afterNextAuditRead?: () => void;
   afterNextImageRead?: () => void;
+  afterNextIssueRead?: () => void;
   commitThenThrowImageActivation: boolean;
   deleteAssigneeBeforeIssueUpdate: boolean;
   deleteAuditBeforeRunUpdate: boolean;
@@ -3338,6 +3434,11 @@ function toD1(
           if (query.includes("FROM audit_issue_images AS image")) {
             const callback = control.afterNextImageRead;
             delete control.afterNextImageRead;
+            callback?.();
+          }
+          if (query.includes("FROM audit_issues AS issue")) {
+            const callback = control.afterNextIssueRead;
+            delete control.afterNextIssueRead;
             callback?.();
           }
           return result;

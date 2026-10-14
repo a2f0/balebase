@@ -104,8 +104,17 @@ auditIssueImages.post("/:issueId/images", async (context) => {
       context.req.query("filename"),
     );
     if (reservation === null) {
+      const discarded = await issueAuditDiscarded(
+        context.env.DB,
+        organizationId,
+        issue.id,
+      );
       return context.json(
-        { error: `Issues are limited to ${maxImagesPerIssue} images.` },
+        {
+          error: discarded
+            ? discardedAuditError
+            : `Issues are limited to ${maxImagesPerIssue} images.`,
+        },
         409,
       );
     }
@@ -260,7 +269,7 @@ async function reserveAuditIssueImage(
          WHERE NOT EXISTS (
            SELECT 1 FROM audit_issue_images AS existing
            WHERE existing.issue_id = ? AND existing.slot = slots.slot
-         )
+         ) AND ${issueAuditNotDiscarded}
          ORDER BY slots.slot ASC
          LIMIT 1
          RETURNING id`,
@@ -272,6 +281,7 @@ async function reserveAuditIssueImage(
         objectId,
         userId,
         createdAt,
+        issueId,
         issueId,
       )
       .first<{ id: string }>();
@@ -331,7 +341,7 @@ function normalizedImageFilename(filename: string, extension: string) {
 class AuditIssueImageUploadError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 408 | 413,
+    readonly status: 400 | 408 | 409 | 413,
   ) {
     super(message);
   }
@@ -376,9 +386,16 @@ async function persistAuditIssueImage(
            SELECT 1 FROM audit_issue_images AS reservation
            WHERE reservation.object_id = objects.id
              AND reservation.issue_id = ?
-         )`,
+         )
+         AND ${issueAuditNotDiscarded}`,
     )
-      .bind(normalizedSize, image.objectId, image.uploadToken, image.issueId)
+      .bind(
+        normalizedSize,
+        image.objectId,
+        image.uploadToken,
+        image.issueId,
+        image.issueId,
+      )
       .run();
     if (Number(activated.meta.changes) === 0) {
       throw new Error("Issue image reservation could not be activated.");
@@ -390,6 +407,16 @@ async function persistAuditIssueImage(
       normalizedSize,
     );
     if (activationCommitted) return;
+    // A discard during the upload leaves the bytes to the cleanup above.
+    if (
+      await issueAuditDiscarded(
+        environment.DB,
+        image.organizationId,
+        image.issueId,
+      )
+    ) {
+      throw new AuditIssueImageUploadError(discardedAuditError, 409);
+    }
     throw cause;
   }
 }
@@ -996,6 +1023,30 @@ async function findAuditIssueImage(
     )
     .bind(organizationId, issueId, imageId)
     .first<AuditIssueImageRow>();
+}
+
+/** Binds one issue id; true unless that issue's audit has been discarded. */
+const issueAuditNotDiscarded = `NOT EXISTS (
+  SELECT 1 FROM audit_issues AS guarded_issue
+  JOIN audits AS guarded_audit ON guarded_audit.id = guarded_issue.audit_id
+  WHERE guarded_issue.id = ? AND guarded_audit.deleted_at IS NOT NULL
+)`;
+
+async function issueAuditDiscarded(
+  database: D1Database,
+  organizationId: string,
+  issueId: string,
+) {
+  const issue = await database
+    .prepare(
+      `SELECT audit.deleted_at
+       FROM audit_issues AS issue
+       JOIN audits AS audit ON audit.id = issue.audit_id
+       WHERE issue.id = ? AND issue.organization_id = ?`,
+    )
+    .bind(issueId, organizationId)
+    .first<{ deleted_at: string | null }>();
+  return Boolean(issue?.deleted_at);
 }
 
 /** Binds one image id; true unless that image's audit has been discarded. */

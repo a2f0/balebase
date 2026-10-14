@@ -476,12 +476,9 @@ audits.delete("/runs/:id", async (context) => {
   if (rejection) return context.json({ error: rejection }, 409);
   const actorId = context.get("authSession").user.id;
   const now = new Date().toISOString();
-  const [discarded] = await context.env.DB.batch([
-    context.env.DB.prepare(
-      `UPDATE audits SET deleted_at = ?, deleted_by_user_id = ?
-       WHERE id = ? AND organization_id = ? AND status = 'in_progress'
-         AND deleted_at IS NULL`,
-    ).bind(now, actorId, audit.id, organizationId),
+  // The event goes first under the update's own predicate: a batch is one
+  // transaction, so a concurrent discard can never record a second event.
+  const [, discarded] = await context.env.DB.batch([
     activityStatement(
       context.env.DB,
       {
@@ -494,14 +491,19 @@ audits.delete("/runs/:id", async (context) => {
         subject: { id: audit.id, type: "audit_run" },
       },
       {
-        bindings: [audit.id, organizationId, now, actorId],
+        bindings: [audit.id, organizationId],
         sql: `EXISTS (
           SELECT 1 FROM audits
-          WHERE id = ? AND organization_id = ?
-            AND deleted_at = ? AND deleted_by_user_id = ?
+          WHERE id = ? AND organization_id = ? AND status = 'in_progress'
+            AND deleted_at IS NULL
         )`,
       },
     ),
+    context.env.DB.prepare(
+      `UPDATE audits SET deleted_at = ?, deleted_by_user_id = ?
+       WHERE id = ? AND organization_id = ? AND status = 'in_progress'
+         AND deleted_at IS NULL`,
+    ).bind(now, actorId, audit.id, organizationId),
   ]);
   if (Number(discarded?.meta.changes) === 0) {
     const current = await findAudit(context.env.DB, organizationId, audit.id);
