@@ -281,9 +281,14 @@ describe("discarding an audit whose reload fails, mounted", () => {
       ),
     );
     await settle();
+    await click("Fail");
     await click("Discard audit");
     await answerDialog("Discard audit");
     expect(container.textContent).toContain("Temporarily unavailable.");
+    // The unsaved Fail was never stored; the read-only audit shows the saved Pass.
+    expect(
+      container.querySelector('button[aria-pressed="true"]')?.textContent,
+    ).toBe("Pass");
     expect(container.textContent).toContain("Discarded ·");
     expect(
       container.querySelector("fieldset.runEditable")?.hasAttribute("disabled"),

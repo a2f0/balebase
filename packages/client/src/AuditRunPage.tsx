@@ -106,15 +106,16 @@ export function runStateReducer(state: RunState, action: RunAction): RunState {
         ...state,
         responses: { ...state.responses, [action.itemId]: action.response },
       };
-    // Read-only at once, even if the reload that follows fails.
+    // Read-only at once, even if the reload that follows fails; unsaved
+    // answers were not kept, so show the saved ones.
     case "discarded":
       return state.detail
         ? {
-            ...state,
             detail: {
               ...state.detail,
               audit: { ...state.detail.audit, deletedAt: action.deletedAt },
             },
+            responses: state.detail.audit.responses,
           }
         : state;
   }

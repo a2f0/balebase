@@ -139,6 +139,7 @@ function useAuditRunList(setError: (error: ErrorNotice | undefined) => void) {
     setError(undefined);
     setRuns(undefined);
     setNextCursor(null);
+    setLoadingMore(false);
     listAuditRuns(undefined, view).then(
       (page) => {
         if (!current) return;
@@ -169,7 +170,7 @@ function useAuditRunList(setError: (error: ErrorNotice | undefined) => void) {
         setError(errorNotice(cause, "Could not load audits."));
       }
     } finally {
-      setLoadingMore(false);
+      if (generation.current === started) setLoadingMore(false);
     }
   }
 
