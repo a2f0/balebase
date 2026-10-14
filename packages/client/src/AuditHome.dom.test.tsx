@@ -131,9 +131,11 @@ function page(container: HTMLElement) {
     cards: () => container.querySelectorAll(".auditTemplateCard").length,
     layoutButton,
     pressed: () =>
-      [...container.querySelectorAll('.segmented > [aria-pressed="true"]')].map(
-        (element) => element.textContent?.trim(),
-      ),
+      [
+        ...container.querySelectorAll(
+          '.auditTemplateToolbar .segmented > [aria-pressed="true"]',
+        ),
+      ].map((element) => element.textContent?.trim()),
     rowText: () =>
       [...container.querySelectorAll(".auditTemplateRow")].map(
         (element) => element.textContent ?? "",
@@ -210,5 +212,69 @@ describe("audit template layout, mounted", () => {
 
     await click(second.layoutButton("Grid"));
     expect(second.cards()).toBe(2);
+  });
+});
+
+describe("deleted audits, mounted", () => {
+  it("lists discarded audits and keeps that list in the address", async () => {
+    const requested: string[] = [];
+    const actor = { email: "alex@example.com", id: "u2", name: "Alex" };
+    const run = {
+      completedAt: null,
+      createdAt: "2026-10-01T00:00:00.000Z",
+      createdBy: actor,
+      deletedAt: null,
+      deletedBy: null,
+      id: "run-active",
+      issueCount: 0,
+      responseCount: 1,
+      status: "in_progress",
+      templateName: "Kitchen close",
+      templateVersion: 2,
+      updatedAt: "2026-10-01T00:00:00.000Z",
+    };
+    globalThis.fetch = (async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/api/audits/templates")) {
+        return Response.json({ templates });
+      }
+      requested.push(`${url.pathname}${url.search}`);
+      const audits =
+        url.searchParams.get("view") === "deleted"
+          ? [
+              {
+                ...run,
+                deletedAt: "2026-10-14T12:00:00.000Z",
+                deletedBy: actor,
+                id: "run-discarded",
+                templateName: "Fire safety",
+              },
+            ]
+          : [run];
+      return Response.json({ audits, nextCursor: null });
+    }) as typeof fetch;
+
+    try {
+      const view = await mountPage();
+      expect(view.text()).toContain("Recent audits");
+      expect(view.text()).toContain("Kitchen close");
+      await click(view.layoutButton("Deleted"));
+      expect(requested).toEqual([
+        "/api/audits/runs",
+        "/api/audits/runs?view=deleted",
+      ]);
+      expect(view.text()).toContain("Deleted audits");
+      expect(view.text()).toContain("Discarded");
+      expect(view.text()).toContain("by Alex");
+      expect(window.location.search).toBe("?view=deleted");
+
+      const revisited = await mountPage();
+      expect(
+        revisited.layoutButton("Deleted")?.getAttribute("aria-pressed"),
+      ).toBe("true");
+      expect(requested.at(-1)).toBe("/api/audits/runs?view=deleted");
+    } finally {
+      window.history.replaceState(null, "", "/audits");
+    }
   });
 });

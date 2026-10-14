@@ -1,5 +1,6 @@
 import { type Context, Hono } from "hono";
 import { activityStatement } from "./activity";
+import { discardedAuditError } from "./auditRunRecords";
 import type { AuthVariables } from "./authMiddleware";
 import { maxFilenameBytes, normalizeFilename } from "./filenames";
 import { auditIssueImageUploadGraceMilliseconds } from "./objectLifecycle";
@@ -52,6 +53,7 @@ function acquireImageUploadCapacity(organizationId: string) {
 }
 
 export interface AuditIssueImageRow {
+  audit_deleted_at: string | null;
   audit_id: string;
   content_type: string;
   created_at: string;
@@ -73,11 +75,17 @@ auditIssueImages.post("/:issueId/images", async (context) => {
   const organizationId = context.get("organizationId");
   const issueId = context.req.param("issueId");
   const issue = await context.env.DB.prepare(
-    `SELECT id FROM audit_issues WHERE id = ? AND organization_id = ?`,
+    `SELECT issue.id, audit.deleted_at AS audit_deleted_at
+     FROM audit_issues AS issue
+     JOIN audits AS audit ON audit.id = issue.audit_id
+     WHERE issue.id = ? AND issue.organization_id = ?`,
   )
     .bind(issueId, organizationId)
-    .first<{ id: string }>();
+    .first<{ audit_deleted_at: string | null; id: string }>();
   if (!issue) return context.json({ error: "Issue not found." }, 404);
+  if (issue.audit_deleted_at) {
+    return context.json({ error: discardedAuditError }, 409);
+  }
 
   const releaseCapacity = acquireImageUploadCapacity(organizationId);
   if (releaseCapacity === null) {
@@ -887,6 +895,9 @@ auditIssueImages.delete("/:issueId/images/:imageId", async (context) => {
     true,
   );
   if (!row) return context.json({ error: "Issue image not found." }, 404);
+  if (row.audit_deleted_at) {
+    return context.json({ error: discardedAuditError }, 409);
+  }
   // Atomically hide the image and release its unique issue slot before R2
   // cleanup. A failed R2 delete leaves a durable object tombstone for cron.
   await context.env.DB.batch([
@@ -975,6 +986,7 @@ async function findAuditIssueImage(
 const imageSelect = `
   SELECT image.id, image.issue_id, image.object_id, image.created_at,
          issue.audit_id, issue.title, audit.template_name,
+         audit.deleted_at AS audit_deleted_at,
          object.deletion_pending,
          object.object_key, object.filename, object.content_type, object.size,
          uploader.id AS uploaded_by_id, uploader.name AS uploaded_by_name,

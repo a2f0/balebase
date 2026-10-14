@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {
   type ActivityRow,
+  activityStatement,
   auditAnswerActivityStatement,
   findActivity,
   toAuditAnswerActivity,
@@ -12,6 +13,16 @@ import {
   findAuditIssueImages,
   toAuditIssueImage,
 } from "./auditIssueImages";
+import {
+  type AuditRow,
+  type AuditSummaryRow,
+  auditStatement,
+  discardedAuditError,
+  discardRejection,
+  findAudit,
+  toAudit,
+  toAuditSummary,
+} from "./auditRunRecords";
 import {
   createTemplate,
   ensureStarterTemplates,
@@ -35,28 +46,6 @@ const audits = new Hono<{
   Bindings: Bindings;
   Variables: AuthVariables;
 }>();
-
-interface AuditRow {
-  completed_at: string | null;
-  created_at: string;
-  created_by_email: string;
-  created_by_id: string;
-  created_by_name: string;
-  definition: string;
-  id: string;
-  responses: string;
-  revision: number;
-  status: string;
-  template_family_id: string | null;
-  template_id: string | null;
-  template_name: string;
-  template_version: number | null;
-  updated_at: string;
-}
-
-interface AuditSummaryRow extends AuditRow {
-  issue_count: number;
-}
 
 interface AuditCursor {
   createdAt: string;
@@ -87,7 +76,6 @@ interface MemberRow {
 }
 
 const auditRunPageSize = 100;
-
 audits.get("/templates", async (context) => {
   const organizationId = context.get("organizationId");
   await ensureStarterTemplates(context.env.DB);
@@ -301,17 +289,29 @@ audits.get("/runs", async (context) => {
   if (cursorValue !== undefined && !cursor) {
     return context.json({ error: "Invalid audit cursor." }, 400);
   }
+  const view = context.req.query("view") ?? "active";
+  if (view !== "active" && view !== "deleted") {
+    return context.json({ error: "Invalid audit view." }, 400);
+  }
+  const deletedFilter =
+    view === "deleted"
+      ? "audit.deleted_at IS NOT NULL"
+      : "audit.deleted_at IS NULL";
   const result = await context.env.DB.prepare(
     `SELECT audit.id, audit.template_id, audit.template_family_id,
             audit.template_version, audit.template_name, audit.definition,
             audit.responses, audit.status, audit.completed_at,
             audit.revision, creator.id AS created_by_id,
             creator.name AS created_by_name, creator.email AS created_by_email,
+            audit.deleted_at, deleted_by.id AS deleted_by_id,
+            deleted_by.name AS deleted_by_name,
+            deleted_by.email AS deleted_by_email,
             audit.created_at, audit.updated_at, COUNT(issue.id) AS issue_count
      FROM audits AS audit
      JOIN user AS creator ON creator.id = audit.started_by
+     LEFT JOIN user AS deleted_by ON deleted_by.id = audit.deleted_by_user_id
      LEFT JOIN audit_issues AS issue ON issue.audit_id = audit.id
-     WHERE audit.organization_id = ?
+     WHERE audit.organization_id = ? AND ${deletedFilter}
        AND (? IS NULL OR audit.created_at < ? OR
             (audit.created_at = ? AND audit.id < ?))
      GROUP BY audit.id
@@ -398,6 +398,8 @@ audits.patch("/runs/:id", async (context) => {
     context.req.param("id"),
   );
   if (!audit) return context.json({ error: "Audit not found." }, 404);
+  if (audit.deleted_at)
+    return context.json({ error: discardedAuditError }, 409);
   const body: unknown = await context.req.json().catch(() => null);
   if (!isRecord(body))
     return context.json({ error: "Invalid audit update." }, 400);
@@ -432,7 +434,8 @@ audits.patch("/runs/:id", async (context) => {
   const updated = await context.env.DB.prepare(
     `UPDATE audits SET responses = ?, status = ?, completed_at = ?, updated_at = ?,
                        activity_actor_id = ?, revision = revision + 1
-     WHERE revision = ? AND id = ? AND organization_id = ?`,
+     WHERE revision = ? AND id = ? AND organization_id = ?
+       AND deleted_at IS NULL`,
   )
     .bind(
       JSON.stringify(responses),
@@ -447,14 +450,68 @@ audits.patch("/runs/:id", async (context) => {
     .run();
   if (Number(updated.meta.changes) === 0) {
     const exists = await findAudit(context.env.DB, organizationId, audit.id);
-    return exists
-      ? context.json(
-          { error: "This audit has changed. Reload it before saving." },
-          409,
-        )
-      : context.json({ error: "Audit not found." }, 404);
+    if (!exists) return context.json({ error: "Audit not found." }, 404);
+    return context.json(
+      {
+        error: exists.deleted_at
+          ? discardedAuditError
+          : "This audit has changed. Reload it before saving.",
+      },
+      409,
+    );
   }
   return context.json({ status, updatedAt: now });
+});
+
+/** Discarding keeps the audit readable in the Deleted view; it never changes again. */
+audits.delete("/runs/:id", async (context) => {
+  const organizationId = context.get("organizationId");
+  const audit = await findAudit(
+    context.env.DB,
+    organizationId,
+    context.req.param("id"),
+  );
+  if (!audit) return context.json({ error: "Audit not found." }, 404);
+  const rejection = discardRejection(audit);
+  if (rejection) return context.json({ error: rejection }, 409);
+  const actorId = context.get("authSession").user.id;
+  const now = new Date().toISOString();
+  const [discarded] = await context.env.DB.batch([
+    context.env.DB.prepare(
+      `UPDATE audits SET deleted_at = ?, deleted_by_user_id = ?
+       WHERE id = ? AND organization_id = ? AND status = 'in_progress'
+         AND deleted_at IS NULL`,
+    ).bind(now, actorId, audit.id, organizationId),
+    activityStatement(
+      context.env.DB,
+      {
+        action: "audit.discarded",
+        actorId,
+        details: {},
+        occurredAt: now,
+        organizationId,
+        root: { id: audit.id, label: audit.template_name, type: "audit_run" },
+        subject: { id: audit.id, type: "audit_run" },
+      },
+      {
+        bindings: [audit.id, organizationId, now, actorId],
+        sql: `EXISTS (
+          SELECT 1 FROM audits
+          WHERE id = ? AND organization_id = ?
+            AND deleted_at = ? AND deleted_by_user_id = ?
+        )`,
+      },
+    ),
+  ]);
+  if (Number(discarded?.meta.changes) === 0) {
+    const current = await findAudit(context.env.DB, organizationId, audit.id);
+    if (!current) return context.json({ error: "Audit not found." }, 404);
+    return context.json(
+      { error: discardRejection(current) ?? discardedAuditError },
+      409,
+    );
+  }
+  return context.json({ deletedAt: now });
 });
 
 audits.post("/runs/:id/issues", async (context) => {
@@ -465,6 +522,8 @@ audits.post("/runs/:id/issues", async (context) => {
     context.req.param("id"),
   );
   if (!audit) return context.json({ error: "Audit not found." }, 404);
+  if (audit.deleted_at)
+    return context.json({ error: discardedAuditError }, 409);
   const body: unknown = await context.req.json().catch(() => null);
   const issueInput = await parseIssueInput(
     context.env.DB,
@@ -476,11 +535,15 @@ audits.post("/runs/:id/issues", async (context) => {
     return context.json({ error: "Invalid issue details." }, 400);
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  await context.env.DB.prepare(
+  const inserted = await context.env.DB.prepare(
     `INSERT INTO audit_issues
      (id, organization_id, audit_id, item_id, title, description, priority,
       status, assigned_to, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)`,
+     SELECT ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?
+     WHERE EXISTS (
+       SELECT 1 FROM audits
+       WHERE id = ? AND organization_id = ? AND deleted_at IS NULL
+     )`,
   )
     .bind(
       id,
@@ -494,8 +557,15 @@ audits.post("/runs/:id/issues", async (context) => {
       context.get("authSession").user.id,
       now,
       now,
+      audit.id,
+      organizationId,
     )
     .run();
+  if (Number(inserted.meta.changes) === 0) {
+    return (await findAudit(context.env.DB, organizationId, audit.id))
+      ? context.json({ error: discardedAuditError }, 409)
+      : context.json({ error: "Audit not found." }, 404);
+  }
   return context.json({ issueId: id }, 201);
 });
 
@@ -504,17 +574,14 @@ audits.patch("/issues/:id", async (context) => {
   if (!isRecord(body))
     return context.json({ error: "Invalid issue update." }, 400);
   const organizationId = context.get("organizationId");
-  const issue = await context.env.DB.prepare(
-    `SELECT id, status, assigned_to
-     FROM audit_issues WHERE id = ? AND organization_id = ?`,
-  )
-    .bind(context.req.param("id"), organizationId)
-    .first<{
-      assigned_to: string | null;
-      id: string;
-      status: string;
-    }>();
+  const issue = await findIssueForUpdate(
+    context.env.DB,
+    organizationId,
+    context.req.param("id"),
+  );
   if (!issue) return context.json({ error: "Issue not found." }, 404);
+  if (issue.audit_deleted_at)
+    return context.json({ error: discardedAuditError }, 409);
   const changesStatus = body.status !== undefined;
   const changesAssignee = body.assignedTo !== undefined;
   if (!changesStatus && !changesAssignee) {
@@ -549,7 +616,11 @@ audits.patch("/issues/:id", async (context) => {
      WHERE id = ? AND organization_id = ?
        AND (? = 0 OR ? IS NULL OR EXISTS (
          SELECT 1 FROM member WHERE organizationId = ? AND userId = ?
-       ))`,
+       ))
+       AND NOT EXISTS (
+         SELECT 1 FROM audits
+         WHERE audits.id = audit_issues.audit_id AND audits.deleted_at IS NOT NULL
+       )`,
   )
     .bind(
       changesStatus ? 1 : 0,
@@ -569,15 +640,30 @@ audits.patch("/issues/:id", async (context) => {
   if (result.meta.changes > 0) {
     return context.json({ assignedTo, status, updatedAt: now });
   }
-  if (
-    changesAssignee &&
-    assignedTo &&
-    !(await isMember(context.env.DB, organizationId, assignedTo))
-  ) {
-    return context.json({ error: "Issue assignee is not a member." }, 400);
-  }
-  return context.json({ error: "Issue not found." }, 404);
+  const rejected = await rejectedIssueUpdate(
+    context.env.DB,
+    organizationId,
+    issue.id,
+    changesAssignee ? assignedTo : null,
+  );
+  return context.json({ error: rejected.error }, rejected.status);
 });
+
+/** Why an issue update changed nothing: a non-member assignee, a discard, or a deletion. */
+async function rejectedIssueUpdate(
+  database: D1Database,
+  organizationId: string,
+  issueId: string,
+  newAssignee: string | null | undefined,
+) {
+  if (newAssignee && !(await isMember(database, organizationId, newAssignee))) {
+    return { error: "Issue assignee is not a member.", status: 400 as const };
+  }
+  const current = await findIssueForUpdate(database, organizationId, issueId);
+  return current?.audit_deleted_at
+    ? { error: discardedAuditError, status: 409 as const }
+    : { error: "Issue not found.", status: 404 as const };
+}
 
 audits.route("/issues", auditIssueImages);
 
@@ -645,30 +731,26 @@ function parseAssignee(value: unknown) {
   return validText(value, 100) ? value.trim() : undefined;
 }
 
-async function findAudit(
-  database: D1Database,
-  organizationId: string,
-  id: string,
-) {
-  return auditStatement(database, organizationId, id).first<AuditRow>();
-}
-
-function auditStatement(
+function findIssueForUpdate(
   database: D1Database,
   organizationId: string,
   id: string,
 ) {
   return database
     .prepare(
-      `SELECT audit.id, audit.template_id, audit.template_family_id, audit.template_version,
-              audit.template_name, audit.definition, audit.responses, audit.status, audit.completed_at,
-              audit.created_at, audit.updated_at, audit.revision,
-              creator.id AS created_by_id, creator.name AS created_by_name,
-              creator.email AS created_by_email
-       FROM audits AS audit JOIN user AS creator ON creator.id = audit.started_by
-       WHERE audit.id = ? AND audit.organization_id = ?`,
+      `SELECT issue.id, issue.status, issue.assigned_to,
+              audit.deleted_at AS audit_deleted_at
+       FROM audit_issues AS issue
+       JOIN audits AS audit ON audit.id = issue.audit_id
+       WHERE issue.id = ? AND issue.organization_id = ?`,
     )
-    .bind(id, organizationId);
+    .bind(id, organizationId)
+    .first<{
+      assigned_to: string | null;
+      audit_deleted_at: string | null;
+      id: string;
+      status: string;
+    }>();
 }
 
 async function findIssues(
@@ -848,43 +930,6 @@ function parseAuditCursor(value: string): AuditCursor | undefined {
   } catch {
     return undefined;
   }
-}
-
-function toAudit(row: AuditRow) {
-  return {
-    completedAt: row.completed_at,
-    createdAt: row.created_at,
-    createdBy: {
-      email: row.created_by_email,
-      id: row.created_by_id,
-      name: row.created_by_name,
-    },
-    definition: storedDefinition(row.definition),
-    id: row.id,
-    responses: JSON.parse(row.responses) as Record<string, string>,
-    revision: row.revision,
-    status: row.status,
-    templateId: row.template_family_id ?? row.template_id,
-    templateName: row.template_name,
-    templateVersion: row.template_version,
-    updatedAt: row.updated_at,
-  };
-}
-
-function toAuditSummary(row: AuditSummaryRow) {
-  const audit = toAudit(row);
-  return {
-    completedAt: audit.completedAt,
-    createdAt: audit.createdAt,
-    createdBy: audit.createdBy,
-    id: audit.id,
-    issueCount: row.issue_count,
-    responseCount: Object.keys(audit.responses).length,
-    status: audit.status,
-    templateName: audit.templateName,
-    templateVersion: audit.templateVersion,
-    updatedAt: audit.updatedAt,
-  };
 }
 
 function toIssue(row: IssueRow, images: AuditIssueImageRow[]) {

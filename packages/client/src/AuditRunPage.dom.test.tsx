@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { DialogHost } from "@tearleads/ui/react";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
@@ -69,6 +70,8 @@ function detail(revision: number, response: string): AuditDetail {
       completedAt: null,
       createdAt: "2026-10-02T12:00:00.000Z",
       createdBy: { email: "sam@example.com", id: "user-1", name: "Sam" },
+      deletedAt: null,
+      deletedBy: null,
       definition: {
         sections: [
           {
@@ -138,7 +141,7 @@ describe("audit save conflicts, mounted", () => {
     await settle();
     await click("N/A");
     expect(container.textContent).toContain("Unsaved answer");
-    await click("Save draft");
+    await click("Save");
     expect(writes[0]).toEqual({
       expectedRevision: 3,
       responses: { check: "na" },
@@ -162,7 +165,7 @@ describe("audit save conflicts, mounted", () => {
     ).toBe("Fail");
     expect(container.textContent).not.toContain("This audit has changed");
     expect(container.textContent).not.toContain("Unsaved answer");
-    await click("Save draft");
+    await click("Save");
     expect(writes[1]).toEqual({
       expectedRevision: 4,
       responses: { check: "fail" },
@@ -170,3 +173,100 @@ describe("audit save conflicts, mounted", () => {
     });
   });
 });
+
+describe("discarding an audit, mounted", () => {
+  it("asks first, then shows the discarded audit read-only", async () => {
+    const requests: string[] = [];
+    let discarded = false;
+    const navigated: string[] = [];
+    globalThis.fetch = (async (input, init) => {
+      const method = init?.method ?? "GET";
+      requests.push(`${method} ${new URL(String(input)).pathname}`);
+      if (String(input).endsWith("/activity")) {
+        return Response.json({ events: [], nextCursor: null });
+      }
+      if (method === "DELETE") {
+        discarded = true;
+        return Response.json({ deletedAt: "2026-10-14T12:00:00.000Z" });
+      }
+      const loaded = detail(2, "pass");
+      if (discarded) {
+        loaded.audit.deletedAt = "2026-10-14T12:00:00.000Z";
+        loaded.audit.deletedBy = {
+          email: "alex@example.com",
+          id: "user-2",
+          name: "Alex",
+        };
+      }
+      return Response.json(loaded);
+    }) as typeof fetch;
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root?.render(
+        <>
+          <DialogHost />
+          <AuditRunPage
+            id="run-1"
+            onNavigate={(pathname) => navigated.push(pathname)}
+          />
+        </>,
+      ),
+    );
+    await settle();
+    expect(buttonLabels()).toContain("Save");
+    expect(buttonLabels()).not.toContain("Save draft");
+
+    await click("Discard audit");
+    expect(document.querySelector("dialog[open]")?.textContent).toContain(
+      "Discard “Fire safety”?",
+    );
+    await answerDialog("Cancel");
+    expect(requests.filter((request) => request.startsWith("DELETE"))).toEqual(
+      [],
+    );
+
+    await click("Discard audit");
+    await answerDialog("Discard audit");
+    expect(requests.filter((request) => request.startsWith("DELETE"))).toEqual([
+      "DELETE /api/audits/runs/run-1",
+    ]);
+    expect(container.textContent).toContain("Audit discarded.");
+    expect(container.textContent).toContain(
+      "Discarded by Alex · alex@example.com",
+    );
+    for (const label of ["Save", "Complete audit", "Discard audit"]) {
+      expect(buttonLabels()).not.toContain(label);
+    }
+    const pass = [...container.querySelectorAll("button")].find(
+      (element) => element.textContent === "Pass",
+    );
+    // Browsers disable every control inside a disabled fieldset.
+    const readOnly = container.querySelector<HTMLFieldSetElement>(
+      "fieldset.runEditable",
+    );
+    expect(readOnly?.hasAttribute("disabled")).toBe(true);
+    expect(pass && readOnly?.contains(pass)).toBe(true);
+
+    await click("Audits");
+    expect(navigated).toEqual(["/audits?view=deleted"]);
+  });
+});
+
+function buttonLabels() {
+  return [...container.querySelectorAll("button")].map(
+    (element) => element.textContent,
+  );
+}
+
+/** Answers the open dialog with the button labelled `label`. */
+async function answerDialog(label: string) {
+  const dialog = document.querySelector("dialog[open]");
+  const choice = [...(dialog?.querySelectorAll("button") ?? [])].find(
+    (element) => element.textContent === label,
+  );
+  expect(choice).toBeDefined();
+  await act(async () => choice?.click());
+  await settle();
+}

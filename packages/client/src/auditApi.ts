@@ -4,6 +4,8 @@ import { apiUrl } from "./config";
 
 type AuditResponseType = "check" | "text";
 export type AuditStatus = "completed" | "in_progress";
+/** Active audits, or in-progress audits someone discarded. */
+export type AuditRunView = "active" | "deleted";
 export type AuditTemplateScope = "global" | "organization";
 
 export interface AuditTemplateItem {
@@ -51,6 +53,9 @@ export interface AuditSummary {
   completedAt: string | null;
   createdAt: string;
   createdBy: ActivityActor;
+  deletedAt: string | null;
+  /** Null once the discarding account has been deleted. */
+  deletedBy: ActivityActor | null;
   id: string;
   issueCount: number;
   responseCount: number;
@@ -71,6 +76,8 @@ export interface AuditRun {
   createdAt: string;
   createdBy: ActivityActor;
   definition: AuditDefinition;
+  deletedAt: string | null;
+  deletedBy: ActivityActor | null;
   id: string;
   responses: Record<string, string>;
   revision: number;
@@ -206,9 +213,14 @@ export async function startAudit(templateId: string) {
   return body.auditId;
 }
 
-export function listAuditRuns(cursor?: string) {
-  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-  return request<AuditRunPage>(`/runs${query}`);
+export function listAuditRuns(cursor?: string, view: AuditRunView = "active") {
+  const query = [
+    cursor ? `cursor=${encodeURIComponent(cursor)}` : "",
+    view === "deleted" ? "view=deleted" : "",
+  ].filter(Boolean);
+  return request<AuditRunPage>(
+    `/runs${query.length ? `?${query.join("&")}` : ""}`,
+  );
 }
 
 export function getAuditRun(id: string) {
@@ -228,6 +240,13 @@ export function saveAuditRun(
       method: "PATCH",
     },
   );
+}
+
+/** Moves an in-progress audit to the Deleted view, where it stays read-only. */
+export function discardAuditRun(id: string) {
+  return request<{ deletedAt: string }>(`/runs/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
 export function createAuditIssue(
