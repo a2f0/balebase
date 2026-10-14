@@ -42,8 +42,34 @@ export const requireAuth = createMiddleware<AuthEnv>(async (context, next) => {
   }
 
   context.set("authSession", session as AuthSession);
+  // An admin impersonating someone should not make that user look active.
+  if (!session.session.impersonatedBy) {
+    context.executionCtx.waitUntil(
+      recordUserActivity(context.env.DB, session.user.id, new Date()),
+    );
+  }
   return next();
 });
+
+async function recordUserActivity(
+  database: D1Database,
+  userId: string,
+  activeAt: Date,
+) {
+  const timestamp = activeAt.toISOString();
+  try {
+    // Writes finish out of order under concurrency; never move the clock back.
+    await database
+      .prepare(
+        `UPDATE "user" SET "lastActiveAt" = ?
+         WHERE "id" = ? AND ("lastActiveAt" IS NULL OR "lastActiveAt" < ?)`,
+      )
+      .bind(timestamp, userId, timestamp)
+      .run();
+  } catch (cause) {
+    console.error("Could not record user activity.", cause);
+  }
+}
 
 function requireSessionOrganization(requiresSeat: (role: string) => boolean) {
   return createMiddleware<AuthEnv>(async (context, next) => {
