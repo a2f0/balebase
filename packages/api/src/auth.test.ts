@@ -1099,6 +1099,7 @@ describe("password authentication", () => {
         method: "PATCH",
       },
       { ...fixture.bindings, DB: toD1(fixture.database) },
+      executionContext(fixture.pending),
     );
     expect(saved.status).toBe(200);
 
@@ -1151,6 +1152,132 @@ describe("password authentication", () => {
     });
   });
 
+  it("records when a signed-in user was last active", async () => {
+    const fixture = await createFixture();
+    await post(fixture.auth, "/sign-up/email", {
+      email,
+      name: "Example Person",
+      password: originalPassword,
+      termsAccepted: true,
+    });
+    const signIn = await post(fixture.auth, "/sign-in/email", {
+      email,
+      password: originalPassword,
+    });
+    const cookie = signIn.headers.get("set-cookie") ?? "";
+    const lastActiveAt = () =>
+      (
+        fixture.database
+          .query("SELECT lastActiveAt FROM user WHERE email = ?")
+          .get(email) as { lastActiveAt: string | null }
+      ).lastActiveAt;
+    const requestMe = async () => {
+      const response = await app.request(
+        "/api/me",
+        { headers: { cookie } },
+        { ...fixture.bindings, DB: toD1(fixture.database) },
+        executionContext(fixture.pending),
+      );
+      await Promise.all(fixture.pending);
+      return response;
+    };
+    expect(lastActiveAt()).toBeNull();
+
+    const activeAfter = Date.now();
+    expect((await requestMe()).status).toBe(200);
+    expect(new Date(lastActiveAt() ?? "").getTime()).toBeGreaterThanOrEqual(
+      activeAfter,
+    );
+
+    const later = "2999-01-01T00:00:00.000Z";
+    fixture.database
+      .query("UPDATE user SET lastActiveAt = ? WHERE email = ?")
+      .run(later, email);
+    expect((await requestMe()).status).toBe(200);
+    expect(lastActiveAt()).toBe(later);
+  });
+
+  it("backfills last activity from account creation", async () => {
+    const database = new Database(":memory:");
+    await applyMigration(database, "0003_create_auth.sql");
+    database
+      .query(
+        `INSERT INTO user
+         (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        "existing-user",
+        "Existing User",
+        "existing@example.com",
+        false,
+        "2026-08-18T12:00:00.000Z",
+        "2026-09-01T12:00:00.000Z",
+        "user",
+        false,
+      );
+
+    await applyMigration(database, "0055_track_user_last_active.sql");
+
+    expect(
+      database
+        .query("SELECT lastActiveAt FROM user WHERE id = ?")
+        .get("existing-user"),
+    ).toEqual({ lastActiveAt: "2026-08-18T12:00:00.000Z" });
+  });
+
+  it("does not mark an impersonated user as active", async () => {
+    const fixture = await createFixture();
+    const impersonatedEmail = "impersonated@example.com";
+    for (const [userEmail, name] of [
+      [email, "Example Admin"],
+      [impersonatedEmail, "Impersonated Person"],
+    ]) {
+      await post(fixture.auth, "/sign-up/email", {
+        email: userEmail,
+        name,
+        password: originalPassword,
+        termsAccepted: true,
+      });
+    }
+    fixture.database
+      .query('UPDATE "user" SET role = ? WHERE email = ?')
+      .run("admin", email);
+    const adminSignIn = await post(fixture.auth, "/sign-in/email", {
+      email,
+      password: originalPassword,
+    });
+    const impersonated = fixture.database
+      .query("SELECT id FROM user WHERE email = ?")
+      .get(impersonatedEmail) as { id: string };
+    const impersonation = await post(
+      fixture.auth,
+      "/admin/impersonate-user",
+      { userId: impersonated.id },
+      adminSignIn.headers.get("set-cookie"),
+    );
+    expect(impersonation.status).toBe(200);
+    const cookies = new CookieJar();
+    cookies.absorb(impersonation);
+
+    const response = await app.request(
+      "/api/me",
+      { headers: { cookie: cookies.header() } },
+      { ...fixture.bindings, DB: toD1(fixture.database) },
+      executionContext(fixture.pending),
+    );
+    await Promise.all(fixture.pending);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      user: { email: impersonatedEmail },
+    });
+    expect(
+      fixture.database
+        .query("SELECT lastActiveAt FROM user WHERE email = ?")
+        .get(impersonatedEmail),
+    ).toEqual({ lastActiveAt: null });
+  });
+
   it("backfills an organization for an existing user", async () => {
     const database = new Database(":memory:");
     await applyMigration(database, "0003_create_auth.sql");
@@ -1199,6 +1326,14 @@ function financeGroupFor(database: Database, organizationId: string) {
        WHERE "team"."organizationId" = ? AND access.capability = 'finance'`,
     )
     .get(organizationId);
+}
+
+function executionContext(pending: Promise<unknown>[]) {
+  return {
+    passThroughOnException: () => undefined,
+    props: {},
+    waitUntil: (promise: Promise<unknown>) => pending.push(promise),
+  } as unknown as ExecutionContext;
 }
 
 function toD1(database: Database) {
@@ -1275,6 +1410,7 @@ async function createFixture() {
   await applyMigration(database, "0032_create_billing.sql");
   await applyMigration(database, "0040_pin_default_organization.sql");
   await applyMigration(database, "0041_create_employee_requirements.sql");
+  await applyMigration(database, "0055_track_user_last_active.sql");
 
   return { auth, bindings, database, messages, pending };
 }

@@ -170,6 +170,7 @@ describe("api", () => {
         path,
         { headers: { cookie: fixture.cookie }, method },
         fixture.bindings,
+        fixture.executionContext,
       );
       expect(response.status).toBe(403);
       const body: unknown = await response.json();
@@ -284,6 +285,7 @@ describe("api", () => {
         method: "PATCH",
       },
       fixture.bindings,
+      fixture.executionContext,
     );
     expect(customMutation.status).toBe(403);
     expect(await customMutation.json()).toMatchObject({
@@ -303,6 +305,7 @@ describe("api", () => {
         method: "POST",
       },
       fixture.bindings,
+      fixture.executionContext,
     );
     expect(pluginMutation.status).toBe(403);
     expect(await pluginMutation.json()).toMatchObject({
@@ -393,6 +396,7 @@ async function protectedOrganizationFixture() {
     "0021_track_terms_acceptance.sql",
     "0031_require_member_two_factor.sql",
     "0040_pin_default_organization.sql",
+    "0055_track_user_last_active.sql",
   ]) {
     database.exec(
       await Bun.file(
@@ -442,6 +446,11 @@ async function protectedOrganizationFixture() {
     bindings,
     cookie: cookie ?? "",
     database,
+    executionContext: {
+      passThroughOnException: () => undefined,
+      props: {},
+      waitUntil: (promise: Promise<unknown>) => pending.push(promise),
+    } as unknown as ExecutionContext,
     ...membership,
   };
 }
