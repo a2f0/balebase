@@ -1,25 +1,26 @@
 import { Hono } from "hono";
 import {
   type ActivityRow,
-  activityStatement,
   auditAnswerActivityStatement,
   findActivity,
   toAuditAnswerActivity,
 } from "./activity";
 import { type AuditDefinition, isRecord, validText } from "./auditDefinition";
+import { auditIssueImageRemoval } from "./auditIssueImageRemoval";
 import {
   type AuditIssueImageRow,
   auditIssueImages,
   findAuditIssueImages,
   toAuditIssueImage,
 } from "./auditIssueImages";
+import { auditRunDiscard } from "./auditRunDiscard";
 import {
   type AuditRow,
   type AuditSummaryRow,
   auditStatement,
   discardedAuditError,
-  discardRejection,
   findAudit,
+  findIssueForUpdate,
   toAudit,
   toAuditSummary,
 } from "./auditRunRecords";
@@ -463,59 +464,6 @@ audits.patch("/runs/:id", async (context) => {
   return context.json({ status, updatedAt: now });
 });
 
-/** Discarding keeps the audit readable in the Deleted view; it never changes again. */
-audits.delete("/runs/:id", async (context) => {
-  const organizationId = context.get("organizationId");
-  const audit = await findAudit(
-    context.env.DB,
-    organizationId,
-    context.req.param("id"),
-  );
-  if (!audit) return context.json({ error: "Audit not found." }, 404);
-  const rejection = discardRejection(audit);
-  if (rejection) return context.json({ error: rejection }, 409);
-  const actorId = context.get("authSession").user.id;
-  const now = new Date().toISOString();
-  // The event goes first under the update's own predicate: a batch is one
-  // transaction, so a concurrent discard can never record a second event.
-  const [, discarded] = await context.env.DB.batch([
-    activityStatement(
-      context.env.DB,
-      {
-        action: "audit.discarded",
-        actorId,
-        details: {},
-        occurredAt: now,
-        organizationId,
-        root: { id: audit.id, label: audit.template_name, type: "audit_run" },
-        subject: { id: audit.id, type: "audit_run" },
-      },
-      {
-        bindings: [audit.id, organizationId],
-        sql: `EXISTS (
-          SELECT 1 FROM audits
-          WHERE id = ? AND organization_id = ? AND status = 'in_progress'
-            AND deleted_at IS NULL
-        )`,
-      },
-    ),
-    context.env.DB.prepare(
-      `UPDATE audits SET deleted_at = ?, deleted_by_user_id = ?
-       WHERE id = ? AND organization_id = ? AND status = 'in_progress'
-         AND deleted_at IS NULL`,
-    ).bind(now, actorId, audit.id, organizationId),
-  ]);
-  if (Number(discarded?.meta.changes) === 0) {
-    const current = await findAudit(context.env.DB, organizationId, audit.id);
-    if (!current) return context.json({ error: "Audit not found." }, 404);
-    return context.json(
-      { error: discardRejection(current) ?? discardedAuditError },
-      409,
-    );
-  }
-  return context.json({ deletedAt: now });
-});
-
 audits.post("/runs/:id/issues", async (context) => {
   const organizationId = context.get("organizationId");
   const audit = await findAudit(
@@ -667,7 +615,9 @@ async function rejectedIssueUpdate(
     : { error: "Issue not found.", status: 404 as const };
 }
 
+audits.route("/runs", auditRunDiscard);
 audits.route("/issues", auditIssueImages);
+audits.route("/issues", auditIssueImageRemoval);
 
 async function copyGlobalTemplate(
   database: D1Database,
@@ -731,28 +681,6 @@ async function copyGlobalTemplate(
 function parseAssignee(value: unknown) {
   if (value === null || value === "") return null;
   return validText(value, 100) ? value.trim() : undefined;
-}
-
-function findIssueForUpdate(
-  database: D1Database,
-  organizationId: string,
-  id: string,
-) {
-  return database
-    .prepare(
-      `SELECT issue.id, issue.status, issue.assigned_to,
-              audit.deleted_at AS audit_deleted_at
-       FROM audit_issues AS issue
-       JOIN audits AS audit ON audit.id = issue.audit_id
-       WHERE issue.id = ? AND issue.organization_id = ?`,
-    )
-    .bind(id, organizationId)
-    .first<{
-      assigned_to: string | null;
-      audit_deleted_at: string | null;
-      id: string;
-      status: string;
-    }>();
 }
 
 async function findIssues(
