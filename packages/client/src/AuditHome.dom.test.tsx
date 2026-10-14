@@ -216,7 +216,7 @@ describe("audit template layout, mounted", () => {
 });
 
 describe("deleted audits, mounted", () => {
-  it("lists discarded audits and keeps that list in the address", async () => {
+  it("lists discarded audits, and opens them from a one-time deep link", async () => {
     const requested: string[] = [];
     const actor = { email: "alex@example.com", id: "u2", name: "Alex" };
     const run = {
@@ -266,15 +266,67 @@ describe("deleted audits, mounted", () => {
       expect(view.text()).toContain("Deleted audits");
       expect(view.text()).toContain("Discarded");
       expect(view.text()).toContain("by Alex");
-      expect(window.location.search).toBe("?view=deleted");
+      expect(window.location.search).toBe("");
 
+      // Back from a discarded audit opens the deleted list, then the address
+      // returns to /audits so later navigation there shows active audits.
+      window.history.replaceState(null, "", "/audits?view=deleted");
       const revisited = await mountPage();
       expect(
         revisited.layoutButton("Deleted")?.getAttribute("aria-pressed"),
       ).toBe("true");
       expect(requested.at(-1)).toBe("/api/audits/runs?view=deleted");
+      expect(window.location.search).toBe("");
     } finally {
       window.history.replaceState(null, "", "/audits");
     }
+  });
+
+  it("drops a page that arrives after the list changed and changed back", async () => {
+    const actor = { email: "alex@example.com", id: "u2", name: "Alex" };
+    const run = (id: string) => ({
+      completedAt: null,
+      createdAt: "2026-10-01T00:00:00.000Z",
+      createdBy: actor,
+      deletedAt: null,
+      deletedBy: null,
+      id,
+      issueCount: 0,
+      responseCount: 0,
+      status: "in_progress",
+      templateName: id,
+      templateVersion: 1,
+      updatedAt: "2026-10-01T00:00:00.000Z",
+    });
+    let releaseStalePage: (() => void) | undefined;
+    globalThis.fetch = (async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/api/audits/templates")) {
+        return Response.json({ templates });
+      }
+      if (url.searchParams.get("cursor") === "page-2") {
+        await new Promise<void>((resolve) => {
+          releaseStalePage = resolve;
+        });
+        return Response.json({ audits: [run("Stale")], nextCursor: null });
+      }
+      return Response.json({
+        audits:
+          url.searchParams.get("view") === "deleted" ? [] : [run("Fresh")],
+        nextCursor: "page-2",
+      });
+    }) as typeof fetch;
+
+    const view = await mountPage();
+    const loadMore = [...document.querySelectorAll("button")].find(
+      (element) => element.textContent === "Load more audits",
+    );
+    await act(async () => loadMore?.click());
+    await click(view.layoutButton("Deleted"));
+    await click(view.layoutButton("Active"));
+    await act(async () => releaseStalePage?.());
+    await settle();
+    expect(view.text()).toContain("Fresh");
+    expect(view.text()).not.toContain("Stale");
   });
 });

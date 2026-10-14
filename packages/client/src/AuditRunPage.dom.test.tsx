@@ -254,6 +254,44 @@ describe("discarding an audit, mounted", () => {
   });
 });
 
+describe("discarding an audit whose reload fails, mounted", () => {
+  it("keeps the page read-only from the discard response alone", async () => {
+    let discarded = false;
+    globalThis.fetch = (async (input, init) => {
+      if (String(input).endsWith("/activity")) {
+        return Response.json({ events: [], nextCursor: null });
+      }
+      if (init?.method === "DELETE") {
+        discarded = true;
+        return Response.json({ deletedAt: "2026-10-14T12:00:00.000Z" });
+      }
+      return discarded
+        ? Response.json({ error: "Temporarily unavailable." }, { status: 503 })
+        : Response.json(detail(2, "pass"));
+    }) as typeof fetch;
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root?.render(
+        <>
+          <DialogHost />
+          <AuditRunPage id="run-1" onNavigate={() => {}} />
+        </>,
+      ),
+    );
+    await settle();
+    await click("Discard audit");
+    await answerDialog("Discard audit");
+    expect(container.textContent).toContain("Temporarily unavailable.");
+    expect(container.textContent).toContain("Discarded ·");
+    expect(
+      container.querySelector("fieldset.runEditable")?.hasAttribute("disabled"),
+    ).toBe(true);
+    expect(buttonLabels()).not.toContain("Save");
+  });
+});
+
 function buttonLabels() {
   return [...container.querySelectorAll("button")].map(
     (element) => element.textContent,

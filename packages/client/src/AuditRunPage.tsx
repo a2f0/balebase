@@ -77,6 +77,7 @@ interface RunState {
 }
 
 type RunAction =
+  | { deletedAt: string; type: "discarded" }
   | { detail: AuditDetail; type: "loaded" }
   | { detail: AuditDetail; type: "issuesRefreshed" }
   | { itemId: string; response: string; type: "answered" };
@@ -105,6 +106,17 @@ export function runStateReducer(state: RunState, action: RunAction): RunState {
         ...state,
         responses: { ...state.responses, [action.itemId]: action.response },
       };
+    // Read-only at once, even if the reload that follows fails.
+    case "discarded":
+      return state.detail
+        ? {
+            ...state,
+            detail: {
+              ...state.detail,
+              audit: { ...state.detail.audit, deletedAt: action.deletedAt },
+            },
+          }
+        : state;
   }
 }
 
@@ -163,7 +175,10 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
 
   async function discard() {
     if (!detail || !(await confirmDiscard(detail.audit.templateName))) return;
-    await perform(() => discardAuditRun(id), "Audit discarded.");
+    await perform(async () => {
+      const { deletedAt } = await discardAuditRun(id);
+      dispatch({ deletedAt, type: "discarded" });
+    }, "Audit discarded.");
   }
 
   if (!detail) {
@@ -371,11 +386,9 @@ function RunOverview({
       </div>
       {deletedAt && (
         <Banner announce={false} icon="trash" tone="warning">
-          Discarded by{" "}
-          {deletedBy
-            ? `${deletedBy.name} · ${deletedBy.email}`
-            : "a deleted account"}{" "}
-          · {formatActivityTime(deletedAt)}. A discarded audit can't be changed.
+          Discarded
+          {deletedBy ? ` by ${deletedBy.name} · ${deletedBy.email}` : ""} ·{" "}
+          {formatActivityTime(deletedAt)}. A discarded audit can't be changed.
         </Banner>
       )}
     </>

@@ -110,20 +110,31 @@ export function AuditHome({
   );
 }
 
-/** Active or deleted audit runs, paged, with the chosen list kept in the address. */
+/**
+ * Active or deleted audit runs, paged. `?view=deleted` opens the deleted list
+ * once (Back from a discarded audit) and then leaves the address.
+ */
 function useAuditRunList(setError: (error: ErrorNotice | undefined) => void) {
   const [view, setView] = useState<AuditRunView>(() =>
     new URLSearchParams(window.location.search).get("view") === "deleted"
       ? "deleted"
       : "active",
   );
-  const viewRef = useRef(view);
+  // Each list load starts a generation; older pages are dropped on arrival.
+  const generation = useRef(0);
   const [runs, setRuns] = useState<AuditSummary[]>();
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  useEffect(() => {
+    if (window.location.search) {
+      window.history.replaceState(window.history.state, "", "/audits");
+    }
+  }, []);
+
   // A newer view's list replaces an older one still in flight.
   useEffect(() => {
+    generation.current += 1;
     let current = true;
     setError(undefined);
     setRuns(undefined);
@@ -143,30 +154,18 @@ function useAuditRunList(setError: (error: ErrorNotice | undefined) => void) {
     };
   }, [setError, view]);
 
-  function changeView(nextView: AuditRunView) {
-    if (nextView === view) return;
-    viewRef.current = nextView;
-    setView(nextView);
-    // Back from a deleted audit returns here, to the same list.
-    window.history.replaceState(
-      window.history.state,
-      "",
-      nextView === "deleted" ? "/audits?view=deleted" : "/audits",
-    );
-  }
-
   async function loadMore() {
     if (!nextCursor) return;
-    const pageView = view;
+    const started = generation.current;
     setLoadingMore(true);
     setError(undefined);
     try {
-      const page = await listAuditRuns(nextCursor, pageView);
-      if (viewRef.current !== pageView) return;
+      const page = await listAuditRuns(nextCursor, view);
+      if (generation.current !== started) return;
       setRuns((current) => [...(current ?? []), ...page.audits]);
       setNextCursor(page.nextCursor);
     } catch (cause) {
-      if (viewRef.current === pageView) {
+      if (generation.current === started) {
         setError(errorNotice(cause, "Could not load audits."));
       }
     } finally {
@@ -175,7 +174,7 @@ function useAuditRunList(setError: (error: ErrorNotice | undefined) => void) {
   }
 
   return {
-    changeView,
+    changeView: setView,
     hasMore: Boolean(nextCursor),
     loadingMore,
     loadMore,
@@ -573,7 +572,7 @@ function AuditRunRow({
         <span className="rowMeta">
           {run.templateVersion ? `v${run.templateVersion} · ` : ""}
           {run.deletedAt
-            ? `Discarded ${formatDate(run.deletedAt)} by ${run.deletedBy?.name ?? "a deleted account"}`
+            ? `Discarded ${formatDate(run.deletedAt)}${run.deletedBy ? ` by ${run.deletedBy.name}` : ""}`
             : `${formatDate(run.updatedAt)} · Started by ${run.createdBy.name}`}
         </span>
       </span>
