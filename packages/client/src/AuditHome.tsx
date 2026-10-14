@@ -12,8 +12,9 @@ import {
   PageHeader,
   PageSection,
 } from "@tearleads/ui/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  type AuditRunView,
   type AuditSummary,
   type AuditTemplate,
   type AuditTemplateScope,
@@ -36,31 +37,22 @@ export function AuditHome({
   onNavigate: (pathname: string) => void;
 }) {
   const [templates, setTemplates] = useState<AuditTemplate[]>();
-  const [runs, setRuns] = useState<AuditSummary[]>();
-  const [nextRunCursor, setNextRunCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [loadingMoreRuns, setLoadingMoreRuns] = useState(false);
   const [templateView, setTemplateView] = useState(() =>
     readAuditTemplateView(),
   );
   const [error, setError] = useState<ErrorNotice>();
+  const runList = useAuditRunList(setError);
 
-  const load = useCallback(async () => {
-    setError(undefined);
+  const loadTemplates = useCallback(async () => {
     try {
-      const [nextTemplates, nextRuns] = await Promise.all([
-        listAuditTemplates(),
-        listAuditRuns(),
-      ]);
-      setTemplates(nextTemplates);
-      setRuns(nextRuns.audits);
-      setNextRunCursor(nextRuns.nextCursor);
+      setTemplates(await listAuditTemplates());
     } catch (cause) {
       setError(errorNotice(cause, "Could not load audits."));
     }
   }, []);
 
-  useEffect(() => void load(), [load]);
+  useEffect(() => void loadTemplates(), [loadTemplates]);
 
   async function createTemplate() {
     setBusy(true);
@@ -91,21 +83,6 @@ export function AuditHome({
     storeAuditTemplateView(view);
   }
 
-  async function loadMoreRuns() {
-    if (!nextRunCursor) return;
-    setLoadingMoreRuns(true);
-    setError(undefined);
-    try {
-      const page = await listAuditRuns(nextRunCursor);
-      setRuns((current) => [...(current ?? []), ...page.audits]);
-      setNextRunCursor(page.nextCursor);
-    } catch (cause) {
-      setError(errorNotice(cause, "Could not load audits."));
-    } finally {
-      setLoadingMoreRuns(false);
-    }
-  }
-
   return (
     <Page>
       <AuditHomeHeader busy={busy} onCreate={createTemplate} />
@@ -120,15 +97,91 @@ export function AuditHome({
           view={templateView}
         />
         <AuditHistory
-          hasMore={Boolean(nextRunCursor)}
-          loadingMore={loadingMoreRuns}
-          onLoadMore={loadMoreRuns}
+          hasMore={runList.hasMore}
+          loadingMore={runList.loadingMore}
+          onLoadMore={runList.loadMore}
           onOpen={(id) => onNavigate(`/audits/runs/${id}`)}
-          runs={runs}
+          onViewChange={runList.changeView}
+          runs={runList.runs}
+          view={runList.view}
         />
       </PageBody>
     </Page>
   );
+}
+
+/**
+ * Active or deleted audit runs, paged. `?view=deleted` opens the deleted list
+ * once (Back from a discarded audit) and then leaves the address.
+ */
+function useAuditRunList(setError: (error: ErrorNotice | undefined) => void) {
+  const [view, setView] = useState<AuditRunView>(() =>
+    new URLSearchParams(window.location.search).get("view") === "deleted"
+      ? "deleted"
+      : "active",
+  );
+  // Each list load starts a generation; older pages are dropped on arrival.
+  const generation = useRef(0);
+  const [runs, setRuns] = useState<AuditSummary[]>();
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  useEffect(() => {
+    if (window.location.search) {
+      window.history.replaceState(window.history.state, "", "/audits");
+    }
+  }, []);
+
+  // A newer view's list replaces an older one still in flight.
+  useEffect(() => {
+    generation.current += 1;
+    let current = true;
+    setError(undefined);
+    setRuns(undefined);
+    setNextCursor(null);
+    setLoadingMore(false);
+    listAuditRuns(undefined, view).then(
+      (page) => {
+        if (!current) return;
+        setRuns(page.audits);
+        setNextCursor(page.nextCursor);
+      },
+      (cause: unknown) => {
+        if (current) setError(errorNotice(cause, "Could not load audits."));
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [setError, view]);
+
+  async function loadMore() {
+    if (!nextCursor) return;
+    const started = generation.current;
+    setLoadingMore(true);
+    setError(undefined);
+    try {
+      const page = await listAuditRuns(nextCursor, view);
+      if (generation.current !== started) return;
+      setRuns((current) => [...(current ?? []), ...page.audits]);
+      setNextCursor(page.nextCursor);
+    } catch (cause) {
+      if (generation.current === started) {
+        setError(errorNotice(cause, "Could not load audits."));
+      }
+    } finally {
+      if (generation.current === started) setLoadingMore(false);
+    }
+  }
+
+  return {
+    changeView: setView,
+    hasMore: Boolean(nextCursor),
+    loadingMore,
+    loadMore,
+    runs,
+    view,
+  };
 }
 
 function AuditHomeHeader({
@@ -415,31 +468,55 @@ function StartAuditButton({
   );
 }
 
+const runViews: { icon: IconName; label: string; view: AuditRunView }[] = [
+  { icon: "audits", label: "Active", view: "active" },
+  { icon: "trash", label: "Deleted", view: "deleted" },
+];
+
 function AuditHistory({
   hasMore,
   loadingMore,
   onLoadMore,
   onOpen,
+  onViewChange,
   runs,
+  view,
 }: {
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => Promise<void>;
   onOpen: (id: string) => void;
+  onViewChange: (view: AuditRunView) => void;
   runs: AuditSummary[] | undefined;
+  view: AuditRunView;
 }) {
   return (
     <PageSection
       actions={
-        runs && (
-          <span className="sectionCount">
-            {runs.length}
-            {hasMore ? "+" : ""}{" "}
-            {runs.length === 1 && !hasMore ? "audit" : "audits"}
-          </span>
-        )
+        <div className="auditRunToolbar">
+          {runs && (
+            <span className="sectionCount">
+              {runs.length}
+              {hasMore ? "+" : ""}{" "}
+              {runs.length === 1 && !hasMore ? "audit" : "audits"}
+            </span>
+          )}
+          <nav aria-label="Audit lists" className="segmented">
+            {runViews.map((option) => (
+              <button
+                aria-pressed={view === option.view}
+                key={option.view}
+                onClick={() => onViewChange(option.view)}
+                type="button"
+              >
+                <Icon name={option.icon} size={16} />
+                {option.label}
+              </button>
+            ))}
+          </nav>
+        </div>
       }
-      title="Recent audits"
+      title={view === "deleted" ? "Deleted audits" : "Recent audits"}
     >
       {runs?.length ? (
         <Card
@@ -463,6 +540,10 @@ function AuditHistory({
             ))}
           </div>
         </Card>
+      ) : runs && view === "deleted" ? (
+        <EmptyState compact icon="trash" title="No deleted audits">
+          Discarded audits will appear here.
+        </EmptyState>
       ) : runs ? (
         <EmptyState compact icon="audits" title="No audits yet">
           Start one from a checklist above.
@@ -491,12 +572,13 @@ function AuditRunRow({
         <span className="rowTitle">{run.templateName}</span>
         <span className="rowMeta">
           {run.templateVersion ? `v${run.templateVersion} · ` : ""}
-          {formatDate(run.updatedAt)}
-          {` · Started by ${run.createdBy.name}`}
+          {run.deletedAt
+            ? `Discarded ${formatDate(run.deletedAt)}${run.deletedBy ? ` by ${run.deletedBy.name}` : ""}`
+            : `${formatDate(run.updatedAt)} · Started by ${run.createdBy.name}`}
         </span>
       </span>
       <span className="auditRunStats">
-        <Badge dot tone={run.status === "completed" ? "success" : "warning"}>
+        <Badge dot tone={runTone(run)}>
           {status(run)}
         </Badge>
         <span className="auditRunStat">
@@ -521,7 +603,13 @@ function itemCount(template: AuditTemplate) {
 }
 
 function status(run: AuditSummary) {
+  if (run.deletedAt) return "Discarded";
   return run.status === "completed" ? "Completed" : "In progress";
+}
+
+function runTone(run: AuditSummary): BadgeTone {
+  if (run.deletedAt) return "danger";
+  return run.status === "completed" ? "success" : "warning";
 }
 
 export function templateStatusTone(value: string): BadgeTone {

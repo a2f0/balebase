@@ -1,7 +1,6 @@
 import {
   Badge,
   type BadgeTone,
-  Banner,
   Button,
   buttonClass,
   Card,
@@ -9,15 +8,19 @@ import {
   EmptyState,
   Field,
   Icon,
-  LoadingState,
   Page,
   PageBody,
-  PageHeader,
   PageSection,
   Toast,
 } from "@tearleads/ui/react";
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { ActivityFeed, formatActivityTime } from "./ActivityFeed";
+import {
+  confirmDiscard,
+  RunHeader,
+  RunLoading,
+  RunOverview,
+} from "./AuditRunHeader";
 import {
   AuditApiError,
   type AuditDefinition,
@@ -29,6 +32,7 @@ import {
   auditIssueImageUrl,
   createAuditIssue,
   deleteAuditIssueImage,
+  discardAuditRun,
   getAuditRun,
   type OrganizationMember,
   saveAuditRun,
@@ -75,6 +79,7 @@ interface RunState {
 }
 
 type RunAction =
+  | { deletedAt: string; type: "discarded" }
   | { detail: AuditDetail; type: "loaded" }
   | { detail: AuditDetail; type: "issuesRefreshed" }
   | { itemId: string; response: string; type: "answered" };
@@ -103,6 +108,18 @@ export function runStateReducer(state: RunState, action: RunAction): RunState {
         ...state,
         responses: { ...state.responses, [action.itemId]: action.response },
       };
+    // Read-only at once, even if the reload that follows fails; unsaved
+    // answers were not kept, so show the saved ones.
+    case "discarded":
+      return state.detail
+        ? {
+            detail: {
+              ...state.detail,
+              audit: { ...state.detail.audit, deletedAt: action.deletedAt },
+            },
+            responses: state.detail.audit.responses,
+          }
+        : state;
   }
 }
 
@@ -134,15 +151,15 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
 
   useEffect(() => void load(), [load]);
 
-  async function save(status: "completed" | "in_progress") {
-    if (!detail) return;
+  /** Runs a change, then reloads the audit so the page shows what was stored. */
+  async function perform(change: () => Promise<unknown>, success: string) {
     setBusy(true);
     setError(undefined);
     setNotice(undefined);
     try {
-      await saveAuditRun(id, responses, status, detail.audit.revision);
+      await change();
       await load();
-      setNotice(status === "completed" ? "Audit completed." : "Draft saved.");
+      setNotice(success);
     } catch (cause) {
       setError(messageFrom(cause));
     } finally {
@@ -150,23 +167,39 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
     }
   }
 
+  async function save(status: "completed" | "in_progress") {
+    if (!detail) return;
+    const { revision } = detail.audit;
+    await perform(
+      () => saveAuditRun(id, responses, status, revision),
+      status === "completed" ? "Audit completed." : "Audit saved.",
+    );
+  }
+
+  async function discard() {
+    if (!detail || !(await confirmDiscard(detail.audit.templateName))) return;
+    await perform(async () => {
+      const { deletedAt } = await discardAuditRun(id);
+      dispatch({ deletedAt, type: "discarded" });
+    }, "Audit discarded.");
+  }
+
   if (!detail) {
     return <RunLoading error={error} onBack={() => onNavigate("/audits")} />;
   }
 
+  const { deletedAt } = detail.audit;
   return (
     <Page>
       <RunHeader
         busy={busy}
-        feedback={
-          error
-            ? { text: error, tone: "danger" }
-            : notice
-              ? { text: notice, tone: "success" }
-              : undefined
-        }
+        discarded={Boolean(deletedAt)}
+        error={error}
         name={detail.audit.templateName}
-        onBack={() => onNavigate("/audits")}
+        onBack={() =>
+          onNavigate(deletedAt ? "/audits?view=deleted" : "/audits")
+        }
+        notice={notice}
         onSave={save}
         status={detail.audit.status}
         templateVersion={detail.audit.templateVersion}
@@ -174,11 +207,7 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
       <PageBody className="runBody">
         {error && <Toast tone="danger">{error}</Toast>}
         {notice && <Toast tone="success">{notice}</Toast>}
-        <p className="runAttribution">
-          Started by {detail.audit.createdBy.name} ·{" "}
-          {detail.audit.createdBy.email} ·{" "}
-          {formatActivityTime(detail.audit.createdAt)}
-        </p>
+        <RunOverview audit={detail.audit} busy={busy} onDiscard={discard} />
         {error && (
           <Button onClick={() => void load()} size="sm">
             Reload audit
@@ -189,26 +218,13 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
           issues={detail.issues}
           responses={responses}
         />
-        <AuditQuestions
-          definition={detail.audit.definition}
-          issueContext={{
-            audit: detail.audit,
-            auditId: id,
-            issues: detail.issues,
-            members: detail.members,
-            onCreated: refreshIssues,
-          }}
-          onChange={(itemId, response) =>
+        <RunWork
+          auditId={id}
+          detail={detail}
+          onAnswer={(itemId, response) =>
             dispatch({ itemId, response, type: "answered" })
           }
-          responses={responses}
-        />
-        <IssuePanel
-          auditId={id}
-          definition={detail.audit.definition}
-          issues={detail.issues}
-          members={detail.members}
-          onChange={refreshIssues}
+          onIssuesChanged={refreshIssues}
           responses={responses}
         />
         <ActivityFeed refreshKey={detail} source={{ id, type: "audit_run" }} />
@@ -217,78 +233,47 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
   );
 }
 
-function RunHeader({
-  busy,
-  feedback,
-  name,
-  onBack,
-  onSave,
-  status,
-  templateVersion,
+/** The checklist and its issues; a discarded audit shows them read-only. */
+function RunWork({
+  auditId,
+  detail,
+  onAnswer,
+  onIssuesChanged,
+  responses,
 }: {
-  busy: boolean;
-  /** Mirrors the save result inside the phone action bar; the banners announce it. */
-  feedback: { text: string; tone: "danger" | "success" } | undefined;
-  name: string;
-  onBack: () => void;
-  onSave: (status: "completed" | "in_progress") => Promise<void>;
-  status: string;
-  templateVersion: number | null;
+  auditId: string;
+  detail: AuditDetail;
+  onAnswer: (itemId: string, response: string) => void;
+  onIssuesChanged: () => Promise<void>;
+  responses: Record<string, string>;
 }) {
   return (
-    <PageHeader
-      actions={
-        <div className="runActions">
-          {feedback && (
-            <p
-              aria-hidden="true"
-              className={cx(
-                "runActionsFeedback",
-                feedback.tone === "danger" && "runActionsFeedbackDanger",
-              )}
-            >
-              {feedback.text}
-            </p>
-          )}
-          <Button disabled={busy} onClick={() => void onSave("in_progress")}>
-            {status === "completed" ? "Reopen audit" : "Save draft"}
-          </Button>
-          <Button
-            disabled={busy}
-            icon="check"
-            onClick={() => void onSave("completed")}
-            variant="primary"
-          >
-            {status === "completed" ? "Save completed audit" : "Complete audit"}
-          </Button>
-        </div>
-      }
-      back={<RunBackButton onBack={onBack} />}
-      eyebrow={
-        <>
-          <span>Audit</span>
-          <Badge dot tone={status === "completed" ? "success" : "warning"}>
-            {formatLabel(status)}
-          </Badge>
-          {templateVersion ? <span>Template v{templateVersion}</span> : null}
-        </>
-      }
-      title={name}
-    />
-  );
-}
-
-function RunBackButton({ onBack }: { onBack: () => void }) {
-  return (
-    <Button
-      className="runBack"
-      icon="arrowLeft"
-      onClick={onBack}
-      size="sm"
-      variant="ghost"
+    // A disabled fieldset turns every answer and issue control read-only.
+    <fieldset
+      className="fieldset runEditable"
+      disabled={Boolean(detail.audit.deletedAt)}
     >
-      Audits
-    </Button>
+      <AuditQuestions
+        definition={detail.audit.definition}
+        issueContext={{
+          audit: detail.audit,
+          auditId,
+          issues: detail.issues,
+          members: detail.members,
+          onCreated: onIssuesChanged,
+        }}
+        onChange={onAnswer}
+        responses={responses}
+      />
+      <IssuePanel
+        auditId={auditId}
+        definition={detail.audit.definition}
+        issues={detail.issues}
+        members={detail.members}
+        onChange={onIssuesChanged}
+        responses={responses}
+      />
+    </fieldset>
   );
 }
 
@@ -355,7 +340,10 @@ function ProgressNote({
         <span>
           Completed
           {audit.completedAt ? ` ${formatDate(audit.completedAt)}` : ""}
-          <span className="runProgressHint"> · Saving a draft reopens it.</span>
+          <span className="runProgressHint">
+            {" "}
+            · Reopening it marks it in progress again.
+          </span>
         </span>
       </p>
     );
@@ -1469,40 +1457,6 @@ function useObjectUrl(file: File) {
     return () => URL.revokeObjectURL(next);
   }, [file]);
   return url;
-}
-
-function RunLoading({
-  error,
-  onBack,
-}: {
-  error: string | undefined;
-  onBack: () => void;
-}) {
-  return (
-    <Page>
-      <PageHeader
-        back={<RunBackButton onBack={onBack} />}
-        eyebrow="Audit"
-        title={error ? "Audit unavailable" : "Audit"}
-      />
-      <PageBody>
-        {error ? (
-          <Banner
-            actions={
-              <Button onClick={onBack} size="sm">
-                Return to audits
-              </Button>
-            }
-            tone="danger"
-          >
-            {error}
-          </Banner>
-        ) : (
-          <LoadingState label="Loading audit…" />
-        )}
-      </PageBody>
-    </Page>
-  );
 }
 
 function allItems(definition: AuditDefinition) {

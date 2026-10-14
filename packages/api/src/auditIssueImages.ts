@@ -1,5 +1,9 @@
 import { type Context, Hono } from "hono";
-import { activityStatement } from "./activity";
+import {
+  discardedAuditError,
+  issueAuditDiscarded,
+  issueAuditNotDiscarded,
+} from "./auditRunRecords";
 import type { AuthVariables } from "./authMiddleware";
 import { maxFilenameBytes, normalizeFilename } from "./filenames";
 import { auditIssueImageUploadGraceMilliseconds } from "./objectLifecycle";
@@ -52,6 +56,7 @@ function acquireImageUploadCapacity(organizationId: string) {
 }
 
 export interface AuditIssueImageRow {
+  audit_deleted_at: string | null;
   audit_id: string;
   content_type: string;
   created_at: string;
@@ -73,11 +78,17 @@ auditIssueImages.post("/:issueId/images", async (context) => {
   const organizationId = context.get("organizationId");
   const issueId = context.req.param("issueId");
   const issue = await context.env.DB.prepare(
-    `SELECT id FROM audit_issues WHERE id = ? AND organization_id = ?`,
+    `SELECT issue.id, audit.deleted_at AS audit_deleted_at
+     FROM audit_issues AS issue
+     JOIN audits AS audit ON audit.id = issue.audit_id
+     WHERE issue.id = ? AND issue.organization_id = ?`,
   )
     .bind(issueId, organizationId)
-    .first<{ id: string }>();
+    .first<{ audit_deleted_at: string | null; id: string }>();
   if (!issue) return context.json({ error: "Issue not found." }, 404);
+  if (issue.audit_deleted_at) {
+    return context.json({ error: discardedAuditError }, 409);
+  }
 
   const releaseCapacity = acquireImageUploadCapacity(organizationId);
   if (releaseCapacity === null) {
@@ -96,8 +107,17 @@ auditIssueImages.post("/:issueId/images", async (context) => {
       context.req.query("filename"),
     );
     if (reservation === null) {
+      const discarded = await issueAuditDiscarded(
+        context.env.DB,
+        organizationId,
+        issue.id,
+      );
       return context.json(
-        { error: `Issues are limited to ${maxImagesPerIssue} images.` },
+        {
+          error: discarded
+            ? discardedAuditError
+            : `Issues are limited to ${maxImagesPerIssue} images.`,
+        },
         409,
       );
     }
@@ -252,7 +272,7 @@ async function reserveAuditIssueImage(
          WHERE NOT EXISTS (
            SELECT 1 FROM audit_issue_images AS existing
            WHERE existing.issue_id = ? AND existing.slot = slots.slot
-         )
+         ) AND ${issueAuditNotDiscarded}
          ORDER BY slots.slot ASC
          LIMIT 1
          RETURNING id`,
@@ -264,6 +284,7 @@ async function reserveAuditIssueImage(
         objectId,
         userId,
         createdAt,
+        issueId,
         issueId,
       )
       .first<{ id: string }>();
@@ -323,7 +344,7 @@ function normalizedImageFilename(filename: string, extension: string) {
 class AuditIssueImageUploadError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 408 | 413,
+    readonly status: 400 | 408 | 409 | 413,
   ) {
     super(message);
   }
@@ -368,9 +389,16 @@ async function persistAuditIssueImage(
            SELECT 1 FROM audit_issue_images AS reservation
            WHERE reservation.object_id = objects.id
              AND reservation.issue_id = ?
-         )`,
+         )
+         AND ${issueAuditNotDiscarded}`,
     )
-      .bind(normalizedSize, image.objectId, image.uploadToken, image.issueId)
+      .bind(
+        normalizedSize,
+        image.objectId,
+        image.uploadToken,
+        image.issueId,
+        image.issueId,
+      )
       .run();
     if (Number(activated.meta.changes) === 0) {
       throw new Error("Issue image reservation could not be activated.");
@@ -382,6 +410,16 @@ async function persistAuditIssueImage(
       normalizedSize,
     );
     if (activationCommitted) return;
+    // A discard during the upload leaves the bytes to the cleanup above.
+    if (
+      await issueAuditDiscarded(
+        environment.DB,
+        image.organizationId,
+        image.issueId,
+      )
+    ) {
+      throw new AuditIssueImageUploadError(discardedAuditError, 409);
+    }
     throw cause;
   }
 }
@@ -770,7 +808,7 @@ interface PendingAuditIssueObject {
   id: string;
 }
 
-async function deletePendingAuditIssueObject(
+export async function deletePendingAuditIssueObject(
   environment: Pick<Bindings, "DB" | "STORAGE">,
   object: PendingAuditIssueObject,
   abandonedClaimCutoff = new Date(
@@ -877,65 +915,6 @@ export async function purgePendingAuditIssueImages(
   return purged;
 }
 
-auditIssueImages.delete("/:issueId/images/:imageId", async (context) => {
-  const organizationId = context.get("organizationId");
-  const row = await findAuditIssueImage(
-    context.env.DB,
-    organizationId,
-    context.req.param("issueId"),
-    context.req.param("imageId"),
-    true,
-  );
-  if (!row) return context.json({ error: "Issue image not found." }, 404);
-  // Atomically hide the image and release its unique issue slot before R2
-  // cleanup. A failed R2 delete leaves a durable object tombstone for cron.
-  await context.env.DB.batch([
-    activityStatement(
-      context.env.DB,
-      {
-        action: "audit.image_removed",
-        actorId: context.get("authSession").user.id,
-        details: {
-          filename: row.filename,
-          issueId: row.issue_id,
-          title: row.title,
-        },
-        occurredAt: new Date().toISOString(),
-        organizationId,
-        root: { id: row.audit_id, label: row.template_name, type: "audit_run" },
-        subject: { id: row.id, type: "audit_issue_image" },
-      },
-      {
-        bindings: [row.id, row.object_id, organizationId],
-        sql: `EXISTS (
-        SELECT 1 FROM audit_issue_images AS image
-        JOIN objects AS object ON object.id = image.object_id
-        WHERE image.id = ? AND object.id = ? AND object.organization_id = ?
-          AND object.deletion_pending = 0
-      )`,
-      },
-    ),
-    context.env.DB.prepare(
-      `UPDATE objects
-       SET deletion_pending = 1, cleanup_token = NULL,
-           cleanup_claimed_at = NULL, upload_token = NULL,
-           upload_lease_expires_at = NULL
-       WHERE id = ? AND organization_id = ? AND kind = 'audit_issue_image'`,
-    ).bind(row.object_id, organizationId),
-    context.env.DB.prepare(
-      `DELETE FROM audit_issue_images WHERE id = ? AND object_id = ?`,
-    ).bind(row.id, row.object_id),
-  ]);
-  try {
-    await deletePendingAuditIssueObject(context.env, {
-      id: row.object_id,
-    });
-  } catch {
-    return context.json({ cleanupPending: true }, 202);
-  }
-  return context.body(null, 204);
-});
-
 export async function findAuditIssueImages(
   database: D1Database,
   organizationId: string,
@@ -954,7 +933,7 @@ export async function findAuditIssueImages(
   return result.results;
 }
 
-async function findAuditIssueImage(
+export async function findAuditIssueImage(
   database: D1Database,
   organizationId: string,
   issueId: string,
@@ -975,6 +954,7 @@ async function findAuditIssueImage(
 const imageSelect = `
   SELECT image.id, image.issue_id, image.object_id, image.created_at,
          issue.audit_id, issue.title, audit.template_name,
+         audit.deleted_at AS audit_deleted_at,
          object.deletion_pending,
          object.object_key, object.filename, object.content_type, object.size,
          uploader.id AS uploaded_by_id, uploader.name AS uploaded_by_name,

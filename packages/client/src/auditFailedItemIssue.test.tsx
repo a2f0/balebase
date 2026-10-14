@@ -55,6 +55,8 @@ function detailWith(responses: Record<string, string>): AuditDetail {
       completedAt: null,
       createdAt: "2026-09-29T00:00:00.000Z",
       createdBy: { email: "sam@example.com", id: "user-1", name: "Sam" },
+      deletedAt: null,
+      deletedBy: null,
       definition: { sections: [], version: 1 },
       id: "audit-1",
       responses,

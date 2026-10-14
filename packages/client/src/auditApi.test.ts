@@ -11,6 +11,7 @@ import {
   copyAuditTemplate,
   createAuditTemplate,
   deleteAuditIssueImage,
+  discardAuditRun,
   getAuditTemplate,
   getAuditTemplateVersion,
   listAuditRuns,
@@ -156,6 +157,32 @@ describe("audit template API", () => {
         `${apiUrl}/api/audits/runs?cursor=cursor%2Fwith%2Ba%20space`,
       );
       expect(page).toEqual({ audits: [], nextCursor: null });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("pages deleted audits and discards an audit by id", async () => {
+    const originalFetch = globalThis.fetch;
+    const requests: string[] = [];
+    globalThis.fetch = (async (input, init) => {
+      requests.push(`${init?.method ?? "GET"} ${input.toString()}`);
+      return init?.method === "DELETE"
+        ? Response.json({ deletedAt: "2026-10-14T12:00:00.000Z" })
+        : Response.json({ audits: [], nextCursor: null });
+    }) as typeof fetch;
+
+    try {
+      await listAuditRuns(undefined, "deleted");
+      await listAuditRuns("next", "deleted");
+      expect(await discardAuditRun("run/1")).toEqual({
+        deletedAt: "2026-10-14T12:00:00.000Z",
+      });
+      expect(requests).toEqual([
+        `GET ${apiUrl}/api/audits/runs?view=deleted`,
+        `GET ${apiUrl}/api/audits/runs?cursor=next&view=deleted`,
+        `DELETE ${apiUrl}/api/audits/runs/run%2F1`,
+      ]);
     } finally {
       globalThis.fetch = originalFetch;
     }

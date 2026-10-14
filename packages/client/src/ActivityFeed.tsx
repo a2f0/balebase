@@ -18,6 +18,7 @@ import {
 const actionLabels: Record<string, string> = {
   "audit.answer_changed": "changed an answer",
   "audit.completed": "completed the audit",
+  "audit.discarded": "discarded the audit",
   "audit.image_removed": "removed an image",
   "audit.image_uploaded": "attached an image",
   "audit.issue_assigned": "changed the issue assignee",
