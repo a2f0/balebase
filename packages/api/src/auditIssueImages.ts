@@ -900,7 +900,8 @@ auditIssueImages.delete("/:issueId/images/:imageId", async (context) => {
   }
   // Atomically hide the image and release its unique issue slot before R2
   // cleanup. A failed R2 delete leaves a durable object tombstone for cron.
-  await context.env.DB.batch([
+  // Each statement rechecks the discard, so one after the read keeps the image.
+  const [, hidden] = await context.env.DB.batch([
     activityStatement(
       context.env.DB,
       {
@@ -917,13 +918,13 @@ auditIssueImages.delete("/:issueId/images/:imageId", async (context) => {
         subject: { id: row.id, type: "audit_issue_image" },
       },
       {
-        bindings: [row.id, row.object_id, organizationId],
+        bindings: [row.id, row.object_id, organizationId, row.id],
         sql: `EXISTS (
         SELECT 1 FROM audit_issue_images AS image
         JOIN objects AS object ON object.id = image.object_id
         WHERE image.id = ? AND object.id = ? AND object.organization_id = ?
           AND object.deletion_pending = 0
-      )`,
+      ) AND ${imageAuditNotDiscarded}`,
       },
     ),
     context.env.DB.prepare(
@@ -931,12 +932,26 @@ auditIssueImages.delete("/:issueId/images/:imageId", async (context) => {
        SET deletion_pending = 1, cleanup_token = NULL,
            cleanup_claimed_at = NULL, upload_token = NULL,
            upload_lease_expires_at = NULL
-       WHERE id = ? AND organization_id = ? AND kind = 'audit_issue_image'`,
-    ).bind(row.object_id, organizationId),
+       WHERE id = ? AND organization_id = ? AND kind = 'audit_issue_image'
+         AND ${imageAuditNotDiscarded}`,
+    ).bind(row.object_id, organizationId, row.id),
     context.env.DB.prepare(
-      `DELETE FROM audit_issue_images WHERE id = ? AND object_id = ?`,
-    ).bind(row.id, row.object_id),
+      `DELETE FROM audit_issue_images
+       WHERE id = ? AND object_id = ? AND ${imageAuditNotDiscarded}`,
+    ).bind(row.id, row.object_id, row.id),
   ]);
+  if (Number(hidden?.meta.changes) === 0) {
+    const current = await findAuditIssueImage(
+      context.env.DB,
+      organizationId,
+      row.issue_id,
+      row.id,
+      true,
+    );
+    return current?.audit_deleted_at
+      ? context.json({ error: discardedAuditError }, 409)
+      : context.json({ error: "Issue image not found." }, 404);
+  }
   try {
     await deletePendingAuditIssueObject(context.env, {
       id: row.object_id,
@@ -982,6 +997,14 @@ async function findAuditIssueImage(
     .bind(organizationId, issueId, imageId)
     .first<AuditIssueImageRow>();
 }
+
+/** Binds one image id; true unless that image's audit has been discarded. */
+const imageAuditNotDiscarded = `NOT EXISTS (
+  SELECT 1 FROM audit_issue_images AS guarded_image
+  JOIN audit_issues AS guarded_issue ON guarded_issue.id = guarded_image.issue_id
+  JOIN audits AS guarded_audit ON guarded_audit.id = guarded_issue.audit_id
+  WHERE guarded_image.id = ? AND guarded_audit.deleted_at IS NOT NULL
+)`;
 
 const imageSelect = `
   SELECT image.id, image.issue_id, image.object_id, image.created_at,

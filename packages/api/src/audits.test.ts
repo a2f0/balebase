@@ -2234,6 +2234,56 @@ describe("audit discarding", () => {
     expect(deleted.body.audits).toEqual([]);
   });
 
+  it("keeps an image when its audit is discarded after the removal's initial read", async () => {
+    const fixture = await createFixture();
+    const { auditId } = await createActivityAudit(fixture);
+    const created = await jsonRequest<IssueResponse>(
+      fixture,
+      `/runs/${auditId}/issues`,
+      "POST",
+      { itemId: "check", title: "Inspect this" },
+    );
+    const issueId = created.body.issueId;
+    const uploaded = await fixture.app.request(
+      `/issues/${issueId}/images?filename=evidence.png`,
+      imageUpload(pngBytes()),
+      fixture.bindings,
+    );
+    const image = ((await uploaded.json()) as IssueImageResponse).image;
+    const storedBefore = fixture.stored.size;
+    fixture.databaseControl.afterNextImageRead = () => {
+      fixture.database
+        .query(
+          `UPDATE audits SET deleted_at = ?, deleted_by_user_id = 'user-2'
+           WHERE id = ?`,
+        )
+        .run(new Date().toISOString(), auditId);
+    };
+
+    const removed = await fixture.app.request(
+      `/issues/${issueId}/images/${image.id}`,
+      { method: "DELETE" },
+      fixture.bindings,
+    );
+    expect(removed.status).toBe(409);
+    const body: unknown = await removed.json();
+    expect(body).toEqual({ error: "This audit was discarded." });
+    expect(fixture.stored.size).toBe(storedBefore);
+    expect(
+      fixture.database
+        .query(
+          `SELECT
+             (SELECT COUNT(*) FROM audit_issue_images WHERE id = ?) AS images,
+             (SELECT object.deletion_pending FROM audit_issue_images AS image
+              JOIN objects AS object ON object.id = image.object_id
+              WHERE image.id = ?) AS pending,
+             (SELECT COUNT(*) FROM activity_events
+              WHERE root_id = ? AND action = 'audit.image_removed') AS removals`,
+        )
+        .get(image.id, image.id, auditId),
+    ).toEqual({ images: 1, pending: 0, removals: 0 });
+  });
+
   it("rejects a save or new issue when the audit is discarded after the initial read", async () => {
     const fixture = await createFixture();
     const { auditId } = await createActivityAudit(fixture);
@@ -2925,6 +2975,7 @@ async function createActivityAudit(
 interface DatabaseControl {
   activateBeforeCleanupClaim: boolean;
   afterNextAuditRead?: () => void;
+  afterNextImageRead?: () => void;
   commitThenThrowImageActivation: boolean;
   deleteAssigneeBeforeIssueUpdate: boolean;
   deleteAuditBeforeRunUpdate: boolean;
@@ -3284,6 +3335,11 @@ function toD1(
           }
           const result = database.query(query).get(...values);
           if (query.includes("FROM audits AS audit")) afterAuditRead();
+          if (query.includes("FROM audit_issue_images AS image")) {
+            const callback = control.afterNextImageRead;
+            delete control.afterNextImageRead;
+            callback?.();
+          }
           return result;
         },
         run: async () => runSync(),
