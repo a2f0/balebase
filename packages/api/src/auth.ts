@@ -20,6 +20,7 @@ import {
   assignAcceptedInvitationRequirements,
   assignRenewedInvitationRequirements,
 } from "./employeeForms";
+import { organizationRoleActivity } from "./organizationRoleActivity";
 import type { Bindings } from "./types";
 
 type WaitUntil = (promise: Promise<unknown>) => void;
@@ -135,6 +136,7 @@ export function createAuth(env: Bindings, waitUntil: WaitUntil) {
       }),
       multiSession({ maximumSessions: 5 }),
       configuredOrganizationPlugin(env, waitUntil),
+      organizationRoleActivity(),
     ],
     rateLimit: {
       enabled: true,

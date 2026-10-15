@@ -13,6 +13,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@better-auth/core": "1.7.0",
     "better-auth": "1.7.0",
     "hono": "4.13.13",
     "pdf-lib": "1.17.1",

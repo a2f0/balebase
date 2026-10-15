@@ -99,6 +99,56 @@ function event(id: number, after: string): ActivityEvent {
 }
 
 describe("activity feed, mounted", () => {
+  it.each([true, false])(
+    "shows role changes and member navigation (compact: %s)",
+    async (compact) => {
+      const change: ActivityEvent = {
+        ...event(51, "admin"),
+        action: "organization.member_role_changed",
+        details: {
+          before: "member",
+          after: "admin,owner",
+          userId: "bob-user",
+          userName: "Bob",
+          userEmail: "bob@example.com",
+        },
+        root: { type: "organization_member", id: "bob/member", label: "Bob" },
+        subject: { type: "organization_member", id: "bob/member" },
+      };
+      globalThis.fetch = (async (_input) =>
+        Response.json({ events: [change], nextCursor: null })) as typeof fetch;
+      const navigations: string[] = [];
+      container = document.createElement("div");
+      document.body.append(container);
+      root = createRoot(container);
+      await act(async () =>
+        root?.render(
+          <ActivityFeed
+            compact={compact}
+            onNavigate={(path) => navigations.push(path)}
+          />,
+        ),
+      );
+      await settle();
+      expect(container.textContent).toContain(
+        "Sam changed an organization role",
+      );
+      expect(container.textContent).toContain("Bob · bob@example.com");
+      expect(container.textContent).toContain("Member → Admin, Owner");
+      expect(container.textContent).not.toContain("Open form");
+      if (compact) {
+        expect(container.querySelector("summary")?.textContent).toBe(
+          "Bob · Member → Admin, Owner",
+        );
+        expect(
+          container.querySelector('[aria-label="Open member: Bob"]'),
+        ).not.toBeNull();
+      }
+      await click(compact ? "Bob" : "Open member");
+      expect(navigations).toEqual(["/organization/people/bob%2Fmember"]);
+    },
+  );
+
   it("uses compact workspace rows with expandable full details and resource navigation", async () => {
     const change = event(51, "First line\nSecond line");
     change.details.before = "Previous answer ".repeat(50);

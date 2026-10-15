@@ -14,6 +14,7 @@ import {
   type ActivitySource,
   listActivity,
 } from "./activityApi";
+import { organizationPeoplePath } from "./organizationState";
 
 const actionLabels: Record<string, string> = {
   "audit.answer_changed": "changed an answer",
@@ -29,6 +30,7 @@ const actionLabels: Record<string, string> = {
   "audit.started": "started the audit",
   "audit.template_created": "created the form",
   "audit.template_version_saved": "saved a form version",
+  "organization.member_role_changed": "changed an organization role",
 };
 
 export function ActivityFeed({
@@ -193,7 +195,7 @@ function CompactActivityRow({
               {" · "}
               {href ? (
                 <Button
-                  aria-label={`Open ${event.root.type === "audit_run" ? "audit" : "form"}: ${event.root.label}`}
+                  aria-label={`${activityLinkLabel(event)}: ${event.root.label}`}
                   className="activityResource"
                   onClick={() => onNavigate(href)}
                   size="sm"
@@ -231,6 +233,9 @@ function CompactActivityRow({
 
 function activitySummary(event: ActivityEvent) {
   const { details } = event;
+  if (event.action === "organization.member_role_changed") {
+    return `${memberLabel(event)} · ${roleLabel(details.before)} → ${roleLabel(details.after)}`;
+  }
   if (event.action === "audit.answer_changed") {
     return `${textValue(details.prompt)} · ${answerLabel(details.before, details.responseType)} → ${answerLabel(details.after, details.responseType)}`;
   }
@@ -273,7 +278,7 @@ function ActivityRow({
       </div>
       {onNavigate && href && (
         <Button onClick={() => onNavigate(href)} size="sm">
-          {event.root.type === "audit_run" ? "Open audit" : "Open form"}
+          {activityLinkLabel(event)}
         </Button>
       )}
     </li>
@@ -283,6 +288,8 @@ function ActivityRow({
 function ActivityDetails({ event }: { event: ActivityEvent }) {
   const details = event.details;
   switch (event.action) {
+    case "organization.member_role_changed":
+      return <MemberRoleDetails event={event} />;
     case "audit.answer_changed":
       return (
         <div className="activityDetails">
@@ -360,6 +367,19 @@ function assigneeLabel(id: unknown, name: unknown, email: unknown) {
     : textValue(name) || textValue(email) || textValue(id);
 }
 
+function MemberRoleDetails({ event }: { event: ActivityEvent }) {
+  return (
+    <div className="activityDetails">
+      <p>
+        {memberLabel(event)} · {textValue(event.details.userEmail)}
+      </p>
+      <p>
+        {roleLabel(event.details.before)} → {roleLabel(event.details.after)}
+      </p>
+    </div>
+  );
+}
+
 function answerLabel(value: unknown, responseType: unknown) {
   if (value == null || value === "") return "Unanswered";
   if (responseType === "check") {
@@ -377,11 +397,35 @@ function textValue(value: unknown) {
 }
 
 function activityPath(event: ActivityEvent) {
+  if (event.root.type === "organization_member")
+    return organizationPeoplePath(event.root.id);
   if (event.root.type === "audit_run")
     return `/audits/runs/${encodeURIComponent(event.root.id)}`;
   if (event.root.type === "audit_template")
     return `/audits/templates/${encodeURIComponent(event.root.id)}`;
   return undefined;
+}
+
+function activityLinkLabel(event: ActivityEvent) {
+  if (event.root.type === "organization_member") return "Open member";
+  return event.root.type === "audit_run" ? "Open audit" : "Open form";
+}
+
+function memberLabel(event: ActivityEvent) {
+  return (
+    textValue(event.details.userName) ||
+    textValue(event.details.userEmail) ||
+    event.root.label
+  );
+}
+
+function roleLabel(value: unknown) {
+  return textValue(value)
+    .split(",")
+    .map((role) => role.trim())
+    .filter(Boolean)
+    .map((role) => role.charAt(0).toUpperCase() + role.slice(1))
+    .join(", ");
 }
 
 export function formatActivityTime(value: string) {
