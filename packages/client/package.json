@@ -1,14 +1,14 @@
 {
   "name": "@tearleads/client",
-  "version": "0.1.28",
+  "version": "0.1.29",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit && vite build",
-    "check": "tsc --noEmit",
-    "deploy": "bun run build && wrangler deploy",
-    "dev": "vite",
+    "build": "bunx --bun --no-install tsc --noEmit && bunx --bun --no-install vite build",
+    "check": "bunx --bun --no-install tsc --noEmit",
+    "deploy": "bun --bun run build && bunx --bun --no-install wrangler deploy",
+    "dev": "bunx --bun --no-install vite",
     "test": "bun test src",
     "test:browser": "bun test browser"
   },

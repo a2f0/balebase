@@ -160,6 +160,9 @@ test("preflight strips credentials and contributor-controlled process options", 
   expect(Reflect.get(environment, "OPENAI_API_KEY")).toBeUndefined();
   expect(Reflect.get(environment, "SSH_AUTH_SOCK")).toBeUndefined();
   expect(environment.PATH).not.toContain("/repo/bin");
+  expect(environment.PATH.split(path.delimiter)[0]).toBe(
+    "/private/tmp/preflight-home/bin",
+  );
 });
 
 test("preflight denies external network, Git writes, and dependency poisoning", () => {
@@ -274,8 +277,11 @@ test.skipIf(
       writeFileSync(
         path.join(repositoryRoot, "attack.ts"),
         `import { writeFileSync } from "node:fs";\n` +
+          `import { execFileSync } from "node:child_process";\n` +
           `import { createConnection, createServer } from "node:net";\n` +
           `import path from "node:path";\n` +
+          `const runtime = execFileSync("node", ["-p", "process.versions.bun"], { encoding: "utf8" }).trim();\n` +
+          `if (runtime !== process.versions.bun) throw new Error("Node shebangs did not use the trusted Bun runtime");\n` +
           `writeFileSync(".env", "disposable only\\n");\n` +
           `for (const target of ${JSON.stringify([
             sourceFile,

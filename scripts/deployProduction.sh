@@ -8,8 +8,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 echo "Running repository checks..."
-bun run check
-bun run test
+bun --bun run check
+bun --bun run test
 
 "$SCRIPT_DIR/deployApi.sh"
 "$SCRIPT_DIR/deployApp.sh"

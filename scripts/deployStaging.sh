@@ -57,8 +57,8 @@ fi
 
 cd "$REPO_ROOT"
 echo "Running repository checks..."
-bun run check
-bun run test
+bun --bun run check
+bun --bun run test
 bun scripts/createStagingConfigs.ts
 
 api_config="$REPO_ROOT/packages/api/wrangler.staging.jsonc"
@@ -66,40 +66,40 @@ client_config="$REPO_ROOT/packages/client/wrangler.staging.jsonc"
 website_config="$REPO_ROOT/packages/website/wrangler.staging.jsonc"
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
-  bunx wrangler deploy --config "$api_config" --dry-run
+  bunx --bun wrangler deploy --config "$api_config" --dry-run
 else
-  bunx wrangler d1 migrations apply DB --remote --config "$api_config"
+  bunx --bun wrangler d1 migrations apply DB --remote --config "$api_config"
   for secret_name in \
     BETTER_AUTH_SECRET PLAID_CLIENT_ID PLAID_SECRET \
     PLAID_TOKEN_ENCRYPTION_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET; do
-    printf '%s' "${!secret_name}" | bunx wrangler secret put \
+    printf '%s' "${!secret_name}" | bunx --bun wrangler secret put \
       "$secret_name" --config "$api_config" >/dev/null
   done
   for secret_name in \
     CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE CHECKR_CREDIT_PACKAGE; do
     if [[ -n "${!secret_name:-}" ]]; then
-      printf '%s' "${!secret_name}" | bunx wrangler secret put \
+      printf '%s' "${!secret_name}" | bunx --bun wrangler secret put \
         "$secret_name" --config "$api_config" >/dev/null
     fi
   done
-  bunx wrangler deploy --config "$api_config"
+  bunx --bun wrangler deploy --config "$api_config"
 fi
 
 VITE_API_URL="https://api-staging.tearleads.de" \
   VITE_WEBSITE_URL="https://staging.tearleads.de" \
-  bun run --cwd "$REPO_ROOT/packages/client" build
+  bun --bun run --cwd "$REPO_ROOT/packages/client" build
 PUBLIC_APP_URL="https://app-staging.tearleads.de" \
-  bun run --cwd "$REPO_ROOT/packages/website" build
+  bun --bun run --cwd "$REPO_ROOT/packages/website" build
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
-  bunx wrangler deploy --config "$client_config" --dry-run
-  bunx wrangler deploy --config "$website_config" --dry-run
+  bunx --bun wrangler deploy --config "$client_config" --dry-run
+  bunx --bun wrangler deploy --config "$website_config" --dry-run
   echo "Staging dry run completed."
   exit 0
 fi
 
-bunx wrangler deploy --config "$client_config"
-bunx wrangler deploy --config "$website_config"
+bunx --bun wrangler deploy --config "$client_config"
+bunx --bun wrangler deploy --config "$website_config"
 DEPLOY_TIER=staging bash "$SCRIPT_DIR/checkProductionDomains.sh"
 apply_args=(apply -input=true)
 if [[ "${AUTO_APPROVE:-0}" == "1" ]]; then

@@ -15,21 +15,25 @@ Infrastructure lives outside the workspaces in `terraform` (D1, R2, and
 
 ## Start locally
 
-Install [Bun](https://bun.sh/) 1.4.2 and Node.js 22.22.1 or newer; CI uses
-Node.js 24.21.0. Bun owns the workspace lockfile; Node runs tooling with Node
-shebangs, including commitlint and lint-staged. Install Terraform, TFLint, and
-ShellCheck for the complete lint suite. Authenticate Wrangler with a Cloudflare
-account when you are ready to provision remote resources.
+Install [Bun](https://bun.sh/) 1.4.2. Bun manages dependencies and runs all
+JavaScript tooling, including commitlint, lint-staged, and Wrangler. Commands
+use `--bun` to keep that runtime even when Node.js is installed. Install
+Terraform, TFLint, and ShellCheck for the complete lint suite. Authenticate
+Wrangler with a Cloudflare account when you are ready to provision remote
+resources.
 
-If you use mise, `mise install` installs the Bun and Node versions pinned in
-`.mise.toml`, matching CI.
+If you use mise, `mise install` installs the Bun version pinned in `.mise.toml`,
+matching CI. Node.js and npm are not required.
 
 ```sh
-bun install
+bun run install:dependencies
 bun run hooks:install
 bun run --cwd packages/api db:migrate:local
 bun run dev
 ```
+
+`install:dependencies` also runs dependency install scripts on Bun, including
+packages whose install command invokes `node` directly.
 
 Local services use these addresses:
 

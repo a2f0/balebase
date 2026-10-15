@@ -179,7 +179,7 @@ describe("pre-push hook", () => {
     repo.commit("feat: signed work", true);
     const result = repo.push();
     expect(result.code, result.stderr).toBe(0);
-    expect(repo.bunCalls()).toEqual(["run check", "run test"]);
+    expect(repo.bunCalls()).toEqual(["--bun run check", "--bun run test"]);
   });
 
   test("refuses an unsigned commit before running any checks", () => {

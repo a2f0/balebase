@@ -9,7 +9,7 @@ DRY_RUN=false
 BUCKET="stealth-objects"
 
 usage() {
-  echo "Usage: bun run organizations:objects:reorganize [--remote|--local] [--dry-run]" >&2
+  echo "Usage: bun --bun run organizations:objects:reorganize [--remote|--local] [--dry-run]" >&2
 }
 
 for argument in "$@"; do
@@ -66,7 +66,7 @@ ORDER BY organization_id, record_type, record_id;
 "
 
 legacy_json="$(
-  bunx wrangler d1 execute DB "${wrangler_storage_args[@]}" --json \
+  bunx --bun wrangler d1 execute DB "${wrangler_storage_args[@]}" --json \
     --command "$legacy_sql"
 )"
 legacy_rows="$(
@@ -135,13 +135,13 @@ while IFS= read -r row; do
   verification_file="$temporary_directory/verification"
   rm -f -- "$source_file" "$verification_file"
 
-  bunx wrangler r2 object get "$BUCKET/$old_key" \
+  bunx --bun wrangler r2 object get "$BUCKET/$old_key" \
     "${wrangler_storage_args[@]}" \
     --file "$source_file" >/dev/null
-  bunx wrangler r2 object put "$BUCKET/$new_key" \
+  bunx --bun wrangler r2 object put "$BUCKET/$new_key" \
     "${wrangler_storage_args[@]}" --force \
     --file "$source_file" --content-type "$content_type" >/dev/null
-  bunx wrangler r2 object get "$BUCKET/$new_key" \
+  bunx --bun wrangler r2 object get "$BUCKET/$new_key" \
     "${wrangler_storage_args[@]}" \
     --file "$verification_file" >/dev/null
   if ! cmp -s "$source_file" "$verification_file"; then
@@ -170,7 +170,7 @@ while IFS= read -r row; do
   esac
 
   update_json="$(
-    bunx wrangler d1 execute DB "${wrangler_storage_args[@]}" --json \
+    bunx --bun wrangler d1 execute DB "${wrangler_storage_args[@]}" --json \
       --command "$update_sql"
   )"
   if ! jq -e --arg id "$record_id" --arg key "$new_key" \
@@ -180,7 +180,7 @@ while IFS= read -r row; do
     exit 1
   fi
 
-  bunx wrangler r2 object delete "$BUCKET/$old_key" \
+  bunx --bun wrangler r2 object delete "$BUCKET/$old_key" \
     "${wrangler_storage_args[@]}" --force \
     >/dev/null
   moved_count=$((moved_count + 1))

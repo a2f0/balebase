@@ -32,7 +32,7 @@ and recheck them before claiming current status.
 For infrastructure decisions, use the public package's read-only plan helper:
 
 ```sh
-bunx --package @a2f0/agent-tool@0.1.11 agent-tool \
+bunx --bun --package @a2f0/agent-tool@0.1.11 agent-tool \
   dependencies check-terraform-plan /private/path/complete-plan.json
 ```
 

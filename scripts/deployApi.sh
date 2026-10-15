@@ -15,17 +15,17 @@ validate_stripe_env live
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
   echo "Dry-running API Worker deployment..."
-  bunx wrangler deploy \
+  bunx --bun wrangler deploy \
     --config "$REPO_ROOT/packages/api/wrangler.jsonc" \
     --dry-run
   exit 0
 fi
 
 echo "Applying production D1 migrations..."
-bun run --cwd "$REPO_ROOT/packages/api" db:migrate:remote
+bun --bun run --cwd "$REPO_ROOT/packages/api" db:migrate:remote
 
 echo "Updating the Better Auth Worker secret..."
-printf '%s' "$BETTER_AUTH_SECRET" | bunx wrangler secret put \
+printf '%s' "$BETTER_AUTH_SECRET" | bunx --bun wrangler secret put \
   BETTER_AUTH_SECRET \
   --config "$REPO_ROOT/packages/api/wrangler.jsonc" \
   >/dev/null
@@ -35,7 +35,7 @@ for secret_name in \
   PLAID_CLIENT_ID \
   PLAID_SECRET \
   PLAID_TOKEN_ENCRYPTION_KEY; do
-  printf '%s' "${!secret_name}" | bunx wrangler secret put \
+  printf '%s' "${!secret_name}" | bunx --bun wrangler secret put \
     "$secret_name" \
     --config "$REPO_ROOT/packages/api/wrangler.jsonc" \
     >/dev/null
@@ -46,7 +46,7 @@ for secret_name in \
   CHECKR_BACKGROUND_PACKAGE \
   CHECKR_CREDIT_PACKAGE; do
   if [[ -n "${!secret_name:-}" ]]; then
-    printf '%s' "${!secret_name}" | bunx wrangler secret put \
+    printf '%s' "${!secret_name}" | bunx --bun wrangler secret put \
       "$secret_name" \
       --config "$REPO_ROOT/packages/api/wrangler.jsonc" \
       >/dev/null
@@ -55,11 +55,11 @@ done
 
 echo "Updating Stripe Worker secrets..."
 for secret_name in STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET; do
-  printf '%s' "${!secret_name}" | bunx wrangler secret put \
+  printf '%s' "${!secret_name}" | bunx --bun wrangler secret put \
     "$secret_name" \
     --config "$REPO_ROOT/packages/api/wrangler.jsonc" \
     >/dev/null
 done
 
 echo "Deploying API Worker..."
-bun run --cwd "$REPO_ROOT/packages/api" deploy
+bun --bun run --cwd "$REPO_ROOT/packages/api" deploy

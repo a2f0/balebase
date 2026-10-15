@@ -57,6 +57,8 @@ printf 'bun %s VITE_API_URL=%s VITE_WEBSITE_URL=%s PUBLIC_APP_URL=%s\n' \
 EOF
 cat > "$FIXTURE/bin/bunx" <<'EOF'
 #!/usr/bin/env bash
+[[ "$1" == "--bun" ]] || { echo 'Expected Wrangler to run on Bun' >&2; exit 1; }
+shift
 if [[ "$*" == *'secret put'* ]]; then
   secret_value="$(cat)"
   printf 'bunx %s token=%s account=%s value=%s\n' "$*" "${CLOUDFLARE_API_TOKEN:-}" "${CLOUDFLARE_ACCOUNT_ID:-}" "$secret_value" >> "$MOCK_LOG"

@@ -45,9 +45,9 @@ $pushed_refs
 REFS
 
 echo "Running repository checks..."
-bun run check
+bun --bun run check
 
 echo "Running tests..."
-bun run test
+bun --bun run test
 
 echo "All checks passed."

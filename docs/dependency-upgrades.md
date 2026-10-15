@@ -3,7 +3,9 @@
 Read the runtime pins from [`.mise.toml`](../.mise.toml), `packageManager` and
 `engines` in [`package.json`](../package.json), and CI. Bun owns `bun.lock`.
 Preserve exact direct dependency pins and keep React, React DOM, their types,
-and the UI peer versions aligned.
+and the UI peer versions aligned. Run package executables with `bunx --bun` so
+their Node shebangs do not select another runtime. CI rejects direct Node, npm,
+and npx invocations in repository commands.
 
 Keep reusable procedures and active constraints here. Put each upgrade's dated
 version inventory, migrations, audit/test/preview evidence, and skipped groups
@@ -24,11 +26,11 @@ repository's trusted-base `packages/agent-tool` shipping implementation.
 - Follow the [Astro major upgrade guide][astro] when changing compiler,
   Markdown, whitespace, or API behavior; verify image handling against the
   [AVIF advisory][astro-advisory] and the selected release.
-- [Commitlint 21][commitlint] raises its Node requirement and changes diagnostic
-  formatting. Its header policy still requires Conventional Commits and a
-  maximum of 50 characters; this repository does not parse its diagnostics.
-- [Lint-staged 17][lint-staged] requires Node 22.22.1 and Git 2.32.0. Configuration
-  is in package.json, so the optional YAML configuration dependency is not
+- [Commitlint 21][commitlint] runs on Bun here. Its header policy requires
+  Conventional Commits and a maximum of 50 characters; this repository does not
+  parse its diagnostics.
+- [Lint-staged 17][lint-staged] runs on Bun here and requires Git 2.32.0.
+  Configuration is in package.json, so the optional YAML dependency is not
   needed to load the staged-file rules.
 - [Knip 6.40][knip] reports exports used only in their declaring file. Keep
   those declarations private, preserve both full and production analysis,

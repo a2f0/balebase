@@ -7,7 +7,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
 echo "Checking file names..."
-bun run lint:files
+bun --bun run lint:files
 
 echo "Linting staged files..."
-bun run lint:staged
+bun --bun run lint:staged
