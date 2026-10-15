@@ -149,6 +149,7 @@ export async function saveTemplateVersion(
   current: TemplateRow,
   userId: string,
   input: TemplateSaveInput,
+  status = current.status,
 ) {
   if (
     input.expectedCurrentVersion !== undefined &&
@@ -163,15 +164,16 @@ export async function saveTemplateVersion(
       userId,
       input,
       new Date().toISOString(),
+      status,
     );
   } catch (cause) {
-    const latest = await findTemplate(database, organizationId, current.id);
+    const latest = await loadTemplate(database, organizationId, current.id);
     if (latest && latest.current_version !== current.current_version) {
       return "stale" as const;
     }
     throw cause;
   }
-  const saved = await findTemplate(database, organizationId, current.id);
+  const saved = await loadTemplate(database, organizationId, current.id);
   if (!saved) throw new Error("Saved template could not be loaded.");
   return saved;
 }
@@ -182,6 +184,7 @@ async function addTemplateVersion(
   userId: string,
   input: TemplateSaveInput,
   now: string,
+  status: string,
 ) {
   const version = current.current_version + 1;
   await database.batch([
@@ -206,7 +209,7 @@ async function addTemplateVersion(
         input.name,
         input.description,
         JSON.stringify(input.definition),
-        current.status,
+        status,
         userId,
         now,
       ),
@@ -292,6 +295,27 @@ export async function findTemplate(
   version?: number,
 ) {
   await ensureStarterTemplates(database);
+  const current = await loadTemplate(database, organizationId, id);
+  if (
+    !current ||
+    current.status === "discarded" ||
+    (organizationId !== null &&
+      current.scope === "global" &&
+      current.status !== "published")
+  )
+    return null;
+  return version
+    ? loadTemplate(database, organizationId, id, version)
+    : current;
+}
+
+/** Internal reads also see discarded forms so concurrent writes report stale. */
+async function loadTemplate(
+  database: D1Database,
+  organizationId: string | null,
+  id: string,
+  version?: number,
+) {
   const versionJoin = version
     ? "version.version = ?"
     : "version.version = family.current_version";

@@ -82,7 +82,8 @@ audits.get("/templates", async (context) => {
   await ensureStarterTemplates(context.env.DB);
   const result = await context.env.DB.prepare(
     `${templateSelect}
-     WHERE family.scope = 'global' OR family.organization_id = ?
+     WHERE (family.scope = 'global' AND version.status = 'published')
+        OR family.organization_id = ?
      ORDER BY family.updated_at DESC`,
   )
     .bind(organizationId)
