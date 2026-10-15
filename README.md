@@ -26,11 +26,14 @@ If you use mise, `mise install` installs the Bun version pinned in `.mise.toml`,
 matching CI. Node.js and npm are not required.
 
 ```sh
-bun --bun install
+bun run install:dependencies
 bun run hooks:install
 bun run --cwd packages/api db:migrate:local
 bun run dev
 ```
+
+`install:dependencies` also runs dependency install scripts on Bun, including
+packages whose install command invokes `node` directly.
 
 Local services use these addresses:
 

@@ -24,6 +24,7 @@
     "emails:purge": "bash scripts/purgeEmails.sh",
     "format": "bun --bun run lint:biome:fix && bun --bun run lint:markdown:fix",
     "hooks:install": "sh scripts/git/install-hooks.sh",
+    "install:dependencies": "bun --bun run bun install",
     "lint": "bun --bun run lint:biome && bun --bun run lint:markdown && bun --bun run lint:files && bun --bun run lint:knip:all && bun --bun run lint:knip:production && bun --bun run lint:scripts && bun --bun run lint:terraform",
     "lint:biome": "bunx --bun --no-install biome check --error-on-warnings .",
     "lint:biome:fix": "bunx --bun --no-install biome check --write --error-on-warnings .",
