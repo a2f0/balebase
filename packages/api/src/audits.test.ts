@@ -105,6 +105,110 @@ interface ActivityRunResponse {
 }
 
 describe("audits", () => {
+  it("preserves legacy shared global forms when publication controls are introduced", async () => {
+    const fixture = await createFixture(true, false);
+    const admin = { role: "admin" };
+    const legacy = await jsonRequest<TemplateResponse>(
+      fixture,
+      "/admin/audit-templates",
+      "POST",
+      { name: "Legacy shared form" },
+      admin,
+    );
+    const { id, definition, name } = legacy.body.template;
+    await jsonRequest(
+      fixture,
+      `/admin/audit-templates/${id}`,
+      "PUT",
+      { definition, name },
+      admin,
+    );
+    const local = await jsonRequest<TemplateResponse>(
+      fixture,
+      "/templates",
+      "POST",
+      { name: "Organization draft" },
+    );
+    fixture.database
+      .query(`INSERT INTO audits
+      (id, organization_id, template_family_id, template_version_id,
+       template_version, template_name, definition, responses, status,
+       started_by, created_at, updated_at)
+      SELECT 'legacy-audit', 'org_user-1', template_id, id, version, name,
+        definition, '{}', 'in_progress', 'user-1', created_at, created_at
+      FROM audit_template_versions WHERE template_id = ? AND version = 1`)
+      .run(id);
+    await applyMigration(
+      fixture.database,
+      "0058_publish_legacy_global_audits.sql",
+    );
+    const shared = await jsonRequest<TemplateResponse>(
+      fixture,
+      `/templates/${id}`,
+      "GET",
+    );
+    expect(shared.body.template).toMatchObject({
+      id,
+      name,
+      status: "published",
+      currentVersion: 2,
+    });
+    const versions = await jsonRequest<TemplateVersionsResponse>(
+      fixture,
+      `/templates/${id}/versions`,
+      "GET",
+    );
+    expect(versions.body.versions.map(({ version }) => version)).toEqual([
+      2, 1,
+    ]);
+    expect(
+      (await jsonRequest(fixture, `/templates/${id}/versions/1`, "GET"))
+        .response.status,
+    ).toBe(200);
+    expect(
+      (await jsonRequest(fixture, `/templates/${id}/runs`, "POST")).response
+        .status,
+    ).toBe(201);
+    expect(
+      (
+        await jsonRequest(fixture, `/templates/${id}/copies`, "POST", {
+          definition,
+          name,
+        })
+      ).response.status,
+    ).toBe(201);
+    const existing = await jsonRequest(fixture, "/runs/legacy-audit", "GET");
+    expect(existing.body).toMatchObject({
+      audit: { templateId: id, templateVersion: 1 },
+    });
+    expect(
+      (
+        await jsonRequest(
+          fixture,
+          `/templates/${local.body.template.id}`,
+          "GET",
+        )
+      ).body,
+    ).toMatchObject({ template: { status: "draft" } });
+    const fresh = await jsonRequest<TemplateResponse>(
+      fixture,
+      "/admin/audit-templates",
+      "POST",
+      { name: "New private draft" },
+      admin,
+    );
+    expect(fresh.body.template).toMatchObject({ status: "draft" });
+    expect(
+      (
+        await jsonRequest(
+          fixture,
+          `/templates/${fresh.body.template.id}`,
+          "GET",
+        )
+      ).response.status,
+    ).toBe(404);
+  });
+
   it("shares only published versions and activity after publishing a global draft", async () => {
     const fixture = await createFixture();
     const admin = { role: "admin" };
@@ -3393,7 +3497,10 @@ interface DatabaseControl {
   failNextPendingUpdate: boolean;
 }
 
-async function createFixture(includeActivity = true) {
+async function createFixture(
+  includeActivity = true,
+  includePublication = true,
+) {
   const database = await createLegacyDatabase();
   await applyMigration(database, "0022_version_audit_templates.sql");
   await applyMigration(database, "0024_create_audit_issue_images.sql");
@@ -3408,6 +3515,8 @@ async function createFixture(includeActivity = true) {
   if (includeActivity)
     await applyMigration(database, "0049_create_activity_events.sql");
   await applyMigration(database, "0056_discard_audits.sql");
+  if (includePublication)
+    await applyMigration(database, "0058_publish_legacy_global_audits.sql");
   const stored = new Map<string, Uint8Array>();
   const databaseControl: DatabaseControl = {
     activateBeforeCleanupClaim: false,
