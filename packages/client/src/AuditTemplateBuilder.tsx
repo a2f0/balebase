@@ -27,6 +27,7 @@ import {
   updateAuditTemplate,
 } from "./auditApi";
 import { type ErrorNotice, ErrorToast, errorNotice } from "./BillingLink";
+import { GlobalAuditControls } from "./GlobalAuditControls";
 import { countLabel } from "./labels";
 import { globalAuditsPath } from "./organizationState";
 import { moveEntry, useReorderDrag } from "./useReorderDrag";
@@ -42,17 +43,17 @@ interface BackLink {
   onBack: () => void;
 }
 
-export function AuditTemplateBuilder({
+function useTemplateBuilder({
   id,
   manageGlobal = false,
   onNavigate,
 }: BuilderProps) {
   const [template, setTemplate] = useState<AuditTemplate>();
+  const [currentStatus, setCurrentStatus] = useState<string>();
   const [versions, setVersions] = useState<AuditTemplateVersion[]>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ErrorNotice>();
   const [notice, setNotice] = useState<string>();
-  const back = backLink(manageGlobal, onNavigate);
 
   useEffect(() => {
     Promise.all([
@@ -61,6 +62,7 @@ export function AuditTemplateBuilder({
     ])
       .then(([nextTemplate, nextVersions]) => {
         setTemplate(nextTemplate);
+        setCurrentStatus(nextTemplate.status);
         setVersions(nextVersions);
       })
       .catch((cause: unknown) =>
@@ -86,7 +88,7 @@ export function AuditTemplateBuilder({
     }
   }
 
-  async function save() {
+  async function save(status?: "published" | "unpublished") {
     if (!template) return;
     setBusy(true);
     setError(undefined);
@@ -95,12 +97,15 @@ export function AuditTemplateBuilder({
       const copiedGlobal = template.scope === "global" && !manageGlobal;
       const saved = copiedGlobal
         ? await copyAuditTemplate(template)
-        : await updateAuditTemplate(template, manageGlobal);
+        : await updateAuditTemplate(template, manageGlobal, status);
       setTemplate(saved);
+      setCurrentStatus(saved.status);
       setNotice(
         copiedGlobal
           ? "Organization form created. The global form is unchanged."
-          : `Version ${saved.version} saved.`,
+          : status
+            ? `Form ${status}.`
+            : `Version ${saved.version} saved.`,
       );
       if (saved.id !== id) {
         onNavigate(`/audits/templates/${encodeURIComponent(saved.id)}`);
@@ -113,6 +118,38 @@ export function AuditTemplateBuilder({
     }
   }
 
+  return {
+    template,
+    currentStatus,
+    versions,
+    busy,
+    error,
+    notice,
+    save,
+    selectVersion,
+    setTemplate,
+    setNotice,
+  };
+}
+
+export function AuditTemplateBuilder({
+  id,
+  manageGlobal = false,
+  onNavigate,
+}: BuilderProps) {
+  const {
+    template,
+    currentStatus,
+    versions,
+    busy,
+    error,
+    notice,
+    save,
+    selectVersion,
+    setTemplate,
+    setNotice,
+  } = useTemplateBuilder({ id, manageGlobal, onNavigate });
+  const back = backLink(manageGlobal, onNavigate);
   if (!template) return <BuilderLoading back={back} error={error?.message} />;
 
   return (
@@ -121,6 +158,7 @@ export function AuditTemplateBuilder({
         back={back}
         busy={busy}
         manageGlobal={manageGlobal}
+        currentStatus={currentStatus ?? template.status}
         onSave={save}
         onVersionChange={selectVersion}
         template={template}
@@ -268,8 +306,9 @@ function BuilderNotices({
       )}
       {isGlobal && manageGlobal && (
         <Banner announce={false} tone="warning">
-          You are managing the shared global form. Saving will publish a new
-          version for every organization.
+          You are managing the shared global form. Published forms are available
+          to every organization. Draft and unpublished forms stay private to
+          root admins.
         </Banner>
       )}
       {template.version < template.currentVersion && (
@@ -295,6 +334,7 @@ function BuilderNotices({
 function BuilderHeader({
   back,
   busy,
+  currentStatus,
   manageGlobal,
   onSave,
   onVersionChange,
@@ -303,8 +343,9 @@ function BuilderHeader({
 }: {
   back: BackLink;
   busy: boolean;
+  currentStatus: string;
   manageGlobal: boolean;
-  onSave: () => Promise<void>;
+  onSave: (status?: "published" | "unpublished") => Promise<void>;
   onVersionChange: (version: number) => Promise<void>;
   template: AuditTemplate;
   versions: AuditTemplateVersion[];
@@ -314,6 +355,15 @@ function BuilderHeader({
     <PageHeader
       actions={
         <div className="auditVersionControls">
+          {manageGlobal && (
+            <GlobalAuditControls
+              busy={busy}
+              onDiscarded={back.onBack}
+              onSave={onSave}
+              status={currentStatus}
+              template={template}
+            />
+          )}
           <label className="auditVersionPicker">
             <span className="auditVersionLabel">Version</span>
             <select

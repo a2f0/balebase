@@ -19,6 +19,7 @@ export interface ActivityRow {
 }
 
 interface ActivityRoot {
+  publishedTemplateOnly?: boolean;
   id: string;
   type: string;
 }
@@ -67,6 +68,14 @@ export async function findActivity(
   if (before !== null) {
     filters.push("id < ?");
     bindings.push(before);
+  }
+  if (root?.publishedTemplateOnly) {
+    filters.push(`EXISTS (
+      SELECT 1 FROM audit_template_versions AS version
+      WHERE version.template_id = activity_events.root_id
+        AND version.version = json_extract(activity_events.details, '$.version')
+        AND version.status = 'published'
+    )`);
   }
   const rows = await database
     .prepare(

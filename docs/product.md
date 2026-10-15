@@ -208,6 +208,18 @@ and normalizes uploads to a single non-animated frame before anything is written
 to storage.
 Audit runs snapshot their template so later template edits do not rewrite
 history.
+Root admins manage global forms in **Global Audits**. New forms are private
+drafts until published. Published forms can be unpublished and published again;
+unpublishing hides them from organizations and prevents new runs and copies,
+while preserving versions and existing audit runs. Only drafts can be discarded.
+Discarded drafts leave the admin list but remain stored with their history.
+Publication changes save a new version, including the editor's current changes,
+and reject stale versions just like other template saves. Organizations can only
+read published versions and their activity; draft and unpublished history stays
+private to root admins.
+Apply migration `0058_publish_legacy_global_audits.sql` before deploying these
+controls. Earlier global versions were shared regardless of their stored draft
+status; the migration marks them published to preserve their existing availability.
 The workspace **Activity** page and each form and audit's Activity section show
 who created forms, started audits, changed answers, completed or reopened audits,
 raised or reassigned issues, resolved or reopened issues, and attached or removed

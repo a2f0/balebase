@@ -28,7 +28,7 @@ import { handleNavigation } from "./workspacePaths";
 
 /**
  * Root admin's home for global forms: every organization can run or copy
- * them, but only changes saved here publish a new shared version.
+ * published forms; root admins control their publication here.
  */
 export function AdminGlobalAudits({
   onNavigate,
@@ -92,7 +92,7 @@ function GlobalAuditList({
             New global checklist
           </Button>
         }
-        description="Checklists shared with every organization. Organizations can run them or customize their own copy; saving here publishes a new version for everyone."
+        description="Publish checklists to share them with every organization. Unpublish forms to keep them private, or discard drafts you no longer need."
         eyebrow="Root Admin"
         title="Global Audits"
       />

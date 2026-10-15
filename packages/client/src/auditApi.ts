@@ -183,15 +183,26 @@ export async function listAuditTemplateVersions(
 export async function updateAuditTemplate(
   template: AuditTemplate,
   manageGlobal = false,
+  status?: "published" | "unpublished",
 ) {
   const body = await send<{ template: AuditTemplate }>(
     `${templatesPath(manageGlobal)}/${encodeURIComponent(template.id)}`,
     {
-      body: templateSaveBody(template),
+      body: templateSaveBody(template, status),
       method: "PUT",
     },
   );
   return body.template;
+}
+
+export function discardGlobalAuditTemplate(template: AuditTemplate) {
+  return send<{ discarded: true }>(
+    `${templatesPath(true)}/${encodeURIComponent(template.id)}`,
+    {
+      body: JSON.stringify({ expectedCurrentVersion: template.currentVersion }),
+      method: "DELETE",
+    },
+  );
 }
 
 export async function copyAuditTemplate(template: AuditTemplate) {
@@ -314,12 +325,16 @@ function templatesPath(manageGlobal: boolean) {
   return manageGlobal ? "/api/admin/audit-templates" : "/api/audits/templates";
 }
 
-function templateSaveBody(template: AuditTemplate) {
+function templateSaveBody(
+  template: AuditTemplate,
+  status?: "published" | "unpublished",
+) {
   return JSON.stringify({
     definition: template.definition,
     description: template.description,
     expectedCurrentVersion: template.currentVersion,
     name: template.name,
+    status,
   });
 }
 

@@ -9,6 +9,7 @@ import {
   positiveInteger,
   saveTemplateVersion,
   staleTemplateError,
+  storedDefinition,
   type TemplateRow,
   templateSaveInput,
   templateSelect,
@@ -31,7 +32,7 @@ adminAuditTemplates.get("/", async (context) => {
   await ensureStarterTemplates(context.env.DB);
   const result = await context.env.DB.prepare(
     `${templateSelect}
-     WHERE family.scope = 'global'
+     WHERE family.scope = 'global' AND version.status != 'discarded'
      ORDER BY family.updated_at DESC`,
   ).all<TemplateRow>();
   return context.json({ templates: result.results.map(toTemplate) });
@@ -115,18 +116,75 @@ adminAuditTemplates.put("/:id", async (context) => {
     context.req.param("id"),
   );
   if (!current) return context.json({ error: "Template not found." }, 404);
-  const input = templateSaveInput(await context.req.json().catch(() => null));
+  const body: unknown = await context.req.json().catch(() => null);
+  const input = templateSaveInput(body);
   if (typeof input === "string") return context.json({ error: input }, 400);
+  const status = isRecord(body) ? body.status : undefined;
+  if (
+    status !== undefined &&
+    status !== "published" &&
+    status !== "unpublished"
+  ) {
+    return context.json({ error: "Template status is invalid." }, 400);
+  }
+  if (status === "unpublished" && current.status !== "published") {
+    return context.json(
+      { error: "Only published forms can be unpublished." },
+      409,
+    );
+  }
   const saved = await saveTemplateVersion(
     context.env.DB,
     null,
     current,
     context.get("authSession").user.id,
     input,
+    status,
   );
   return saved === "stale"
     ? context.json({ error: staleTemplateError }, 409)
     : context.json({ template: toTemplate(saved) });
+});
+
+adminAuditTemplates.delete("/:id", async (context) => {
+  const current = await findTemplate(
+    context.env.DB,
+    null,
+    context.req.param("id"),
+  );
+  if (!current) return context.json({ error: "Template not found." }, 404);
+  if (current.status !== "draft") {
+    return context.json(
+      {
+        error:
+          "Only draft forms can be discarded. Unpublish published forms instead.",
+      },
+      409,
+    );
+  }
+  const body: unknown = await context.req.json().catch(() => null);
+  if (!isRecord(body) || !Number.isSafeInteger(body.expectedCurrentVersion)) {
+    return context.json(
+      { error: "The current template version is required." },
+      400,
+    );
+  }
+  const saved = await saveTemplateVersion(
+    context.env.DB,
+    null,
+    current,
+    context.get("authSession").user.id,
+    {
+      definition: storedDefinition(current.definition),
+      description: current.description,
+      expectedCurrentVersion: body.expectedCurrentVersion,
+      name: current.name,
+    },
+    "discarded",
+  );
+  return saved === "stale"
+    ? context.json({ error: staleTemplateError }, 409)
+    : context.json({ discarded: true });
 });
 
 export { adminAuditTemplates };

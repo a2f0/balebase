@@ -82,7 +82,8 @@ audits.get("/templates", async (context) => {
   await ensureStarterTemplates(context.env.DB);
   const result = await context.env.DB.prepare(
     `${templateSelect}
-     WHERE family.scope = 'global' OR family.organization_id = ?
+     WHERE (family.scope = 'global' AND version.status = 'published')
+        OR family.organization_id = ?
      ORDER BY family.updated_at DESC`,
   )
     .bind(organizationId)
@@ -174,7 +175,11 @@ audits.get("/templates/:id/versions", async (context) => {
   );
   if (!template) return context.json({ error: "Template not found." }, 404);
   return context.json({
-    versions: await listTemplateVersions(context.env.DB, template.id),
+    versions: await listTemplateVersions(
+      context.env.DB,
+      template.id,
+      template.scope === "global",
+    ),
   });
 });
 
@@ -216,7 +221,11 @@ audits.get("/templates/:id/activity", async (context) => {
     context.env.DB,
     template.scope === "global" ? null : organizationId,
     context.req.query("cursor"),
-    { id: template.id, type: "audit_template" },
+    {
+      id: template.id,
+      type: "audit_template",
+      publishedTemplateOnly: template.scope === "global",
+    },
   );
   return page
     ? context.json(page)

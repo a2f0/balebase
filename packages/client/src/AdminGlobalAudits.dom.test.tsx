@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { DialogHost } from "@tearleads/ui/react";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
@@ -86,12 +87,17 @@ const globalForm: AuditTemplate = {
 const admin = `${apiUrl}/api/admin/audit-templates`;
 
 /** Answers like the root admin API, recording every request. */
-function stubApi() {
+function stubApi(form = globalForm, failure?: string) {
   const requests: string[] = [];
   globalThis.fetch = (async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
     requests.push(`${method} ${url}`);
+    if (method === "DELETE") {
+      return failure
+        ? Response.json({ error: failure }, { status: 409 })
+        : Response.json({ discarded: true });
+    }
     if (method === "POST") {
       return Response.json(
         { template: { ...globalForm, id: "new/form" } },
@@ -101,7 +107,7 @@ function stubApi() {
     if (method === "PUT") {
       const body = JSON.parse(String(init?.body)) as { name: string };
       return Response.json({
-        template: { ...globalForm, ...body, currentVersion: 2, version: 2 },
+        template: { ...form, ...body, currentVersion: 2, version: 2 },
       });
     }
     if (url === admin) return Response.json({ templates: [globalForm] });
@@ -109,7 +115,7 @@ function stubApi() {
     if (url.includes("/activity")) {
       return Response.json({ events: [], nextCursor: null });
     }
-    return Response.json({ template: globalForm });
+    return Response.json({ template: form });
   }) as typeof fetch;
   return requests;
 }
@@ -127,10 +133,13 @@ async function render(pathname: string) {
   root = createRoot(container);
   await act(async () =>
     root?.render(
-      <AdminGlobalAudits
-        onNavigate={(path) => paths.push(path)}
-        pathname={pathname}
-      />,
+      <>
+        <AdminGlobalAudits
+          onNavigate={(path) => paths.push(path)}
+          pathname={pathname}
+        />
+        <DialogHost />
+      </>,
     ),
   );
   await settle();
@@ -146,6 +155,63 @@ function button(text: string) {
 }
 
 describe("Global Audits", () => {
+  it("unpublishes and republishes a form without offering deletion", async () => {
+    const requests = stubApi();
+    await render("/root/global-audits/fire%2Fsafety");
+    expect(container.textContent).not.toContain("Discard draft");
+    await act(async () => button("Unpublish").click());
+    await settle();
+    expect(container.textContent).toContain("Form unpublished.");
+    expect(container.textContent).not.toContain("Discard draft");
+    await act(async () => button("Publish").click());
+    await settle();
+    expect(container.textContent).toContain("Form published.");
+    expect(
+      requests.filter((request) => request.startsWith("PUT")),
+    ).toHaveLength(2);
+    expect(requests.some((request) => request.startsWith("DELETE"))).toBe(
+      false,
+    );
+  });
+
+  it("confirms discarding a draft and returns to Global Audits", async () => {
+    const requests = stubApi({ ...globalForm, status: "draft" });
+    const paths = await render("/root/global-audits/fire%2Fsafety");
+    await act(async () => button("Discard draft").click());
+    await act(async () => button("Cancel").click());
+    expect(requests.some((request) => request.startsWith("DELETE"))).toBe(
+      false,
+    );
+    await act(async () => button("Discard draft").click());
+    const confirm = document.querySelector<HTMLButtonElement>(
+      '[role="alertdialog"] .buttonDanger',
+    );
+    expect(confirm).not.toBeNull();
+    await act(async () => confirm?.click());
+    await settle();
+    expect(requests).toContain(`DELETE ${admin}/fire%2Fsafety`);
+    expect(paths).toEqual(["/root/global-audits"]);
+  });
+
+  it("keeps a draft open when discarding fails", async () => {
+    stubApi(
+      { ...globalForm, status: "draft" },
+      "This template has a newer version. Reload it before saving.",
+    );
+    const paths = await render("/root/global-audits/fire%2Fsafety");
+    await act(async () => button("Discard draft").click());
+    await act(async () =>
+      document
+        .querySelector<HTMLButtonElement>('[role="alertdialog"] .buttonDanger')
+        ?.click(),
+    );
+    await settle();
+    expect(paths).toEqual([]);
+    expect(container.textContent).toContain(
+      "This template has a newer version.",
+    );
+  });
+
   it("lists global forms from the root admin API and opens one to manage", async () => {
     const requests = stubApi();
     const paths = await render("/root/global-audits");

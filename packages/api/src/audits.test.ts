@@ -105,6 +105,398 @@ interface ActivityRunResponse {
 }
 
 describe("audits", () => {
+  it("preserves legacy shared global forms when publication controls are introduced", async () => {
+    const fixture = await createFixture(true, false);
+    const admin = { role: "admin" };
+    const legacy = await jsonRequest<TemplateResponse>(
+      fixture,
+      "/admin/audit-templates",
+      "POST",
+      { name: "Legacy shared form" },
+      admin,
+    );
+    const { id, definition, name } = legacy.body.template;
+    await jsonRequest(
+      fixture,
+      `/admin/audit-templates/${id}`,
+      "PUT",
+      { definition, name },
+      admin,
+    );
+    const local = await jsonRequest<TemplateResponse>(
+      fixture,
+      "/templates",
+      "POST",
+      { name: "Organization draft" },
+    );
+    fixture.database
+      .query(`INSERT INTO audits
+      (id, organization_id, template_family_id, template_version_id,
+       template_version, template_name, definition, responses, status,
+       started_by, created_at, updated_at)
+      SELECT 'legacy-audit', 'org_user-1', template_id, id, version, name,
+        definition, '{}', 'in_progress', 'user-1', created_at, created_at
+      FROM audit_template_versions WHERE template_id = ? AND version = 1`)
+      .run(id);
+    await applyMigration(
+      fixture.database,
+      "0058_publish_legacy_global_audits.sql",
+    );
+    const shared = await jsonRequest<TemplateResponse>(
+      fixture,
+      `/templates/${id}`,
+      "GET",
+    );
+    expect(shared.body.template).toMatchObject({
+      id,
+      name,
+      status: "published",
+      currentVersion: 2,
+    });
+    const versions = await jsonRequest<TemplateVersionsResponse>(
+      fixture,
+      `/templates/${id}/versions`,
+      "GET",
+    );
+    expect(versions.body.versions.map(({ version }) => version)).toEqual([
+      2, 1,
+    ]);
+    expect(
+      (await jsonRequest(fixture, `/templates/${id}/versions/1`, "GET"))
+        .response.status,
+    ).toBe(200);
+    expect(
+      (await jsonRequest(fixture, `/templates/${id}/runs`, "POST")).response
+        .status,
+    ).toBe(201);
+    expect(
+      (
+        await jsonRequest(fixture, `/templates/${id}/copies`, "POST", {
+          definition,
+          name,
+        })
+      ).response.status,
+    ).toBe(201);
+    const existing = await jsonRequest(fixture, "/runs/legacy-audit", "GET");
+    expect(existing.body).toMatchObject({
+      audit: { templateId: id, templateVersion: 1 },
+    });
+    expect(
+      (
+        await jsonRequest(
+          fixture,
+          `/templates/${local.body.template.id}`,
+          "GET",
+        )
+      ).body,
+    ).toMatchObject({ template: { status: "draft" } });
+    const fresh = await jsonRequest<TemplateResponse>(
+      fixture,
+      "/admin/audit-templates",
+      "POST",
+      { name: "New private draft" },
+      admin,
+    );
+    expect(fresh.body.template).toMatchObject({ status: "draft" });
+    expect(
+      (
+        await jsonRequest(
+          fixture,
+          `/templates/${fresh.body.template.id}`,
+          "GET",
+        )
+      ).response.status,
+    ).toBe(404);
+  });
+
+  it("shares only published versions and activity after publishing a global draft", async () => {
+    const fixture = await createFixture();
+    const admin = { role: "admin" };
+    const created = await jsonRequest<TemplateResponse>(
+      fixture,
+      "/admin/audit-templates",
+      "POST",
+      { name: "Private draft title" },
+      admin,
+    );
+    const { id, definition } = created.body.template;
+    for (const [expectedCurrentVersion, name, status] of [
+      [1, "Public form", "published"],
+      [2, "Private unpublished title", "unpublished"],
+      [3, "Public form again", "published"],
+    ] as const) {
+      expect(
+        (
+          await jsonRequest(
+            fixture,
+            `/admin/audit-templates/${id}`,
+            "PUT",
+            { definition, expectedCurrentVersion, name, status },
+            admin,
+          )
+        ).response.status,
+      ).toBe(200);
+    }
+    for (const version of [1, 3]) {
+      expect(
+        (
+          await jsonRequest(
+            fixture,
+            `/templates/${id}/versions/${version}`,
+            "GET",
+          )
+        ).response.status,
+      ).toBe(404);
+      expect(
+        (
+          await jsonRequest(
+            fixture,
+            `/admin/audit-templates/${id}/versions/${version}`,
+            "GET",
+            undefined,
+            admin,
+          )
+        ).response.status,
+      ).toBe(200);
+    }
+    expect(
+      (await jsonRequest(fixture, `/templates/${id}/versions/2`, "GET"))
+        .response.status,
+    ).toBe(200);
+    const shared = await jsonRequest<TemplateVersionsResponse>(
+      fixture,
+      `/templates/${id}/versions`,
+      "GET",
+    );
+    expect(shared.body.versions.map(({ version }) => version)).toEqual([4, 2]);
+    const managed = await jsonRequest<TemplateVersionsResponse>(
+      fixture,
+      `/admin/audit-templates/${id}/versions`,
+      "GET",
+      undefined,
+      admin,
+    );
+    expect(managed.body.versions.map(({ version }) => version)).toEqual([
+      4, 3, 2, 1,
+    ]);
+    const history = await jsonRequest<ActivityResponse>(
+      fixture,
+      `/templates/${id}/activity`,
+      "GET",
+    );
+    expect(
+      history.body.events.map(({ details }) => Reflect.get(details, "version")),
+    ).toEqual([4, 2]);
+    expect(JSON.stringify(history.body)).not.toContain("Private");
+    const adminHistory = await jsonRequest<ActivityResponse>(
+      fixture,
+      `/admin/audit-templates/${id}/activity`,
+      "GET",
+      undefined,
+      admin,
+    );
+    expect(adminHistory.body.events).toHaveLength(4);
+  });
+
+  it("unpublishes global forms without losing history or existing audits", async () => {
+    const fixture = await createFixture();
+    const admin = { role: "admin" };
+    const id = "nfpa70e_global";
+    const current = await jsonRequest<TemplateResponse>(
+      fixture,
+      `/templates/${id}`,
+      "GET",
+    );
+    const run = await jsonRequest<RunResponse>(
+      fixture,
+      `/templates/${id}/runs`,
+      "POST",
+    );
+    const save = (status: string, expectedCurrentVersion: number) =>
+      jsonRequest<TemplateResponse>(
+        fixture,
+        `/admin/audit-templates/${id}`,
+        "PUT",
+        { ...current.body.template, status, expectedCurrentVersion },
+        admin,
+      );
+    expect((await save("unpublished", 1)).body.template).toMatchObject({
+      status: "unpublished",
+      version: 2,
+    });
+    for (const [path, method] of [
+      [`/templates/${id}`, "GET"],
+      [`/templates/${id}/versions`, "GET"],
+      [`/templates/${id}/versions/1`, "GET"],
+      [`/templates/${id}/activity`, "GET"],
+      [`/templates/${id}/runs`, "POST"],
+      [`/templates/${id}/copies`, "POST"],
+    ] as const) {
+      expect((await jsonRequest(fixture, path, method)).response.status).toBe(
+        404,
+      );
+    }
+    const listed = await jsonRequest<TemplateListResponse>(
+      fixture,
+      "/templates",
+      "GET",
+    );
+    expect(listed.body.templates.map(({ id }) => id)).not.toContain(id);
+    const managed = await jsonRequest<TemplateListResponse>(
+      fixture,
+      "/admin/audit-templates",
+      "GET",
+      undefined,
+      admin,
+    );
+    expect(managed.body.templates.map(({ id }) => id)).toContain(id);
+    const history = await jsonRequest<TemplateResponse>(
+      fixture,
+      `/admin/audit-templates/${id}/versions/1`,
+      "GET",
+      undefined,
+      admin,
+    );
+    expect(history.body.template).toMatchObject({
+      status: "published",
+      version: 1,
+    });
+    const existing = await jsonRequest(
+      fixture,
+      `/runs/${run.body.auditId}`,
+      "GET",
+    );
+    expect(existing.body).toMatchObject({
+      audit: { templateId: id, templateVersion: 1 },
+    });
+    expect(
+      (
+        await jsonRequest(
+          fixture,
+          `/admin/audit-templates/${id}`,
+          "DELETE",
+          { expectedCurrentVersion: 2 },
+          admin,
+        )
+      ).response.status,
+    ).toBe(409);
+    expect((await save("published", 1)).response.status).toBe(409);
+    expect((await save("published", 2)).body.template).toMatchObject({
+      status: "published",
+      version: 3,
+    });
+    expect(
+      (await jsonRequest(fixture, `/templates/${id}/runs`, "POST")).response
+        .status,
+    ).toBe(201);
+    expect(
+      (
+        await jsonRequest(
+          fixture,
+          `/admin/audit-templates/${id}`,
+          "DELETE",
+          { expectedCurrentVersion: 3 },
+          admin,
+        )
+      ).response.status,
+    ).toBe(409);
+  });
+
+  it("keeps global drafts private and discards them with a version guard", async () => {
+    const fixture = await createFixture();
+    const admin = { role: "admin" };
+    const created = await jsonRequest<TemplateResponse>(
+      fixture,
+      "/admin/audit-templates",
+      "POST",
+      { name: "Private draft" },
+      admin,
+    );
+    const { id } = created.body.template;
+    expect(
+      (await jsonRequest(fixture, `/templates/${id}`, "GET")).response.status,
+    ).toBe(404);
+    expect(
+      (await jsonRequest(fixture, `/templates/${id}/runs`, "POST")).response
+        .status,
+    ).toBe(404);
+    const saved = await jsonRequest(
+      fixture,
+      `/admin/audit-templates/${id}`,
+      "PUT",
+      {
+        definition: created.body.template.definition,
+        name: created.body.template.name,
+        expectedCurrentVersion: 1,
+      },
+      admin,
+    );
+    expect(saved.body).toMatchObject({
+      template: { status: "draft", version: 2 },
+    });
+    expect(
+      (
+        await jsonRequest(
+          fixture,
+          `/admin/audit-templates/${id}`,
+          "DELETE",
+          { expectedCurrentVersion: 1 },
+          admin,
+        )
+      ).response.status,
+    ).toBe(409);
+    expect(
+      (
+        await jsonRequest(
+          fixture,
+          `/admin/audit-templates/${id}`,
+          "DELETE",
+          {},
+          admin,
+        )
+      ).response.status,
+    ).toBe(400);
+    expect(
+      (
+        await jsonRequest(
+          fixture,
+          `/admin/audit-templates/${id}`,
+          "DELETE",
+          { expectedCurrentVersion: 2 },
+          admin,
+        )
+      ).response.status,
+    ).toBe(200);
+    for (const suffix of ["", "/versions", "/versions/1", "/activity"]) {
+      expect(
+        (
+          await jsonRequest(
+            fixture,
+            `/admin/audit-templates/${id}${suffix}`,
+            "GET",
+            undefined,
+            admin,
+          )
+        ).response.status,
+      ).toBe(404);
+    }
+    const listed = await jsonRequest<TemplateListResponse>(
+      fixture,
+      "/admin/audit-templates",
+      "GET",
+      undefined,
+      admin,
+    );
+    expect(listed.body.templates.map(({ id }) => id)).not.toContain(id);
+    expect(
+      fixture.database
+        .query(
+          "SELECT COUNT(*) AS count FROM audit_template_versions WHERE template_id = ?",
+        )
+        .get(id),
+    ).toEqual({ count: 3 });
+  });
+
   it("stops reading image uploads at the streaming byte limit", async () => {
     let cancelled = false;
     const stream = new ReadableStream<Uint8Array>({
@@ -1580,6 +1972,17 @@ describe("audits", () => {
     );
     expect(global.response.status).toBe(201);
     expect(global.body.template.scope).toBe("global");
+    await jsonRequest(
+      fixture,
+      `/admin/audit-templates/${global.body.template.id}`,
+      "PUT",
+      {
+        ...global.body.template,
+        expectedCurrentVersion: 1,
+        status: "published",
+      },
+      { role: "admin" },
+    );
 
     const local = await jsonRequest<TemplateResponse>(
       fixture,
@@ -1615,7 +2018,7 @@ describe("audits", () => {
         "PUT",
         {
           definition: global.body.template.definition,
-          expectedCurrentVersion: 1,
+          expectedCurrentVersion: 2,
           name: "Organization safety form",
         },
         { role },
@@ -1629,7 +2032,7 @@ describe("audits", () => {
       "POST",
       {
         definition: global.body.template.definition,
-        expectedCurrentVersion: 1,
+        expectedCurrentVersion: 2,
         name: "Organization safety form",
       },
     );
@@ -1648,10 +2051,10 @@ describe("audits", () => {
       "GET",
     );
     expect(unchangedGlobal.body.template).toMatchObject({
-      currentVersion: 1,
+      currentVersion: 2,
       name: "Shared safety form",
       scope: "global",
-      version: 1,
+      version: 2,
     });
 
     const adminUpdate = await jsonRequest<TemplateResponse>(
@@ -1660,16 +2063,16 @@ describe("audits", () => {
       "PUT",
       {
         definition: global.body.template.definition,
-        expectedCurrentVersion: 1,
+        expectedCurrentVersion: 2,
         name: "Shared safety form v2",
       },
       { role: "admin" },
     );
     expect(adminUpdate.body.template).toMatchObject({
-      currentVersion: 2,
+      currentVersion: 3,
       name: "Shared safety form v2",
       scope: "global",
-      version: 2,
+      version: 3,
     });
 
     const privateRun = await jsonRequest(
@@ -1709,7 +2112,7 @@ describe("audits", () => {
       audit: {
         templateId: global.body.template.id,
         templateName: "Shared safety form v2",
-        templateVersion: 2,
+        templateVersion: 3,
       },
     });
   });
@@ -1808,6 +2211,7 @@ describe("audits", () => {
       {
         definition: created.body.template.definition,
         expectedCurrentVersion: 1,
+        status: "published",
         name: "Shared ladder form v2",
       },
       admin,
@@ -2845,6 +3249,17 @@ describe("audit activity", () => {
       { name: "Shared form" },
       { role: "admin" },
     );
+    await jsonRequest(
+      fixture,
+      `/admin/audit-templates/${global.body.template.id}`,
+      "PUT",
+      {
+        ...global.body.template,
+        expectedCurrentVersion: 1,
+        status: "published",
+      },
+      { role: "admin" },
+    );
     const globalHistory = await jsonRequest<ActivityResponse>(
       fixture,
       `/templates/${global.body.template.id}/activity`,
@@ -2852,7 +3267,9 @@ describe("audit activity", () => {
       undefined,
       other,
     );
-    expect(globalHistory.body.events[0]?.action).toBe("audit.template_created");
+    expect(globalHistory.body.events.map(({ action }) => action)).toEqual([
+      "audit.template_version_saved",
+    ]);
     const privateHistory = await jsonRequest<ActivityResponse>(
       fixture,
       `/templates/${templateId}/activity`,
@@ -3080,7 +3497,10 @@ interface DatabaseControl {
   failNextPendingUpdate: boolean;
 }
 
-async function createFixture(includeActivity = true) {
+async function createFixture(
+  includeActivity = true,
+  includePublication = true,
+) {
   const database = await createLegacyDatabase();
   await applyMigration(database, "0022_version_audit_templates.sql");
   await applyMigration(database, "0024_create_audit_issue_images.sql");
@@ -3095,6 +3515,8 @@ async function createFixture(includeActivity = true) {
   if (includeActivity)
     await applyMigration(database, "0049_create_activity_events.sql");
   await applyMigration(database, "0056_discard_audits.sql");
+  if (includePublication)
+    await applyMigration(database, "0058_publish_legacy_global_audits.sql");
   const stored = new Map<string, Uint8Array>();
   const databaseControl: DatabaseControl = {
     activateBeforeCleanupClaim: false,
