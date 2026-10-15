@@ -219,6 +219,7 @@ async function addTemplateVersion(
 export async function listTemplateVersions(
   database: D1Database,
   templateId: string,
+  publishedOnly = false,
 ) {
   const result = await database
     .prepare(
@@ -229,6 +230,7 @@ export async function listTemplateVersions(
        FROM audit_template_versions AS version
        JOIN user AS creator ON creator.id = version.created_by
        WHERE version.template_id = ?
+         ${publishedOnly ? "AND version.status = 'published'" : ""}
        ORDER BY version.version DESC`,
     )
     .bind(templateId)
@@ -304,9 +306,14 @@ export async function findTemplate(
       current.status !== "published")
   )
     return null;
-  return version
-    ? loadTemplate(database, organizationId, id, version)
+  const selected = version
+    ? await loadTemplate(database, organizationId, id, version)
     : current;
+  return organizationId !== null &&
+    selected?.scope === "global" &&
+    selected.status !== "published"
+    ? null
+    : selected;
 }
 
 /** Internal reads also see discarded forms so concurrent writes report stale. */

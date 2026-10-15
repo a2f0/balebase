@@ -214,7 +214,9 @@ unpublishing hides them from organizations and prevents new runs and copies,
 while preserving versions and existing audit runs. Only drafts can be discarded.
 Discarded drafts leave the admin list but remain stored with their history.
 Publication changes save a new version, including the editor's current changes,
-and reject stale versions just like other template saves.
+and reject stale versions just like other template saves. Organizations can only
+read published versions and their activity; draft and unpublished history stays
+private to root admins.
 The workspace **Activity** page and each form and audit's Activity section show
 who created forms, started audits, changed answers, completed or reopened audits,
 raised or reassigned issues, resolved or reopened issues, and attached or removed

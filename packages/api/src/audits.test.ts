@@ -105,6 +105,95 @@ interface ActivityRunResponse {
 }
 
 describe("audits", () => {
+  it("shares only published versions and activity after publishing a global draft", async () => {
+    const fixture = await createFixture();
+    const admin = { role: "admin" };
+    const created = await jsonRequest<TemplateResponse>(
+      fixture,
+      "/admin/audit-templates",
+      "POST",
+      { name: "Private draft title" },
+      admin,
+    );
+    const { id, definition } = created.body.template;
+    for (const [expectedCurrentVersion, name, status] of [
+      [1, "Public form", "published"],
+      [2, "Private unpublished title", "unpublished"],
+      [3, "Public form again", "published"],
+    ] as const) {
+      expect(
+        (
+          await jsonRequest(
+            fixture,
+            `/admin/audit-templates/${id}`,
+            "PUT",
+            { definition, expectedCurrentVersion, name, status },
+            admin,
+          )
+        ).response.status,
+      ).toBe(200);
+    }
+    for (const version of [1, 3]) {
+      expect(
+        (
+          await jsonRequest(
+            fixture,
+            `/templates/${id}/versions/${version}`,
+            "GET",
+          )
+        ).response.status,
+      ).toBe(404);
+      expect(
+        (
+          await jsonRequest(
+            fixture,
+            `/admin/audit-templates/${id}/versions/${version}`,
+            "GET",
+            undefined,
+            admin,
+          )
+        ).response.status,
+      ).toBe(200);
+    }
+    expect(
+      (await jsonRequest(fixture, `/templates/${id}/versions/2`, "GET"))
+        .response.status,
+    ).toBe(200);
+    const shared = await jsonRequest<TemplateVersionsResponse>(
+      fixture,
+      `/templates/${id}/versions`,
+      "GET",
+    );
+    expect(shared.body.versions.map(({ version }) => version)).toEqual([4, 2]);
+    const managed = await jsonRequest<TemplateVersionsResponse>(
+      fixture,
+      `/admin/audit-templates/${id}/versions`,
+      "GET",
+      undefined,
+      admin,
+    );
+    expect(managed.body.versions.map(({ version }) => version)).toEqual([
+      4, 3, 2, 1,
+    ]);
+    const history = await jsonRequest<ActivityResponse>(
+      fixture,
+      `/templates/${id}/activity`,
+      "GET",
+    );
+    expect(
+      history.body.events.map(({ details }) => Reflect.get(details, "version")),
+    ).toEqual([4, 2]);
+    expect(JSON.stringify(history.body)).not.toContain("Private");
+    const adminHistory = await jsonRequest<ActivityResponse>(
+      fixture,
+      `/admin/audit-templates/${id}/activity`,
+      "GET",
+      undefined,
+      admin,
+    );
+    expect(adminHistory.body.events).toHaveLength(4);
+  });
+
   it("unpublishes global forms without losing history or existing audits", async () => {
     const fixture = await createFixture();
     const admin = { role: "admin" };
@@ -3074,9 +3163,9 @@ describe("audit activity", () => {
       undefined,
       other,
     );
-    expect(globalHistory.body.events.map(({ action }) => action)).toContain(
-      "audit.template_created",
-    );
+    expect(globalHistory.body.events.map(({ action }) => action)).toEqual([
+      "audit.template_version_saved",
+    ]);
     const privateHistory = await jsonRequest<ActivityResponse>(
       fixture,
       `/templates/${templateId}/activity`,
