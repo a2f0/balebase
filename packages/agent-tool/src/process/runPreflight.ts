@@ -569,7 +569,7 @@ export function buildPreflightEnvironment(
     GIT_CONFIG_VALUE_1: "",
     GIT_TERMINAL_PROMPT: "0",
     HOME: temporaryHome,
-    PATH: trustedRuntimePath(runtimes),
+    PATH: `${path.join(temporaryHome, "bin")}${path.delimiter}${trustedRuntimePath(runtimes)}`,
     PWD: repositoryRoot,
     TEARLEADS_PREFLIGHT_OFFLINE: "1",
     TURBO_ENV_MODE: "loose",
@@ -601,7 +601,6 @@ function resolvePreflightRuntimes(
   }
   const optionalRuntimes = [
     "gh",
-    "node",
     "gpg",
     "gpg-agent",
     "gpgconf",
@@ -747,6 +746,11 @@ export function runPreflight(
   const checkoutRoot = path.join(temporaryRoot, "checkout");
   mkdirSync(temporaryHome, { recursive: true });
   try {
+    // Bun's shared node shim may be outside the sandbox's readable trees.
+    // Keep Node shebangs on the trusted Bun runtime inside this preflight.
+    const runtimeDirectory = path.join(temporaryHome, "bin");
+    mkdirSync(runtimeDirectory);
+    symlinkSync(bun.executable, path.join(runtimeDirectory, "node"));
     const gitEnvironment = safeGitEnvironment(
       environment,
       checkoutRoot,

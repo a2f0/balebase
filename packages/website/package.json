@@ -5,11 +5,11 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "build": "astro build",
-    "check": "astro check",
-    "deploy": "bun run build && wrangler deploy",
-    "dev": "astro dev",
-    "preview": "astro preview"
+    "build": "bunx --bun --no-install astro build",
+    "check": "bunx --bun --no-install astro check",
+    "deploy": "bun --bun run build && bunx --bun --no-install wrangler deploy",
+    "dev": "bunx --bun --no-install astro dev",
+    "preview": "bunx --bun --no-install astro preview"
   },
   "dependencies": {
     "@tearleads/ui": "workspace:*",

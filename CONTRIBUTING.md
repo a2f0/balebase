@@ -3,7 +3,7 @@
 Start with the [local setup](README.md#start-locally). Run commands from the
 repository root unless a command specifies `--cwd`.
 
-`.mise.toml` pins Bun and Node to the CI versions. With mise installed, run
+`.mise.toml` pins Bun to the CI version. With mise installed, run
 `mise install` and activate mise in your shell. For one command, use
 `mise exec -- bun run check:fast`.
 

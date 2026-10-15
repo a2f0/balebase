@@ -57,7 +57,7 @@ if [[ -f "$REPO_ROOT/.secrets/staging.env" ]]; then
 fi
 
 cd "$REPO_ROOT/packages/api"
-bunx wrangler dev \
+bunx --bun wrangler dev \
   --env-file "$auth_env_file" \
   --var "CHECKR_ENV:staging" \
   --var "STRIPE_PRO_LEGACY_PRICE_IDS:${STRIPE_PRO_LEGACY_PRICE_IDS:-}" \

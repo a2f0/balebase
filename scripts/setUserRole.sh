@@ -9,7 +9,7 @@ ROLE="${2:-}"
 TARGET="${3:---remote}"
 
 if [[ -z "$EMAIL" || -z "$ROLE" ]]; then
-  echo "Usage: bun run auth:set-role <email> <user|admin> [--remote|--local]" >&2
+  echo "Usage: bun --bun run auth:set-role <email> <user|admin> [--remote|--local]" >&2
   exit 1
 fi
 
@@ -35,7 +35,7 @@ sql="UPDATE \"user\" SET \"role\" = '$ROLE' WHERE \"email\" = '$escaped_email' R
 
 cd "$REPO_ROOT/packages/api"
 result="$(
-  bunx wrangler d1 execute DB "$TARGET" --json --command "$sql"
+  bunx --bun wrangler d1 execute DB "$TARGET" --json --command "$sql"
 )"
 
 if ! jq -e --arg email "$EMAIL" --arg role "$ROLE" \

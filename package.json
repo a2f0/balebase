@@ -4,14 +4,14 @@
   "license": "UNLICENSED",
   "packageManager": "bun@1.4.2",
   "scripts": {
-    "agent:run": "agent-tool run",
-    "agent:logs": "agent-tool logs",
+    "agent:run": "bunx --bun --no-install agent-tool run",
+    "agent:logs": "bunx --bun --no-install agent-tool logs",
     "auth:set-role": "bash scripts/setUserRole.sh",
     "backup:shared-data": "bash scripts/backupSharedData.sh",
-    "build": "turbo run build",
-    "check": "export OPENSSL_CONF=/dev/null; bun run lint && turbo run check && bun run check:scripts",
-    "check:fast": "export OPENSSL_CONF=/dev/null; bun run lint:biome && bun run lint:markdown && bun run lint:files && turbo run check && bun run check:scripts",
-    "check:scripts": "tsc --noEmit --project scripts/tsconfig.json",
+    "build": "bunx --bun --no-install turbo run build",
+    "check": "export OPENSSL_CONF=/dev/null; bun --bun run lint && bunx --bun --no-install turbo run check && bun --bun run check:scripts",
+    "check:fast": "export OPENSSL_CONF=/dev/null; bun --bun run lint:biome && bun --bun run lint:markdown && bun --bun run lint:files && bunx --bun --no-install turbo run check && bun --bun run check:scripts",
+    "check:scripts": "bunx --bun --no-install tsc --noEmit --project scripts/tsconfig.json",
     "deploy": "bash scripts/deployProduction.sh",
     "deploy:api": "bash scripts/deployApi.sh",
     "deploy:app": "bash scripts/deployApp.sh",
@@ -20,24 +20,24 @@
     "deploy:staging": "bash scripts/deployStaging.sh",
     "deploy:verify": "bash scripts/verifyProduction.sh",
     "deploy:website": "bash scripts/deployWebsite.sh",
-    "dev": "turbo run dev",
+    "dev": "bunx --bun --no-install turbo run dev",
     "emails:purge": "bash scripts/purgeEmails.sh",
-    "format": "bun run lint:biome:fix && bun run lint:markdown:fix",
+    "format": "bun --bun run lint:biome:fix && bun --bun run lint:markdown:fix",
     "hooks:install": "sh scripts/git/install-hooks.sh",
-    "lint": "bun run lint:biome && bun run lint:markdown && bun run lint:files && bun run lint:knip:all && bun run lint:knip:production && bun run lint:scripts && bun run lint:terraform",
-    "lint:biome": "biome check --error-on-warnings .",
-    "lint:biome:fix": "biome check --write --error-on-warnings .",
-    "lint:commit-msg": "commitlint --config commitlint.config.mts --edit",
-    "lint:files": "ls-lint",
-    "lint:knip:all": "knip",
-    "lint:knip:dependencies": "knip --dependencies",
-    "lint:knip:exports": "knip --exports",
-    "lint:knip:files": "knip --files",
-    "lint:knip:production": "knip --production",
+    "lint": "bun --bun run lint:biome && bun --bun run lint:markdown && bun --bun run lint:files && bun --bun run lint:knip:all && bun --bun run lint:knip:production && bun --bun run lint:scripts && bun --bun run lint:terraform",
+    "lint:biome": "bunx --bun --no-install biome check --error-on-warnings .",
+    "lint:biome:fix": "bunx --bun --no-install biome check --write --error-on-warnings .",
+    "lint:commit-msg": "bunx --bun --no-install commitlint --config commitlint.config.mts --edit",
+    "lint:files": "bunx --bun --no-install ls-lint",
+    "lint:knip:all": "bunx --bun --no-install knip",
+    "lint:knip:dependencies": "bunx --bun --no-install knip --dependencies",
+    "lint:knip:exports": "bunx --bun --no-install knip --exports",
+    "lint:knip:files": "bunx --bun --no-install knip --files",
+    "lint:knip:production": "bunx --bun --no-install knip --production",
     "lint:markdown": "bun --bun x markdownlint-cli2 '**/*.md'",
     "lint:markdown:fix": "bun --bun x markdownlint-cli2 --fix '**/*.md'",
     "lint:scripts": "shellcheck scripts/*.sh scripts/checks/*.sh scripts/git/hooks/* terraform/scripts/*.sh",
-    "lint:staged": "lint-staged",
+    "lint:staged": "bunx --bun --no-install lint-staged",
     "lint:terraform": "bash scripts/checks/checkTerraform.sh",
     "organizations:objects:reorganize": "bash scripts/reorganizeOrganizationObjects.sh",
     "organizations:purge": "bash scripts/purgeOrganizations.sh",
@@ -46,7 +46,7 @@
     "terraform:staging:apply": "bash terraform/scripts/run.sh staging apply",
     "terraform:staging:plan": "bash terraform/scripts/run.sh staging plan",
     "terraform:validate": "bash terraform/scripts/run.sh validate",
-    "test": "export OPENSSL_CONF=/dev/null; turbo run test && bun run test:staging && bun run test:backup && bun run test:markdownlint",
+    "test": "export OPENSSL_CONF=/dev/null; bunx --bun --no-install turbo run test && bun --bun run test:staging && bun --bun run test:backup && bun --bun run test:markdownlint",
     "test:backup": "bash scripts/checks/testBackupSharedData.sh",
     "test:markdownlint": "bun test scripts/checks/markdownlintConfig.test.ts",
     "test:staging": "bash scripts/checks/testDeployStaging.sh"
@@ -55,7 +55,7 @@
     "packages/*"
   ],
   "lint-staged": {
-    "*.{astro,css,html,js,json,jsonc,jsx,mjs,cjs,ts,tsx}": "biome check --fix --error-on-warnings",
+    "*.{astro,css,html,js,json,jsonc,jsx,mjs,cjs,ts,tsx}": "bunx --bun --no-install biome check --fix --error-on-warnings",
     "*.md": "bun --bun x markdownlint-cli2 --fix"
   },
   "devDependencies": {
@@ -74,7 +74,7 @@
     "wrangler": "4.123.0"
   },
   "engines": {
-    "node": ">=22.22.1"
+    "bun": ">=1.4.2"
   },
   "overrides": {
     "markdownlint-cli2@0.23.3": {

@@ -5,7 +5,7 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "check": "tsc --noEmit",
+    "check": "bunx --bun --no-install tsc --noEmit",
     "test": "bun test src"
   },
   "devDependencies": {
