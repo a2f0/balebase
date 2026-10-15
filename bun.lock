@@ -29,8 +29,9 @@
     },
     "packages/api": {
       "name": "@tearleads/api",
-      "version": "0.1.12",
+      "version": "0.1.19",
       "dependencies": {
+        "@better-auth/core": "1.7.0",
         "better-auth": "1.7.0",
         "hono": "4.13.13",
         "pdf-lib": "1.17.1",
@@ -44,7 +45,7 @@
     },
     "packages/client": {
       "name": "@tearleads/client",
-      "version": "0.1.17",
+      "version": "0.1.27",
       "dependencies": {
         "@stripe/stripe-js": "9.17.0",
         "@tearleads/ui": "workspace:*",

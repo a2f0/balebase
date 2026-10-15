@@ -34,6 +34,9 @@ interface ActivityDetails {
   prompt?: unknown;
   responseType?: unknown;
   title?: unknown;
+  userEmail?: unknown;
+  userId?: unknown;
+  userName?: unknown;
   version?: unknown;
   [key: string]: unknown;
 }
