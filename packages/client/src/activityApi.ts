@@ -28,12 +28,18 @@ interface ActivityDetails {
   before?: unknown;
   beforeEmail?: unknown;
   beforeName?: unknown;
+  changes?: unknown;
   description?: unknown;
   filename?: unknown;
+  make?: unknown;
+  model?: unknown;
   priority?: unknown;
   prompt?: unknown;
+  purchaseDate?: unknown;
   responseType?: unknown;
+  serialNumber?: unknown;
   title?: unknown;
+  type?: unknown;
   userEmail?: unknown;
   userId?: unknown;
   userName?: unknown;
@@ -49,7 +55,11 @@ export interface ActivityPage {
 export type ActivitySource =
   | {
       id: string;
-      type: "audit_run" | "audit_template" | "global_audit_template";
+      type:
+        | "audit_run"
+        | "audit_template"
+        | "equipment"
+        | "global_audit_template";
     }
   | undefined;
 
@@ -73,6 +83,7 @@ function activityPath(source: ActivitySource) {
   if (!source) return "/api/activity";
   const id = encodeURIComponent(source.id);
   if (source.type === "audit_run") return `/api/audits/runs/${id}/activity`;
+  if (source.type === "equipment") return `/api/equipment/${id}/activity`;
   if (source.type === "global_audit_template") {
     return `/api/admin/audit-templates/${id}/activity`;
   }

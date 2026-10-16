@@ -14,7 +14,13 @@ import {
   type ActivitySource,
   listActivity,
 } from "./activityApi";
+import { assigneeLabel, textValue } from "./activityLabels";
+import {
+  EquipmentActivityDetails,
+  equipmentActivitySummary,
+} from "./equipmentActivity";
 import { organizationPeoplePath } from "./organizationState";
+import { equipmentPath } from "./workspacePaths";
 
 const actionLabels: Record<string, string> = {
   "audit.answer_changed": "changed an answer",
@@ -30,6 +36,10 @@ const actionLabels: Record<string, string> = {
   "audit.started": "started the audit",
   "audit.template_created": "created the form",
   "audit.template_version_saved": "saved a form version",
+  "equipment.assigned": "changed the equipment assignee",
+  "equipment.created": "added equipment",
+  "equipment.deleted": "deleted equipment",
+  "equipment.updated": "edited equipment",
   "organization.member_role_changed": "changed an organization role",
 };
 
@@ -233,6 +243,7 @@ function CompactActivityRow({
 
 function activitySummary(event: ActivityEvent) {
   const { details } = event;
+  if (event.root.type === "equipment") return equipmentActivitySummary(event);
   if (event.action === "organization.member_role_changed") {
     return `${memberLabel(event)} · ${roleLabel(details.before)} → ${roleLabel(details.after)}`;
   }
@@ -287,6 +298,9 @@ function ActivityRow({
 
 function ActivityDetails({ event }: { event: ActivityEvent }) {
   const details = event.details;
+  if (event.root.type === "equipment") {
+    return <EquipmentActivityDetails event={event} />;
+  }
   switch (event.action) {
     case "organization.member_role_changed":
       return <MemberRoleDetails event={event} />;
@@ -361,12 +375,6 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
   }
 }
 
-function assigneeLabel(id: unknown, name: unknown, email: unknown) {
-  return id == null
-    ? "Unassigned"
-    : textValue(name) || textValue(email) || textValue(id);
-}
-
 function MemberRoleDetails({ event }: { event: ActivityEvent }) {
   return (
     <div className="activityDetails">
@@ -390,13 +398,13 @@ function answerLabel(value: unknown, responseType: unknown) {
   return textValue(value);
 }
 
-function textValue(value: unknown) {
-  return typeof value === "string" || typeof value === "number"
-    ? String(value)
-    : "";
-}
-
 function activityPath(event: ActivityEvent) {
+  // Deleted equipment has no page to open.
+  if (event.root.type === "equipment") {
+    return event.action === "equipment.deleted"
+      ? undefined
+      : equipmentPath(event.root.id);
+  }
   if (event.root.type === "organization_member")
     return organizationPeoplePath(event.root.id);
   if (event.root.type === "audit_run")
@@ -407,6 +415,7 @@ function activityPath(event: ActivityEvent) {
 }
 
 function activityLinkLabel(event: ActivityEvent) {
+  if (event.root.type === "equipment") return "Open equipment";
   if (event.root.type === "organization_member") return "Open member";
   return event.root.type === "audit_run" ? "Open audit" : "Open form";
 }

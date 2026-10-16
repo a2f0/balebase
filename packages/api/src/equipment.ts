@@ -1,4 +1,5 @@
 import { type Context, Hono } from "hono";
+import { findActivity } from "./activity";
 import type { AuthVariables } from "./authMiddleware";
 import { normalizeBusinessDate } from "./businesses";
 import { listLinkedEmails, toLinkedEmail } from "./inboundEmailLinks";
@@ -114,7 +115,7 @@ equipment.post("/", async (context) => {
       input.assigneeId,
     )
     .run();
-  if (result.meta.changes !== 1) return assigneeNotMember(context);
+  if (result.meta.changes === 0) return assigneeNotMember(context);
   const created = await findEquipment(context.env.DB, organizationId, id);
   if (!created) return equipmentNotFound(context);
   return context.json({ equipment: toEquipment(created) }, 201);
@@ -141,6 +142,25 @@ equipment.get("/:id", async (context) => {
   });
 });
 
+equipment.get("/:id/activity", async (context) => {
+  const organizationId = context.get("organizationId");
+  const item = await findEquipment(
+    context.env.DB,
+    organizationId,
+    context.req.param("id"),
+  );
+  if (!item) return equipmentNotFound(context);
+  const page = await findActivity(
+    context.env.DB,
+    organizationId,
+    context.req.query("cursor"),
+    { id: item.id, type: "equipment" },
+  );
+  return page
+    ? context.json(page)
+    : context.json({ error: "Invalid activity cursor." }, 400);
+});
+
 // Updates only the fields present in the body, so concurrent edits to other
 // fields are kept; `assigneeId: null` unassigns.
 equipment.patch("/:id", async (context) => {
@@ -160,15 +180,18 @@ equipment.patch("/:id", async (context) => {
   const columns = Object.keys(changes) as EquipmentColumn[];
   const assigneeChanges = "assigned_user_id" in changes;
   const assigneeId = changes.assigned_user_id ?? null;
+  // The actor rides along so the update trigger records who changed what.
   const result = await context.env.DB.prepare(
     `UPDATE equipment
-     SET ${columns.map((column) => `${column} = ?, `).join("")}updated_at = ?
+     SET ${columns.map((column) => `${column} = ?, `).join("")}updated_at = ?,
+         activity_actor_id = ?
      WHERE id = ? AND organization_id = ?
        ${assigneeChanges ? `AND ${assigneeIsMember}` : ""}`,
   )
     .bind(
       ...columns.map((column) => changes[column] ?? null),
       new Date().toISOString(),
+      context.get("authSession").user.id,
       existing.id,
       organizationId,
       ...(assigneeChanges ? [assigneeId, organizationId, assigneeId] : []),
@@ -180,7 +203,7 @@ equipment.patch("/:id", async (context) => {
     existing.id,
   );
   if (!updated) return equipmentNotFound(context);
-  if (result.meta.changes !== 1) return assigneeNotMember(context);
+  if (result.meta.changes === 0) return assigneeNotMember(context);
   return context.json({ equipment: toEquipment(updated) });
 });
 
@@ -194,7 +217,31 @@ equipment.delete("/:id", async (context) => {
   );
   if (!item) return equipmentNotFound(context);
   // Drop email links explicitly rather than relying on the trigger alone.
+  // The event reads the row it describes, so it is recorded only when this
+  // batch is the one that deletes it.
   await context.env.DB.batch([
+    context.env.DB.prepare(
+      `INSERT INTO activity_events (
+         organization_id, root_type, root_id, root_label, subject_type,
+         subject_id, action, actor_user_id, actor_name, actor_email,
+         occurred_at, details
+       )
+       SELECT item.organization_id, 'equipment', item.id,
+              item.make || ' ' || item.model, 'equipment', item.id,
+              'equipment.deleted', actor.id, actor.name, actor.email, ?,
+              json_object('type', item.type, 'make', item.make,
+                          'model', item.model,
+                          'serialNumber', item.serial_number,
+                          'purchaseDate', item.purchase_date)
+       FROM equipment AS item
+       JOIN user AS actor ON actor.id = ?
+       WHERE item.id = ? AND item.organization_id = ?`,
+    ).bind(
+      new Date().toISOString(),
+      context.get("authSession").user.id,
+      item.id,
+      organizationId,
+    ),
     context.env.DB.prepare(
       `DELETE FROM inbound_email_links
        WHERE organization_id = ? AND target_type = 'equipment'

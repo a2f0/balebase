@@ -20,3 +20,25 @@ export function equipmentTypeIcon(type: string): IconName {
 export function equipmentName(item: { make: string; model: string }) {
   return `${item.make} ${item.model}`.trim();
 }
+
+/** "Computer · C02XYZ · Purchased Mar 1, 2026", omitting what is not recorded. */
+export function equipmentMeta(item: {
+  purchaseDate: string | null;
+  serialNumber: string | null;
+  type: string;
+}) {
+  return [
+    equipmentTypeLabel(item.type),
+    item.serialNumber,
+    item.purchaseDate && `Purchased ${formatPurchaseDate(item.purchaseDate)}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** A purchase date ("2026-03-01") in the viewer's format, on its own day. */
+export function formatPurchaseDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
+    new Date(`${value}T12:00:00`),
+  );
+}
