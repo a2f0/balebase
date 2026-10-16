@@ -1,4 +1,4 @@
-import { Badge, Button, confirmDialog, Toast } from "@tearleads/ui/react";
+import { Badge, Button, confirmDialog, Toast } from "@balebase/ui/react";
 import { useState } from "react";
 import { type AuditTemplate, discardGlobalAuditTemplate } from "./auditApi";
 import { formatLabel } from "./labels";

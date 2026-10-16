@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
-import { DialogHost } from "@tearleads/ui/react";
+import { DialogHost } from "@balebase/ui/react";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
@@ -209,7 +209,7 @@ describe("organization API keys", () => {
     );
     expect(secret?.value).toBe(token);
     expect(container.textContent).toContain(
-      `claude mcp add --transport http tearleads http://localhost:8787/mcp --header "Authorization: Bearer ${token}"`,
+      `claude mcp add --transport http balebase http://localhost:8787/mcp --header "Authorization: Bearer ${token}"`,
     );
     await click(button(container, "Copy key"));
     expect(copied).toEqual([token]);

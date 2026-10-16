@@ -1,4 +1,4 @@
-import { Badge } from "@tearleads/ui/react";
+import { Badge } from "@balebase/ui/react";
 import { formatRole } from "./organizationPeopleState";
 import type { OrganizationMember } from "./organizationSettingsApi";
 import {

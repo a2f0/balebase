@@ -7,7 +7,7 @@ import {
   PageBody,
   PageHeader,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import {
   type Dispatch,
   type SetStateAction,
@@ -39,7 +39,7 @@ import { type FinancePage, financePageFor, financePages } from "./financePages";
 import { filterTransactionsByAccount } from "./financeTransactions";
 import { handleNavigation } from "./workspacePaths";
 
-const linkTokenStorageKey = "tearleads.plaid.linkToken";
+const linkTokenStorageKey = "balebase.plaid.linkToken";
 
 export function Finance({
   onNavigate,
@@ -384,7 +384,7 @@ function FinanceDataNotice() {
       tone="neutral"
     >
       <p>
-        Plaid securely connects your institution. Tearleads imports up to 24
+        Plaid securely connects your institution. Balebase imports up to 24
         months of account balances and transaction details so authorized
         organization members can review and annotate them. We do not receive
         your bank credentials, never sell customer information, and let you

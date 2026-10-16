@@ -1,6 +1,6 @@
 {
-  "name": "@tearleads/client",
-  "version": "0.1.34",
+  "name": "@balebase/client",
+  "version": "0.1.35",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@stripe/stripe-js": "9.17.0",
-    "@tearleads/ui": "workspace:*",
+    "@balebase/ui": "workspace:*",
     "better-auth": "1.7.0",
     "pdfjs-dist": "6.3.289",
     "qrcode.react": "4.2.0",

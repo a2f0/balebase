@@ -1,4 +1,4 @@
-import { Button, ButtonLink, Icon } from "@tearleads/ui/react";
+import { Button, ButtonLink, Icon } from "@balebase/ui/react";
 import type {
   PDFDocumentLoadingTask,
   PDFDocumentProxy,

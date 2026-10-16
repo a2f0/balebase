@@ -4,7 +4,7 @@
  * classes the app renders. It is decorative: the frame is inert and hidden
  * from assistive technology, and the caption describes it instead.
  */
-import type { IconName } from "@tearleads/ui/icons";
+import type { IconName } from "@balebase/ui/icons";
 import Icon from "./Icon.astro";
 
 const railItems: IconName[] = [
@@ -44,7 +44,7 @@ const checks: { prompt: string; response: (typeof responses)[number] }[] = [
 <figure class="auditPreview">
   <div aria-hidden="true" class="previewFrame" inert>
     <div class="previewRail onDark">
-      <span class="brandMark">T</span>
+      <span class="brandMark">B</span>
       {
         railItems.map((name) => (
           <span
@@ -122,7 +122,7 @@ const checks: { prompt: string; response: (typeof responses)[number] }[] = [
     </div>
   </div>
   <figcaption class="srOnly">
-    An audit in progress in Tearleads: checklist items answered pass, fail, or
+    An audit in progress in Balebase: checklist items answered pass, fail, or
     N/A, and a high-priority issue assigned to a teammate with two photos.
   </figcaption>
 </figure>

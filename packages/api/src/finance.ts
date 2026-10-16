@@ -165,7 +165,7 @@ async function createLinkToken(
 ) {
   requireEncryptionKey(context.env);
   const body: LinkTokenRequest = {
-    client_name: "Tearleads",
+    client_name: "Balebase",
     country_codes: ["US"],
     language: "en",
     products: ["transactions"],

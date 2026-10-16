@@ -1,4 +1,4 @@
-import { Avatar, Icon, Toast } from "@tearleads/ui/react";
+import { Avatar, Icon, Toast } from "@balebase/ui/react";
 import { useId, useRef, useState } from "react";
 import { version as appVersion } from "../package.json";
 import type { AccountSession } from "./accountSessions";

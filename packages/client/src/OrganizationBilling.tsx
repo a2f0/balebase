@@ -1,4 +1,4 @@
-import { type Plan, plans } from "@tearleads/ui/brand";
+import { type Plan, plans } from "@balebase/ui/brand";
 import {
   Badge,
   type BadgeTone,
@@ -10,7 +10,7 @@ import {
   LoadingState,
   PageSection,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type BillingStatus,

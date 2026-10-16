@@ -301,7 +301,7 @@ function appendCertificate(
     text: string;
   }> = [
     { bold: true, size: 18, text: "Certificate of completion" },
-    { gap: 6, size: 10, text: `${certificate.organizationName} · Tearleads` },
+    { gap: 6, size: 10, text: `${certificate.organizationName} · Balebase` },
     { bold: true, gap: 18, size: 12, text: certificate.title },
     { size: 9, text: `Contract ID: ${certificate.contractId}` },
     {

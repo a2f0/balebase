@@ -10,7 +10,7 @@ import {
   PageBody,
   PageHeader,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { useEffect, useRef, useState } from "react";
 import { formatDate } from "./ContractSummary";
 import { ContractTemplateEditor } from "./ContractTemplateEditor";

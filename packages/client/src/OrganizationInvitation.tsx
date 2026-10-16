@@ -1,4 +1,4 @@
-import { Button, Card, Icon, LoadingState, Toast } from "@tearleads/ui/react";
+import { Button, Card, Icon, LoadingState, Toast } from "@balebase/ui/react";
 import { useEffect, useState } from "react";
 import { authClient } from "./authClient";
 

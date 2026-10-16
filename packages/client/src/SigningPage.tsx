@@ -6,7 +6,7 @@ import {
   LoadingState,
   Logo,
   promptDialog,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { useEffect, useState } from "react";
 import { fetchApi } from "./apiVersion";
 import { boxStyle, ContractPages } from "./ContractDocument";

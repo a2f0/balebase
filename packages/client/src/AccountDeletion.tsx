@@ -1,4 +1,4 @@
-import { Button, Card, confirmDialog, Toast } from "@tearleads/ui/react";
+import { Button, Card, confirmDialog, Toast } from "@balebase/ui/react";
 import { useEffect, useState } from "react";
 import { fetchApi } from "./apiVersion";
 import { apiUrl } from "./config";

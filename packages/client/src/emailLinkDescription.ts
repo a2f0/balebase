@@ -1,4 +1,4 @@
-import type { IconName } from "@tearleads/ui/react";
+import type { IconName } from "@balebase/ui/react";
 import type { InboundEmailLink } from "./api";
 import { equipmentName, equipmentTypeIcon } from "./equipmentLabels";
 import { formatMoney } from "./financeFormat";

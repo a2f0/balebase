@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
 
 const harness = `
-import { Toast, ToastProvider } from "@tearleads/ui/react";
+import { Toast, ToastProvider } from "@balebase/ui/react";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 

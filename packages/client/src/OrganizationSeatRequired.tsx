@@ -1,4 +1,4 @@
-import { EmptyState, Page, PageBody, PageHeader } from "@tearleads/ui/react";
+import { EmptyState, Page, PageBody, PageHeader } from "@balebase/ui/react";
 import { BillingLink, billingPath } from "./BillingLink";
 import type { OrganizationSeatRequirement } from "./organizationGroupsApi";
 

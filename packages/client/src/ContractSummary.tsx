@@ -8,7 +8,7 @@ import {
   PageSection,
   promptDialog,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { useState } from "react";
 import { fetchApi } from "./apiVersion";
 import { boxStyle, ContractPages } from "./ContractDocument";

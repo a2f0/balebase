@@ -1,5 +1,5 @@
 {
-  "name": "@tearleads/website",
+  "name": "@balebase/website",
   "version": "0.1.0",
   "private": true,
   "license": "UNLICENSED",
@@ -12,7 +12,7 @@
     "preview": "bunx --bun --no-install astro preview"
   },
   "dependencies": {
-    "@tearleads/ui": "workspace:*",
+    "@balebase/ui": "workspace:*",
     "astro": "7.3.6"
   },
   "devDependencies": {

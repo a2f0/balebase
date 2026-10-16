@@ -1,4 +1,4 @@
-import { Page, PageBody, PageHeader } from "@tearleads/ui/react";
+import { Page, PageBody, PageHeader } from "@balebase/ui/react";
 import { ActivityFeed } from "./ActivityFeed";
 
 export function Activity({

@@ -10,7 +10,7 @@ import {
   PageBody,
   PageHeader,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
 import { authClient } from "./authClient";
 import { OrganizationApiKeys } from "./OrganizationApiKeys";

@@ -66,7 +66,7 @@ interface ForwardedRequest {
 
 function createServer(access: ApiKeyAccess, forward: ForwardedRequest) {
   const server = new McpServer(
-    { name: "tearleads", title: "Tearleads", version },
+    { name: "balebase", title: "Balebase", version },
     {
       cacheHints: {
         "server/discover": { cacheScope: "private", ttlMs: toolListTtlMs },
@@ -105,7 +105,7 @@ function createServer(access: ApiKeyAccess, forward: ForwardedRequest) {
 
 function serverInstructions(access: ApiKeyAccess) {
   return [
-    "Tearleads is an organization workspace: audits and checklists, equipment, contracts and e-signature, the shared inbox, the document library, finance, businesses, and employee forms.",
+    "Balebase is an organization workspace: audits and checklists, equipment, contracts and e-signature, the shared inbox, the document library, finance, businesses, and employee forms.",
     access === "write"
       ? "This API key can read and change data in one organization."
       : "This API key is read-only: it can read data in one organization but cannot change it.",

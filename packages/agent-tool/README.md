@@ -1,4 +1,4 @@
-# @tearleads/agent-tool
+# @balebase/agent-tool
 
 Minimal CLI for cross-agent code review, reviewed PR merges, and the version
 bumps that ship with them.

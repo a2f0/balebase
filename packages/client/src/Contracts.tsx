@@ -9,7 +9,7 @@ import {
   PageHeader,
   PageSection,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ContractEditor } from "./ContractEditor";
 import {

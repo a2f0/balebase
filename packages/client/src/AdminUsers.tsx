@@ -9,7 +9,7 @@ import {
   PageHeader,
   PageSection,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { useCallback, useEffect, useState } from "react";
 import { formatDate, Identity } from "./adminDisplay";
 import { adminUserListQuery, adminUserPageSize } from "./adminUserList";

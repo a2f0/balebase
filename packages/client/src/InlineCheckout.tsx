@@ -1,4 +1,4 @@
-import { Button, Card, Toast } from "@tearleads/ui/react";
+import { Button, Card, Toast } from "@balebase/ui/react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import type { InlineCheckoutSession } from "./billingApi";
 import {

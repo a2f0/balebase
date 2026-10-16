@@ -1,4 +1,4 @@
-import { Avatar } from "@tearleads/ui/react";
+import { Avatar } from "@balebase/ui/react";
 
 export function Identity({
   avatar = false,

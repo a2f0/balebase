@@ -10,7 +10,7 @@ import {
   PageHeader,
   PageSection,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { useEffect, useState } from "react";
 import { TemplateStats, templateStatusTone } from "./AuditHome";
 import { AuditTemplateBuilder } from "./AuditTemplateBuilder";

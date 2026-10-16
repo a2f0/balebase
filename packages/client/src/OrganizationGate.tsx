@@ -5,7 +5,7 @@ import {
   PageBody,
   PageHeader,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { type ReactNode, useState } from "react";
 import {
   blockingSeatRequirement,

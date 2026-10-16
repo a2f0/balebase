@@ -9,7 +9,7 @@ import {
   Field,
   LoadingState,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import {
   type ApiKey,
@@ -416,7 +416,7 @@ function ConnectionCard() {
 }
 
 function claudeCodeCommand(token: string) {
-  return `claude mcp add --transport http tearleads ${mcpServerUrl} --header "Authorization: Bearer ${token}"`;
+  return `claude mcp add --transport http balebase ${mcpServerUrl} --header "Authorization: Bearer ${token}"`;
 }
 
 function usageSummary(apiKey: ApiKey) {

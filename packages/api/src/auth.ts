@@ -99,12 +99,12 @@ export function createAuth(env: Bindings, waitUntil: WaitUntil) {
       sendResetPassword: async ({ user, url }) => {
         waitUntil(
           env.EMAIL.send({
-            from: { email: env.AUTH_EMAIL_FROM, name: "Tearleads" },
-            subject: "Reset your Tearleads password",
+            from: { email: env.AUTH_EMAIL_FROM, name: "Balebase" },
+            subject: "Reset your Balebase password",
             text: [
               `Hi ${user.name},`,
               "",
-              "Use this link to reset your Tearleads password:",
+              "Use this link to reset your Balebase password:",
               url,
               "",
               "The link expires in one hour. If you did not request this, you can ignore this email.",
@@ -120,12 +120,12 @@ export function createAuth(env: Bindings, waitUntil: WaitUntil) {
       sendVerificationEmail: async ({ user, url }) => {
         waitUntil(
           env.EMAIL.send({
-            from: { email: env.AUTH_EMAIL_FROM, name: "Tearleads" },
-            subject: "Verify your Tearleads email",
+            from: { email: env.AUTH_EMAIL_FROM, name: "Balebase" },
+            subject: "Verify your Balebase email",
             text: [
               `Hi ${user.name},`,
               "",
-              "Verify your email address for Tearleads:",
+              "Verify your email address for Balebase:",
               url,
               "",
               "The link expires in one hour. You can still sign in before verifying.",
@@ -138,7 +138,7 @@ export function createAuth(env: Bindings, waitUntil: WaitUntil) {
     plugins: [
       admin({ adminRoles: ["admin"], defaultRole: "user" }),
       twoFactor({
-        issuer: "Tearleads",
+        issuer: "Balebase",
       }),
       multiSession({ maximumSessions: 5 }),
       configuredOrganizationPlugin(env, waitUntil),
@@ -292,12 +292,12 @@ function queueInvitationEmail(
   invitationURL.searchParams.set("id", data.id);
   waitUntil(
     env.EMAIL.send({
-      from: { email: env.AUTH_EMAIL_FROM, name: "Tearleads" },
+      from: { email: env.AUTH_EMAIL_FROM, name: "Balebase" },
       subject: `You're invited to ${data.organization.name}`,
       text: [
         "Hi,",
         "",
-        `${data.inviter.user.name} (${data.inviter.user.email}) invited you to join ${data.organization.name} on Tearleads with the ${data.role} role.`,
+        `${data.inviter.user.name} (${data.inviter.user.email}) invited you to join ${data.organization.name} on Balebase with the ${data.role} role.`,
         "",
         "Accept the invitation:",
         invitationURL.toString(),

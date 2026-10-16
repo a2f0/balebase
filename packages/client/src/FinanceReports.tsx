@@ -7,7 +7,7 @@ import {
   Field,
   LoadingState,
   PageSection,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { useEffect, useState } from "react";
 import {
   type ExpenseCategoryTotal,

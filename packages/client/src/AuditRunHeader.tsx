@@ -8,7 +8,7 @@ import {
   Page,
   PageBody,
   PageHeader,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { formatActivityTime } from "./ActivityFeed";
 import type { AuditRun } from "./auditApi";
 import { formatLabel } from "./labels";

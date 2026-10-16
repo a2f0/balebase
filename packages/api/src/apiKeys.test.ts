@@ -488,7 +488,7 @@ describe("MCP endpoint", () => {
       serverInfo: { name: string };
     }>(await fixture.mcp(token, legacyInitialize()));
     expect(initialized.protocolVersion).toBe("2025-06-18");
-    expect(initialized.serverInfo.name).toBe("tearleads");
+    expect(initialized.serverInfo.name).toBe("balebase");
 
     const legacyHeaders = { "MCP-Protocol-Version": "2025-06-18" };
     const notification = await fixture.mcp(

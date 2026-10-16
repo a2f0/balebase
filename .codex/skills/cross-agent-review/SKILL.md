@@ -77,7 +77,7 @@ commits to review and have no round limit.
   git can verify the result (SSH signing also needs
   `gpg.ssh.allowedSignersFile`); repair and base-merge commits are signed, and
   pushes refuse unsigned commits.
-- The `@tearleads/agent-tool` package in the fetched base commit. Every tool
+- The `@balebase/agent-tool` package in the fetched base commit. Every tool
   these skills run comes from that base — never from an installation outside
   this repository.
 - For Claude Code reviews: `claude` CLI with `ANTHROPIC_API_KEY` available;

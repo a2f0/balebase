@@ -7,7 +7,7 @@ import {
   LoadingState,
   PageSection,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import {
   addDefaultExpenseCategories,

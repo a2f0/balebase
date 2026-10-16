@@ -1,4 +1,4 @@
-import { Button, cx, Icon, type IconName, Toast } from "@tearleads/ui/react";
+import { Button, cx, Icon, type IconName, Toast } from "@balebase/ui/react";
 import { type FormEvent, useEffect, useState } from "react";
 import {
   type InboundEmailLink,

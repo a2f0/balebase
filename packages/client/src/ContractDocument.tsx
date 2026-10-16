@@ -1,4 +1,4 @@
-import { LoadingState } from "@tearleads/ui/react";
+import { LoadingState } from "@balebase/ui/react";
 import type {
   PDFDocumentLoadingTask,
   PDFDocumentProxy,

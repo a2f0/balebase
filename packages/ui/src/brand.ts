@@ -2,7 +2,7 @@
  * Product facts shared by the marketing site and the client, so pricing and
  * legal navigation never drift between the two.
  */
-export const productName = "Tearleads";
+export const productName = "Balebase";
 
 export const legalLinks = [
   { href: "/privacy", label: "Privacy" },

@@ -21,7 +21,7 @@ function pdfjsAssets(): Plugin {
   );
   const directories = ["cmaps", "iccs", "standard_fonts", "wasm"];
   return {
-    name: "tearleads-pdfjs-assets",
+    name: "balebase-pdfjs-assets",
     configureServer(server) {
       server.middlewares.use("/pdfjs", (request, response, next) => {
         const path = decodeURIComponent(request.url?.split("?")[0] ?? "");

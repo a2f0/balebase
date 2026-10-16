@@ -7,7 +7,7 @@ import {
   cx,
   Icon,
   PageSection,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import type { FinanceAccount, FinanceConnection } from "./financeApi";
 import { formatMoney } from "./financeFormat";
 import { countLabel, formatLabel } from "./labels";

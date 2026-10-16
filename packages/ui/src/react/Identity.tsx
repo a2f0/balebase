@@ -5,7 +5,7 @@ export function Logo({ className }: { className?: string | undefined }) {
   return (
     <span className={cx("brand", className)}>
       <span aria-hidden="true" className="brandMark">
-        T
+        B
       </span>
       <span>{productName}</span>
     </span>

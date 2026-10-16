@@ -1,4 +1,4 @@
-import { Button, Card, cx, Field, Toast } from "@tearleads/ui/react";
+import { Button, Card, cx, Field, Toast } from "@balebase/ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchApi } from "./apiVersion";
 import { ContractPages } from "./ContractDocument";

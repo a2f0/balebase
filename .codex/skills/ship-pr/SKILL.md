@@ -84,7 +84,7 @@ artifacts. Keep review findings and the complete verdict directly visible.
 ## Prerequisites
 
 - `git` and `gh` (authenticated) on `PATH`.
-- The trusted `@tearleads/agent-tool` setup required by the delegated
+- The trusted `@balebase/agent-tool` setup required by the delegated
   `cross-agent-review`, `open-pr`, and `squash-merge` skills. The version
   actions come only from the base's own agent-tool; while the base predates
   them, only a PR that leaves `packages/api` and `packages/client` untouched
