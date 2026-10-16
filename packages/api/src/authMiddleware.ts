@@ -1,5 +1,12 @@
 import type { Context, Next } from "hono";
 import { createMiddleware } from "hono/factory";
+import {
+  type ApiKeyPrincipal,
+  apiKeyFromHeader,
+  apiKeyRouteDenial,
+  authenticateApiKey,
+  recordApiKeyUse,
+} from "./apiKeys";
 import type { AuthSession } from "./auth";
 import { createAuth } from "./auth";
 import { organizationUserHasSeat } from "./billing";
@@ -7,6 +14,8 @@ import { isOrganizationOwner } from "./organizationMembers";
 import type { Bindings } from "./types";
 
 export interface AuthVariables {
+  /** Set when an API key, rather than a session, authenticated the request. */
+  apiKey?: ApiKeyPrincipal;
   authSession: AuthSession;
   organizationId: string;
   organizationRole: string;
@@ -30,6 +39,18 @@ const organizationSeatRouteExemptions = new Set([
 ]);
 
 export const requireAuth = createMiddleware<AuthEnv>(async (context, next) => {
+  const token = apiKeyFromHeader(context.req.header("Authorization"));
+  if (token !== undefined) {
+    const failure = await authenticateRequestApiKey(context, token);
+    if (failure) return failure;
+    const denial = apiKeyRouteDenial(
+      context.req.path,
+      context.req.method,
+      context.get("apiKey")?.access ?? "read",
+    );
+    if (denial) return context.json({ error: denial }, 403);
+    return next();
+  }
   const auth = createAuth(context.env, (promise) =>
     context.executionCtx.waitUntil(promise),
   );
@@ -50,6 +71,52 @@ export const requireAuth = createMiddleware<AuthEnv>(async (context, next) => {
   }
   return next();
 });
+
+/**
+ * Authenticates the MCP endpoint, which accepts only API keys: tools reach the
+ * workspace through the same per-route API-key policy as REST calls.
+ */
+export const requireApiKey = createMiddleware<AuthEnv>(
+  async (context, next) => {
+    const token = apiKeyFromHeader(context.req.header("Authorization"));
+    if (token === undefined) {
+      context.header("WWW-Authenticate", 'Bearer realm="Tearleads"');
+      return context.json(
+        { error: "An API key is required. Send it as a Bearer token." },
+        401,
+      );
+    }
+    const failure = await authenticateRequestApiKey(context, token);
+    return failure ?? next();
+  },
+);
+
+async function authenticateRequestApiKey(
+  context: Context<AuthEnv>,
+  token: string,
+) {
+  const now = new Date();
+  const result = await authenticateApiKey(context.env.DB, token, now);
+  if (!result.ok) {
+    if (result.status === 401) {
+      context.header(
+        "WWW-Authenticate",
+        'Bearer realm="Tearleads", error="invalid_token"',
+      );
+    }
+    return context.json({ error: result.error }, result.status);
+  }
+  context.set("apiKey", result.principal);
+  context.set("authSession", result.session);
+  // Integration traffic is not the creator being active, so only the key's
+  // own last use is recorded.
+  if (result.stale) {
+    context.executionCtx.waitUntil(
+      recordApiKeyUse(context.env.DB, result.principal.id, now),
+    );
+  }
+  return undefined;
+}
 
 async function recordUserActivity(
   database: D1Database,
@@ -74,10 +141,14 @@ async function recordUserActivity(
 function requireSessionOrganization(requiresSeat: (role: string) => boolean) {
   return createMiddleware<AuthEnv>(async (context, next) => {
     const session = context.get("authSession");
-    const candidates = organizationCandidates(
-      session.session.activeOrganizationId,
-      session.user.defaultOrganizationId,
-    );
+    // A key belongs to one organization; it never falls back to another.
+    const apiKey = context.get("apiKey");
+    const candidates = apiKey
+      ? [apiKey.organizationId]
+      : organizationCandidates(
+          session.session.activeOrganizationId,
+          session.user.defaultOrganizationId,
+        );
     return authorizeOrganization(context, next, candidates, requiresSeat);
   });
 }

@@ -13,6 +13,7 @@ import {
 } from "@tearleads/ui/react";
 import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
 import { authClient } from "./authClient";
+import { OrganizationApiKeys } from "./OrganizationApiKeys";
 import { OrganizationBilling } from "./OrganizationBilling";
 import { OrganizationAccessSettings } from "./OrganizationGroups";
 import { OrganizationMemberDetail } from "./OrganizationMemberDetail";
@@ -71,7 +72,7 @@ export function OrganizationSettings({
       />
       <PageBody
         className={
-          page === "general" || page === "billing"
+          page === "general" || page === "billing" || page === "api-keys"
             ? "organizationNarrowBody"
             : undefined
         }
@@ -140,15 +141,17 @@ function OrganizationSettingsPageContent({
       />
     );
   }
-  if (page === "access") {
+  if (page === "access" || page === "api-keys") {
     if (memberRole !== undefined && !canManage) {
       return <SettingsAccessDenied onNavigate={onNavigate} />;
     }
-    return (
+    return page === "access" ? (
       <OrganizationAccessSettings
         onAccessChanged={onAccessChanged}
         organizationId={organization.id}
       />
+    ) : (
+      <OrganizationApiKeys organizationId={organization.id} />
     );
   }
   if (page === "billing") {
@@ -191,6 +194,11 @@ function OrganizationSettingsNavigation({
             label: "Access",
             page: "access",
             path: "/organization/access",
+          },
+          {
+            label: "API keys",
+            page: "api-keys",
+            path: "/organization/api-keys",
           },
         ]
       : []),

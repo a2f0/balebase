@@ -23,6 +23,8 @@ import { organizationPeoplePath } from "./organizationState";
 import { equipmentPath } from "./workspacePaths";
 
 const actionLabels: Record<string, string> = {
+  "api_key.created": "created an API key",
+  "api_key.revoked": "revoked an API key",
   "audit.answer_changed": "changed an answer",
   "audit.completed": "completed the audit",
   "audit.discarded": "discarded the audit",
@@ -244,6 +246,7 @@ function CompactActivityRow({
 function activitySummary(event: ActivityEvent) {
   const { details } = event;
   if (event.root.type === "equipment") return equipmentActivitySummary(event);
+  if (event.root.type === "api_key") return apiKeySummary(event);
   if (event.action === "organization.member_role_changed") {
     return `${memberLabel(event)} · ${roleLabel(details.before)} → ${roleLabel(details.after)}`;
   }
@@ -300,6 +303,9 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
   const details = event.details;
   if (event.root.type === "equipment") {
     return <EquipmentActivityDetails event={event} />;
+  }
+  if (event.root.type === "api_key") {
+    return <p className="activityDetails">{apiKeySummary(event)}</p>;
   }
   switch (event.action) {
     case "organization.member_role_changed":
@@ -418,6 +424,11 @@ function activityLinkLabel(event: ActivityEvent) {
   if (event.root.type === "equipment") return "Open equipment";
   if (event.root.type === "organization_member") return "Open member";
   return event.root.type === "audit_run" ? "Open audit" : "Open form";
+}
+
+function apiKeySummary({ details }: ActivityEvent) {
+  const access = details.access === "write" ? "Read and write" : "Read only";
+  return `${access} · ${textValue(details.prefix)}…`;
 }
 
 function memberLabel(event: ActivityEvent) {

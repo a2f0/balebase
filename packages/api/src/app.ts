@@ -6,10 +6,12 @@ import { activity } from "./activity";
 import { adminAuditTemplates } from "./adminAuditTemplates";
 import { adminJobs } from "./adminJobs";
 import { adminOrganizations } from "./adminOrganizations";
+import { apiKeys } from "./apiKeys";
 import { audits } from "./audits";
 import { createAuth } from "./auth";
 import {
   type AuthVariables,
+  requireApiKey,
   requireAuth,
   requireAuthOrganizationSeat,
   requireBillingOrganization,
@@ -104,6 +106,7 @@ app.get("/api", (context) =>
       adminJobs: "/api/admin/jobs",
       adminOrganizations: "/api/admin/organizations",
       accountSettings: "/api/account-settings",
+      apiKeys: "/api/organization-settings/api-keys",
       activity: "/api/activity",
       audits: "/api/audits",
       billing: "/api/billing",
@@ -114,6 +117,7 @@ app.get("/api", (context) =>
       finance: "/api/finance",
       inbox: "/api/inbox",
       libraryFolders: "/api/library/folders",
+      mcp: "/mcp",
       objects: "/api/objects",
       organizationGroups: "/api/organization-groups",
       organizationSettings: "/api/organization-settings",
@@ -124,8 +128,37 @@ app.get("/api", (context) =>
   }),
 );
 
-app.get("/api/me", requireAuth, (context) =>
-  context.json({ user: context.get("authSession").user }),
+app.get("/api/me", requireAuth, (context) => {
+  const apiKey = context.get("apiKey");
+  return context.json({
+    user: context.get("authSession").user,
+    ...(apiKey ? { apiKey } : {}),
+  });
+});
+
+// MCP clients authenticate with an organization API key. Tools call back into
+// this app, so every REST route's own authorization applies to them.
+app.all(
+  "/mcp",
+  async (context, next) => {
+    // Browsers never need this endpoint. Refusing foreign origins follows the
+    // MCP transport's DNS-rebinding guidance; native clients send no Origin.
+    const origin = context.req.header("Origin");
+    if (origin !== undefined && origin !== context.env.CORS_ORIGIN) {
+      return context.json({ error: "Untrusted request origin." }, 403);
+    }
+    return next();
+  },
+  requireApiKey,
+  requireOrganization,
+  async (context) => {
+    // The SDK preloads its schemas when it loads; importing it on first use
+    // keeps that work out of every isolate's startup.
+    const { handleMcpRequest } = await import("./mcp");
+    return handleMcpRequest(context, (request) =>
+      app.fetch(request, context.env, context.executionCtx),
+    );
+  },
 );
 
 app.get("/api/admin", requireAuth, requireRole("admin"), (context) =>
@@ -210,6 +243,9 @@ app.use("/api/organization-settings/*", requireAuth);
 app.use("/api/organization-settings/people", requireOrganization);
 app.use("/api/organization-settings/people/*", requireOrganization);
 app.use("/api/organization-settings/current", requireOrganization);
+app.use("/api/organization-settings/api-keys", requireOrganization);
+app.use("/api/organization-settings/api-keys/*", requireOrganization);
+app.route("/api/organization-settings/api-keys", apiKeys);
 app.route("/api/organization-settings", organizationSettings);
 
 app.use("/api/library/folders", requireAuth, requireOrganization);

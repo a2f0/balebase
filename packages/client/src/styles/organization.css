@@ -1,5 +1,5 @@
 /*
- * Organization settings (General, Billing) and the invitation page.
+ * Organization settings (General, Billing, API keys) and the invitation page.
  * Shared components come from @tearleads/ui; this file only lays them out.
  */
 
@@ -121,6 +121,46 @@
 /* Holds Stripe's iframe; the height keeps the card steady while it loads. */
 .billingCheckoutPayment {
   min-height: 12rem;
+}
+
+/* API keys: a new key's secret beside its copy button. */
+.apiKeySecret {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.apiKeySecret > .input {
+  flex: 1 1 auto;
+}
+
+.apiKeyCommand {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  background: var(--color-surface-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.apiKeyHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+@media (max-width: 560px) {
+  .apiKeySecret {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 /* Invitation: a single centered column inside the workspace frame. */
