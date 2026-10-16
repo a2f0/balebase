@@ -58,6 +58,7 @@ function member(id: string, name: string, role = "member"): OrganizationMember {
   return {
     id,
     joinedAt: "2026-10-01T09:00:00.000Z",
+    lastActiveAt: "2026-10-14T15:30:00.000Z",
     role,
     twoFactorEnabled: false,
     twoFactorRequired: false,
@@ -178,6 +179,9 @@ describe("a member's page", () => {
     expect(text).toContain(
       `Joined${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date("2026-10-01T09:00:00.000Z"))}`,
     );
+    expect(text).toContain(
+      `Last active${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date("2026-10-14T15:30:00.000Z"))}`,
+    );
     expect(text).toContain("Require 2FA");
     expect(
       container.querySelector('select[aria-label="Role for Mark Member"]'),
@@ -215,6 +219,7 @@ describe("a member's page", () => {
     expect(button(container, "Send requests")).toBeNull();
     expect(button(container, "Remove from organization")).toBeNull();
     expect(text).not.toContain("Require 2FA");
+    expect(text).not.toContain("Last active");
   });
 
   it("keeps another member's requests private", async () => {

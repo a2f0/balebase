@@ -214,6 +214,10 @@ function MemberProfile({
         <dd>{formatDate(member.joinedAt)}</dd>
         {canManage && (
           <>
+            <dt>Last active</dt>
+            <dd>
+              {member.lastActiveAt ? formatDate(member.lastActiveAt) : "Never"}
+            </dd>
             <dt>Two-factor</dt>
             <dd className="memberProfileTwoFactor">
               <TwoFactorStatus member={member} />

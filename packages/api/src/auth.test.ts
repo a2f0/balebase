@@ -501,8 +501,8 @@ describe("password authentication", () => {
       .query('UPDATE "user" SET role = ? WHERE email = ?')
       .run("admin", email);
     fixture.database
-      .query('UPDATE "user" SET role = NULL WHERE email = ?')
-      .run(nullableRoleEmail);
+      .query('UPDATE "user" SET role = NULL, lastActiveAt = ? WHERE email = ?')
+      .run("2026-10-15T08:30:00.000Z", nullableRoleEmail);
     expect(
       fixture.database
         .query("SELECT role FROM user WHERE id = 'system:audit-library'")
@@ -528,13 +528,19 @@ describe("password authentication", () => {
     expect(await firstPage.json()).toMatchObject({
       limit: 1,
       total: 2,
-      users: [{ email: nullableRoleEmail, role: null }],
+      users: [
+        {
+          email: nullableRoleEmail,
+          lastActiveAt: "2026-10-15T08:30:00.000Z",
+          role: null,
+        },
+      ],
     });
     expect(await secondPage.json()).toMatchObject({
       limit: 1,
       offset: 1,
       total: 2,
-      users: [{ email, role: "admin" }],
+      users: [{ email, lastActiveAt: null, role: "admin" }],
     });
   });
 

@@ -42,6 +42,10 @@ organizations at `/root/organizations`. Clicking an organization name opens
 its admin detail page with the organization's people, employee requirements,
 Checkr results, and links to
 available Checkr reports, without changing the admin's active workspace.
+Authenticated API requests record each account's last active date; an admin
+impersonating someone does not. Root admins see it on both pages, and
+organization owners and administrators see it for members under
+Organization → People. Other members do not receive it.
 The shared inbound mailbox is at `/inbox`. Each account receives a default
 organization at signup; existing accounts are backfilled by the organization
 migration. Organization owners and

@@ -81,7 +81,7 @@
 
 /* Minimum widths keep columns legible; the wrapper scrolls on small screens. */
 .adminUsersTable {
-  min-width: 40rem;
+  min-width: 46rem;
 }
 
 .adminOrganizationTable {

@@ -397,6 +397,33 @@ describe("organization member security", () => {
     expect(ownerBody.currentMemberId).toBe("member_owner-user");
   });
 
+  it("shows managers, but not members, when each member was last active", async () => {
+    const fixture = await createFixture();
+    fixture.database
+      .query("UPDATE user SET lastActiveAt = ? WHERE id = ?")
+      .run("2026-10-15T08:30:00.000Z", "member-user");
+
+    const ownerListing = await fixture
+      .app("owner-user", "owner")
+      .request("/people");
+    const ownerBody = (await ownerListing.json()) as {
+      members: Array<Record<string, unknown>>;
+    };
+    expect(
+      ownerBody.members.find(({ id }) => id === "target-member"),
+    ).toMatchObject({ lastActiveAt: "2026-10-15T08:30:00.000Z" });
+
+    const memberListing = await fixture
+      .app("member-user", "member")
+      .request("/people");
+    const memberBody = (await memberListing.json()) as {
+      members: Array<Record<string, unknown>>;
+    };
+    for (const listedMember of memberBody.members) {
+      expect(listedMember).not.toHaveProperty("lastActiveAt");
+    }
+  });
+
   it("rejects member changes from non-managers", async () => {
     const fixture = await createFixture();
     const response = await fixture
@@ -480,6 +507,7 @@ async function createFixture() {
   await applyMigration(database, "0031_require_member_two_factor.sql");
   await applyMigration(database, "0032_create_billing.sql");
   await applyMigration(database, "0053_track_paid_billing_end.sql");
+  await applyMigration(database, "0055_track_user_last_active.sql");
   insertSession(database, "owner-user", targetOrganizationId);
   insertSession(database, "member-user", targetOrganizationId);
   const bindings = {
