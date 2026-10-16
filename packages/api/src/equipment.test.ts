@@ -2,6 +2,7 @@ import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { Hono } from "hono";
+import { activity } from "./activity";
 import type { AuthSession } from "./auth";
 import type { AuthVariables } from "./authMiddleware";
 import { equipment } from "./equipment";
@@ -28,6 +29,14 @@ interface Equipment {
   purchaseDate: string | null;
   serialNumber: string | null;
   type: string;
+}
+
+interface ActivityEvent {
+  action: string;
+  actor: { id: string };
+  details: Record<string, unknown>;
+  root: { label: string; type: string };
+  subject: { type: string };
 }
 
 const laptop = {
@@ -265,6 +274,156 @@ describe("equipment", () => {
       `/api/equipment/${created.body.equipment.id}`,
     );
     expect(detail.body.equipment.assignee).toBeNull();
+  });
+
+  it("records who added, changed, assigned, and deleted equipment", async () => {
+    const { as, database } = await createFixture();
+    const owner = as("owner-user", "owner");
+    const member = as("member-user", "member");
+    const created = await owner.json<{ equipment: Equipment }>(
+      "POST",
+      "/api/equipment",
+      laptop,
+    );
+    const id = created.body.equipment.id;
+    const history = async () =>
+      (
+        await member.json<{ events: ActivityEvent[] }>(
+          "GET",
+          `/api/equipment/${id}/activity`,
+        )
+      ).body.events.map(({ action, actor, details, root }) => ({
+        action,
+        actor: actor.id,
+        details,
+        label: root.label,
+      }));
+
+    // Saves that change nothing, or are rejected, record nothing.
+    await owner.json("PATCH", `/api/equipment/${id}`, {
+      assigneeId: "member-user",
+      make: "Apple",
+    });
+    await owner.json("PATCH", `/api/equipment/${id}`, {
+      assigneeId: "other-user",
+      model: "Rejected",
+    });
+    await member.json("PATCH", `/api/equipment/${id}`, { model: "Denied" });
+    await owner.json("PATCH", `/api/equipment/${id}`, {
+      model: "MacBook Air",
+      serialNumber: "",
+      type: "computer",
+    });
+    // Leaving the organization unassigns without an actor.
+    database.query("DELETE FROM member WHERE userId = 'member-user'").run();
+    await owner.json("PATCH", `/api/equipment/${id}`, {
+      assigneeId: "owner-user",
+      purchaseDate: "2026-04-01",
+    });
+    expect(
+      database
+        .query("SELECT activity_actor_id FROM equipment WHERE id = ?")
+        .get(id),
+    ).toEqual({ activity_actor_id: null });
+
+    const recorded = [
+      {
+        action: "equipment.assigned",
+        actor: "owner-user",
+        details: {
+          after: "owner-user",
+          afterEmail: "owner-user@example.com",
+          afterName: "owner-user",
+          before: null,
+          beforeEmail: null,
+          beforeName: null,
+        },
+        label: "Apple MacBook Air",
+      },
+      {
+        action: "equipment.updated",
+        actor: "owner-user",
+        details: {
+          changes: [
+            {
+              after: "2026-04-01",
+              before: "2026-03-01",
+              field: "purchaseDate",
+            },
+          ],
+        },
+        label: "Apple MacBook Air",
+      },
+      {
+        action: "equipment.updated",
+        actor: "owner-user",
+        details: {
+          changes: [
+            { after: "MacBook Air", before: "MacBook Pro", field: "model" },
+            { after: null, before: "C02XYZ", field: "serialNumber" },
+          ],
+        },
+        label: "Apple MacBook Air",
+      },
+      {
+        action: "equipment.created",
+        actor: "owner-user",
+        details: {
+          assignedTo: "member-user",
+          assigneeEmail: "member-user@example.com",
+          assigneeName: "member-user",
+          make: "Apple",
+          model: "MacBook Pro",
+          purchaseDate: "2026-03-01",
+          serialNumber: "C02XYZ",
+          type: "computer",
+        },
+        label: "Apple MacBook Pro",
+      },
+    ];
+    expect(await history()).toEqual(recorded);
+    expect(
+      (await owner.json("GET", "/api/equipment/equipment-other/activity"))
+        .status,
+    ).toBe(404);
+
+    // Deletion is recorded once, and the history outlives the equipment.
+    expect((await owner.json("DELETE", `/api/equipment/${id}`)).status).toBe(
+      204,
+    );
+    expect((await owner.json("DELETE", `/api/equipment/${id}`)).status).toBe(
+      404,
+    );
+    expect(
+      (await owner.json("GET", `/api/equipment/${id}/activity`)).status,
+    ).toBe(404);
+    const feed = await owner.json<{ events: ActivityEvent[] }>(
+      "GET",
+      "/api/activity",
+    );
+    expect(
+      feed.body.events.map(({ action, details, root, subject }) => ({
+        action,
+        details,
+        root: root.type,
+        subject: subject.type,
+      }))[0],
+    ).toEqual({
+      action: "equipment.deleted",
+      details: {
+        make: "Apple",
+        model: "MacBook Air",
+        purchaseDate: "2026-04-01",
+        serialNumber: null,
+        type: "computer",
+      },
+      root: "equipment",
+      subject: "equipment",
+    });
+    expect(feed.body.events.map(({ action }) => action)).toEqual([
+      "equipment.deleted",
+      ...recorded.map(({ action }) => action),
+    ]);
   });
 
   it("attaches emails and receipts to equipment", async () => {
@@ -528,6 +687,7 @@ function testApp(userId: string, role: string) {
     } as unknown as AuthSession);
     await next();
   });
+  app.route("/api/activity", activity);
   app.route("/api/equipment", equipment);
   app.route("/api/inbox", inbox);
   return app;

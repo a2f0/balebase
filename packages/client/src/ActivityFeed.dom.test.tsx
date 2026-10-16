@@ -98,6 +98,55 @@ function event(id: number, after: string): ActivityEvent {
   };
 }
 
+function equipmentEvents(): ActivityEvent[] {
+  const equipmentEvent = (
+    id: number,
+    action: string,
+    label: string,
+    details: ActivityEvent["details"],
+  ): ActivityEvent => ({
+    ...event(id, ""),
+    action,
+    details,
+    root: { id: "laptop/1", label, type: "equipment" },
+    subject: { id: "laptop/1", type: "equipment" },
+  });
+  return [
+    equipmentEvent(54, "equipment.deleted", "Apple MacBook Air", {
+      make: "Apple",
+      model: "MacBook Air",
+      purchaseDate: null,
+      serialNumber: null,
+      type: "monitor",
+    }),
+    equipmentEvent(53, "equipment.assigned", "Apple MacBook Air", {
+      after: "bob-user",
+      afterEmail: "bob@example.com",
+      afterName: "Bob",
+      before: null,
+      beforeEmail: null,
+      beforeName: null,
+    }),
+    equipmentEvent(52, "equipment.updated", "Apple MacBook Air", {
+      changes: [
+        { after: "MacBook Air", before: "MacBook Pro", field: "model" },
+        { after: null, before: "C02XYZ", field: "serialNumber" },
+        { after: "monitor", before: "computer", field: "type" },
+      ],
+    }),
+    equipmentEvent(51, "equipment.created", "Apple MacBook Pro", {
+      assignedTo: null,
+      assigneeEmail: null,
+      assigneeName: null,
+      make: "Apple",
+      model: "MacBook Pro",
+      purchaseDate: null,
+      serialNumber: "C02XYZ",
+      type: "computer",
+    }),
+  ];
+}
+
 describe("activity feed, mounted", () => {
   it.each([true, false])(
     "shows role changes and member navigation (compact: %s)",
@@ -148,6 +197,81 @@ describe("activity feed, mounted", () => {
       expect(navigations).toEqual(["/organization/people/bob%2Fmember"]);
     },
   );
+
+  it("shows equipment history and links only to equipment that still exists", async () => {
+    globalThis.fetch = (async (_input) =>
+      Response.json({
+        events: equipmentEvents(),
+        nextCursor: null,
+      })) as typeof fetch;
+    const navigations: string[] = [];
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root?.render(
+        <Activity onNavigate={(pathname) => navigations.push(pathname)} />,
+      ),
+    );
+    await settle();
+    expect(
+      [...container.querySelectorAll(".activityHeading")].map(
+        (heading) => heading.textContent,
+      ),
+    ).toEqual([
+      "Sam deleted equipment · Apple MacBook Air",
+      "Sam changed the equipment assignee · Apple MacBook Air",
+      "Sam edited equipment · Apple MacBook Air",
+      "Sam added equipment · Apple MacBook Pro",
+    ]);
+    expect(
+      [...container.querySelectorAll("summary")].map(
+        (summary) => summary.textContent,
+      ),
+    ).toEqual([
+      "Monitor",
+      "Unassigned → Bob",
+      "Model: MacBook Pro → MacBook Air · Serial number: C02XYZ → Not recorded · Type: Computer → Monitor",
+      "Computer · C02XYZ",
+    ]);
+    expect(container.textContent).toContain("Computer · Apple MacBook Pro");
+    expect(container.textContent).toContain(
+      "Serial number: C02XYZ · Purchase date: Not recorded",
+    );
+    expect(container.textContent).toContain("Assigned to: Unassigned");
+    expect(
+      container.querySelectorAll(
+        '[aria-label="Open equipment: Apple MacBook Air"]',
+      ),
+    ).toHaveLength(2);
+    await click("Apple MacBook Pro");
+    expect(navigations).toEqual(["/equipment/laptop%2F1"]);
+  });
+
+  it("reads one item's history through its equipment", async () => {
+    const requests: string[] = [];
+    globalThis.fetch = (async (input) => {
+      requests.push(String(input));
+      return Response.json({ events: equipmentEvents(), nextCursor: null });
+    }) as typeof fetch;
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root?.render(
+        <ActivityFeed
+          onNavigate={() => undefined}
+          source={{ id: "laptop/1", type: "equipment" }}
+        />,
+      ),
+    );
+    await settle();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toEndWith("/api/equipment/laptop%2F1/activity");
+    expect(container.textContent).toContain("Unassigned → Bob");
+    expect(container.textContent).toContain("Model: MacBook Pro → MacBook Air");
+    expect(container.textContent).not.toContain("Open equipment");
+  });
 
   it("uses compact workspace rows with expandable full details and resource navigation", async () => {
     const change = event(51, "First line\nSecond line");

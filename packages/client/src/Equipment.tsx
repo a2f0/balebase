@@ -22,6 +22,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { ActivityFeed } from "./ActivityFeed";
 import { type LinkedEmail, unlinkInboundEmail } from "./api";
 import {
   createEquipment,
@@ -37,9 +38,11 @@ import {
 } from "./equipmentApi";
 import { type AssigneeFilter, filterEquipment } from "./equipmentFilters";
 import {
+  equipmentMeta,
   equipmentName,
   equipmentTypeIcon,
   equipmentTypeLabel,
+  formatPurchaseDate,
 } from "./equipmentLabels";
 import { LinkedEmailList } from "./LinkedEmailList";
 import { countLabel } from "./labels";
@@ -496,6 +499,10 @@ function EquipmentDetailPage({
               onUnlink={(email) => void unlink(email)}
               title="Emails and receipts"
             />
+            <ActivityFeed
+              refreshKey={item}
+              source={{ id, type: "equipment" }}
+            />
           </>
         )}
       </PageBody>
@@ -587,7 +594,9 @@ function EquipmentDetails({
           </dd>
           <dt>Purchase date</dt>
           <dd className={item.purchaseDate ? undefined : "equipmentMissing"}>
-            {item.purchaseDate ? formatDate(item.purchaseDate) : "Not recorded"}
+            {item.purchaseDate
+              ? formatPurchaseDate(item.purchaseDate)
+              : "Not recorded"}
           </dd>
           <dt>Assigned to</dt>
           <dd>
@@ -801,22 +810,6 @@ function EquipmentFields({
         />
       </Field>
     </div>
-  );
-}
-
-function equipmentMeta(item: EquipmentItem) {
-  return [
-    equipmentTypeLabel(item.type),
-    item.serialNumber,
-    item.purchaseDate && `Purchased ${formatDate(item.purchaseDate)}`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(`${value}T12:00:00`),
   );
 }
 
