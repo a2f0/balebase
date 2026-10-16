@@ -729,7 +729,7 @@ async function createFixture() {
   const stored = new Map<string, Uint8Array>();
   const storage = { failWrites: false };
   const bindings = {
-    AUTH_EMAIL_FROM: "security@auth.tearleads.de",
+    AUTH_EMAIL_FROM: "security@auth.balebase.com",
     BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
     BETTER_AUTH_URL: "https://api.test",
     CORS_ORIGIN: "https://app.test",
@@ -741,7 +741,7 @@ async function createFixture() {
       },
     } as unknown as SendEmail,
     IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.tearleads.de",
+    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
     STORAGE: storageFor(stored, storage),
   } satisfies Bindings;
 

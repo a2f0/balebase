@@ -10,7 +10,7 @@ admin-plugin operations and the example `GET /api/admin` route. Passwords must
 be 12–128 characters, reset links expire after one hour, and a successful reset
 revokes the user's existing sessions.
 
-The main endpoints under `https://api.tearleads.de/api/auth` are:
+The main endpoints under `https://api.balebase.com/api/auth` are:
 
 - `POST /sign-up/email`
 - `POST /sign-in/email`
@@ -103,11 +103,11 @@ request require membership in a group with the Finance capability.
 
 Authentication needs a strong `BETTER_AUTH_SECRET` in the ignored
 `.secrets/prod/app.env`. Production password reset additionally requires
-Cloudflare Email Sending to be enabled for `auth.tearleads.de`, with
-`security@auth.tearleads.de` permitted as a sender. Sending DNS records and
-DMARC policy are isolated under `auth.tearleads.de`; Google Workspace remains
-responsible for mail at the apex. The deployment script uploads the auth secret
-to the Worker but never places it in Wrangler configuration or Terraform state.
+Cloudflare Email Sending to be enabled for `auth.balebase.com`, with
+`security@auth.balebase.com` permitted as a sender. Sending DNS records and
+DMARC policy are isolated under `auth.balebase.com`, leaving the apex free for
+other mail. The deployment script uploads the auth secret to the Worker but
+never places it in Wrangler configuration or Terraform state.
 
 ## API keys and MCP
 
@@ -134,7 +134,7 @@ organization settings, API key management, root administration, and Better Auth
 endpoints stay session-only, so a leaked key cannot create more keys or change
 sign-in security.
 
-The MCP server is at `https://api.tearleads.de/mcp` and uses Streamable HTTP
+The MCP server is at `https://api.balebase.com/mcp` and uses Streamable HTTP
 with the official TypeScript SDK. It serves the stateless `2026-07-28`
 revision and, through the SDK's stateless fallback, clients that still open
 with `initialize`. It keeps no sessions and has no standalone event stream.
@@ -146,7 +146,7 @@ or reconcile Checkr invitations; use the app for those. Connect Claude Code
 with:
 
 ```sh
-claude mcp add --transport http tearleads https://api.tearleads.de/mcp \
+claude mcp add --transport http tearleads https://api.balebase.com/mcp \
   --header "Authorization: Bearer <key>"
 ```
 
@@ -225,7 +225,7 @@ PDF for cleanup. Migration `0050_create_contract_templates.sql` adds the
 versioned template records and contract provenance.
 
 Signers need no account. Each receives a link to `/sign/<token>` from
-`security@auth.tearleads.de`, with the sender's address as reply-to. The token
+`security@auth.balebase.com`, with the sender's address as reply-to. The token
 is an HMAC-SHA256, keyed by `BETTER_AUTH_SECRET`, of the recipient ID and a
 random nonce; only the nonce and a hash of the token are stored, so reminders
 can resend the same link. A link must still derive from the current secret, so
@@ -356,7 +356,7 @@ key to decrypt their Plaid access tokens. The deployment script uploads all
 three values as encrypted Worker secrets.
 
 The Worker currently uses Plaid Sandbox. Add
-`https://app.tearleads.de/finance` to the Plaid Dashboard's allowed redirect
+`https://app.balebase.com/finance` to the Plaid Dashboard's allowed redirect
 URIs for OAuth institutions. Before switching `PLAID_ENV` to `production` in
 the API Wrangler configuration, replace the Sandbox secret with the Production
 secret and complete Plaid's application and company profile requirements.
@@ -407,8 +407,8 @@ Register the API's webhook URL with each Checkr account, either under
 
 | Checkr account | Webhook URL |
 | --- | --- |
-| Staging | `https://api-staging.tearleads.de/api/checkr/webhook` |
-| Production | `https://api.tearleads.de/api/checkr/webhook` |
+| Staging | `https://api-staging.balebase.com/api/checkr/webhook` |
+| Production | `https://api.balebase.com/api/checkr/webhook` |
 
 Checkr signs each delivery with the account's API key, so the Worker's
 `CHECKR_API_KEY` must belong to the account that sends the webhook. The endpoint
@@ -450,7 +450,7 @@ price ID to the legacy list before rotating the current price so existing
 subscriptions keep their entitlements. Local development overrides the
 production IDs in Wrangler with these values, so test-mode keys must be paired
 with test-mode IDs. The public Stripe webhook URL is
-`https://api.tearleads.de/api/billing/webhook`. The non-secret Pro price,
+`https://api.balebase.com/api/billing/webhook`. The non-secret Pro price,
 optional Billing Portal configuration ID, and optional publishable key belong in
 `packages/api/wrangler.jsonc`; the API deployment script uploads the two secret
 values as encrypted Worker secrets and requires a live-mode API key for

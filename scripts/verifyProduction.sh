@@ -31,7 +31,7 @@ verify_url() {
   echo "PASS: $label is reachable."
 }
 
-verify_url "API" "https://api.tearleads.de/health"
+verify_url "API" "https://api.balebase.com/health"
 
 verify_cors_headers() {
   local label="$1"
@@ -42,7 +42,7 @@ verify_cors_headers() {
   normalized_headers="$(tr -d '\r' <<<"$headers" |
     tr '[:upper:]' '[:lower:]' |
     awk '/^http\// { last_response = "" } { last_response = last_response $0 ORS } END { printf "%s", last_response }')"
-  if ! grep -Fqx 'access-control-allow-origin: https://app.tearleads.de' \
+  if ! grep -Fqx 'access-control-allow-origin: https://app.balebase.com' \
     <<<"$normalized_headers" ||
     ! grep -Fqx 'access-control-allow-credentials: true' \
       <<<"$normalized_headers"; then
@@ -67,7 +67,7 @@ verify_auth_cors() {
     --retry-max-time 120
     --dump-header -
     --output /dev/null
-    --header "Origin: https://app.tearleads.de"
+    --header "Origin: https://app.balebase.com"
   )
 
   if [[ -n "$VERIFY_DOH_URL" ]]; then
@@ -82,7 +82,7 @@ verify_auth_cors() {
 
   echo "Checking $method auth session CORS..."
   headers="$(curl "${curl_args[@]}" \
-    "https://api.tearleads.de/api/auth/get-session")"
+    "https://api.balebase.com/api/auth/get-session")"
   verify_cors_headers "$method auth session response" "$headers"
 }
 
@@ -98,7 +98,7 @@ verify_edge_error_cors() {
     --dump-header -
     --output /dev/null
     --write-out $'\n%{http_code}'
-    --header "Origin: https://app.tearleads.de"
+    --header "Origin: https://app.balebase.com"
   )
 
   if [[ -n "$VERIFY_DOH_URL" ]]; then
@@ -108,7 +108,7 @@ verify_edge_error_cors() {
   # Cloudflare documents this as a test endpoint for its own 522 response.
   echo "Checking Cloudflare edge error CORS..."
   response="$(curl "${curl_args[@]}" \
-    "https://api.tearleads.de/cdn-cgi/error/522")"
+    "https://api.balebase.com/cdn-cgi/error/522")"
   status="${response##*$'\n'}"
   headers="${response%$'\n'*}"
   if [[ "$status" != "522" ]]; then
@@ -121,8 +121,8 @@ verify_edge_error_cors() {
 verify_auth_cors GET
 verify_auth_cors OPTIONS
 verify_edge_error_cors
-verify_url "app" "https://app.tearleads.de"
-verify_url "website" "https://tearleads.de"
-verify_url "privacy policy" "https://tearleads.de/privacy"
-verify_url "terms of service" "https://tearleads.de/terms"
-verify_url "data retention policy" "https://tearleads.de/data-retention"
+verify_url "app" "https://app.balebase.com"
+verify_url "website" "https://balebase.com"
+verify_url "privacy policy" "https://balebase.com/privacy"
+verify_url "terms of service" "https://balebase.com/terms"
+verify_url "data retention policy" "https://balebase.com/data-retention"

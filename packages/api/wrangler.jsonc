@@ -1,6 +1,6 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "tearleads-api",
+  "name": "balebase-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-17",
   "compatibility_flags": ["nodejs_compat"],
@@ -12,13 +12,13 @@
     "crons": ["17 * * * *"]
   },
   "vars": {
-    "AUTH_EMAIL_FROM": "security@auth.tearleads.de",
-    "BETTER_AUTH_URL": "https://api.tearleads.de",
-    "CORS_ORIGIN": "https://app.tearleads.de",
+    "AUTH_EMAIL_FROM": "security@auth.balebase.com",
+    "BETTER_AUTH_URL": "https://api.balebase.com",
+    "CORS_ORIGIN": "https://app.balebase.com",
     "CHECKR_ENV": "production",
-    "INBOUND_EMAIL_DOMAIN": "inbox.tearleads.de",
+    "INBOUND_EMAIL_DOMAIN": "inbox.balebase.com",
     "PLAID_ENV": "sandbox",
-    "PLAID_REDIRECT_URI": "https://app.tearleads.de/finance",
+    "PLAID_REDIRECT_URI": "https://app.balebase.com/finance",
     "STRIPE_PORTAL_CONFIGURATION_ID": "bpc_1U8gHBB19gR8AJxmNFLm8BVk",
     "STRIPE_PRO_LEGACY_PRICE_IDS": "",
     "STRIPE_PRO_PRICE_ID": "price_1U8fg7B19gR8AJxmpcqsWGg8",
@@ -29,17 +29,15 @@
   "d1_databases": [
     {
       "binding": "DB",
-      // Cloudflare D1 names are immutable; retain the original resource name.
-      "database_name": "stealth-db",
-      "database_id": "d2827a94-7088-4648-9b57-5f915da2b909",
+      "database_name": "balebase-db",
+      "database_id": "c661323d-a9f3-4658-9001-59591cea9208",
       "migrations_dir": "migrations"
     }
   ],
   "r2_buckets": [
     {
       "binding": "STORAGE",
-      // R2 buckets cannot be renamed; retain the existing data-bearing bucket.
-      "bucket_name": "stealth-objects"
+      "bucket_name": "balebase-objects"
     }
   ],
   "images": {
@@ -48,7 +46,7 @@
   "send_email": [
     {
       "name": "EMAIL",
-      "allowed_sender_addresses": ["security@auth.tearleads.de"]
+      "allowed_sender_addresses": ["security@auth.balebase.com"]
     }
   ]
 }

@@ -18,7 +18,7 @@ else
 fi
 
 API_BASE="https://api.cloudflare.com/client/v4"
-ZONE_NAME="tearleads.de"
+ZONE_NAME="balebase.com"
 DEPLOY_TIER="${DEPLOY_TIER:-prod}"
 if [[ "$DEPLOY_TIER" != "prod" && "$DEPLOY_TIER" != "staging" ]]; then
   echo "ERROR: Unknown deployment tier: $DEPLOY_TIER" >&2
@@ -85,11 +85,11 @@ check_hostname() {
 }
 
 if [[ "$DEPLOY_TIER" == "staging" ]]; then
-  check_hostname "staging.tearleads.de" "tearleads-website-staging"
-  check_hostname "app-staging.tearleads.de" "tearleads-client-staging"
-  check_hostname "api-staging.tearleads.de" "tearleads-api-staging"
+  check_hostname "website-staging.balebase.com" "balebase-website-staging"
+  check_hostname "app-staging.balebase.com" "balebase-client-staging"
+  check_hostname "api-staging.balebase.com" "balebase-api-staging"
 else
-  check_hostname "tearleads.de" "tearleads-website"
-  check_hostname "app.tearleads.de" "tearleads-client"
-  check_hostname "api.tearleads.de" "tearleads-api"
+  check_hostname "balebase.com" "balebase-website"
+  check_hostname "app.balebase.com" "balebase-client"
+  check_hostname "api.balebase.com" "balebase-api"
 fi

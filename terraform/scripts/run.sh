@@ -26,6 +26,17 @@ else
   load_cloudflare_env
 fi
 
+if [[ -z "${TF_STATE_ACCESS_KEY_ID:-}" || -z "${TF_STATE_SECRET_ACCESS_KEY:-}" ]]; then
+  echo "ERROR: Missing TF_STATE_ACCESS_KEY_ID or TF_STATE_SECRET_ACCESS_KEY." >&2
+  echo "The R2 state backend needs them in .secrets/$TIER/app.env." >&2
+  exit 1
+fi
+# Only Terraform sees the state keys, and an ambient AWS profile or session
+# cannot redirect the backend.
+unset AWS_PROFILE AWS_SESSION_TOKEN
+export AWS_ACCESS_KEY_ID="$TF_STATE_ACCESS_KEY_ID"
+export AWS_SECRET_ACCESS_KEY="$TF_STATE_SECRET_ACCESS_KEY"
+
 if [[ $# -eq 0 ]]; then
   set -- plan
 fi

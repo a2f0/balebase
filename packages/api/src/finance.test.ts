@@ -1035,14 +1035,14 @@ function financePath(path: string) {
 
 function bindingsFor(database: Database): Bindings {
   return {
-    AUTH_EMAIL_FROM: "security@auth.tearleads.de",
+    AUTH_EMAIL_FROM: "security@auth.balebase.com",
     BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
     BETTER_AUTH_URL: "https://api.test",
     CORS_ORIGIN: "https://app.test",
     DB: toD1(database),
     EMAIL: {} as SendEmail,
     IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.tearleads.de",
+    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
     PLAID_CLIENT_ID: "client-test",
     PLAID_ENV: "sandbox",
     PLAID_REDIRECT_URI: "https://app.test/finance",

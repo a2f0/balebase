@@ -12,31 +12,31 @@ variable "cloudflare_account_id" {
 variable "domain" {
   description = "Cloudflare zone used by the product."
   type        = string
-  default     = "tearleads.de"
+  default     = "balebase.com"
 }
 
 variable "d1_database_name" {
   description = "Name of the D1 database bound to the API Worker."
   type        = string
-  default     = "stealth-db-staging"
+  default     = "balebase-db-staging"
 }
 
 variable "r2_bucket_name" {
   description = "Name of the R2 bucket bound to the API Worker."
   type        = string
-  default     = "stealth-objects-staging"
+  default     = "balebase-objects-staging"
 }
 
 variable "inbound_email_subdomain" {
   description = "Subdomain that receives organization uploads through Email Routing."
   type        = string
-  default     = "inbox-staging.tearleads.de"
+  default     = "inbox-staging.balebase.com"
 }
 
 variable "inbound_email_address" {
   description = "Base email address routed to the API Worker's email handler."
   type        = string
-  default     = "upload@inbox-staging.tearleads.de"
+  default     = "upload@inbox-staging.balebase.com"
 }
 
 variable "enable_custom_domains" {
@@ -54,35 +54,35 @@ variable "enable_email_routing" {
 variable "website_hostname" {
   description = "Hostname for the Astro marketing website Worker."
   type        = string
-  default     = "staging.tearleads.de"
+  default     = "website-staging.balebase.com"
 }
 
 variable "client_hostname" {
   description = "Hostname for the React client Worker."
   type        = string
-  default     = "app-staging.tearleads.de"
+  default     = "app-staging.balebase.com"
 }
 
 variable "api_hostname" {
   description = "Hostname for the API Worker."
   type        = string
-  default     = "api-staging.tearleads.de"
+  default     = "api-staging.balebase.com"
 }
 
 variable "website_worker_name" {
   description = "Deployed name of the website Worker."
   type        = string
-  default     = "tearleads-website-staging"
+  default     = "balebase-website-staging"
 }
 
 variable "client_worker_name" {
   description = "Deployed name of the client Worker."
   type        = string
-  default     = "tearleads-client-staging"
+  default     = "balebase-client-staging"
 }
 
 variable "api_worker_name" {
   description = "Deployed name of the API Worker."
   type        = string
-  default     = "tearleads-api-staging"
+  default     = "balebase-api-staging"
 }

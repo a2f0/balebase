@@ -11,7 +11,7 @@ under `packages/`:
 - `packages/website` — static Astro marketing site.
 
 Infrastructure lives outside the workspaces in `terraform` (D1, R2, and
-`tearleads.de` Worker-domain infrastructure).
+`balebase.com` Worker-domain infrastructure).
 
 ## Start locally
 

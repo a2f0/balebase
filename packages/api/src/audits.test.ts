@@ -3643,14 +3643,14 @@ function bindingsFor(
   },
 ): Bindings {
   return {
-    AUTH_EMAIL_FROM: "security@auth.tearleads.de",
+    AUTH_EMAIL_FROM: "security@auth.balebase.com",
     BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
     BETTER_AUTH_URL: "https://api.test",
     CORS_ORIGIN: "https://app.test",
     DB: toD1(database, databaseControl),
     EMAIL: {} as SendEmail,
     IMAGES: imagesFor(),
-    INBOUND_EMAIL_DOMAIN: "inbox.tearleads.de",
+    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
     STRIPE_PRO_PRICE_ID: "price_pro_test",
     STORAGE: storageFor(stored, storageControl),
   };

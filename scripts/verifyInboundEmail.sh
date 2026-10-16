@@ -26,15 +26,15 @@ else
 fi
 
 API_BASE="https://api.cloudflare.com/client/v4"
-ZONE_NAME="tearleads.de"
+ZONE_NAME="balebase.com"
 if [[ "$DEPLOY_TIER" == "staging" ]]; then
-  INBOUND_DOMAIN="inbox-staging.tearleads.de"
-  INBOUND_ADDRESS="upload@inbox-staging.tearleads.de"
-  WORKER_NAME="tearleads-api-staging"
+  INBOUND_DOMAIN="inbox-staging.balebase.com"
+  INBOUND_ADDRESS="upload@inbox-staging.balebase.com"
+  WORKER_NAME="balebase-api-staging"
 else
-  INBOUND_DOMAIN="inbox.tearleads.de"
-  INBOUND_ADDRESS="upload@inbox.tearleads.de"
-  WORKER_NAME="tearleads-api"
+  INBOUND_DOMAIN="inbox.balebase.com"
+  INBOUND_ADDRESS="upload@inbox.balebase.com"
+  WORKER_NAME="balebase-api"
 fi
 
 cloudflare_get() {

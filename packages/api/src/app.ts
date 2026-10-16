@@ -92,7 +92,7 @@ app.all("/api/auth/*", (context) =>
 );
 
 app.get("/", (context) =>
-  context.json({ name: "tearleads-api", documentation: "/api" }),
+  context.json({ name: "balebase-api", documentation: "/api" }),
 );
 
 app.get("/health", (context) =>

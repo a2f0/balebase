@@ -6,7 +6,7 @@ import {
   workspaceContentKey,
 } from "./accountNavigation";
 
-const origin = "https://app.tearleads.de";
+const origin = "https://app.balebase.com";
 
 describe("account navigation", () => {
   it("preserves an invitation while another account signs in", () => {

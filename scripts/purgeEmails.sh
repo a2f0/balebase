@@ -89,7 +89,7 @@ while IFS=$'\t' read -r email_id organization_id deleted_at; do
 
   while IFS= read -r object_key; do
     [[ -z "$object_key" ]] && continue
-    bunx --bun wrangler r2 object delete "stealth-objects/$object_key" \
+    bunx --bun wrangler r2 object delete "balebase-objects/$object_key" \
       "${wrangler_storage_args[@]}" --force
   done <<<"$object_keys"
 
