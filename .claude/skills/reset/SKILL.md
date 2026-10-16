@@ -152,8 +152,8 @@ fi
    # Honor the *complete* upstream: the remote AND the branch name it maps to.
    UPSTREAM_REF=$(git config "branch.$TARGET_BRANCH.merge" 2>/dev/null || echo "refs/heads/$TARGET_BRANCH")
    git check-ref-format "$UPSTREAM_REF" >/dev/null || { echo "Error: invalid upstream ref $UPSTREAM_REF; hooks not installed" >&2; exit 1; }
-   git -c core.hooksPath=/dev/null fetch "$REMOTE" --prune || { echo "Error: prune failed; hooks not installed" >&2; exit 1; }
-   git -c core.hooksPath=/dev/null fetch "$REMOTE" "$UPSTREAM_REF" || { echo "Error: upstream fetch failed; hooks not installed" >&2; exit 1; }
+   git -c core.hooksPath=/dev/null -c core.fsmonitor=false fetch "$REMOTE" --prune || { echo "Error: prune failed; hooks not installed" >&2; exit 1; }
+   git -c core.hooksPath=/dev/null -c core.fsmonitor=false fetch "$REMOTE" "$UPSTREAM_REF" || { echo "Error: upstream fetch failed; hooks not installed" >&2; exit 1; }
    FETCHED_UPSTREAM=$(git rev-parse --verify 'FETCH_HEAD^{commit}') || { echo "Error: fetched upstream is not a commit; hooks not installed" >&2; exit 1; }
    LOCAL_TARGET=""
    if git show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
@@ -177,7 +177,7 @@ fi
    ```bash
    TARGET_CHECKOUTS=$(git worktree list --porcelain | grep -cxF "branch refs/heads/$TARGET_BRANCH") || :
    if [ "$BRANCH" != "$TARGET_BRANCH" ] && [ "$TARGET_CHECKOUTS" != 0 ]; then
-     git -c core.hooksPath=/dev/null switch --detach "$FETCHED_UPSTREAM" || { echo "Error: could not detach at the fetched $TARGET_BRANCH; hooks not installed" >&2; exit 1; }
+     git -c core.hooksPath=/dev/null -c core.fsmonitor=false switch --detach "$FETCHED_UPSTREAM" || { echo "Error: could not detach at the fetched $TARGET_BRANCH; hooks not installed" >&2; exit 1; }
    elif [ -z "$LOCAL_TARGET" ]; then
      git -c core.hooksPath=/dev/null switch -c "$TARGET_BRANCH" "$FETCHED_UPSTREAM" || { echo "Error: could not create $TARGET_BRANCH at its fetched upstream; hooks not installed" >&2; exit 1; }
      git config --local "branch.$TARGET_BRANCH.remote" "$REMOTE" || { echo "Error: could not configure $TARGET_BRANCH remote; hooks not installed" >&2; exit 1; }

@@ -117,6 +117,12 @@ const fixtureHelpers = [
   '    chmod +x ".git/hooks/$hook"',
   "  done",
   "}",
+  // Configures an fsmonitor command, which runs even with hooks disabled.
+  "arm_fsmonitor() {",
+  '  printf \'#!/bin/sh\\ntouch "%s/hook-ran"\\nexit 1\\n\' "$FIXTURE" > ../fsmonitor',
+  "  chmod +x ../fsmonitor",
+  '  git config core.fsmonitor "$FIXTURE/fsmonitor"',
+  "}",
 ];
 
 function run(script: string, cwd: string, env: Record<string, string> = {}) {
@@ -172,7 +178,7 @@ function advanceOrigin(fixture: string) {
   const advanced = run(
     [
       "set -eu",
-      "git -c core.hooksPath=/dev/null fetch -q origin main",
+      "git -c core.hooksPath=/dev/null -c core.fsmonitor=false fetch -q origin main",
       'later=$(git commit-tree -p FETCH_HEAD -m later "FETCH_HEAD^{tree}")',
       'git -c core.hooksPath=/dev/null push -q origin "$later:refs/heads/main"',
       'printf "%s" "$later"',
@@ -230,12 +236,13 @@ test("squash-merge keeps worktrees holding ignored files beyond build output", (
     );
   }
 
-  withFixture([], (fixture) => {
+  withFixture(["arm_hooks", "arm_fsmonitor"], (fixture) => {
     const clean = run(
       `${helper}\nholds_ignored_state .`,
       path.join(fixture, "primary"),
     );
     expect(clean.status).toBe(1);
+    expect(existsSync(path.join(fixture, "hook-ran"))).toBe(false);
   });
 
   // Under pipefail, stopping at the first kept file would cut the listing
@@ -297,6 +304,7 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
       "git worktree add -q --detach ../detached",
       "branch self; merged self",
       "arm_hooks",
+      "arm_fsmonitor",
     ],
     (fixture) => {
       const result = run(
@@ -366,7 +374,12 @@ test("a merge from a linked worktree detaches, resets, and retires it", () => {
   const { cleanup, helper, retire } = squashMergeSnippets();
   const resetScript = resetSnippet();
   for (const name of featureNames) {
-    const setup = [`branch ${name}`, `squash ${name}`, "arm_hooks"];
+    const setup = [
+      `branch ${name}`,
+      `squash ${name}`,
+      "arm_hooks",
+      "arm_fsmonitor",
+    ];
     withFixture(setup, (fixture) => {
       const primary = path.join(fixture, "primary");
       const feature = path.join(fixture, name);
