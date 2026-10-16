@@ -106,17 +106,19 @@ TAR_BIN=$(resolve_bootstrap_tool tar) || exit 1
 PATH="${GIT_BIN%/*}:${GH_BIN%/*}:${BUN_BIN%/*}:${TAR_BIN%/*}:/usr/bin:/bin:/usr/sbin:/sbin"
 export PATH
 
-# `git worktree remove` deletes ignored files without asking. Keep a worktree
-# holding any that may be the only copy of local credentials, Terraform state,
-# or Wrangler's local D1 and R2 data, wherever they sit — including inside
-# ignored directories. Names are read NUL-delimited, since git quotes unusual
-# ones. A listing git cannot produce stands in as an ignored `.env`, so an
-# unreadable worktree is kept.
+# `git worktree remove` deletes ignored files without asking. Only build output
+# is known to be disposable; any other ignored file may be the only copy of
+# local credentials, Terraform state or variables, or Wrangler's local D1 and
+# R2 data, so it keeps the worktree. Names are read NUL-delimited, since git
+# quotes unusual ones. Every line is counted rather than stopping at the first,
+# so under pipefail an early exit cannot cut the listing short and read as
+# clean. A listing git cannot produce, or a count grep cannot make, keeps it.
 holds_ignored_state() {
-  { git -C "${1}" ls-files -z --others --ignored --exclude-standard ||
-    printf '.env\0'; } |
+  ignored_kept=$({ git -C "${1}" ls-files -z --others --ignored --exclude-standard ||
+    printf 'unlisted\0'; } |
     tr '\0' '\n' |
-    grep -qE '(^|/)(\.secrets/|\.wrangler/state/|\.env[^/]*$|[^/]*\.tfstate[^/]*$)'
+    grep -cvE '(^|/)(node_modules|\.turbo|dist|\.astro|\.terraform-lint|\.wrangler/tmp)/|\.tsbuildinfo$|(^|/)\.DS_Store$') || :
+  [ "$ignored_kept" != 0 ]
 }
 
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
@@ -355,7 +357,7 @@ as-is.
      MERGED_HEADS=$(gh pr list -R "$REPO" --head "$WT_BRANCH" --state merged --json headRefOid -q '.[].headRefOid') || { echo "Kept $WT_PATH (PR lookup failed)"; continue; }
      printf '%s\n' "$MERGED_HEADS" | grep -qxF "$WT_HEAD" || { echo "Kept $WT_PATH (no merged PR at its tip)"; continue; }
      WT_STATUS=$(git -C "$WT_PATH" status --porcelain --untracked-files=all) && [ -z "$WT_STATUS" ] || { echo "Kept $WT_PATH (uncommitted, untracked, or unreadable)"; continue; }
-     if holds_ignored_state "$WT_PATH"; then echo "Kept $WT_PATH (ignored credentials or local state)"; continue; fi
+     if holds_ignored_state "$WT_PATH"; then echo "Kept $WT_PATH (ignored files beyond build output)"; continue; fi
      git worktree remove "$WT_PATH" || { echo "Kept $WT_PATH (git worktree remove refused)"; continue; }
      [ "$(git rev-parse --verify --quiet "refs/heads/$WT_BRANCH^{commit}")" != "$WT_HEAD" ] || git branch -D "$WT_BRANCH" >/dev/null
      echo "Removed $WT_PATH ($WT_BRANCH)"
@@ -369,15 +371,16 @@ as-is.
      fresh one that only sits at the base tip, and one with commits added after
      its PR merged.
    - **It must also be safe to delete.** Removal requires no uncommitted or
-     untracked files. `holds_ignored_state` must also find no ignored `.env*`,
-     `*.tfstate*`, `.secrets/`, or `.wrangler/state/` file anywhere in the
-     tree, including inside ignored directories. `git worktree remove` deletes
-     ignored files without asking, and those may be the only copy of local
-     credentials, Terraform state, or the local D1 databases and R2 uploads
-     `wrangler dev` persists. Wrangler's disposable `.wrangler/tmp/` bundles
-     do not count. A `terraform init` leaves `.terraform/terraform.tfstate`,
-     and a local Wrangler run leaves `.wrangler/state/`, so such worktrees are
-     kept and listed for the user. Both checks fail closed: a worktree git
+     untracked files. `holds_ignored_state` must also find every ignored file
+     to be build output: under `node_modules/`, `.turbo/`, `dist/`, `.astro/`,
+     `.terraform-lint/`, or `.wrangler/tmp/`, or a `*.tsbuildinfo` or
+     `.DS_Store`. `git worktree remove` deletes ignored files without asking,
+     and anything else ignored — `.env*`, `.secrets`, Terraform state, plans,
+     variables, and overrides, rendered `wrangler.staging.jsonc`, and the
+     local D1 databases and R2 uploads in `.wrangler/state/` — may be the only
+     copy. An ignore rule added later is protected until it joins that list.
+     A `terraform init` or a local Wrangler run therefore keeps a worktree,
+     and it is listed for the user. Both checks fail closed: a worktree git
      cannot read is kept.
    - **Detached worktrees are kept and listed.** Nothing ties a detached HEAD
      to a PR, and a session that just ran `git worktree add --detach` looks the
@@ -405,15 +408,15 @@ as-is.
      [ -d "$PRIMARY_WORKTREE" ] || { echo "Error: primary checkout not found; keeping $SELF_ROOT" >&2; exit 1; }
      git merge-base --is-ancestor "$MERGE_COMMIT" HEAD || { echo "Error: HEAD does not contain $MERGE_COMMIT; keeping $SELF_ROOT" >&2; exit 1; }
      if git show-ref --verify --quiet "refs/heads/$MERGED_BRANCH"; then echo "Error: $MERGED_BRANCH still exists; keeping $SELF_ROOT" >&2; exit 1; fi
-     if holds_ignored_state "$SELF_ROOT"; then echo "Error: ignored credentials or local state; keeping $SELF_ROOT" >&2; exit 1; fi
+     if holds_ignored_state "$SELF_ROOT"; then echo "Error: ignored files beyond build output; keeping $SELF_ROOT" >&2; exit 1; fi
      cd "$PRIMARY_WORKTREE" || exit 1
      git worktree remove "$SELF_ROOT" || { echo "Error: git worktree remove refused; keeping $SELF_ROOT" >&2; exit 1; }
    fi
    ```
 
    - **The gates mirror the sweep.** HEAD must contain the merge commit, the
-     merged branch must be gone, and `holds_ignored_state` must find no ignored
-     credentials or state at risk. `git worktree remove` without `--force`
+     merged branch must be gone, and `holds_ignored_state` must find nothing
+     ignored beyond build output. `git worktree remove` without `--force`
      refuses untracked files. On any refusal the worktree stays detached at the
      base tip; report why.
    - **Leave a harness-managed worktree through the harness.** If this session

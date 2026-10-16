@@ -62,7 +62,8 @@ const fixtureHelpers = [
   'mkdir -p "$FIXTURE/merged"',
   'git init -q -b main "$FIXTURE/primary"',
   'cd "$FIXTURE/primary"',
-  "printf '%s\\n' '.env*' .secrets/ .wrangler/ build/ > .gitignore",
+  "printf '%s\\n' '.env*' .secrets/ .wrangler/ .terraform/ dist/ node_modules/ > .gitignore",
+  "printf '%s\\n' '*.tsbuildinfo' '*.tfvars' override.tf >> .gitignore",
   "git add .gitignore",
   "git commit -q -m init",
   "branch() {",
@@ -119,18 +120,21 @@ function worktreeNames(fixture: string) {
     .sort();
 }
 
-test("squash-merge keeps worktrees holding ignored credentials or state", () => {
+test("squash-merge keeps worktrees holding ignored files beyond build output", () => {
   const { helper } = squashMergeSnippets();
   const cases: [ignoredFile: string, held: boolean][] = [
-    ["build/app.js", false],
-    [".env.local", true],
-    [".secrets/prod.json", true],
-    // Git quotes a non-ASCII name unless it is read NUL-delimited.
-    [".secrets/prodé.json", true],
-    ["build/upload/.env", true],
-    ["build/.terraform/terraform.tfstate", true],
-    ["packages/api/.wrangler/state/v3/d1/db.sqlite", true],
+    ["dist/app.js", false],
+    ["node_modules/pkg/.env", false],
+    ["tsconfig.tsbuildinfo", false],
     ["packages/api/.wrangler/tmp/bundle/index.js", false],
+    // Git quotes a non-ASCII name unless it is read NUL-delimited.
+    ["dist/appé.js", false],
+    [".secrets/prodé.json", true],
+    [".env.local", true],
+    ["terraform/prod.tfvars", true],
+    ["terraform/override.tf", true],
+    ["terraform/.terraform/terraform.tfstate", true],
+    ["packages/api/.wrangler/state/v3/d1/db.sqlite", true],
   ];
   for (const [ignoredFile, held] of cases) {
     withFixture(
@@ -149,7 +153,28 @@ test("squash-merge keeps worktrees holding ignored credentials or state", () => 
     );
   }
 
-  // A listing git cannot produce counts as holding state.
+  withFixture([], (fixture) => {
+    const clean = run(
+      `${helper}\nholds_ignored_state .`,
+      path.join(fixture, "primary"),
+    );
+    expect(clean.status).toBe(1);
+  });
+
+  // Under pipefail, stopping at the first kept file would cut the listing
+  // short, and the broken pipe would read as clean.
+  withFixture(
+    ["mkdir dist", "(cd dist && seq 20000 | xargs touch)", ": > .env"],
+    (fixture) => {
+      const result = run(
+        `set -o pipefail\n${helper}\nholds_ignored_state .`,
+        path.join(fixture, "primary"),
+      );
+      expect(result.status).toBe(0);
+    },
+  );
+
+  // A listing git cannot produce keeps the worktree.
   const unreadable = run(
     `${helper}\nholds_ignored_state /nonexistent/checkout`,
     tmpdir(),
@@ -162,6 +187,9 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
   withFixture(
     [
       "branch done; merged done",
+      "branch built; merged built",
+      "mkdir -p ../built/dist ../built/node_modules/pkg",
+      ": > '../built/dist/appé.js'; : > ../built/node_modules/pkg/.env",
       "branch bundled; merged bundled",
       "mkdir -p ../bundled/.wrangler/tmp; : > ../bundled/.wrangler/tmp/index.js",
       "branch wrangler; merged wrangler",
@@ -196,6 +224,7 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
           ]),
       );
       expect(outcomes).toEqual({
+        built: "Removed: feat/built",
         bundled: "Removed: feat/bundled",
         detached: "Kept: detached HEAD",
         dirty: "Kept: uncommitted, untracked, or unreadable",
@@ -203,9 +232,9 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
         locked: "Kept: locked",
         moved: "Kept: no merged PR at its tip",
         open: "Kept: no merged PR at its tip",
-        quoted: "Kept: ignored credentials or local state",
-        state: "Kept: ignored credentials or local state",
-        wrangler: "Kept: ignored credentials or local state",
+        quoted: "Kept: ignored files beyond build output",
+        state: "Kept: ignored files beyond build output",
+        wrangler: "Kept: ignored files beyond build output",
       });
       expect(worktreeNames(fixture)).toEqual([
         "detached",
@@ -220,6 +249,7 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
         "wrangler",
       ]);
       expect(existsSync(path.join(fixture, "done"))).toBe(false);
+      expect(existsSync(path.join(fixture, "built"))).toBe(false);
       expect(existsSync(path.join(fixture, "bundled"))).toBe(false);
       const branches = run(
         "git branch --format='%(refname:short)'",
