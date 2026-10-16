@@ -68,6 +68,7 @@ describe("organization state", () => {
       "/organization/people/member%2F1",
     );
     expect(organizationSettingsPage("/organization/access")).toBe("access");
+    expect(organizationSettingsPage("/organization/api-keys")).toBe("api-keys");
     expect(organizationSettingsPage("/organization/unknown")).toBe("general");
   });
 

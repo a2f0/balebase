@@ -19,6 +19,7 @@ export interface ActivityEvent {
 }
 
 interface ActivityDetails {
+  access?: unknown;
   after?: unknown;
   afterEmail?: unknown;
   afterName?: unknown;
@@ -33,6 +34,7 @@ interface ActivityDetails {
   filename?: unknown;
   make?: unknown;
   model?: unknown;
+  prefix?: unknown;
   priority?: unknown;
   prompt?: unknown;
   purchaseDate?: unknown;

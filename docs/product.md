@@ -109,6 +109,51 @@ DMARC policy are isolated under `auth.tearleads.de`; Google Workspace remains
 responsible for mail at the apex. The deployment script uploads the auth secret
 to the Worker but never places it in Wrangler configuration or Terraform state.
 
+## API keys and MCP
+
+Organization owners and admins create API keys under **Organization → API
+keys** (`/organization/api-keys`). Each key has a name, an access level (read
+everything, or read and write everything), and an expiration of 30 days, 90
+days, one year, or never. The `tlk_` token is shown once at creation; D1 keeps
+only its SHA-256 hash and an identifying prefix. An organization can have 50
+active keys. Creating and revoking keys appear in the Activity feed, and each
+key records when it was last used, to the minute.
+
+A key acts as the person who created it, inside its own organization only. It
+never carries the platform `admin` role, cannot be created while impersonating,
+and follows the same seat, Finance group, and two-factor rules as its creator's
+session. A key counts as two-factor verified only when the session that created
+it was; if the organization later requires two-factor authentication, create a
+new key after signing in with it. A key stops working when it is revoked or
+expires, when its creator is no longer an owner or admin there, or when the
+organization is deleted. Send it as `Authorization: Bearer <key>`. Keys reach
+the workspace routes: activity, audits, businesses, contracts, employee forms,
+equipment, finance, inbox, library folders and files, groups, `/api/me`, and the
+people list. Read keys may only use `GET`. Account settings, billing,
+organization settings, API key management, root administration, and Better Auth
+endpoints stay session-only, so a leaked key cannot create more keys or change
+sign-in security.
+
+The MCP server is at `https://api.tearleads.de/mcp` and uses Streamable HTTP
+with the official TypeScript SDK. It serves the stateless `2026-07-28`
+revision and, through the SDK's stateless fallback, clients that still open
+with `initialize`. It keeps no sessions and has no standalone event stream.
+It accepts only API keys and rejects browser origins other than the client.
+Each tool calls one REST route with the caller's key, so the route's own
+validation and permissions apply; read keys are offered only the read tools.
+Tools do not upload or download files, connect or remove Plaid institutions,
+or reconcile Checkr invitations; use the app for those. Connect Claude Code
+with:
+
+```sh
+claude mcp add --transport http tearleads https://api.tearleads.de/mcp \
+  --header "Authorization: Bearer <key>"
+```
+
+Other clients need Streamable HTTP and a custom header. There is no OAuth
+authorization server yet, so clients that only support OAuth cannot connect.
+Apply migration `0060_create_organization_api_keys.sql` before deploying.
+
 ## Library folders and inbox links
 
 Library documents can be organized into flat, organization-scoped folders,
