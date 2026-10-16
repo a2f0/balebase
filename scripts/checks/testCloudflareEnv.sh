@@ -151,4 +151,9 @@ expect_output \
   load_tier_env prod
 expect_failure 'Missing required Cloudflare variables' load_cloudflare_env
 
+# A malformed line stops the caller instead of loading partial credentials.
+printf '%s\n' TF_VAR_cloudflare_account_id=shared-account not-an-assignment \
+  > "$FIXTURE/.secrets/prod/shared.env"
+expect_failure 'not-an-assignment' load_cloudflare_env
+
 echo 'Secrets tier loading checks passed.'
