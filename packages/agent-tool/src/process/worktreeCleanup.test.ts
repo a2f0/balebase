@@ -39,13 +39,17 @@ function skillSnippets(skill: string) {
 
 function squashMergeSnippets() {
   const skill = skillSnippets("squash-merge");
-  const helper = /^holds_ignored_state\(\) \{\n[\s\S]*?\n\}$/m.exec(
-    skill.content,
+  const helpers = ["holds_ignored_state", "hides_tracked_changes"].map(
+    (name) => {
+      const helper = new RegExp(`^${name}\\(\\) \\{\\n[\\s\\S]*?\\n\\}$`, "m");
+      const match = helper.exec(skill.content);
+      expect({ name, found: match !== null }).toEqual({ name, found: true });
+      return match?.[0] ?? "";
+    },
   );
-  expect(helper).not.toBeNull();
   return {
     cleanup: skill.block("BASE_CHECKOUTS="),
-    helper: helper?.[0] ?? "",
+    helper: helpers.join("\n"),
     retire: skill.block("GIT_COMMON_DIR="),
     sweep: skill.block("worktree prune"),
   };
@@ -92,7 +96,8 @@ const fixtureHelpers = [
   'cd "$FIXTURE/primary"',
   "printf '%s\\n' '.env*' .secrets/ .wrangler/ .terraform/ dist/ > .gitignore",
   "printf '%s\\n' node_modules/ '*.tsbuildinfo' '*.tfvars' override.tf >> .gitignore",
-  "git add .gitignore",
+  "printf 'base\\n' > README",
+  "git add .gitignore README",
   "git commit -q -m init",
   'git remote add origin "$FIXTURE/origin.git"',
   "git push -q origin main",
@@ -266,6 +271,42 @@ test("squash-merge keeps worktrees holding ignored files beyond build output", (
   expect(unreadable.status).toBe(0);
 });
 
+test("squash-merge keeps worktrees whose tracked edits status cannot see", () => {
+  const { helper } = squashMergeSnippets();
+  const cases: [name: string, setup: string[], hidden: boolean][] = [
+    ["clean", [], false],
+    [
+      "assume-unchanged edit",
+      ["echo edit >> README", "git update-index --assume-unchanged README"],
+      true,
+    ],
+    [
+      "skip-worktree edit",
+      ["git update-index --skip-worktree README", "echo edit >> README"],
+      true,
+    ],
+  ];
+  for (const [name, setup, hidden] of cases) {
+    withFixture(setup, (fixture) => {
+      const result = run(
+        `${helper}\nhides_tracked_changes .`,
+        path.join(fixture, "primary"),
+      );
+      expect({ name, status: result.status }).toEqual({
+        name,
+        status: hidden ? 0 : 1,
+      });
+    });
+  }
+
+  // A listing git cannot produce keeps the worktree.
+  const unreadable = run(
+    `${helper}\nhides_tracked_changes /nonexistent/checkout`,
+    tmpdir(),
+  );
+  expect(unreadable.status).toBe(0);
+});
+
 test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
   const { helper, sweep } = squashMergeSnippets();
   // Another session commits to feat/raced right after its worktree goes.
@@ -301,6 +342,11 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
       "branch quoted; merged quoted; mkdir -p ../quoted/.secrets",
       ": > '../quoted/.secrets/prodé.json'",
       "branch locked; merged locked; git worktree lock ../locked",
+      "branch hidden; merged hidden; echo edit >> ../hidden/README",
+      "git -C ../hidden update-index --assume-unchanged README",
+      "branch skipped; merged skipped",
+      "git -C ../skipped update-index --skip-worktree README",
+      "echo edit >> ../skipped/README",
       "git worktree add -q --detach ../detached",
       "branch self; merged self",
       "arm_hooks",
@@ -329,23 +375,27 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
         detached: "Kept: detached HEAD",
         dirty: "Kept: uncommitted, untracked, or unreadable",
         done: "Removed: feat/done",
+        hidden: "Kept: tracked files hidden from status",
         locked: "Kept: locked",
         moved: "Kept: no merged PR at its tip",
         open: "Kept: no merged PR at its tip",
         quoted: "Kept: ignored files beyond build output",
         raced: "Removed: kept feat/raced, which moved",
+        skipped: "Kept: tracked files hidden from status",
         state: "Kept: ignored files beyond build output",
         wrangler: "Kept: ignored files beyond build output",
       });
       expect(worktreeNames(fixture)).toEqual([
         "detached",
         "dirty",
+        "hidden",
         "locked",
         "moved",
         "open",
         "primary",
         "quoted",
         "self",
+        "skipped",
         "state",
         "wrangler",
       ]);
@@ -475,6 +525,15 @@ test("squash-merge retires its worktree only after a completed cleanup", () => {
   ];
   const cases: [name: string, setup: string[]][] = [
     ["branch still present", detached],
+    [
+      "hidden tracked edit",
+      [
+        ...detached,
+        "git branch -q -D feat/self",
+        "echo edit >> ../self/README",
+        "git -C ../self update-index --assume-unchanged README",
+      ],
+    ],
     [
       "ignored state",
       [...detached, "git branch -q -D feat/self", ": > ../self/.env"],

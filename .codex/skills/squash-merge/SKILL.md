@@ -121,6 +121,16 @@ holds_ignored_state() {
   [ "$ignored_kept" != 0 ]
 }
 
+# Status cannot see edits to tracked files flagged --assume-unchanged or
+# --skip-worktree, and `git worktree remove` would delete them. Any index entry
+# not tagged as a plain cached file keeps the worktree; so does a listing git
+# cannot produce.
+hides_tracked_changes() {
+  flagged=$({ git -C "${1}" -c core.fsmonitor=false ls-files -v || printf 'unlisted\n'; } |
+    grep -cv '^H ') || :
+  [ "$flagged" != 0 ]
+}
+
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 # One gh call for both values, split on the space neither a repo slug nor a
@@ -357,6 +367,7 @@ as-is.
      MERGED_HEADS=$(gh pr list -R "$REPO" --head "$WT_BRANCH" --state merged --json headRefOid -q '.[].headRefOid') || { echo "Kept $WT_PATH (PR lookup failed)"; continue; }
      printf '%s\n' "$MERGED_HEADS" | grep -qxF "$WT_HEAD" || { echo "Kept $WT_PATH (no merged PR at its tip)"; continue; }
      WT_STATUS=$(git -C "$WT_PATH" -c core.hooksPath=/dev/null -c core.fsmonitor=false status --porcelain --untracked-files=all) && [ -z "$WT_STATUS" ] || { echo "Kept $WT_PATH (uncommitted, untracked, or unreadable)"; continue; }
+     if hides_tracked_changes "$WT_PATH"; then echo "Kept $WT_PATH (tracked files hidden from status)"; continue; fi
      if holds_ignored_state "$WT_PATH"; then echo "Kept $WT_PATH (ignored files beyond build output)"; continue; fi
      git -c core.hooksPath=/dev/null -c core.fsmonitor=false worktree remove "$WT_PATH" || { echo "Kept $WT_PATH (git worktree remove refused)"; continue; }
      # Compare-and-delete in one step: a commit landing on the branch after
@@ -377,7 +388,9 @@ as-is.
      fresh one that only sits at the base tip, and one with commits added after
      its PR merged.
    - **It must also be safe to delete.** Removal requires no uncommitted or
-     untracked files. `holds_ignored_state` must also find every ignored file
+     untracked files, and `hides_tracked_changes` must find no tracked file
+     flagged `--assume-unchanged` or `--skip-worktree`, since status cannot see
+     edits to those. `holds_ignored_state` must also find every ignored file
      to be build output: under `node_modules/`, `.turbo/`, `dist/`, `.astro/`,
      `.terraform-lint/`, or `.wrangler/tmp/`, or a `*.tsbuildinfo` or
      `.DS_Store`. `git worktree remove` deletes ignored files without asking,
@@ -386,8 +399,10 @@ as-is.
      local D1 databases and R2 uploads in `.wrangler/state/` — may be the only
      copy. An ignore rule added later is protected until it joins that list.
      A `terraform init` or a local Wrangler run therefore keeps a worktree,
-     and it is listed for the user. Both checks fail closed: a worktree git
-     cannot read is kept.
+     and it is listed for the user. Every check fails closed: a worktree git
+     cannot read is kept. So is one whose path git has to quote, such as a
+     path containing a tab or newline, since the listing above cannot carry
+     it.
    - **Detached worktrees are kept and listed.** Nothing ties a detached HEAD
      to a PR, and a session that just ran `git worktree add --detach` looks the
      same as a leftover. Report them so the user can decide.
@@ -418,6 +433,7 @@ as-is.
      [ -d "$PRIMARY_WORKTREE" ] || { echo "Error: primary checkout not found; keeping $SELF_ROOT" >&2; exit 1; }
      git merge-base --is-ancestor "$MERGE_COMMIT" HEAD || { echo "Error: HEAD does not contain $MERGE_COMMIT; keeping $SELF_ROOT" >&2; exit 1; }
      if git show-ref --verify --quiet "refs/heads/$MERGED_BRANCH"; then echo "Error: $MERGED_BRANCH still exists; keeping $SELF_ROOT" >&2; exit 1; fi
+     if hides_tracked_changes "$SELF_ROOT"; then echo "Error: tracked files hidden from status; keeping $SELF_ROOT" >&2; exit 1; fi
      if holds_ignored_state "$SELF_ROOT"; then echo "Error: ignored files beyond build output; keeping $SELF_ROOT" >&2; exit 1; fi
      cd "$PRIMARY_WORKTREE" || exit 1
      git -c core.hooksPath=/dev/null -c core.fsmonitor=false worktree remove "$SELF_ROOT" || { echo "Error: git worktree remove refused; keeping $SELF_ROOT" >&2; exit 1; }
@@ -425,8 +441,9 @@ as-is.
    ```
 
    - **The gates mirror the sweep.** HEAD must contain the merge commit, the
-     merged branch must be gone, and `holds_ignored_state` must find nothing
-     ignored beyond build output. `git worktree remove` without `--force`
+     merged branch must be gone, `hides_tracked_changes` must find no hidden
+     tracked edits, and `holds_ignored_state` must find nothing ignored beyond
+     build output. `git worktree remove` without `--force`
      refuses untracked files. On any refusal the worktree stays detached at the
      base tip; report why.
    - **Leave a harness-managed worktree through the harness.** If this session
