@@ -4,7 +4,7 @@ import {
   DialogHost,
   dismissDialogs,
   promptDialog,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { Window } from "happy-dom";
 import { act, type ReactNode } from "react";
 import type { Root } from "react-dom/client";

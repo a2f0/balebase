@@ -4,7 +4,7 @@ import {
   Logo,
   promptDialog,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import {
   type CSSProperties,
   type MouseEvent,
@@ -127,7 +127,7 @@ function Sidebar({
       <div className="sidebarInner">
         <div className="sidebarTop">
           <a
-            aria-label="Tearleads home"
+            aria-label="Balebase home"
             className="sidebarBrand"
             href="/"
             onClick={(event) => handleNavigation(event, "/", navigate)}

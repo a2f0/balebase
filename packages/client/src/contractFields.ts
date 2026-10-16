@@ -2,7 +2,7 @@ import {
   type BadgeTone,
   confirmDialog,
   type IconName,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import type {
   ContractEvent,
   ContractStatus,

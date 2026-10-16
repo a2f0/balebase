@@ -12,7 +12,7 @@ import {
   PageBody,
   PageSection,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { ActivityFeed, formatActivityTime } from "./ActivityFeed";
 import {

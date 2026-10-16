@@ -12,7 +12,7 @@ import {
   PageBody,
   PageHeader,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
 import {

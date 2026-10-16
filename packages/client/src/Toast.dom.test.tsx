@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, expect, it } from "bun:test";
-import { Toast, ToastProvider } from "@tearleads/ui/react";
+import { Toast, ToastProvider } from "@balebase/ui/react";
 import { Window } from "happy-dom";
 import { act, StrictMode, useState } from "react";
 import type { Root } from "react-dom/client";

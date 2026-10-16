@@ -1,4 +1,4 @@
-import { dismissDialogs } from "@tearleads/ui/react";
+import { dismissDialogs } from "@balebase/ui/react";
 import { useEffect, useRef } from "react";
 
 const positionKey = "workspacePosition";

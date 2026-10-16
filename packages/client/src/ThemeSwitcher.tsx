@@ -1,4 +1,4 @@
-import { cx, Icon, type IconName } from "@tearleads/ui/react";
+import { cx, Icon, type IconName } from "@balebase/ui/react";
 import {
   setThemePreference,
   type ThemePreference,

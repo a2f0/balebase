@@ -1,4 +1,4 @@
-import { confirmDialog } from "@tearleads/ui/react";
+import { confirmDialog } from "@balebase/ui/react";
 import { useEffect } from "react";
 import { addNavigationGuard } from "./navigationGuard";
 

@@ -156,7 +156,7 @@ function send(
     ...(message.attachments ? { attachments: message.attachments } : {}),
     from: {
       email: environment.AUTH_EMAIL_FROM,
-      name: `${mail.organizationName} via Tearleads`.slice(0, 100),
+      name: `${mail.organizationName} via Balebase`.slice(0, 100),
     },
     ...(mail.sender ? { replyTo: mail.sender.email } : {}),
     subject: message.subject.slice(0, 250),

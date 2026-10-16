@@ -2,7 +2,7 @@ export type AuditTemplateView = "grid" | "list";
 
 export const defaultAuditTemplateView: AuditTemplateView = "grid";
 
-const auditTemplateViewStorageKey = "tearleads.audit-template-view";
+const auditTemplateViewStorageKey = "balebase.audit-template-view";
 
 interface StorageReader {
   getItem(key: string): string | null;

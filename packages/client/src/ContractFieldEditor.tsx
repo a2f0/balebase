@@ -1,4 +1,4 @@
-import { Button, Card, cx, Field, Icon } from "@tearleads/ui/react";
+import { Button, Card, cx, Field, Icon } from "@balebase/ui/react";
 import {
   type KeyboardEvent,
   type MouseEvent,

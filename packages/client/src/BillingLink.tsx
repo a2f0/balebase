@@ -1,4 +1,4 @@
-import { ButtonLink, Toast } from "@tearleads/ui/react";
+import { ButtonLink, Toast } from "@balebase/ui/react";
 import { handleNavigation } from "./workspacePaths";
 
 export const billingPath = "/organization/billing";

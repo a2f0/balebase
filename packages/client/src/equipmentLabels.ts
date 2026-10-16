@@ -1,4 +1,4 @@
-import type { IconName } from "@tearleads/ui/react";
+import type { IconName } from "@balebase/ui/react";
 import { formatLabel } from "./labels";
 
 const typeLabels: Record<string, { icon: IconName; label: string }> = {

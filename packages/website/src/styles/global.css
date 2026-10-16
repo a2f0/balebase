@@ -1,6 +1,6 @@
 /*
  * Marketing-site chrome: page container, skip link, header, and footer.
- * Tokens, type, and components come from @tearleads/ui/styles.css, which
+ * Tokens, type, and components come from @balebase/ui/styles.css, which
  * BaseLayout imports first; this file only arranges them.
  */
 html {

@@ -1,4 +1,4 @@
-# @tearleads/ui
+# @balebase/ui
 
 The design system shared by the marketing site (`packages/website`) and the
 client (`packages/client`). It owns the visual language (tokens, type, and
@@ -8,10 +8,10 @@ component styles) so both apps look like one product.
 
 | Import                     | Contents                                              |
 | -------------------------- | ----------------------------------------------------- |
-| `@tearleads/ui/styles.css` | Self-hosted fonts, tokens, base styles, component CSS |
-| `@tearleads/ui/react`      | Typed React primitives for the client                 |
-| `@tearleads/ui/icons`      | The shared icon vocabulary (Lucide geometry)          |
-| `@tearleads/ui/brand`      | Product name, pricing plans, and legal links          |
+| `@balebase/ui/styles.css`  | Self-hosted fonts, tokens, base styles, component CSS |
+| `@balebase/ui/react`       | Typed React primitives for the client                 |
+| `@balebase/ui/icons`       | The shared icon vocabulary (Lucide geometry)          |
+| `@balebase/ui/brand`       | Product name, pricing plans, and legal links          |
 
 Import `styles.css` once, before any app stylesheet. The website uses the
 same class names directly in Astro markup; the client prefers the React
@@ -115,5 +115,5 @@ both themes, so `.onDark` regions need no theme-specific styles.
   overlapping, and stay visible while scrolling. `Toast` also works alone.
 - `EmptyState` (`icon`, `title`, `actions`, `compact`, `plain`) and `LoadingState`.
 - `Field` wraps a control with its label, hint, and an `optional` marker.
-- `Icon` renders a name from `@tearleads/ui/icons`; `Avatar` and `Logo`
+- `Icon` renders a name from `@balebase/ui/icons`; `Avatar` and `Logo`
   render identity.

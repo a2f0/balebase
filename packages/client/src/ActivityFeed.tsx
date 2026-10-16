@@ -6,7 +6,7 @@ import {
   EmptyState,
   LoadingState,
   PageSection,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type ActivityEvent,

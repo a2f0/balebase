@@ -39,9 +39,9 @@
           "level": "error",
           "options": {
             "paths": {
-              "@tearleads/api": "Do not import from the API Worker package",
-              "@tearleads/client": "Do not import from the client deployment target",
-              "@tearleads/website": "Do not import from the website deployment target"
+              "@balebase/api": "Do not import from the API Worker package",
+              "@balebase/client": "Do not import from the client deployment target",
+              "@balebase/website": "Do not import from the website deployment target"
             }
           }
         }

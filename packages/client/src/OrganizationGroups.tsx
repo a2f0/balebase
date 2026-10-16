@@ -8,7 +8,7 @@ import {
   Field,
   LoadingState,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import {
   createOrganizationGroup,

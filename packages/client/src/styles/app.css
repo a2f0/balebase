@@ -1,6 +1,6 @@
 /*
  * Client-only layout. Shared tokens and components come from
- * @tearleads/ui/styles.css, which main.tsx imports first.
+ * @balebase/ui/styles.css, which main.tsx imports first.
  */
 @import "./shell.css";
 @import "./auth.css";

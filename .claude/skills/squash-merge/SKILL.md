@@ -44,7 +44,7 @@ it, and delete the merged branch, so a shipped PR leaves no local leftovers.
 ## Prerequisites
 
 - `git`, `gh` (authenticated), POSIX `awk`, `realpath`, and `tar` on `PATH`.
-- The `@tearleads/agent-tool` package in the PR's base commit. Every tool
+- The `@balebase/agent-tool` package in the PR's base commit. Every tool
   these skills run comes from that base — never from an installation outside
   this repository.
 - `node_modules` installed (`bun install`) so repository checks and hooks run.

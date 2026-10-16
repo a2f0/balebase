@@ -146,7 +146,7 @@ or reconcile Checkr invitations; use the app for those. Connect Claude Code
 with:
 
 ```sh
-claude mcp add --transport http tearleads https://api.balebase.com/mcp \
+claude mcp add --transport http balebase https://api.balebase.com/mcp \
   --header "Authorization: Bearer <key>"
 ```
 
@@ -422,7 +422,7 @@ account; any other candidate's report stays `pending` indefinitely.
 Every organization starts on the cardless Free plan with one usable member
 seat, up to five organization form templates, and 30 days of audit-run history.
 An hourly Worker task removes older Free-plan audit runs and their associated
-issue images. Tearleads Pro costs $10 per active organization member each month
+issue images. Balebase Pro costs $10 per active organization member each month
 and includes unlimited form templates and audit history. Membership hooks update
 the licensed Stripe subscription quantity, and an hourly reconciliation repairs
 any quantity drift.

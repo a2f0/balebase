@@ -135,7 +135,7 @@ describe("billing", () => {
       const created = requests[0]?.body;
       expect(created?.get("ui_mode")).toBe("elements");
       expect(created?.get("return_url")).toBe(
-        "https://app.tearleads.test/organization/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}",
+        "https://app.balebase.test/organization/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}",
       );
       expect(created?.get("customer_email")).toBe("user-1@example.com");
       expect(created?.has("success_url")).toBe(false);
@@ -2351,14 +2351,14 @@ async function createFixture(organizationRole = "owner") {
   await applyMigration(database, "0032_create_billing.sql");
   await applyMigration(database, "0053_track_paid_billing_end.sql");
   const bindings = {
-    AUTH_EMAIL_FROM: "security@auth.tearleads.test",
+    AUTH_EMAIL_FROM: "security@auth.balebase.test",
     BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-    BETTER_AUTH_URL: "https://api.tearleads.test",
-    CORS_ORIGIN: "https://app.tearleads.test",
+    BETTER_AUTH_URL: "https://api.balebase.test",
+    CORS_ORIGIN: "https://app.balebase.test",
     DB: toD1(database),
     EMAIL: {} as SendEmail,
     IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.tearleads.test",
+    INBOUND_EMAIL_DOMAIN: "inbox.balebase.test",
     STORAGE: {} as R2Bucket,
     STRIPE_PRO_LEGACY_PRICE_IDS: "",
     STRIPE_PRO_PRICE_ID: proPriceId,

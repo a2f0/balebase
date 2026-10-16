@@ -4,7 +4,7 @@ export type ThemePreference = "dark" | "light" | "system";
 type Theme = "dark" | "light";
 
 // index.html reads this key before first paint; keep the two in sync.
-export const themeStorageKey = "tearleads.theme";
+export const themeStorageKey = "balebase.theme";
 const darkSchemeQuery = "(prefers-color-scheme: dark)";
 
 interface StorageReader {

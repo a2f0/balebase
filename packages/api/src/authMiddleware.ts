@@ -80,7 +80,7 @@ export const requireApiKey = createMiddleware<AuthEnv>(
   async (context, next) => {
     const token = apiKeyFromHeader(context.req.header("Authorization"));
     if (token === undefined) {
-      context.header("WWW-Authenticate", 'Bearer realm="Tearleads"');
+      context.header("WWW-Authenticate", 'Bearer realm="Balebase"');
       return context.json(
         { error: "An API key is required. Send it as a Bearer token." },
         401,
@@ -101,7 +101,7 @@ async function authenticateRequestApiKey(
     if (result.status === 401) {
       context.header(
         "WWW-Authenticate",
-        'Bearer realm="Tearleads", error="invalid_token"',
+        'Bearer realm="Balebase", error="invalid_token"',
       );
     }
     return context.json({ error: result.error }, result.status);

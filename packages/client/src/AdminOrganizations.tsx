@@ -9,7 +9,7 @@ import {
   PageHeader,
   PageSection,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import {
   type Dispatch,
   type SetStateAction,

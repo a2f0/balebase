@@ -1,4 +1,4 @@
-import { legalLinks, productName } from "@tearleads/ui/brand";
+import { legalLinks, productName } from "@balebase/ui/brand";
 import {
   Banner,
   Button,
@@ -8,7 +8,7 @@ import {
   type IconName,
   Logo,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { authClient } from "./authClient";
 import { websiteUrl } from "./config";

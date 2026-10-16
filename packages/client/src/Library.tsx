@@ -13,7 +13,7 @@ import {
   PageHeader,
   PageSection,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import {
   type FormEvent,
   useCallback,
@@ -726,7 +726,7 @@ function VerificationStatus({
           tone="warning"
         >
           <p>
-            You can use Tearleads now, but confirming {email} helps secure your
+            You can use Balebase now, but confirming {email} helps secure your
             account.
           </p>
         </Banner>

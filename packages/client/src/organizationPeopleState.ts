@@ -1,4 +1,4 @@
-import { confirmDialog } from "@tearleads/ui/react";
+import { confirmDialog } from "@balebase/ui/react";
 import { useCallback, useEffect, useState } from "react";
 import { authClient } from "./authClient";
 import {

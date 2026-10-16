@@ -19,6 +19,7 @@ export async function signingToken(
     "HMAC",
     key,
     new TextEncoder().encode(
+      // Pre-rename tag; changing it breaks every emailed signing link.
       `tearleads-contract-signing:v1:${recipientId}:${nonce}`,
     ),
   );

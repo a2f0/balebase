@@ -1,6 +1,6 @@
 /*
  * Site-wide constants for the marketing pages. Product facts that the client
- * also shows (name, plans, legal links) live in @tearleads/ui/brand.
+ * also shows (name, plans, legal links) live in @balebase/ui/brand.
  */
 export const appUrl: string =
   import.meta.env.PUBLIC_APP_URL ?? "http://localhost:5173";

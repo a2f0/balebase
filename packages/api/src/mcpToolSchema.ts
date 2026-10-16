@@ -13,7 +13,7 @@ export interface McpTool {
   destructive?: boolean;
   method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
   name: string;
-  /** Reaches people or services outside Tearleads, such as email or Checkr. */
+  /** Reaches people or services outside Balebase, such as email or Checkr. */
   openWorld?: boolean;
   params?: Record<string, JsonSchemaType>;
   /** A REST path with `{name}` placeholders for `params`. */

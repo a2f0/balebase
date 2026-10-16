@@ -6,7 +6,7 @@ import {
   PageBody,
   PageHeader,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
 import { AccountDeletion } from "./AccountDeletion";
 import { AccountSecurity } from "./AccountSecurity";
@@ -193,7 +193,7 @@ function AccountGeneral({
       {error && <Toast tone="danger">{error}</Toast>}
       {notice && <Toast tone="success">{notice}</Toast>}
       <Card
-        description="Match your system, or keep Tearleads light or dark on this device."
+        description="Match your system, or keep Balebase light or dark on this device."
         title="Appearance"
       >
         <ThemeSwitcher className="appearanceTheme" />

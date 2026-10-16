@@ -1,4 +1,4 @@
-import { Button, Card, Field, Toast } from "@tearleads/ui/react";
+import { Button, Card, Field, Toast } from "@balebase/ui/react";
 import { useEffect, useRef, useState } from "react";
 import { boxStyle, ContractPages } from "./ContractDocument";
 import { fieldTypeLabel, localDate, recipientTone } from "./contractFields";

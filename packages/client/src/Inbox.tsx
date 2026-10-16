@@ -11,7 +11,7 @@ import {
   PageBody,
   PageHeader,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AttachmentPreviewTile } from "./AttachmentPreview";
 import {

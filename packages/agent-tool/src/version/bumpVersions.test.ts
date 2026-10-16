@@ -96,9 +96,9 @@ function repository(): string {
   const rootDir = mkdtempSync(path.join(tmpdir(), "agent-tool-versions-"));
   repositories.push(rootDir);
   git(rootDir, ["init", "-q", "-b", "main"]);
-  write(rootDir, CLIENT, manifest("@tearleads/client", "0.1.0"));
+  write(rootDir, CLIENT, manifest("@balebase/client", "0.1.0"));
   write(rootDir, "packages/client/src/app.ts", "export {};\n");
-  write(rootDir, API, manifest("@tearleads/api", "0.2.0"));
+  write(rootDir, API, manifest("@balebase/api", "0.2.0"));
   write(rootDir, "packages/api/src/app.ts", "export {};\n");
   write(rootDir, "README.md", "demo\n");
   commitAll(rootDir, "chore: initial");
@@ -148,8 +148,8 @@ describe("bumpVersions", () => {
     expect(bumpVersions(rootDir, base, testGit)).toBe(0);
 
     expect(stdout.join("")).toBe(`${CLIENT}\n`);
-    expect(read(rootDir, CLIENT)).toBe(manifest("@tearleads/client", "0.1.1"));
-    expect(read(rootDir, API)).toBe(manifest("@tearleads/api", "0.2.0"));
+    expect(read(rootDir, CLIENT)).toBe(manifest("@balebase/client", "0.1.1"));
+    expect(read(rootDir, API)).toBe(manifest("@balebase/api", "0.2.0"));
     commitAll(rootDir, "chore: bump package versions");
     expect(checkVersions(rootDir, base, testGit)).toBe(0);
   });
@@ -162,13 +162,13 @@ describe("bumpVersions", () => {
 
     bumpVersions(rootDir, mainOid(rootDir), testGit);
     expect(stdout.join("")).toBe(`${API}\n${CLIENT}\n`);
-    expect(read(rootDir, API)).toBe(manifest("@tearleads/api", "0.2.1"));
+    expect(read(rootDir, API)).toBe(manifest("@balebase/api", "0.2.1"));
   });
 
   test("is a no-op once the branch carries the bump", () => {
     const rootDir = repository();
     write(rootDir, "packages/api/src/app.ts", "export const b = 1;\n");
-    write(rootDir, API, manifest("@tearleads/api", "0.2.1"));
+    write(rootDir, API, manifest("@balebase/api", "0.2.1"));
     commitAll(rootDir, "feat: change api");
 
     expect(bumpVersions(rootDir, mainOid(rootDir), testGit)).toBe(0);
@@ -187,11 +187,11 @@ describe("bumpVersions", () => {
   test("re-bumps past a base that took the same version first", () => {
     const rootDir = repository();
     write(rootDir, "packages/client/src/app.ts", "export const a = 1;\n");
-    write(rootDir, CLIENT, manifest("@tearleads/client", "0.1.1"));
+    write(rootDir, CLIENT, manifest("@balebase/client", "0.1.1"));
     commitAll(rootDir, "feat: change client");
     const base = commitOnMain(rootDir, {
       "packages/client/src/other.ts": "export {};\n",
-      [CLIENT]: manifest("@tearleads/client", "0.1.1"),
+      [CLIENT]: manifest("@balebase/client", "0.1.1"),
     });
     git(rootDir, ["merge", "-q", "--no-edit", base]);
 
@@ -202,16 +202,16 @@ describe("bumpVersions", () => {
       targetVersion: "0.1.2",
     });
     bumpVersions(rootDir, base, testGit);
-    expect(read(rootDir, CLIENT)).toBe(manifest("@tearleads/client", "0.1.2"));
+    expect(read(rootDir, CLIENT)).toBe(manifest("@balebase/client", "0.1.2"));
   });
 
   test("returns a version-only change to the base version", () => {
     const rootDir = repository();
-    write(rootDir, CLIENT, manifest("@tearleads/client", "0.1.1"));
+    write(rootDir, CLIENT, manifest("@balebase/client", "0.1.1"));
     commitAll(rootDir, "chore: stale bump");
 
     bumpVersions(rootDir, mainOid(rootDir), testGit);
-    expect(read(rootDir, CLIENT)).toBe(manifest("@tearleads/client", "0.1.0"));
+    expect(read(rootDir, CLIENT)).toBe(manifest("@balebase/client", "0.1.0"));
   });
 
   test("counts manifest edits beyond the version as a change", () => {
@@ -219,20 +219,20 @@ describe("bumpVersions", () => {
     write(
       rootDir,
       CLIENT,
-      manifest("@tearleads/client", "0.1.0", '\n  "license": "MIT",'),
+      manifest("@balebase/client", "0.1.0", '\n  "license": "MIT",'),
     );
     commitAll(rootDir, "chore: add license");
 
     bumpVersions(rootDir, mainOid(rootDir), testGit);
     expect(read(rootDir, CLIENT)).toBe(
-      manifest("@tearleads/client", "0.1.1", '\n  "license": "MIT",'),
+      manifest("@balebase/client", "0.1.1", '\n  "license": "MIT",'),
     );
   });
 
   test("keeps a deliberate minor release", () => {
     const rootDir = repository();
     write(rootDir, "packages/client/src/app.ts", "export const a = 1;\n");
-    write(rootDir, CLIENT, manifest("@tearleads/client", "0.2.0"));
+    write(rootDir, CLIENT, manifest("@balebase/client", "0.2.0"));
     commitAll(rootDir, "feat: release client 0.2");
 
     expect(checkVersions(rootDir, mainOid(rootDir), testGit)).toBe(0);
@@ -245,7 +245,7 @@ describe("bumpVersions", () => {
     write(
       rootDir,
       CLIENT,
-      manifest("@tearleads/client", "0.1.0", '\n  "x": 1,'),
+      manifest("@balebase/client", "0.1.0", '\n  "x": 1,'),
     );
 
     expect(() => bumpVersions(rootDir, mainOid(rootDir), testGit)).toThrow(
@@ -260,10 +260,10 @@ describe("bumpVersions", () => {
     write(
       rootDir,
       CLIENT,
-      manifest("@tearleads/client", "0.1.0", '\n  "x": 1,'),
+      manifest("@balebase/client", "0.1.0", '\n  "x": 1,'),
     );
     git(rootDir, ["add", CLIENT]);
-    write(rootDir, CLIENT, manifest("@tearleads/client", "0.1.0"));
+    write(rootDir, CLIENT, manifest("@balebase/client", "0.1.0"));
 
     expect(() => bumpVersions(rootDir, mainOid(rootDir), testGit)).toThrow(
       "uncommitted changes",
@@ -284,7 +284,7 @@ describe("bumpVersions", () => {
       "not a regular file",
     );
     expect(readFileSync(outside, "utf8")).toBe(
-      manifest("@tearleads/client", "0.1.0"),
+      manifest("@balebase/client", "0.1.0"),
     );
   });
 
@@ -300,39 +300,39 @@ describe("resolveVersionConflicts", () => {
   test("takes the base version and keeps both sides' other edits", () => {
     const rootDir = repository();
     write(rootDir, "packages/client/src/app.ts", "export const a = 1;\n");
-    write(rootDir, CLIENT, manifest("@tearleads/client", "0.1.1"));
+    write(rootDir, CLIENT, manifest("@balebase/client", "0.1.1"));
     commitAll(rootDir, "feat: change client");
     commitOnMain(rootDir, {
-      [CLIENT]: manifest("@tearleads/client", "0.1.2", '\n  "license": "MIT",'),
+      [CLIENT]: manifest("@balebase/client", "0.1.2", '\n  "license": "MIT",'),
     });
     expect(mergeMain(rootDir)).not.toBe(0);
 
     expect(resolveVersionConflicts(rootDir, testGit)).toBe(0);
     expect(read(rootDir, CLIENT)).toBe(
-      manifest("@tearleads/client", "0.1.2", '\n  "license": "MIT",'),
+      manifest("@balebase/client", "0.1.2", '\n  "license": "MIT",'),
     );
     expect(git(rootDir, ["diff", "--name-only", "--diff-filter=U"])).toBe("");
     git(rootDir, ["commit", "-q", "--no-edit"]);
 
     bumpVersions(rootDir, mainOid(rootDir), testGit);
     expect(read(rootDir, CLIENT)).toBe(
-      manifest("@tearleads/client", "0.1.3", '\n  "license": "MIT",'),
+      manifest("@balebase/client", "0.1.3", '\n  "license": "MIT",'),
     );
   });
 
   test("keeps the branch's deliberate minor release", () => {
     const rootDir = repository();
     write(rootDir, "packages/client/src/app.ts", "export const a = 1;\n");
-    write(rootDir, CLIENT, manifest("@tearleads/client", "0.2.0"));
+    write(rootDir, CLIENT, manifest("@balebase/client", "0.2.0"));
     commitAll(rootDir, "feat: release client 0.2");
     commitOnMain(rootDir, {
-      [CLIENT]: manifest("@tearleads/client", "0.1.2", '\n  "license": "MIT",'),
+      [CLIENT]: manifest("@balebase/client", "0.1.2", '\n  "license": "MIT",'),
     });
     expect(mergeMain(rootDir)).not.toBe(0);
 
     expect(resolveVersionConflicts(rootDir, testGit)).toBe(0);
     expect(read(rootDir, CLIENT)).toBe(
-      manifest("@tearleads/client", "0.2.0", '\n  "license": "MIT",'),
+      manifest("@balebase/client", "0.2.0", '\n  "license": "MIT",'),
     );
     git(rootDir, ["commit", "-q", "--no-edit"]);
     expect(checkVersions(rootDir, mainOid(rootDir), testGit)).toBe(0);
@@ -341,11 +341,11 @@ describe("resolveVersionConflicts", () => {
   test("touches nothing when another file conflicts", () => {
     const rootDir = repository();
     write(rootDir, "README.md", "branch\n");
-    write(rootDir, CLIENT, manifest("@tearleads/client", "0.1.1"));
+    write(rootDir, CLIENT, manifest("@balebase/client", "0.1.1"));
     commitAll(rootDir, "feat: change readme");
     commitOnMain(rootDir, {
       "README.md": "main\n",
-      [CLIENT]: manifest("@tearleads/client", "0.1.2"),
+      [CLIENT]: manifest("@balebase/client", "0.1.2"),
     });
     expect(mergeMain(rootDir)).not.toBe(0);
     const before = read(rootDir, CLIENT);
@@ -362,11 +362,11 @@ describe("resolveVersionConflicts", () => {
     write(
       rootDir,
       CLIENT,
-      manifest("@tearleads/client", "0.1.1", '\n  "license": "ISC",'),
+      manifest("@balebase/client", "0.1.1", '\n  "license": "ISC",'),
     );
     commitAll(rootDir, "chore: license");
     commitOnMain(rootDir, {
-      [CLIENT]: manifest("@tearleads/client", "0.1.2", '\n  "license": "MIT",'),
+      [CLIENT]: manifest("@balebase/client", "0.1.2", '\n  "license": "MIT",'),
     });
     expect(mergeMain(rootDir)).not.toBe(0);
 
@@ -392,10 +392,10 @@ describe("resolveVersionConflicts", () => {
     rmSync(marker);
 
     write(rootDir, "packages/client/src/app.ts", "export const a = 1;\n");
-    write(rootDir, CLIENT, manifest("@tearleads/client", "0.1.1"));
+    write(rootDir, CLIENT, manifest("@balebase/client", "0.1.1"));
     commitAll(rootDir, "feat: change client");
     commitOnMain(rootDir, {
-      [CLIENT]: manifest("@tearleads/client", "0.1.2", '\n  "license": "MIT",'),
+      [CLIENT]: manifest("@balebase/client", "0.1.2", '\n  "license": "MIT",'),
     });
     expect(mergeMain(rootDir)).not.toBe(0);
     expect(resolveVersionConflicts(rootDir, testGit)).toBe(0);

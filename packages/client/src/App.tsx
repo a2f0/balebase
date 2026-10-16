@@ -5,7 +5,7 @@ import {
   Page,
   PageBody,
   PageHeader,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { AccountSettings } from "./AccountSettings";
 import { Activity } from "./Activity";
@@ -637,7 +637,7 @@ function LoadingScreen() {
     <div className="loadingScreen onDark" role="status">
       <span className="srOnly">Loading session</span>
       <span aria-hidden="true" className="brandMark loadingMark">
-        T
+        B
       </span>
       <span className="loadingPulse" />
     </div>

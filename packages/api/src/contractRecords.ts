@@ -248,7 +248,7 @@ export async function mailFor(
     contractId: contract.id,
     dueDate: contract.due_date,
     message: contract.message,
-    organizationName: row?.organization_name ?? "Tearleads",
+    organizationName: row?.organization_name ?? "Balebase",
     sender:
       row?.sender_email && row.sender_name
         ? { email: row.sender_email, name: row.sender_name }

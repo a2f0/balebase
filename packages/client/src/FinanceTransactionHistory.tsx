@@ -9,7 +9,7 @@ import {
   Icon,
   LoadingState,
   PageSection,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { type FormEvent, useState } from "react";
 import type { LinkedEmail } from "./api";
 import type {

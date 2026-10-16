@@ -339,7 +339,7 @@ describe("password authentication", () => {
     };
     expect(setup).toMatchObject({ method: "totp" });
     expect(setup.backupCodes).toHaveLength(10);
-    expect(setup.totpURI).toStartWith("otpauth://totp/Tearleads:");
+    expect(setup.totpURI).toStartWith("otpauth://totp/Balebase:");
     const pendingMfa = fixture.database
       .query(
         `SELECT user.twoFactorEnabled, twoFactor.verified,

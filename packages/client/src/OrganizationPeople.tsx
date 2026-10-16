@@ -10,7 +10,7 @@ import {
   Icon,
   LoadingState,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import {
   type FormEvent,
   type ReactNode,

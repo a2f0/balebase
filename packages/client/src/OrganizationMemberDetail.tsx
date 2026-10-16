@@ -8,7 +8,7 @@ import {
   EmptyState,
   LoadingState,
   Toast,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { EmployeeForms } from "./EmployeeForms";
 import {
   MemberRoleControl,

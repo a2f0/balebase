@@ -4,7 +4,7 @@ import {
   EmptyState,
   Icon,
   PageSection,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import type { LinkedEmail } from "./api";
 import { countLabel } from "./labels";
 import { handleNavigation, inboxEmailPath } from "./workspacePaths";

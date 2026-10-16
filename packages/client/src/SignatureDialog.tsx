@@ -1,4 +1,4 @@
-import { Button, Field, Icon } from "@tearleads/ui/react";
+import { Button, Field, Icon } from "@balebase/ui/react";
 import { type PointerEvent, useEffect, useRef, useState } from "react";
 
 type Mode = "initials" | "signature";

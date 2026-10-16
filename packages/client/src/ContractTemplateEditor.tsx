@@ -1,4 +1,4 @@
-import { Button, Card, confirmDialog, Field, Toast } from "@tearleads/ui/react";
+import { Button, Card, confirmDialog, Field, Toast } from "@balebase/ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ContractPages } from "./ContractDocument";
 import {

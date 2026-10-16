@@ -963,6 +963,7 @@ class CheckrReconciliationRequired extends Error {
 }
 
 function checkrAttemptTag(nonce: string) {
+  // Pre-rename prefix: Checkr holds tags in this form for open invitations.
   return `tearleads-screening:${nonce}`;
 }
 

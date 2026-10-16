@@ -34,8 +34,8 @@ if [[ "$TARGET" == "--remote" ]]; then
 fi
 
 wrangler_storage_args=("$TARGET")
-if [[ "$TARGET" == "--local" && -n "${TEARLEADS_WRANGLER_PERSIST_TO:-}" ]]; then
-  wrangler_storage_args+=(--persist-to "$TEARLEADS_WRANGLER_PERSIST_TO")
+if [[ "$TARGET" == "--local" && -n "${BALEBASE_WRANGLER_PERSIST_TO:-}" ]]; then
+  wrangler_storage_args+=(--persist-to "$BALEBASE_WRANGLER_PERSIST_TO")
 fi
 
 cd "$REPO_ROOT/packages/api"

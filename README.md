@@ -1,6 +1,6 @@
-# Tearleads
+# Balebase
 
-Tearleads runs on Cloudflare Workers, D1, and R2. Every workspace lives
+Balebase runs on Cloudflare Workers, D1, and R2. Every workspace lives
 under `packages/`:
 
 - `packages/agent-tool` — repository automation shared by the agent workflows.

@@ -11,7 +11,7 @@ import {
   PageBody,
   PageHeader,
   PageSection,
-} from "@tearleads/ui/react";
+} from "@balebase/ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type AuditRunView,
