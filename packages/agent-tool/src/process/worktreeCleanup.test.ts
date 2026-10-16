@@ -99,6 +99,7 @@ const fixtureHelpers = [
   'cd "$FIXTURE/primary"',
   "printf '%s\\n' '.env*' .secrets/ .wrangler/ .terraform/ dist/ > .gitignore",
   "printf '%s\\n' node_modules/ '*.tsbuildinfo' '*.tfvars' override.tf >> .gitignore",
+  "printf '%s\\n' .terraform-lint/ >> .gitignore",
   "printf 'base\\n' > README",
   "git add .gitignore README",
   "git commit -q -m init",
@@ -226,6 +227,15 @@ test("squash-merge keeps worktrees holding ignored files beyond build output", (
     ["terraform/override.tf", true],
     ["terraform/.terraform/terraform.tfstate", true],
     ["packages/api/.wrangler/state/v3/d1/db.sqlite", true],
+    ["packages/client/dist/app.js", false],
+    ["packages/api/node_modules/pkg/.env", false],
+    ["terraform/stacks/prod/.terraform-lint/report.json", false],
+    // A build directory's name inside protected state does not make it build
+    // output.
+    [".secrets/dist/key.json", true],
+    [".wrangler/state/dist/data", true],
+    ["packages/api/.wrangler/state/node_modules/db", true],
+    ["src/dist/app.js", true],
   ];
   for (const [ignoredFile, held] of cases) {
     withFixture(

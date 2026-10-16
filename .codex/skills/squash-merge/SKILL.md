@@ -107,6 +107,7 @@ PATH="${GIT_BIN%/*}:${GH_BIN%/*}:${BUN_BIN%/*}:${TAR_BIN%/*}:/usr/bin:/bin:/usr/
 export PATH
 
 # `git worktree remove` deletes ignored files without asking. Only build output
+# where this repository writes it — at the root or directly inside a package —
 # is known to be disposable; any other ignored file may be the only copy of
 # local credentials, Terraform state or variables, or Wrangler's local D1 and
 # R2 data, so it keeps the worktree. Names are read NUL-delimited, since git
@@ -117,7 +118,7 @@ holds_ignored_state() {
   ignored_kept=$({ git -C "${1}" -c core.fsmonitor=false ls-files -z --others --ignored --exclude-standard ||
     printf 'unlisted\0'; } |
     tr '\0' '\n' |
-    grep -cvE '(^|/)(node_modules|\.turbo|dist|\.astro|\.terraform-lint|\.wrangler/tmp)/|\.tsbuildinfo$|(^|/)\.DS_Store$') || :
+    grep -cvE '^(packages/[^./][^/]*/)?((node_modules|\.turbo|dist|\.astro|\.wrangler/tmp)/|[^/]*\.tsbuildinfo$)|^terraform/stacks/[^/]+/\.terraform-lint/|(^|/)\.DS_Store$') || :
   [ "$ignored_kept" != 0 ]
 }
 
@@ -391,10 +392,13 @@ as-is.
      untracked files, and `hides_tracked_changes` must find no tracked file
      flagged `--assume-unchanged` or `--skip-worktree`, since status cannot see
      edits to those. `holds_ignored_state` must also find every ignored file
-     to be build output: under `node_modules/`, `.turbo/`, `dist/`, `.astro/`,
-     `.terraform-lint/`, or `.wrangler/tmp/`, or a `*.tsbuildinfo` or
-     `.DS_Store`. `git worktree remove` deletes ignored files without asking,
-     and anything else ignored — `.env*`, `.secrets`, Terraform state, plans,
+     to be build output where this repository writes it: under
+     `node_modules/`, `.turbo/`, `dist/`, `.astro/`, or `.wrangler/tmp/`, or a
+     `*.tsbuildinfo`, at the root or directly inside `packages/<name>/`; under
+     `terraform/stacks/<stack>/.terraform-lint/`; or a `.DS_Store`. A build
+     directory name anywhere else, such as `.secrets/dist/`, does not count.
+     `git worktree remove` deletes ignored files without asking, and anything
+     else ignored — `.env*`, `.secrets`, Terraform state, plans,
      variables, and overrides, rendered `wrangler.staging.jsonc`, and the
      local D1 databases and R2 uploads in `.wrangler/state/` — may be the only
      copy. An ignore rule added later is protected until it joins that list.
