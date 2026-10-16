@@ -119,18 +119,20 @@ only its SHA-256 hash and an identifying prefix. An organization can have 50
 active keys. Creating and revoking keys appear in the Activity feed, and each
 key records when it was last used, to the minute.
 
-A key acts as the person who created it, inside its own organization only.
-It never carries the platform `admin` role, cannot be created while
-impersonating, and follows the same seat, Finance group, and two-factor rules
-as its creator's session. A key stops working when it is revoked or expires,
-when its creator is no longer an owner or admin there, or when the
+A key acts as the person who created it, inside its own organization only. It
+never carries the platform `admin` role, cannot be created while impersonating,
+and follows the same seat, Finance group, and two-factor rules as its creator's
+session. A key counts as two-factor verified only when the session that created
+it was; if the organization later requires two-factor authentication, create a
+new key after signing in with it. A key stops working when it is revoked or
+expires, when its creator is no longer an owner or admin there, or when the
 organization is deleted. Send it as `Authorization: Bearer <key>`. Keys reach
 the workspace routes: activity, audits, businesses, contracts, employee forms,
-equipment, finance, inbox, library folders and files, groups, `/api/me`, and
-the people list. Read keys may only use `GET`. Account settings, billing,
-organization settings, API key management, root administration, and Better
-Auth endpoints stay session-only, so a leaked key cannot create more keys or
-change sign-in security.
+equipment, finance, inbox, library folders and files, groups, `/api/me`, and the
+people list. Read keys may only use `GET`. Account settings, billing,
+organization settings, API key management, root administration, and Better Auth
+endpoints stay session-only, so a leaked key cannot create more keys or change
+sign-in security.
 
 The MCP server is at `https://api.tearleads.de/mcp` and uses Streamable HTTP
 with the official TypeScript SDK. It serves the stateless `2026-07-28`

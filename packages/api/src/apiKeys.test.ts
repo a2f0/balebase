@@ -280,6 +280,180 @@ describe("organization API keys", () => {
   });
 });
 
+describe("API key security boundaries", () => {
+  it("binds two-factor verification to the session that issued the key", async () => {
+    const fixture = await createFixture();
+    const unverified = await fixture.createKey("read");
+    fixture.database
+      .query(`UPDATE user SET twoFactorEnabled = 1 WHERE id = ?`)
+      .run(fixture.userId);
+    fixture.database
+      .query(`UPDATE member SET twoFactorRequired = 1 WHERE userId = ?`)
+      .run(fixture.userId);
+    const denied = await fixture.withKey<{ code: string }>(
+      unverified.token,
+      "GET",
+      "/api/equipment",
+    );
+    expect(denied.status).toBe(403);
+    expect(denied.body.code).toBe("TWO_FACTOR_VERIFICATION_REQUIRED");
+
+    fixture.database
+      .query(`UPDATE session SET twoFactorVerified = 1 WHERE userId = ?`)
+      .run(fixture.userId);
+    const verified = await fixture.createKey("read");
+    expect(
+      fixture.database
+        .query(
+          "SELECT two_factor_verified FROM organization_api_keys WHERE id = ?",
+        )
+        .get(verified.apiKey.id),
+    ).toEqual({ two_factor_verified: 1 });
+    expect(
+      (await fixture.withKey(verified.token, "GET", "/api/equipment")).status,
+    ).toBe(200);
+
+    fixture.database
+      .query(`UPDATE user SET twoFactorEnabled = 0 WHERE id = ?`)
+      .run(fixture.userId);
+    const disabled = await fixture.withKey<{ code: string }>(
+      verified.token,
+      "GET",
+      "/api/equipment",
+    );
+    expect(disabled.status).toBe(403);
+    expect(disabled.body.code).toBe("TWO_FACTOR_SETUP_REQUIRED");
+  });
+
+  it("applies the creator's Free-plan seat", async () => {
+    const fixture = await createFixture();
+    const { token } = await fixture.createKey("read");
+    fixture.database
+      .query(
+        `INSERT INTO user
+         (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
+         VALUES ('earlier-owner', 'Earlier', 'earlier@example.com', 1, ?, ?,
+                 'user', 0)`,
+      )
+      .run(now(), now());
+    fixture.database
+      .query(
+        `INSERT INTO member (id, organizationId, userId, role, createdAt)
+         VALUES ('earlier-member', ?, 'earlier-owner', 'owner',
+                 '2000-01-01T00:00:00.000Z')`,
+      )
+      .run(fixture.organizationId);
+    const response = await fixture.withKey<{ code: string }>(
+      token,
+      "GET",
+      "/api/equipment",
+    );
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe("UPGRADE_REQUIRED");
+  });
+
+  it("requires the creator's Finance group membership", async () => {
+    const fixture = await createFixture();
+    const { token } = await fixture.createKey("read");
+    expect((await fixture.withKey(token, "GET", "/api/finance")).status).toBe(
+      200,
+    );
+    fixture.database
+      .query(`DELETE FROM "teamMember" WHERE "userId" = ?`)
+      .run(fixture.userId);
+    const denied = await fixture.withKey<{ error: string }>(
+      token,
+      "GET",
+      "/api/finance",
+    );
+    expect(denied.status).toBe(403);
+    expect(denied.body.error).toBe("Finance group membership required.");
+  });
+
+  it("rejects keys while their creator is banned", async () => {
+    const fixture = await createFixture();
+    const { token } = await fixture.createKey("read");
+    fixture.database
+      .query(`UPDATE user SET banned = 1, banExpires = NULL WHERE id = ?`)
+      .run(fixture.userId);
+    const banned = await fixture.withKey<{ error: string }>(
+      token,
+      "GET",
+      "/api/equipment",
+    );
+    expect(banned.status).toBe(403);
+    expect(banned.body.error).toBe("This API key's creator is banned.");
+
+    fixture.database
+      .query(`UPDATE user SET banExpires = ? WHERE id = ?`)
+      .run("2020-01-01T00:00:00.000Z", fixture.userId);
+    expect((await fixture.withKey(token, "GET", "/api/equipment")).status).toBe(
+      200,
+    );
+  });
+
+  it("refuses to create keys while impersonating", async () => {
+    const fixture = await createFixture();
+    fixture.database
+      .query(
+        `UPDATE session SET impersonatedBy = 'root-admin' WHERE userId = ?`,
+      )
+      .run(fixture.userId);
+    const response = await fixture.session<{ error: string }>(
+      "POST",
+      "/api/organization-settings/api-keys",
+      { access: "write", expiresInDays: 30, name: "Persistent" },
+    );
+    expect(response.status).toBe(403);
+    expect(response.body.error).toContain("impersonating");
+    expect(
+      fixture.database
+        .query("SELECT COUNT(*) AS count FROM organization_api_keys")
+        .get(),
+    ).toEqual({ count: 0 });
+  });
+
+  it("limits each organization to 50 active keys", async () => {
+    const fixture = await createFixture();
+    const insert = fixture.database.query(
+      `INSERT INTO organization_api_keys
+       (id, organization_id, name, access, token_prefix, token_hash,
+        created_by, created_at)
+       VALUES (?, ?, 'Seeded', 'read', 'tlk_seeded', ?, ?, ?)`,
+    );
+    for (let index = 0; index < 50; index += 1) {
+      insert.run(
+        `seeded-${index}`,
+        fixture.organizationId,
+        `hash-${index}`,
+        fixture.userId,
+        now(),
+      );
+    }
+    const input = { access: "read", expiresInDays: 30, name: "One more" };
+    const limited = await fixture.session<{ error: string }>(
+      "POST",
+      "/api/organization-settings/api-keys",
+      input,
+    );
+    expect(limited.status).toBe(409);
+    expect(limited.body.error).toContain("at most 50");
+
+    fixture.database
+      .query("UPDATE organization_api_keys SET expires_at = ? WHERE id = ?")
+      .run("2020-01-01T00:00:00.000Z", "seeded-0");
+    expect(
+      (
+        await fixture.session(
+          "POST",
+          "/api/organization-settings/api-keys",
+          input,
+        )
+      ).status,
+    ).toBe(201);
+  });
+});
+
 describe("MCP endpoint", () => {
   it("requires an API key and a trusted origin", async () => {
     const fixture = await createFixture();

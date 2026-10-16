@@ -1,7 +1,9 @@
 -- Organization API keys for the REST API and the MCP endpoint. Only a SHA-256
 -- hash of each token is stored; the token itself is shown once at creation.
 -- A key acts as its creator, so it stops working when the creator is no
--- longer an owner or admin of the organization.
+-- longer an owner or admin of the organization. two_factor_verified records
+-- whether the creating session had passed two-factor verification, so a key
+-- made without it cannot satisfy a two-factor requirement added later.
 CREATE TABLE organization_api_keys (
   id TEXT NOT NULL PRIMARY KEY,
   organization_id TEXT NOT NULL
@@ -12,6 +14,8 @@ CREATE TABLE organization_api_keys (
   token_hash TEXT NOT NULL UNIQUE,
   created_by TEXT NOT NULL REFERENCES user (id) ON DELETE CASCADE,
   created_at TEXT NOT NULL,
+  two_factor_verified INTEGER NOT NULL DEFAULT 0
+    CHECK (two_factor_verified IN (0, 1)),
   expires_at TEXT,
   last_used_at TEXT,
   revoked_at TEXT,

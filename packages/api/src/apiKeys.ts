@@ -54,6 +54,7 @@ interface CredentialRow {
   organization_id: string;
   revoked_at: string | null;
   twoFactorEnabled: number | boolean | null;
+  two_factor_verified: number;
   updatedAt: string | number;
   user_id: string;
 }
@@ -142,6 +143,7 @@ export async function authenticateApiKey(
     .prepare(
       `SELECT api_key.id, api_key.organization_id, api_key.access,
               api_key.expires_at, api_key.last_used_at, api_key.revoked_at,
+              api_key.two_factor_verified,
               member.role AS member_role,
               user.id AS user_id, user.name, user.email, user.emailVerified,
               user.image, user.createdAt, user.updatedAt, user.banned,
@@ -215,11 +217,13 @@ export async function recordApiKeyUse(
 
 /**
  * The creator's identity, limited to this organization. API keys never carry
- * the platform admin role, and the key itself stands in for the two-factor
- * check its creator passed when making it.
+ * the platform admin role. A key counts as two-factor verified only if the
+ * session that created it was, and only while its creator keeps two-factor
+ * authentication enabled; otherwise a later requirement needs a new key.
  */
 function apiKeySession(row: CredentialRow, now: Date) {
   const twoFactorEnabled = Boolean(row.twoFactorEnabled);
+  const twoFactorVerified = twoFactorEnabled && row.two_factor_verified === 1;
   return {
     session: {
       activeOrganizationId: row.organization_id,
@@ -230,7 +234,7 @@ function apiKeySession(row: CredentialRow, now: Date) {
       impersonatedBy: null,
       ipAddress: null,
       token: "",
-      twoFactorVerified: twoFactorEnabled,
+      twoFactorVerified,
       updatedAt: now,
       userAgent: null,
       userId: row.user_id,
@@ -297,28 +301,22 @@ apiKeys.post("/", async (context) => {
   if (typeof input === "string") return context.json({ error: input }, 400);
   const organizationId = context.get("organizationId");
   const now = new Date();
-  if (
-    (await countActiveKeys(context.env.DB, organizationId, now)) >=
-    maxActiveKeys
-  ) {
-    return context.json(
-      {
-        error: `An organization can have at most ${maxActiveKeys} active API keys. Revoke one before creating another.`,
-      },
-      409,
-    );
-  }
   const id = crypto.randomUUID();
   const token = newToken();
   const expiresAt =
     input.expiresInDays === null
       ? null
       : new Date(now.getTime() + input.expiresInDays * dayMs).toISOString();
-  await context.env.DB.prepare(
+  // The limit is checked in the INSERT itself so concurrent requests cannot
+  // both pass a separate count.
+  const inserted = await context.env.DB.prepare(
     `INSERT INTO organization_api_keys
        (id, organization_id, name, access, token_prefix, token_hash,
-        created_by, created_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        created_by, created_at, two_factor_verified, expires_at)
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+     WHERE (SELECT COUNT(*) FROM organization_api_keys
+            WHERE organization_id = ? AND revoked_at IS NULL
+              AND (expires_at IS NULL OR expires_at > ?)) < ?`,
   )
     .bind(
       id,
@@ -329,9 +327,21 @@ apiKeys.post("/", async (context) => {
       await hashToken(token),
       session.user.id,
       now.toISOString(),
+      session.session.twoFactorVerified ? 1 : 0,
       expiresAt,
+      organizationId,
+      now.toISOString(),
+      maxActiveKeys,
     )
     .run();
+  if (inserted.meta.changes === 0) {
+    return context.json(
+      {
+        error: `An organization can have at most ${maxActiveKeys} active API keys. Revoke one before creating another.`,
+      },
+      409,
+    );
+  }
   const created = await findApiKey(context.env.DB, organizationId, id);
   if (!created) throw new Error("The new API key could not be read back.");
   return context.json({ apiKey: toApiKey(created, now), token }, 201);
@@ -378,22 +388,6 @@ function findApiKey(database: D1Database, organizationId: string, id: string) {
     )
     .bind(organizationId, id)
     .first<ApiKeyRow>();
-}
-
-async function countActiveKeys(
-  database: D1Database,
-  organizationId: string,
-  now: Date,
-) {
-  const result = await database
-    .prepare(
-      `SELECT COUNT(*) AS count FROM organization_api_keys
-       WHERE organization_id = ? AND revoked_at IS NULL
-         AND (expires_at IS NULL OR expires_at > ?)`,
-    )
-    .bind(organizationId, now.toISOString())
-    .first<{ count: number }>();
-  return result?.count ?? 0;
 }
 
 function toApiKey(row: ApiKeyRow, now: Date) {
