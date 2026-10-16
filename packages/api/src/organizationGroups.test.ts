@@ -106,6 +106,7 @@ describe("organization groups", () => {
     expect(memberListing.body.members).toHaveLength(2);
     expect(memberListing.body.invitations).toEqual([]);
     for (const listedMember of memberListing.body.members) {
+      expect(listedMember).not.toHaveProperty("lastActiveAt");
       expect(listedMember).not.toHaveProperty("twoFactorEnabled");
       expect(listedMember).not.toHaveProperty("twoFactorRequired");
     }
@@ -205,6 +206,7 @@ async function createFixture() {
   await applyMigration(database, "0010_create_organization_groups.sql");
   await applyMigration(database, "0020_add_two_factor_authentication.sql");
   await applyMigration(database, "0031_require_member_two_factor.sql");
+  await applyMigration(database, "0055_track_user_last_active.sql");
   return { bindings: bindingsFor(database), database };
 }
 

@@ -58,6 +58,7 @@ function member(id: string, name: string, role = "member"): OrganizationMember {
   return {
     id,
     joinedAt: "2026-10-01T09:00:00.000Z",
+    lastActiveAt: "2026-10-14T15:30:00.000Z",
     role,
     twoFactorEnabled: false,
     twoFactorRequired: false,
@@ -354,7 +355,10 @@ describe("the member list", () => {
           },
         ],
         memberRole: "owner",
-        members: [owner, member("mark", "Mark Member")],
+        members: [
+          { ...owner, lastActiveAt: null },
+          member("mark", "Mark Member"),
+        ],
       },
       [
         requirement({ memberId: "mark" }),
@@ -379,6 +383,14 @@ describe("the member list", () => {
     );
     expect(mark?.getAttribute("href")).toBe("/organization/people/mark");
     expect(mark?.textContent).toContain("2 open requests");
+    expect(mark?.textContent).toContain(
+      `mark@example.com · Last active ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date("2026-10-14T15:30:00.000Z"))}`,
+    );
+    expect(
+      [...container.querySelectorAll("a")].find((link) =>
+        link.textContent?.includes("Olivia Owner"),
+      )?.textContent,
+    ).toContain("owner@example.com · Never active");
     const unattached = [...container.querySelectorAll(".card")].find((card) =>
       card.textContent?.includes("Invitees and former members"),
     );
@@ -486,6 +498,7 @@ describe("the member list", () => {
 
     expect(inviteForm()).toBeUndefined();
     expect(inviteButton()).toBeNull();
+    expect(container.textContent).not.toContain("Last active");
     expect(container.textContent).toContain(
       "Your organization has requested a form or check from you.",
     );

@@ -66,6 +66,7 @@ function detail(id = "other/org"): AdminOrganizationDetail {
       {
         id: "member-1",
         joinedAt: "2026-10-07T11:00:00.000Z",
+        lastActiveAt: "2026-10-14T15:30:00.000Z",
         role: "owner",
         twoFactorEnabled: true,
         user: { id: "user-1", email: "pat@example.com", name: "Pat Person" },
@@ -154,6 +155,14 @@ describe("root organization details", () => {
       "Organization other/org",
     );
     expect(container.textContent).toContain("pat@example.com");
+    const personRow = [...container.querySelectorAll("tr")].find((row) =>
+      row.textContent?.includes("pat@example.com"),
+    );
+    expect(personRow?.lastElementChild?.textContent).toBe(
+      new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
+        new Date("2026-10-14T15:30:00.000Z"),
+      ),
+    );
     expect(container.textContent).toContain("Background check");
     expect(container.textContent).toContain("Consider");
     expect(container.textContent).toContain("Review the report in Checkr.");

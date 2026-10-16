@@ -755,7 +755,10 @@ function MemberRow({
               </Badge>
             )}
           </span>
-          <span className="rowMeta truncate">{member.user.email}</span>
+          <span className="rowMeta truncate">
+            {member.user.email}
+            {canManage && ` · ${lastActiveLabel(member)}`}
+          </span>
         </div>
       </a>
       <div className="memberTwoFactor">
@@ -833,6 +836,12 @@ function PendingInvitations({
       </ul>
     </Card>
   );
+}
+
+function lastActiveLabel({ lastActiveAt }: OrganizationMember) {
+  return lastActiveAt
+    ? `Last active ${formatDate(lastActiveAt)}`
+    : "Never active";
 }
 
 function formatDate(value: string) {

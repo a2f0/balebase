@@ -145,6 +145,7 @@ function OrganizationPeople({ members }: { members: OrganizationMember[] }) {
                 <th scope="col">Person</th>
                 <th scope="col">Role</th>
                 <th scope="col">Two-factor authentication</th>
+                <th scope="col">Last active</th>
               </tr>
             </thead>
             <tbody>
@@ -158,6 +159,11 @@ function OrganizationPeople({ members }: { members: OrganizationMember[] }) {
                   </td>
                   <td>{formatStatus(member.role)}</td>
                   <td>{member.twoFactorEnabled ? "Enabled" : "Not enabled"}</td>
+                  <td className="adminDate tabular">
+                    {member.lastActiveAt
+                      ? formatDate(member.lastActiveAt)
+                      : "Never"}
+                  </td>
                 </tr>
               ))}
             </tbody>

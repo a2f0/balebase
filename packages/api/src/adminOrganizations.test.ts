@@ -25,6 +25,9 @@ describe("admin organizations", () => {
         "DELETE FROM member WHERE userId = 'user-1' AND organizationId = ?",
       )
       .run(targetOrganizationId);
+    database
+      .query("UPDATE user SET lastActiveAt = ? WHERE id = 'member-user'")
+      .run("2026-10-15T08:30:00.000Z");
     const response = await testApp(database).request(
       `/${targetOrganizationId}`,
     );
@@ -39,6 +42,7 @@ describe("admin organizations", () => {
       {
         id: "member_member-user",
         joinedAt: expect.any(String),
+        lastActiveAt: "2026-10-15T08:30:00.000Z",
         role: "owner",
         twoFactorEnabled: false,
         twoFactorRequired: false,
@@ -573,6 +577,7 @@ async function createDetailFixture() {
     "0031_require_member_two_factor.sql",
     "0041_create_employee_requirements.sql",
     "0042_add_checkr_screenings.sql",
+    "0055_track_user_last_active.sql",
   ]) {
     database.exec(
       await Bun.file(

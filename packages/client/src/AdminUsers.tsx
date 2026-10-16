@@ -22,6 +22,7 @@ interface ListedUser {
   email: string;
   emailVerified: boolean;
   id: string;
+  lastActiveAt?: Date | string | null | undefined;
   name: string;
   role?: string | null | undefined;
 }
@@ -137,6 +138,7 @@ function UserTable({ users }: { users: ListedUser[] }) {
             <th scope="col">Status</th>
             <th scope="col">Role</th>
             <th scope="col">Joined</th>
+            <th scope="col">Last active</th>
           </tr>
         </thead>
         <tbody>
@@ -157,6 +159,9 @@ function UserTable({ users }: { users: ListedUser[] }) {
                 </td>
                 <td className="adminDate tabular">
                   {formatDate(user.createdAt)}
+                </td>
+                <td className="adminDate tabular">
+                  {user.lastActiveAt ? formatDate(user.lastActiveAt) : "Never"}
                 </td>
               </tr>
             );

@@ -5,6 +5,8 @@ import type { WorkspaceOrganization } from "./organizationState";
 export interface OrganizationMember {
   id: string;
   joinedAt: string;
+  /** Sent to managers only; null before the account's first visit. */
+  lastActiveAt?: string | null;
   role: string;
   twoFactorEnabled?: boolean;
   twoFactorRequired?: boolean;

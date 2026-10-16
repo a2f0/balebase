@@ -1,6 +1,7 @@
 interface OrganizationMember {
   id: string;
   joinedAt: string;
+  lastActiveAt: string | null;
   role: string;
   twoFactorEnabled: boolean;
   twoFactorRequired: boolean;
@@ -15,6 +16,7 @@ interface OrganizationMemberRow {
   created_at: string;
   email: string;
   id: string;
+  last_active_at: string | null;
   name: string;
   role: string;
   two_factor_enabled: number | boolean;
@@ -31,6 +33,7 @@ export async function listOrganizationMembers(
       `SELECT member.id, member.role, member.createdAt AS created_at,
               member.twoFactorRequired AS two_factor_required,
               user.id AS user_id, user.name, user.email,
+              user.lastActiveAt AS last_active_at,
               user.twoFactorEnabled AS two_factor_enabled
        FROM member
        JOIN user ON user.id = member.userId
@@ -44,6 +47,7 @@ export async function listOrganizationMembers(
       created_at: joinedAt,
       email,
       id,
+      last_active_at: lastActiveAt,
       name,
       role,
       two_factor_enabled: twoFactorEnabled,
@@ -52,6 +56,7 @@ export async function listOrganizationMembers(
     }): OrganizationMember => ({
       id,
       joinedAt,
+      lastActiveAt,
       role,
       twoFactorEnabled: Boolean(twoFactorEnabled),
       twoFactorRequired: Boolean(twoFactorRequired),

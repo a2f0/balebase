@@ -35,6 +35,12 @@ const userAdditionalFields = {
     required: false,
     type: "string",
   },
+  // Stamped by requireAuth; returned so root admins see it when listing users.
+  lastActiveAt: {
+    input: false,
+    required: false,
+    type: "date",
+  },
   termsAccepted: {
     required: false,
     returned: false,
