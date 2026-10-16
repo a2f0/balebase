@@ -47,10 +47,13 @@ function squashMergeSnippets() {
       return match?.[0] ?? "";
     },
   );
+  const retireGates = skill.block("GIT_COMMON_DIR=");
+  const retireRemoval = skill.block('if [ "$RETIRE_READY" = true ]');
   return {
     cleanup: skill.block("BASE_CHECKOUTS="),
     helper: helpers.join("\n"),
-    retire: skill.block("GIT_COMMON_DIR="),
+    retire: `${retireGates}\n${retireRemoval}`,
+    retireGates,
     sweep: skill.block("worktree prune"),
   };
 }
@@ -421,7 +424,7 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
 const featureNames = ["feature", "featuré"];
 
 test("a merge from a linked worktree detaches, resets, and retires it", () => {
-  const { cleanup, helper, retire } = squashMergeSnippets();
+  const { cleanup, helper, retire, retireGates } = squashMergeSnippets();
   const resetScript = resetSnippet();
   for (const name of featureNames) {
     const setup = [
@@ -463,10 +466,26 @@ test("a merge from a linked worktree detaches, resets, and retires it", () => {
       expect(git(primary, "rev-parse --abbrev-ref HEAD")).toBe("main");
       expect(git(primary, "rev-parse main")).toBe(primaryMain);
 
-      const retired = run(`${prelude}\n${helper}\n${retire}\npwd`, feature, {
+      const retireEnvironment = {
         MERGE_COMMIT: mergeCommit,
         MERGED_BRANCH: `feat/${name}`,
-      });
+      };
+      // ExitWorktree takes the place of the removal block, so the gates alone
+      // must approve the worktree and leave it in place.
+      const gated = run(
+        `${prelude}\n${helper}\n${retireGates}\necho "$RETIRE_READY"`,
+        feature,
+        retireEnvironment,
+      );
+      expect({ name, status: gated.status }).toEqual({ name, status: 0 });
+      expect(gated.stdout.trim()).toBe("true");
+      expect(existsSync(feature)).toBe(true);
+
+      const retired = run(
+        `${prelude}\n${helper}\n${retire}\npwd`,
+        feature,
+        retireEnvironment,
+      );
       expect({ name, status: retired.status }).toEqual({ name, status: 0 });
       expect(existsSync(feature)).toBe(false);
       expect(path.basename(retired.stdout.trim())).toBe("primary");
@@ -517,7 +536,7 @@ test("a merge switches to the base when no worktree holds it", () => {
 });
 
 test("squash-merge retires its worktree only after a completed cleanup", () => {
-  const { helper, retire } = squashMergeSnippets();
+  const { helper, retire, retireGates } = squashMergeSnippets();
   // Each case departs from a completed cleanup in one way.
   const detached = [
     "branch self",
@@ -539,6 +558,10 @@ test("squash-merge retires its worktree only after a completed cleanup", () => {
       [...detached, "git branch -q -D feat/self", ": > ../self/.env"],
     ],
     [
+      "untracked file",
+      [...detached, "git branch -q -D feat/self", ": > ../self/notes.txt"],
+    ],
+    [
       "merge not contained",
       [
         ...detached,
@@ -549,19 +572,25 @@ test("squash-merge retires its worktree only after a completed cleanup", () => {
   ];
   for (const [name, setup] of cases) {
     withFixture(setup, (fixture) => {
-      const result = run(
-        `${prelude}\n${helper}\n${retire}`,
-        path.join(fixture, "self"),
-        {
-          MERGE_COMMIT: git(path.join(fixture, "primary"), "rev-parse main"),
-          MERGED_BRANCH: "feat/self",
-        },
-      );
-      expect({
-        name,
-        exists: existsSync(path.join(fixture, "self")),
-        status: result.status,
-      }).toEqual({ name, exists: true, status: 1 });
+      const environment = {
+        MERGE_COMMIT: git(path.join(fixture, "primary"), "rev-parse main"),
+        MERGED_BRANCH: "feat/self",
+      };
+      // The gates alone decide for ExitWorktree; with the removal block they
+      // decide for git.
+      for (const script of [`${retireGates}\necho "$RETIRE_READY"`, retire]) {
+        const result = run(
+          `${prelude}\n${helper}\n${script}`,
+          path.join(fixture, "self"),
+          environment,
+        );
+        expect({
+          name,
+          approved: result.stdout.includes("true"),
+          exists: existsSync(path.join(fixture, "self")),
+          status: result.status,
+        }).toEqual({ name, approved: false, exists: true, status: 1 });
+      }
     });
   }
 });

@@ -422,35 +422,48 @@ as-is.
 
 6. **Retire this worktree**: skip it when `--keep-branch` or `--keep-worktree`
    was given, when step 4 did not complete, or in the primary checkout. Run it
-   last, because it deletes the directory the shell is in.
+   last, because it deletes the directory the shell is in. First run every
+   gate; they set `RETIRE_READY=true` only when all of them pass:
 
    ```bash
+   RETIRE_READY=false
    GIT_DIR_ABS=$(git rev-parse --path-format=absolute --git-dir) || exit 1
    GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir) || exit 1
-   if [ "$GIT_DIR_ABS" != "$GIT_COMMON_DIR" ]; then
+   if [ "$GIT_DIR_ABS" = "$GIT_COMMON_DIR" ]; then
+     echo "The primary checkout is never retired"
+   else
      SELF_ROOT=$("$REALPATH_BIN" "$(git rev-parse --show-toplevel)") || exit 1
      PRIMARY_WORKTREE=$(git worktree list --porcelain | awk '/^worktree / { print substr($(0), 10); exit }')
      [ -d "$PRIMARY_WORKTREE" ] || { echo "Error: primary checkout not found; keeping $SELF_ROOT" >&2; exit 1; }
      git merge-base --is-ancestor "$MERGE_COMMIT" HEAD || { echo "Error: HEAD does not contain $MERGE_COMMIT; keeping $SELF_ROOT" >&2; exit 1; }
      if git show-ref --verify --quiet "refs/heads/$MERGED_BRANCH"; then echo "Error: $MERGED_BRANCH still exists; keeping $SELF_ROOT" >&2; exit 1; fi
+     SELF_STATUS=$(git -c core.hooksPath=/dev/null -c core.fsmonitor=false status --porcelain --untracked-files=all) && [ -z "$SELF_STATUS" ] || { echo "Error: uncommitted, untracked, or unreadable files; keeping $SELF_ROOT" >&2; exit 1; }
      if hides_tracked_changes "$SELF_ROOT"; then echo "Error: tracked files hidden from status; keeping $SELF_ROOT" >&2; exit 1; fi
      if holds_ignored_state "$SELF_ROOT"; then echo "Error: ignored files beyond build output; keeping $SELF_ROOT" >&2; exit 1; fi
+     RETIRE_READY=true
+   fi
+   ```
+
+   Then remove the worktree, only once the gates have passed:
+
+   ```bash
+   if [ "$RETIRE_READY" = true ]; then
      cd "$PRIMARY_WORKTREE" || exit 1
      git -c core.hooksPath=/dev/null -c core.fsmonitor=false worktree remove "$SELF_ROOT" || { echo "Error: git worktree remove refused; keeping $SELF_ROOT" >&2; exit 1; }
    fi
    ```
 
    - **The gates mirror the sweep.** HEAD must contain the merge commit, the
-     merged branch must be gone, `hides_tracked_changes` must find no hidden
-     tracked edits, and `holds_ignored_state` must find nothing ignored beyond
-     build output. `git worktree remove` without `--force`
-     refuses untracked files. On any refusal the worktree stays detached at the
-     base tip; report why.
-   - **Leave a harness-managed worktree through the harness.** If this session
-     entered the worktree with Claude Code's `EnterWorktree`, call
-     `ExitWorktree` with `action: "remove"` instead of the git commands above.
-     That returns the session to its starting directory. Fall back to git if
-     it refuses.
+     merged branch must be gone, the tree must be clean including untracked
+     files, `hides_tracked_changes` must find no hidden tracked edits, and
+     `holds_ignored_state` must find nothing ignored beyond build output. On
+     any refusal the worktree stays detached at the base tip; report why.
+   - **Every removal path runs the gates first.** If this session entered the
+     worktree with Claude Code's `EnterWorktree`, run the gates block, then —
+     only when it set `RETIRE_READY=true` — call `ExitWorktree` with
+     `action: "remove"` in place of the removal block. That returns the
+     session to its starting directory. Fall back to the removal block if it
+     refuses. Never call `ExitWorktree` to remove a worktree the gates kept.
    - **The shell ends up in the primary checkout.** Run nothing else from the
      removed path. A session launched inside the worktree has to continue from
      the primary checkout, so say so in the report.
