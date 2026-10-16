@@ -86,5 +86,9 @@ The canonical hostnames are part of the default Terraform desired state. Set
 The stacks moved from the `tearleads.de` zone to `balebase.com` in October 2026.
 D1 and R2 names cannot change, so production data was copied from `stealth-db`
 and `stealth-objects` into the new resources, and the old ones were removed from
-state rather than destroyed. Nothing here references `tearleads.de` or
+state rather than destroyed. The old `tearleads-api`, `tearleads-client`, and
+`tearleads-website` Workers were deleted once the new domains were verified, so
+`tearleads-api`'s hourly cron can no longer reconcile Stripe seats from the
+retired database; `wrangler deployments list --name tearleads-api` now reports
+that the Worker does not exist. Nothing here references `tearleads.de` or
 `tearleads.com`.
