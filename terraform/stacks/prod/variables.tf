@@ -1,11 +1,11 @@
 variable "cloudflare_api_token" {
-  description = "Cloudflare API token loaded from .secrets/root.env."
+  description = "Cloudflare API token loaded from .secrets/prod."
   type        = string
   sensitive   = true
 }
 
 variable "cloudflare_account_id" {
-  description = "Cloudflare account ID loaded from .secrets/root.env."
+  description = "Cloudflare account ID loaded from .secrets/prod."
   type        = string
 }
 

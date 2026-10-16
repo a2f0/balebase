@@ -102,8 +102,8 @@ containing its initial owner; Finance navigation and every `/api/finance`
 request require membership in a group with the Finance capability.
 
 Authentication needs a strong `BETTER_AUTH_SECRET` in the ignored
-`.secrets/root.env`. Production password reset additionally requires Cloudflare
-Email Sending to be enabled for `auth.tearleads.de`, with
+`.secrets/prod/app.env`. Production password reset additionally requires
+Cloudflare Email Sending to be enabled for `auth.tearleads.de`, with
 `security@auth.tearleads.de` permitted as a sender. Sending DNS records and
 DMARC policy are isolated under `auth.tearleads.de`; Google Workspace remains
 responsible for mail at the apex. The deployment script uploads the auth secret
@@ -341,8 +341,8 @@ local history is a separate, permanent action that is only available after the
 institution has been disconnected.
 
 Plaid access tokens are encrypted with AES-GCM before being stored in D1. Add
-these values to the ignored `.secrets/root.env` before local Plaid testing or a
-production deployment:
+these values to the ignored `.secrets/prod/app.env` before local Plaid testing
+or a production deployment:
 
 ```sh
 export PLAID_CLIENT_ID=your-client-id
@@ -385,8 +385,8 @@ enter its ID in **Link invitation**. The app verifies the candidate, package,
 and creation time before linking it. Do not start a new check until the old
 request is reconciled.
 
-Set these optional values in `.secrets/root.env` for production deployment or
-`.secrets/staging.env` for staging and local development:
+Set these optional values in `.secrets/prod/app.env` for production deployment
+or `.secrets/staging/app.env` for staging and local development:
 
 ```sh
 CHECKR_API_KEY=your-checkr-secret-key
@@ -432,8 +432,8 @@ Owners and organization admins can upgrade or manage billing at
 Portal. Checkout uses Stripe's hosted page unless `STRIPE_PUBLISHABLE_KEY` holds
 a publishable key from the same Stripe account and mode as the secret key; then
 the billing page embeds Stripe's Payment Element, styled with the app's theme
-tokens. Add the following values to the ignored `.secrets/root.env` before local
-billing work or a production API deployment:
+tokens. Add the following values to the ignored `.secrets/prod/app.env` before
+local billing work or a production API deployment:
 
 ```sh
 export STRIPE_SECRET_KEY=your-live-or-test-secret-key

@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/cloudflareEnv.sh"
 if [[ "${DEPLOY_TIER:-prod}" == "staging" ]]; then
   unset TF_VAR_cloudflare_api_token TF_VAR_cloudflare_account_id
-  source_env_file "$(get_repo_root)/.secrets/staging.env"
+  load_tier_env staging
   validate_cloudflare_env
   export CLOUDFLARE_API_TOKEN="${TF_VAR_cloudflare_api_token:-}"
   export CLOUDFLARE_ACCOUNT_ID="${TF_VAR_cloudflare_account_id:-}"

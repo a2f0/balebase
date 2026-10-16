@@ -8,7 +8,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=./cloudflareEnv.sh
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/cloudflareEnv.sh"
-source_env_file "$REPO_ROOT/.secrets/root.env"
+load_tier_env prod "$REPO_ROOT"
 validate_auth_env
 if [[ -n "${STRIPE_SECRET_KEY:-}" ||
   -n "${STRIPE_WEBHOOK_SECRET:-}" ||
@@ -43,10 +43,12 @@ for secret_name in \
   fi
 done
 
-if [[ -f "$REPO_ROOT/.secrets/staging.env" ]]; then
+# Local development uses Checkr staging, so its credentials come from the
+# staging tier when this checkout has one.
+if [[ -f "$REPO_ROOT/.secrets/staging/app.env" ]]; then
   (
     unset CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE CHECKR_CREDIT_PACKAGE
-    source_env_file "$REPO_ROOT/.secrets/staging.env"
+    load_tier_env staging "$REPO_ROOT"
     for secret_name in \
       CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE CHECKR_CREDIT_PACKAGE; do
       if [[ -n "${!secret_name:-}" ]]; then

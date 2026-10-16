@@ -6,23 +6,51 @@ get_repo_root() {
 
 source_env_file() {
   local env_file="$1"
+  local status
 
   if [[ ! -f "$env_file" ]]; then
     echo "ERROR: $env_file is missing." >&2
-    echo "Create it with the variables listed in README.md." >&2
+    echo "Create it with the variables listed in docs/operations.md." >&2
     return 1
   fi
 
   set -a
   # shellcheck source=/dev/null
   source "$env_file"
+  status=$?
   set +a
+  return "$status"
+}
+
+# .secrets links to this project's folder in the matrix-secrets repository.
+# Each tier folder is self-contained: shared.env, when present, holds values
+# copied from the cross-project root file, and app.env holds this project's
+# values for the tier, so app.env wins. Pass a root to read a tree other than
+# the current Git checkout. Call it as a plain command: a `||` or `if` around
+# it disables errexit while the files are sourced, so a malformed line would
+# no longer stop the caller.
+load_tier_env() {
+  local tier="$1"
+  local repo_root="${2:-}"
+  local tier_dir
+
+  if [[ "$tier" != "prod" && "$tier" != "staging" ]]; then
+    echo "ERROR: Unknown secrets tier: $tier" >&2
+    return 1
+  fi
+  if [[ -z "$repo_root" ]]; then
+    repo_root="$(get_repo_root)" || return 1
+  fi
+
+  tier_dir="$repo_root/.secrets/$tier"
+  if [[ -f "$tier_dir/shared.env" ]]; then
+    source_env_file "$tier_dir/shared.env"
+  fi
+  source_env_file "$tier_dir/app.env"
 }
 
 load_cloudflare_env() {
-  local secrets_dir
-  secrets_dir="$(get_repo_root)/.secrets"
-  source_env_file "$secrets_dir/root.env"
+  load_tier_env prod
   validate_cloudflare_env
 
   export CLOUDFLARE_API_TOKEN="$TF_VAR_cloudflare_api_token"
@@ -30,9 +58,7 @@ load_cloudflare_env() {
 }
 
 load_cloudflare_email_env() {
-  local secrets_dir
-  secrets_dir="$(get_repo_root)/.secrets"
-  source_env_file "$secrets_dir/root.env"
+  load_tier_env prod
 
   if [[ -z "${CLOUDFLARE_EMAIL_API_TOKEN:-}" ]]; then
     echo "ERROR: Missing CLOUDFLARE_EMAIL_API_TOKEN." >&2

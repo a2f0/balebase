@@ -7,7 +7,6 @@
     "agent:run": "bunx --bun --no-install agent-tool run",
     "agent:logs": "bunx --bun --no-install agent-tool logs",
     "auth:set-role": "bash scripts/setUserRole.sh",
-    "backup:shared-data": "bash scripts/backupSharedData.sh",
     "build": "bunx --bun --no-install turbo run build",
     "check": "export OPENSSL_CONF=/dev/null; bun --bun run lint && bunx --bun --no-install turbo run check && bun --bun run check:scripts",
     "check:fast": "export OPENSSL_CONF=/dev/null; bun --bun run lint:biome && bun --bun run lint:markdown && bun --bun run lint:files && bunx --bun --no-install turbo run check && bun --bun run check:scripts",
@@ -47,8 +46,8 @@
     "terraform:staging:apply": "bash terraform/scripts/run.sh staging apply",
     "terraform:staging:plan": "bash terraform/scripts/run.sh staging plan",
     "terraform:validate": "bash terraform/scripts/run.sh validate",
-    "test": "export OPENSSL_CONF=/dev/null; bunx --bun --no-install turbo run test && bun --bun run test:staging && bun --bun run test:backup && bun --bun run test:markdownlint",
-    "test:backup": "bash scripts/checks/testBackupSharedData.sh",
+    "test": "export OPENSSL_CONF=/dev/null; bunx --bun --no-install turbo run test && bun --bun run test:staging && bun --bun run test:env && bun --bun run test:markdownlint",
+    "test:env": "bash scripts/checks/testCloudflareEnv.sh",
     "test:markdownlint": "bun test scripts/checks/markdownlintConfig.test.ts",
     "test:staging": "bash scripts/checks/testDeployStaging.sh"
   },

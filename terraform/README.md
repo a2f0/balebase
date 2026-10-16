@@ -18,8 +18,10 @@ hostnames. See the [staging deployment steps](../docs/operations.md#deploy-stagi
 
 ## Secrets
 
-The scripts follow the Tearleads `.secrets` pattern and load these variables
-from `.secrets/root.env` without copying them into Terraform files or state:
+The scripts load these variables from the production tier, `.secrets/prod`
+(`shared.env` when present, then `app.env`), without copying them into
+Terraform files or state. The staging stack reads `.secrets/staging` the same
+way:
 
 ```sh
 export TF_VAR_cloudflare_api_token="..."
@@ -27,12 +29,14 @@ export TF_VAR_cloudflare_account_id="..."
 export CLOUDFLARE_EMAIL_API_TOKEN="..."
 ```
 
-The `.secrets` path is ignored by Git and holds only `root.env`. The Terraform
-token needs Zone Read, DNS Write, D1 Edit, R2 Edit, Workers Scripts Edit, and
-Email Routing Rules Write and Zone Transform Rules Write on the `tearleads.de`
-zone. The separate Email API
-token needs Zone Read and Zone Settings Edit on the same zone so deploys can
-enable subaddressing and verify the subdomain's Email Routing DNS records.
+`.secrets` is a gitignored link to `../matrix-secrets/balebase`, managed and
+backed up from the matrix repository; see
+[local secrets](../docs/operations.md#local-secrets). The Terraform token needs
+Zone Read, DNS Write, D1 Edit, R2 Edit, Workers Scripts Edit, and Email Routing
+Rules Write and Zone Transform Rules Write on the `tearleads.de` zone. The
+separate Email API token needs Zone Read and Zone Settings Edit on the same
+zone so deploys can enable subaddressing and verify the subdomain's Email
+Routing DNS records.
 
 ## Plan and apply
 
