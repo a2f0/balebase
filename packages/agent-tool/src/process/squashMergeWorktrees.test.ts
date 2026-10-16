@@ -62,7 +62,7 @@ const fixtureHelpers = [
   'mkdir -p "$FIXTURE/merged"',
   'git init -q -b main "$FIXTURE/primary"',
   'cd "$FIXTURE/primary"',
-  "printf '%s\\n' '.env*' .secrets/ build/ > .gitignore",
+  "printf '%s\\n' '.env*' .secrets/ .wrangler/ build/ > .gitignore",
   "git add .gitignore",
   "git commit -q -m init",
   "branch() {",
@@ -129,6 +129,8 @@ test("squash-merge keeps worktrees holding ignored credentials or state", () => 
     [".secrets/prodé.json", true],
     ["build/upload/.env", true],
     ["build/.terraform/terraform.tfstate", true],
+    ["packages/api/.wrangler/state/v3/d1/db.sqlite", true],
+    ["packages/api/.wrangler/tmp/bundle/index.js", false],
   ];
   for (const [ignoredFile, held] of cases) {
     withFixture(
@@ -160,6 +162,10 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
   withFixture(
     [
       "branch done; merged done",
+      "branch bundled; merged bundled",
+      "mkdir -p ../bundled/.wrangler/tmp; : > ../bundled/.wrangler/tmp/index.js",
+      "branch wrangler; merged wrangler",
+      "mkdir -p ../wrangler/.wrangler/state; : > ../wrangler/.wrangler/state/db",
       "branch open",
       "branch moved; merged moved",
       "git -C ../moved commit -q --allow-empty -m 'after merge'",
@@ -190,14 +196,16 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
           ]),
       );
       expect(outcomes).toEqual({
+        bundled: "Removed: feat/bundled",
         detached: "Kept: detached HEAD",
         dirty: "Kept: uncommitted, untracked, or unreadable",
         done: "Removed: feat/done",
         locked: "Kept: locked",
         moved: "Kept: no merged PR at its tip",
         open: "Kept: no merged PR at its tip",
-        quoted: "Kept: ignored credentials or Terraform state",
-        state: "Kept: ignored credentials or Terraform state",
+        quoted: "Kept: ignored credentials or local state",
+        state: "Kept: ignored credentials or local state",
+        wrangler: "Kept: ignored credentials or local state",
       });
       expect(worktreeNames(fixture)).toEqual([
         "detached",
@@ -209,8 +217,10 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
         "quoted",
         "self",
         "state",
+        "wrangler",
       ]);
       expect(existsSync(path.join(fixture, "done"))).toBe(false);
+      expect(existsSync(path.join(fixture, "bundled"))).toBe(false);
       const branches = run(
         "git branch --format='%(refname:short)'",
         path.join(fixture, "primary"),
