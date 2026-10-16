@@ -2,8 +2,15 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Git hooks, including pre-push, export repository variables such as GIT_DIR.
+# Clear them so Git resolves the fixture as its own repository and never
+# initializes this checkout or reads its real .secrets link.
+while IFS= read -r git_variable; do
+  unset "$git_variable"
+done < <(git rev-parse --local-env-vars)
+
 # The fixture is its own Git repository outside this checkout, so the loaders
-# resolve it as the repository root and never reach the real .secrets link.
+# resolve it as the repository root.
 FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/cloudflare-env-test.XXXXXX")"
 trap 'rm -rf "$FIXTURE"' EXIT
 
@@ -11,6 +18,11 @@ mkdir -p "$FIXTURE/scripts" "$FIXTURE/packages/api" "$FIXTURE/bin" \
   "$FIXTURE/.secrets/prod"
 cp "$REPO_ROOT/scripts/cloudflareEnv.sh" "$REPO_ROOT/scripts/devApi.sh" "$FIXTURE/scripts/"
 git init -q "$FIXTURE"
+fixture_root="$(cd "$FIXTURE" && pwd -P)"
+[[ "$(cd "$FIXTURE" && git rev-parse --show-toplevel)" == "$fixture_root" ]] || {
+  echo 'The fixture does not resolve as its own Git repository' >&2
+  exit 1
+}
 
 cat > "$FIXTURE/.secrets/prod/shared.env" <<'EOF'
 TF_VAR_cloudflare_api_token=shared-token
