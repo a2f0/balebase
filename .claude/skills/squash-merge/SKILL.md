@@ -105,6 +105,15 @@ BUN_BIN=$(resolve_bootstrap_tool bun) || exit 1
 TAR_BIN=$(resolve_bootstrap_tool tar) || exit 1
 PATH="${GIT_BIN%/*}:${GH_BIN%/*}:${BUN_BIN%/*}:${TAR_BIN%/*}:/usr/bin:/bin:/usr/sbin:/sbin"
 export PATH
+
+# `git worktree remove` deletes ignored files without asking. Keep a worktree
+# holding any that may be the only copy of local credentials or Terraform
+# state, wherever they sit — including inside ignored directories.
+holds_ignored_state() {
+  git -C "${1}" ls-files --others --ignored --exclude-standard |
+    grep -qE '(^|/)(\.secrets/|\.env[^/]*$|[^/]*\.tfstate[^/]*$)'
+}
+
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 # One gh call for both values, split on the space neither a repo slug nor a
@@ -341,7 +350,7 @@ as-is.
      MERGED_HEADS=$(gh pr list -R "$REPO" --head "$WT_BRANCH" --state merged --json headRefOid -q '.[].headRefOid') || { echo "Kept $WT_PATH (PR lookup failed)"; continue; }
      printf '%s\n' "$MERGED_HEADS" | grep -qxF "$WT_HEAD" || { echo "Kept $WT_PATH (no merged PR at its tip)"; continue; }
      [ -z "$(git -C "$WT_PATH" status --porcelain --untracked-files=all)" ] || { echo "Kept $WT_PATH (uncommitted or untracked files)"; continue; }
-     if git -C "$WT_PATH" ls-files --others --ignored --exclude-standard --directory | grep -qE '(^|/)(\.env[^/]*|[^/]*\.tfstate[^/]*)$'; then echo "Kept $WT_PATH (ignored env or Terraform state)"; continue; fi
+     if holds_ignored_state "$WT_PATH"; then echo "Kept $WT_PATH (ignored credentials or Terraform state)"; continue; fi
      git worktree remove "$WT_PATH" || { echo "Kept $WT_PATH (git worktree remove refused)"; continue; }
      [ "$(git rev-parse --verify --quiet "refs/heads/$WT_BRANCH^{commit}")" != "$WT_HEAD" ] || git branch -D "$WT_BRANCH" >/dev/null
      echo "Removed $WT_PATH ($WT_BRANCH)"
@@ -355,10 +364,12 @@ as-is.
      fresh one that only sits at the base tip, and one with commits added after
      its PR merged.
    - **It must also be safe to delete.** Removal requires no uncommitted or
-     untracked files. It also requires no ignored `.env*` or `*.tfstate*` file
-     outside an ignored directory. `git worktree remove` deletes ignored files
-     without asking, and those may be the only copy of local credentials or
-     Terraform state.
+     untracked files. `holds_ignored_state` must also find no ignored `.env*`,
+     `*.tfstate*`, or `.secrets/` file anywhere in the tree, including inside
+     ignored directories. `git worktree remove` deletes ignored files without
+     asking, and those may be the only copy of local credentials or Terraform
+     state. A `terraform init` leaves `.terraform/terraform.tfstate`, so a
+     worktree where Terraform was initialized is kept and listed for the user.
    - **Detached worktrees are kept and listed.** Nothing ties a detached HEAD
      to a PR, and a session that just ran `git worktree add --detach` looks the
      same as a leftover. Report them so the user can decide.
@@ -385,16 +396,17 @@ as-is.
      [ -d "$PRIMARY_WORKTREE" ] || { echo "Error: primary checkout not found; keeping $SELF_ROOT" >&2; exit 1; }
      git merge-base --is-ancestor "$MERGE_COMMIT" HEAD || { echo "Error: HEAD does not contain $MERGE_COMMIT; keeping $SELF_ROOT" >&2; exit 1; }
      if git show-ref --verify --quiet "refs/heads/$MERGED_BRANCH"; then echo "Error: $MERGED_BRANCH still exists; keeping $SELF_ROOT" >&2; exit 1; fi
-     if git ls-files --others --ignored --exclude-standard --directory | grep -qE '(^|/)(\.env[^/]*|[^/]*\.tfstate[^/]*)$'; then echo "Error: ignored env or Terraform state files; keeping $SELF_ROOT" >&2; exit 1; fi
+     if holds_ignored_state "$SELF_ROOT"; then echo "Error: ignored credentials or Terraform state; keeping $SELF_ROOT" >&2; exit 1; fi
      cd "$PRIMARY_WORKTREE" || exit 1
      git worktree remove "$SELF_ROOT" || { echo "Error: git worktree remove refused; keeping $SELF_ROOT" >&2; exit 1; }
    fi
    ```
 
    - **The gates mirror the sweep.** HEAD must contain the merge commit, the
-     merged branch must be gone, and no ignored env or state file may be at
-     risk. `git worktree remove` without `--force` refuses untracked files.
-     On any refusal the worktree stays detached at the base tip; report why.
+     merged branch must be gone, and `holds_ignored_state` must find no ignored
+     credentials or state at risk. `git worktree remove` without `--force`
+     refuses untracked files. On any refusal the worktree stays detached at the
+     base tip; report why.
    - **Leave a harness-managed worktree through the harness.** If this session
      entered the worktree with Claude Code's `EnterWorktree`, call
      `ExitWorktree` with `action: "remove"` instead of the git commands above.
