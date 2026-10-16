@@ -92,3 +92,9 @@ state rather than destroyed. The old `tearleads-api`, `tearleads-client`, and
 retired database; `wrangler deployments list --name tearleads-api` now reports
 that the Worker does not exist. Nothing here references `tearleads.de` or
 `tearleads.com`.
+
+The old hostnames were retired without redirects by decision. At cutover no
+link on them was live: the only contract recipient had never been sent a
+signing token, nothing had been signed, and every invitation was accepted and
+expired, so no emailed `/sign/<token>`, document, or `/invite` link broke. New
+links are built from `CORS_ORIGIN` and point at `app.balebase.com`.
