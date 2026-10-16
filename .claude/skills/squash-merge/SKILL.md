@@ -108,9 +108,13 @@ export PATH
 
 # `git worktree remove` deletes ignored files without asking. Keep a worktree
 # holding any that may be the only copy of local credentials or Terraform
-# state, wherever they sit — including inside ignored directories.
+# state, wherever they sit — including inside ignored directories. Names are
+# read NUL-delimited, since git quotes unusual ones. A listing git cannot
+# produce stands in as an ignored `.env`, so an unreadable worktree is kept.
 holds_ignored_state() {
-  git -C "${1}" ls-files --others --ignored --exclude-standard |
+  { git -C "${1}" ls-files -z --others --ignored --exclude-standard ||
+    printf '.env\0'; } |
+    tr '\0' '\n' |
     grep -qE '(^|/)(\.secrets/|\.env[^/]*$|[^/]*\.tfstate[^/]*$)'
 }
 
@@ -349,7 +353,7 @@ as-is.
      [ "$WT_BRANCH" != "-" ] || { echo "Kept $WT_PATH (detached HEAD)"; continue; }
      MERGED_HEADS=$(gh pr list -R "$REPO" --head "$WT_BRANCH" --state merged --json headRefOid -q '.[].headRefOid') || { echo "Kept $WT_PATH (PR lookup failed)"; continue; }
      printf '%s\n' "$MERGED_HEADS" | grep -qxF "$WT_HEAD" || { echo "Kept $WT_PATH (no merged PR at its tip)"; continue; }
-     [ -z "$(git -C "$WT_PATH" status --porcelain --untracked-files=all)" ] || { echo "Kept $WT_PATH (uncommitted or untracked files)"; continue; }
+     WT_STATUS=$(git -C "$WT_PATH" status --porcelain --untracked-files=all) && [ -z "$WT_STATUS" ] || { echo "Kept $WT_PATH (uncommitted, untracked, or unreadable)"; continue; }
      if holds_ignored_state "$WT_PATH"; then echo "Kept $WT_PATH (ignored credentials or Terraform state)"; continue; fi
      git worktree remove "$WT_PATH" || { echo "Kept $WT_PATH (git worktree remove refused)"; continue; }
      [ "$(git rev-parse --verify --quiet "refs/heads/$WT_BRANCH^{commit}")" != "$WT_HEAD" ] || git branch -D "$WT_BRANCH" >/dev/null
@@ -370,6 +374,7 @@ as-is.
      asking, and those may be the only copy of local credentials or Terraform
      state. A `terraform init` leaves `.terraform/terraform.tfstate`, so a
      worktree where Terraform was initialized is kept and listed for the user.
+     Both checks fail closed: a worktree git cannot read is kept.
    - **Detached worktrees are kept and listed.** Nothing ties a detached HEAD
      to a PR, and a session that just ran `git worktree add --detach` looks the
      same as a leftover. Report them so the user can decide.
