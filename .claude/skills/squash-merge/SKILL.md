@@ -436,6 +436,8 @@ as-is.
      PRIMARY_WORKTREE=$(git worktree list --porcelain | awk '/^worktree / { print substr($(0), 10); exit }')
      [ -d "$PRIMARY_WORKTREE" ] || { echo "Error: primary checkout not found; keeping $SELF_ROOT" >&2; exit 1; }
      git merge-base --is-ancestor "$MERGE_COMMIT" HEAD || { echo "Error: HEAD does not contain $MERGE_COMMIT; keeping $SELF_ROOT" >&2; exit 1; }
+     git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c credential.helper= -c 'credential.helper=!gh auth git-credential' fetch --quiet "$BASE_REPO_URL" "$BASE_BRANCH" || { echo "Error: could not fetch $REPO:$BASE_BRANCH; keeping $SELF_ROOT" >&2; exit 1; }
+     git merge-base --is-ancestor HEAD FETCH_HEAD || { echo "Error: HEAD has commits $BASE_BRANCH lacks; keeping $SELF_ROOT" >&2; exit 1; }
      if git show-ref --verify --quiet "refs/heads/$MERGED_BRANCH"; then echo "Error: $MERGED_BRANCH still exists; keeping $SELF_ROOT" >&2; exit 1; fi
      SELF_STATUS=$(git -c core.hooksPath=/dev/null -c core.fsmonitor=false status --porcelain --untracked-files=all) && [ -z "$SELF_STATUS" ] || { echo "Error: uncommitted, untracked, or unreadable files; keeping $SELF_ROOT" >&2; exit 1; }
      if hides_tracked_changes "$SELF_ROOT"; then echo "Error: tracked files hidden from status; keeping $SELF_ROOT" >&2; exit 1; fi
@@ -453,11 +455,14 @@ as-is.
    fi
    ```
 
-   - **The gates mirror the sweep.** HEAD must contain the merge commit, the
-     merged branch must be gone, the tree must be clean including untracked
-     files, `hides_tracked_changes` must find no hidden tracked edits, and
-     `holds_ignored_state` must find nothing ignored beyond build output. On
-     any refusal the worktree stays detached at the base tip; report why.
+   - **The gates mirror the sweep.** HEAD must contain the merge commit and
+     hold nothing the freshly fetched base lacks, so a commit made on the
+     detached HEAD after cleanup keeps the worktree. (So does a stacked PR
+     under `ship-pr`, whose reset moves to a default branch the base lacks.)
+     The merged branch must be gone, the tree must be clean including
+     untracked files, `hides_tracked_changes` must find no hidden tracked
+     edits, and `holds_ignored_state` must find nothing ignored beyond build
+     output. On any refusal the worktree stays detached; report why.
    - **Every removal path runs the gates first.** If this session entered the
      worktree with Claude Code's `EnterWorktree`, run the gates block, then —
      only when it set `RETIRE_READY=true` — call `ExitWorktree` with

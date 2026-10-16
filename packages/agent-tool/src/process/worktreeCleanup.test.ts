@@ -467,6 +467,8 @@ test("a merge from a linked worktree detaches, resets, and retires it", () => {
       expect(git(primary, "rev-parse main")).toBe(primaryMain);
 
       const retireEnvironment = {
+        BASE_BRANCH: "main",
+        BASE_REPO_URL: path.join(fixture, "origin.git"),
         MERGE_COMMIT: mergeCommit,
         MERGED_BRANCH: `feat/${name}`,
       };
@@ -562,6 +564,14 @@ test("squash-merge retires its worktree only after a completed cleanup", () => {
       [...detached, "git branch -q -D feat/self", ": > ../self/notes.txt"],
     ],
     [
+      "commit after cleanup",
+      [
+        ...detached,
+        "git branch -q -D feat/self",
+        "git -C ../self commit -q --allow-empty -m 'only copy'",
+      ],
+    ],
+    [
       "merge not contained",
       [
         ...detached,
@@ -573,6 +583,8 @@ test("squash-merge retires its worktree only after a completed cleanup", () => {
   for (const [name, setup] of cases) {
     withFixture(setup, (fixture) => {
       const environment = {
+        BASE_BRANCH: "main",
+        BASE_REPO_URL: path.join(fixture, "origin.git"),
         MERGE_COMMIT: git(path.join(fixture, "primary"), "rev-parse main"),
         MERGED_BRANCH: "feat/self",
       };
