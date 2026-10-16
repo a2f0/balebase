@@ -359,8 +359,14 @@ as-is.
      WT_STATUS=$(git -C "$WT_PATH" status --porcelain --untracked-files=all) && [ -z "$WT_STATUS" ] || { echo "Kept $WT_PATH (uncommitted, untracked, or unreadable)"; continue; }
      if holds_ignored_state "$WT_PATH"; then echo "Kept $WT_PATH (ignored files beyond build output)"; continue; fi
      git worktree remove "$WT_PATH" || { echo "Kept $WT_PATH (git worktree remove refused)"; continue; }
-     [ "$(git rev-parse --verify --quiet "refs/heads/$WT_BRANCH^{commit}")" != "$WT_HEAD" ] || git branch -D "$WT_BRANCH" >/dev/null
-     echo "Removed $WT_PATH ($WT_BRANCH)"
+     # Compare-and-delete in one step: a commit landing on the branch after
+     # the checks above makes the delete fail instead of losing the commit.
+     if git update-ref -d "refs/heads/$WT_BRANCH" "$WT_HEAD" 2>/dev/null; then
+       git config --remove-section "branch.$WT_BRANCH" 2>/dev/null || :
+       echo "Removed $WT_PATH ($WT_BRANCH)"
+     else
+       echo "Removed $WT_PATH (kept $WT_BRANCH, which moved)"
+     fi
    done
    ```
 
@@ -386,8 +392,9 @@ as-is.
      to a PR, and a session that just ran `git worktree add --detach` looks the
      same as a leftover. Report them so the user can decide.
    - **Nothing is forced.** `git worktree remove` without `--force` refuses a
-     worktree with changes or a lock. `git branch -D` runs only while the
-     branch still points at the merged tip. Remote branches are left alone,
+     worktree with changes or a lock. The branch is deleted with
+     `git update-ref -d` against the merged tip, which deletes it only if it
+     still points there, in one atomic step. Remote branches are left alone,
      since deleting them belongs to the run that merged them. To keep a
      finished worktree, lock it with `git worktree lock <path>`.
    - **Only this clone's worktrees are in scope.** `git worktree prune` first
