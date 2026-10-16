@@ -1,6 +1,6 @@
 ---
 name: squash-merge
-description: Merge the current PR with a subject-only message through GitHub's policy gate, binding supplied review SHAs, then return to the PR's base branch, fast-forward it, and delete the merged branch
+description: Merge the current PR with a subject-only message through GitHub's policy gate, binding supplied review SHAs, then return to the PR's base branch, fast-forward it, delete the merged branch, sweep merged worktrees, and retire the current worktree
 ---
 
 # Reviewed Merge (`squash-merge` compatibility)
@@ -14,6 +14,10 @@ that `gh pr merge --subject` otherwise suppresses.
 
 Once the PR is confirmed `MERGED`, return to the PR's base branch, fast-forward
 it, and delete the merged branch, so a shipped PR leaves no local leftovers.
+Linked git worktrees are cleaned up too. A worktree that ran the merge is
+removed once its branch is gone. Each merge also sweeps this clone's other
+worktrees whose PRs already merged. Agents do not always work in a worktree;
+without one, both steps do nothing.
 
 ## Arguments
 
@@ -29,17 +33,22 @@ it, and delete the merged branch, so a shipped PR leaves no local leftovers.
   An unprotected base, non-strict policy, or active merge queue is rejected. A
   moved pair is rejected.
 - `--keep-branch` (optional flag, position-independent): skip the post-merge
-  cleanup (step 4) and stay on the feature branch. Use when the branch is still
-  needed locally (e.g. to build a follow-up PR on top of it).
+  cleanup (step 4) and the worktree retirement (step 6), and stay on the
+  feature branch. Use when the branch is still needed locally (e.g. to build a
+  follow-up PR on top of it).
+- `--keep-worktree` (optional flag, position-independent): run the cleanup but
+  skip step 6, leaving a linked worktree detached at the base tip. `ship-pr`
+  passes it so `reset` can still run in the worktree before `ship-pr` retires
+  it.
 
-  **This flag is consumed by this skill and must never reach the tool.** The
+  **These flags are consumed by this skill and must never reach the tool.** The
   tool takes only the three positionals above — subject, head SHA, base SHA —
-  and how a forwarded `--keep-branch` fails depends on where it lands: first, it
+  and how a forwarded flag fails depends on where it lands: first, it
   is read as the *subject* and rejected by commitlint; after the positionals
   (the position `ship-pr` forwards), it is **silently ignored**. The silent case
   is the dangerous one — the merge succeeds, the caller believes cleanup was
-  skipped, and it ran anyway. Strip the flag from the arguments, let it gate
-  step 4, and call the tool with the subject and SHA only.
+  skipped, and it ran anyway. Strip the flags from the arguments, let them gate
+  steps 4 and 6, and call the tool with the subject and SHA only.
 
 ## Prerequisites
 
@@ -250,10 +259,17 @@ as-is.
    ```bash
    MERGED_BRANCH="$BRANCH"
    MERGE_COMMIT=$(gh pr view "$PR_NUMBER" --json mergeCommit -q .mergeCommit.oid -R "$REPO")
+   # Git checks a branch out in one worktree at a time. When another worktree
+   # (usually the primary checkout) holds the base, detach at its tip instead.
+   BASE_WORKTREE=$(git worktree list --porcelain | awk -v ref="refs/heads/$BASE_BRANCH" '/^worktree / { path = substr($(0), 10) } $(0) == "branch " ref { print path }')
 
-   git -c core.hooksPath=/dev/null switch "$BASE_BRANCH" || { echo "Error: could not switch to $BASE_BRANCH" >&2; exit 1; }
    git -c credential.helper= -c 'credential.helper=!gh auth git-credential' fetch "$BASE_REPO_URL" "$BASE_BRANCH" || { echo "Error: could not fetch $REPO:$BASE_BRANCH; skipping delete" >&2; exit 1; }
-   git -c core.hooksPath=/dev/null merge --ff-only FETCH_HEAD || { echo "Error: $BASE_BRANCH could not fast-forward to $REPO:$BASE_BRANCH; skipping delete" >&2; exit 1; }
+   if [ -n "$BASE_WORKTREE" ]; then
+     git -c core.hooksPath=/dev/null switch --detach FETCH_HEAD || { echo "Error: could not detach at $REPO:$BASE_BRANCH; skipping delete" >&2; exit 1; }
+   else
+     git -c core.hooksPath=/dev/null switch "$BASE_BRANCH" || { echo "Error: could not switch to $BASE_BRANCH" >&2; exit 1; }
+     git -c core.hooksPath=/dev/null merge --ff-only FETCH_HEAD || { echo "Error: $BASE_BRANCH could not fast-forward to $REPO:$BASE_BRANCH; skipping delete" >&2; exit 1; }
+   fi
 
    # The real gate on the delete: prove this branch now contains the squash commit.
    [ -n "$MERGE_COMMIT" ] || { echo "Error: could not resolve merge commit; skipping delete" >&2; exit 1; }
@@ -272,6 +288,13 @@ as-is.
 
    - **Switch before deleting** — git refuses to delete the branch that is
      checked out.
+   - **Detach when another worktree holds the base.** In a linked worktree,
+     `git switch "$BASE_BRANCH"` fails with "already used by worktree" when the
+     primary checkout is on that branch. That used to stop the cleanup and
+     strand the worktree on its merged branch. Detaching at the fetched tip
+     frees the feature branch for deletion. The ancestry check below still
+     gates the delete. The other worktree's base branch is left for its owner
+     to fast-forward.
    - **`--ff-only`** — the base branch must never acquire a merge commit here.
      A non-fast-forward means it has diverged locally; stop and report rather
      than reconciling. The guard is what makes that happen: without it the
@@ -295,11 +318,100 @@ as-is.
    - **`-D`, not `-d`, is required here** — see the note below. The `MERGED` check
      plus the ancestry check above are what make the force safe.
 
-5. **Report results**: state the merged PR number, the final merge subject
+5. **Sweep merged worktrees**: run this whenever the merge landed, even when
+   `--keep-branch` or `--keep-worktree` was given or step 4 stopped. Each merge
+   then also clears worktrees that earlier runs or other sessions left behind.
+   With no linked worktrees, it does nothing.
+
+   ```bash
+   SELF_ROOT=$("$REALPATH_BIN" "$(git rev-parse --show-toplevel)") || exit 1
+   TAB=$(printf '\t')
+   git worktree prune || { echo "Error: git worktree prune failed; skipping the sweep" >&2; exit 1; }
+   git worktree list --porcelain | awk -v tab="$TAB" '
+     function emit() { if (path != "" && ++n > 1) print path tab head tab branch tab flag }
+     /^worktree / { emit(); path = substr($(0), 10); head = "-"; branch = "-"; flag = "-"; next }
+     /^HEAD / { head = substr($(0), 6); next }
+     /^branch refs\/heads\// { branch = substr($(0), 19); next }
+     /^(bare|locked|prunable)/ { flag = $(1); next }
+     END { emit() }
+   ' | while IFS="$TAB" read -r WT_PATH WT_HEAD WT_BRANCH WT_FLAG; do
+     [ "$("$REALPATH_BIN" "$WT_PATH" 2>/dev/null)" != "$SELF_ROOT" ] || continue
+     [ "$WT_FLAG" = "-" ] || { echo "Kept $WT_PATH ($WT_FLAG)"; continue; }
+     [ "$WT_BRANCH" != "-" ] || { echo "Kept $WT_PATH (detached HEAD)"; continue; }
+     MERGED_HEADS=$(gh pr list -R "$REPO" --head "$WT_BRANCH" --state merged --json headRefOid -q '.[].headRefOid') || { echo "Kept $WT_PATH (PR lookup failed)"; continue; }
+     printf '%s\n' "$MERGED_HEADS" | grep -qxF "$WT_HEAD" || { echo "Kept $WT_PATH (no merged PR at its tip)"; continue; }
+     [ -z "$(git -C "$WT_PATH" status --porcelain --untracked-files=all)" ] || { echo "Kept $WT_PATH (uncommitted or untracked files)"; continue; }
+     if git -C "$WT_PATH" ls-files --others --ignored --exclude-standard --directory | grep -qE '(^|/)(\.env[^/]*|[^/]*\.tfstate[^/]*)$'; then echo "Kept $WT_PATH (ignored env or Terraform state)"; continue; fi
+     git worktree remove "$WT_PATH" || { echo "Kept $WT_PATH (git worktree remove refused)"; continue; }
+     [ "$(git rev-parse --verify --quiet "refs/heads/$WT_BRANCH^{commit}")" != "$WT_HEAD" ] || git branch -D "$WT_BRANCH" >/dev/null
+     echo "Removed $WT_PATH ($WT_BRANCH)"
+   done
+   ```
+
+   - **A worktree is removed only when its work has provably landed.** It must
+     be on a named branch, and a merged PR in this repository must have
+     exactly that branch tip as its head. That is the state a shipped branch
+     is left in when its cleanup could not run. Two kinds of branch survive: a
+     fresh one that only sits at the base tip, and one with commits added after
+     its PR merged.
+   - **It must also be safe to delete.** Removal requires no uncommitted or
+     untracked files. It also requires no ignored `.env*` or `*.tfstate*` file
+     outside an ignored directory. `git worktree remove` deletes ignored files
+     without asking, and those may be the only copy of local credentials or
+     Terraform state.
+   - **Detached worktrees are kept and listed.** Nothing ties a detached HEAD
+     to a PR, and a session that just ran `git worktree add --detach` looks the
+     same as a leftover. Report them so the user can decide.
+   - **Nothing is forced.** `git worktree remove` without `--force` refuses a
+     worktree with changes or a lock. `git branch -D` runs only while the
+     branch still points at the merged tip. Remote branches are left alone,
+     since deleting them belongs to the run that merged them. To keep a
+     finished worktree, lock it with `git worktree lock <path>`.
+   - **Only this clone's worktrees are in scope.** `git worktree prune` first
+     drops records of worktrees whose directories are already gone, and
+     touches no files. A worktree whose own repository was deleted no longer
+     appears in any `git worktree list`, so the sweep cannot reach it.
+
+6. **Retire this worktree**: skip it when `--keep-branch` or `--keep-worktree`
+   was given, when step 4 did not complete, or in the primary checkout. Run it
+   last, because it deletes the directory the shell is in.
+
+   ```bash
+   GIT_DIR_ABS=$(git rev-parse --path-format=absolute --git-dir) || exit 1
+   GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir) || exit 1
+   if [ "$GIT_DIR_ABS" != "$GIT_COMMON_DIR" ]; then
+     SELF_ROOT=$("$REALPATH_BIN" "$(git rev-parse --show-toplevel)") || exit 1
+     PRIMARY_WORKTREE=$(git worktree list --porcelain | awk '/^worktree / { print substr($(0), 10); exit }')
+     [ -d "$PRIMARY_WORKTREE" ] || { echo "Error: primary checkout not found; keeping $SELF_ROOT" >&2; exit 1; }
+     git merge-base --is-ancestor "$MERGE_COMMIT" HEAD || { echo "Error: HEAD does not contain $MERGE_COMMIT; keeping $SELF_ROOT" >&2; exit 1; }
+     if git show-ref --verify --quiet "refs/heads/$MERGED_BRANCH"; then echo "Error: $MERGED_BRANCH still exists; keeping $SELF_ROOT" >&2; exit 1; fi
+     if git ls-files --others --ignored --exclude-standard --directory | grep -qE '(^|/)(\.env[^/]*|[^/]*\.tfstate[^/]*)$'; then echo "Error: ignored env or Terraform state files; keeping $SELF_ROOT" >&2; exit 1; fi
+     cd "$PRIMARY_WORKTREE" || exit 1
+     git worktree remove "$SELF_ROOT" || { echo "Error: git worktree remove refused; keeping $SELF_ROOT" >&2; exit 1; }
+   fi
+   ```
+
+   - **The gates mirror the sweep.** HEAD must contain the merge commit, the
+     merged branch must be gone, and no ignored env or state file may be at
+     risk. `git worktree remove` without `--force` refuses untracked files.
+     On any refusal the worktree stays detached at the base tip; report why.
+   - **Leave a harness-managed worktree through the harness.** If this session
+     entered the worktree with Claude Code's `EnterWorktree`, call
+     `ExitWorktree` with `action: "remove"` instead of the git commands above.
+     That returns the session to its starting directory. Fall back to git if
+     it refuses.
+   - **The shell ends up in the primary checkout.** Run nothing else from the
+     removed path. A session launched inside the worktree has to continue from
+     the primary checkout, so say so in the report.
+
+7. **Report results**: state the merged PR number, the final merge subject
    (including the `(#<pr>)` reference), and confirm the merge succeeded. Name the
-   base branch returned to, that it was fast-forwarded and verified to contain the
-   merge commit, and that the merged branch was deleted (locally, and remotely when
-   it still existed) — or why cleanup was skipped.
+   base branch returned to (or the tip a linked worktree detached at), that it
+   was fast-forwarded and verified to contain the merge commit, and that the
+   merged branch was deleted (locally, and remotely when it still existed) — or
+   why cleanup was skipped. List the worktrees the sweep removed and the ones it
+   kept with their reasons. Say whether this worktree was retired, or why it
+   was kept.
 
 ## Notes
 
@@ -316,6 +428,11 @@ as-is.
 - Cleanup uses `git branch -D` because a squashed feature tip is not an ancestor
   of the new base commit. It remains safe because cleanup is gated on GitHub
   reporting `MERGED` and on the base containing GitHub's merge commit.
-- The tool itself does not delete the branch or change the checkout, and knows
-  nothing of `--keep-branch`; step 4 of this skill owns all of that. A caller that
-  invokes the tool directly gets the merge **without** the cleanup.
+- The tool itself does not delete the branch, change the checkout, or touch
+  worktrees, and knows nothing of `--keep-branch` or `--keep-worktree`; steps
+  4–6 of this skill own all of that. A caller that invokes the tool directly
+  gets the merge **without** the cleanup.
+- Worktrees are cleaned up as merges land, not in a separate chore. The
+  merging worktree retires itself, and the sweep catches worktrees whose
+  cleanup never ran. Both only remove a worktree whose branch tip is a merged
+  PR's exact head, or whose branch this run just deleted.
