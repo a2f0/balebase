@@ -9,6 +9,7 @@
 .wrangler
 wrangler.staging.jsonc
 .terraform
+.terraform-lint
 dist
 node_modules
 *.tsbuildinfo

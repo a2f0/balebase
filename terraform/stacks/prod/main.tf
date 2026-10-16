@@ -13,12 +13,22 @@ resource "cloudflare_d1_database" "main" {
   read_replication = {
     mode = "disabled"
   }
+
+  # D1 and R2 names are immutable, so a rename plans a replacement. Copy the
+  # data, then `terraform state rm` the old resource instead of destroying it.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "cloudflare_r2_bucket" "objects" {
   account_id    = var.cloudflare_account_id
   name          = var.r2_bucket_name
   storage_class = "Standard"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Email Routing itself is enabled once in the Cloudflare dashboard; the provider
@@ -31,7 +41,7 @@ resource "cloudflare_email_routing_dns" "inbound" {
 
 resource "cloudflare_email_routing_rule" "inbound" {
   zone_id = data.cloudflare_zone.main.id
-  name    = "Store inbound email in tearleads-api"
+  name    = "Store inbound email in ${var.api_worker_name}"
   enabled = true
 
   matchers = [{

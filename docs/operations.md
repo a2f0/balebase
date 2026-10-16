@@ -18,13 +18,15 @@ values that the matrix repository deploys; repository code never reads it.
 ## Provision Cloudflare resources
 
 Put the Cloudflare credentials in `.secrets/prod/app.env`, then review the
-Terraform plan. Both tokens must be scoped to the `tearleads.de` zone;
+Terraform plan. Both tokens must be scoped to the `balebase.com` zone;
 `scripts/cloudflareEnv.sh` lists every variable the scripts read:
 
 ```sh
 export TF_VAR_cloudflare_api_token=your-account-token
 export TF_VAR_cloudflare_account_id=your-account-id
 export CLOUDFLARE_EMAIL_API_TOKEN=your-zone-token
+export TF_STATE_ACCESS_KEY_ID=r2-state-token-id
+export TF_STATE_SECRET_ACCESS_KEY=sha256-of-r2-state-token
 bun run terraform:plan
 ```
 
@@ -37,9 +39,9 @@ bun run terraform:plan
 bun run terraform:apply
 ```
 
-Inbound mail to `upload+<organization-id>@inbox.tearleads.de` is handled by
+Inbound mail to `upload+<organization-id>@inbox.balebase.com` is handled by
 the API Worker. Email Routing is enabled once in the Cloudflare dashboard;
-Terraform then creates the `inbox.tearleads.de` MX records and routes the
+Terraform then creates the `inbox.balebase.com` MX records and routes the
 address to the Worker. The Worker stores the full `.eml` and each attachment in
 the private R2 bucket, with organization-scoped delivery and attachment
 metadata in D1.
@@ -82,11 +84,12 @@ bun run deploy:verify   # check all production URLs
 
 ## Deploy staging
 
-Staging uses separate Workers, a D1 database, an R2 bucket, and Terraform state.
-Its public URLs are `staging.tearleads.de`, `app-staging.tearleads.de`, and
-`api-staging.tearleads.de`. Inbound uploads use
-`upload+<organization-id>@inbox-staging.tearleads.de`. The flat hostnames work
-with Cloudflare Universal SSL on the `tearleads.de` zone.
+Staging uses separate Workers, a D1 database, an R2 bucket, and Terraform state
+(in the same R2 state bucket as production). Its public URLs are
+`website-staging.balebase.com`, `app-staging.balebase.com`, and
+`api-staging.balebase.com`. Inbound uploads use
+`upload+<organization-id>@inbox-staging.balebase.com`. The flat hostnames work
+with Cloudflare Universal SSL on the `balebase.com` zone.
 
 Put these values in `.secrets/staging/app.env`. Use a new auth secret, sandbox
 Plaid credentials, and Stripe test-mode credentials and price:
@@ -95,6 +98,8 @@ Plaid credentials, and Stripe test-mode credentials and price:
 TF_VAR_cloudflare_api_token=...
 TF_VAR_cloudflare_account_id=...
 CLOUDFLARE_EMAIL_API_TOKEN=...
+TF_STATE_ACCESS_KEY_ID=...
+TF_STATE_SECRET_ACCESS_KEY=...
 BETTER_AUTH_SECRET=...
 PLAID_CLIENT_ID=...
 PLAID_SECRET=...
@@ -124,7 +129,7 @@ asks for confirmation before applying the domains. The generated
 `wrangler.staging.jsonc` files are ignored; their D1 ID comes from staging
 Terraform output. The staging API does not run production's scheduled jobs.
 Configure the Stripe test-mode webhook at
-`https://api-staging.tearleads.de/api/billing/webhook` and put that endpoint's
+`https://api-staging.balebase.com/api/billing/webhook` and put that endpoint's
 signing secret in `STRIPE_WEBHOOK_SECRET`.
 
 For later infrastructure changes, use `bun run terraform:staging:plan` and
@@ -178,6 +183,6 @@ The move downloads each legacy object, uploads it beneath
 `organizations/<organization-id>/`, verifies that the bytes match, updates its
 D1 key, and only then deletes the legacy object.
 
-Production URLs are `api.tearleads.de`, `app.tearleads.de`, and
-`tearleads.de`. See [`terraform/README.md`](../terraform/README.md) for state and
+Production URLs are `api.balebase.com`, `app.balebase.com`, and
+`balebase.com`. See [`terraform/README.md`](../terraform/README.md) for state and
 domain details.

@@ -10,7 +10,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/cloudflareEnv.sh"
 load_cloudflare_env
 
-export PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app.tearleads.de}"
+export PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app.balebase.com}"
 
 echo "Building website with app URL $PUBLIC_APP_URL..."
 if [[ "${DRY_RUN:-0}" == "1" ]]; then

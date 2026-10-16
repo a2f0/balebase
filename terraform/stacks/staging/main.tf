@@ -32,7 +32,7 @@ resource "cloudflare_email_routing_dns" "inbound" {
 resource "cloudflare_email_routing_rule" "inbound" {
   count   = var.enable_email_routing ? 1 : 0
   zone_id = data.cloudflare_zone.main.id
-  name    = "Store inbound email in tearleads-api-staging"
+  name    = "Store inbound email in ${var.api_worker_name}"
   enabled = true
 
   matchers = [{

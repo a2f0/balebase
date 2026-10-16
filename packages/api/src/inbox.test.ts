@@ -18,7 +18,7 @@ const otherRawObjectKey = `organizations/${otherOrganizationId}/inbound-emails/$
 const otherAttachmentObjectKey = `organizations/${otherOrganizationId}/inbound-emails/${otherEmailId}/attachments/${otherAttachmentId}`;
 const rawEmail = [
   "From: Sender <sender@example.com>",
-  "To: upload@inbox.tearleads.de",
+  "To: upload@inbox.balebase.com",
   "Subject: Test attachment",
   "MIME-Version: 1.0",
   'Content-Type: multipart/mixed; boundary="test-boundary"',
@@ -125,7 +125,7 @@ describe("inbox", () => {
     expect(list.status).toBe(200);
     const listBody: unknown = await list.json();
     expect(listBody).toEqual({
-      address: `upload+${organizationId}@inbox.tearleads.de`,
+      address: `upload+${organizationId}@inbox.balebase.com`,
       emails: [
         {
           attachmentCount: 1,
@@ -140,7 +140,7 @@ describe("inbox", () => {
           receivedAt: "2026-08-18T12:00:00.000Z",
           subject: "Test attachment",
           status: "inbox",
-          to: "upload@inbox.tearleads.de",
+          to: "upload@inbox.balebase.com",
         },
       ],
     });
@@ -295,7 +295,7 @@ async function createFixture() {
       emailId,
       "<test@example.com>",
       "sender@example.com",
-      "upload@inbox.tearleads.de",
+      "upload@inbox.balebase.com",
       "Test attachment",
       rawObjectKey,
       new TextEncoder().encode(rawEmail).byteLength,
@@ -335,7 +335,7 @@ async function createFixture() {
       otherOrganizationId,
       "<other@example.com>",
       "other@example.com",
-      `upload+${otherOrganizationId}@inbox.tearleads.de`,
+      `upload+${otherOrganizationId}@inbox.balebase.com`,
       "Other organization",
       otherRawObjectKey,
       new TextEncoder().encode(rawEmail).byteLength,
@@ -382,14 +382,14 @@ async function createFixture() {
     [otherAttachmentObjectKey, new TextEncoder().encode("other attachment")],
   ]);
   const bindings = {
-    AUTH_EMAIL_FROM: "security@auth.tearleads.de",
+    AUTH_EMAIL_FROM: "security@auth.balebase.com",
     BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
     BETTER_AUTH_URL: "https://api.test",
     CORS_ORIGIN: "https://app.test",
     DB: toD1(database),
     EMAIL: {} as SendEmail,
     IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.tearleads.de",
+    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
     STORAGE: createStorage(objects),
   } satisfies Bindings;
   const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();

@@ -1,15 +1,15 @@
 # Credentials are loaded from .secrets/prod, never from this file.
-domain = "tearleads.de"
+domain = "balebase.com"
 
-d1_database_name = "stealth-db"
-r2_bucket_name    = "stealth-objects"
-inbound_email_subdomain = "inbox.tearleads.de"
-inbound_email_address   = "upload@inbox.tearleads.de"
+d1_database_name = "balebase-db"
+r2_bucket_name    = "balebase-objects"
+inbound_email_subdomain = "inbox.balebase.com"
+inbound_email_address   = "upload@inbox.balebase.com"
 
 # The production deploy script creates all three Workers before Terraform
 # attaches these domains.
 enable_custom_domains = true
 
-website_hostname = "tearleads.de"
-client_hostname  = "app.tearleads.de"
-api_hostname     = "api.tearleads.de"
+website_hostname = "balebase.com"
+client_hostname  = "app.balebase.com"
+api_hostname     = "api.balebase.com"

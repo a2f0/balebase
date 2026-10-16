@@ -27,6 +27,9 @@ fi
 for tier in prod staging; do
   stack_dir="$TERRAFORM_ROOT/stacks/$tier"
   echo "Initializing $tier Terraform providers..."
+  # A separate data directory keeps validation away from the R2 backend that
+  # terraform/scripts/run.sh initializes in .terraform.
+  export TF_DATA_DIR="$stack_dir/.terraform-lint"
   terraform -chdir="$stack_dir" init -backend=false -input=false >/dev/null
   terraform -chdir="$stack_dir" validate
   tflint --init --config="$REPO_ROOT/.tflint.hcl" --chdir="$stack_dir" >/dev/null

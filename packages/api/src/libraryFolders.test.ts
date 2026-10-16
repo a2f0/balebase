@@ -234,14 +234,14 @@ async function createFixture() {
   seed(database);
   const stored = new Map<string, Uint8Array>();
   const bindings = {
-    AUTH_EMAIL_FROM: "security@auth.tearleads.de",
+    AUTH_EMAIL_FROM: "security@auth.balebase.com",
     BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
     BETTER_AUTH_URL: "https://api.test",
     CORS_ORIGIN: "https://app.test",
     DB: toD1(database),
     EMAIL: {} as SendEmail,
     IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.tearleads.de",
+    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
     STORAGE: storageFor(stored),
   } satisfies Bindings;
 
@@ -331,7 +331,7 @@ function seed(database: Database) {
        (id, organization_id, envelope_from, envelope_to, subject,
         raw_object_key, raw_size, received_at)
        VALUES ('email-1', 'org-1', 'sender@example.com',
-               'upload@inbox.tearleads.de', 'Lease', 'raw/email-1', 1, ?)`,
+               'upload@inbox.balebase.com', 'Lease', 'raw/email-1', 1, ?)`,
     )
     .run(timestamp);
 }

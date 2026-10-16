@@ -5,9 +5,9 @@ set -euo pipefail
 VERIFY_DOH_URL="${VERIFY_DOH_URL-https://cloudflare-dns.com/dns-query}"
 
 for url in \
-  "https://api-staging.tearleads.de/health" \
-  "https://app-staging.tearleads.de" \
-  "https://staging.tearleads.de"; do
+  "https://api-staging.balebase.com/health" \
+  "https://app-staging.balebase.com" \
+  "https://website-staging.balebase.com"; do
   echo "Checking $url..."
   curl_args=(
     --connect-timeout 10

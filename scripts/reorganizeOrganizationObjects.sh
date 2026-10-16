@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TARGET="--remote"
 DRY_RUN=false
-BUCKET="stealth-objects"
+BUCKET="balebase-objects"
 
 usage() {
   echo "Usage: bun --bun run organizations:objects:reorganize [--remote|--local] [--dry-run]" >&2

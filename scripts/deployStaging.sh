@@ -85,10 +85,10 @@ else
   bunx --bun wrangler deploy --config "$api_config"
 fi
 
-VITE_API_URL="https://api-staging.tearleads.de" \
-  VITE_WEBSITE_URL="https://staging.tearleads.de" \
+VITE_API_URL="https://api-staging.balebase.com" \
+  VITE_WEBSITE_URL="https://website-staging.balebase.com" \
   bun --bun run --cwd "$REPO_ROOT/packages/client" build
-PUBLIC_APP_URL="https://app-staging.tearleads.de" \
+PUBLIC_APP_URL="https://app-staging.balebase.com" \
   bun --bun run --cwd "$REPO_ROOT/packages/website" build
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then

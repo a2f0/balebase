@@ -636,14 +636,14 @@ function testApp(
 
 function bindingsFor(database: Database): Bindings {
   return {
-    AUTH_EMAIL_FROM: "security@auth.tearleads.de",
+    AUTH_EMAIL_FROM: "security@auth.balebase.com",
     BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
     BETTER_AUTH_URL: "https://api.test",
     CORS_ORIGIN: "https://app.test",
     DB: toD1(database),
     EMAIL: {} as SendEmail,
     IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.tearleads.de",
+    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
     STORAGE: {} as R2Bucket,
     STRIPE_PRO_PRICE_ID: proPriceId,
     STRIPE_SECRET_KEY: "sk_live_test",

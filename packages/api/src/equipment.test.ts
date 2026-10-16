@@ -12,7 +12,7 @@ import type { Bindings } from "./types";
 const timestamp = "2026-09-20T12:00:00.000Z";
 const rawEmail = [
   "From: Store <orders@store.example>",
-  "To: upload@inbox.tearleads.de",
+  "To: upload@inbox.balebase.com",
   "Subject: Your laptop receipt",
   "Content-Type: text/plain",
   "",
@@ -567,14 +567,14 @@ async function createFixture() {
   seed(database);
   const raw = new TextEncoder().encode(rawEmail);
   const bindings = {
-    AUTH_EMAIL_FROM: "security@auth.tearleads.de",
+    AUTH_EMAIL_FROM: "security@auth.balebase.com",
     BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
     BETTER_AUTH_URL: "https://api.test",
     CORS_ORIGIN: "https://app.test",
     DB: toD1(database),
     EMAIL: {} as SendEmail,
     IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.tearleads.de",
+    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
     STORAGE: {
       get: async () => ({ arrayBuffer: async () => raw.slice().buffer }),
     } as unknown as R2Bucket,
@@ -650,7 +650,7 @@ function seed(database: Database) {
      (id, organization_id, envelope_from, envelope_to, subject,
       raw_object_key, raw_size, received_at)
      VALUES ('email-1', 'org-1', 'orders@store.example',
-             'upload@inbox.tearleads.de', 'Your laptop receipt',
+             'upload@inbox.balebase.com', 'Your laptop receipt',
              'raw/email-1', 1, ?)`,
     timestamp,
   );

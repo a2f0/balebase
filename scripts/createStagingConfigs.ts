@@ -41,15 +41,15 @@ async function save(app: string, value: Record<string, unknown>) {
 }
 
 const api = await config("api");
-api.name = "tearleads-api-staging";
+api.name = "balebase-api-staging";
 api.vars = {
   ...api.vars,
-  BETTER_AUTH_URL: "https://api-staging.tearleads.de",
-  CORS_ORIGIN: "https://app-staging.tearleads.de",
+  BETTER_AUTH_URL: "https://api-staging.balebase.com",
+  CORS_ORIGIN: "https://app-staging.balebase.com",
   CHECKR_ENV: "staging",
-  INBOUND_EMAIL_DOMAIN: "inbox-staging.tearleads.de",
+  INBOUND_EMAIL_DOMAIN: "inbox-staging.balebase.com",
   PLAID_ENV: "sandbox",
-  PLAID_REDIRECT_URI: "https://app-staging.tearleads.de/finance",
+  PLAID_REDIRECT_URI: "https://app-staging.balebase.com/finance",
   STRIPE_PORTAL_CONFIGURATION_ID:
     Reflect.get(process.env, "STAGING_STRIPE_PORTAL_CONFIGURATION_ID") ?? "",
   STRIPE_PRO_LEGACY_PRICE_IDS: "",
@@ -73,9 +73,9 @@ delete api.triggers;
 await save("api", api);
 
 const client = await config("client");
-client.name = "tearleads-client-staging";
+client.name = "balebase-client-staging";
 await save("client", client);
 
 const website = await config("website");
-website.name = "tearleads-website-staging";
+website.name = "balebase-website-staging";
 await save("website", website);

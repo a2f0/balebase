@@ -1667,7 +1667,7 @@ async function createFixture() {
   const messages: EmailMessageBuilder[] = [];
   const pending: Promise<unknown>[] = [];
   const bindings = {
-    AUTH_EMAIL_FROM: "security@auth.tearleads.de",
+    AUTH_EMAIL_FROM: "security@auth.balebase.com",
     BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
     BETTER_AUTH_URL: baseURL,
     CORS_ORIGIN: origin,
@@ -1679,7 +1679,7 @@ async function createFixture() {
       },
     } as unknown as SendEmail,
     IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.tearleads.de",
+    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
     STRIPE_PRO_PRICE_ID: "price_pro_test",
     STORAGE: {} as R2Bucket,
   } satisfies Bindings;

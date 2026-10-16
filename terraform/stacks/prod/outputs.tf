@@ -1,5 +1,5 @@
 output "zone_id" {
-  description = "Cloudflare zone ID for tearleads.de."
+  description = "Cloudflare zone ID for balebase.com."
   value       = data.cloudflare_zone.main.id
 }
 
