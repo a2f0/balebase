@@ -20,7 +20,7 @@ source "$REPO_ROOT/scripts/cloudflareEnv.sh"
 
 if [[ "$TIER" == "staging" ]]; then
   unset TF_VAR_cloudflare_api_token TF_VAR_cloudflare_account_id
-  source_env_file "$REPO_ROOT/.secrets/staging.env"
+  load_tier_env staging "$REPO_ROOT"
   validate_cloudflare_env
 else
   load_cloudflare_env

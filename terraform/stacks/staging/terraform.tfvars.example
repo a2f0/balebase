@@ -1,4 +1,4 @@
-# Credentials are loaded from .secrets/staging.env, never from this file.
+# Credentials are loaded from .secrets/staging, never from this file.
 domain = "tearleads.de"
 
 d1_database_name = "stealth-db-staging"

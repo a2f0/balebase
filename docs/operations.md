@@ -2,11 +2,24 @@
 
 [Local setup](../README.md) · [Product reference](product.md)
 
+## Local secrets
+
+`.secrets` is a gitignored link to `../matrix-secrets/balebase`, managed and
+backed up from the matrix repository (a2f0/matrix,
+[`docs/secrets.md`](https://github.com/a2f0/matrix/blob/main/docs/secrets.md)).
+Each tier folder is self-contained. Production commands, and commands that take
+no tier, read `.secrets/prod`; staging commands read `.secrets/staging`. Within
+a tier, `shared.env` holds values copied from a cross-project root file and
+loads first when present; the tier's own `app.env` loads last and wins. The
+local API reads the production tier, then takes only its Checkr credentials
+from the staging tier when one exists. The `ci/` folder holds GitHub Actions
+values that the matrix repository deploys; repository code never reads it.
+
 ## Provision Cloudflare resources
 
-Create the ignored `.secrets/root.env` with the Cloudflare credentials, then
-review the Terraform plan. Both tokens must be scoped to the `tearleads.de`
-zone; `scripts/cloudflareEnv.sh` lists every variable the scripts read:
+Put the Cloudflare credentials in `.secrets/prod/app.env`, then review the
+Terraform plan. Both tokens must be scoped to the `tearleads.de` zone;
+`scripts/cloudflareEnv.sh` lists every variable the scripts read:
 
 ```sh
 export TF_VAR_cloudflare_api_token=your-account-token
@@ -31,7 +44,7 @@ address to the Worker. The Worker stores the full `.eml` and each attachment in
 the private R2 bucket, with organization-scoped delivery and attachment
 metadata in D1.
 Organization members can inspect their active organization's mailbox in the
-client at `/inbox`. The ignored `.secrets/root.env` also needs
+client at `/inbox`. The production tier also needs
 `CLOUDFLARE_EMAIL_API_TOKEN`; it configures subaddressing and verifies the
 subdomain's Email Routing setup. The Terraform token needs Email Routing Rules
 Write.
@@ -75,8 +88,8 @@ Its public URLs are `staging.tearleads.de`, `app-staging.tearleads.de`, and
 `upload+<organization-id>@inbox-staging.tearleads.de`. The flat hostnames work
 with Cloudflare Universal SSL on the `tearleads.de` zone.
 
-Create the ignored `.secrets/staging.env` with these values. Use a new auth
-secret, sandbox Plaid credentials, and Stripe test-mode credentials and price:
+Put these values in `.secrets/staging/app.env`. Use a new auth secret, sandbox
+Plaid credentials, and Stripe test-mode credentials and price:
 
 ```sh
 TF_VAR_cloudflare_api_token=...
@@ -118,17 +131,7 @@ For later infrastructure changes, use `bun run terraform:staging:plan` and
 `bun run terraform:staging:apply`. Cloudflare Email Routing subaddressing must
 be enabled once for the zone, as described in the inbound email setup above.
 
-## Back up shared local data
-
-Run `bun run backup:shared-data` to archive `.secrets` and, when present,
-`.test_files` under `~/stealth-backups`. Pass an output directory as the first
-argument. Password-protected backups are `.zip.gpg` files encrypted with GPG
-AES-256 authenticated encryption; GPG prompts in an interactive terminal.
-For an unattended backup, use `--password <password>` or explicitly choose an
-unencrypted `.zip` with `--no-password`. Without a terminal, one of those
-options is required. The password option exposes the passphrase in the backup
-command's process list. To restore an encrypted backup, run
-`gpg --decrypt backup.zip.gpg > backup.zip` and extract the resulting ZIP.
+## Retain and purge data
 
 Organization owners can soft-delete an organization from its general settings.
 The organization and its workspace data become inaccessible immediately and

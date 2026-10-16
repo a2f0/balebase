@@ -41,6 +41,11 @@ Local services use these addresses:
 - Client: <http://localhost:5173>
 - Website: <http://localhost:4321>
 
+The local API reads `BETTER_AUTH_SECRET` and optional integration keys from
+`.secrets`, a gitignored link to `../matrix-secrets/balebase` that the
+[matrix repository](https://github.com/a2f0/matrix/blob/main/docs/secrets.md)
+manages and backs up. See [local secrets](docs/operations.md#local-secrets).
+
 Wrangler persists the local D1 database and R2 bucket under
 `packages/api/.wrangler/`. The client defaults to the local API. Override it by
 copying `packages/client/.env.example` to `packages/client/.env`.
@@ -68,8 +73,8 @@ trusted-shipping constraints.
 - [Product behavior and integrations](docs/product.md): authentication,
   organizations, library, inbox, equipment, contracts, audits, finance,
   employee forms, and billing.
-- [Deployment and maintenance](docs/operations.md): Cloudflare provisioning,
-  production and staging deploys, backups, and data retention commands.
+- [Deployment and maintenance](docs/operations.md): local secrets, Cloudflare
+  provisioning, production and staging deploys, and data retention commands.
 - [Infrastructure](terraform/README.md): Terraform state and domains.
 - [Dependency upgrades](docs/dependency-upgrades.md): compatibility constraints
   and the upgrade workflow.

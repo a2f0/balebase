@@ -1,4 +1,4 @@
-# Credentials are loaded from .secrets/root.env, never from this file.
+# Credentials are loaded from .secrets/prod, never from this file.
 domain = "tearleads.de"
 
 d1_database_name = "stealth-db"

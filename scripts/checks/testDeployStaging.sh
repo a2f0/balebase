@@ -8,7 +8,7 @@ FIXTURE="$(mktemp -d "$REPO_ROOT/.staging-test.XXXXXX")"
 trap 'rm -rf "$FIXTURE"' EXIT
 
 mkdir -p "$FIXTURE/scripts" "$FIXTURE/terraform/scripts" \
-  "$FIXTURE/terraform/stacks/staging" "$FIXTURE/.secrets" "$FIXTURE/bin" \
+  "$FIXTURE/terraform/stacks/staging" "$FIXTURE/.secrets/staging" "$FIXTURE/bin" \
   "$FIXTURE/packages/api" "$FIXTURE/packages/client" "$FIXTURE/packages/website"
 cp "$REPO_ROOT/scripts/deployStaging.sh" "$REPO_ROOT/scripts/cloudflareEnv.sh" "$FIXTURE/scripts/"
 cp "$REPO_ROOT/scripts/createStagingConfigs.ts" "$FIXTURE/scripts/"
@@ -23,7 +23,9 @@ for target in api client website; do
   cp "$REPO_ROOT/packages/$target/wrangler.jsonc" "$FIXTURE/packages/$target/"
 done
 ln -s "$REPO_ROOT/node_modules" "$FIXTURE/node_modules"
-cat > "$FIXTURE/.secrets/staging.env" <<'EOF'
+STAGING_APP_ENV="$FIXTURE/.secrets/staging/app.env"
+STAGING_SHARED_ENV="$FIXTURE/.secrets/staging/shared.env"
+cat > "$STAGING_APP_ENV" <<'EOF'
 TF_VAR_cloudflare_api_token=test-token
 TF_VAR_cloudflare_account_id=test-account
 BETTER_AUTH_SECRET=test-auth
@@ -108,8 +110,18 @@ if (read("client").name !== "tearleads-client-staging") throw new Error("Client 
 if (read("website").name !== "tearleads-website-staging") throw new Error("Website Worker name is not staging");
 ' "$FIXTURE"
 
+# The tier's optional shared.env loads first, and app.env overrides it.
+cat > "$STAGING_SHARED_ENV" <<'EOF'
+TF_VAR_cloudflare_api_token=shared-token
+TF_VAR_cloudflare_account_id=test-account
+EOF
+sed -i.bak '/^TF_VAR_cloudflare_account_id=/d' "$STAGING_APP_ENV"
 : > "$MOCK_LOG"
 PATH="$FIXTURE/bin:$PATH" DRY_RUN=0 AUTO_APPROVE=1 bash "$FIXTURE/scripts/deployStaging.sh" > "$FIXTURE/output.log"
+if grep -q 'shared-token' "$MOCK_LOG"; then
+  echo 'Staging shared.env overrode the app.env Cloudflare token' >&2
+  exit 1
+fi
 for target in api client website; do
   [[ "$(grep -cF "wrangler deploy --config $FIXTURE/packages/$target/wrangler.staging.jsonc token=test-token account=test-account" "$MOCK_LOG" || true)" -eq 1 ]] || {
     echo "Normal deployment did not target the $target staging Worker with staging credentials" >&2
@@ -133,7 +145,7 @@ if grep -Eq 'wrangler deploy .*wrangler\.jsonc|terraform .*stacks/prod' "$MOCK_L
   exit 1
 fi
 
-sed -i.bak 's/sk_test_fixture/sk_live_fixture/' "$FIXTURE/.secrets/staging.env"
+sed -i.bak 's/sk_test_fixture/sk_live_fixture/' "$STAGING_APP_ENV"
 : > "$MOCK_LOG"
 if PATH="$FIXTURE/bin:$PATH" DRY_RUN=1 bash "$FIXTURE/scripts/deployStaging.sh" > "$FIXTURE/output.log" 2>&1; then
   echo 'Staging accepted a live Stripe key' >&2
@@ -141,7 +153,7 @@ if PATH="$FIXTURE/bin:$PATH" DRY_RUN=1 bash "$FIXTURE/scripts/deployStaging.sh" 
 fi
 [[ ! -s "$MOCK_LOG" ]] || { echo 'Staging ran commands after rejecting a live Stripe key' >&2; exit 1; }
 
-sed -i.bak -e 's/sk_live_fixture/sk_test_fixture/' -e 's/pk_test_fixture/pk_live_fixture/' "$FIXTURE/.secrets/staging.env"
+sed -i.bak -e 's/sk_live_fixture/sk_test_fixture/' -e 's/pk_test_fixture/pk_live_fixture/' "$STAGING_APP_ENV"
 : > "$MOCK_LOG"
 if PATH="$FIXTURE/bin:$PATH" DRY_RUN=1 bash "$FIXTURE/scripts/deployStaging.sh" > "$FIXTURE/output.log" 2>&1; then
   echo 'Staging accepted a live Stripe publishable key' >&2

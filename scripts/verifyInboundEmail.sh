@@ -11,7 +11,7 @@ DEPLOY_TIER="${DEPLOY_TIER:-prod}"
 if [[ "$DEPLOY_TIER" == "staging" ]]; then
   unset TF_VAR_cloudflare_api_token TF_VAR_cloudflare_account_id \
     CLOUDFLARE_EMAIL_API_TOKEN
-  source_env_file "$(get_repo_root)/.secrets/staging.env"
+  load_tier_env staging
   validate_cloudflare_env
   if [[ -z "${CLOUDFLARE_EMAIL_API_TOKEN:-}" ]]; then
     echo "ERROR: Missing CLOUDFLARE_EMAIL_API_TOKEN." >&2
