@@ -44,10 +44,10 @@ function squashMergeSnippets() {
   );
   expect(helper).not.toBeNull();
   return {
-    cleanup: skill.block("BASE_WORKTREE="),
+    cleanup: skill.block("BASE_CHECKOUTS="),
     helper: helper?.[0] ?? "",
     retire: skill.block("GIT_COMMON_DIR="),
-    sweep: skill.block("git worktree prune"),
+    sweep: skill.block("worktree prune"),
   };
 }
 
@@ -57,7 +57,7 @@ function resetSnippet() {
     "BRANCH=$(git rev-parse --abbrev-ref HEAD)",
     'ROOT_DIR=$("$REALPATH_BIN" "$(git rev-parse --show-toplevel)")',
     skill.block("FETCHED_UPSTREAM=$(git rev-parse"),
-    skill.block("TARGET_WORKTREE="),
+    skill.block("TARGET_CHECKOUTS="),
   ].join("\n");
 }
 
@@ -108,6 +108,14 @@ const fixtureHelpers = [
   '  squashed=$(git commit-tree -p FETCH_HEAD -m "$1" "feat/$1^{tree}")',
   '  git push -q origin "$squashed:refs/heads/main"',
   '  printf \'%s\\n\' "$squashed" > "$FIXTURE/merge-commit"',
+  "}",
+  // Installs hooks the snippets must never run; each leaves hook-ran behind.
+  "arm_hooks() {",
+  "  for hook in reference-transaction post-checkout post-merge pre-push \\",
+  "    post-index-change; do",
+  '    printf \'#!/bin/sh\\ntouch "%s/hook-ran"\\n\' "$FIXTURE" > ".git/hooks/$hook"',
+  '    chmod +x ".git/hooks/$hook"',
+  "  done",
   "}",
 ];
 
@@ -164,9 +172,9 @@ function advanceOrigin(fixture: string) {
   const advanced = run(
     [
       "set -eu",
-      "git fetch -q origin main",
+      "git -c core.hooksPath=/dev/null fetch -q origin main",
       'later=$(git commit-tree -p FETCH_HEAD -m later "FETCH_HEAD^{tree}")',
-      'git push -q origin "$later:refs/heads/main"',
+      'git -c core.hooksPath=/dev/null push -q origin "$later:refs/heads/main"',
       'printf "%s" "$later"',
     ].join("\n"),
     primary,
@@ -257,9 +265,12 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
   const raceAfterRemoval = [
     "git() {",
     '  command git "$@" || return',
-    '  if [ "$1 $2" = "worktree remove" ] && [ "$(basename "$3")" = raced ]; then',
-    '    command git update-ref refs/heads/feat/raced "$(cat "$FIXTURE/raced-new")"',
-    "  fi",
+    '  case " $* " in',
+    '    *" worktree remove "*/raced" "*)',
+    "      command git -c core.hooksPath=/dev/null update-ref \\",
+    '        refs/heads/feat/raced "$(cat "$FIXTURE/raced-new")"',
+    "      ;;",
+    "  esac",
     "}",
   ].join("\n");
   withFixture(
@@ -285,6 +296,7 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
       "branch locked; merged locked; git worktree lock ../locked",
       "git worktree add -q --detach ../detached",
       "branch self; merged self",
+      "arm_hooks",
     ],
     (fixture) => {
       const result = run(
@@ -339,6 +351,7 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
       const branches = git(primary, "branch --format='%(refname:short)'");
       expect(branches).not.toContain("feat/done");
       expect(branches).toContain("feat/moved");
+      expect(existsSync(path.join(fixture, "hook-ran"))).toBe(false);
       expect(git(primary, "rev-parse feat/raced")).toBe(
         readFileSync(path.join(fixture, "raced-new"), "utf8").trim(),
       );
@@ -346,83 +359,98 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
   );
 });
 
+// A non-ASCII name checks that no step mistakes a quoted path for another.
+const featureNames = ["feature", "featuré"];
+
 test("a merge from a linked worktree detaches, resets, and retires it", () => {
   const { cleanup, helper, retire } = squashMergeSnippets();
   const resetScript = resetSnippet();
-  withFixture(["branch feature", "squash feature"], (fixture) => {
-    const primary = path.join(fixture, "primary");
-    const feature = path.join(fixture, "feature");
-    const primaryMain = git(primary, "rev-parse main");
-    const mergeCommit = readFileSync(
-      path.join(fixture, "merge-commit"),
-      "utf8",
-    ).trim();
-
-    // The primary checkout holds main, so the cleanup cannot switch to it.
-    const cleaned = run(
-      `${prelude}\n${cleanup}`,
-      feature,
-      cleanupEnvironment(fixture, "feature"),
-    );
-    expect(cleaned.status).toBe(0);
-    expect(git(feature, "rev-parse --abbrev-ref HEAD")).toBe("HEAD");
-    expect(git(feature, "rev-parse HEAD")).toBe(mergeCommit);
-    expect(git(primary, "branch --list feat/feature")).toBe("");
-    expect(git(primary, "ls-remote --heads origin feat/feature")).toBe("");
-
-    const later = advanceOrigin(fixture);
-    const resetRun = run(`${prelude}\n${resetScript}`, feature, {
-      TARGET_BRANCH: "main",
-    });
-    expect(resetRun.status).toBe(0);
-    expect(git(feature, "rev-parse --abbrev-ref HEAD")).toBe("HEAD");
-    expect(git(feature, "rev-parse HEAD")).toBe(later);
-
-    // Another worktree's branch is never moved on its behalf.
-    expect(git(primary, "rev-parse --abbrev-ref HEAD")).toBe("main");
-    expect(git(primary, "rev-parse main")).toBe(primaryMain);
-
-    const retired = run(`${prelude}\n${helper}\n${retire}\npwd`, feature, {
-      MERGE_COMMIT: mergeCommit,
-      MERGED_BRANCH: "feat/feature",
-    });
-    expect(retired.status).toBe(0);
-    expect(existsSync(feature)).toBe(false);
-    expect(path.basename(retired.stdout.trim())).toBe("primary");
-    expect(worktreeNames(fixture)).toEqual(["primary"]);
-  });
-});
-
-test("a merge switches to the base when no worktree holds it", () => {
-  const { cleanup } = squashMergeSnippets();
-  const resetScript = resetSnippet();
-  withFixture(
-    ["branch feature", "squash feature", "git switch -q -c idle"],
-    (fixture) => {
-      const feature = path.join(fixture, "feature");
+  for (const name of featureNames) {
+    const setup = [`branch ${name}`, `squash ${name}`, "arm_hooks"];
+    withFixture(setup, (fixture) => {
+      const primary = path.join(fixture, "primary");
+      const feature = path.join(fixture, name);
+      const primaryMain = git(primary, "rev-parse main");
       const mergeCommit = readFileSync(
         path.join(fixture, "merge-commit"),
         "utf8",
       ).trim();
 
+      // The primary checkout holds main, so the cleanup cannot switch to it.
       const cleaned = run(
         `${prelude}\n${cleanup}`,
         feature,
-        cleanupEnvironment(fixture, "feature"),
+        cleanupEnvironment(fixture, name),
       );
-      expect(cleaned.status).toBe(0);
-      expect(git(feature, "rev-parse --abbrev-ref HEAD")).toBe("main");
+      expect({ name, status: cleaned.status }).toEqual({ name, status: 0 });
+      expect(git(feature, "rev-parse --abbrev-ref HEAD")).toBe("HEAD");
       expect(git(feature, "rev-parse HEAD")).toBe(mergeCommit);
+      expect(git(primary, `branch --list feat/${name}`)).toBe("");
+      expect(git(primary, `ls-remote --heads origin feat/${name}`)).toBe("");
 
       const later = advanceOrigin(fixture);
       const resetRun = run(`${prelude}\n${resetScript}`, feature, {
         TARGET_BRANCH: "main",
       });
-      expect(resetRun.status).toBe(0);
-      expect(git(feature, "rev-parse --abbrev-ref HEAD")).toBe("main");
+      expect({ name, status: resetRun.status }).toEqual({ name, status: 0 });
+      expect(git(feature, "rev-parse --abbrev-ref HEAD")).toBe("HEAD");
       expect(git(feature, "rev-parse HEAD")).toBe(later);
-    },
-  );
+
+      // Another worktree's branch is never moved on its behalf.
+      expect(git(primary, "rev-parse --abbrev-ref HEAD")).toBe("main");
+      expect(git(primary, "rev-parse main")).toBe(primaryMain);
+
+      const retired = run(`${prelude}\n${helper}\n${retire}\npwd`, feature, {
+        MERGE_COMMIT: mergeCommit,
+        MERGED_BRANCH: `feat/${name}`,
+      });
+      expect({ name, status: retired.status }).toEqual({ name, status: 0 });
+      expect(existsSync(feature)).toBe(false);
+      expect(path.basename(retired.stdout.trim())).toBe("primary");
+      expect(worktreeNames(fixture)).toEqual(["primary"]);
+      expect(existsSync(path.join(fixture, "hook-ran"))).toBe(false);
+    });
+  }
+});
+
+test("a merge switches to the base when no worktree holds it", () => {
+  const { cleanup } = squashMergeSnippets();
+  const resetScript = resetSnippet();
+  for (const name of featureNames) {
+    withFixture(
+      [
+        `branch ${name}`,
+        `squash ${name}`,
+        "git switch -q -c idle",
+        "arm_hooks",
+      ],
+      (fixture) => {
+        const feature = path.join(fixture, name);
+        const mergeCommit = readFileSync(
+          path.join(fixture, "merge-commit"),
+          "utf8",
+        ).trim();
+
+        const cleaned = run(
+          `${prelude}\n${cleanup}`,
+          feature,
+          cleanupEnvironment(fixture, name),
+        );
+        expect({ name, status: cleaned.status }).toEqual({ name, status: 0 });
+        expect(git(feature, "rev-parse --abbrev-ref HEAD")).toBe("main");
+        expect(git(feature, "rev-parse HEAD")).toBe(mergeCommit);
+
+        const later = advanceOrigin(fixture);
+        const resetRun = run(`${prelude}\n${resetScript}`, feature, {
+          TARGET_BRANCH: "main",
+        });
+        expect({ name, status: resetRun.status }).toEqual({ name, status: 0 });
+        expect(git(feature, "rev-parse --abbrev-ref HEAD")).toBe("main");
+        expect(git(feature, "rev-parse HEAD")).toBe(later);
+        expect(existsSync(path.join(fixture, "hook-ran"))).toBe(false);
+      },
+    );
+  }
 });
 
 test("squash-merge retires its worktree only after a completed cleanup", () => {

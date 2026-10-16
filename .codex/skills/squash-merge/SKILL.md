@@ -277,10 +277,10 @@ as-is.
    MERGE_COMMIT=$(gh pr view "$PR_NUMBER" --json mergeCommit -q .mergeCommit.oid -R "$REPO")
    # Git checks a branch out in one worktree at a time. When another worktree
    # (usually the primary checkout) holds the base, detach at its tip instead.
-   BASE_WORKTREE=$(git worktree list --porcelain | awk -v ref="refs/heads/$BASE_BRANCH" '/^worktree / { path = substr($(0), 10) } $(0) == "branch " ref { print path }')
+   BASE_CHECKOUTS=$(git worktree list --porcelain | grep -cxF "branch refs/heads/$BASE_BRANCH") || :
 
-   git -c credential.helper= -c 'credential.helper=!gh auth git-credential' fetch "$BASE_REPO_URL" "$BASE_BRANCH" || { echo "Error: could not fetch $REPO:$BASE_BRANCH; skipping delete" >&2; exit 1; }
-   if [ -n "$BASE_WORKTREE" ]; then
+   git -c core.hooksPath=/dev/null -c credential.helper= -c 'credential.helper=!gh auth git-credential' fetch "$BASE_REPO_URL" "$BASE_BRANCH" || { echo "Error: could not fetch $REPO:$BASE_BRANCH; skipping delete" >&2; exit 1; }
+   if [ "$BASE_CHECKOUTS" != 0 ]; then
      git -c core.hooksPath=/dev/null switch --detach FETCH_HEAD || { echo "Error: could not detach at $REPO:$BASE_BRANCH; skipping delete" >&2; exit 1; }
    else
      git -c core.hooksPath=/dev/null switch "$BASE_BRANCH" || { echo "Error: could not switch to $BASE_BRANCH" >&2; exit 1; }
@@ -299,7 +299,7 @@ as-is.
    fi
    LOCAL_BRANCH_SHA=$(git rev-parse --verify "refs/heads/$MERGED_BRANCH^{commit}") || { echo "Error: could not resolve local branch $MERGED_BRANCH; refusing local delete" >&2; exit 1; }
    [ "$LOCAL_BRANCH_SHA" = "$PR_HEAD_SHA" ] || [ "$LOCAL_BRANCH_SHA" = "$MERGE_COMMIT" ] || { echo "Error: local $MERGED_BRANCH moved after merge; refusing local delete" >&2; exit 1; }
-   git branch -D "$MERGED_BRANCH" || { echo "Error: could not delete local $MERGED_BRANCH" >&2; exit 1; }
+   git -c core.hooksPath=/dev/null branch -D "$MERGED_BRANCH" || { echo "Error: could not delete local $MERGED_BRANCH" >&2; exit 1; }
    ```
 
    - **Switch before deleting** — git refuses to delete the branch that is
@@ -342,7 +342,7 @@ as-is.
    ```bash
    SELF_ROOT=$("$REALPATH_BIN" "$(git rev-parse --show-toplevel)") || exit 1
    TAB=$(printf '\t')
-   git worktree prune || { echo "Error: git worktree prune failed; skipping the sweep" >&2; exit 1; }
+   git -c core.hooksPath=/dev/null worktree prune || { echo "Error: git worktree prune failed; skipping the sweep" >&2; exit 1; }
    git worktree list --porcelain | awk -v tab="$TAB" '
      function emit() { if (path != "" && ++n > 1) print path tab head tab branch tab flag }
      /^worktree / { emit(); path = substr($(0), 10); head = "-"; branch = "-"; flag = "-"; next }
@@ -356,12 +356,12 @@ as-is.
      [ "$WT_BRANCH" != "-" ] || { echo "Kept $WT_PATH (detached HEAD)"; continue; }
      MERGED_HEADS=$(gh pr list -R "$REPO" --head "$WT_BRANCH" --state merged --json headRefOid -q '.[].headRefOid') || { echo "Kept $WT_PATH (PR lookup failed)"; continue; }
      printf '%s\n' "$MERGED_HEADS" | grep -qxF "$WT_HEAD" || { echo "Kept $WT_PATH (no merged PR at its tip)"; continue; }
-     WT_STATUS=$(git -C "$WT_PATH" status --porcelain --untracked-files=all) && [ -z "$WT_STATUS" ] || { echo "Kept $WT_PATH (uncommitted, untracked, or unreadable)"; continue; }
+     WT_STATUS=$(git -C "$WT_PATH" -c core.hooksPath=/dev/null status --porcelain --untracked-files=all) && [ -z "$WT_STATUS" ] || { echo "Kept $WT_PATH (uncommitted, untracked, or unreadable)"; continue; }
      if holds_ignored_state "$WT_PATH"; then echo "Kept $WT_PATH (ignored files beyond build output)"; continue; fi
-     git worktree remove "$WT_PATH" || { echo "Kept $WT_PATH (git worktree remove refused)"; continue; }
+     git -c core.hooksPath=/dev/null worktree remove "$WT_PATH" || { echo "Kept $WT_PATH (git worktree remove refused)"; continue; }
      # Compare-and-delete in one step: a commit landing on the branch after
      # the checks above makes the delete fail instead of losing the commit.
-     if git update-ref -d "refs/heads/$WT_BRANCH" "$WT_HEAD" 2>/dev/null; then
+     if git -c core.hooksPath=/dev/null update-ref -d "refs/heads/$WT_BRANCH" "$WT_HEAD" 2>/dev/null; then
        git config --remove-section "branch.$WT_BRANCH" 2>/dev/null || :
        echo "Removed $WT_PATH ($WT_BRANCH)"
      else
@@ -394,7 +394,9 @@ as-is.
    - **Nothing is forced.** `git worktree remove` without `--force` refuses a
      worktree with changes or a lock. The branch is deleted with
      `git update-ref -d` against the merged tip, which deletes it only if it
-     still points there, in one atomic step. Remote branches are left alone,
+     still points there, in one atomic step. Every git call that changes a ref
+     or a worktree disables hooks, since this shell holds credentials. Remote
+     branches are left alone,
      since deleting them belongs to the run that merged them. To keep a
      finished worktree, lock it with `git worktree lock <path>`.
    - **Only this clone's worktrees are in scope.** `git worktree prune` first
@@ -417,7 +419,7 @@ as-is.
      if git show-ref --verify --quiet "refs/heads/$MERGED_BRANCH"; then echo "Error: $MERGED_BRANCH still exists; keeping $SELF_ROOT" >&2; exit 1; fi
      if holds_ignored_state "$SELF_ROOT"; then echo "Error: ignored files beyond build output; keeping $SELF_ROOT" >&2; exit 1; fi
      cd "$PRIMARY_WORKTREE" || exit 1
-     git worktree remove "$SELF_ROOT" || { echo "Error: git worktree remove refused; keeping $SELF_ROOT" >&2; exit 1; }
+     git -c core.hooksPath=/dev/null worktree remove "$SELF_ROOT" || { echo "Error: git worktree remove refused; keeping $SELF_ROOT" >&2; exit 1; }
    fi
    ```
 

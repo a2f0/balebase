@@ -175,8 +175,8 @@ fi
    exact equality:**
 
    ```bash
-   TARGET_WORKTREE=$(git worktree list --porcelain | awk -v ref="refs/heads/$TARGET_BRANCH" '/^worktree / { path = substr($(0), 10) } $(0) == "branch " ref { print path }')
-   if [ -n "$TARGET_WORKTREE" ] && [ "$("$REALPATH_BIN" "$TARGET_WORKTREE")" != "$ROOT_DIR" ]; then
+   TARGET_CHECKOUTS=$(git worktree list --porcelain | grep -cxF "branch refs/heads/$TARGET_BRANCH") || :
+   if [ "$BRANCH" != "$TARGET_BRANCH" ] && [ "$TARGET_CHECKOUTS" != 0 ]; then
      git -c core.hooksPath=/dev/null switch --detach "$FETCHED_UPSTREAM" || { echo "Error: could not detach at the fetched $TARGET_BRANCH; hooks not installed" >&2; exit 1; }
    elif [ -z "$LOCAL_TARGET" ]; then
      git -c core.hooksPath=/dev/null switch -c "$TARGET_BRANCH" "$FETCHED_UPSTREAM" || { echo "Error: could not create $TARGET_BRANCH at its fetched upstream; hooks not installed" >&2; exit 1; }
