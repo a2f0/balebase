@@ -111,13 +111,14 @@ export PATH
 # is known to be disposable; any other ignored file may be the only copy of
 # local credentials, Terraform state or variables, or Wrangler's local D1 and
 # R2 data, so it keeps the worktree. Names are read NUL-delimited, since git
-# quotes unusual ones. Every line is counted rather than stopping at the first,
+# quotes unusual ones, and a newline inside a name becomes \001 so each line
+# is one whole path. Every line is counted rather than stopping at the first,
 # so under pipefail an early exit cannot cut the listing short and read as
 # clean. A listing git cannot produce, or a count grep cannot make, keeps it.
 holds_ignored_state() {
   ignored_kept=$({ git -C "${1}" -c core.fsmonitor=false ls-files -z --others --ignored --exclude-standard ||
     printf 'unlisted\0'; } |
-    tr '\0' '\n' |
+    tr '\n\0' '\001\n' |
     grep -cvE '^(packages/[^./][^/]*/)?((node_modules|\.turbo|dist|\.astro|\.wrangler/tmp)/|[^/]*\.tsbuildinfo$)|^terraform/stacks/[^/]+/\.terraform-lint/|(^|/)\.DS_Store$') || :
   [ "$ignored_kept" != 0 ]
 }

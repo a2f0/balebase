@@ -212,32 +212,9 @@ function cleanupEnvironment(fixture: string, name: string) {
   };
 }
 
-test("squash-merge keeps worktrees holding ignored files beyond build output", () => {
+function expectHeld(ignoredFiles: readonly string[], held: boolean) {
   const { helper } = squashMergeSnippets();
-  const cases: [ignoredFile: string, held: boolean][] = [
-    ["dist/app.js", false],
-    ["node_modules/pkg/.env", false],
-    ["tsconfig.tsbuildinfo", false],
-    ["packages/api/.wrangler/tmp/bundle/index.js", false],
-    // Git quotes a non-ASCII name unless it is read NUL-delimited.
-    ["dist/appé.js", false],
-    [".secrets/prodé.json", true],
-    [".env.local", true],
-    ["terraform/prod.tfvars", true],
-    ["terraform/override.tf", true],
-    ["terraform/.terraform/terraform.tfstate", true],
-    ["packages/api/.wrangler/state/v3/d1/db.sqlite", true],
-    ["packages/client/dist/app.js", false],
-    ["packages/api/node_modules/pkg/.env", false],
-    ["terraform/stacks/prod/.terraform-lint/report.json", false],
-    // A build directory's name inside protected state does not make it build
-    // output.
-    [".secrets/dist/key.json", true],
-    [".wrangler/state/dist/data", true],
-    ["packages/api/.wrangler/state/node_modules/db", true],
-    ["src/dist/app.js", true],
-  ];
-  for (const [ignoredFile, held] of cases) {
+  for (const ignoredFile of ignoredFiles) {
     withFixture(
       ['mkdir -p "$(dirname "$IGNORED_FILE")"', ': > "$IGNORED_FILE"'],
       (fixture) => {
@@ -253,7 +230,49 @@ test("squash-merge keeps worktrees holding ignored files beyond build output", (
       { IGNORED_FILE: ignoredFile },
     );
   }
+}
 
+test("squash-merge treats build output where it is written as disposable", () => {
+  expectHeld(
+    [
+      "dist/app.js",
+      "node_modules/pkg/.env",
+      "tsconfig.tsbuildinfo",
+      "packages/api/.wrangler/tmp/bundle/index.js",
+      "packages/client/dist/app.js",
+      "packages/api/node_modules/pkg/.env",
+      "terraform/stacks/prod/.terraform-lint/report.json",
+      // Git quotes a non-ASCII name unless it is read NUL-delimited.
+      "dist/appé.js",
+    ],
+    false,
+  );
+});
+
+test("squash-merge keeps worktrees holding ignored files beyond build output", () => {
+  expectHeld(
+    [
+      ".secrets/prodé.json",
+      ".env.local",
+      "terraform/prod.tfvars",
+      "terraform/override.tf",
+      "terraform/.terraform/terraform.tfstate",
+      "packages/api/.wrangler/state/v3/d1/db.sqlite",
+      // A build directory's name inside protected state does not make it
+      // build output.
+      ".secrets/dist/key.json",
+      ".wrangler/state/dist/data",
+      "packages/api/.wrangler/state/node_modules/db",
+      "src/dist/app.js",
+      // Split at its newline, this one path would read as two disposable ones.
+      "cache.tsbuildinfo\nnode_modules/.env",
+    ],
+    true,
+  );
+});
+
+test("squash-merge reads the whole ignored listing or keeps the worktree", () => {
+  const { helper } = squashMergeSnippets();
   withFixture(["arm_hooks", "arm_fsmonitor"], (fixture) => {
     const clean = run(
       `${helper}\nholds_ignored_state .`,
