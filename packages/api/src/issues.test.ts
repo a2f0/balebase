@@ -179,6 +179,98 @@ describe("workspace issues", () => {
     expect((await f.request(`/audits/issues/${id}/images`)).status).toBe(404);
   });
 
+  it.each(["workspace", "finance_transaction", "audit_run"])(
+    "can edit %s issues after an assignee leaves, but rejects new nonmember assignments",
+    async (type) => {
+      const f = await fixture();
+      const definition = JSON.stringify({
+        version: 1,
+        sections: [
+          {
+            id: "section",
+            title: "Checks",
+            items: [
+              {
+                id: "check",
+                prompt: "Exits clear?",
+                required: true,
+                responseType: "check",
+              },
+            ],
+          },
+        ],
+      });
+      f.db
+        .query(
+          `INSERT INTO audits (id, organization_id, template_name, definition, responses, status, started_by, created_at, updated_at) VALUES ('audit', 'org_user-1', 'Inspection', ?, '{}', 'in_progress', 'user-1', ?, ?)`,
+        )
+        .run(definition, now, now);
+      const target =
+        type === "workspace"
+          ? undefined
+          : type === "audit_run"
+            ? { type, id: "audit", itemId: "check" }
+            : { type, id: "txn" };
+      const created = await f.request<{ issueId: string }>("/issues", "POST", {
+        title: "Assigned issue",
+        assignedTo: "user-2",
+        target,
+      });
+      expect(created.status).toBe(201);
+      const path = `/issues/${created.body.issueId}`;
+      f.db.exec("DELETE FROM member WHERE id = 'second-member'");
+      expect(
+        (
+          await f.request(path, "PATCH", {
+            expectedRevision: 0,
+            status: "resolved",
+          })
+        ).status,
+      ).toBe(200);
+      // The form sends every editable field, including the unchanged former assignee.
+      expect(
+        (
+          await f.request(path, "PATCH", {
+            expectedRevision: 1,
+            title: "Still editable",
+            assignedTo: "user-2",
+          })
+        ).status,
+      ).toBe(200);
+      expect(
+        (
+          await f.request(path, "PATCH", {
+            expectedRevision: 2,
+            assignedTo: "user-1",
+          })
+        ).status,
+      ).toBe(200);
+      expect(
+        (
+          await f.request(path, "PATCH", {
+            expectedRevision: 3,
+            assignedTo: "user-2",
+          })
+        ).status,
+      ).toBe(409);
+      expect(
+        (
+          await f.request(path, "PATCH", {
+            expectedRevision: 3,
+            assignedTo: null,
+          })
+        ).status,
+      ).toBe(200);
+      const current = await f.request<{ issue: TestIssue }>(path);
+      expect(current.body.issue).toMatchObject({
+        title: "Still editable",
+        status: "resolved",
+        assignedTo: null,
+        revision: 4,
+      });
+    },
+  );
+
   it("paginates after access and status filtering without duplicates, and rejects invalid inputs", async () => {
     const f = await fixture();
     for (let i = 0; i < 56; i++)

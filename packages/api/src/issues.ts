@@ -220,7 +220,7 @@ async function updateIssue(context: IssueContext) {
     context.env.DB.prepare(`UPDATE issues SET title = ?, description = ?, priority = ?, status = ?, assigned_to = ?,
       updated_at = ?, activity_actor_id = ?, revision = revision + 1
     WHERE id = ? AND organization_id = ? AND revision = ? AND ${issueTargetWritable}
-      AND (? IS NULL OR EXISTS (SELECT 1 FROM member WHERE organizationId = ? AND userId = ?))`).bind(
+      AND (? IS NULL OR ? IS assigned_to OR EXISTS (SELECT 1 FROM member WHERE organizationId = ? AND userId = ?))`).bind(
       input.title,
       input.description,
       input.priority,
@@ -231,6 +231,7 @@ async function updateIssue(context: IssueContext) {
       issue.id,
       organizationId,
       body.expectedRevision,
+      input.assignedTo,
       input.assignedTo,
       organizationId,
       input.assignedTo,
