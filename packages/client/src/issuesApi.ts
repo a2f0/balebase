@@ -89,7 +89,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const body = (await response.json().catch(() => null)) as {
       error?: string;
     } | null;
-    throw new Error(body?.error ?? "Could not load issues.");
+    throw new Error(body?.error ?? "Issue request failed.");
   }
   return response.json() as Promise<T>;
 }

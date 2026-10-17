@@ -339,8 +339,7 @@ reject stale saves. **Raise issue** on a transaction attaches its source; the
 issue links back to that exact transaction regardless of the overview's filters.
 Transaction detail pages show related issues and annotation activity.
 
-Apply migrations `0062_create_issues.sql` and `0063_record_finance_annotations.sql`
-before deploying. The shared `issues` table uses `target_type` and `target_id`,
+The shared `issues` table uses `target_type` and `target_id`,
 with an optional audit item ID. Existing audit issue IDs, images, and activity
 are preserved; audit image management remains in the source audit. Unavailable
 sources hide their issues from the list and make details read only. Purging a

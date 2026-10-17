@@ -39,7 +39,11 @@ issues.get("/:id/activity", async (context) => {
     context.env.DB,
     context.get("organizationId"),
     context.req.query("cursor"),
-    { id: issue.id, type: "issue", issueOnly: true },
+    {
+      id: issue.target_id ?? issue.id,
+      type: issue.target_type === "workspace" ? "issue" : issue.target_type,
+      issueId: issue.id,
+    },
     issue.target_type === "finance_transaction",
   );
   return page

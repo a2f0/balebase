@@ -222,7 +222,22 @@ describe("workspace issues, mounted", () => {
         onNavigate={(path) => paths.push(path)}
       />,
     );
+    const draft = container.querySelector("textarea");
+    await act(async () => {
+      if (draft) {
+        Object.getOwnPropertyDescriptor(
+          dom.HTMLTextAreaElement.prototype,
+          "value",
+        )?.set?.call(draft, "Unsaved investigation");
+        draft.dispatchEvent(
+          new dom.Event("input", { bubbles: true }) as unknown as Event,
+        );
+      }
+    });
     await click("Resolve issue");
+    expect(container.querySelector("textarea")?.value).toBe(
+      "Unsaved investigation",
+    );
     expect(writes[0]).toMatchObject({
       status: "resolved",
       expectedRevision: 0,
@@ -235,8 +250,19 @@ describe("workspace issues, mounted", () => {
     stale = true;
     await submit();
     expect(container.textContent).toContain("Reload issue");
+    expect(container.querySelectorAll('[role="alert"]').length).toBe(1);
     stale = false;
+    current = {
+      ...current,
+      title: "New remote title",
+      description: "Saved by another member",
+      revision: current.revision + 1,
+    };
     await click("Reload issue");
+    expect(container.querySelector("textarea")?.value).toBe(
+      "Saved by another member",
+    );
+    expect(container.querySelector("input")?.value).toBe("New remote title");
     expect(container.querySelectorAll('[role="alert"]').length).toBe(0);
   });
 
@@ -266,4 +292,21 @@ describe("workspace issues, mounted", () => {
     await click("Raise issue");
     expect(paths).toEqual(["/issues/new/transactions/old-txn"]);
   });
+});
+
+it("handles malformed issue links without a render exception", async () => {
+  const requests: string[] = [];
+  respond((url) => {
+    requests.push(url.pathname);
+    return Response.json({ error: "Issue not found." }, { status: 404 });
+  });
+  await mount(
+    <Issues
+      pathname="/issues/%E0"
+      canAccessFinance
+      onNavigate={() => undefined}
+    />,
+  );
+  expect(container.textContent).toContain("Issue not found.");
+  expect(requests).toEqual(["/api/issues/%25E0"]);
 });

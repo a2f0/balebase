@@ -26,7 +26,7 @@ export interface ActivityRow {
 }
 
 interface ActivityRoot {
-  issueOnly?: boolean;
+  issueId?: string;
   publishedTemplateOnly?: boolean;
   id: string;
   type: string;
@@ -82,14 +82,13 @@ export async function findActivity(
     organizationId === null ? [] : [organizationId];
   if (!includeFinance) filters.push("root_type <> 'finance_transaction'");
   if (root) {
-    if (root.issueOnly) {
+    filters.push("root_type = ? AND root_id = ?");
+    bindings.push(root.type, root.id);
+    if (root.issueId) {
       filters.push(
         "((subject_type IN ('issue', 'audit_issue') AND subject_id = ?) OR (subject_type = 'audit_issue_image' AND json_extract(details, '$.issueId') = ?))",
       );
-      bindings.push(root.id, root.id);
-    } else {
-      filters.push("root_type = ? AND root_id = ?");
-      bindings.push(root.type, root.id);
+      bindings.push(root.issueId, root.issueId);
     }
   }
   if (before !== null) {

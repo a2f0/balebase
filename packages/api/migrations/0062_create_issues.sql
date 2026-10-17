@@ -45,7 +45,7 @@ DROP TABLE audit_issues;
 CREATE INDEX audit_issue_images_issue_idx ON audit_issue_images (issue_id, created_at);
 CREATE INDEX issues_organization_idx ON issues (organization_id, created_at DESC, id DESC);
 CREATE INDEX issues_target_idx ON issues (organization_id, target_type, target_id, status);
-CREATE INDEX issues_assignee_idx ON issues (organization_id, assigned_to, status);
+CREATE INDEX issues_assignee_idx ON issues (assigned_to);
 
 -- Polymorphic references need explicit validation and retention behavior.
 CREATE TRIGGER issue_target_insert BEFORE INSERT ON issues
@@ -65,11 +65,11 @@ BEGIN
 END;
 CREATE TRIGGER issues_audit_delete AFTER DELETE ON audits
 BEGIN
-  DELETE FROM issues WHERE target_type = 'audit_run' AND target_id = OLD.id;
+  DELETE FROM issues WHERE organization_id = OLD.organization_id AND target_type = 'audit_run' AND target_id = OLD.id;
 END;
 CREATE TRIGGER issues_transaction_delete AFTER DELETE ON plaid_transactions
 BEGIN
-  DELETE FROM issues WHERE target_type = 'finance_transaction' AND target_id = OLD.id;
+  DELETE FROM issues WHERE organization_id = OLD.organization_id AND target_type = 'finance_transaction' AND target_id = OLD.id;
   DELETE FROM activity_events WHERE root_type = 'finance_transaction' AND root_id = OLD.id;
 END;
 

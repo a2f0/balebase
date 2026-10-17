@@ -24,6 +24,7 @@ import {
   issuePath,
   updateIssue,
 } from "./issuesApi";
+import { decodeRecordId } from "./workspacePaths";
 
 export function Issues({
   pathname,
@@ -41,7 +42,7 @@ export function Issues({
     return (
       <NewIssue
         key={pathname}
-        transactionId={decodeURIComponent(transaction[1] ?? "")}
+        transactionId={decodeRecordId(transaction[1] ?? "")}
         onNavigate={onNavigate}
       />
     );
@@ -50,7 +51,7 @@ export function Issues({
     return (
       <IssueDetail
         key={pathname}
-        id={decodeURIComponent(match[1] ?? "")}
+        id={decodeRecordId(match[1] ?? "")}
         onNavigate={onNavigate}
       />
     );
@@ -220,6 +221,7 @@ function IssueDetail({
   const [issue, setIssue] = useState<Issue>();
   const [error, setError] = useState<string>();
   const [reload, setReload] = useState(0);
+  const [formVersion, setFormVersion] = useState(0);
   const [busy, setBusy] = useState(false);
   const request = useMemo(() => ({ id, reload }), [id, reload]);
   useEffect(() => {
@@ -227,7 +229,10 @@ function IssueDetail({
     setError(undefined);
     void getIssue(request.id)
       .then((data) => {
-        if (active) setIssue(data.issue);
+        if (active) {
+          setIssue(data.issue);
+          setFormVersion((value) => value + 1);
+        }
       })
       .catch((cause: unknown) => {
         if (active) setError(message(cause));
@@ -248,9 +253,6 @@ function IssueDetail({
       });
       setIssue(data.issue);
       setError(undefined);
-    } catch (cause) {
-      setError(message(cause));
-      throw cause;
     } finally {
       setBusy(false);
     }
@@ -299,7 +301,7 @@ function IssueDetail({
             >
               <Card>
                 <IssueForm
-                  key={`${id}:${issue.revision}:${reload}`}
+                  key={`${id}:${formVersion}`}
                   initial={{
                     title: issue.title,
                     description: issue.description,
@@ -307,6 +309,7 @@ function IssueDetail({
                     assignedTo: issue.assignedTo?.id ?? null,
                   }}
                   onSave={save}
+                  onError={setError}
                   label="Save changes"
                   disabled={busy || !issue.target.available}
                 />

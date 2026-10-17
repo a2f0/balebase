@@ -322,7 +322,7 @@ audits.get("/runs", async (context) => {
      FROM audits AS audit
      JOIN user AS creator ON creator.id = audit.started_by
      LEFT JOIN user AS deleted_by ON deleted_by.id = audit.deleted_by_user_id
-     LEFT JOIN issues AS issue ON issue.target_id = audit.id AND issue.target_type = 'audit_run'
+     LEFT JOIN issues AS issue ON issue.organization_id = audit.organization_id AND issue.target_id = audit.id AND issue.target_type = 'audit_run'
      WHERE audit.organization_id = ? AND ${deletedFilter}
        AND (? IS NULL OR audit.created_at < ? OR
             (audit.created_at = ? AND audit.id < ?))

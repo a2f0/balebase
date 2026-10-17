@@ -270,6 +270,114 @@ describe("workspace issues", () => {
     ).toBeNull();
   });
 
+  it("validates audit targets and records generic edits in the audit history", async () => {
+    const f = await fixture();
+    const definition = JSON.stringify({
+      version: 1,
+      sections: [
+        {
+          id: "section",
+          title: "Checks",
+          items: [
+            {
+              id: "check",
+              prompt: "Exits clear?",
+              required: true,
+              responseType: "check",
+            },
+          ],
+        },
+      ],
+    });
+    f.db
+      .query(
+        `INSERT INTO audits (id, organization_id, template_name, definition, responses, status, started_by, created_at, updated_at) VALUES ('audit', 'org_user-1', 'Inspection', ?, '{}', 'in_progress', 'user-1', ?, ?)`,
+      )
+      .run(definition, now, now);
+    const target = { type: "audit_run", id: "audit", itemId: "check" };
+    expect(
+      (
+        await f.request("/issues", "POST", {
+          title: "Unknown item",
+          target: { ...target, itemId: "unknown" },
+        })
+      ).status,
+    ).toBe(404);
+    const created = await f.request<{ issueId: string }>("/issues", "POST", {
+      title: "Blocked exit",
+      target,
+    });
+    expect(created.status).toBe(201);
+    const id = created.body.issueId;
+    expect(
+      (
+        await f.request(`/issues/${id}`, "PATCH", {
+          expectedRevision: 0,
+          title: "Exit repaired",
+          description: "New handle installed",
+          priority: "critical",
+        })
+      ).status,
+    ).toBe(200);
+    const history = await f.request<{ events: Event[] }>(
+      "/audits/runs/audit/activity",
+    );
+    expect(history.body.events[0]).toMatchObject({
+      action: "issue.updated",
+      subject: { id },
+      details: {
+        before: { title: "Blocked exit", description: "", priority: "medium" },
+        after: {
+          title: "Exit repaired",
+          description: "New handle installed",
+          priority: "critical",
+        },
+      },
+    });
+    const ownHistory = await f.request<{ events: Event[] }>(
+      `/issues/${id}/activity`,
+    );
+    expect(ownHistory.body.events.map((event) => event.action)).toEqual([
+      "issue.updated",
+      "audit.issue_created",
+    ]);
+    f.db.query("UPDATE audits SET deleted_at = ? WHERE id = 'audit'").run(now);
+    expect(
+      (await f.request("/issues", "POST", { title: "Discarded audit", target }))
+        .status,
+    ).toBe(404);
+    expect(
+      (
+        await f.request(`/issues/${id}`, "PATCH", {
+          expectedRevision: 1,
+          title: "No longer editable",
+        })
+      ).status,
+    ).toBe(409);
+  });
+
+  it("returns a conflict if the source disappears after validation but before insert", async () => {
+    const f = await fixture();
+    f.beforeBatch = () => {
+      f.beforeBatch = undefined;
+      f.db.exec("DELETE FROM plaid_transactions WHERE id = 'txn'");
+    };
+    expect(
+      (
+        await f.request("/issues", "POST", {
+          title: "Racing purge",
+          target: { type: "finance_transaction", id: "txn" },
+        })
+      ).status,
+    ).toBe(409);
+    expect(f.db.query("SELECT id FROM issues").all()).toEqual([]);
+    expect(
+      f.db
+        .query("SELECT id FROM activity_events WHERE subject_type = 'issue'")
+        .all(),
+    ).toEqual([]);
+  });
+
   it("preserves legacy audit IDs, attachments, history, and storage cleanup through migration", async () => {
     const f = await fixture(true);
     f.db
@@ -468,6 +576,7 @@ async function fixture(legacy = false) {
     user: "user-1",
     organization: "org_user-1",
     apiKey: false,
+    beforeBatch: undefined as (() => void) | undefined,
     request,
   };
   const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
@@ -499,7 +608,7 @@ async function fixture(legacy = false) {
     };
     if (body !== undefined) init.body = JSON.stringify(body);
     const response = await app.request(path, init, {
-      DB: toD1(db),
+      DB: toD1(db, () => state.beforeBatch?.()),
     } as Bindings);
     return {
       status: response.status,
@@ -511,12 +620,14 @@ async function fixture(legacy = false) {
 async function migrate(db: Database, file: string) {
   db.exec(await Bun.file(`${import.meta.dir}/../migrations/${file}`).text());
 }
-function toD1(db: Database) {
+function toD1(db: Database, beforeBatch: () => void) {
   return {
-    batch: async (statements: { execute: () => unknown }[]) =>
-      db.transaction(() =>
+    batch: async (statements: { execute: () => unknown }[]) => {
+      beforeBatch();
+      return db.transaction(() =>
         statements.map((statement) => statement.execute()),
-      )(),
+      )();
+    },
     prepare: (query: string) => {
       let values: SQLQueryBindings[] = [];
       const execute = () => ({

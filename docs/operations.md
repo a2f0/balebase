@@ -52,6 +52,19 @@ client at `/inbox`. The production tier also needs
 subdomain's Email Routing setup. The Terraform token needs Email Routing Rules
 Write.
 
+## Shared issues migration
+
+The API 0.1.32 release requires `0062_create_issues.sql` and
+`0063_record_finance_annotations.sql`. The deployment scripts apply migrations
+before deploying the API. Migration 0062 preserves audit issue IDs, attachments,
+and history while replacing `audit_issues` with the shared `issues` table.
+The previous Worker cannot read or write audit issues after that replacement:
+expect audit requests to fail during the migration-to-Worker deployment window.
+Schedule this release accordingly and finish the API deployment promptly.
+If deployment fails after migration, retry deploying the new API; rolling the
+Worker back alone does not restore the old schema. Keep the normal D1 recovery
+point available if a full schema-and-Worker rollback is needed.
+
 ## Deploy production
 
 The full deployment checks the repository, applies D1 migrations, deploys the

@@ -16,11 +16,13 @@ const emptyIssue: IssueInput = {
 export function IssueForm({
   initial = emptyIssue,
   onSave,
+  onError,
   label = "Raise issue",
   disabled = false,
 }: {
   initial?: IssueInput;
   onSave: (input: IssueInput) => Promise<void>;
+  onError?: (message: string) => void;
   label?: string;
   disabled?: boolean;
 }) {
@@ -52,9 +54,10 @@ export function IssueForm({
     try {
       await onSave(input);
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Could not save issue.",
-      );
+      const message =
+        cause instanceof Error ? cause.message : "Could not save issue.";
+      if (onError) onError(message);
+      else setError(message);
     } finally {
       setBusy(false);
     }

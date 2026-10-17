@@ -55,6 +55,7 @@ import { SigningPage } from "./SigningPage";
 import { useOrganizationAccess } from "./useOrganizationAccess";
 import { hasRole, WorkspaceShell, type WorkspaceUser } from "./WorkspaceShell";
 import {
+  decodeRecordId,
   isBusinessesPath,
   isContractsPath,
   isEquipmentPath,
@@ -550,7 +551,7 @@ function financeContent(pathname: string, navigate: (path: string) => void) {
     return (
       <FinanceTransactionPage
         key={pathname}
-        id={decodeURIComponent(pathname.slice("/finance/transactions/".length))}
+        id={decodeRecordId(pathname.slice("/finance/transactions/".length))}
         onNavigate={navigate}
       />
     );
