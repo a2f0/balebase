@@ -3518,6 +3518,8 @@ async function createFixture(
   await applyMigration(database, "0007_create_finance.sql");
   await applyMigration(database, "0009_retain_finance_history.sql");
   await applyMigration(database, "0010_create_organization_groups.sql");
+  // Billing restore triggers reference deletedAt; table rebuilds revalidate them.
+  await applyMigration(database, "0011_soft_delete_organizations.sql");
   await applyMigration(database, "0056_discard_audits.sql");
   if (includePublication)
     await applyMigration(database, "0058_publish_legacy_global_audits.sql");
