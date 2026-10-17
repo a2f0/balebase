@@ -119,6 +119,7 @@ export interface AdminOrganization {
   name: string;
   ownerEmail: string | null;
   ownerName: string | null;
+  plaidItemCount: number;
   slug: string;
 }
 

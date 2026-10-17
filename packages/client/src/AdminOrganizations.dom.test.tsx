@@ -60,6 +60,7 @@ function detail(id = "other/org"): AdminOrganizationDetail {
       name: `Organization ${id}`,
       ownerEmail: "pat@example.com",
       ownerName: "Pat Person",
+      plaidItemCount: 3,
       slug: "other-organization",
     },
     members: [
@@ -117,6 +118,36 @@ function button(text: string) {
 }
 
 describe("root organization details", () => {
+  it.each([0, 3])(
+    "shows %i Plaid items in the list and overview",
+    async (count) => {
+      const fixture = detail();
+      fixture.organization.plaidItemCount = count;
+      globalThis.fetch = (async (input) =>
+        Response.json(
+          String(input).endsWith("/other%2Forg")
+            ? fixture
+            : { organizations: [fixture.organization] },
+        )) as typeof fetch;
+
+      await render();
+      const headings = [...container.querySelectorAll("thead th")];
+      const column = headings.findIndex(
+        (heading) => heading.textContent === "Plaid items",
+      );
+      expect(column).toBeGreaterThan(-1);
+      expect(
+        container.querySelector("tbody tr")?.children[column]?.textContent,
+      ).toBe(String(count));
+
+      await render("/root/organizations/other%2Forg");
+      const label = [...container.querySelectorAll("dt")].find(
+        (element) => element.textContent === "Plaid items",
+      );
+      expect(label?.nextElementSibling?.textContent).toBe(String(count));
+    },
+  );
+
   it("opens the clicked organization and returns to the list using only reads", async () => {
     const fixture = detail();
     const requests: Array<{

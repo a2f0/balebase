@@ -118,6 +118,10 @@ function OrganizationOverview({
         </dd>
         <dt>Slug</dt>
         <dd className="mono">{organization.slug}</dd>
+        <dt title="Bank login connections, including those with sync errors. Disconnected items are excluded.">
+          Plaid items
+        </dt>
+        <dd className="tabular">{organization.plaidItemCount}</dd>
         <dt>Created</dt>
         <dd>{formatDate(organization.createdAt)}</dd>
       </dl>
