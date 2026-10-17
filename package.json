@@ -53,7 +53,10 @@
     "test": "export OPENSSL_CONF=/dev/null; bunx --bun --no-install turbo run test && bun --bun run test:staging && bun --bun run test:env && bun --bun run test:markdownlint",
     "test:env": "bash scripts/checks/testCloudflareEnv.sh",
     "test:markdownlint": "bun test scripts/checks/markdownlintConfig.test.ts",
-    "test:staging": "bash scripts/checks/testDeployStaging.sh"
+    "test:staging": "bash scripts/checks/testDeployStaging.sh",
+    "mobile:sync": "bun run --cwd packages/client mobile:sync",
+    "mobile:ios": "bun run --cwd packages/client mobile:ios",
+    "mobile:android": "bun run --cwd packages/client mobile:android"
   },
   "workspaces": [
     "packages/*"

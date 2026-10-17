@@ -137,6 +137,62 @@ For later infrastructure changes, use `bun run terraform:staging:plan` and
 `bun run terraform:staging:apply`. Cloudflare Email Routing subaddressing must
 be enabled once for the zone, as described in the inbound email setup above.
 
+## Mobile builds and release setup
+
+The Capacitor projects live in `packages/client/ios` and
+`packages/client/android`; both identify the app as `com.balebase.app`.
+`bun run mobile:sync` always packages local assets, regenerates the brand
+images, and synchronizes native dependencies. Run it before an IDE build and
+after changing dependencies or client code. There is no hosted `server.url`
+or live-reload server in a release bundle.
+
+For a simulator build without Apple signing:
+
+```sh
+bun run mobile:sync
+xcodebuild -project packages/client/ios/App/App.xcodeproj -scheme App \
+  -configuration Debug -sdk iphonesimulator \
+  -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath packages/client/ios/DerivedData \
+  CODE_SIGNING_ALLOWED=NO build
+```
+
+For an Android debug APK, set `ANDROID_HOME` to the installed SDK directory:
+
+```sh
+bun run mobile:sync
+packages/client/android/gradlew -p packages/client/android assembleDebug
+```
+
+The APK is written to
+`packages/client/android/app/build/outputs/apk/debug/app-debug.apk`.
+Android release builds remain unsigned until an upload keystore is configured.
+
+Before TestFlight or Play distribution:
+
+1. Create the Apple bundle identifier and App Store Connect app for
+   `com.balebase.app`, then choose your team and signing profile in Xcode.
+   Create the Google Play app with the same application ID and configure its
+   upload key outside the repository.
+2. Set the release version/build number in Xcode and Android's
+   `app/build.gradle`. Store build numbers are separate from web/API patch
+   versions and must increase for each upload.
+3. Deploy the API change that trusts `capacitor://localhost` and
+   `https://localhost`. The native HTTP transport sends cookies and an explicit
+   trusted Origin; web authentication continues using the configured web origin.
+4. Exercise login, MFA, account switching, logout/relaunch, camera and file
+   uploads, PDF viewing/downloads, invitations, and keyboard/back navigation on
+   real devices. Email verification and password-reset links currently open
+   the hosted web app; universal/app links are not configured.
+5. Complete store metadata, privacy declarations, and device screenshots.
+   Validate the existing Stripe billing and Plaid flows for the intended store
+   distribution before submission; this shell does not add native purchases or
+   native Plaid SDK integration.
+
+No store upload, signing identity, or automatic mobile deployment is configured.
+See [Capacitor's environment setup](https://capacitorjs.com/docs/getting-started/environment-setup)
+for SDK installation details.
+
 ## Retain and purge data
 
 Organization owners can soft-delete an organization from its general settings.

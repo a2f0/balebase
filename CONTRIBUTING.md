@@ -14,6 +14,7 @@ repository root unless a command specifies `--cwd`.
 | API routes, authorization, persistence | `packages/api/src` |
 | Database schema | `packages/api/migrations` |
 | Application screens | `packages/client/src` |
+| Native mobile projects and preparation | `packages/client/ios`, `packages/client/android`, `packages/client/scripts` |
 | Shared components, icons, styles | `packages/ui/src` |
 | Logo and generated images | `packages/ui/assets`, `packages/ui/scripts` |
 | Public website | `packages/website/src` |
@@ -32,6 +33,12 @@ Follow those concrete responsibilities when a screen needs to be split.
 favicons, iOS and Android icons and splash screens in Capacitor's project
 layout, and the 1024×1024 Plaid icon at `plaid/icon-1024.png`. Generated images
 are ignored; keep binary files out of commits.
+
+`bun run mobile:sync` writes the native images into both checked-in Capacitor
+projects and restores the Gradle wrapper JAR from the pinned CLI template.
+Commit native source and configuration; generated web bundles, images, plugin
+paths, signing material, and build products remain ignored. CI builds and syncs
+the mobile bundle; native SDK builds are described in the operations guide.
 
 ## Check a change
 

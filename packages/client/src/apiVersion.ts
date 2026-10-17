@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import { useSyncExternalStore } from "react";
 
 // The API names its version in this header on every response.
@@ -13,6 +14,20 @@ const listeners = new Set<() => void>();
  * deploy while the app is open shows up with the next response.
  */
 export async function fetchApi(input: RequestInfo | URL, init?: RequestInit) {
+  if (Capacitor.isNativePlatform()) {
+    // Native HTTP does not supply the browser's Origin header. Preserve Better
+    // Auth's CSRF checks for cookie-authenticated mutations on both platforms.
+    const headers = new Headers(
+      init?.headers ?? (input instanceof Request ? input.headers : undefined),
+    );
+    headers.set(
+      "Origin",
+      Capacitor.getPlatform() === "ios"
+        ? "capacitor://localhost"
+        : "https://localhost",
+    );
+    init = { ...init, headers };
+  }
   const response = await fetch(input, init);
   const version = response.headers.get(apiVersionHeader);
   if (version !== null && version !== apiVersion) {

@@ -6,6 +6,36 @@ import { createAuth } from "./auth";
 import type { Bindings } from "./types";
 
 describe("api", () => {
+  it("allows only the web client and exact native origins through CORS", async () => {
+    for (const origin of [
+      "https://app.test",
+      "capacitor://localhost",
+      "https://localhost",
+      "https://localhost.attacker.test",
+      "capacitor://attacker.test",
+      "https://attacker.test",
+    ]) {
+      const response = await app.request(
+        "/api/auth/sign-in/email",
+        {
+          method: "OPTIONS",
+          headers: {
+            Origin: origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+          },
+        },
+        authBindings(),
+      );
+      expect(response.headers.get("access-control-allow-origin")).toBe(
+        origin.includes("attacker") ? null : origin,
+      );
+      expect(response.headers.get("access-control-allow-credentials")).toBe(
+        "true",
+      );
+    }
+  });
+
   it("requires authentication for maintenance and account deletion routes", async () => {
     for (const [path, method] of [
       ["/api/admin/jobs", "GET"],

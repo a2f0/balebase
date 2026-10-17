@@ -9,6 +9,20 @@ import {
 const origin = "https://app.balebase.com";
 
 describe("account navigation", () => {
+  it("keeps native account return paths on the local bundle", () => {
+    const source = "capacitor://localhost/add-account";
+    expect(accountReturnPath("?returnTo=%2Finvite%3Fid%3Done", source)).toBe(
+      "/invite?id=one",
+    );
+    expect(invitationIdForPath("/invite?id=one", source)).toBe("one");
+    expect(
+      accountReturnPath("?returnTo=capacitor%3A%2F%2Fevil.test", source),
+    ).toBe("/");
+    expect(
+      invitationIdForPath("capacitor://evil.test/invite?id=one", source),
+    ).toBeUndefined();
+  });
+
   it("preserves an invitation while another account signs in", () => {
     const returnTo = "/invite?id=invitation-id";
     const addPath = addAccountPath(returnTo);

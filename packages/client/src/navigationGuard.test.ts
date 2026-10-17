@@ -8,8 +8,7 @@ import {
  * Just enough of a browser for the workspace's history handling. Like a real
  * one, `history.go` moves later and then fires popstate.
  */
-function fakeBrowser(earlier: string[] = []) {
-  const origin = "https://app.test";
+function fakeBrowser(earlier: string[] = [], origin = "https://app.test") {
   // Earlier entries were not created by the workspace, so they carry no state.
   const entries: { path: string; state: unknown }[] = [
     ...earlier.map((path) => ({ path, state: null })),
@@ -75,6 +74,20 @@ afterEach(() => {
 });
 
 describe("workspace navigation", () => {
+  it("navigates within the native bundle but refuses other opaque origins", () => {
+    const browser = fakeBrowser([], "capacitor://localhost");
+    const pages: string[] = [];
+    const navigation = createWorkspaceNavigation(browser, (path) =>
+      pages.push(path),
+    );
+    navigation.navigate("/activity");
+    expect(pages).toEqual(["/activity"]);
+    navigation.navigate("capacitor://attacker.test/library");
+    navigation.navigate("custom://localhost/library");
+    expect(pages).toEqual(["/activity"]);
+    navigation.dispose();
+  });
+
   it("follows a link approved while a Back is still being undone", async () => {
     const browser = fakeBrowser();
     const pages: string[] = [];

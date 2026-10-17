@@ -73,3 +73,6 @@ jobs:
 
       - name: Build applications
         run: bun run build
+
+      - name: Build and sync mobile applications
+        run: bun run mobile:sync

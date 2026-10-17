@@ -8,7 +8,9 @@ export function accountReturnPath(search: string, origin: string) {
   if (!returnTo) return "/";
   try {
     const target = new URL(returnTo, origin);
-    if (target.origin !== origin) return "/";
+    const source = new URL(origin);
+    if (target.protocol !== source.protocol || target.host !== source.host)
+      return "/";
     return `${target.pathname}${target.search}${target.hash}`;
   } catch {
     return "/";
@@ -18,7 +20,12 @@ export function accountReturnPath(search: string, origin: string) {
 export function invitationIdForPath(path: string, origin: string) {
   try {
     const target = new URL(path, origin);
-    if (target.origin !== origin || target.pathname !== "/invite") {
+    const source = new URL(origin);
+    if (
+      target.protocol !== source.protocol ||
+      target.host !== source.host ||
+      target.pathname !== "/invite"
+    ) {
       return undefined;
     }
     return target.searchParams.get("id")?.trim() || undefined;

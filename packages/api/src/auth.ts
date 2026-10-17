@@ -16,6 +16,7 @@ import {
   organizationSeatLimit,
   syncOrganizationSeats,
 } from "./billing";
+import { clientOrigins } from "./clientOrigins";
 import {
   assignAcceptedInvitationRequirements,
   assignRenewedInvitationRequirements,
@@ -152,7 +153,7 @@ export function createAuth(env: Bindings, waitUntil: WaitUntil) {
     session: {
       additionalFields: sessionAdditionalFields,
     },
-    trustedOrigins: [env.CORS_ORIGIN],
+    trustedOrigins: clientOrigins(env),
     user: {
       additionalFields: userAdditionalFields,
     },

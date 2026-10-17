@@ -22,6 +22,7 @@ import {
 import { billing, handleStripeWebhook, syncOrganizationSeats } from "./billing";
 import { businesses } from "./businesses";
 import { handleCheckrWebhook } from "./checkrSync";
+import { clientOrigins } from "./clientOrigins";
 import { contracts } from "./contracts";
 import { employeeForms } from "./employeeForms";
 import { equipment } from "./equipment";
@@ -56,7 +57,8 @@ app.use(
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     credentials: true,
     exposeHeaders: ["Retry-After", "X-Document-Revision", apiVersionHeader],
-    origin: (_origin, context) => context.env.CORS_ORIGIN,
+    origin: (origin, context) =>
+      clientOrigins(context.env).includes(origin) ? origin : undefined,
   }),
 );
 
