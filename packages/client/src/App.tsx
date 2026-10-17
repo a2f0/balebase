@@ -216,17 +216,15 @@ function AuthenticationRoute({
             }
           : undefined
       }
-      onPasswordReset={async () => {
-        // The reset revoked that account's sessions. A session that survives
-        // belongs to another account, so the new password signs in beside it.
-        if (sessionPresent) {
-          const { data } = await authClient.getSession();
-          if (data) {
-            leaveResetPage("/add-account");
-            return;
-          }
-          await refetchSession();
+      onLeaveReset={async () => {
+        // A reset revokes that account's sessions. A session that survives it,
+        // or going back without resetting, keeps its account: sign-in then
+        // adds the reset account beside it.
+        if (sessionPresent && (await sessionSurvives())) {
+          leaveResetPage("/add-account");
+          return;
         }
+        if (sessionPresent) await refetchSession();
         leaveResetPage("/");
       }}
       variant={addingAccount ? "add-account" : "default"}
@@ -596,6 +594,17 @@ function FeatureAccessDenied({ onNavigate }: { onNavigate: () => void }) {
       onAction={onNavigate}
     />
   );
+}
+
+/** Whether this browser still has a session; false when that is unknown. */
+async function sessionSurvives() {
+  try {
+    const { data } = await authClient.getSession();
+    return Boolean(data);
+  } catch {
+    // Unreachable: the refetch that follows reports it as a session error.
+    return false;
+  }
 }
 
 function SessionError({ onRetry }: { onRetry: () => void }) {
