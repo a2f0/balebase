@@ -48,6 +48,20 @@ Use the `update-dependencies` skill installed from the pinned
   those declarations private, preserve both full and production analysis,
   and include CSS in project patterns for the font import compiler.
 
+## Native builds
+
+Treat Capacitor, its Android libraries, the Android Gradle plugin, and Gradle as
+one compatibility group. AndroidX Core 1.19 requires compile SDK 37 and AGP 9.1
+or later; the app's target SDK and minimum Android version are separate policies.
+Run mobile sync, an Android debug build and unsigned release bundle, and an
+unsigned iOS simulator build before shipping native dependency changes.
+
+Mobile sync restores the bootstrap wrapper JAR from the exact Capacitor CLI
+template. The checksum-pinned Gradle distribution in `gradle-wrapper.properties`
+is the runtime that executes builds; verify `gradlew --version` after sync.
+Keep a density-only default splash image in the agent-tool native target so
+Android release lint can resolve it independently of orientation qualifiers.
+
 ## Security fixes and remaining constraints
 
 Markdownlint CLI 0.23.3 pins smol-toml 1.8.0, which is affected by
@@ -59,6 +73,15 @@ null-prototype objects; `bun run test:markdownlint` exercises the actual CLI
 with TOML, JSON, and the repository JSONC configuration. Remove the override
 when the CLI permits the fixed parser; remove the patch when Markdownlint
 preserves the same regression cases without it. Confirm removal with a fresh audit.
+
+Capacitor CLI's `xcode@3.0.1` requires UUID 7. Its exact-parent override
+selects the patched CommonJS-compatible 11.1.1 release for
+[GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq).
+Xcode's only UUID call is `v4()` without arguments; the advisory affects other
+UUID methods with caller-provided buffers. Validate the actual Xcode parser's
+project ID generation and parse/add/write/reparse flow, then mobile sync and an
+unsigned iOS build when changing this override. Remove it when the owner selects
+a fixed version and those checks pass without the override.
 
 Keep Wrangler and the API's Miniflare pin aligned with the exact Miniflare
 version supported by the stable Wrangler release. Miniflare 5 still carries a
