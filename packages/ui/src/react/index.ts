@@ -16,6 +16,6 @@ export {
 export { EmptyState, LoadingState } from "./EmptyState";
 export { Field } from "./Field";
 export { Icon } from "./Icon";
-export { Avatar, Logo } from "./Identity";
+export { Avatar, BrandMark, Logo } from "./Identity";
 export { Page, PageBody, PageHeader, PageSection } from "./Page";
 export { Toast, ToastProvider } from "./Toast";

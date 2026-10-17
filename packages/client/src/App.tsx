@@ -1,4 +1,5 @@
 import {
+  BrandMark,
   Button,
   EmptyState,
   Icon,
@@ -665,10 +666,7 @@ function LoadingScreen() {
   return (
     <div className="loadingScreen onDark" role="status">
       <span className="srOnly">Loading session</span>
-      <span aria-hidden="true" className="brandMark loadingMark">
-        B
-      </span>
-      <span className="loadingPulse" />
+      <BrandMark className="loadingMark" />
     </div>
   );
 }

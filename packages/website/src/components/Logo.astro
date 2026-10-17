@@ -1,6 +1,7 @@
 ---
 /* The brand lockup, matching the client's React <Logo>. */
 import { productName } from "@balebase/ui/brand";
+import BrandMark from "@balebase/ui/logo.svg";
 ---
 
 <a
@@ -8,6 +9,6 @@ import { productName } from "@balebase/ui/brand";
   class="brand siteBrand"
   href="/"
 >
-  <span aria-hidden="true" class="brandMark">B</span>
+  <BrandMark aria-hidden="true" class="brandMark" />
   <span>{productName}</span>
 </a>

@@ -5,6 +5,7 @@
  * from assistive technology, and the caption describes it instead.
  */
 import type { IconName } from "@balebase/ui/icons";
+import BrandMark from "@balebase/ui/logo.svg";
 import Icon from "./Icon.astro";
 
 const railItems: IconName[] = [
@@ -44,7 +45,7 @@ const checks: { prompt: string; response: (typeof responses)[number] }[] = [
 <figure class="auditPreview">
   <div aria-hidden="true" class="previewFrame" inert>
     <div class="previewRail onDark">
-      <span class="brandMark">B</span>
+      <BrandMark class="brandMark" />
       {
         railItems.map((name) => (
           <span

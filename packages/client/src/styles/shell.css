@@ -290,33 +290,26 @@ body.sidebarResizing {
   background: var(--color-ink);
 }
 
+/* Builds the tile and takes it down one logo pixel row (3px) per step. */
 .loadingMark {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: var(--radius-lg);
-  font-size: var(--text-lg);
-}
-
-.loadingPulse {
   width: 3rem;
-  height: 2px;
-  overflow: hidden;
-  border-radius: var(--radius-full);
-  background: var(--color-ink-line);
+  height: 3rem;
+  animation: loadingMark 1600ms steps(17, jump-none) infinite alternate;
 }
 
-.loadingPulse::after {
-  display: block;
-  width: 50%;
-  height: 100%;
-  background: var(--color-lime);
-  animation: loadingPulse 900ms var(--ease) infinite alternate;
-  content: "";
-}
+@keyframes loadingMark {
+  from {
+    clip-path: inset(0 0 100%);
+  }
 
-@keyframes loadingPulse {
   to {
-    transform: translateX(100%);
+    clip-path: inset(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loadingMark {
+    animation: none;
   }
 }
 

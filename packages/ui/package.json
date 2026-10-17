@@ -7,12 +7,14 @@
   "exports": {
     "./brand": "./src/brand.ts",
     "./icons": "./src/icons.ts",
+    "./logo.svg": "./assets/logo.svg",
     "./react": "./src/react/index.ts",
     "./styles.css": "./src/styles.css"
   },
   "scripts": {
     "check": "bunx --bun --no-install tsc --noEmit",
-    "test": "bun test src"
+    "images": "bun scripts/buildImages.ts",
+    "test": "bun test src scripts"
   },
   "dependencies": {
     "@fontsource-variable/manrope": "5.3.0",
