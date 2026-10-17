@@ -60,14 +60,12 @@ with TOML, JSON, and the repository JSONC configuration. Remove the override
 when the CLI permits the fixed parser; remove the patch when Markdownlint
 preserves the same regression cases without it. Confirm removal with a fresh audit.
 
-Wrangler is retained when complete real production and staging resource previews
-are unavailable. The API uses the Miniflare 5 prerelease API
-(`convertV4MiniflareOptions`); the registry's latest stable Miniflare 4 is not
-an upgrade for that integration. Revisit when a supported Miniflare 5 release
-is available and the Workerd upload test passes. Wrangler and Miniflare's
-exact Sharp and Undici pins can retain security advisories; a blanket override
-would bypass the owner's supported integration. Changing the deployment group
-also requires complete previews and the owning integration checks.
+Keep Wrangler and the API's Miniflare pin aligned with the exact Miniflare
+version supported by the stable Wrangler release. Miniflare 5 still carries a
+prerelease label; the registry's latest stable Miniflare 4 is not an upgrade
+for the `convertV4MiniflareOptions` integration. Verify the Workerd upload test
+and complete real production and staging resource previews before changing
+this group. Prefer the owner's fixed Sharp and Undici releases over overrides.
 
 [PR #95](https://github.com/a2f0/stealth/pull/95) recorded the following constraints
 and exposure analysis. They explain the retained choices, not a fresh audit or
@@ -126,7 +124,7 @@ promote only ongoing procedures or active constraints into this guide.
 [astro-advisory]: https://github.com/withastro/astro/security/advisories/GHSA-26w7-cxv4-gfx2
 [commitlint]: https://github.com/conventional-changelog/commitlint/releases/tag/v21.0.0
 [lint-staged]: https://github.com/lint-staged/lint-staged/releases/tag/v17.0.0
-[knip]: https://github.com/webpro-nl/knip/releases/tag/knip%406.41.0
+[knip]: https://github.com/webpro-nl/knip/releases/tag/knip%406.40.0
 
 [toml-advisory]: https://github.com/advisories/GHSA-r4xh-jqrq-34v2
 [braces-advisory]: https://github.com/advisories/GHSA-vfj7-8cjw-p6xm

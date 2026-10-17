@@ -33,14 +33,14 @@ interface CapturedStatement {
 }
 
 describe("inbound email", () => {
-  it("cleans up mail whose headers exceed the parser budget", async () => {
+  it("rejects oversized headers before starting an upload", async () => {
     await expectRejectedMessage(
       `X-Large: ${"x".repeat(128 * 1024)}\r\n\r\nbody`,
       /Maximum header size/,
     );
   });
 
-  it("cleans up mail whose MIME nesting exceeds the parser budget", async () => {
+  it("rejects excessive MIME nesting before starting an upload", async () => {
     let raw = "Content-Type: text/plain\r\n\r\nbody";
     for (let depth = 0; depth < 32; depth++) {
       raw = `Content-Type: multipart/mixed; boundary="level-${depth}"\r\n\r\n--level-${depth}\r\n${raw}\r\n--level-${depth}--\r\n`;
@@ -141,6 +141,7 @@ async function expectRejectedMessage(raw: string, reason: RegExp) {
       createBindings(database.value, storage.value),
     ),
   ).rejects.toThrow(reason);
+  expect(storage.uploads).toHaveLength(0);
   expect(storage.objects.size).toBe(0);
   expect(database.statements).toHaveLength(0);
 }
@@ -184,16 +185,18 @@ function createDatabase() {
 
 function createStorage() {
   const objects = new Map<string, Uint8Array>();
+  const uploads: string[] = [];
   const value = {
     delete: async (key: string) => {
       objects.delete(key);
     },
     put: async (key: string, content: unknown) => {
+      uploads.push(key);
       objects.set(key, await toBytes(content));
       return {};
     },
   } as unknown as R2Bucket;
-  return { objects, value };
+  return { objects, uploads, value };
 }
 
 function createMessage(raw: string, to = recipient) {

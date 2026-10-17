@@ -76,7 +76,7 @@
     "markdownlint-cli2": "0.23.3",
     "turbo": "2.11.9",
     "typescript": "6.0.3",
-    "wrangler": "4.123.0"
+    "wrangler": "4.151.1"
   },
   "engines": {
     "bun": ">=1.4.2"
