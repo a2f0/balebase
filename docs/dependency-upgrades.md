@@ -22,6 +22,12 @@ Use the `update-dependencies` skill installed from the pinned
   The native TypeScript 7 release removes APIs used by language tooling.
   Explicit Bun types in the workspace tsconfigs account for TypeScript 6's
   new default type inclusion. See the [TypeScript 6 release notes][typescript].
+- Better Auth and `@better-auth/core` stay aligned on 1.7.2 while the
+  database has the 1.7.0 `account.issuer NOT NULL` column and issuer unique
+  index. Releases from 1.7.3 stop writing that field; sign-up then fails. The
+  [1.7 upgrade guide][better-auth] requires manual index and column cleanup.
+  Revisit only after reviewing a non-destructive migration against both real
+  environments and passing the complete authentication and API-key tests.
 - Follow the [Astro major upgrade guide][astro] when changing compiler,
   Markdown, whitespace, or API behavior; verify image handling against the
   [AVIF advisory][astro-advisory] and the selected release.
@@ -39,7 +45,7 @@ Use the `update-dependencies` skill installed from the pinned
 
 Markdownlint CLI 0.23.3 pins smol-toml 1.8.0, which is affected by
 [GHSA-r4xh-jqrq-34v2][toml-advisory]. An exact-parent override selects the fixed
-1.9.0 parser. Its null-prototype objects expose a Markdownlint 0.41.1
+1.9.1 parser. Its null-prototype objects expose a Markdownlint 0.41.1
 `instanceof Object` incompatibility: nested TOML rule options, disabled rules,
 and warning severity are silently lost. A Bun-generated patch recognizes
 null-prototype objects; `bun run test:markdownlint` exercises the actual CLI
@@ -47,11 +53,14 @@ with TOML, JSON, and the repository JSONC configuration. Remove the override
 when the CLI permits the fixed parser; remove the patch when Markdownlint
 preserves the same regression cases without it. Confirm removal with a fresh audit.
 
-Wrangler and the API's prerelease Miniflare are retained when real resource
-previews or the Workerd integration are unavailable. Their exact Sharp and
-Undici pins can retain security advisories; a blanket override would bypass
-the owner's supported integration. Revisit those groups when complete previews
-and the owning integration checks are available.
+Wrangler is retained when complete real production and staging resource previews
+are unavailable. The API uses the Miniflare 5 prerelease API
+(`convertV4MiniflareOptions`); the registry's latest stable Miniflare 4 is not
+an upgrade for that integration. Revisit when a supported Miniflare 5 release
+is available and the Workerd upload test passes. Their exact Sharp and Undici
+pins can retain security advisories; a blanket override would bypass the
+owner's supported integration. Changing the deployment group also requires
+complete previews and the owning integration checks.
 
 [PR #95](https://github.com/a2f0/stealth/pull/95) recorded the following constraints
 and exposure analysis. They explain the retained choices, not a fresh audit or
@@ -103,6 +112,7 @@ upgrade. Keep the upgrade PR's ledger of selected and constrained dependencies,
 audits, checks, warnings, previews, review, merge, and deployment results there;
 promote only ongoing procedures or active constraints into this guide.
 
+[better-auth]: https://www.better-auth.com/docs/guides/1-7-upgrade-guide
 [typescript]: https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html
 [astro]: https://docs.astro.build/en/guides/upgrade-to/v7/
 [astro-advisory]: https://github.com/withastro/astro/security/advisories/GHSA-26w7-cxv4-gfx2
