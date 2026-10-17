@@ -370,6 +370,9 @@ as-is.
      WT_STATUS=$(git -C "$WT_PATH" -c core.hooksPath=/dev/null -c core.fsmonitor=false status --porcelain --untracked-files=all) && [ -z "$WT_STATUS" ] || { echo "Kept $WT_PATH (uncommitted, untracked, or unreadable)"; continue; }
      if hides_tracked_changes "$WT_PATH"; then echo "Kept $WT_PATH (tracked files hidden from status)"; continue; fi
      if holds_ignored_state "$WT_PATH"; then echo "Kept $WT_PATH (ignored files beyond build output)"; continue; fi
+     # Another session may have switched or committed here since the listing.
+     [ "$(git -C "$WT_PATH" symbolic-ref -q HEAD)" = "refs/heads/$WT_BRANCH" ] &&
+       [ "$(git -C "$WT_PATH" rev-parse -q --verify HEAD)" = "$WT_HEAD" ] || { echo "Kept $WT_PATH (changed during the sweep)"; continue; }
      git -c core.hooksPath=/dev/null -c core.fsmonitor=false worktree remove "$WT_PATH" || { echo "Kept $WT_PATH (git worktree remove refused)"; continue; }
      # Compare-and-delete in one step: a commit landing on the branch after
      # the checks above makes the delete fail instead of losing the commit.
@@ -410,6 +413,10 @@ as-is.
    - **Detached worktrees are kept and listed.** Nothing ties a detached HEAD
      to a PR, and a session that just ran `git worktree add --detach` looks the
      same as a leftover. Report them so the user can decide.
+   - **Each worktree is re-read just before removal.** If another session
+     switched it off its branch or committed since the listing, it is kept.
+     Git has no lock that stops a commit, so a commit landing in the instant
+     between that check and the removal remains possible but improbable.
    - **Nothing is forced.** `git worktree remove` without `--force` refuses a
      worktree with changes or a lock. The branch is deleted with
      `git update-ref -d` against the merged tip, which deletes it only if it

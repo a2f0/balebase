@@ -334,9 +334,25 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
     "  esac",
     "}",
   ].join("\n");
+  // Another session detaches feat/detour and commits while its PR is looked up.
+  const detourDuringLookup = [
+    'eval "original_$(declare -f gh)"',
+    "gh() {",
+    '  case " $* " in',
+    '    *" --head feat/detour "*)',
+    '      command git -C "$FIXTURE/detour" -c core.hooksPath=/dev/null \\',
+    "        -c core.fsmonitor=false switch -q --detach",
+    '      command git -C "$FIXTURE/detour" -c core.hooksPath=/dev/null \\',
+    "        -c core.fsmonitor=false commit -q --allow-empty -m mine",
+    "      ;;",
+    "  esac",
+    '  original_gh "$@"',
+    "}",
+  ].join("\n");
   withFixture(
     [
       "branch done; merged done",
+      "branch detour; merged detour",
       "branch built; merged built",
       "mkdir -p ../built/dist ../built/node_modules/pkg",
       ": > '../built/dist/appé.js'; : > ../built/node_modules/pkg/.env",
@@ -367,7 +383,7 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
     ],
     (fixture) => {
       const result = run(
-        `${prelude}\n${raceAfterRemoval}\n${helper}\n${sweep}`,
+        `${prelude}\n${detourDuringLookup}\n${raceAfterRemoval}\n${helper}\n${sweep}`,
         path.join(fixture, "self"),
         { FIXTURE: fixture },
       );
@@ -386,6 +402,7 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
         built: "Removed: feat/built",
         bundled: "Removed: feat/bundled",
         detached: "Kept: detached HEAD",
+        detour: "Kept: changed during the sweep",
         dirty: "Kept: uncommitted, untracked, or unreadable",
         done: "Removed: feat/done",
         hidden: "Kept: tracked files hidden from status",
@@ -400,6 +417,7 @@ test("squash-merge sweeps only clean worktrees at a merged PR's head", () => {
       });
       expect(worktreeNames(fixture)).toEqual([
         "detached",
+        "detour",
         "dirty",
         "hidden",
         "locked",
