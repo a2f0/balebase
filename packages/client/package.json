@@ -1,14 +1,14 @@
 {
   "name": "@balebase/client",
-  "version": "0.1.40",
+  "version": "0.1.41",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "build": "bunx --bun --no-install tsc --noEmit && bun ../ui/scripts/buildImages.ts --favicons public && bunx --bun --no-install vite build",
+    "build": "bunx --bun --no-install tsc --noEmit && bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/client/public && bunx --bun --no-install vite build",
     "check": "bunx --bun --no-install tsc --noEmit",
     "deploy": "bun --bun run build && bunx --bun --no-install wrangler deploy",
-    "dev": "bun ../ui/scripts/buildImages.ts --favicons public && bunx --bun --no-install vite",
+    "dev": "bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/client/public && bunx --bun --no-install vite",
     "test": "bun test src",
     "test:browser": "bun test browser"
   },
