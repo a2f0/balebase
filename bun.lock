@@ -22,7 +22,7 @@
     },
     "packages/api": {
       "name": "@balebase/api",
-      "version": "0.1.28",
+      "version": "0.1.29",
       "dependencies": {
         "@better-auth/core": "1.7.0",
         "@modelcontextprotocol/server": "2.3.1",
@@ -39,7 +39,7 @@
     },
     "packages/client": {
       "name": "@balebase/client",
-      "version": "0.1.36",
+      "version": "0.1.37",
       "dependencies": {
         "@balebase/ui": "workspace:*",
         "@stripe/stripe-js": "9.17.0",
