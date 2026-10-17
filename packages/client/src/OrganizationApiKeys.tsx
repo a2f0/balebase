@@ -17,19 +17,14 @@ import {
   type ApiKeyExpiration,
   createApiKey,
   listApiKeys,
-  mcpServerUrl,
   revokeApiKey,
 } from "./apiKeysApi";
-import { apiUrl } from "./config";
+import { McpConfiguration } from "./McpConfiguration";
+import { useClipboard } from "./useClipboard";
 
 interface CreatedKey {
   apiKey: ApiKey;
   token: string;
-}
-
-interface Notice {
-  message: string;
-  tone: "danger" | "success";
 }
 
 const expirationOptions: Array<{ label: string; value: string }> = [
@@ -113,7 +108,7 @@ export function OrganizationApiKeys({
         />
       )}
       <ApiKeyList apiKeys={apiKeys} onRevoked={replace} />
-      <ConnectionCard />
+      {!created && <ConnectionCard />}
     </>
   );
 }
@@ -150,7 +145,7 @@ function CreateApiKeyCard({
 
   return (
     <Card
-      description="Scripts and MCP clients such as Claude use API keys to reach this organization. A key acts as you, limited to the access you choose."
+      description="Scripts and MCP clients such as Claude and Codex use API keys to reach this organization. A key acts as you, limited to the access you choose."
       footer={
         <Button
           busy={busy}
@@ -220,8 +215,7 @@ function NewApiKeyCard({
   created: CreatedKey;
   onDone: () => void;
 }) {
-  const [notice, setNotice] = useState<Notice>();
-  const command = claudeCodeCommand(created.token);
+  const { copy, notice } = useClipboard();
   return (
     <Card
       className="cardAccent"
@@ -245,28 +239,13 @@ function NewApiKeyCard({
             />
             <Button
               icon="copy"
-              onClick={() =>
-                void copy(created.token, "API key copied.", setNotice)
-              }
+              onClick={() => void copy(created.token, "API key copied.")}
             >
               Copy key
             </Button>
           </span>
         </Field>
-        <Field
-          hint="Run this in a terminal to add the key to Claude Code."
-          label="Add to Claude Code"
-        >
-          <span className="apiKeySecret">
-            <code className="apiKeyCommand">{command}</code>
-            <Button
-              icon="copy"
-              onClick={() => void copy(command, "Command copied.", setNotice)}
-            >
-              Copy command
-            </Button>
-          </span>
-        </Field>
+        <McpConfiguration token={created.token} />
         {notice && <Toast tone={notice.tone}>{notice.message}</Toast>}
       </div>
     </Card>
@@ -306,7 +285,7 @@ function ApiKeyList({
       {error && <Toast tone="danger">{error}</Toast>}
       {apiKeys.length === 0 ? (
         <EmptyState compact icon="key" title="No API keys yet">
-          Create a key to connect Claude or another MCP client.
+          Create a key to connect Claude, Codex, or another MCP client.
         </EmptyState>
       ) : (
         <ul className="rowList">
@@ -375,48 +354,14 @@ function ApiKeyRow({
 }
 
 function ConnectionCard() {
-  const [notice, setNotice] = useState<Notice>();
   return (
     <Card
       description="Any MCP client that supports Streamable HTTP and custom headers can connect. Read keys see only read tools."
       title="Connect an MCP client"
     >
-      <dl className="keyValue">
-        <dt>Server URL</dt>
-        <dd>
-          <code className="codeChip">{mcpServerUrl}</code>
-        </dd>
-        <dt>Header</dt>
-        <dd>
-          <code className="codeChip">
-            Authorization: Bearer &lt;API key&gt;
-          </code>
-        </dd>
-        <dt>REST API</dt>
-        <dd>
-          The same header works for{" "}
-          <code className="codeChip">{apiUrl}/api</code> workspace routes.
-          Account, billing, and key management stay session-only.
-        </dd>
-      </dl>
-      <div className="cluster">
-        <Button
-          icon="copy"
-          onClick={() =>
-            void copy(mcpServerUrl, "Server URL copied.", setNotice)
-          }
-          size="sm"
-        >
-          Copy server URL
-        </Button>
-        {notice && <Toast tone={notice.tone}>{notice.message}</Toast>}
-      </div>
+      <McpConfiguration />
     </Card>
   );
-}
-
-function claudeCodeCommand(token: string) {
-  return `claude mcp add --transport http balebase ${mcpServerUrl} --header "Authorization: Bearer ${token}"`;
 }
 
 function usageSummary(apiKey: ApiKey) {
@@ -439,23 +384,6 @@ function expirationDays(value: string): ApiKeyExpiration {
     return Number(value) as ApiKeyExpiration;
   }
   return null;
-}
-
-async function copy(
-  text: string,
-  message: string,
-  setNotice: (notice: Notice | undefined) => void,
-) {
-  setNotice(undefined);
-  try {
-    await navigator.clipboard.writeText(text);
-    setNotice({ message, tone: "success" });
-  } catch {
-    setNotice({
-      message: "Copy failed. Select it and copy manually.",
-      tone: "danger",
-    });
-  }
 }
 
 function confirmRevoke(name: string) {
