@@ -12,8 +12,9 @@ no tier, read `.secrets/prod`; staging commands read `.secrets/staging`. Within
 a tier, `shared.env` holds values copied from a cross-project root file and
 loads first when present; the tier's own `app.env` loads last and wins. The
 local API reads the production tier, then takes only its Checkr credentials
-from the staging tier when one exists. The `ci/` folder holds GitHub Actions
-values that the matrix repository deploys; repository code never reads it.
+and Plaid Sandbox client ID and secret from the staging tier when one exists.
+The `ci/` folder holds GitHub Actions values that the matrix repository
+deploys; repository code never reads it.
 
 ## Provision Cloudflare resources
 

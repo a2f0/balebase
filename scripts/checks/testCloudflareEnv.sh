@@ -33,6 +33,9 @@ cat > "$FIXTURE/.secrets/prod/app.env" <<'EOF'
 TF_VAR_cloudflare_api_token=prod-token
 BETTER_AUTH_SECRET=prod-auth
 CHECKR_API_KEY=prod-checkr
+PLAID_CLIENT_ID=prod-plaid-client
+PLAID_SECRET=prod-plaid-secret
+PLAID_TOKEN_ENCRYPTION_KEY=prod-plaid-key
 EOF
 # A file left over from the flat layout must never be read.
 printf 'TF_VAR_cloudflare_api_token=legacy-token\n' > "$FIXTURE/.secrets/root.env"
@@ -74,6 +77,9 @@ cat > "$FIXTURE/bin/bunx" <<'EOF'
 while [[ $# -gt 0 ]]; do
   if [[ "$1" == "--env-file" ]]; then
     cat "$2" >> "$MOCK_LOG"
+    shift
+  elif [[ "$1" == "--var" ]]; then
+    printf 'var %s\n' "$2" >> "$MOCK_LOG"
     shift
   fi
   shift
@@ -133,12 +139,22 @@ expect_output \
 expect_failure '.secrets/staging/app.env is missing.' load_tier_env staging
 expect_failure 'Unknown secrets tier: dev' load_tier_env dev
 
-# Local development reads the production tier and adds only Checkr
-# credentials from the staging tier, when this checkout has one.
+# Local development reads the production tier but runs Checkr staging and
+# Plaid Sandbox. Their credentials come only from the staging tier, when this
+# checkout has one, so the production Plaid secret never reaches it.
+dev_vars="$(printf '%s\n' \
+  'var CHECKR_ENV:staging' \
+  'var PLAID_ENV:sandbox' \
+  'var STRIPE_PORTAL_CONFIGURATION_ID:' \
+  'var STRIPE_PRO_LEGACY_PRICE_IDS:' \
+  'var STRIPE_PRO_PRICE_ID:' \
+  'var STRIPE_PUBLISHABLE_KEY:')"
 expect_dev_env "$(printf '%s\n' \
   BETTER_AUTH_SECRET=prod-auth \
   BETTER_AUTH_URL=http://localhost:8787 \
-  CORS_ORIGIN=http://localhost:5173)"
+  CORS_ORIGIN=http://localhost:5173 \
+  PLAID_TOKEN_ENCRYPTION_KEY=prod-plaid-key \
+  "$dev_vars")"
 
 mkdir -p "$FIXTURE/.secrets/staging"
 cat > "$FIXTURE/.secrets/staging/shared.env" <<'EOF'
@@ -148,13 +164,19 @@ EOF
 cat > "$FIXTURE/.secrets/staging/app.env" <<'EOF'
 BETTER_AUTH_SECRET=staging-auth
 CHECKR_API_KEY=staging-checkr
+PLAID_CLIENT_ID=sandbox-plaid-client
+PLAID_SECRET=sandbox-plaid-secret
 EOF
 expect_dev_env "$(printf '%s\n' \
   BETTER_AUTH_SECRET=prod-auth \
   BETTER_AUTH_URL=http://localhost:8787 \
   CHECKR_API_KEY=staging-checkr \
   CHECKR_BACKGROUND_PACKAGE=shared-background \
-  CORS_ORIGIN=http://localhost:5173)"
+  CORS_ORIGIN=http://localhost:5173 \
+  PLAID_CLIENT_ID=sandbox-plaid-client \
+  PLAID_SECRET=sandbox-plaid-secret \
+  PLAID_TOKEN_ENCRYPTION_KEY=prod-plaid-key \
+  "$dev_vars")"
 
 # shared.env is optional.
 rm "$FIXTURE/.secrets/prod/shared.env"

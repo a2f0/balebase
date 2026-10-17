@@ -358,12 +358,12 @@ local history is a separate, permanent action that is only available after the
 institution has been disconnected.
 
 Plaid access tokens are encrypted with AES-GCM before being stored in D1. Add
-these values to the ignored `.secrets/prod/app.env` before local Plaid testing
-or a production deployment:
+these values to the ignored `.secrets/prod/app.env` before a production
+deployment:
 
 ```sh
 export PLAID_CLIENT_ID=your-client-id
-export PLAID_SECRET=your-sandbox-secret
+export PLAID_SECRET=your-production-secret
 export PLAID_TOKEN_ENCRYPTION_KEY=your-base64-32-byte-key
 ```
 
@@ -372,11 +372,14 @@ result, and do not replace it casually: existing connections require the same
 key to decrypt their Plaid access tokens. The deployment script uploads all
 three values as encrypted Worker secrets.
 
-The Worker currently uses Plaid Sandbox. Add
-`https://app.balebase.com/finance` to the Plaid Dashboard's allowed redirect
-URIs for OAuth institutions. Before switching `PLAID_ENV` to `production` in
-the API Wrangler configuration, replace the Sandbox secret with the Production
-secret and complete Plaid's application and company profile requirements.
+The production Worker uses Plaid Production; staging and local development use
+Plaid Sandbox. Local development keeps the production tier's encryption key but
+takes the Sandbox `PLAID_CLIENT_ID` and `PLAID_SECRET` from
+`.secrets/staging/app.env`. Sandbox and Production access tokens are not
+interchangeable, so disconnect connections before changing a Worker's
+`PLAID_ENV`. Production Link requires a Data Transparency Messaging use case in
+the Plaid Dashboard, and `https://app.balebase.com/finance` must be an allowed
+redirect URI for OAuth institutions.
 
 ## Employee forms and screening
 
