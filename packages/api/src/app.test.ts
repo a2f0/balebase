@@ -6,7 +6,7 @@ import { createAuth } from "./auth";
 import type { Bindings } from "./types";
 
 describe("api", () => {
-  it("allows only the web client and exact native origins through CORS", async () => {
+  it("allows only the web client through CORS, excluding native-only headers", async () => {
     for (const origin of [
       "https://app.test",
       "capacitor://localhost",
@@ -22,14 +22,18 @@ describe("api", () => {
           headers: {
             Origin: origin,
             "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "content-type",
+            "Access-Control-Request-Headers":
+              "content-type,x-balebase-native-origin",
           },
         },
         authBindings(),
       );
       expect(response.headers.get("access-control-allow-origin")).toBe(
-        origin.includes("attacker") ? null : origin,
+        origin === "https://app.test" ? origin : null,
       );
+      expect(
+        response.headers.get("access-control-allow-headers"),
+      ).not.toContain("X-Balebase-Native-Origin");
       expect(response.headers.get("access-control-allow-credentials")).toBe(
         "true",
       );

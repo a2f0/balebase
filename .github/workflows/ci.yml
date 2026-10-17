@@ -77,4 +77,4 @@ jobs:
       - name: Build and sync mobile applications
         run: |
           bun run mobile:sync
-          git diff --exit-code
+          test -z "$(git status --porcelain)" || { git status --short; exit 1; }

@@ -4,6 +4,7 @@ import { readdir } from "node:fs/promises";
 import { findActivity } from "./activity";
 import { app } from "./app";
 import { createAuth } from "./auth";
+import { withNativeOrigin } from "./nativeRequest";
 import type { Bindings } from "./types";
 
 const baseURL = "https://api.test";
@@ -27,16 +28,29 @@ describe("password authentication", () => {
       "capacitor://localhost",
       "https://localhost",
     ]) {
-      const signIn = await post(
-        auth,
-        "/sign-in/email",
-        {
-          email,
-          password: originalPassword,
-        },
-        null,
-        requestOrigin,
-      );
+      const nativePost = (
+        path: string,
+        body: Record<string, unknown>,
+        cookie?: string | null,
+      ) =>
+        auth.handler(
+          withNativeOrigin(
+            new Request(`${baseURL}/api/auth${path}`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Balebase-Native-Origin": requestOrigin,
+                Cookie: cookie ?? "",
+              },
+              body: JSON.stringify(body),
+            }),
+            origin,
+          ),
+        );
+      const signIn = await nativePost("/sign-in/email", {
+        email,
+        password: originalPassword,
+      });
       expect(signIn.status).toBe(200);
       const cookie = signIn.headers.get("set-cookie");
       expect(cookie).toContain("session_token=");
@@ -50,13 +64,7 @@ describe("password authentication", () => {
         "https://attacker.test",
       );
       expect(rejected.status).toBe(403);
-      const signedOut = await post(
-        auth,
-        "/sign-out",
-        {},
-        cookie,
-        requestOrigin,
-      );
+      const signedOut = await nativePost("/sign-out", {}, cookie);
       expect(signedOut.status).toBe(200);
       expect(await (await get(auth, "/get-session", cookie)).json()).toBeNull();
     }

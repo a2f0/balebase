@@ -14,7 +14,7 @@ repository root unless a command specifies `--cwd`.
 | API routes, authorization, persistence | `packages/api/src` |
 | Database schema | `packages/api/migrations` |
 | Application screens | `packages/client/src` |
-| Native mobile projects and preparation | `packages/client/ios`, `packages/client/android`, `packages/client/scripts` |
+| Native mobile projects and preparation | `packages/client/ios`, `packages/client/android`, `packages/client/scripts`, `scripts/build*.sh`, `scripts/run*.sh` |
 | Shared components, icons, styles | `packages/ui/src` |
 | Logo and generated images | `assets/brand`, `images` in `agent-tool.json` |
 | Public website | `packages/website/src` |
@@ -46,7 +46,9 @@ Generated images are ignored; keep binary files out of commits.
 `bun run mobile:sync` writes the native images into both checked-in Capacitor
 projects and restores the Gradle wrapper JAR from the pinned CLI template.
 Commit native source and configuration; generated web bundles, images, plugin
-paths, signing material, and build products remain ignored. CI builds and syncs
+paths, signing material, and build products remain ignored. After changing Capacitor
+dependencies, sync and commit the updated iOS Swift package manifest, which pins
+the plugin paths resolved by Bun. CI builds and syncs
 the mobile bundle; native SDK builds are described in the operations guide.
 
 ## Check a change

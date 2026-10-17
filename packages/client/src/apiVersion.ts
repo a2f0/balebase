@@ -15,13 +15,14 @@ const listeners = new Set<() => void>();
  */
 export async function fetchApi(input: RequestInfo | URL, init?: RequestInit) {
   if (Capacitor.isNativePlatform()) {
-    // Native HTTP does not supply the browser's Origin header. Preserve Better
-    // Auth's CSRF checks for cookie-authenticated mutations on both platforms.
+    // Request strips the forbidden Origin header before Capacitor forwards it.
+    // Send a native-only marker; the API restores Origin only when no browser
+    // Origin is present. This header is deliberately excluded from CORS.
     const headers = new Headers(
       init?.headers ?? (input instanceof Request ? input.headers : undefined),
     );
     headers.set(
-      "Origin",
+      "X-Balebase-Native-Origin",
       Capacitor.getPlatform() === "ios"
         ? "capacitor://localhost"
         : "https://localhost",

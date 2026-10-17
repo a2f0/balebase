@@ -162,7 +162,7 @@ The APK is written to
 `packages/client/android/app/build/outputs/apk/debug/app-debug.apk`.
 Android release builds remain unsigned until an upload keystore is configured.
 
-Like Tearleads, the root `scripts/` folder also contains release and run
+The root `scripts/` folder also contains release and run
 entrypoints. They work from any current directory and always build and sync
 the web bundle before invoking the native tools:
 
@@ -189,9 +189,11 @@ Before TestFlight or Play distribution:
 2. Set the release version/build number in Xcode and Android's
    `app/build.gradle`. Store build numbers are separate from web/API patch
    versions and must increase for each upload.
-3. Deploy the API change that trusts `capacitor://localhost` and
-   `https://localhost`. The native HTTP transport sends cookies and an explicit
-   trusted Origin; web authentication continues using the configured web origin.
+3. Deploy the native request adapter in the API before using a remote backend.
+   The native HTTP transport sends cookies and an origin marker. When no
+   browser Origin is present, the API applies its configured web origin. The
+   marker is excluded from allowed CORS headers; existing browser origins and
+   authentication callback allowlists remain unchanged.
 4. Exercise login, MFA, account switching, logout/relaunch, camera and file
    uploads, PDF viewing/downloads, invitations, and keyboard/back navigation on
    real devices. Email verification and password-reset links currently open

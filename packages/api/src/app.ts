@@ -22,13 +22,13 @@ import {
 import { billing, handleStripeWebhook, syncOrganizationSeats } from "./billing";
 import { businesses } from "./businesses";
 import { handleCheckrWebhook } from "./checkrSync";
-import { clientOrigins } from "./clientOrigins";
 import { contracts } from "./contracts";
 import { employeeForms } from "./employeeForms";
 import { equipment } from "./equipment";
 import { finance } from "./finance";
 import { inbox } from "./inbox";
 import { libraryFolders } from "./libraryFolders";
+import { withNativeOrigin } from "./nativeRequest";
 import { objects } from "./objects";
 import { organizationGroups, requireCapability } from "./organizationGroups";
 import { organizationSettings } from "./organizationSettings";
@@ -50,6 +50,11 @@ app.use("*", async (context, next) => {
   context.header(apiVersionHeader, apiVersion);
 });
 
+app.use("/api/*", async (context, next) => {
+  context.req.raw = withNativeOrigin(context.req.raw, context.env.CORS_ORIGIN);
+  await next();
+});
+
 app.use(
   "/api/*",
   cors({
@@ -58,7 +63,7 @@ app.use(
     credentials: true,
     exposeHeaders: ["Retry-After", "X-Document-Revision", apiVersionHeader],
     origin: (origin, context) =>
-      clientOrigins(context.env).includes(origin) ? origin : undefined,
+      origin === context.env.CORS_ORIGIN ? origin : undefined,
   }),
 );
 

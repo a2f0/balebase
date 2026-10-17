@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { type AuthVariables, requireRole } from "./authMiddleware";
-import { clientOrigins } from "./clientOrigins";
 import {
   maintenanceJobs,
   maintenanceTasks,
@@ -13,9 +12,7 @@ adminJobs.use("*", requireRole("admin"));
 adminJobs.get("/", (context) => context.json({ jobs: maintenanceJobs }));
 adminJobs.post("/:jobId/run", async (context) => {
   // CORS alone does not prevent cross-origin form submissions with cookies.
-  if (
-    !clientOrigins(context.env).includes(context.req.header("Origin") ?? "")
-  ) {
+  if (context.req.header("Origin") !== context.env.CORS_ORIGIN) {
     return context.json({ error: "Untrusted request origin." }, 403);
   }
   const job = maintenanceJobs.find(

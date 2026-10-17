@@ -6,6 +6,7 @@ import { adminJobs } from "./adminJobs";
 import type { AuthSession } from "./auth";
 import type { AuthVariables } from "./authMiddleware";
 import { runMaintenanceJob } from "./maintenance";
+import { withNativeOrigin } from "./nativeRequest";
 import type { Bindings } from "./types";
 import { purgeRequestedUsers, userDeletion } from "./userDeletion";
 
@@ -59,6 +60,10 @@ async function fixture(role = "admin", impersonatedBy?: string) {
   } as unknown as Bindings;
   const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
   app.use("*", async (context, next) => {
+    context.req.raw = withNativeOrigin(
+      context.req.raw,
+      context.env.CORS_ORIGIN,
+    );
     context.set("authSession", {
       user: { id: "actor", role },
       session: { impersonatedBy },
@@ -269,11 +274,17 @@ it.each([
 it.each(["capacitor://localhost", "https://localhost"])(
   "permits account deletion and admin maintenance from %s",
   async (nativeOrigin) => {
+    const nativePost = (confirm: string) => ({
+      ...post(confirm),
+      headers: {
+        "Content-Type": "application/json",
+        "X-Balebase-Native-Origin": nativeOrigin,
+      },
+    });
     const f = await fixture("user");
     f.insertUser("actor");
     expect(
-      (await f.request("/deletion", post("delete my account", nativeOrigin)))
-        .status,
+      (await f.request("/deletion", nativePost("delete my account"))).status,
     ).toBe(200);
     expect(await (await f.request("/deletion")).json()).toMatchObject({
       requestedAt: expect.any(String),
@@ -282,7 +293,10 @@ it.each(["capacitor://localhost", "https://localhost"])(
       (
         await f.request("/deletion", {
           method: "DELETE",
-          headers: { Origin: "https://evil.example" },
+          headers: {
+            Origin: "https://evil.example",
+            "X-Balebase-Native-Origin": nativeOrigin,
+          },
         })
       ).status,
     ).toBe(403);
@@ -290,7 +304,7 @@ it.each(["capacitor://localhost", "https://localhost"])(
       (
         await f.request("/deletion", {
           method: "DELETE",
-          headers: { Origin: nativeOrigin },
+          headers: { "X-Balebase-Native-Origin": nativeOrigin },
         })
       ).status,
     ).toBe(200);
@@ -302,7 +316,7 @@ it.each(["capacitor://localhost", "https://localhost"])(
       (
         await f.request(
           "/jobs/purgeRequestedUsers/run",
-          post("purgeRequestedUsers", nativeOrigin),
+          nativePost("purgeRequestedUsers"),
         )
       ).status,
     ).toBe(403);
@@ -311,7 +325,7 @@ it.each(["capacitor://localhost", "https://localhost"])(
       (
         await admin.request(
           "/jobs/purgeRequestedUsers/run",
-          post("purgeRequestedUsers", nativeOrigin),
+          nativePost("purgeRequestedUsers"),
         )
       ).status,
     ).toBe(200);

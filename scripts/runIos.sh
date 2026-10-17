@@ -5,4 +5,4 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 bun run --cwd "$REPO_ROOT" mobile:sync
 cd "$REPO_ROOT/packages/client"
-exec bunx --bun --no-install cap run ios "$@"
+exec bunx --bun --no-install cap run ios --no-sync "$@"

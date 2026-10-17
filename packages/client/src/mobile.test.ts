@@ -63,10 +63,9 @@ describe("mobile API requests", () => {
           }),
         );
       }
-      expect(requests.map((headers) => headers.get("Origin"))).toEqual([
-        "capacitor://localhost",
-        "https://localhost",
-      ]);
+      expect(
+        requests.map((headers) => headers.get("X-Balebase-Native-Origin")),
+      ).toEqual(["capacitor://localhost", "https://localhost"]);
       expect(requests.map((headers) => headers.get("X-Test"))).toEqual([
         "preserved",
         "preserved",
@@ -78,11 +77,19 @@ describe("mobile API requests", () => {
 
   it("keeps emailed links on the hosted app", () => {
     native.mockReturnValue(true);
-    expect(authCallbackUrl("/reset-password")).toBe(
-      "https://app.balebase.com/reset-password",
-    );
-    expect(authCallbackUrl("/?verified=true")).toBe(
-      "https://app.balebase.com/?verified=true",
-    );
+    const { VITE_APP_URL } = process.env;
+    Reflect.set(process.env, "VITE_APP_URL", "https://mobile-app.example");
+    try {
+      expect(authCallbackUrl("/reset-password")).toBe(
+        "https://mobile-app.example/reset-password",
+      );
+      expect(authCallbackUrl("/?verified=true")).toBe(
+        "https://mobile-app.example/?verified=true",
+      );
+    } finally {
+      if (VITE_APP_URL === undefined)
+        Reflect.deleteProperty(process.env, "VITE_APP_URL");
+      else Reflect.set(process.env, "VITE_APP_URL", VITE_APP_URL);
+    }
   });
 });
