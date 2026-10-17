@@ -778,7 +778,7 @@ test("reset reaches the exact fetched upstream before installing hooks", () => {
       "git -c core.hooksPath=/dev/null pull --ff-only",
     );
     const fetch = content.indexOf(
-      'git -c core.hooksPath=/dev/null fetch "$REMOTE" "$UPSTREAM_REF"',
+      'git -c core.hooksPath=/dev/null -c core.fsmonitor=false fetch "$REMOTE" "$UPSTREAM_REF"',
     );
     const ancestry = content.indexOf(
       'git merge-base --is-ancestor "$LOCAL_TARGET" "$FETCHED_UPSTREAM"',

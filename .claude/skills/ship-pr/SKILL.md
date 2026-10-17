@@ -1,6 +1,6 @@
 ---
 name: ship-pr
-description: Ship current work end-to-end — commit on a feature branch, patch-bump the changed backend/frontend versions, cross-agent review and repair it, open or resume its PR with a single push after the review, bring it up to date with its base, merge the verified reviewed candidate through GitHub's policy gate, then return to the base branch, delete the merged branch, and reset the checkout
+description: Ship current work end-to-end — commit on a feature branch, patch-bump the changed backend/frontend versions, cross-agent review and repair it, open or resume its PR with a single push after the review, bring it up to date with its base, merge the verified reviewed candidate through GitHub's policy gate, then return to the base branch, delete the merged branch, sweep merged worktrees, reset the checkout, and retire its worktree
 ---
 
 # Ship PR
@@ -37,6 +37,11 @@ A successful flow ends back on the PR's base branch — the default branch for a
 repo's git hooks reinstalled. That cleanup belongs to `squash-merge`, which runs
 it only after GitHub confirms the PR is `MERGED` and that the base branch
 actually contains the merge commit; the final checkout reset belongs to `reset`.
+
+Agents do not always ship from a linked git worktree. When this flow does,
+the worktree is detached at the base and reset there, then removed as the
+flow's last action. Every merge also sweeps this clone's other worktrees whose
+PRs already merged. `squash-merge` owns both steps.
 
 ## Compact output and trusted preflight
 
@@ -77,7 +82,8 @@ artifacts. Keep review findings and the complete verdict directly visible.
   is overriding and proceeds. The reviewed-head guard still applies.
 - `--keep-branch` (optional flag, position-independent): forwarded verbatim to
   `squash-merge`, which then skips the post-merge cleanup and stays on the
-  feature branch. Use when the branch is still needed locally.
+  feature branch. Its worktree, if any, is kept too. Use when the branch is
+  still needed locally.
 - The PR body is read from stdin (empty when none is piped) and passed to
   `open-pr`.
 
@@ -461,10 +467,13 @@ loop, subject-only reviewed merge, and `MERGED`-state verification.
 
    That skill also owns the post-merge cleanup: once GitHub confirms `MERGED`, it
    returns to the PR's base branch, fast-forwards it, verifies it contains the
-   merge commit, and deletes the merged branch locally and remotely. Forward
-   `--keep-branch` when it was given to opt out. Do not re-implement the cleanup
-   here; it is gated on the merge actually landing, so it must stay with the step
-   that performs the merge.
+   merge commit, and deletes the merged branch locally and remotely. In a linked
+   worktree it detaches at the base tip instead of switching. It then sweeps
+   this clone's other worktrees whose PRs merged. Forward `--keep-branch` when
+   it was given to opt out. **Always pass `--keep-worktree`**: `reset` (step 5)
+   still has to run in this checkout, so step 6 retires the worktree afterwards.
+   Do not re-implement the cleanup here; it is gated on the merge actually
+   landing, so it must stay with the step that performs the merge.
 
    **Invoke the `squash-merge` skill — do not call the tool directly from here.**
    The tool merges and returns; the cleanup and `--keep-branch` live in the skill
@@ -476,8 +485,8 @@ loop, subject-only reviewed merge, and `MERGED`-state verification.
    an empty first argument to default the subject to the PR title:
 
    ```text
-   squash-merge '' "$REVIEWED_SHA" "$REVIEWED_BASE_SHA"
-   squash-merge '' "$REVIEWED_SHA" "$REVIEWED_BASE_SHA" --keep-branch
+   squash-merge '' "$REVIEWED_SHA" "$REVIEWED_BASE_SHA" --keep-worktree
+   squash-merge '' "$REVIEWED_SHA" "$REVIEWED_BASE_SHA" --keep-worktree --keep-branch
    ```
 
    The empty subject falls back to the PR title captured when the PR was opened
@@ -502,7 +511,9 @@ loop, subject-only reviewed merge, and `MERGED`-state verification.
    the git hooks from `scripts/git/install-hooks.sh`.
 
    After step 4 the checkout is normally already on the base branch and current,
-   so the branch half is a no-op; the hooks half is the point. This is where the
+   so the branch half is a no-op; the hooks half is the point. In a linked
+   worktree whose primary checkout holds the default branch, `reset` detaches
+   at its fetched tip instead of switching. This is where the
    flow re-bootstraps the hooks, including the pre-push commit-trust gate that
    refuses unsigned or co-authored commits on every manual push. Hook changes
    arrive as ordinary commits under `scripts/git/hooks/` and do nothing until
@@ -517,7 +528,16 @@ loop, subject-only reviewed merge, and `MERGED`-state verification.
    re-review. A `reset` failure does not invalidate the merge: report it and
    continue to step 6.
 
-6. **Report results**: the PR URL, review agent and fallback status, repair rounds
+6. **Retire the worktree** — only when the flow ran in a linked worktree, the
+   merge landed, `squash-merge`'s cleanup deleted the merged branch, and
+   `--keep-branch` was not given. Run `squash-merge`'s step 6 ("Retire this
+   worktree") now, after the reset. In the primary checkout it does nothing.
+   It is the flow's last action in the worktree. It removes the directory the
+   shell is in and moves the shell to the primary checkout, so run nothing
+   else from the old path. If it refuses (untracked files, ignored env or
+   state files), the worktree stays detached at the base; report why.
+
+7. **Report results**: the PR URL, review agent and fallback status, repair rounds
    performed, base refreshes performed, findings fixed or waived, the version
    each changed package shipped at (for example
    `packages/client 0.1.4 → 0.1.5`, or that neither versioned package changed),
@@ -527,12 +547,14 @@ loop, subject-only reviewed merge, and `MERGED`-state verification.
    `MERGED`, and state the branch returned to, that the merged branch was
    deleted, and that the hooks were reinstalled — or, when cleanup or the reset
    was skipped (`--keep-branch`, a dirty worktree, a merge that did not land),
-   say so and what was left behind.
+   say so and what was left behind. List the worktrees the sweep removed or
+   kept, and say whether this flow's worktree was retired.
 
 ## Notes
 
 - **Order is enforced**: commit → sync-bump-review-and-repair → open/resume →
-  freshness gate → merge → cleanup → reset. A failure before the open step
+  freshness gate → merge → cleanup and sweep → reset → retire worktree. A
+  failure before the open step
   leaves committed local work and no PR; a failure after it leaves the PR in a
   safe, open state. Either way it is reported.
 - **One push, after the review** — on the fresh path the branch is pushed exactly

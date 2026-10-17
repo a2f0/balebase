@@ -152,8 +152,8 @@ fi
    # Honor the *complete* upstream: the remote AND the branch name it maps to.
    UPSTREAM_REF=$(git config "branch.$TARGET_BRANCH.merge" 2>/dev/null || echo "refs/heads/$TARGET_BRANCH")
    git check-ref-format "$UPSTREAM_REF" >/dev/null || { echo "Error: invalid upstream ref $UPSTREAM_REF; hooks not installed" >&2; exit 1; }
-   git -c core.hooksPath=/dev/null fetch "$REMOTE" --prune || { echo "Error: prune failed; hooks not installed" >&2; exit 1; }
-   git -c core.hooksPath=/dev/null fetch "$REMOTE" "$UPSTREAM_REF" || { echo "Error: upstream fetch failed; hooks not installed" >&2; exit 1; }
+   git -c core.hooksPath=/dev/null -c core.fsmonitor=false fetch "$REMOTE" --prune || { echo "Error: prune failed; hooks not installed" >&2; exit 1; }
+   git -c core.hooksPath=/dev/null -c core.fsmonitor=false fetch "$REMOTE" "$UPSTREAM_REF" || { echo "Error: upstream fetch failed; hooks not installed" >&2; exit 1; }
    FETCHED_UPSTREAM=$(git rev-parse --verify 'FETCH_HEAD^{commit}') || { echo "Error: fetched upstream is not a commit; hooks not installed" >&2; exit 1; }
    LOCAL_TARGET=""
    if git show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
@@ -175,7 +175,10 @@ fi
    exact equality:**
 
    ```bash
-   if [ -z "$LOCAL_TARGET" ]; then
+   TARGET_CHECKOUTS=$(git worktree list --porcelain | grep -cxF "branch refs/heads/$TARGET_BRANCH") || :
+   if [ "$BRANCH" != "$TARGET_BRANCH" ] && [ "$TARGET_CHECKOUTS" != 0 ]; then
+     git -c core.hooksPath=/dev/null -c core.fsmonitor=false switch --detach "$FETCHED_UPSTREAM" || { echo "Error: could not detach at the fetched $TARGET_BRANCH; hooks not installed" >&2; exit 1; }
+   elif [ -z "$LOCAL_TARGET" ]; then
      git -c core.hooksPath=/dev/null switch -c "$TARGET_BRANCH" "$FETCHED_UPSTREAM" || { echo "Error: could not create $TARGET_BRANCH at its fetched upstream; hooks not installed" >&2; exit 1; }
      git config --local "branch.$TARGET_BRANCH.remote" "$REMOTE" || { echo "Error: could not configure $TARGET_BRANCH remote; hooks not installed" >&2; exit 1; }
      git config --local "branch.$TARGET_BRANCH.merge" "$UPSTREAM_REF" || { echo "Error: could not configure $TARGET_BRANCH upstream; hooks not installed" >&2; exit 1; }
@@ -191,6 +194,14 @@ fi
    Treat that as success. When the local branch does not exist, the fetched SHA
    is used directly and the new branch receives the remote/upstream configuration
    that future resets will honor.
+
+   **When another worktree holds the target branch, detach at the fetched
+   commit instead.** Git checks a branch out in one worktree at a time, so in
+   a linked worktree whose primary checkout is on the default branch,
+   switching fails. Detaching reaches the same exact commit, and the equality
+   assertion below still gates the hooks. The other worktree's copy of the
+   branch is never moved, because it may hold someone else's work in
+   progress.
 
    **Fetch, prove ancestry, then fast-forward to exact equality.** A plain
    `git pull --ff-only` is insufficient: when the local branch is ahead of
@@ -237,8 +248,9 @@ fi
    intended and is why the step 1 guards refuse to run on a dirty hook source.
 
 5. **Report the state actually reached** — not a verdict. Name the branch now
-   checked out, whether it moved or was already there, whether it fast-forwarded
-   (and to what), and which hooks were installed or removed.
+   checked out (or the commit a linked worktree detached at), whether it moved
+   or was already there, whether it fast-forwarded (and to what), and which
+   hooks were installed or removed.
 
    When the run stopped early, say **which stages completed and which did not**,
    because the answer differs by where it stopped:
@@ -286,3 +298,8 @@ fi
   default — pass the base as the branch argument if that is not wanted.
 - **`--ff-only` failure is a real signal**, not a nuisance: the default branch
   has local commits that were never pushed. Resolve that by hand; do not force.
+- **Linked worktrees end detached, and stay in place.** When another worktree
+  holds the target branch, the reset detaches at its fetched tip. Hooks
+  install into the shared `.git/hooks` from that exact revision. Removing the
+  worktree is not part of a reset: `squash-merge` retires it, and `ship-pr`
+  does so after this skill has run.
