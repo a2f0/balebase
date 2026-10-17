@@ -1,6 +1,7 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import { readdir } from "node:fs/promises";
+import { activityBatch } from "./activity";
 import { apiKeyRouteDenial } from "./apiKeys";
 import { app } from "./app";
 import { createAuth } from "./auth";
@@ -380,6 +381,55 @@ describe("organization API keys", () => {
       ["audit.started", viaKey("rest")],
       ["audit.template_created", viaKey("rest")],
     ]);
+  });
+
+  it("rolls back a failed key-made batch along with its attribution", async () => {
+    const fixture = await createFixture();
+    const { apiKey } = await fixture.createKey("write");
+    fixture.addEquipment("laptop", fixture.organizationId, "MacBook Pro");
+    const database = fixture.bindings.DB;
+    await expect(
+      activityBatch(
+        database,
+        {
+          access: "write",
+          channel: "mcp",
+          id: apiKey.id,
+          organizationId: fixture.organizationId,
+        },
+        [
+          database
+            .prepare(
+              `UPDATE equipment SET model = 'Renamed', activity_actor_id = ?
+               WHERE id = 'laptop'`,
+            )
+            .bind(fixture.userId),
+          database.prepare("INSERT INTO equipment (id) VALUES ('laptop')"),
+        ],
+      ),
+    ).rejects.toThrow();
+    expect(
+      fixture.database
+        .query(
+          `SELECT
+             (SELECT COUNT(*) FROM activity_api_key_context) AS contexts,
+             (SELECT COUNT(*) FROM activity_events
+              WHERE root_type = 'equipment') AS events,
+             (SELECT model FROM equipment WHERE id = 'laptop') AS model`,
+        )
+        .get(),
+    ).toEqual({ contexts: 0, events: 0, model: "MacBook Pro" });
+
+    const edited = await fixture.session("PATCH", "/api/equipment/laptop", {
+      model: "MacBook Air",
+    });
+    expect(edited.status).toBe(200);
+    const activity = await fixture.session<{
+      events: Array<{ action: string; actor: { apiKey: unknown } }>;
+    }>("GET", "/api/equipment/laptop/activity");
+    expect(
+      activity.body.events.map(({ action, actor }) => [action, actor.apiKey]),
+    ).toEqual([["equipment.updated", null]]);
   });
 
   it("credits a key only with its creator's activity in its organization", async () => {
@@ -1079,8 +1129,11 @@ interface TestStatement {
 
 function toD1(database: Database) {
   return {
+    // A D1 batch is one transaction, so a failure rolls back every statement.
     batch: async (statements: TestStatement[]) =>
-      statements.map((statement) => statement.execute()),
+      database.transaction(() =>
+        statements.map((statement) => statement.execute()),
+      )(),
     exec: async (query: string) => database.exec(query),
     prepare: (query: string) => {
       let values: SQLQueryBindings[] = [];
