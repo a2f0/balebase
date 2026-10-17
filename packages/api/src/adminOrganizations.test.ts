@@ -37,6 +37,7 @@ describe("admin organizations", () => {
       id: targetOrganizationId,
       memberCount: 1,
       name: "Member Person's Organization",
+      plaidItemCount: 0,
     });
     expect(body.members).toEqual([
       {
@@ -188,6 +189,12 @@ describe("admin organizations", () => {
       ).text(),
     );
 
+    database.exec(
+      await Bun.file(
+        new URL("../migrations/0007_create_finance.sql", import.meta.url),
+      ).text(),
+    );
+
     const response = await testApp(database).request("/");
 
     expect(response.status).toBe(200);
@@ -205,9 +212,69 @@ describe("admin organizations", () => {
           name: "Example Person's Organization",
           ownerEmail: "person@example.com",
           ownerName: "Example Person",
+          plaidItemCount: 0,
           slug: "personal-user-1",
         },
       ],
+    });
+  });
+
+  it("counts connected Plaid items per organization independently of accounts and members", async () => {
+    const database = await createDetailFixture();
+    const now = "2026-10-17T12:00:00.000Z";
+    for (const [id, organizationId, status] of [
+      ["active-item", targetOrganizationId, "active"],
+      ["error-item", targetOrganizationId, "error"],
+      ["disconnected-item", targetOrganizationId, "disconnected"],
+      ["other-item", "org_user-1", "active"],
+    ]) {
+      database
+        .query(
+          `INSERT INTO plaid_items
+           (id, organization_id, plaid_item_id, access_token_ciphertext,
+            access_token_iv, status, created_by, created_at, updated_at)
+           VALUES (?, ?, ?, '', '', ?, 'user-1', ?, ?)`,
+        )
+        .run(id ?? "", organizationId ?? "", id ?? "", status ?? "", now, now);
+    }
+    for (const id of ["checking", "savings", "credit-card"]) {
+      database
+        .query(
+          `INSERT INTO plaid_accounts
+           (id, organization_id, plaid_item_record_id, plaid_account_id,
+            name, type, updated_at)
+           VALUES (?, ?, 'active-item', ?, ?, 'depository', ?)`,
+        )
+        .run(id, targetOrganizationId, id, id, now);
+    }
+    const app = testApp(database);
+    const list = await app.request("/");
+    expect(list.status).toBe(200);
+    const body = (await list.json()) as {
+      organizations: Array<Record<string, unknown>>;
+    };
+    expect(body.organizations).toHaveLength(2);
+    expect(body.organizations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: targetOrganizationId,
+          memberCount: 2,
+          plaidItemCount: 2,
+        }),
+        expect.objectContaining({
+          id: "org_user-1",
+          memberCount: 1,
+          plaidItemCount: 1,
+        }),
+      ]),
+    );
+    const detail = await app.request(`/${targetOrganizationId}`);
+    expect(detail.status).toBe(200);
+    const detailBody = (await detail.json()) as OrganizationDetailResponse;
+    expect(detailBody.organization).toMatchObject({
+      id: targetOrganizationId,
+      memberCount: 2,
+      plaidItemCount: 2,
     });
   });
 
@@ -537,6 +604,7 @@ async function createDeletionFixture() {
       "2026-08-18T12:00:00.000Z",
     );
   for (const migration of [
+    "0007_create_finance.sql",
     "0010_create_organization_groups.sql",
     "0011_soft_delete_organizations.sql",
     "0013_track_organization_deletion_actor.sql",

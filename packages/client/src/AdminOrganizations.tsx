@@ -252,6 +252,13 @@ function OrganizationTable({
             <th className="adminNumeric" scope="col">
               Members
             </th>
+            <th
+              className="adminNumeric"
+              scope="col"
+              title="Bank login connections, including those with sync errors. Disconnected items are excluded."
+            >
+              Plaid items
+            </th>
             <th scope="col">Status</th>
             <th scope="col">Marked by</th>
             <th scope="col">Created</th>
@@ -327,6 +334,7 @@ function OrganizationTableRow({
         )}
       </td>
       <td className="adminNumeric tabular">{organization.memberCount}</td>
+      <td className="adminNumeric tabular">{organization.plaidItemCount}</td>
       <td>
         <OrganizationStatus deletedAt={organization.deletedAt} />
       </td>

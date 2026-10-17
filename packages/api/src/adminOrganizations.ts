@@ -27,6 +27,7 @@ interface OrganizationRow {
   name: string;
   owner_email: string | null;
   owner_name: string | null;
+  plaid_item_count: number;
   slug: string;
 }
 
@@ -37,7 +38,10 @@ const organizationQuery = `SELECT organization.id, organization.name, organizati
             deleted_by.name AS deleted_by_name,
             deleted_by.email AS deleted_by_email,
             owner.name AS owner_name, owner.email AS owner_email,
-            COUNT(member.id) AS member_count
+            COUNT(member.id) AS member_count,
+            (SELECT COUNT(*) FROM plaid_items AS item
+             WHERE item.organization_id = organization.id
+               AND item.status != 'disconnected') AS plaid_item_count
      FROM organization
      LEFT JOIN user AS owner
        ON owner.defaultOrganizationId = organization.id
@@ -91,6 +95,7 @@ function toAdminOrganization(organization: OrganizationRow) {
     name: organization.name,
     ownerEmail: organization.owner_email,
     ownerName: organization.owner_name,
+    plaidItemCount: organization.plaid_item_count,
     slug: organization.slug,
   };
 }
