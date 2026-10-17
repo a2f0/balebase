@@ -1,7 +1,9 @@
 # Dependency upgrades
 
-Read the runtime pins from [`.mise.toml`](../.mise.toml), `packageManager` and
-`engines` in [`package.json`](../package.json), and CI. Bun owns `bun.lock`.
+Read the selected runtime from [`.mise.toml`](../.mise.toml), `packageManager`
+in [`package.json`](../package.json), and CI. The `engines` field declares the
+supported minimum; preserve it unless a migration needs a higher floor.
+Bun owns `bun.lock`.
 Preserve exact direct dependency pins and keep React, React DOM, their types,
 and the UI peer versions aligned. Run package executables with `bunx --bun` so
 their Node shebangs do not select another runtime. CI rejects direct Node, npm,
@@ -22,6 +24,17 @@ Use the `update-dependencies` skill installed from the pinned
   The native TypeScript 7 release removes APIs used by language tooling.
   Explicit Bun types in the workspace tsconfigs account for TypeScript 6's
   new default type inclusion. See the [TypeScript 6 release notes][typescript].
+- Better Auth and `@better-auth/core` stay aligned on 1.7.2 while the
+  database has the 1.7.0 `account.issuer NOT NULL` column and issuer unique
+  index. Releases from 1.7.3 stop writing that field; sign-up then fails. The
+  [1.7 upgrade guide][better-auth] requires manual index and column cleanup.
+  Revisit only after reviewing a non-destructive migration against both real
+  environments and passing the complete authentication and API-key tests.
+- Stripe.js stays on 9.17.0, the newest Dahlia release, while the server pins
+  Stripe API `2026-06-24.dahlia`. [Stripe.js 10][stripe-js] selects the Endive
+  release. Revisit this pair only after testing a real sandbox Checkout Session
+  through `initCheckoutElementsSdk`; the mocked checkout tests cannot prove
+  compatibility between the frontend release and the server API.
 - Follow the [Astro major upgrade guide][astro] when changing compiler,
   Markdown, whitespace, or API behavior; verify image handling against the
   [AVIF advisory][astro-advisory] and the selected release.
@@ -31,7 +44,7 @@ Use the `update-dependencies` skill installed from the pinned
 - [Lint-staged 17][lint-staged] runs on Bun here and requires Git 2.32.0.
   Configuration is in package.json, so the optional YAML dependency is not
   needed to load the staged-file rules.
-- [Knip 6.40][knip] reports exports used only in their declaring file. Keep
+- [Knip][knip] reports exports used only in their declaring file. Keep
   those declarations private, preserve both full and production analysis,
   and include CSS in project patterns for the font import compiler.
 
@@ -39,7 +52,7 @@ Use the `update-dependencies` skill installed from the pinned
 
 Markdownlint CLI 0.23.3 pins smol-toml 1.8.0, which is affected by
 [GHSA-r4xh-jqrq-34v2][toml-advisory]. An exact-parent override selects the fixed
-1.9.0 parser. Its null-prototype objects expose a Markdownlint 0.41.1
+1.9.1 parser. Its null-prototype objects expose a Markdownlint 0.41.1
 `instanceof Object` incompatibility: nested TOML rule options, disabled rules,
 and warning severity are silently lost. A Bun-generated patch recognizes
 null-prototype objects; `bun run test:markdownlint` exercises the actual CLI
@@ -47,11 +60,12 @@ with TOML, JSON, and the repository JSONC configuration. Remove the override
 when the CLI permits the fixed parser; remove the patch when Markdownlint
 preserves the same regression cases without it. Confirm removal with a fresh audit.
 
-Wrangler and the API's prerelease Miniflare are retained when real resource
-previews or the Workerd integration are unavailable. Their exact Sharp and
-Undici pins can retain security advisories; a blanket override would bypass
-the owner's supported integration. Revisit those groups when complete previews
-and the owning integration checks are available.
+Keep Wrangler and the API's Miniflare pin aligned with the exact Miniflare
+version supported by the stable Wrangler release. Miniflare 5 still carries a
+prerelease label; the registry's latest stable Miniflare 4 is not an upgrade
+for the `convertV4MiniflareOptions` integration. Verify the Workerd upload test
+and complete real production and staging resource previews before changing
+this group. Prefer the owner's fixed Sharp and Undici releases over overrides.
 
 [PR #95](https://github.com/a2f0/stealth/pull/95) recorded the following constraints
 and exposure analysis. They explain the retained choices, not a fresh audit or
@@ -103,6 +117,8 @@ upgrade. Keep the upgrade PR's ledger of selected and constrained dependencies,
 audits, checks, warnings, previews, review, merge, and deployment results there;
 promote only ongoing procedures or active constraints into this guide.
 
+[stripe-js]: https://github.com/stripe/stripe-js/releases/tag/v10.0.0
+[better-auth]: https://www.better-auth.com/docs/guides/1-7-upgrade-guide
 [typescript]: https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html
 [astro]: https://docs.astro.build/en/guides/upgrade-to/v7/
 [astro-advisory]: https://github.com/withastro/astro/security/advisories/GHSA-26w7-cxv4-gfx2

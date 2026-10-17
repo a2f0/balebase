@@ -14,7 +14,7 @@ Infrastructure lives outside the workspaces in `terraform` (D1, R2, and
 
 ## Start locally
 
-Install [Bun](https://bun.sh/) 1.4.2. Bun manages dependencies and runs all
+Install [Bun](https://bun.sh/) 1.4.3. Bun manages dependencies and runs all
 JavaScript tooling, including commitlint, lint-staged, and Wrangler. Commands
 use `--bun` to keep that runtime even when Node.js is installed. Install
 Terraform, TFLint, and ShellCheck for the complete lint suite. Authenticate
