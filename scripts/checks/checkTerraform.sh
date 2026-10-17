@@ -14,11 +14,6 @@ fi
 echo "Checking Terraform formatting..."
 terraform -chdir="$TERRAFORM_ROOT" fmt -check -recursive -diff
 
-if [[ "${TEARLEADS_PREFLIGHT_OFFLINE:-0}" == "1" ]]; then
-  echo "Skipping provider-backed validation and TFLint in the network-isolated preflight."
-  exit 0
-fi
-
 if ! command -v tflint >/dev/null 2>&1; then
   echo "ERROR: tflint is required for Terraform linting." >&2
   exit 1
