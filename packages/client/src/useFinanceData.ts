@@ -24,6 +24,7 @@ export function useFinanceData() {
   const requestId = useRef(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string>();
   const [loadMoreError, setLoadMoreError] = useState<string>();
   const load = useCallback(async (cursor?: string, reset = false) => {
@@ -32,6 +33,7 @@ export function useFinanceData() {
     const refresh = !reset && loadedFilters.current === filters;
     setLoading(!cursor && !refresh);
     setLoadingMore(Boolean(cursor));
+    setRefreshing(!cursor && refresh);
     setLoadError(undefined);
     setLoadMoreError(undefined);
     const setRequestError = cursor ? setLoadMoreError : setLoadError;
@@ -56,6 +58,7 @@ export function useFinanceData() {
       if (id === requestId.current) {
         setLoading(false);
         setLoadingMore(false);
+        setRefreshing(false);
       }
     }
   }, []);
@@ -75,6 +78,7 @@ export function useFinanceData() {
       data?.nextCursor &&
       !loading &&
       !loadingMore &&
+      !refreshing &&
       filters === loadedFilters.current
     )
       await load(data.nextCursor);
@@ -84,6 +88,7 @@ export function useFinanceData() {
     filters,
     loading: loading || filters !== loadedFilters.current,
     loadingMore,
+    refreshing,
     loadError,
     loadMoreError,
     load,

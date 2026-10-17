@@ -39,6 +39,7 @@ function renderFinance(
       filters={{ accountIds: [], year: null, uncategorized: false }}
       loading={false}
       loadingMore={false}
+      refreshing={false}
       loadError={undefined}
       loadMoreError={undefined}
       onFiltersChange={() => undefined}

@@ -125,7 +125,12 @@ export function FinanceTransactionHistory({
       )}
       {loadMoreError && <Banner tone="danger">{loadMoreError}</Banner>}
       {hasMore && transactions && (
-        <Button busy={loadingMore} onClick={() => void onLoadMore()} size="sm">
+        <Button
+          busy={loadingMore}
+          disabled={handlers.busy}
+          onClick={() => void onLoadMore()}
+          size="sm"
+        >
           {loadMoreError ? "Retry loading more" : "Load more transactions"}
         </Button>
       )}

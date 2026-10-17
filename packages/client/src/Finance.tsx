@@ -218,7 +218,9 @@ export function FinanceView({
       />
       <PageBody>
         <FinanceNotices
-          error={error ?? handlers.loadError}
+          error={
+            error ?? (page === "overview" ? undefined : handlers.loadError)
+          }
           notice={notice}
           overview={page === "overview"}
           showDataNotice={data?.accounts.length === 0}
@@ -246,6 +248,7 @@ function FinanceOverview({
   filters,
   loading,
   loadingMore,
+  refreshing,
   loadError,
   loadMoreError,
   onFiltersChange,
@@ -304,7 +307,7 @@ function FinanceOverview({
         loadMoreError={loadMoreError}
         onLoadMore={onLoadMore}
         onReload={onReload}
-        busy={handlers.busy}
+        busy={handlers.busy || refreshing || loadingMore}
         categories={data?.categories ?? []}
         onAnnotate={handlers.onAnnotate}
         onCategorize={handlers.onCategorize}

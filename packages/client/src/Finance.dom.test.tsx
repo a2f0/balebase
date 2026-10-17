@@ -245,6 +245,7 @@ describe("Finance filters", () => {
     const cursor = JSON.stringify({ date: `${year}-01-01`, id: "Coffee" });
     const refreshed = Promise.withResolvers<Response>();
     let saved = false;
+    let cursorRequests = 0;
     respond((url, init) => {
       if (init?.method === "PATCH") {
         saved = true;
@@ -253,8 +254,10 @@ describe("Finance filters", () => {
         });
       }
       if (url.searchParams.has("cursor")) {
+        cursorRequests++;
         return Response.json({
           ...data,
+          nextCursor: "older-cursor",
           transactions: [
             transaction("Older expense", {
               annotation: { labels: [], note: "", reviewed: saved },
@@ -290,6 +293,9 @@ describe("Finance filters", () => {
     expect(rowNames()).toEqual(["Coffee", "Older expense"]);
     expect(container.contains(form)).toBe(true);
     expect(container.textContent).not.toContain("Loading finances");
+    expect(button("Load more transactions").disabled).toBe(true);
+    await click("Load more transactions");
+    expect(cursorRequests).toBe(1);
     await act(async () =>
       refreshed.resolve(
         Response.json({
@@ -301,6 +307,8 @@ describe("Finance filters", () => {
     );
     expect(rowNames()).toEqual(["Coffee", "Older expense"]);
     expect(container.contains(form)).toBe(true);
+    expect(cursorRequests).toBe(2);
+    expect(button("Load more transactions").disabled).toBe(false);
     expect(
       container.querySelectorAll(".financeTransactionStatus")[1]?.textContent,
     ).toBe("Reviewed");
