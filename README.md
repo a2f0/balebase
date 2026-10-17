@@ -3,7 +3,6 @@
 Balebase runs on Cloudflare Workers, D1, and R2. Every workspace lives
 under `packages/`:
 
-- `packages/agent-tool` — repository automation shared by the agent workflows.
 - `packages/api` — Hono API on Cloudflare Workers, with D1 and R2 bindings.
 - `packages/client` — React and Vite application.
 - `packages/ui` — the shared design system (tokens, component styles, React
@@ -65,8 +64,7 @@ bun run format    # apply source and Markdown fixes
 
 Agents can capture noisy finite commands with
 `bun run agent:run --label tests -- bun run test`. See
-[compact output](CONTRIBUTING.md#compact-command-output) for private logs and
-trusted-shipping constraints.
+[compact output](CONTRIBUTING.md#compact-command-output) for private logs.
 
 ## Reference
 

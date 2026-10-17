@@ -19,10 +19,6 @@ const baseConfig = {
   treatConfigHintsAsErrors: true,
   workspaces: {
     ".": rootToolingWorkspace,
-    "packages/agent-tool": {
-      entry: ["src/index.ts", "src/**/*.test.ts"],
-      project: ["src/**/*.{css,ts}"],
-    },
     "packages/api": {
       entry: ["src/**/*.test.ts"],
       project: ["src/**/*.{css,ts}"],
@@ -47,10 +43,6 @@ const productionConfig = {
   treatConfigHintsAsErrors: true,
   workspaces: {
     ".": rootToolingWorkspace,
-    "packages/agent-tool": {
-      entry: ["src/index.ts!"],
-      project: [],
-    },
     "packages/api": {
       entry: ["src/**/*.ts!", "!src/**/*.test.ts"],
       project: [],

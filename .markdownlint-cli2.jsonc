@@ -6,7 +6,10 @@
     "**/.git/**",
     "**/.astro/**",
     "**/.wrangler/**",
-    "**/dist/**"
+    "**/dist/**",
+    // agent-tool manages these skills; bun run agents:check verifies them.
+    ".agents/skills/**",
+    ".claude/skills/**"
   ],
   "config": {
     "default": true,
