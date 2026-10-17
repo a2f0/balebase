@@ -39,7 +39,7 @@
     },
     "packages/client": {
       "name": "@balebase/client",
-      "version": "0.1.40",
+      "version": "0.1.41",
       "dependencies": {
         "@balebase/ui": "workspace:*",
         "@stripe/stripe-js": "9.17.0",
