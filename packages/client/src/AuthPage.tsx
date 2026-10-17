@@ -29,8 +29,11 @@ interface AuthPageProps {
   initialNoticeTone?: "info" | "success";
   onAuthenticated: (action: AuthenticationAction) => Promise<void>;
   onCancel?: (() => Promise<void> | void) | undefined;
-  /** Leaves the reset link once its token is spent; sign-in continues here. */
-  onPasswordReset: () => Promise<void>;
+  /**
+   * Leaves the reset link, once its token is spent or when the person goes back
+   * to sign in instead; sign-in continues here.
+   */
+  onLeaveReset: () => Promise<void>;
   variant?: AuthVariant;
 }
 
@@ -67,7 +70,7 @@ export function AuthPage({
   initialNoticeTone = "info",
   onAuthenticated,
   onCancel,
-  onPasswordReset,
+  onLeaveReset,
   variant = "default",
 }: AuthPageProps) {
   const auth = useAuthPageState({
@@ -76,7 +79,7 @@ export function AuthPage({
     initialNotice,
     onAuthenticated,
     onCancel,
-    onPasswordReset,
+    onLeaveReset,
   });
 
   if (auth.twoFactorRequired) {
@@ -103,7 +106,9 @@ export function AuthPage({
       // Action results confirm; a notice that arrived with the page keeps its tone.
       noticeTone={auth.notice === initialNotice ? initialNoticeTone : "success"}
       onCancel={onCancel ? auth.cancel : undefined}
-      onMode={auth.chooseMode}
+      onMode={
+        auth.mode === "reset" ? () => void auth.leaveReset() : auth.chooseMode
+      }
       onSubmit={auth.submit}
       variant={variant}
     />
@@ -116,7 +121,7 @@ function useAuthPageState({
   initialNotice,
   onAuthenticated,
   onCancel,
-  onPasswordReset,
+  onLeaveReset,
 }: Required<Pick<AuthPageProps, "initialMode">> &
   Pick<
     AuthPageProps,
@@ -124,7 +129,7 @@ function useAuthPageState({
     | "initialNotice"
     | "onAuthenticated"
     | "onCancel"
-    | "onPasswordReset"
+    | "onLeaveReset"
   >) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [name, setName] = useState("");
@@ -147,20 +152,29 @@ function useAuthPageState({
     setTermsAccepted(false);
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function runWhileBusy(action: () => Promise<void> | void) {
     setBusy(true);
     setError(undefined);
-    setNotice(undefined);
-
     try {
+      await action();
+    } catch (cause) {
+      setError(messageFrom(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setNotice(undefined);
+    await runWhileBusy(async () => {
       const result = await performAuthAction({
         confirmation,
         email,
         mode,
         name,
         onAuthenticated,
-        onPasswordReset,
+        onLeaveReset,
         password,
         resetToken,
         termsAccepted,
@@ -171,25 +185,18 @@ function useAuthPageState({
       }
       if (result.nextMode) chooseMode(result.nextMode);
       setNotice(result.notice);
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
-  async function cancel() {
-    if (!onCancel) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      await onCancel();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const leaveReset = () =>
+    runWhileBusy(async () => {
+      await onLeaveReset();
+      chooseMode("sign-in");
+    });
+
+  const cancel = async () => {
+    if (onCancel) await runWhileBusy(onCancel);
+  };
 
   return {
     busy,
@@ -198,6 +205,7 @@ function useAuthPageState({
     confirmation,
     email,
     error,
+    leaveReset,
     mode,
     name,
     notice,
@@ -404,7 +412,7 @@ interface AuthActionInput {
   mode: AuthMode;
   name: string;
   onAuthenticated: (action: AuthenticationAction) => Promise<void>;
-  onPasswordReset: () => Promise<void>;
+  onLeaveReset: () => Promise<void>;
   password: string;
   resetToken: string | null;
   termsAccepted: boolean;
@@ -483,7 +491,7 @@ async function performAuthAction(
     token: input.resetToken,
   });
   throwForAuthError(result.error);
-  await input.onPasswordReset();
+  await input.onLeaveReset();
   return {
     nextMode: "sign-in" as const,
     notice: "Password updated. Sign in with your new password.",

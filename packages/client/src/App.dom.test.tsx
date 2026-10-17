@@ -74,14 +74,21 @@ type Person = (typeof people)[keyof typeof people];
 
 /**
  * Answers the auth endpoints for one browser. Like the server, resetting a
- * password revokes only that account's sessions.
+ * password revokes only that account's sessions. With `offlineAfterReset`, the
+ * session can no longer be fetched once the reset lands, until `reconnect()`.
  */
-function stubAuth(signedIn: Person | null, resetFor: Person) {
+function stubAuth(
+  signedIn: Person | null,
+  resetFor: Person,
+  { offlineAfterReset = false } = {},
+) {
   let active = signedIn;
+  let offline = false;
   globalThis.fetch = (async (input, init) => {
     const path = new URL(String(input instanceof Request ? input.url : input))
       .pathname;
     if (path === "/api/auth/get-session") {
+      if (offline) throw new TypeError("Failed to fetch");
       return Response.json(
         active && {
           session: {
@@ -96,6 +103,7 @@ function stubAuth(signedIn: Person | null, resetFor: Person) {
     }
     if (path === "/api/auth/reset-password") {
       if (active?.id === resetFor.id) active = null;
+      offline = offlineAfterReset;
       return Response.json({ status: true });
     }
     if (path === "/api/auth/sign-in/email") {
@@ -106,6 +114,11 @@ function stubAuth(signedIn: Person | null, resetFor: Person) {
     }
     return Response.json([]);
   }) as typeof fetch;
+  return {
+    reconnect() {
+      offline = false;
+    },
+  };
 }
 
 async function settle() {
@@ -146,7 +159,7 @@ async function fill(name: string, value: string) {
   });
 }
 
-async function submit(label: string) {
+async function press(label: string) {
   const button = [...container.querySelectorAll("button")].find(
     (element) => element.textContent?.trim() === label,
   );
@@ -158,7 +171,7 @@ async function submit(label: string) {
 async function resetPassword() {
   await fill("password", "correct horse battery");
   await fill("password-confirmation", "correct horse battery");
-  await submit("Set new password");
+  await press("Set new password");
   expect(window.location.search).toBe("");
   expect(container.textContent).toContain(
     "Password updated. Sign in with your new password.",
@@ -168,7 +181,7 @@ async function resetPassword() {
 async function signIn(person: Person, label: string) {
   await fill("email", person.email);
   await fill("password", "correct horse battery");
-  await submit(label);
+  await press(label);
   expect(heading()).not.toBe("Choose a new password");
   expect(container.querySelector(".authShell")).toBeNull();
   expect(window.location.pathname).toBe("/");
@@ -206,5 +219,47 @@ describe("password reset", () => {
     expect(heading()).toBe("Sign in to another account");
 
     await signIn(people.owner, "Add account");
+  });
+
+  it("leaves the reset link when going back to sign in instead", async () => {
+    stubAuth(null, people.owner);
+    await openResetLink();
+
+    await press("Back to sign in");
+    expect(window.location.pathname).toBe("/");
+    expect(window.location.search).toBe("");
+    expect(heading()).toBe("Enter your workspace");
+
+    await signIn(people.owner, "Sign in");
+  });
+
+  it("adds an account when a signed-in browser goes back to sign in", async () => {
+    stubAuth(people.other, people.owner);
+    await openResetLink();
+
+    await press("Back to sign in");
+    expect(window.location.pathname).toBe("/add-account");
+    expect(heading()).toBe("Sign in to another account");
+
+    await signIn(people.owner, "Add account");
+  });
+
+  it("reports a lost connection after a reset as a session error, not a failed reset", async () => {
+    const network = stubAuth(people.owner, people.owner, {
+      offlineAfterReset: true,
+    });
+    await openResetLink();
+
+    await fill("password", "correct horse battery");
+    await fill("password-confirmation", "correct horse battery");
+    await press("Set new password");
+    expect(window.location.pathname).toBe("/");
+    expect(container.textContent).not.toContain("Failed to fetch");
+    expect(heading()).not.toBe("Choose a new password");
+    expect(container.textContent).toContain("We couldn’t load your session.");
+
+    network.reconnect();
+    await press("Try again");
+    expect(heading()).toBe("Enter your workspace");
   });
 });
