@@ -102,11 +102,26 @@ export interface FinanceData {
   categories: ExpenseCategory[];
   configured: boolean;
   connections: FinanceConnection[];
+  nextCursor: string | null;
   transactions: FinanceTransaction[];
 }
 
-export async function getFinanceData() {
-  return request<FinanceData>("");
+export interface FinanceFilters {
+  accountIds: string[];
+  year: number | null;
+  uncategorized: boolean;
+}
+
+export async function getFinanceData(
+  filters?: FinanceFilters,
+  cursor?: string,
+) {
+  const query = new URLSearchParams();
+  for (const id of filters?.accountIds ?? []) query.append("accountId", id);
+  if (filters?.year) query.set("year", String(filters.year));
+  if (filters?.uncategorized) query.set("uncategorized", "true");
+  if (cursor) query.set("cursor", cursor);
+  return request<FinanceData>(query.size ? `?${query}` : "");
 }
 
 export async function createPlaidLinkToken() {

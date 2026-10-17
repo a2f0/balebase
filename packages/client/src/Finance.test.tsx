@@ -8,6 +8,7 @@ const emptyData: FinanceData = {
   categories: [],
   configured: true,
   connections: [],
+  nextCursor: null,
   transactions: [],
 };
 
@@ -35,6 +36,12 @@ function renderFinance(
 ) {
   return renderToStaticMarkup(
     <FinanceView
+      filters={{ accountIds: [], year: null, uncategorized: false }}
+      loading={false}
+      loadingMore={false}
+      loadError={undefined}
+      onFiltersChange={() => undefined}
+      onLoadMore={async () => undefined}
       busy={false}
       data={data}
       error={options.error}

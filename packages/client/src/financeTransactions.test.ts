@@ -1,24 +1,24 @@
 import { describe, expect, it } from "bun:test";
-import { filterTransactionsByAccount } from "./financeTransactions";
+import { selectFinanceAccount } from "./financeTransactions";
 
-describe("finance transaction filters", () => {
-  const transactions = [
-    { accountId: "checking", id: "transaction-1" },
-    { accountId: "savings", id: "transaction-2" },
-    { accountId: "checking", id: "transaction-3" },
-  ];
-
-  it("shows only transactions for the selected account", () => {
+describe("finance account selection", () => {
+  it("focuses one account on an ordinary click and clears a sole selection", () => {
+    expect(selectFinanceAccount([], "checking", false)).toEqual(["checking"]);
     expect(
-      filterTransactionsByAccount(transactions, "checking")?.map(
-        (transaction) => transaction.id,
-      ),
-    ).toEqual(["transaction-1", "transaction-3"]);
+      selectFinanceAccount(["checking", "savings"], "checking", false),
+    ).toEqual(["checking"]);
+    expect(selectFinanceAccount(["checking"], "checking", false)).toEqual([]);
   });
 
-  it("shows every transaction when no account is selected", () => {
-    expect(filterTransactionsByAccount(transactions, undefined)).toBe(
-      transactions,
-    );
+  it("adds and removes individual accounts with Shift without changing the others", () => {
+    expect(selectFinanceAccount([], "savings", true)).toEqual(["savings"]);
+    expect(selectFinanceAccount(["checking"], "savings", true)).toEqual([
+      "checking",
+      "savings",
+    ]);
+    expect(
+      selectFinanceAccount(["checking", "savings", "card"], "savings", true),
+    ).toEqual(["checking", "card"]);
+    expect(selectFinanceAccount(["checking"], "checking", true)).toEqual([]);
   });
 });
