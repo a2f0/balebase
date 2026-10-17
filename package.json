@@ -59,11 +59,12 @@
     "terraform:staging:apply": "bash terraform/scripts/run.sh staging apply",
     "terraform:staging:plan": "bash terraform/scripts/run.sh staging plan",
     "terraform:validate": "bash terraform/scripts/run.sh validate",
-    "test": "export OPENSSL_CONF=/dev/null; bunx --bun --no-install turbo run test && bun --bun run test:staging && bun --bun run test:env && bun --bun run test:markdownlint && bun --bun run test:images",
+    "test": "export OPENSSL_CONF=/dev/null; bunx --bun --no-install turbo run test && bun --bun run test:staging && bun --bun run test:env && bun --bun run test:markdownlint && bun --bun run test:images && bun --bun run test:xcode",
     "test:env": "bash scripts/checks/testCloudflareEnv.sh",
     "test:images": "bun test scripts/checks/brandImages.test.ts",
     "test:markdownlint": "bun test scripts/checks/markdownlintConfig.test.ts",
-    "test:staging": "bash scripts/checks/testDeployStaging.sh"
+    "test:staging": "bash scripts/checks/testDeployStaging.sh",
+    "test:xcode": "bun test scripts/checks/xcodeUuidOverride.test.ts"
   },
   "workspaces": [
     "packages/*"

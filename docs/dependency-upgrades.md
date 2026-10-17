@@ -78,10 +78,12 @@ Capacitor CLI's `xcode@3.0.1` requires UUID 7. Its exact-parent override
 selects the patched CommonJS-compatible 11.1.1 release for
 [GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq).
 Xcode's only UUID call is `v4()` without arguments; the advisory affects other
-UUID methods with caller-provided buffers. Validate the actual Xcode parser's
-project ID generation and parse/add/write/reparse flow, then mobile sync and an
-unsigned iOS build when changing this override. Remove it when the owner selects
-a fixed version and those checks pass without the override.
+UUID methods with caller-provided buffers. `bun run test:xcode` loads UUID through
+the installed Capacitor CLI's Xcode dependency and checks project ID generation,
+parse/add/write/reparse behavior, and output-buffer bounds. It runs in the normal
+test and CI gate without requiring Xcode. Also run mobile sync and an unsigned
+iOS build when changing this override. Remove it when the owner selects a fixed
+version and those checks pass without the override.
 
 Keep Wrangler and the API's Miniflare pin aligned with the exact Miniflare
 version supported by the stable Wrangler release. Miniflare 5 still carries a
