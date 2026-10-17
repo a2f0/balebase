@@ -33,8 +33,6 @@ printf '%s\n' \
   >"$auth_env_file"
 
 for secret_name in \
-  PLAID_CLIENT_ID \
-  PLAID_SECRET \
   PLAID_TOKEN_ENCRYPTION_KEY \
   STRIPE_SECRET_KEY \
   STRIPE_WEBHOOK_SECRET; do
@@ -43,14 +41,17 @@ for secret_name in \
   fi
 done
 
-# Local development uses Checkr staging, so its credentials come from the
-# staging tier when this checkout has one.
+# Local development uses Checkr staging and Plaid Sandbox, so their
+# credentials come from the staging tier when this checkout has one. The
+# production tier's Plaid key still encrypts local access tokens.
 if [[ -f "$REPO_ROOT/.secrets/staging/app.env" ]]; then
   (
-    unset CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE CHECKR_CREDIT_PACKAGE
+    unset CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE CHECKR_CREDIT_PACKAGE \
+      PLAID_CLIENT_ID PLAID_SECRET
     load_tier_env staging "$REPO_ROOT"
     for secret_name in \
-      CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE CHECKR_CREDIT_PACKAGE; do
+      CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE CHECKR_CREDIT_PACKAGE \
+      PLAID_CLIENT_ID PLAID_SECRET; do
       if [[ -n "${!secret_name:-}" ]]; then
         printf '%s=%s\n' "$secret_name" "${!secret_name}" >>"$auth_env_file"
       fi
@@ -62,6 +63,7 @@ cd "$REPO_ROOT/packages/api"
 bunx --bun wrangler dev \
   --env-file "$auth_env_file" \
   --var "CHECKR_ENV:staging" \
+  --var "PLAID_ENV:sandbox" \
   --var "STRIPE_PRO_LEGACY_PRICE_IDS:${STRIPE_PRO_LEGACY_PRICE_IDS:-}" \
   --var "STRIPE_PRO_PRICE_ID:${STRIPE_PRO_PRICE_ID:-}" \
   --var "STRIPE_PORTAL_CONFIGURATION_ID:${STRIPE_PORTAL_CONFIGURATION_ID:-}" \

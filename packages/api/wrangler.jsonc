@@ -17,7 +17,7 @@
     "CORS_ORIGIN": "https://app.balebase.com",
     "CHECKR_ENV": "production",
     "INBOUND_EMAIL_DOMAIN": "inbox.balebase.com",
-    "PLAID_ENV": "sandbox",
+    "PLAID_ENV": "production",
     "PLAID_REDIRECT_URI": "https://app.balebase.com/finance",
     "STRIPE_PORTAL_CONFIGURATION_ID": "bpc_1U8gHBB19gR8AJxmNFLm8BVk",
     "STRIPE_PRO_LEGACY_PRICE_IDS": "",
