@@ -1,3 +1,4 @@
+import { type ActivityActor, activityBatch } from "./activity";
 import {
   type AuditDefinition,
   isRecord,
@@ -82,15 +83,15 @@ const auditLibraryActor = {
 export async function createTemplate(
   database: D1Database,
   input: {
+    actor: ActivityActor;
     name: string;
     organizationId: string | null;
     templateLimit: number | null;
-    userId: string;
   },
 ) {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const results = await database.batch([
+  const results = await activityBatch(database, input.actor.apiKey, [
     database
       .prepare(
         `INSERT INTO audit_template_families
@@ -106,7 +107,7 @@ export async function createTemplate(
         id,
         input.organizationId ? "organization" : "global",
         input.organizationId,
-        input.userId,
+        input.actor.userId,
         now,
         now,
         input.templateLimit,
@@ -128,7 +129,7 @@ export async function createTemplate(
         id,
         input.name,
         JSON.stringify(blankDefinition()),
-        input.userId,
+        input.actor.userId,
         now,
         id,
       ),
@@ -147,7 +148,7 @@ export async function saveTemplateVersion(
   database: D1Database,
   organizationId: string | null,
   current: TemplateRow,
-  userId: string,
+  actor: ActivityActor,
   input: TemplateSaveInput,
   status = current.status,
 ) {
@@ -161,7 +162,7 @@ export async function saveTemplateVersion(
     await addTemplateVersion(
       database,
       current,
-      userId,
+      actor,
       input,
       new Date().toISOString(),
       status,
@@ -181,13 +182,13 @@ export async function saveTemplateVersion(
 async function addTemplateVersion(
   database: D1Database,
   current: TemplateRow,
-  userId: string,
+  actor: ActivityActor,
   input: TemplateSaveInput,
   now: string,
   status: string,
 ) {
   const version = current.current_version + 1;
-  await database.batch([
+  await activityBatch(database, actor.apiKey, [
     database
       .prepare(
         `UPDATE audit_template_families
@@ -210,7 +211,7 @@ async function addTemplateVersion(
         input.description,
         JSON.stringify(input.definition),
         status,
-        userId,
+        actor.userId,
         now,
       ),
   ]);

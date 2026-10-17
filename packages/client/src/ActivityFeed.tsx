@@ -9,6 +9,7 @@ import {
 } from "@balebase/ui/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  type ActivityActor,
   type ActivityEvent,
   type ActivityPage,
   type ActivitySource,
@@ -200,7 +201,8 @@ function CompactActivityRow({
         <p className="activityHeading">
           <strong title={event.actor.email}>
             {event.actor.name || event.actor.email}
-          </strong>{" "}
+          </strong>
+          <ApiKeyAttribution actor={event.actor} />{" "}
           {actionLabels[event.action] ?? event.action}
           {onNavigate && (
             <>
@@ -273,7 +275,8 @@ function ActivityRow({
         <p className="activityHeading">
           <strong title={event.actor.email}>
             {event.actor.name || event.actor.email}
-          </strong>{" "}
+          </strong>
+          <ApiKeyAttribution actor={event.actor} />{" "}
           {actionLabels[event.action] ?? event.action}
         </p>
         <p className="activityMeta">
@@ -446,6 +449,22 @@ function roleLabel(value: unknown) {
     .filter(Boolean)
     .map((role) => role.charAt(0).toUpperCase() + role.slice(1))
     .join(", ");
+}
+
+const channelLabels = { mcp: "MCP", rest: "API" } as const;
+
+/** Names the API key, if any, that the actor made a change through. */
+export function ApiKeyAttribution({ actor }: { actor: ActivityActor }) {
+  if (!actor.apiKey) return null;
+  const { channel, name } = actor.apiKey;
+  return (
+    <span
+      className="activityApiKey"
+      title={`API key, called through ${channel === "mcp" ? "MCP" : "the REST API"}`}
+    >
+      {` via ${name} (${channelLabels[channel]})`}
+    </span>
+  );
 }
 
 export function formatActivityTime(value: string) {

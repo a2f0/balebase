@@ -83,7 +83,7 @@ interface TestIdentity {
 interface ActivityResponse {
   events: Array<{
     action: string;
-    actor: { email: string; id: string; name: string };
+    actor: { apiKey: unknown; email: string; id: string; name: string };
     details: Record<string, unknown>;
     historical: boolean;
     id: number;
@@ -2978,6 +2978,7 @@ describe("audit activity", () => {
         ({ action }) => action === "audit.completed",
       )?.actor,
     ).toEqual({
+      apiKey: null,
       email: "second@example.com",
       id: "user-2",
       name: "Second Person",
@@ -3384,7 +3385,7 @@ describe("audit activity", () => {
       .query(`INSERT INTO audit_issues (id, organization_id, audit_id, item_id, title, description, priority, status, created_by, created_at, updated_at)
       VALUES ('legacy-issue', 'org_user-1', ?, 'check', 'Legacy issue', '', 'high', 'resolved', 'user-2', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z')`)
       .run(auditId);
-    await applyMigration(fixture.database, "0049_create_activity_events.sql");
+    await applyActivityMigrations(fixture.database);
     const history = await jsonRequest<ActivityResponse>(
       fixture,
       `/runs/${auditId}/activity`,
@@ -3512,8 +3513,7 @@ async function createFixture(
   await applyMigration(database, "0030_queue_deleted_objects.sql");
   await applyMigration(database, "0032_create_billing.sql");
   await applyMigration(database, "0033_create_audit_library_actor.sql");
-  if (includeActivity)
-    await applyMigration(database, "0049_create_activity_events.sql");
+  if (includeActivity) await applyActivityMigrations(database);
   await applyMigration(database, "0056_discard_audits.sql");
   if (includePublication)
     await applyMigration(database, "0058_publish_legacy_global_audits.sql");
@@ -3708,6 +3708,13 @@ function toD1(
   },
 ) {
   let batchTail: Promise<void> = Promise.resolve();
+  // A write that commits but whose response never arrives, as D1 can report.
+  let lostResponse: Error | undefined;
+  const throwLostResponse = () => {
+    const cause = lostResponse;
+    lostResponse = undefined;
+    if (cause) throw cause;
+  };
   const afterAuditRead = () => {
     const callback = control.afterNextAuditRead;
     delete control.afterNextAuditRead;
@@ -3717,8 +3724,9 @@ function toD1(
     batch: (statements: D1PreparedStatement[]) => {
       const execution = batchTail.then(() => {
         database.exec("BEGIN");
+        let results: D1Result[];
         try {
-          const results = statements.map((statement) =>
+          results = statements.map((statement) =>
             (
               statement as D1PreparedStatement & {
                 runSync: () => D1Result;
@@ -3727,11 +3735,12 @@ function toD1(
           );
           database.exec("COMMIT");
           afterAuditRead();
-          return results;
         } catch (cause) {
           database.exec("ROLLBACK");
           throw cause;
         }
+        throwLostResponse();
+        return results;
       });
       batchTail = execution.then(
         () => undefined,
@@ -3802,8 +3811,9 @@ function toD1(
           query.includes("SET size = ?, deletion_pending = 0")
         ) {
           control.commitThenThrowImageActivation = false;
-          database.query(query).run(...values);
-          throw new Error("D1 activation response was lost after commit");
+          lostResponse = new Error(
+            "D1 activation response was lost after commit",
+          );
         }
         if (
           control.failNextPendingUpdate &&
@@ -3865,7 +3875,11 @@ function toD1(
           }
           return result;
         },
-        run: async () => runSync(),
+        run: async () => {
+          const result = runSync();
+          throwLostResponse();
+          return result;
+        },
         runSync,
       };
       return statement;
@@ -3991,6 +4005,13 @@ function imagesFor(
       return transformer;
     },
   } as unknown as ImagesBinding;
+}
+
+/** Activity events, including their API key attribution. */
+async function applyActivityMigrations(database: Database) {
+  await applyMigration(database, "0049_create_activity_events.sql");
+  await applyMigration(database, "0060_create_organization_api_keys.sql");
+  await applyMigration(database, "0061_attribute_activity_to_api_keys.sql");
 }
 
 async function applyMigration(database: Database, filename: string) {

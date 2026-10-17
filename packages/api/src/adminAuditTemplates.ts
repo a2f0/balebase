@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { findActivity } from "./activity";
+import { findActivity, requestActor } from "./activity";
 import { isRecord, validText } from "./auditDefinition";
 import {
   createTemplate,
@@ -44,10 +44,10 @@ adminAuditTemplates.post("/", async (context) => {
     return context.json({ error: "A template name is required." }, 400);
   }
   const template = await createTemplate(context.env.DB, {
+    actor: requestActor(context),
     name: body.name.trim(),
     organizationId: null,
     templateLimit: null,
-    userId: context.get("authSession").user.id,
   });
   if (!template) throw new Error("Global template could not be created.");
   return context.json({ template: toTemplate(template) }, 201);
@@ -137,7 +137,7 @@ adminAuditTemplates.put("/:id", async (context) => {
     context.env.DB,
     null,
     current,
-    context.get("authSession").user.id,
+    requestActor(context),
     input,
     status,
   );
@@ -173,7 +173,7 @@ adminAuditTemplates.delete("/:id", async (context) => {
     context.env.DB,
     null,
     current,
-    context.get("authSession").user.id,
+    requestActor(context),
     {
       definition: storedDefinition(current.definition),
       description: current.description,

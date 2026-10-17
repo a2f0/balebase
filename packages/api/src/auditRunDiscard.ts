@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { activityStatement } from "./activity";
+import { activityBatch, activityStatement } from "./activity";
 import {
   discardedAuditError,
   discardRejection,
@@ -28,33 +28,37 @@ auditRunDiscard.delete("/:id", async (context) => {
   const now = new Date().toISOString();
   // The event goes first under the update's own predicate: a batch is one
   // transaction, so a concurrent discard can never record a second event.
-  const [, discarded] = await context.env.DB.batch([
-    activityStatement(
-      context.env.DB,
-      {
-        action: "audit.discarded",
-        actorId,
-        details: {},
-        occurredAt: now,
-        organizationId,
-        root: { id: audit.id, label: audit.template_name, type: "audit_run" },
-        subject: { id: audit.id, type: "audit_run" },
-      },
-      {
-        bindings: [audit.id, organizationId],
-        sql: `EXISTS (
+  const [, discarded] = await activityBatch(
+    context.env.DB,
+    context.get("apiKey"),
+    [
+      activityStatement(
+        context.env.DB,
+        {
+          action: "audit.discarded",
+          actorId,
+          details: {},
+          occurredAt: now,
+          organizationId,
+          root: { id: audit.id, label: audit.template_name, type: "audit_run" },
+          subject: { id: audit.id, type: "audit_run" },
+        },
+        {
+          bindings: [audit.id, organizationId],
+          sql: `EXISTS (
           SELECT 1 FROM audits
           WHERE id = ? AND organization_id = ? AND status = 'in_progress'
             AND deleted_at IS NULL
         )`,
-      },
-    ),
-    context.env.DB.prepare(
-      `UPDATE audits SET deleted_at = ?, deleted_by_user_id = ?
+        },
+      ),
+      context.env.DB.prepare(
+        `UPDATE audits SET deleted_at = ?, deleted_by_user_id = ?
        WHERE id = ? AND organization_id = ? AND status = 'in_progress'
          AND deleted_at IS NULL`,
-    ).bind(now, actorId, audit.id, organizationId),
-  ]);
+      ).bind(now, actorId, audit.id, organizationId),
+    ],
+  );
   if (Number(discarded?.meta.changes) === 0) {
     const current = await findAudit(context.env.DB, organizationId, audit.id);
     if (!current) return context.json({ error: "Audit not found." }, 404);

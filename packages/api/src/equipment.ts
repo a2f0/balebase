@@ -1,5 +1,5 @@
 import { type Context, Hono } from "hono";
-import { findActivity } from "./activity";
+import { activityBatch, findActivity } from "./activity";
 import type { AuthVariables } from "./authMiddleware";
 import { normalizeBusinessDate } from "./businesses";
 import { listLinkedEmails, toLinkedEmail } from "./inboundEmailLinks";
@@ -91,31 +91,32 @@ equipment.post("/", async (context) => {
   const organizationId = context.get("organizationId");
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const result = await context.env.DB.prepare(
+  const insert = context.env.DB.prepare(
     `INSERT INTO equipment
        (id, organization_id, type, make, model, serial_number, purchase_date,
         assigned_user_id, created_by, created_at, updated_at)
      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
      WHERE ${assigneeIsMember}`,
-  )
-    .bind(
-      id,
-      organizationId,
-      input.type,
-      input.make,
-      input.model,
-      input.serialNumber,
-      input.purchaseDate,
-      input.assigneeId,
-      context.get("authSession").user.id,
-      now,
-      now,
-      input.assigneeId,
-      organizationId,
-      input.assigneeId,
-    )
-    .run();
-  if (result.meta.changes === 0) return assigneeNotMember(context);
+  ).bind(
+    id,
+    organizationId,
+    input.type,
+    input.make,
+    input.model,
+    input.serialNumber,
+    input.purchaseDate,
+    input.assigneeId,
+    context.get("authSession").user.id,
+    now,
+    now,
+    input.assigneeId,
+    organizationId,
+    input.assigneeId,
+  );
+  const [result] = await activityBatch(context.env.DB, context.get("apiKey"), [
+    insert,
+  ]);
+  if (result?.meta.changes === 0) return assigneeNotMember(context);
   const created = await findEquipment(context.env.DB, organizationId, id);
   if (!created) return equipmentNotFound(context);
   return context.json({ equipment: toEquipment(created) }, 201);
@@ -181,29 +182,30 @@ equipment.patch("/:id", async (context) => {
   const assigneeChanges = "assigned_user_id" in changes;
   const assigneeId = changes.assigned_user_id ?? null;
   // The actor rides along so the update trigger records who changed what.
-  const result = await context.env.DB.prepare(
+  const update = context.env.DB.prepare(
     `UPDATE equipment
      SET ${columns.map((column) => `${column} = ?, `).join("")}updated_at = ?,
          activity_actor_id = ?
      WHERE id = ? AND organization_id = ?
        ${assigneeChanges ? `AND ${assigneeIsMember}` : ""}`,
-  )
-    .bind(
-      ...columns.map((column) => changes[column] ?? null),
-      new Date().toISOString(),
-      context.get("authSession").user.id,
-      existing.id,
-      organizationId,
-      ...(assigneeChanges ? [assigneeId, organizationId, assigneeId] : []),
-    )
-    .run();
+  ).bind(
+    ...columns.map((column) => changes[column] ?? null),
+    new Date().toISOString(),
+    context.get("authSession").user.id,
+    existing.id,
+    organizationId,
+    ...(assigneeChanges ? [assigneeId, organizationId, assigneeId] : []),
+  );
+  const [result] = await activityBatch(context.env.DB, context.get("apiKey"), [
+    update,
+  ]);
   const updated = await findEquipment(
     context.env.DB,
     organizationId,
     existing.id,
   );
   if (!updated) return equipmentNotFound(context);
-  if (result.meta.changes === 0) return assigneeNotMember(context);
+  if (result?.meta.changes === 0) return assigneeNotMember(context);
   return context.json({ equipment: toEquipment(updated) });
 });
 
@@ -219,7 +221,7 @@ equipment.delete("/:id", async (context) => {
   // Drop email links explicitly rather than relying on the trigger alone.
   // The event reads the row it describes, so it is recorded only when this
   // batch is the one that deletes it.
-  await context.env.DB.batch([
+  await activityBatch(context.env.DB, context.get("apiKey"), [
     context.env.DB.prepare(
       `INSERT INTO activity_events (
          organization_id, root_type, root_id, root_label, subject_type,

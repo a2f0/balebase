@@ -1,9 +1,15 @@
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
+import type { ApiKeyChannel, ApiKeyPrincipal } from "./apiKeys";
 import type { AuthVariables } from "./authMiddleware";
 import type { Bindings } from "./types";
 
+type ActivityEnv = { Bindings: Bindings; Variables: AuthVariables };
+
 export interface ActivityRow {
   action: string;
+  actor_api_key_channel: ApiKeyChannel | null;
+  actor_api_key_id: string | null;
+  actor_api_key_name: string | null;
   actor_email: string;
   actor_name: string;
   actor_user_id: string;
@@ -24,12 +30,15 @@ interface ActivityRoot {
   type: string;
 }
 
+/** The person behind a write, and the API key they made it with, if any. */
+export interface ActivityActor {
+  apiKey?: ApiKeyPrincipal | undefined;
+  userId: string;
+}
+
 const pageSize = 50;
 
-export const activity = new Hono<{
-  Bindings: Bindings;
-  Variables: AuthVariables;
-}>();
+export const activity = new Hono<ActivityEnv>();
 
 activity.get("/", async (context) => {
   const page = await findActivity(
@@ -119,6 +128,37 @@ export function toAuditAnswerActivity(rows: ActivityRow[]) {
   );
 }
 
+export function requestActor(context: Context<ActivityEnv>): ActivityActor {
+  return {
+    apiKey: context.get("apiKey"),
+    userId: context.get("authSession").user.id,
+  };
+}
+
+/**
+ * Runs statements as one transaction. When an API key made the request, the
+ * activity they record, by trigger or directly, is attributed to that key as
+ * well as to its creator. Results line up with the given statements.
+ */
+export async function activityBatch(
+  database: D1Database,
+  apiKey: ApiKeyPrincipal | undefined,
+  statements: D1PreparedStatement[],
+) {
+  if (!apiKey) return database.batch(statements);
+  const results = await database.batch([
+    database
+      .prepare(
+        `INSERT INTO activity_api_key_context (slot, api_key_id, channel)
+         VALUES (1, ?, ?)`,
+      )
+      .bind(apiKey.id, apiKey.channel),
+    ...statements,
+    database.prepare("DELETE FROM activity_api_key_context"),
+  ]);
+  return results.slice(1, -1);
+}
+
 /** Include this statement in the same batch as the corresponding mutation. */
 export function activityStatement(
   database: D1Database,
@@ -159,6 +199,14 @@ export function activityStatement(
 
 function activityActor(row: ActivityRow) {
   return {
+    apiKey:
+      row.actor_api_key_name === null
+        ? null
+        : {
+            channel: row.actor_api_key_channel,
+            id: row.actor_api_key_id,
+            name: row.actor_api_key_name,
+          },
     email: row.actor_email,
     id: row.actor_user_id,
     name: row.actor_name,

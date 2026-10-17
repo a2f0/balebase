@@ -25,6 +25,10 @@
   overflow-wrap: anywhere;
 }
 
+.activityApiKey {
+  color: var(--color-text-muted);
+}
+
 .activityDetails {
   display: grid;
   gap: var(--space-1);

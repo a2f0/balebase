@@ -320,6 +320,20 @@ describe("answer attribution", () => {
     expect(tracked).toContain("Updated by");
     expect(tracked).toContain("Sam");
     expect(tracked).toContain("sam@example.com");
+    expect(tracked).not.toContain(" via ");
+    audit.answerActivity[item.id] = {
+      actor: {
+        apiKey: { channel: "mcp", id: "key-1", name: "Claude Desktop" },
+        email: "sam@example.com",
+        id: "user-1",
+        name: "Sam",
+      },
+      occurredAt: "2026-10-02T12:00:00.000Z",
+    };
+    const viaKey = renderToStaticMarkup(
+      <AnswerAttribution audit={audit} itemId={item.id} response="pass" />,
+    );
+    expect(viaKey).toContain(" via Claude Desktop (MCP)");
     const pending = renderToStaticMarkup(
       <AnswerAttribution audit={audit} itemId={item.id} response="fail" />,
     );
