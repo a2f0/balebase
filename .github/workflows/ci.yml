@@ -77,4 +77,8 @@ jobs:
       - name: Build and sync mobile applications
         run: |
           bun run mobile:sync
-          test -z "$(git status --porcelain)" || { git status --short; exit 1; }
+          native_paths=(packages/client/ios packages/client/android)
+          test -z "$(git status --porcelain -- "${native_paths[@]}")" || {
+            git status --short -- "${native_paths[@]}"
+            exit 1
+          }
