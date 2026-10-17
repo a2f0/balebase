@@ -13,7 +13,7 @@ wrangler.staging.jsonc
 dist
 node_modules
 
-# Favicons generated from packages/ui/assets/logo.svg on each dev or build.
+# Favicons generated from assets/brand/logo.svg on each dev or build.
 packages/*/public/favicon.svg
 packages/*/public/favicon.ico
 packages/*/public/apple-touch-icon.png

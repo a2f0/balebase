@@ -26,7 +26,7 @@
     "emails:purge": "bash scripts/purgeEmails.sh",
     "format": "bun --bun run lint:biome:fix && bun --bun run lint:markdown:fix",
     "hooks:install": "sh scripts/git/install-hooks.sh",
-    "images": "bun run --cwd packages/ui images",
+    "images": "agent-tool images build native && agent-tool images build favicons --out packages/ui/dist/images/web",
     "install:dependencies": "bun --bun run bun install",
     "lint": "bun --bun run lint:biome && bun --bun run lint:markdown && bun --bun run lint:files && bun --bun run lint:knip:all && bun --bun run lint:knip:production && bun --bun run lint:scripts && bun --bun run lint:terraform",
     "lint:biome": "bunx --bun --no-install biome check --error-on-warnings .",
@@ -50,8 +50,9 @@
     "terraform:staging:apply": "bash terraform/scripts/run.sh staging apply",
     "terraform:staging:plan": "bash terraform/scripts/run.sh staging plan",
     "terraform:validate": "bash terraform/scripts/run.sh validate",
-    "test": "export OPENSSL_CONF=/dev/null; bunx --bun --no-install turbo run test && bun --bun run test:staging && bun --bun run test:env && bun --bun run test:markdownlint",
+    "test": "export OPENSSL_CONF=/dev/null; bunx --bun --no-install turbo run test && bun --bun run test:staging && bun --bun run test:env && bun --bun run test:markdownlint && bun --bun run test:images",
     "test:env": "bash scripts/checks/testCloudflareEnv.sh",
+    "test:images": "bun test scripts/checks/brandImages.test.ts",
     "test:markdownlint": "bun test scripts/checks/markdownlintConfig.test.ts",
     "test:staging": "bash scripts/checks/testDeployStaging.sh"
   },
@@ -63,7 +64,7 @@
     "*.md": "bun --bun x markdownlint-cli2 --fix"
   },
   "devDependencies": {
-    "@a2f0/agent-tool": "0.1.12",
+    "@a2f0/agent-tool": "0.1.13",
     "@biomejs/biome": "2.5.15",
     "@commitlint/cli": "21.2.3",
     "@commitlint/config-conventional": "21.2.3",
