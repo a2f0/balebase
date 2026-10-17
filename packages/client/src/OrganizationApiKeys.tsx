@@ -19,17 +19,12 @@ import {
   listApiKeys,
   revokeApiKey,
 } from "./apiKeysApi";
-import { apiUrl } from "./config";
 import { McpConfiguration } from "./McpConfiguration";
+import { useClipboard } from "./useClipboard";
 
 interface CreatedKey {
   apiKey: ApiKey;
   token: string;
-}
-
-interface Notice {
-  message: string;
-  tone: "danger" | "success";
 }
 
 const expirationOptions: Array<{ label: string; value: string }> = [
@@ -220,7 +215,7 @@ function NewApiKeyCard({
   created: CreatedKey;
   onDone: () => void;
 }) {
-  const [notice, setNotice] = useState<Notice>();
+  const { copy, notice } = useClipboard();
   return (
     <Card
       className="cardAccent"
@@ -244,9 +239,7 @@ function NewApiKeyCard({
             />
             <Button
               icon="copy"
-              onClick={() =>
-                void copy(created.token, "API key copied.", setNotice)
-              }
+              onClick={() => void copy(created.token, "API key copied.")}
             >
               Copy key
             </Button>
@@ -366,14 +359,7 @@ function ConnectionCard() {
       description="Any MCP client that supports Streamable HTTP and custom headers can connect. Read keys see only read tools."
       title="Connect an MCP client"
     >
-      <div className="formGrid">
-        <McpConfiguration />
-        <p className="textSm textMuted">
-          The same header works for{" "}
-          <code className="codeChip">{apiUrl}/api</code> workspace routes.
-          Account, billing, and key management stay session-only.
-        </p>
-      </div>
+      <McpConfiguration />
     </Card>
   );
 }
@@ -398,23 +384,6 @@ function expirationDays(value: string): ApiKeyExpiration {
     return Number(value) as ApiKeyExpiration;
   }
   return null;
-}
-
-async function copy(
-  text: string,
-  message: string,
-  setNotice: (notice: Notice | undefined) => void,
-) {
-  setNotice(undefined);
-  try {
-    await navigator.clipboard.writeText(text);
-    setNotice({ message, tone: "success" });
-  } catch {
-    setNotice({
-      message: "Copy failed. Select it and copy manually.",
-      tone: "danger",
-    });
-  }
 }
 
 function confirmRevoke(name: string) {

@@ -217,6 +217,9 @@ describe("organization API keys", () => {
     );
     expect(secret?.value).toBe(token);
     expect(container.textContent).toContain(
+      "Account, billing, and key management stay session-only.",
+    );
+    expect(container.textContent).toContain(
       `claude mcp add --transport http balebase http://localhost:8787/mcp --header "Authorization: Bearer ${token}"`,
     );
     await click(button(container, "Copy key"));
@@ -304,6 +307,7 @@ describe("organization API keys", () => {
       ["ArrowRight", "Claude Code"],
       ["ArrowLeft", "Generic"],
       ["Home", "Claude Code"],
+      ["a", "Claude Code"],
     ] as const;
     for (const [key, label] of moves) {
       await act(async () => {

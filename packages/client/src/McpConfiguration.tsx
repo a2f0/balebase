@@ -1,6 +1,8 @@
 import { Button, Toast } from "@balebase/ui/react";
 import { type KeyboardEvent, useId, useState } from "react";
 import { mcpServerUrl } from "./apiKeysApi";
+import { apiUrl } from "./config";
+import { useClipboard } from "./useClipboard";
 
 const clients = ["Claude Code", "Codex", "Generic"] as const;
 type Client = (typeof clients)[number];
@@ -47,6 +49,11 @@ export function McpConfiguration({ token }: { token?: string | undefined }) {
       >
         <ClientConfiguration client={client} token={key} />
       </div>
+      <p className="textSm textMuted">
+        The same header works for <code className="codeChip">{apiUrl}/api</code>{" "}
+        workspace routes. Account, billing, and key management stay
+        session-only.
+      </p>
     </div>
   );
 }
@@ -57,12 +64,12 @@ function switchTab(
   select: (client: Client) => void,
 ) {
   const index = clients.indexOf(client);
-  const next = {
-    ArrowLeft: (index + clients.length - 1) % clients.length,
-    ArrowRight: (index + 1) % clients.length,
-    End: clients.length - 1,
-    Home: 0,
-  }[event.key];
+  const next = new Map([
+    ["ArrowLeft", (index + clients.length - 1) % clients.length],
+    ["ArrowRight", (index + 1) % clients.length],
+    ["End", clients.length - 1],
+    ["Home", 0],
+  ]).get(event.key);
   if (next === undefined) return;
   event.preventDefault();
   select(clients[next] ?? "Claude Code");
@@ -121,29 +128,14 @@ function ClientConfiguration({
 }
 
 function CopyableCode({ label, text }: { label: string; text: string }) {
-  const [notice, setNotice] = useState<{
-    message: string;
-    tone: "danger" | "success";
-  }>();
-  async function copy() {
-    setNotice(undefined);
-    try {
-      await navigator.clipboard.writeText(text);
-      setNotice({ message: "Copied to clipboard.", tone: "success" });
-    } catch {
-      setNotice({
-        message: "Copy failed. Select it and copy manually.",
-        tone: "danger",
-      });
-    }
-  }
+  const { copy, notice } = useClipboard();
   return (
     <div className="formGrid">
       <div className="apiKeySecret">
         <pre className="apiKeyCommand">
           <code>{text}</code>
         </pre>
-        <Button icon="copy" onClick={() => void copy()}>
+        <Button icon="copy" onClick={() => void copy(text)}>
           {label}
         </Button>
       </div>
