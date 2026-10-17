@@ -27,6 +27,7 @@ import { employeeForms } from "./employeeForms";
 import { equipment } from "./equipment";
 import { finance } from "./finance";
 import { inbox } from "./inbox";
+import { issues } from "./issues";
 import { libraryFolders } from "./libraryFolders";
 import { objects } from "./objects";
 import { organizationGroups, requireCapability } from "./organizationGroups";
@@ -108,6 +109,7 @@ app.get("/api", (context) =>
       accountSettings: "/api/account-settings",
       apiKeys: "/api/organization-settings/api-keys",
       activity: "/api/activity",
+      issues: "/api/issues",
       audits: "/api/audits",
       billing: "/api/billing",
       businesses: "/api/businesses",
@@ -188,6 +190,10 @@ app.route("/api/audits", audits);
 app.use("/api/activity", requireAuth, requireOrganization);
 app.use("/api/activity/*", requireAuth, requireOrganization);
 app.route("/api/activity", activity);
+
+app.use("/api/issues", requireAuth, requireOrganization);
+app.use("/api/issues/*", requireAuth, requireOrganization);
+app.route("/api/issues", issues);
 
 app.use("/api/businesses", requireAuth, requireOrganization);
 app.use("/api/businesses/*", requireAuth, requireOrganization);

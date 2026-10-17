@@ -329,6 +329,31 @@ baseline rather than a code-compliance certification; see the
 [residential audit library](residential-audit-library.md) for its source,
 licensing, validation, and jurisdiction-overlay rules.
 
+## Issues and transaction activity
+
+The sidebar's **Issues** page (`/issues`) brings audit issues, transaction issues,
+and standalone workspace issues into one list. Filter by status or source and
+search titles. Issues have a title, description, priority, assignee, open/resolved
+status, and their own activity history. Updates require `expectedRevision` and
+reject stale saves. **Raise issue** on a transaction attaches its source; the
+issue links back to that exact transaction regardless of the overview's filters.
+Transaction detail pages show related issues and annotation activity.
+
+Apply migrations `0062_create_issues.sql` and `0063_record_finance_annotations.sql`
+before deploying. The shared `issues` table uses `target_type` and `target_id`,
+with an optional audit item ID. Existing audit issue IDs, images, and activity
+are preserved; audit image management remains in the source audit. Unavailable
+sources hide their issues from the list and make details read only. Purging a
+source removes its issues, and audit image cleanup still queues stored files.
+The `/api/issues` routes and matching MCP tools support listing, creating,
+editing, assigning, resolving, reopening, and reading issue history.
+
+Annotation changes appear in workspace Activity and transaction history with
+before/after notes, labels, and review status. Unchanged saves and category-only
+changes do not create annotation events. Earlier annotation edits cannot be
+reconstructed. Finance capability checks apply to transaction issues and
+annotation activity, including the shared feeds and API-key access.
+
 ## Finance and Plaid
 
 The organization-scoped Finance page at `/finance` uses

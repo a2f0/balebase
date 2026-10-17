@@ -1,6 +1,7 @@
 import { type Context, Hono } from "hono";
 import type { ApiKeyChannel, ApiKeyPrincipal } from "./apiKeys";
 import type { AuthVariables } from "./authMiddleware";
+import { userHasCapability } from "./organizationGroups";
 import type { Bindings } from "./types";
 
 type ActivityEnv = { Bindings: Bindings; Variables: AuthVariables };
@@ -25,6 +26,7 @@ export interface ActivityRow {
 }
 
 interface ActivityRoot {
+  issueOnly?: boolean;
   publishedTemplateOnly?: boolean;
   id: string;
   type: string;
@@ -45,6 +47,13 @@ activity.get("/", async (context) => {
     context.env.DB,
     context.get("organizationId"),
     context.req.query("cursor"),
+    undefined,
+    await userHasCapability(
+      context.env.DB,
+      context.get("organizationId"),
+      context.get("authSession").user.id,
+      "finance",
+    ),
   );
   return page
     ? context.json(page)
@@ -61,6 +70,7 @@ export async function findActivity(
   organizationId: string | null,
   cursor?: string,
   root?: ActivityRoot,
+  includeFinance = false,
 ) {
   if (cursor !== undefined && !/^[1-9]\d{0,15}$/.test(cursor)) return null;
   const before = cursor === undefined ? null : Number(cursor);
@@ -70,9 +80,17 @@ export async function findActivity(
   ];
   const bindings: (string | number)[] =
     organizationId === null ? [] : [organizationId];
+  if (!includeFinance) filters.push("root_type <> 'finance_transaction'");
   if (root) {
-    filters.push("root_type = ? AND root_id = ?");
-    bindings.push(root.type, root.id);
+    if (root.issueOnly) {
+      filters.push(
+        "((subject_type IN ('issue', 'audit_issue') AND subject_id = ?) OR (subject_type = 'audit_issue_image' AND json_extract(details, '$.issueId') = ?))",
+      );
+      bindings.push(root.id, root.id);
+    } else {
+      filters.push("root_type = ? AND root_id = ?");
+      bindings.push(root.type, root.id);
+    }
   }
   if (before !== null) {
     filters.push("id < ?");

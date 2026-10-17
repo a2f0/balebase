@@ -81,3 +81,7 @@ function isoDate(date: Date) {
   const day = String(date.getDate()).padStart(2, "0");
   return `${date.getFullYear()}-${month}-${day}`;
 }
+
+export function financeTransactionPath(id: string) {
+  return `/finance/transactions/${encodeURIComponent(id)}`;
+}

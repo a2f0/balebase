@@ -28,8 +28,10 @@ import { Businesses } from "./Businesses";
 import { Contracts } from "./Contracts";
 import { Equipment } from "./Equipment";
 import { Finance } from "./Finance";
+import { FinanceTransactionPage } from "./FinanceTransactionPage";
 import { isFinancePath } from "./financePages";
 import { Inbox } from "./Inbox";
+import { Issues } from "./Issues";
 import { Library } from "./Library";
 import {
   guardWorkspaceChange,
@@ -473,12 +475,20 @@ function contentForPath(
   twoFactorEnabled: boolean,
   onSecurityChanged: () => Promise<unknown>,
 ) {
+  if (pathname === "/issues" || pathname.startsWith("/issues/"))
+    return (
+      <Issues
+        pathname={pathname}
+        onNavigate={navigate}
+        canAccessFinance={access.can("finance")}
+      />
+    );
   if (pathname === "/activity") return <Activity onNavigate={navigate} />;
   if (pathname === "/audits" || pathname.startsWith("/audits/")) {
     return <Audits onNavigate={navigate} pathname={pathname} />;
   }
   if (isFinancePath(pathname)) {
-    return <Finance onNavigate={navigate} pathname={pathname} />;
+    return financeContent(pathname, navigate);
   }
   if (isBusinessesPath(pathname)) {
     return <Businesses onNavigate={navigate} pathname={pathname} />;
@@ -535,6 +545,18 @@ function contentForPath(
   return library;
 }
 
+function financeContent(pathname: string, navigate: (path: string) => void) {
+  if (pathname.startsWith("/finance/transactions/"))
+    return (
+      <FinanceTransactionPage
+        key={pathname}
+        id={decodeURIComponent(pathname.slice("/finance/transactions/".length))}
+        onNavigate={navigate}
+      />
+    );
+  return <Finance onNavigate={navigate} pathname={pathname} />;
+}
+
 function rootAdminContent(
   pathname: string,
   navigate: (pathname: string) => void,
@@ -559,6 +581,8 @@ function currentLocation() {
 }
 
 function activePageFor(pathname: string) {
+  if (pathname === "/issues" || pathname.startsWith("/issues/"))
+    return "issues" as const;
   if (pathname === "/activity") return "activity" as const;
   if (pathname === "/audits" || pathname.startsWith("/audits/")) {
     return "audits" as const;

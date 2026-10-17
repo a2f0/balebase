@@ -660,10 +660,10 @@ describe("audits", () => {
       .run(now, now);
     fixture.database
       .query(
-        `INSERT INTO audit_issues
-         (id, organization_id, audit_id, item_id, title, created_by,
+        `INSERT INTO issues
+         (target_type, id, organization_id, target_id, item_id, title, created_by,
           created_at, updated_at)
-         VALUES ('format-issue', 'org_user-1', 'format-audit', 'item',
+         VALUES ('audit_run', 'format-issue', 'org_user-1', 'format-audit', 'item',
                  'Format test issue', 'user-1', ?, ?)`,
       )
       .run(now, now);
@@ -782,10 +782,10 @@ describe("audits", () => {
         .run(`memory-audit-${suffix}`, organizationId, userId, now, now);
       fixture.database
         .query(
-          `INSERT INTO audit_issues
-           (id, organization_id, audit_id, item_id, title, created_by,
+          `INSERT INTO issues
+           (target_type, id, organization_id, target_id, item_id, title, created_by,
             created_at, updated_at)
-           VALUES (?, ?, ?, 'item', 'Memory test issue', ?, ?, ?)`,
+           VALUES ('audit_run', ?, ?, ?, 'item', 'Memory test issue', ?, ?, ?)`,
         )
         .run(
           `memory-issue-${suffix}`,
@@ -1065,7 +1065,7 @@ describe("audits", () => {
     expect(removedDuringAssignment.response.status).toBe(400);
     expect(
       fixture.database
-        .query(`SELECT assigned_to FROM audit_issues WHERE id = ?`)
+        .query(`SELECT assigned_to FROM issues WHERE id = ?`)
         .get(issue.body.issueId),
     ).toEqual({ assigned_to: "user-1" });
 
@@ -1453,7 +1453,7 @@ describe("audits", () => {
     expect(resolved.response.status).toBe(200);
     expect(
       fixture.database
-        .query(`SELECT assigned_to, status FROM audit_issues WHERE id = ?`)
+        .query(`SELECT assigned_to, status FROM issues WHERE id = ?`)
         .get(issue.body.issueId),
     ).toEqual({ assigned_to: "user-1", status: "resolved" });
 
@@ -1556,10 +1556,10 @@ describe("audits", () => {
       .run(definition, now, now);
     fixture.database
       .query(
-        `INSERT INTO audit_issues
-         (id, organization_id, audit_id, item_id, title, created_by,
+        `INSERT INTO issues
+         (target_type, id, organization_id, target_id, item_id, title, created_by,
           created_at, updated_at)
-         VALUES ('cascade-issue', 'org_user-1', 'cascade-audit', 'item-1',
+         VALUES ('audit_run', 'cascade-issue', 'org_user-1', 'cascade-audit', 'item-1',
                  'Cascade issue', 'user-1', ?, ?)`,
       )
       .run(now, now);
@@ -1584,7 +1584,7 @@ describe("audits", () => {
     fixture.database.exec("PRAGMA foreign_keys = ON");
 
     fixture.database
-      .query(`DELETE FROM audit_issues WHERE id = 'cascade-issue'`)
+      .query(`DELETE FROM issues WHERE id = 'cascade-issue'`)
       .run();
 
     expect(
@@ -1621,16 +1621,16 @@ describe("audits", () => {
 
     fixture.database
       .query(
-        `INSERT INTO audit_issues
-         (id, organization_id, audit_id, item_id, title, created_by,
+        `INSERT INTO issues
+         (target_type, id, organization_id, target_id, item_id, title, created_by,
           created_at, updated_at)
-         VALUES ('upload-race-issue', 'org_user-1', 'cascade-audit', 'item-2',
+         VALUES ('audit_run', 'upload-race-issue', 'org_user-1', 'cascade-audit', 'item-2',
                  'Upload race issue', 'user-1', ?, ?)`,
       )
       .run(now, now);
     fixture.storageControl.beforeNextPut = async () => {
       fixture.database
-        .query(`DELETE FROM audit_issues WHERE id = 'upload-race-issue'`)
+        .query(`DELETE FROM issues WHERE id = 'upload-race-issue'`)
         .run();
     };
 
@@ -1676,10 +1676,10 @@ describe("audits", () => {
       .run(now, now);
     fixture.database
       .query(
-        `INSERT INTO audit_issues
-         (id, organization_id, audit_id, item_id, title, created_by,
+        `INSERT INTO issues
+         (target_type, id, organization_id, target_id, item_id, title, created_by,
           created_at, updated_at)
-         VALUES ('purged-issue', 'org_user-1', 'purged-audit', 'item-1',
+         VALUES ('audit_run', 'purged-issue', 'org_user-1', 'purged-audit', 'item-1',
                  'Purged issue', 'user-1', ?, ?)`,
       )
       .run(now, now);
@@ -2590,8 +2590,8 @@ describe("audit discarding", () => {
         .query(
           `SELECT
              (SELECT responses FROM audits WHERE id = ?) AS responses,
-             (SELECT status FROM audit_issues WHERE id = ?) AS issueStatus,
-             (SELECT COUNT(*) FROM audit_issues WHERE audit_id = ?) AS issues,
+             (SELECT status FROM issues WHERE id = ?) AS issueStatus,
+             (SELECT COUNT(*) FROM issues WHERE target_id = ?) AS issues,
              (SELECT COUNT(*) FROM audit_issue_images WHERE issue_id = ?) AS images,
              (SELECT COUNT(*) FROM activity_events
               WHERE root_id = ? AND action = 'audit.discarded') AS discards`,
@@ -2773,7 +2773,7 @@ describe("audit discarding", () => {
              (SELECT COUNT(*) FROM audit_issue_images) AS images,
              (SELECT COUNT(*) FROM objects
               WHERE kind = 'audit_issue_image') AS objects,
-             (SELECT status FROM audit_issues WHERE id = ?) AS issueStatus,
+             (SELECT status FROM issues WHERE id = ?) AS issueStatus,
              (SELECT COUNT(*) FROM activity_events
               WHERE root_id = ? AND action IN
                 ('audit.image_uploaded', 'audit.issue_resolved',
@@ -2826,7 +2826,7 @@ describe("audit discarding", () => {
     ).toEqual({ responses: "{}", revision: 0 });
     expect(
       fixture.database
-        .query("SELECT COUNT(*) AS count FROM audit_issues WHERE audit_id = ?")
+        .query("SELECT COUNT(*) AS count FROM issues WHERE target_id = ?")
         .get(auditId),
     ).toEqual({ count: 0 });
   });
@@ -3386,6 +3386,7 @@ describe("audit activity", () => {
       VALUES ('legacy-issue', 'org_user-1', ?, 'check', 'Legacy issue', '', 'high', 'resolved', 'user-2', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z')`)
       .run(auditId);
     await applyActivityMigrations(fixture.database);
+    await applyMigration(fixture.database, "0062_create_issues.sql");
     const history = await jsonRequest<ActivityResponse>(
       fixture,
       `/runs/${auditId}/activity`,
@@ -3514,9 +3515,13 @@ async function createFixture(
   await applyMigration(database, "0032_create_billing.sql");
   await applyMigration(database, "0033_create_audit_library_actor.sql");
   if (includeActivity) await applyActivityMigrations(database);
+  await applyMigration(database, "0007_create_finance.sql");
+  await applyMigration(database, "0009_retain_finance_history.sql");
+  await applyMigration(database, "0010_create_organization_groups.sql");
   await applyMigration(database, "0056_discard_audits.sql");
   if (includePublication)
     await applyMigration(database, "0058_publish_legacy_global_audits.sql");
+  if (includeActivity) await applyMigration(database, "0062_create_issues.sql");
   const stored = new Map<string, Uint8Array>();
   const databaseControl: DatabaseControl = {
     activateBeforeCleanupClaim: false,
@@ -3791,7 +3796,7 @@ function toD1(
         }
         if (
           control.deleteAssigneeBeforeIssueUpdate &&
-          query.includes("UPDATE audit_issues") &&
+          query.includes("UPDATE issues") &&
           query.includes("SELECT 1 FROM member")
         ) {
           control.deleteAssigneeBeforeIssueUpdate = false;
@@ -3868,7 +3873,7 @@ function toD1(
             delete control.afterNextImageRead;
             callback?.();
           }
-          if (query.includes("FROM audit_issues AS issue")) {
+          if (query.includes("FROM issues AS issue")) {
             const callback = control.afterNextIssueRead;
             delete control.afterNextIssueRead;
             callback?.();

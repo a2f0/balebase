@@ -20,6 +20,8 @@ import type {
   FinanceTransactionAnnotationInput,
 } from "./financeApi";
 import { formatMoney } from "./financeFormat";
+import { financeTransactionPath } from "./financePages";
+import { transactionIssuePath } from "./issuesApi";
 import { formatLabel } from "./labels";
 import { handleNavigation, inboxEmailPath } from "./workspacePaths";
 
@@ -191,7 +193,7 @@ function TransactionContent({
     <Card className="financeListCard" flush>
       <ul className="rowList financeTransactions">
         {transactions.map((transaction) => (
-          <TransactionRow
+          <FinanceTransactionRow
             key={transaction.id}
             transaction={transaction}
             {...handlers}
@@ -202,7 +204,7 @@ function TransactionContent({
   );
 }
 
-function TransactionRow({
+export function FinanceTransactionRow({
   busy,
   categories,
   onAnnotate,
@@ -224,7 +226,19 @@ function TransactionRow({
         {formatDate(transaction.transactionDate)}
       </time>
       <div className="rowMain financeTransactionMain">
-        <span className="rowTitle financeTransactionName">{title}</span>
+        <a
+          className="rowTitle financeTransactionName"
+          href={financeTransactionPath(transaction.id)}
+          onClick={(event) =>
+            handleNavigation(
+              event,
+              financeTransactionPath(transaction.id),
+              onNavigate,
+            )
+          }
+        >
+          {title}
+        </a>
         <span className="rowMeta financeTransactionMeta">
           {transactionMeta(transaction)}
         </span>
@@ -236,6 +250,7 @@ function TransactionRow({
       <div className="financeTransactionCategory">
         {categories.length > 0 && (
           <select
+            disabled={busy}
             aria-label={`Expense category for ${title}`}
             className={cx(
               "select inputSm",
@@ -269,17 +284,27 @@ function TransactionRow({
       >
         {formatMoney(-transaction.amount, transaction.currencyCode)}
       </span>
-      <Button
-        aria-controls={expanded ? formId : undefined}
-        aria-expanded={expanded}
-        className="financeTransactionAction"
-        icon="edit"
-        onClick={() => onSelectAnnotation(transaction.id)}
-        size="sm"
-        variant="ghost"
-      >
-        {hasAnnotation(transaction) ? "Edit note" : "Annotate"}
-      </Button>
+      <div className="financeTransactionActions">
+        <Button
+          aria-controls={expanded ? formId : undefined}
+          aria-expanded={expanded}
+          className="financeTransactionAction"
+          icon="edit"
+          onClick={() => onSelectAnnotation(transaction.id)}
+          size="sm"
+          variant="ghost"
+        >
+          {hasAnnotation(transaction) ? "Edit note" : "Annotate"}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon="issues"
+          onClick={() => onNavigate(transactionIssuePath(transaction.id))}
+        >
+          Raise issue
+        </Button>
+      </div>
       {expanded && (
         <TransactionAnnotationForm
           busy={busy}
