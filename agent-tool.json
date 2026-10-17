@@ -18,7 +18,8 @@
     ]
   },
   "merge": {
-    "requiredChecks": [{ "name": "Check, test, and build", "workflow": "CI" }]
+    "requiredChecks": [{ "name": "Check, test, and build", "workflow": "CI" }],
+    "requireStrictBaseFreshness": true
   },
   "versions": {
     "packages": ["packages/api", "packages/client"]
