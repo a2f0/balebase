@@ -1,10 +1,12 @@
-import { Button, ButtonLink, Icon } from "@balebase/ui/react";
+import { Button, Icon } from "@balebase/ui/react";
 import type {
   PDFDocumentLoadingTask,
   PDFDocumentProxy,
   RenderTask,
 } from "pdfjs-dist";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
+import { ApiDownload } from "./ApiDownload";
+import { ApiImage } from "./ApiImage";
 import { fetchApi } from "./apiVersion";
 import { countLabel, formatBytes } from "./labels";
 import { isRenderCancellation, openPdf, renderPdfPage } from "./pdfDocument";
@@ -76,7 +78,8 @@ export function AttachmentPreviewTile({
             {detail} · {formatBytes(attachment.size)}
           </span>
         </span>
-        <ButtonLink
+        <ApiDownload
+          filename={attachment.filename}
           aria-label={`Download ${attachment.filename}`}
           href={url}
           icon="download"
@@ -102,7 +105,7 @@ function ImageThumbnail({ url }: { url: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) return <PreviewPlaceholder icon="image" label="No preview" />;
   return (
-    <img
+    <ApiImage
       alt=""
       className="previewTileImage"
       decoding="async"
@@ -200,9 +203,14 @@ function PreviewDialog({
             />
           )}
           <div className="previewDialogActions">
-            <ButtonLink href={url} icon="download" size="sm">
+            <ApiDownload
+              filename={attachment.filename}
+              href={url}
+              icon="download"
+              size="sm"
+            >
               Download
-            </ButtonLink>
+            </ApiDownload>
             <Button
               aria-label="Close preview"
               icon="close"
@@ -215,7 +223,11 @@ function PreviewDialog({
         </header>
         <div className="previewDialogBody">
           {kind === "image" ? (
-            <img alt={attachment.filename} className="previewImage" src={url} />
+            <ApiImage
+              alt={attachment.filename}
+              className="previewImage"
+              src={url}
+            />
           ) : (
             <PdfViewerPage pageNumber={pageNumber} pdf={pdf} />
           )}

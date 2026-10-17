@@ -20,6 +20,8 @@
     "@balebase/ui": "workspace:*",
     "@capacitor/app": "8.1.2",
     "@capacitor/core": "8.5.3",
+    "@capacitor/filesystem": "8.1.5",
+    "@capacitor/share": "8.0.3",
     "@stripe/stripe-js": "9.17.0",
     "better-auth": "1.7.0",
     "pdfjs-dist": "6.3.289",

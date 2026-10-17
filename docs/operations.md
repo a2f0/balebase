@@ -197,7 +197,9 @@ Before TestFlight or Play distribution:
 4. Exercise login, MFA, account switching, logout/relaunch, camera and file
    uploads, PDF viewing/downloads, invitations, and keyboard/back navigation on
    real devices. Email verification and password-reset links currently open
-   the hosted web app; universal/app links are not configured.
+   the hosted web app, which has a separate session and may require signing
+   in again. Universal/app links are not configured. Native downloads use the
+   system save/share sheet; authenticated images load through native HTTP.
 5. Complete store metadata, privacy declarations, and device screenshots.
    Validate the existing Stripe billing and Plaid flows for the intended store
    distribution before submission; this shell does not add native purchases or

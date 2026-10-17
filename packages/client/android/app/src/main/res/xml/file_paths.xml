@@ -2,4 +2,5 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Capacitor's file input camera capture writes to this app-owned folder. -->
     <external-files-path name="camera_images" path="Pictures/" />
+    <cache-path name="downloads" path="downloads/" />
 </paths>

@@ -12,7 +12,9 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.5.3"),
-        .package(name: "CapacitorApp", path: "../../../../../node_modules/.bun/@capacitor+app@8.1.2+9cf34ba37901b220/node_modules/@capacitor/app")
+        .package(name: "CapacitorApp", path: "../../../../../node_modules/.bun/@capacitor+app@8.1.2+9cf34ba37901b220/node_modules/@capacitor/app"),
+        .package(name: "CapacitorFilesystem", path: "../../../../../node_modules/.bun/@capacitor+filesystem@8.1.5+9cf34ba37901b220/node_modules/@capacitor/filesystem"),
+        .package(name: "CapacitorShare", path: "../../../../../node_modules/.bun/@capacitor+share@8.0.3+9cf34ba37901b220/node_modules/@capacitor/share")
     ],
     targets: [
         .target(
@@ -20,7 +22,9 @@ let package = Package(
             dependencies: [
                 .product(name: "Capacitor", package: "capacitor-swift-pm"),
                 .product(name: "Cordova", package: "capacitor-swift-pm"),
-                .product(name: "CapacitorApp", package: "CapacitorApp")
+                .product(name: "CapacitorApp", package: "CapacitorApp"),
+                .product(name: "CapacitorFilesystem", package: "CapacitorFilesystem"),
+                .product(name: "CapacitorShare", package: "CapacitorShare")
             ]
         )
     ]

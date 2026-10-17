@@ -9,6 +9,7 @@ import {
 import { QRCodeSVG } from "qrcode.react";
 import { type FormEvent, useState } from "react";
 import { authClient } from "./authClient";
+import { saveFile } from "./saveFile";
 
 interface TotpSetup {
   backupCodes: string[];
@@ -473,7 +474,15 @@ function RecoveryCodesCard({
         </Button>
         <Button
           icon="download"
-          onClick={() => downloadRecoveryCodes(codes)}
+          onClick={() =>
+            void downloadRecoveryCodes(codes).catch(() =>
+              setCopyNotice({
+                tone: "danger",
+                message:
+                  "Could not save recovery codes. Try copying them instead.",
+              }),
+            )
+          }
           size="sm"
         >
           Download
@@ -657,14 +666,10 @@ function recoveryCodesText(codes: string[]) {
 }
 
 function downloadRecoveryCodes(codes: string[]) {
-  const url = URL.createObjectURL(
+  return saveFile(
     new Blob([recoveryCodesText(codes)], { type: "text/plain" }),
+    "balebase-mfa-recovery-codes.txt",
   );
-  const link = document.createElement("a");
-  link.download = "balebase-mfa-recovery-codes.txt";
-  link.href = url;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 function throwForSecurityError(
