@@ -1,17 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
-import { allImages } from "../../ui/scripts/buildImages";
-import { parsePixelSvg } from "../../ui/scripts/pixelImage";
 
 const clientRoot = resolve(import.meta.dir, "..");
-const svg = await readFile(join(clientRoot, "../ui/assets/logo.svg"), "utf8");
-for (const [path, content] of allImages(parsePixelSvg(svg), svg)) {
-  if (!path.startsWith("ios/") && !path.startsWith("android/")) continue;
-  const target = join(clientRoot, path);
-  await mkdir(dirname(target), { recursive: true });
-  await writeFile(target, content);
+for (const platform of ["ios", "android"]) {
+  await cp(
+    join(clientRoot, "../ui/dist/images", platform),
+    join(clientRoot, platform),
+    { recursive: true },
+  );
 }
 
 // Restore the binary wrapper from the pinned CLI rather than tracking a JAR.

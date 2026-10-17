@@ -16,7 +16,7 @@ repository root unless a command specifies `--cwd`.
 | Application screens | `packages/client/src` |
 | Native mobile projects and preparation | `packages/client/ios`, `packages/client/android`, `packages/client/scripts` |
 | Shared components, icons, styles | `packages/ui/src` |
-| Logo and generated images | `packages/ui/assets`, `packages/ui/scripts` |
+| Logo and generated images | `assets/brand`, `images` in `agent-tool.json` |
 | Public website | `packages/website/src` |
 | Deployment and maintenance commands | `scripts`, `terraform` |
 | Agent review and merge policy | `agent-tool.json`, `AGENTS.md` |
@@ -27,12 +27,21 @@ In the client, a screen such as `Finance.tsx` owns loading and mutations.
 `financeApi.ts` contains HTTP calls, and `financeFormat.ts` formats amounts.
 Follow those concrete responsibilities when a screen needs to be split.
 
-`packages/ui/assets/logo.svg` is the pixel B logo, drawn only with whole-unit
-`<rect>` elements. Website and client builds write their favicons to
-`public/`. `bun run images` writes the full set to `packages/ui/dist/images`:
-favicons, iOS and Android icons and splash screens in Capacitor's project
-layout, and the 1024×1024 Plaid icon at `plaid/icon-1024.png`. Generated images
-are ignored; keep binary files out of commits.
+`assets/brand/logo.svg` is the pixel B logo, drawn only with whole-unit
+`<rect>` elements; the client and website import this one copy. The `images`
+section of `agent-tool.json` declares every image generated from it, and the
+pinned `agent-tool images build` renders them, with `pixelSnap` scaling the logo
+by whole numbers. Website and client dev and build write the `favicons` target
+to their `public/`. `bun run images` writes the `native` target to
+`packages/ui/dist/images` (iOS and Android icons and splash screens in
+Capacitor's project layout, and the 1024×1024 Plaid icon at
+`plaid/icon-1024.png`) and the favicons to its `web/`. The lime and ink fills
+match `--color-lime` and `--color-ink` in `packages/ui/src/styles/tokens.css`.
+The touch and App Store icons are opaque because iOS blackens transparent
+home-screen pixels and the App Store rejects transparency. The 60% Android
+adaptive foreground stays inside the 66dp that launchers may leave unmasked,
+and the Plaid icon's margin keeps the B whole under a circular crop.
+Generated images are ignored; keep binary files out of commits.
 
 `bun run mobile:sync` writes the native images into both checked-in Capacitor
 projects and restores the Gradle wrapper JAR from the pinned CLI template.

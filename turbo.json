@@ -5,6 +5,11 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/agent-tool.json",
+        "$TURBO_ROOT$/assets/brand/**"
+      ],
       "outputs": ["dist/**"]
     },
     "check": {

@@ -2,8 +2,9 @@
   <title>Balebase</title>
   <!--
     One viewBox unit is one pixel of the 16px favicon. Keep every shape a
-    whole-unit <rect>: packages/ui/scripts/buildImages.ts renders this file at
-    whole-number scales and rejects anything else.
+    whole-unit <rect>: agent-tool's pixelSnap (see agent-tool.json) scales
+    this file by whole numbers, so with crispEdges each unit renders as a
+    block of exact pixels.
   -->
   <!-- Lime tile with stepped corners. -->
   <rect x="2" y="0" width="12" height="1" fill="#b7ff5b"/>

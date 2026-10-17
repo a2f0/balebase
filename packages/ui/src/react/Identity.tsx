@@ -1,8 +1,8 @@
-import logoUrl from "../../assets/logo.svg";
+import logoUrl from "../../../../assets/brand/logo.svg";
 import { productName } from "../brand";
 import { cx } from "./cx";
 
-/** The pixel B tile from assets/logo.svg, which the favicons share. */
+/** The pixel B tile from assets/brand/logo.svg, which the favicons share. */
 export function BrandMark({ className }: { className?: string | undefined }) {
   return <img alt="" className={cx("brandMark", className)} src={logoUrl} />;
 }
