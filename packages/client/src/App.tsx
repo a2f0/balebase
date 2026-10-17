@@ -101,6 +101,11 @@ export function App() {
       <AuthenticationRoute
         activeSessionToken={session?.session.token}
         addingAccount={isAddAccountPage}
+        leaveResetPage={() => {
+          // Replace, not push: Back must not return to the spent reset link.
+          window.history.replaceState(window.history.state, "", "/");
+          setPathname("/");
+        }}
         navigate={navigate}
         pathname={pathname}
         refetchSession={() => refetch()}
@@ -128,6 +133,7 @@ export function App() {
 function AuthenticationRoute({
   activeSessionToken,
   addingAccount,
+  leaveResetPage,
   navigate,
   pathname,
   refetchSession,
@@ -137,6 +143,7 @@ function AuthenticationRoute({
 }: {
   activeSessionToken: string | undefined;
   addingAccount: boolean;
+  leaveResetPage: () => void;
   navigate: (pathname: string) => void;
   pathname: string;
   refetchSession: () => Promise<unknown>;
@@ -209,6 +216,12 @@ function AuthenticationRoute({
             }
           : undefined
       }
+      onPasswordReset={async () => {
+        // The reset revoked that account's sessions. A signed-in browser
+        // learns so here, where the reset page keeps this form mounted.
+        if (sessionPresent) await refetchSession();
+        leaveResetPage();
+      }}
       variant={addingAccount ? "add-account" : "default"}
     />
   );

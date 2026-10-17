@@ -29,6 +29,8 @@ interface AuthPageProps {
   initialNoticeTone?: "info" | "success";
   onAuthenticated: (action: AuthenticationAction) => Promise<void>;
   onCancel?: (() => Promise<void> | void) | undefined;
+  /** Leaves the reset link once its token is spent; sign-in continues here. */
+  onPasswordReset: () => Promise<void>;
   variant?: AuthVariant;
 }
 
@@ -65,6 +67,7 @@ export function AuthPage({
   initialNoticeTone = "info",
   onAuthenticated,
   onCancel,
+  onPasswordReset,
   variant = "default",
 }: AuthPageProps) {
   const auth = useAuthPageState({
@@ -73,6 +76,7 @@ export function AuthPage({
     initialNotice,
     onAuthenticated,
     onCancel,
+    onPasswordReset,
   });
 
   if (auth.twoFactorRequired) {
@@ -112,10 +116,15 @@ function useAuthPageState({
   initialNotice,
   onAuthenticated,
   onCancel,
+  onPasswordReset,
 }: Required<Pick<AuthPageProps, "initialMode">> &
   Pick<
     AuthPageProps,
-    "initialError" | "initialNotice" | "onAuthenticated" | "onCancel"
+    | "initialError"
+    | "initialNotice"
+    | "onAuthenticated"
+    | "onCancel"
+    | "onPasswordReset"
   >) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [name, setName] = useState("");
@@ -151,6 +160,7 @@ function useAuthPageState({
         mode,
         name,
         onAuthenticated,
+        onPasswordReset,
         password,
         resetToken,
         termsAccepted,
@@ -160,8 +170,6 @@ function useAuthPageState({
         return;
       }
       if (result.nextMode) chooseMode(result.nextMode);
-      if (result.clearLocation)
-        window.history.replaceState(window.history.state, "", "/");
       setNotice(result.notice);
     } catch (cause) {
       setError(messageFrom(cause));
@@ -396,13 +404,13 @@ interface AuthActionInput {
   mode: AuthMode;
   name: string;
   onAuthenticated: (action: AuthenticationAction) => Promise<void>;
+  onPasswordReset: () => Promise<void>;
   password: string;
   resetToken: string | null;
   termsAccepted: boolean;
 }
 
 interface AuthActionResult {
-  clearLocation?: boolean;
   nextMode?: AuthMode;
   notice?: string;
   twoFactorRequired?: boolean;
@@ -475,8 +483,8 @@ async function performAuthAction(
     token: input.resetToken,
   });
   throwForAuthError(result.error);
+  await input.onPasswordReset();
   return {
-    clearLocation: true,
     nextMode: "sign-in" as const,
     notice: "Password updated. Sign in with your new password.",
   };
