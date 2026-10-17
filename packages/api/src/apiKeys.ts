@@ -91,6 +91,7 @@ const dayMs = 24 * 60 * 60 * 1000;
 const apiKeyRoutes: Array<{ prefix: string; writable: boolean }> = [
   { prefix: "/api/me", writable: false },
   { prefix: "/api/activity", writable: false },
+  { prefix: "/api/issues", writable: true },
   { prefix: "/api/audits", writable: true },
   { prefix: "/api/businesses", writable: true },
   { prefix: "/api/contracts", writable: true },

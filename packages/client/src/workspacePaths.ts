@@ -137,3 +137,12 @@ export function handleNavigation(
   event.preventDefault();
   onNavigate(pathname);
 }
+
+/** Keep malformed escapes as typed so record pages can report an unavailable record. */
+export function decodeRecordId(segment: string) {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}

@@ -39,6 +39,9 @@ function navigationGroups(role: string) {
 describe("workspace navigation", () => {
   it("shows Organization in Admin without showing Root Admin to a regular user", () => {
     const groups = navigationGroups("user");
+    expect(groups.some((group) => group?.includes('href="/issues"'))).toBe(
+      true,
+    );
     const admin = groups.find((group) => group?.includes(">Admin</p>"));
 
     expect(admin).toContain('href="/organization"');

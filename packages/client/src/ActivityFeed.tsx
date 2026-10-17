@@ -20,10 +20,19 @@ import {
   EquipmentActivityDetails,
   equipmentActivitySummary,
 } from "./equipmentActivity";
+import { financeTransactionPath } from "./financePages";
+import { issuePath } from "./issuesApi";
 import { organizationPeoplePath } from "./organizationState";
+import { RecordActivityDetails } from "./recordActivity";
 import { equipmentPath } from "./workspacePaths";
 
 const actionLabels: Record<string, string> = {
+  "finance.transaction_annotated": "updated a transaction annotation",
+  "issue.created": "raised an issue",
+  "issue.assigned": "changed the issue assignee",
+  "issue.resolved": "resolved an issue",
+  "issue.reopened": "reopened an issue",
+  "issue.updated": "edited an issue",
   "api_key.created": "created an API key",
   "api_key.revoked": "revoked an API key",
   "audit.answer_changed": "changed an answer",
@@ -247,6 +256,8 @@ function CompactActivityRow({
 
 function activitySummary(event: ActivityEvent) {
   const { details } = event;
+  if (event.action === "finance.transaction_annotated")
+    return "Annotation changes";
   if (event.root.type === "equipment") return equipmentActivitySummary(event);
   if (event.root.type === "api_key") return apiKeySummary(event);
   if (event.action === "organization.member_role_changed") {
@@ -310,6 +321,11 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
   if (event.root.type === "api_key") {
     return <p className="activityDetails">{apiKeySummary(event)}</p>;
   }
+  if (
+    event.action === "finance.transaction_annotated" ||
+    event.action === "issue.updated"
+  )
+    return <RecordActivityDetails event={event} />;
   switch (event.action) {
     case "organization.member_role_changed":
       return <MemberRoleDetails event={event} />;
@@ -325,6 +341,7 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
           </p>
         </div>
       );
+    case "issue.assigned":
     case "audit.issue_assigned":
       return (
         <div className="activityDetails">
@@ -344,6 +361,7 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
           </p>
         </div>
       );
+    case "issue.created":
     case "audit.issue_created":
       return (
         <div className="activityDetails">
@@ -408,6 +426,10 @@ function answerLabel(value: unknown, responseType: unknown) {
 }
 
 function activityPath(event: ActivityEvent) {
+  if (event.subject.type === "issue" || event.subject.type === "audit_issue")
+    return issuePath(event.subject.id);
+  if (event.root.type === "finance_transaction")
+    return financeTransactionPath(event.root.id);
   // Deleted equipment has no page to open.
   if (event.root.type === "equipment") {
     return event.action === "equipment.deleted"
@@ -424,6 +446,9 @@ function activityPath(event: ActivityEvent) {
 }
 
 function activityLinkLabel(event: ActivityEvent) {
+  if (event.subject.type === "issue" || event.subject.type === "audit_issue")
+    return "Open issue";
+  if (event.root.type === "finance_transaction") return "Open transaction";
   if (event.root.type === "equipment") return "Open equipment";
   if (event.root.type === "organization_member") return "Open member";
   return event.root.type === "audit_run" ? "Open audit" : "Open form";

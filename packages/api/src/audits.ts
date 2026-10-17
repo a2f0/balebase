@@ -322,7 +322,7 @@ audits.get("/runs", async (context) => {
      FROM audits AS audit
      JOIN user AS creator ON creator.id = audit.started_by
      LEFT JOIN user AS deleted_by ON deleted_by.id = audit.deleted_by_user_id
-     LEFT JOIN audit_issues AS issue ON issue.audit_id = audit.id
+     LEFT JOIN issues AS issue ON issue.organization_id = audit.organization_id AND issue.target_id = audit.id AND issue.target_type = 'audit_run'
      WHERE audit.organization_id = ? AND ${deletedFilter}
        AND (? IS NULL OR audit.created_at < ? OR
             (audit.created_at = ? AND audit.id < ?))
@@ -498,10 +498,10 @@ audits.post("/runs/:id/issues", async (context) => {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const insert = context.env.DB.prepare(
-    `INSERT INTO audit_issues
-     (id, organization_id, audit_id, item_id, title, description, priority,
+    `INSERT INTO issues
+     (id, organization_id, target_type, target_id, item_id, title, description, priority,
       status, assigned_to, created_by, created_at, updated_at)
-     SELECT ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?
+     SELECT ?, ?, 'audit_run', ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?
      WHERE EXISTS (
        SELECT 1 FROM audits
        WHERE id = ? AND organization_id = ? AND deleted_at IS NULL
@@ -574,17 +574,17 @@ audits.patch("/issues/:id", async (context) => {
       : issue.status;
   const now = new Date().toISOString();
   const update = context.env.DB.prepare(
-    `UPDATE audit_issues
+    `UPDATE issues
      SET status = CASE WHEN ? = 1 THEN ? ELSE status END,
          assigned_to = CASE WHEN ? = 1 THEN ? ELSE assigned_to END,
          updated_at = ?, activity_actor_id = ?, revision = revision + 1
-     WHERE id = ? AND organization_id = ?
+     WHERE id = ? AND organization_id = ? AND target_type = 'audit_run'
        AND (? = 0 OR ? IS NULL OR EXISTS (
          SELECT 1 FROM member WHERE organizationId = ? AND userId = ?
        ))
        AND NOT EXISTS (
          SELECT 1 FROM audits
-         WHERE audits.id = audit_issues.audit_id AND audits.deleted_at IS NOT NULL
+         WHERE audits.id = issues.target_id AND audits.deleted_at IS NOT NULL
        )`,
   ).bind(
     changesStatus ? 1 : 0,
@@ -712,10 +712,10 @@ async function findIssues(
               creator.id AS created_by_id, creator.name AS created_by_name,
               creator.email AS created_by_email,
               assignee.email AS assignee_email
-       FROM audit_issues AS issue
+       FROM issues AS issue
        JOIN user AS creator ON creator.id = issue.created_by
        LEFT JOIN user AS assignee ON assignee.id = issue.assigned_to
-       WHERE issue.audit_id = ? AND issue.organization_id = ?
+       WHERE issue.target_type = 'audit_run' AND issue.target_id = ? AND issue.organization_id = ?
        ORDER BY issue.created_at DESC`,
     )
     .bind(auditId, organizationId)

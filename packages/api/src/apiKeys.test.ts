@@ -583,6 +583,157 @@ describe("API key security boundaries", () => {
     expect(denied.body.error).toBe("Finance group membership required.");
   });
 
+  it("applies read/write and Finance access to issues through real REST and MCP authentication", async () => {
+    const f = await createFixture();
+    const read = await f.createKey("read");
+    const write = await f.createKey("write");
+    f.database
+      .query(
+        `INSERT INTO plaid_items (id, organization_id, plaid_item_id, access_token_ciphertext, access_token_iv, created_by, created_at, updated_at) VALUES ('issue-item', ?, 'issue-plaid-item', '', '', ?, ?, ?)`,
+      )
+      .run(f.organizationId, f.userId, now(), now());
+    f.database
+      .query(
+        `INSERT INTO plaid_accounts (id, organization_id, plaid_item_record_id, plaid_account_id, name, type, updated_at) VALUES ('issue-account', ?, 'issue-item', 'issue-plaid-account', 'Checking', 'depository', ?)`,
+      )
+      .run(f.organizationId, now());
+    f.database
+      .query(
+        `INSERT INTO plaid_transactions (id, organization_id, plaid_item_record_id, account_record_id, plaid_transaction_id, name, amount, transaction_date, pending, updated_at) VALUES ('issue-txn', ?, 'issue-item', 'issue-account', 'issue-plaid-txn', 'Coffee', 25, '2026-10-01', 0, ?)`,
+      )
+      .run(f.organizationId, now());
+    const input = {
+      title: "Private transaction issue",
+      target: { type: "finance_transaction", id: "issue-txn" },
+    };
+    expect(
+      (await f.withKey(read.token, "POST", "/api/issues", input)).status,
+    ).toBe(403);
+    const created = await f.callTool<{
+      content: Array<{ text: string }>;
+      isError?: boolean;
+    }>(write.token, "create_issue", input);
+    expect(created.isError).toBeUndefined();
+    const { issueId } = JSON.parse(created.content[0]?.text ?? "");
+    expect(
+      (await f.withKey(read.token, "GET", `/api/issues/${issueId}`)).status,
+    ).toBe(200);
+    expect(
+      (
+        await f.withKey(read.token, "PATCH", `/api/issues/${issueId}`, {
+          expectedRevision: 0,
+          status: "resolved",
+        })
+      ).status,
+    ).toBe(403);
+    const updated = await f.callTool<{
+      content: Array<{ text: string }>;
+      isError?: boolean;
+    }>(write.token, "update_issue", {
+      id: issueId,
+      expectedRevision: 0,
+      status: "resolved",
+    });
+    expect(updated.isError).toBeUndefined();
+    const history = await f.callTool<{ content: Array<{ text: string }> }>(
+      read.token,
+      "list_issue_activity",
+      { id: issueId },
+    );
+    expect(JSON.parse(history.content[0]?.text ?? "").events[0]).toMatchObject({
+      action: "issue.resolved",
+      actor: { id: f.userId, apiKey: { channel: "mcp" } },
+    });
+    await f.withKey(write.token, "POST", "/api/issues", {
+      title: "Public workspace issue",
+    });
+    f.database
+      .query('DELETE FROM "teamMember" WHERE "userId" = ?')
+      .run(f.userId);
+    const listed = await f.withKey<{ issues: Array<{ title: string }> }>(
+      read.token,
+      "GET",
+      "/api/issues?status=all",
+    );
+    expect(listed.body.issues.map((issue) => issue.title)).toEqual([
+      "Public workspace issue",
+    ]);
+    const mcpListed = await f.callTool<{ content: Array<{ text: string }> }>(
+      read.token,
+      "list_issues",
+      { status: "all" },
+    );
+    expect(JSON.stringify(mcpListed)).not.toContain(
+      "Private transaction issue",
+    );
+    for (const path of [
+      `/api/issues/${issueId}`,
+      `/api/issues/${issueId}/activity`,
+    ])
+      expect((await f.withKey(read.token, "GET", path)).status).toBe(404);
+    expect(
+      (
+        await f.withKey(write.token, "PATCH", `/api/issues/${issueId}`, {
+          expectedRevision: 1,
+          status: "open",
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (await f.withKey(write.token, "POST", "/api/issues", input)).status,
+    ).toBe(404);
+    const denied = await f.callTool<{ isError?: boolean }>(
+      write.token,
+      "create_issue",
+      input,
+    );
+    expect(denied.isError).toBe(true);
+    expect(
+      JSON.stringify(
+        (await f.withKey(read.token, "GET", "/api/activity")).body,
+      ),
+    ).not.toContain("Private transaction issue");
+  });
+
+  it("exposes the same assignee directory as equipment for members and read-only keys", async () => {
+    const f = await createFixture();
+    const { token } = await f.createKey("read");
+    const equipment = await f.withKey<{ members: unknown[] }>(
+      token,
+      "GET",
+      "/api/equipment",
+    );
+    const directory = await f.withKey<{ members: unknown[] }>(
+      token,
+      "GET",
+      "/api/issues/members",
+    );
+    expect(directory.status).toBe(200);
+    expect(directory.body.members).toEqual(equipment.body.members);
+    const mcp = await f.callTool<{ content: Array<{ text: string }> }>(
+      token,
+      "list_issue_members",
+      {},
+    );
+    expect(JSON.parse(mcp.content[0]?.text ?? "").members).toEqual(
+      equipment.body.members,
+    );
+    f.setRole("member");
+    const ordinaryEquipment = await f.session<{ members: unknown[] }>(
+      "GET",
+      "/api/equipment",
+    );
+    const ordinaryDirectory = await f.session<{ members: unknown[] }>(
+      "GET",
+      "/api/issues/members",
+    );
+    expect(ordinaryEquipment.status).toBe(200);
+    expect(ordinaryDirectory.status).toBe(200);
+    expect(ordinaryDirectory.body.members).toEqual(
+      ordinaryEquipment.body.members,
+    );
+  });
+
   it("rejects keys while their creator is banned", async () => {
     const fixture = await createFixture();
     const { token } = await fixture.createKey("read");

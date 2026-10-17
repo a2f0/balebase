@@ -426,3 +426,42 @@ describe("activity feed, mounted", () => {
     expect(container.textContent).not.toContain("Activity unavailable");
   });
 });
+
+it("shows annotation changes and links issue events to their issue", async () => {
+  const changes: ActivityEvent[] = [
+    {
+      ...event(2, ""),
+      action: "finance.transaction_annotated",
+      root: { type: "finance_transaction", id: "txn/1", label: "Coffee" },
+      subject: { type: "finance_transaction", id: "txn/1" },
+      details: {
+        before: { note: "Missing receipt", labels: ["tax"], reviewed: false },
+        after: { note: "", labels: [], reviewed: true },
+      },
+    },
+    {
+      ...event(1, ""),
+      action: "issue.created",
+      root: { type: "finance_transaction", id: "txn/1", label: "Coffee" },
+      subject: { type: "issue", id: "issue/1" },
+      details: { title: "Duplicate charge", priority: "high" },
+    },
+  ];
+  globalThis.fetch = (async (_input) =>
+    Response.json({ events: changes, nextCursor: null })) as typeof fetch;
+  const paths: string[] = [];
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  await act(async () =>
+    root?.render(<ActivityFeed onNavigate={(path) => paths.push(path)} />),
+  );
+  expect(container.textContent).toContain("updated a transaction annotation");
+  expect(container.textContent).toContain("Missing receipt");
+  expect(container.textContent).toContain("None");
+  expect(container.textContent).toContain("Not reviewed");
+  expect(container.textContent).toContain("Duplicate charge");
+  await click("Open transaction");
+  await click("Open issue");
+  expect(paths).toEqual(["/finance/transactions/txn%2F1", "/issues/issue%2F1"]);
+});

@@ -80,7 +80,7 @@ export const workspaceTools: McpTool[] = [
   },
   {
     description:
-      "Lists the organization's activity feed, newest first, 50 events per page: audits, forms, issues, equipment, role changes, and API keys. Pass nextCursor to page.",
+      "Lists the organization's activity feed, newest first, 50 events per page: audits, forms, issues, transaction annotations, equipment, role changes, and API keys. Finance activity requires Finance access. Pass nextCursor to page.",
     method: "GET",
     name: "list_activity",
     path: "/api/activity",

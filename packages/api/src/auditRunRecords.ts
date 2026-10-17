@@ -119,8 +119,8 @@ export function toAuditSummary(row: AuditSummaryRow) {
 
 /** Binds one issue id; true unless that issue's audit has been discarded. */
 export const issueAuditNotDiscarded = `NOT EXISTS (
-  SELECT 1 FROM audit_issues AS guarded_issue
-  JOIN audits AS guarded_audit ON guarded_audit.id = guarded_issue.audit_id
+  SELECT 1 FROM issues AS guarded_issue
+  JOIN audits AS guarded_audit ON guarded_audit.id = guarded_issue.target_id AND guarded_issue.target_type = 'audit_run'
   WHERE guarded_issue.id = ? AND guarded_audit.deleted_at IS NOT NULL
 )`;
 
@@ -132,8 +132,8 @@ export async function issueAuditDiscarded(
   const issue = await database
     .prepare(
       `SELECT audit.deleted_at
-       FROM audit_issues AS issue
-       JOIN audits AS audit ON audit.id = issue.audit_id
+       FROM issues AS issue
+       JOIN audits AS audit ON audit.id = issue.target_id AND issue.target_type = 'audit_run'
        WHERE issue.id = ? AND issue.organization_id = ?`,
     )
     .bind(issueId, organizationId)
@@ -144,8 +144,8 @@ export async function issueAuditDiscarded(
 /** Binds one image id; true unless that image's audit has been discarded. */
 export const imageAuditNotDiscarded = `NOT EXISTS (
   SELECT 1 FROM audit_issue_images AS guarded_image
-  JOIN audit_issues AS guarded_issue ON guarded_issue.id = guarded_image.issue_id
-  JOIN audits AS guarded_audit ON guarded_audit.id = guarded_issue.audit_id
+  JOIN issues AS guarded_issue ON guarded_issue.id = guarded_image.issue_id
+  JOIN audits AS guarded_audit ON guarded_audit.id = guarded_issue.target_id AND guarded_issue.target_type = 'audit_run'
   WHERE guarded_image.id = ? AND guarded_audit.deleted_at IS NOT NULL
 )`;
 
@@ -158,8 +158,8 @@ export function findIssueForUpdate(
     .prepare(
       `SELECT issue.id, issue.status, issue.assigned_to,
               audit.deleted_at AS audit_deleted_at
-       FROM audit_issues AS issue
-       JOIN audits AS audit ON audit.id = issue.audit_id
+       FROM issues AS issue
+       JOIN audits AS audit ON audit.id = issue.target_id AND issue.target_type = 'audit_run'
        WHERE issue.id = ? AND issue.organization_id = ?`,
     )
     .bind(id, organizationId)
