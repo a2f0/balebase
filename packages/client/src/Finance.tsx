@@ -218,9 +218,7 @@ export function FinanceView({
       />
       <PageBody>
         <FinanceNotices
-          error={
-            error ?? (page === "overview" ? undefined : handlers.loadError)
-          }
+          error={error ?? handlers.loadError}
           notice={notice}
           overview={page === "overview"}
           showDataNotice={data?.accounts.length === 0}
@@ -249,6 +247,7 @@ function FinanceOverview({
   loading,
   loadingMore,
   loadError,
+  loadMoreError,
   onFiltersChange,
   onLoadMore,
   onReload,
@@ -265,13 +264,12 @@ function FinanceOverview({
       : filters.accountIds.length > 1
         ? `${filters.accountIds.length} accounts`
         : undefined;
-  const transactions =
-    loading || loadError
-      ? undefined
-      : data?.transactions.filter(
-          (transaction) =>
-            !filters.uncategorized || !transaction.expenseCategoryId,
-        );
+  const transactions = loading
+    ? undefined
+    : data?.transactions.filter(
+        (transaction) =>
+          !filters.uncategorized || !transaction.expenseCategoryId,
+      );
   return (
     <>
       <FinanceConnections
@@ -303,6 +301,7 @@ function FinanceOverview({
         hasMore={Boolean(data?.nextCursor)}
         loadingMore={loadingMore}
         loadError={loadError}
+        loadMoreError={loadMoreError}
         onLoadMore={onLoadMore}
         onReload={onReload}
         busy={handlers.busy}

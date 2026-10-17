@@ -40,6 +40,7 @@ function renderFinance(
       loading={false}
       loadingMore={false}
       loadError={undefined}
+      loadMoreError={undefined}
       onFiltersChange={() => undefined}
       onLoadMore={async () => undefined}
       busy={false}

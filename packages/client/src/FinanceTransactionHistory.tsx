@@ -47,6 +47,7 @@ export function FinanceTransactionHistory({
   hasMore,
   loadingMore,
   loadError,
+  loadMoreError,
   onLoadMore,
   onReload,
   transactions,
@@ -59,6 +60,7 @@ export function FinanceTransactionHistory({
   hasMore: boolean;
   loadingMore: boolean;
   loadError: string | undefined;
+  loadMoreError: string | undefined;
   onLoadMore: () => Promise<void>;
   onReload: () => Promise<void>;
   transactions: FinanceTransaction[] | undefined;
@@ -98,7 +100,7 @@ export function FinanceTransactionHistory({
           Give each transaction a category to see totals by category in Reports.
         </Banner>
       )}
-      {loadError ? (
+      {loadError && (
         <Banner
           tone="danger"
           actions={
@@ -109,7 +111,8 @@ export function FinanceTransactionHistory({
         >
           {loadError}
         </Banner>
-      ) : (
+      )}
+      {(!loadError || transactions) && (
         <TransactionContent
           filtered={
             filters.accountIds.length > 0 ||
@@ -120,9 +123,10 @@ export function FinanceTransactionHistory({
           {...handlers}
         />
       )}
+      {loadMoreError && <Banner tone="danger">{loadMoreError}</Banner>}
       {hasMore && transactions && (
         <Button busy={loadingMore} onClick={() => void onLoadMore()} size="sm">
-          Load more transactions
+          {loadMoreError ? "Retry loading more" : "Load more transactions"}
         </Button>
       )}
     </PageSection>

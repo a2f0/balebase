@@ -241,6 +241,107 @@ describe("Finance filters", () => {
     expect(rowNames()).toEqual(["Coffee"]);
   });
 
+  it("keeps all loaded rows and the annotation form while refreshing a saved note", async () => {
+    const cursor = JSON.stringify({ date: `${year}-01-01`, id: "Coffee" });
+    const refreshed = Promise.withResolvers<Response>();
+    let saved = false;
+    respond((url, init) => {
+      if (init?.method === "PATCH") {
+        saved = true;
+        return Response.json({
+          annotation: { labels: [], note: "", reviewed: true },
+        });
+      }
+      if (url.searchParams.has("cursor")) {
+        return Response.json({
+          ...data,
+          transactions: [
+            transaction("Older expense", {
+              annotation: { labels: [], note: "", reviewed: saved },
+            }),
+          ],
+        });
+      }
+      if (saved) return refreshed.promise;
+      return Response.json({
+        ...data,
+        nextCursor: cursor,
+        transactions: [transaction("Coffee")],
+      });
+    });
+    await mount();
+    await click("Load more transactions");
+    const annotate = container.querySelectorAll<HTMLButtonElement>(
+      ".financeTransactionAction",
+    )[1];
+    await act(async () => annotate?.click());
+    const form = container.querySelector<HTMLFormElement>(
+      '[aria-label="Annotation for Older expense"]',
+    );
+    if (!form) throw new Error("No annotation form for the older transaction");
+    await act(async () =>
+      form.dispatchEvent(
+        new dom.Event("submit", {
+          bubbles: true,
+          cancelable: true,
+        }) as unknown as Event,
+      ),
+    );
+    expect(rowNames()).toEqual(["Coffee", "Older expense"]);
+    expect(container.contains(form)).toBe(true);
+    expect(container.textContent).not.toContain("Loading finances");
+    await act(async () =>
+      refreshed.resolve(
+        Response.json({
+          ...data,
+          nextCursor: cursor,
+          transactions: [transaction("Coffee")],
+        }),
+      ),
+    );
+    expect(rowNames()).toEqual(["Coffee", "Older expense"]);
+    expect(container.contains(form)).toBe(true);
+    expect(
+      container.querySelectorAll(".financeTransactionStatus")[1]?.textContent,
+    ).toBe("Reviewed");
+  });
+
+  it("keeps earlier pages visible after a load-more failure and retries the same cursor", async () => {
+    const cursor = JSON.stringify({ date: `${year}-01-01`, id: "Coffee" });
+    const cursors: string[] = [];
+    respond((url) => {
+      const requestedCursor = url.searchParams.get("cursor");
+      if (!requestedCursor)
+        return Response.json({
+          ...data,
+          nextCursor: cursor,
+          transactions: [transaction("Coffee")],
+        });
+      cursors.push(requestedCursor);
+      return cursors.length === 1
+        ? Response.json(
+            { error: "Older transactions are temporarily unavailable." },
+            { status: 503 },
+          )
+        : Response.json({
+            ...data,
+            transactions: [transaction("Older expense")],
+          });
+    });
+    await mount();
+    await click("Load more transactions");
+    expect(rowNames()).toEqual(["Coffee"]);
+    expect(container.textContent).toContain(
+      "Older transactions are temporarily unavailable.",
+    );
+    await click("Retry loading more");
+    expect(cursors).toEqual([cursor, cursor]);
+    expect(rowNames()).toEqual(["Coffee", "Older expense"]);
+    expect(container.textContent).not.toContain(
+      "Older transactions are temporarily unavailable.",
+    );
+  });
+
   it("shows retry on a filter failure and a useful empty state on success", async () => {
     let failed = true;
     respond((url) =>
