@@ -46,15 +46,34 @@ it("preserves native CSRF markers through Capacitor's real browser fetch patch",
       throw new Error("File fixture failed");
     const page = await browser.newPage();
     await page.setRequestInterception(true);
-    page.on(
-      "request",
-      (request) =>
+    const binaryBytes = [0, 255, 1, 128, 37, 80, 68, 70];
+    const proxyRequests: {
+      remote: string | null;
+      marker: string | undefined;
+    }[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.pathname === "/_capacitor_http_interceptor_") {
+        const remote = url.searchParams.get("u");
+        proxyRequests.push({
+          remote,
+          marker: request.headers()["x-balebase-native-origin"],
+        });
         void request.respond({
           status: 200,
-          contentType: "text/html",
-          body: "<!doctype html><html><body></body></html>",
-        }),
-    );
+          contentType: remote?.endsWith(".pdf")
+            ? "application/pdf"
+            : "image/png",
+          body: Buffer.from(binaryBytes),
+        });
+        return;
+      }
+      void request.respond({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><html><body></body></html>",
+      });
+    });
     await page.goto("https://localhost");
     await page.evaluate(() => {
       Reflect.set(window, "androidBridge", { postMessage() {} });
@@ -64,7 +83,7 @@ it("preserves native CSRF markers through Capacitor's real browser fetch patch",
       Reflect.set(window, "WEBVIEW_SERVER_URL", "https://localhost");
     });
     await page.addScriptTag({ content: bridge });
-    const requests = await page.evaluate(async (code) => {
+    const transport = await page.evaluate(async (code) => {
       const calls: {
         headers: Record<string, string>;
         data: unknown;
@@ -110,8 +129,33 @@ it("preserves native CSRF markers through Capacitor's real browser fetch patch",
         method: "POST",
         body: form,
       });
-      return calls;
+      // Capacitor 8 sends GET downloads through its local native HTTP proxy,
+      // which streams raw bytes. Its nativePromise/base64 path is for mutations.
+      // Exercise the actual fetch patch, not a replacement fetch implementation.
+      const downloads = [];
+      for (const extension of ["pdf", "png"]) {
+        const response = await fetchApi(
+          `https://api.test/private.${extension}`,
+          { credentials: "include" },
+        );
+        const blob = await response.clone().blob();
+        downloads.push({
+          type: blob.type,
+          blob: Array.from(new Uint8Array(await blob.arrayBuffer())),
+          buffer: Array.from(new Uint8Array(await response.arrayBuffer())),
+        });
+      }
+      return { calls, downloads };
     }, source);
+    const requests = transport.calls;
+    expect(proxyRequests).toEqual([
+      { remote: "https://api.test/private.pdf", marker: "https://localhost" },
+      { remote: "https://api.test/private.png", marker: "https://localhost" },
+    ]);
+    expect(transport.downloads).toEqual([
+      { type: "application/pdf", blob: binaryBytes, buffer: binaryBytes },
+      { type: "image/png", blob: binaryBytes, buffer: binaryBytes },
+    ]);
     expect(requests).toHaveLength(2);
     for (const request of requests) {
       const { "x-balebase-native-origin": nativeOrigin } = request.headers;

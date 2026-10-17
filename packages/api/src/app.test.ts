@@ -56,8 +56,8 @@ describe("api", () => {
         origin === "https://app.test" ? origin : null,
       );
       expect(
-        response.headers.get("access-control-allow-headers"),
-      ).not.toContain("X-Balebase-Native-Origin");
+        response.headers.get("access-control-allow-headers")?.toLowerCase(),
+      ).not.toContain("x-balebase-native-origin");
       expect(response.headers.get("access-control-allow-credentials")).toBe(
         "true",
       );

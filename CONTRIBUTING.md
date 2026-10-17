@@ -45,7 +45,7 @@ Generated images are ignored; keep binary files out of commits.
 
 `bun run mobile:sync` writes the native images into both checked-in Capacitor
 projects and restores the Gradle wrapper JAR from the pinned CLI template.
-Commit native source and configuration; generated web bundles, images, plugin
+Commit native source and configuration; generated web bundles, images, Android plugin
 paths, signing material, and build products remain ignored. After changing Capacitor
 dependencies, sync and commit the updated iOS Swift package manifest, which pins
 the plugin paths resolved by Bun. CI builds and syncs
