@@ -46,6 +46,9 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
+  // Better Auth's session store unmounts a second after its last listener
+  // leaves, and then detaches from window; let it go before window does.
+  await new Promise((resolve) => setTimeout(resolve, 1_100));
   for (const [key, descriptor] of saved) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
