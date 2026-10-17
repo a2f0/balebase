@@ -81,8 +81,8 @@ auditIssueImages.post("/:issueId/images", async (context) => {
   const issueId = context.req.param("issueId");
   const issue = await context.env.DB.prepare(
     `SELECT issue.id, audit.deleted_at AS audit_deleted_at
-     FROM audit_issues AS issue
-     JOIN audits AS audit ON audit.id = issue.audit_id
+     FROM issues AS issue
+     JOIN audits AS audit ON audit.id = issue.target_id AND issue.target_type = 'audit_run'
      WHERE issue.id = ? AND issue.organization_id = ?`,
   )
     .bind(issueId, organizationId)
@@ -933,7 +933,7 @@ export async function findAuditIssueImages(
   const result = await database
     .prepare(
       `${imageSelect}
-       WHERE issue.organization_id = ? AND issue.audit_id = ?
+       WHERE issue.organization_id = ? AND issue.target_id = ?
          AND object.kind = 'audit_issue_image'
          AND object.deletion_pending = 0
        ORDER BY image.created_at ASC`,
@@ -963,15 +963,15 @@ export async function findAuditIssueImage(
 
 const imageSelect = `
   SELECT image.id, image.issue_id, image.object_id, image.created_at,
-         issue.audit_id, issue.title, audit.template_name,
+         issue.target_id AS audit_id, issue.title, audit.template_name,
          audit.deleted_at AS audit_deleted_at,
          object.deletion_pending,
          object.object_key, object.filename, object.content_type, object.size,
          uploader.id AS uploaded_by_id, uploader.name AS uploaded_by_name,
          uploader.email AS uploaded_by_email
   FROM audit_issue_images AS image
-  JOIN audit_issues AS issue ON issue.id = image.issue_id
-  JOIN audits AS audit ON audit.id = issue.audit_id
+  JOIN issues AS issue ON issue.id = image.issue_id
+  JOIN audits AS audit ON audit.id = issue.target_id AND issue.target_type = 'audit_run'
   JOIN objects AS object ON object.id = image.object_id
   JOIN user AS uploader ON uploader.id = image.uploaded_by`;
 

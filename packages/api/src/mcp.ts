@@ -11,6 +11,7 @@ import type { AuthVariables } from "./authMiddleware";
 import { auditTools } from "./mcpAuditTools";
 import { contractTools } from "./mcpContractTools";
 import { financeTools } from "./mcpFinanceTools";
+import { issueTools } from "./mcpIssueTools";
 import { libraryTools } from "./mcpLibraryTools";
 import { type McpTool, toolAccess, toolInputSchema } from "./mcpToolSchema";
 import { workspaceTools } from "./mcpWorkspaceTools";
@@ -25,6 +26,7 @@ const toolListTtlMs = 5 * 60 * 1000;
 
 export const mcpTools: McpTool[] = [
   ...workspaceTools,
+  ...issueTools,
   ...auditTools,
   ...contractTools,
   ...libraryTools,
