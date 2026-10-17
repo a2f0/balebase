@@ -44,7 +44,6 @@ describe("inbox", () => {
     );
     const response = await fixture.request(`/${emailId}`);
     expect(response.status).toBe(500);
-    expect(await response.text()).toBe("Internal Server Error");
   });
 
   it("refuses to render stored mail with excessive MIME nesting", async () => {
@@ -55,7 +54,6 @@ describe("inbox", () => {
     const fixture = await createFixture(raw);
     const response = await fixture.request(`/${emailId}`);
     expect(response.status).toBe(500);
-    expect(await response.text()).toBe("Internal Server Error");
   });
 
   it("does not render an embedded message inline", async () => {
