@@ -1,4 +1,16 @@
+import { existsSync } from "node:fs";
 import type { KnipConfig } from "knip";
+
+// Knip's Capacitor plugin detects Android only from this generated file.
+// Exempt the native platform on a fresh checkout, before mobile:sync creates it.
+const androidBeforeSync = existsSync(
+  new URL(
+    "./packages/client/android/capacitor.settings.gradle",
+    import.meta.url,
+  ),
+)
+  ? []
+  : ["@capacitor/android"];
 
 const rootToolingWorkspace = {
   project: ["*.{css,ts,mts}"],
@@ -28,7 +40,7 @@ const baseConfig = {
       project: ["src/**/*.{css,ts,tsx}", "browser/**/*.tsx"],
       // cap sync registers this native plugin; its default Android back handler
       // needs no JavaScript listener and preserves our popstate navigation guard.
-      ignoreDependencies: ["@capacitor/app"],
+      ignoreDependencies: ["@capacitor/app", ...androidBeforeSync],
     },
     "packages/ui": {
       entry: ["src/**/*.test.ts"],
