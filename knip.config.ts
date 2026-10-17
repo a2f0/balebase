@@ -26,6 +26,9 @@ const baseConfig = {
     "packages/client": {
       entry: ["browser/**/*.test.tsx"],
       project: ["src/**/*.{css,ts,tsx}", "browser/**/*.tsx"],
+      // cap sync registers this native plugin; its default Android back handler
+      // needs no JavaScript listener and preserves our popstate navigation guard.
+      ignoreDependencies: ["@capacitor/app"],
     },
     "packages/ui": {
       entry: ["src/**/*.test.ts"],
@@ -50,6 +53,7 @@ const productionConfig = {
     "packages/client": {
       entry: ["src/**/*.{ts,tsx}!"],
       project: [],
+      ignoreDependencies: ["@capacitor/app"],
     },
     // Production mode does not follow CSS @import chains, so the partials
     // that import the font packages are listed as entries themselves.

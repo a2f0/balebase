@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
+import { clientOrigins } from "./clientOrigins";
 import type { Bindings } from "./types";
 
 export const userDeletion = new Hono<{
@@ -17,7 +18,9 @@ userDeletion.get("/", async (context) => {
 });
 
 userDeletion.post("/", async (context) => {
-  if (context.req.header("Origin") !== context.env.CORS_ORIGIN) {
+  if (
+    !clientOrigins(context.env).includes(context.req.header("Origin") ?? "")
+  ) {
     return context.json({ error: "Untrusted request origin." }, 403);
   }
   const session = context.get("authSession");
@@ -48,7 +51,9 @@ userDeletion.post("/", async (context) => {
 });
 
 userDeletion.delete("/", async (context) => {
-  if (context.req.header("Origin") !== context.env.CORS_ORIGIN) {
+  if (
+    !clientOrigins(context.env).includes(context.req.header("Origin") ?? "")
+  ) {
     return context.json({ error: "Untrusted request origin." }, 403);
   }
   const userId = context.get("authSession").user.id;

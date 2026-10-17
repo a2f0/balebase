@@ -149,24 +149,36 @@ or live-reload server in a release bundle.
 For a simulator build without Apple signing:
 
 ```sh
-bun run mobile:sync
-xcodebuild -project packages/client/ios/App/App.xcodeproj -scheme App \
-  -configuration Debug -sdk iphonesimulator \
-  -destination 'generic/platform=iOS Simulator' \
-  -derivedDataPath packages/client/ios/DerivedData \
-  CODE_SIGNING_ALLOWED=NO build
+./scripts/buildIos.sh
 ```
 
 For an Android debug APK, set `ANDROID_HOME` to the installed SDK directory:
 
 ```sh
-bun run mobile:sync
-packages/client/android/gradlew -p packages/client/android assembleDebug
+./scripts/buildAndroid.sh
 ```
 
 The APK is written to
 `packages/client/android/app/build/outputs/apk/debug/app-debug.apk`.
 Android release builds remain unsigned until an upload keystore is configured.
+
+Like Tearleads, the root `scripts/` folder also contains release and run
+entrypoints. They work from any current directory and always build and sync
+the web bundle before invoking the native tools:
+
+```sh
+./scripts/runIos.sh --target <simulator-or-device-id>
+./scripts/runAndroid.sh --target <emulator-or-device-id>
+./scripts/buildIosRelease.sh
+./scripts/buildAndroidRelease.sh
+```
+
+The release scripts produce an **unsigned** iOS device archive at
+`packages/client/ios/App/output/Balebase.xcarchive` and an unsigned Android
+bundle at `packages/client/android/app/build/outputs/bundle/release/app-release.aab`.
+They do not upload or create store records. Use the IDE's archive/export or
+signed bundle flow after configuring signing. Root `mobile:build:*` and
+`mobile:run:*` Bun scripts invoke the same entrypoints.
 
 Before TestFlight or Play distribution:
 

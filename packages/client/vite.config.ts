@@ -11,9 +11,18 @@ export default defineConfig(({ mode }) => {
   const { VITE_API_URL, VITE_APP_URL } = loadEnv(mode, process.cwd());
   const apiUrl = VITE_API_URL ?? "https://api.balebase.com";
   const appUrl = VITE_APP_URL ?? "https://app.balebase.com";
-  for (const url of [apiUrl, appUrl]) {
-    if (new URL(url).protocol !== "https:") {
-      throw new Error("Mobile builds require HTTPS API and app URLs.");
+  for (const [name, url] of Object.entries({
+    VITE_API_URL: apiUrl,
+    VITE_APP_URL: appUrl,
+  })) {
+    let protocol: string;
+    try {
+      protocol = new URL(url).protocol;
+    } catch {
+      throw new Error(`${name} must be a valid HTTPS URL for mobile builds.`);
+    }
+    if (protocol !== "https:") {
+      throw new Error(`${name} must use HTTPS for mobile builds.`);
     }
   }
   return {

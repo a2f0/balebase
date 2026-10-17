@@ -266,6 +266,58 @@ it.each([
   },
 );
 
+it.each(["capacitor://localhost", "https://localhost"])(
+  "permits account deletion and admin maintenance from %s",
+  async (nativeOrigin) => {
+    const f = await fixture("user");
+    f.insertUser("actor");
+    expect(
+      (await f.request("/deletion", post("delete my account", nativeOrigin)))
+        .status,
+    ).toBe(200);
+    expect(await (await f.request("/deletion")).json()).toMatchObject({
+      requestedAt: expect.any(String),
+    });
+    expect(
+      (
+        await f.request("/deletion", {
+          method: "DELETE",
+          headers: { Origin: "https://evil.example" },
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await f.request("/deletion", {
+          method: "DELETE",
+          headers: { Origin: nativeOrigin },
+        })
+      ).status,
+    ).toBe(200);
+    const deletionStatus: unknown = await (await f.request("/deletion")).json();
+    expect(deletionStatus).toEqual({
+      requestedAt: null,
+    });
+    expect(
+      (
+        await f.request(
+          "/jobs/purgeRequestedUsers/run",
+          post("purgeRequestedUsers", nativeOrigin),
+        )
+      ).status,
+    ).toBe(403);
+    const admin = await fixture();
+    expect(
+      (
+        await admin.request(
+          "/jobs/purgeRequestedUsers/run",
+          post("purgeRequestedUsers", nativeOrigin),
+        )
+      ).status,
+    ).toBe(200);
+  },
+);
+
 it("records a user's own request once and permits cancellation", async () => {
   const f = await fixture("user");
   f.insertUser("actor");

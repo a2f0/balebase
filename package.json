@@ -57,7 +57,13 @@
     "test:staging": "bash scripts/checks/testDeployStaging.sh",
     "mobile:sync": "bun run --cwd packages/client mobile:sync",
     "mobile:ios": "bun run --cwd packages/client mobile:ios",
-    "mobile:android": "bun run --cwd packages/client mobile:android"
+    "mobile:android": "bun run --cwd packages/client mobile:android",
+    "mobile:build:ios": "bash scripts/buildIos.sh",
+    "mobile:build:android": "bash scripts/buildAndroid.sh",
+    "mobile:build:ios:release": "bash scripts/buildIosRelease.sh",
+    "mobile:build:android:release": "bash scripts/buildAndroidRelease.sh",
+    "mobile:run:ios": "bash scripts/runIos.sh",
+    "mobile:run:android": "bash scripts/runAndroid.sh"
   },
   "workspaces": [
     "packages/*"

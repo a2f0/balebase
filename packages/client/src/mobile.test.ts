@@ -1,10 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type Mock,
+  spyOn,
+} from "bun:test";
 import { Capacitor } from "@capacitor/core";
 import { fetchApi } from "./apiVersion";
 import { authCallbackUrl } from "./config";
 
-let native = spyOn(Capacitor, "isNativePlatform");
-let platform = spyOn(Capacitor, "getPlatform");
+let native: Mock<typeof Capacitor.isNativePlatform>;
+let platform: Mock<typeof Capacitor.getPlatform>;
 
 beforeEach(() => {
   native = spyOn(Capacitor, "isNativePlatform");
@@ -17,6 +25,27 @@ afterEach(() => {
 });
 
 describe("mobile API requests", () => {
+  it("uses the current web origin for browser email links", () => {
+    native.mockReturnValue(false);
+    const originalWindow = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "window",
+    );
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { location: { origin: "https://web.example" } },
+    });
+    try {
+      expect(authCallbackUrl("/reset-password")).toBe(
+        "https://web.example/reset-password",
+      );
+    } finally {
+      if (originalWindow)
+        Object.defineProperty(globalThis, "window", originalWindow);
+      else Reflect.deleteProperty(globalThis, "window");
+    }
+  });
+
   it("sends trusted native origins and preserves request headers", async () => {
     const originalFetch = globalThis.fetch;
     const requests: Headers[] = [];

@@ -75,4 +75,6 @@ jobs:
         run: bun run build
 
       - name: Build and sync mobile applications
-        run: bun run mobile:sync
+        run: |
+          bun run mobile:sync
+          git diff --exit-code

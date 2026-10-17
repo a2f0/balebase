@@ -24,7 +24,8 @@
     "qrcode.react": "4.2.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "@capacitor/core": "8.5.3"
+    "@capacitor/core": "8.5.3",
+    "@capacitor/app": "8.1.2"
   },
   "devDependencies": {
     "@types/bun": "1.4.2",

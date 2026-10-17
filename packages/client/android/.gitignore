@@ -107,3 +107,6 @@ gradle/wrapper/gradle-wrapper.jar
 # cap sync resolves workspace-specific plugin paths.
 capacitor.settings.gradle
 app/capacitor.build.gradle
+
+# Regenerated from agent-tool.json by mobile:sync.
+app/src/main/res/values/ic_launcher_background.xml
