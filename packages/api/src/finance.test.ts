@@ -1,5 +1,6 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
+import { readdir } from "node:fs/promises";
 import { Hono } from "hono";
 import type { AuthSession } from "./auth";
 import type { AuthVariables } from "./authMiddleware";
@@ -994,26 +995,11 @@ async function createFixture(options?: { pendingTransition?: boolean }) {
       "user",
       false,
     );
-  await applyMigration(database, "0004_create_organizations.sql");
-  await applyMigration(database, "0007_create_finance.sql");
-  await applyMigration(database, "0009_retain_finance_history.sql");
-  await applyMigration(database, "0034_create_finance_expense_categories.sql");
-  for (const migration of [
-    "0001_create_objects.sql",
-    "0006_scope_objects_to_organizations.sql",
-    "0025_classify_objects.sql",
-    "0002_create_inbound_emails.sql",
-    // 0011's organization triggers reference 0010's groups; newer SQLite
-    // rejects 0012's table rename while any trigger names a missing table.
-    "0010_create_organization_groups.sql",
-    "0011_soft_delete_organizations.sql",
-    "0012_scope_inbound_emails_to_organizations.sql",
-    "0016_soft_delete_inbound_emails.sql",
-    "0035_create_library_folders.sql",
-    "0036_create_inbound_email_links.sql",
-    "0054_archive_inbound_emails.sql",
-  ]) {
-    await applyMigration(database, migration);
+  for (const migration of (
+    await readdir(`${import.meta.dir}/../migrations`)
+  ).sort()) {
+    if (migration.endsWith(".sql") && migration !== "0003_create_auth.sql")
+      await applyMigration(database, migration);
   }
   const requestPlaid = mockPlaid(options);
   const bindings = bindingsFor(database);

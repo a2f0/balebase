@@ -4,6 +4,7 @@ import { readdir } from "node:fs/promises";
 import { findActivity } from "./activity";
 import { app } from "./app";
 import { createAuth } from "./auth";
+import { withNativeOrigin } from "./nativeRequest";
 import type { Bindings } from "./types";
 
 const baseURL = "https://api.test";
@@ -13,6 +14,62 @@ const originalPassword = "correct horse battery staple";
 const replacementPassword = "new correct horse battery staple";
 
 describe("password authentication", () => {
+  it("supports native cookie sessions without accepting foreign origins", async () => {
+    const { auth } = await createFixture();
+    // Better Auth skips origin validation in tests unless explicitly enabled.
+    (await auth.$context).skipOriginCheck = false;
+    await post(auth, "/sign-up/email", {
+      email,
+      name: "Mobile Person",
+      password: originalPassword,
+      termsAccepted: true,
+    });
+    for (const requestOrigin of [
+      "capacitor://localhost",
+      "https://localhost",
+    ]) {
+      const nativePost = (
+        path: string,
+        body: Record<string, unknown>,
+        cookie?: string | null,
+      ) =>
+        auth.handler(
+          withNativeOrigin(
+            new Request(`${baseURL}/api/auth${path}`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Balebase-Native-Origin": requestOrigin,
+                Cookie: cookie ?? "",
+              },
+              body: JSON.stringify(body),
+            }),
+            origin,
+          ),
+        );
+      const signIn = await nativePost("/sign-in/email", {
+        email,
+        password: originalPassword,
+      });
+      expect(signIn.status).toBe(200);
+      const cookie = signIn.headers.get("set-cookie");
+      expect(cookie).toContain("session_token=");
+      const session = await get(auth, "/get-session", cookie);
+      expect(await session.json()).toMatchObject({ user: { email } });
+      const rejected = await post(
+        auth,
+        "/sign-out",
+        {},
+        cookie,
+        "https://attacker.test",
+      );
+      expect(rejected.status).toBe(403);
+      const signedOut = await nativePost("/sign-out", {}, cookie);
+      expect(signedOut.status).toBe(200);
+      expect(await (await get(auth, "/get-session", cookie)).json()).toBeNull();
+    }
+  });
+
   it("requires and records Terms of Service acceptance at sign-up", async () => {
     const fixture = await createFixture();
     const existingUsers = fixture.database
@@ -1698,6 +1755,7 @@ function post(
   path: string,
   body: Record<string, unknown>,
   cookie?: string | null,
+  requestOrigin = origin,
 ) {
   return auth.handler(
     new Request(`${baseURL}/api/auth${path}`, {
@@ -1705,7 +1763,7 @@ function post(
       headers: {
         "content-type": "application/json",
         cookie: cookie ?? "",
-        origin,
+        origin: requestOrigin,
       },
       method: "POST",
     }),

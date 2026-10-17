@@ -1,0 +1,21 @@
+.issueToolbar {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(8rem, 1fr)) minmax(12rem, 2fr);
+  gap: var(--space-4);
+}
+.issueFields {
+  display: grid;
+  gap: var(--space-4);
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .issueToolbar {
+    grid-template-columns: 1fr;
+  }
+}

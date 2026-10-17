@@ -71,6 +71,8 @@ export type ActivitySource =
         | "audit_run"
         | "audit_template"
         | "equipment"
+        | "issue"
+        | "finance_transaction"
         | "global_audit_template";
     }
   | undefined;
@@ -94,6 +96,9 @@ export async function listActivity(source?: ActivitySource, cursor?: string) {
 function activityPath(source: ActivitySource) {
   if (!source) return "/api/activity";
   const id = encodeURIComponent(source.id);
+  if (source.type === "issue") return `/api/issues/${id}/activity`;
+  if (source.type === "finance_transaction")
+    return `/api/finance/transactions/${id}/activity`;
   if (source.type === "audit_run") return `/api/audits/runs/${id}/activity`;
   if (source.type === "equipment") return `/api/equipment/${id}/activity`;
   if (source.type === "global_audit_template") {

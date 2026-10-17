@@ -4,7 +4,8 @@ Balebase runs on Cloudflare Workers, D1, and R2. Every workspace lives
 under `packages/`:
 
 - `packages/api` — Hono API on Cloudflare Workers, with D1 and R2 bindings.
-- `packages/client` — React and Vite application.
+- `packages/client` — React and Vite application, with Capacitor iOS and Android
+  projects sharing the same screens.
 - `packages/ui` — the shared design system (tokens, component styles, React
   primitives, icons, and pricing copy) used by the client and the website.
 - `packages/website` — static Astro marketing site.
@@ -48,6 +49,41 @@ manages and backs up. See [local secrets](docs/operations.md#local-secrets).
 Wrangler persists the local D1 database and R2 bucket under
 `packages/api/.wrangler/`. The client defaults to the local API. Override it by
 copying `packages/client/.env.example` to `packages/client/.env`.
+
+## Mobile development
+
+The native app is named **Balebase** and uses `com.balebase.app` on both
+platforms. Install Xcode 26 or later for iOS, or Android Studio with Android SDK
+36 and JDK 21 for Android. The app supports iOS 18+ and Android 12+; the iOS
+floor also covers the embedded PDF viewer's browser APIs.
+
+```sh
+bun run mobile:ios      # build, sync both native projects, and open Xcode
+bun run mobile:android  # build, sync both native projects, and open Android Studio
+bun run mobile:sync     # rebuild web assets, icons, and native dependencies
+./scripts/buildIos.sh   # unsigned simulator build
+./scripts/buildAndroid.sh # installable debug APK
+./scripts/runIos.sh     # build and run on a selected simulator/device
+./scripts/runAndroid.sh # build and run on a selected emulator/device
+```
+
+Choose a simulator or connected device and run the app from the IDE. These
+commands bundle the client locally and default to `https://api.balebase.com`.
+Mobile output lives in `packages/client/dist-mobile`, separately from the web
+deployment. Native networking preserves cookie authentication; deploy the API's
+mobile-origin support before testing against a remote environment.
+
+To test staging, put these values in `packages/client/.env.mobile.local`:
+
+```dotenv
+VITE_API_URL=https://api-staging.balebase.com
+VITE_APP_URL=https://app-staging.balebase.com
+```
+
+Both URLs must use HTTPS. A shared `.env` pointing at the local HTTP API must
+be overridden for mobile builds. Emailed verification and password-reset links
+open the hosted app. See [mobile builds and release setup](docs/operations.md#mobile-builds-and-release-setup)
+for unsigned builds and the remaining store setup.
 
 ## Working in the repo
 

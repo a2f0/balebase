@@ -52,6 +52,19 @@ client at `/inbox`. The production tier also needs
 subdomain's Email Routing setup. The Terraform token needs Email Routing Rules
 Write.
 
+## Shared issues migration
+
+The API 0.1.32 release requires `0062_create_issues.sql` and
+`0063_record_finance_annotations.sql`. The deployment scripts apply migrations
+before deploying the API. Migration 0062 preserves audit issue IDs, attachments,
+and history while replacing `audit_issues` with the shared `issues` table.
+The previous Worker cannot read or write audit issues after that replacement:
+expect audit requests to fail during the migration-to-Worker deployment window.
+Schedule this release accordingly and finish the API deployment promptly.
+If deployment fails after migration, retry deploying the new API; rolling the
+Worker back alone does not restore the old schema. Keep the normal D1 recovery
+point available if a full schema-and-Worker rollback is needed.
+
 ## Deploy production
 
 The full deployment checks the repository, applies D1 migrations, deploys the
@@ -136,6 +149,78 @@ signing secret in `STRIPE_WEBHOOK_SECRET`.
 For later infrastructure changes, use `bun run terraform:staging:plan` and
 `bun run terraform:staging:apply`. Cloudflare Email Routing subaddressing must
 be enabled once for the zone, as described in the inbound email setup above.
+
+## Mobile builds and release setup
+
+The Capacitor projects live in `packages/client/ios` and
+`packages/client/android`; both identify the app as `com.balebase.app`.
+`bun run mobile:sync` always packages local assets, regenerates the brand
+images, and synchronizes native dependencies. Run it before an IDE build and
+after changing dependencies or client code. There is no hosted `server.url`
+or live-reload server in a release bundle.
+
+For a simulator build without Apple signing:
+
+```sh
+./scripts/buildIos.sh
+```
+
+For an Android debug APK, set `ANDROID_HOME` to the installed SDK directory:
+
+```sh
+./scripts/buildAndroid.sh
+```
+
+The APK is written to
+`packages/client/android/app/build/outputs/apk/debug/app-debug.apk`.
+Android release builds remain unsigned until an upload keystore is configured.
+
+The root `scripts/` folder also contains release and run
+entrypoints. They work from any current directory and always build and sync
+the web bundle before invoking the native tools:
+
+```sh
+./scripts/runIos.sh --target <simulator-or-device-id>
+./scripts/runAndroid.sh --target <emulator-or-device-id>
+./scripts/buildIosRelease.sh
+./scripts/buildAndroidRelease.sh
+```
+
+The release scripts produce an **unsigned** iOS device archive at
+`packages/client/ios/App/output/Balebase.xcarchive` and an unsigned Android
+bundle at `packages/client/android/app/build/outputs/bundle/release/app-release.aab`.
+They do not upload or create store records. Use the IDE's archive/export or
+signed bundle flow after configuring signing. Root `mobile:build:*` and
+`mobile:run:*` Bun scripts invoke the same entrypoints.
+
+Before TestFlight or Play distribution:
+
+1. Create the Apple bundle identifier and App Store Connect app for
+   `com.balebase.app`, then choose your team and signing profile in Xcode.
+   Create the Google Play app with the same application ID and configure its
+   upload key outside the repository.
+2. Set the release version/build number in Xcode and Android's
+   `app/build.gradle`. Store build numbers are separate from web/API patch
+   versions and must increase for each upload.
+3. Deploy the native request adapter in the API before using a remote backend.
+   The native HTTP transport sends cookies and an origin marker. When no
+   browser Origin is present, the API applies its configured web origin. The
+   marker is excluded from allowed CORS headers; existing browser origins and
+   authentication callback allowlists remain unchanged.
+4. Exercise login, MFA, account switching, logout/relaunch, camera and file
+   uploads, PDF viewing/downloads, invitations, and keyboard/back navigation on
+   real devices. Email verification and password-reset links currently open
+   the hosted web app, which has a separate session and may require signing
+   in again. Universal/app links are not configured. Native downloads use the
+   system save/share sheet; authenticated images load through native HTTP.
+5. Complete store metadata, privacy declarations, and device screenshots.
+   Validate the existing Stripe billing and Plaid flows for the intended store
+   distribution before submission; this shell does not add native purchases or
+   native Plaid SDK integration.
+
+No store upload, signing identity, or automatic mobile deployment is configured.
+See [Capacitor's environment setup](https://capacitorjs.com/docs/getting-started/environment-setup)
+for SDK installation details.
 
 ## Retain and purge data
 

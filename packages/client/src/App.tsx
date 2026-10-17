@@ -26,10 +26,13 @@ import { useAccountSessions } from "./accountSessions";
 import { authClient } from "./authClient";
 import { Businesses } from "./Businesses";
 import { Contracts } from "./Contracts";
+import { authCallbackUrl } from "./config";
 import { Equipment } from "./Equipment";
 import { Finance } from "./Finance";
+import { FinanceTransactionPage } from "./FinanceTransactionPage";
 import { isFinancePath } from "./financePages";
 import { Inbox } from "./Inbox";
+import { Issues } from "./Issues";
 import { Library } from "./Library";
 import {
   guardWorkspaceChange,
@@ -53,6 +56,7 @@ import { SigningPage } from "./SigningPage";
 import { useOrganizationAccess } from "./useOrganizationAccess";
 import { hasRole, WorkspaceShell, type WorkspaceUser } from "./WorkspaceShell";
 import {
+  decodeRecordId,
   isBusinessesPath,
   isContractsPath,
   isEquipmentPath,
@@ -154,7 +158,7 @@ function AuthenticationRoute({
 }) {
   const returnTo = accountReturnPath(
     window.location.search,
-    window.location.origin,
+    window.location.href,
   );
   const invitationNotice =
     pathname === "/invite"
@@ -179,7 +183,7 @@ function AuthenticationRoute({
           action === "sign-up"
             ? invitationIdForPath(
                 addingAccount ? returnTo : currentLocation(),
-                window.location.origin,
+                window.location.href,
               )
             : undefined;
         if (invitationId) {
@@ -381,7 +385,7 @@ function NoOrganization() {
 
 async function resendVerification(email: string) {
   const result = await authClient.sendVerificationEmail({
-    callbackURL: `${window.location.origin}/?verified=true`,
+    callbackURL: authCallbackUrl("/?verified=true"),
     email,
   });
   if (result.error) {
@@ -473,12 +477,20 @@ function contentForPath(
   twoFactorEnabled: boolean,
   onSecurityChanged: () => Promise<unknown>,
 ) {
+  if (pathname === "/issues" || pathname.startsWith("/issues/"))
+    return (
+      <Issues
+        pathname={pathname}
+        onNavigate={navigate}
+        canAccessFinance={access.can("finance")}
+      />
+    );
   if (pathname === "/activity") return <Activity onNavigate={navigate} />;
   if (pathname === "/audits" || pathname.startsWith("/audits/")) {
     return <Audits onNavigate={navigate} pathname={pathname} />;
   }
   if (isFinancePath(pathname)) {
-    return <Finance onNavigate={navigate} pathname={pathname} />;
+    return financeContent(pathname, navigate);
   }
   if (isBusinessesPath(pathname)) {
     return <Businesses onNavigate={navigate} pathname={pathname} />;
@@ -535,6 +547,18 @@ function contentForPath(
   return library;
 }
 
+function financeContent(pathname: string, navigate: (path: string) => void) {
+  if (pathname.startsWith("/finance/transactions/"))
+    return (
+      <FinanceTransactionPage
+        key={pathname}
+        id={decodeRecordId(pathname.slice("/finance/transactions/".length))}
+        onNavigate={navigate}
+      />
+    );
+  return <Finance onNavigate={navigate} pathname={pathname} />;
+}
+
 function rootAdminContent(
   pathname: string,
   navigate: (pathname: string) => void,
@@ -559,6 +583,8 @@ function currentLocation() {
 }
 
 function activePageFor(pathname: string) {
+  if (pathname === "/issues" || pathname.startsWith("/issues/"))
+    return "issues" as const;
   if (pathname === "/activity") return "activity" as const;
   if (pathname === "/audits" || pathname.startsWith("/audits/")) {
     return "audits" as const;

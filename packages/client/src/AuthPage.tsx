@@ -11,7 +11,7 @@ import {
 } from "@balebase/ui/react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { authClient } from "./authClient";
-import { websiteUrl } from "./config";
+import { authCallbackUrl, websiteUrl } from "./config";
 
 type AuthMode = "forgot" | "reset" | "sign-in" | "sign-up";
 export type AuthenticationAction = "sign-in" | "sign-up";
@@ -454,7 +454,7 @@ async function performAuthAction(
 
   if (mode === "sign-up") {
     const result = await authClient.signUp.email({
-      callbackURL: `${window.location.origin}/?verified=true`,
+      callbackURL: authCallbackUrl("/?verified=true"),
       email: input.email,
       fetchOptions: deferredSessionRefresh,
       name: input.name,
@@ -476,7 +476,7 @@ async function performAuthAction(
   if (mode === "forgot") {
     const result = await authClient.requestPasswordReset({
       email: input.email,
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: authCallbackUrl("/reset-password"),
     });
     throwForAuthError(result.error);
     return { notice: "If that account exists, a reset link is on its way." };

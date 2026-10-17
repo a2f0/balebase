@@ -31,7 +31,7 @@ function loadPdfjs() {
  */
 export async function openPdf(data: ArrayBuffer) {
   const pdfjs = await loadPdfjs();
-  const assets = new URL("/pdfjs/", window.location.origin).href;
+  const assets = new URL("/pdfjs/", window.location.href).href;
   return pdfjs.getDocument({
     cMapPacked: true,
     cMapUrl: `${assets}cmaps/`,

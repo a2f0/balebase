@@ -9,7 +9,7 @@ export function Activity({
   return (
     <Page>
       <PageHeader
-        description="See who changed forms, audits, equipment, and roles in this organization."
+        description="See who changed forms, audits, issues, transaction annotations, equipment, and roles in this organization."
         eyebrow="Workspace"
         title="Activity"
       />

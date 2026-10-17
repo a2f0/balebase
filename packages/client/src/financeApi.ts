@@ -253,3 +253,10 @@ async function parseError(response: Response) {
     body?.error ?? `Request failed with status ${response.status}.`,
   );
 }
+
+export function getFinanceTransaction(id: string) {
+  return request<{
+    transaction: FinanceTransaction;
+    categories: ExpenseCategory[];
+  }>(`/transactions/${encodeURIComponent(id)}`);
+}

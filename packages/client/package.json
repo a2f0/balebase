@@ -1,20 +1,28 @@
 {
   "name": "@balebase/client",
-  "version": "0.1.43",
+  "version": "0.1.44",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "build": "bunx --bun --no-install tsc --noEmit && bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/client/public && bunx --bun --no-install vite build",
+    "build:mobile": "bunx --bun --no-install tsc --noEmit && bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/client/public && bunx --bun --no-install vite build --mode mobile",
     "check": "bunx --bun --no-install tsc --noEmit",
     "deploy": "bun --bun run build && bunx --bun --no-install wrangler deploy",
     "dev": "bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/client/public && bunx --bun --no-install vite",
+    "mobile:android": "bun run mobile:sync && bunx --bun --no-install cap open android",
+    "mobile:ios": "bun run mobile:sync && bunx --bun --no-install cap open ios",
+    "mobile:sync": "bun run build:mobile && bunx --bun --no-install agent-tool --repo ../.. images build native && bun scripts/prepareMobile.ts && bunx --bun --no-install cap sync",
     "test": "bun test src",
     "test:browser": "bun test browser"
   },
   "dependencies": {
-    "@stripe/stripe-js": "9.17.0",
     "@balebase/ui": "workspace:*",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/filesystem": "8.1.5",
+    "@capacitor/share": "8.0.3",
+    "@stripe/stripe-js": "9.17.0",
     "better-auth": "1.7.2",
     "pdfjs-dist": "6.4.299",
     "qrcode.react": "4.2.0",
@@ -22,6 +30,9 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/cli": "8.5.3",
+    "@capacitor/ios": "8.5.3",
     "@types/bun": "1.4.3",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",

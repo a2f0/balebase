@@ -6,6 +6,64 @@ import { createAuth } from "./auth";
 import type { Bindings } from "./types";
 
 describe("api", () => {
+  it("applies native origins through the real authenticated route middleware", async () => {
+    const fixture = await protectedOrganizationFixture();
+    for (const marker of ["capacitor://localhost", "https://localhost"]) {
+      for (const browserOrigin of [undefined, "https://attacker.test"]) {
+        const headers = new Headers({
+          Cookie: fixture.cookie,
+          "Content-Type": "application/json",
+          "X-Balebase-Native-Origin": marker,
+        });
+        if (browserOrigin) headers.set("Origin", browserOrigin);
+        const response = await app.request(
+          "/api/account-settings/deletion",
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ confirm: "delete my account" }),
+          },
+          fixture.bindings,
+          fixture.executionContext,
+        );
+        expect(response.status).toBe(browserOrigin ? 403 : 200);
+      }
+    }
+  });
+  it("allows only the web client through CORS, excluding native-only headers", async () => {
+    for (const origin of [
+      "https://app.test",
+      "capacitor://localhost",
+      "https://localhost",
+      "https://localhost.attacker.test",
+      "capacitor://attacker.test",
+      "https://attacker.test",
+    ]) {
+      const response = await app.request(
+        "/api/auth/sign-in/email",
+        {
+          method: "OPTIONS",
+          headers: {
+            Origin: origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers":
+              "content-type,x-balebase-native-origin",
+          },
+        },
+        authBindings(),
+      );
+      expect(response.headers.get("access-control-allow-origin")).toBe(
+        origin === "https://app.test" ? origin : null,
+      );
+      expect(
+        response.headers.get("access-control-allow-headers")?.toLowerCase(),
+      ).not.toContain("x-balebase-native-origin");
+      expect(response.headers.get("access-control-allow-credentials")).toBe(
+        "true",
+      );
+    }
+  });
+
   it("requires authentication for maintenance and account deletion routes", async () => {
     for (const [path, method] of [
       ["/api/admin/jobs", "GET"],
@@ -13,6 +71,11 @@ describe("api", () => {
       ["/api/admin/audit-templates", "POST"],
       ["/api/admin/audit-templates/template-id", "PUT"],
       ["/api/activity", "GET"],
+      ["/api/issues", "GET"],
+      ["/api/issues", "POST"],
+      ["/api/issues/members", "GET"],
+      ["/api/issues/private", "PATCH"],
+      ["/api/issues/private/activity", "GET"],
       ["/api/audits/runs/private/activity", "GET"],
       ["/api/admin/jobs/purgeRequestedUsers/run", "POST"],
       ["/api/account-settings/deletion", "GET"],
@@ -396,6 +459,7 @@ async function protectedOrganizationFixture() {
     "0021_track_terms_acceptance.sql",
     "0031_require_member_two_factor.sql",
     "0040_pin_default_organization.sql",
+    "0048_create_user_deletion_requests.sql",
     "0055_track_user_last_active.sql",
   ]) {
     database.exec(

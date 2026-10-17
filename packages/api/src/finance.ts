@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { activityBatch, findActivity } from "./activity";
 import {
   addDefaultCategories,
   assignTransactionCategory,
@@ -113,6 +114,8 @@ export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
   );
   finance.delete("/connections/:id/data", deleteConnectionData);
   finance.get("/transactions", searchTransactions);
+  finance.get("/transactions/:id", transactionDetail);
+  finance.get("/transactions/:id/activity", transactionActivity);
   finance.patch("/transactions/:id/annotation", updateTransactionAnnotation);
   finance.put("/transactions/:id/category", assignTransactionCategory);
   finance.get("/categories", listCategories);
@@ -167,6 +170,48 @@ async function financeListing(context: FinanceContext) {
       ),
     ),
   });
+}
+
+async function transactionDetail(context: FinanceContext) {
+  const organizationId = context.get("organizationId");
+  const [row] = await listTransactions(context.env.DB, {
+    where:
+      "txn.organization_id = ? AND txn.id = ? AND txn.source_status = 'active'",
+    bindings: [organizationId, context.req.param("id") ?? ""],
+  });
+  if (!row) return context.json({ error: "Transaction not found." }, 404);
+  const [categories, emails] = await Promise.all([
+    listExpenseCategories(context.env.DB, organizationId),
+    listLinkedEmails(
+      context.env.DB,
+      organizationId,
+      "finance_transaction",
+      row.id,
+    ),
+  ]);
+  return context.json({
+    transaction: toTransaction(row, emails.map(toLinkedEmail)),
+    categories,
+  });
+}
+
+async function transactionActivity(context: FinanceContext) {
+  const id = context.req.param("id") ?? "";
+  const exists = await context.env.DB.prepare(`SELECT id FROM plaid_transactions
+    WHERE id = ? AND organization_id = ? AND source_status = 'active'`)
+    .bind(id, context.get("organizationId"))
+    .first();
+  if (!exists) return context.json({ error: "Transaction not found." }, 404);
+  const page = await findActivity(
+    context.env.DB,
+    context.get("organizationId"),
+    context.req.query("cursor"),
+    { type: "finance_transaction", id },
+    true,
+  );
+  return page
+    ? context.json(page)
+    : context.json({ error: "Invalid activity cursor." }, 400);
 }
 
 async function createLinkToken(
@@ -355,7 +400,7 @@ async function updateTransactionAnnotation(context: FinanceContext) {
   }
   const now = new Date().toISOString();
   const userId = context.get("authSession").user.id;
-  await context.env.DB.prepare(
+  const statement = context.env.DB.prepare(
     `INSERT INTO finance_transaction_annotations
        (transaction_id, organization_id, note, labels,
         reviewed, created_by, updated_by, created_at, updated_at)
@@ -366,19 +411,18 @@ async function updateTransactionAnnotation(context: FinanceContext) {
          reviewed = excluded.reviewed,
          updated_by = excluded.updated_by,
          updated_at = excluded.updated_at`,
-  )
-    .bind(
-      transactionId,
-      organizationId,
-      annotation.note,
-      JSON.stringify(annotation.labels),
-      annotation.reviewed ? 1 : 0,
-      userId,
-      userId,
-      now,
-      now,
-    )
-    .run();
+  ).bind(
+    transactionId,
+    organizationId,
+    annotation.note,
+    JSON.stringify(annotation.labels),
+    annotation.reviewed ? 1 : 0,
+    userId,
+    userId,
+    now,
+    now,
+  );
+  await activityBatch(context.env.DB, context.get("apiKey"), [statement]);
   return context.json({ annotation });
 }
 

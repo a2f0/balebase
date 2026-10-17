@@ -1,5 +1,6 @@
 import { fetchApi } from "./apiVersion";
 import { apiUrl } from "./config";
+import { saveFile } from "./saveFile";
 
 export type EmployeeRequirementKind =
   | "form"
@@ -165,12 +166,9 @@ export async function downloadEmployeeForm(id: string, filename: string) {
   if (!Number.isSafeInteger(revision) || revision < 1) {
     throw new Error("The downloaded form has no review version.");
   }
-  const url = URL.createObjectURL(await response.blob());
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  if (!(await saveFile(await response.blob(), filename))) {
+    throw new Error("Saving the form was canceled.");
+  }
   return revision;
 }
 

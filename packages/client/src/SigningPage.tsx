@@ -1,6 +1,5 @@
 import {
   Button,
-  ButtonLink,
   cx,
   EmptyState,
   LoadingState,
@@ -8,6 +7,7 @@ import {
   promptDialog,
 } from "@balebase/ui/react";
 import { useEffect, useState } from "react";
+import { ApiDownload } from "./ApiDownload";
 import { fetchApi } from "./apiVersion";
 import { boxStyle, ContractPages } from "./ContractDocument";
 import { fieldTypeLabel, initialsFor } from "./contractFields";
@@ -162,13 +162,14 @@ function SigningSession({
           Complete the highlighted fields, then finish.
         </p>
         <div>
-          <ButtonLink
+          <ApiDownload
+            filename="contract.pdf"
             href={signingDocumentUrl(token)}
             icon="download"
             size="sm"
           >
             Download the PDF to read
-          </ButtonLink>
+          </ApiDownload>
         </div>
       </section>
       <ContractPages
@@ -339,9 +340,14 @@ function SigningFooter({ session }: { session: Session }) {
 function SigningOutcome({ token, view }: { token: string; view: SigningView }) {
   const { contract, recipient } = view;
   const download = contract.status === "completed" && (
-    <ButtonLink href={signingFinalUrl(token)} icon="download" variant="primary">
+    <ApiDownload
+      filename="signed-contract.pdf"
+      href={signingFinalUrl(token)}
+      icon="download"
+      variant="primary"
+    >
       Download the signed copy
-    </ButtonLink>
+    </ApiDownload>
   );
   if (contract.status === "voided") {
     return (
