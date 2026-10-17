@@ -107,8 +107,10 @@ For agent-assisted shipping, invoke the `ship-pr` skill. The skills in
 `@a2f0/agent-tool` package; do not edit them. `agent-tool.json` holds the title
 policy, the required CI check, and the versioned packages: a change to
 `packages/api` or `packages/client` ships with a patch bump from
-`agent-tool versions prepare`. Pushes run the normal hooks. After a merge, run
-`bun run hooks:install` once the checkout is back on `main`.
+`agent-tool versions prepare`. Pushes run the normal hooks, with your usual
+environment and credentials, so review script and dependency changes before
+pushing them. After a merge, run `bun run hooks:install` once the checkout is
+back on `main`.
 
 After changing the `@a2f0/agent-tool` pin, run `bun run agents:sync` and commit
 the lockfile, skills, and `.agent-tool-skills.json` together. CI runs
