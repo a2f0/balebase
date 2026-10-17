@@ -43,6 +43,29 @@ describe("finance API", () => {
     ]);
   });
 
+  it("combines account, year, expense, and pagination filters", async () => {
+    const cursor = JSON.stringify({ date: "2025-08-01", id: "txn/1" });
+    const requested = await captureRequests(async () => {
+      await getFinanceData(
+        {
+          accountIds: ["checking/1", "savings"],
+          year: 2025,
+          uncategorized: true,
+        },
+        cursor,
+      );
+    });
+    const url = new URL(requested[0]?.url ?? "");
+    expect(url.pathname).toBe("/api/finance");
+    expect(url.searchParams.getAll("accountId")).toEqual([
+      "checking/1",
+      "savings",
+    ]);
+    expect(url.searchParams.get("year")).toBe("2025");
+    expect(url.searchParams.get("uncategorized")).toBe("true");
+    expect(url.searchParams.get("cursor")).toBe(cursor);
+  });
+
   it("sets or clears a transaction's single category", async () => {
     const requested = await captureRequests(async () => {
       await setTransactionCategory("txn/1", "category-1");

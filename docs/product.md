@@ -337,7 +337,13 @@ and [Transactions Sync](https://plaid.com/docs/api/products/transactions/) to
 import up to 24 months of account and transaction history. Syncing is manual in
 this first release; Plaid webhooks can be added later for automatic updates.
 Users can add organization-scoped notes, labels, and a reviewed flag to
-imported transactions.
+imported transactions. Select an account card to focus on it; Shift-click adds
+or removes individual accounts from the selection. No selection shows all
+accounts. The transaction toolbar combines account selection with the current
+calendar year, previous calendar year, or all time, and an uncategorized-expense
+filter. That filter follows the Reports rules: posted outflows without an
+expense category, excluding transfers and loan or card payments. Filters search
+all imported history; **Load more transactions** retrieves the next 250 matches.
 
 Each organization keeps its own list of expense categories at
 `/finance/categories` (with a one-click common set), and each transaction can

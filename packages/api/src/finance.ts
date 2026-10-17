@@ -9,6 +9,7 @@ import {
   renameCategory,
 } from "./financeCategories";
 import type { FinanceContext, FinanceEnv } from "./financeContext";
+import { financeListingFilters } from "./financeListingFilters";
 import { expenseReport } from "./financeReports";
 import { type PlaidItemRow, syncPlaidItem } from "./financeSync";
 import { searchTransactions } from "./financeTransactionSearch";
@@ -132,12 +133,15 @@ export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
 }
 
 async function financeListing(context: FinanceContext) {
+  const filters = financeListingFilters(context);
+  if (!filters)
+    return context.json({ error: "Invalid transaction filters." }, 400);
   const organizationId = context.get("organizationId");
   const [connections, accounts, transactions, categories, linkedEmails] =
     await Promise.all([
       listConnections(context.env.DB, organizationId),
       listAccounts(context.env.DB, organizationId),
-      listTransactions(context.env.DB, organizationId),
+      listTransactions(context.env.DB, filters),
       listExpenseCategories(context.env.DB, organizationId),
       listLinkedEmails(context.env.DB, organizationId, "finance_transaction"),
     ]);
@@ -145,12 +149,18 @@ async function financeListing(context: FinanceContext) {
     linkedEmails,
     ({ target_id }) => target_id,
   );
+  const page = transactions.slice(0, 250);
+  const last = page.at(-1);
   return context.json({
     accounts: accounts.map(toAccount),
     categories,
     configured: isConfigured(context.env),
     connections: connections.map(toConnection),
-    transactions: transactions.map((row) =>
+    nextCursor:
+      transactions.length > 250 && last
+        ? JSON.stringify({ date: last.transaction_date, id: last.id })
+        : null,
+    transactions: page.map((row) =>
       toTransaction(
         row,
         (emailsByTransaction.get(row.id) ?? []).map(toLinkedEmail),
@@ -435,7 +445,10 @@ async function listAccounts(database: D1Database, organizationId: string) {
   return result.results;
 }
 
-async function listTransactions(database: D1Database, organizationId: string) {
+async function listTransactions(
+  database: D1Database,
+  filters: NonNullable<ReturnType<typeof financeListingFilters>>,
+) {
   const result = await database
     .prepare(
       `SELECT txn.id, txn.name, txn.merchant_name,
@@ -453,11 +466,11 @@ async function listTransactions(database: D1Database, organizationId: string) {
          ON account.id = txn.account_record_id
        LEFT JOIN finance_transaction_annotations AS annotation
          ON annotation.transaction_id = txn.id
-       WHERE txn.organization_id = ? AND txn.source_status = 'active'
+       WHERE ${filters.where}
        ORDER BY txn.transaction_date DESC, txn.id DESC
-       LIMIT 250`,
+       LIMIT 251`,
     )
-    .bind(organizationId)
+    .bind(...filters.bindings)
     .all<TransactionRow>();
   return result.results;
 }

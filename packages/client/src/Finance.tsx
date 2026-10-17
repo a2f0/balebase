@@ -30,13 +30,13 @@ import {
   type FinanceData,
   type FinanceTransaction,
   type FinanceTransactionAnnotationInput,
-  getFinanceData,
   setTransactionCategory,
   syncFinanceConnection,
   updateFinanceTransactionAnnotation,
 } from "./financeApi";
 import { type FinancePage, financePageFor, financePages } from "./financePages";
-import { filterTransactionsByAccount } from "./financeTransactions";
+import { selectFinanceAccount } from "./financeTransactions";
+import { type FinanceListingState, useFinanceData } from "./useFinanceData";
 import { handleNavigation } from "./workspacePaths";
 
 const linkTokenStorageKey = "balebase.plaid.linkToken";
@@ -48,18 +48,10 @@ export function Finance({
   onNavigate: (pathname: string) => void;
   pathname: string;
 }) {
-  const [data, setData] = useState<FinanceData>();
+  const { load, setData, ...listing } = useFinanceData();
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
-  const load = useCallback(async () => {
-    try {
-      setData(await getFinanceData());
-    } catch (cause) {
-      setError(messageFrom(cause));
-    }
-  }, []);
-  useEffect(() => void load(), [load]);
   const plaid = usePlaidConnect(load, setError, setNotice);
   const actions = financeActions(load, setWorking, setError, setNotice);
   const busy = working || plaid.busy;
@@ -67,7 +59,7 @@ export function Finance({
   return (
     <FinanceView
       busy={busy}
-      data={data}
+      {...listing}
       error={error}
       notice={notice}
       onAnnotate={actions.annotate}
@@ -207,13 +199,13 @@ export function FinanceView({
   onReload,
   page,
   ...handlers
-}: OverviewHandlers & {
-  data: FinanceData | undefined;
-  error: string | undefined;
-  notice: string | undefined;
-  onReload: () => Promise<void>;
-  page: FinancePage;
-}) {
+}: OverviewHandlers &
+  FinanceListingState & {
+    error: string | undefined;
+    notice: string | undefined;
+    onReload: () => Promise<void>;
+    page: FinancePage;
+  }) {
   const unconfigured = data?.configured === false;
   return (
     <Page>
@@ -226,7 +218,9 @@ export function FinanceView({
       />
       <PageBody>
         <FinanceNotices
-          error={error}
+          error={
+            error ?? (page === "overview" ? undefined : handlers.loadError)
+          }
           notice={notice}
           overview={page === "overview"}
           showDataNotice={data?.accounts.length === 0}
@@ -241,7 +235,9 @@ export function FinanceView({
             onChanged={onReload}
           />
         )}
-        {page === "overview" && <FinanceOverview data={data} {...handlers} />}
+        {page === "overview" && (
+          <FinanceOverview data={data} onReload={onReload} {...handlers} />
+        )}
       </PageBody>
     </Page>
   );
@@ -249,17 +245,34 @@ export function FinanceView({
 
 function FinanceOverview({
   data,
+  filters,
+  loading,
+  loadingMore,
+  refreshing,
+  loadError,
+  loadMoreError,
+  onFiltersChange,
+  onLoadMore,
+  onReload,
   ...handlers
-}: OverviewHandlers & { data: FinanceData | undefined }) {
-  const [selectedAccountId, setSelectedAccountId] = useState<string>();
+}: OverviewHandlers & FinanceListingState & { onReload: () => Promise<void> }) {
   const [selectedTransactionId, setSelectedTransactionId] = useState<string>();
-  const selectedAccount = data?.accounts.find(
-    (account) => account.id === selectedAccountId,
-  );
-  const transactions = filterTransactionsByAccount(
-    data?.transactions,
-    selectedAccount?.id,
-  );
+  const selectedAccounts =
+    data?.accounts.filter((account) =>
+      filters.accountIds.includes(account.id),
+    ) ?? [];
+  const accountName =
+    filters.accountIds.length === 1
+      ? (selectedAccounts[0]?.name ?? "selected account")
+      : filters.accountIds.length > 1
+        ? `${filters.accountIds.length} accounts`
+        : undefined;
+  const transactions = loading
+    ? undefined
+    : data?.transactions.filter(
+        (transaction) =>
+          !filters.uncategorized || !transaction.expenseCategoryId,
+      );
   return (
     <>
       <FinanceConnections
@@ -272,20 +285,33 @@ function FinanceOverview({
       />
       <FinanceAccounts
         accounts={data?.accounts}
-        onSelect={(accountId) =>
-          setSelectedAccountId((current) =>
-            current === accountId ? undefined : accountId,
-          )
+        onSelect={(accountId, shiftKey) =>
+          onFiltersChange({
+            ...filters,
+            accountIds: selectFinanceAccount(
+              filters.accountIds,
+              accountId,
+              shiftKey,
+            ),
+          })
         }
-        selectedAccountId={selectedAccount?.id}
+        selectedAccountIds={filters.accountIds}
       />
       <FinanceTransactionHistory
-        accountName={selectedAccount?.name}
-        busy={handlers.busy}
+        accountName={accountName}
+        filters={filters}
+        onFiltersChange={onFiltersChange}
+        hasMore={Boolean(data?.nextCursor)}
+        loadingMore={loadingMore}
+        loadError={loadError}
+        loadMoreError={loadMoreError}
+        onLoadMore={onLoadMore}
+        onReload={onReload}
+        busy={handlers.busy || refreshing || loadingMore}
         categories={data?.categories ?? []}
         onAnnotate={handlers.onAnnotate}
         onCategorize={handlers.onCategorize}
-        onClearFilter={() => setSelectedAccountId(undefined)}
+        onClearFilter={() => onFiltersChange({ ...filters, accountIds: [] })}
         onNavigate={handlers.onNavigate}
         onSelectAnnotation={(transactionId) =>
           setSelectedTransactionId((current) =>
