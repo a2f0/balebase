@@ -42,7 +42,7 @@
       "version": "0.1.43",
       "dependencies": {
         "@balebase/ui": "workspace:*",
-        "@stripe/stripe-js": "10.1.0",
+        "@stripe/stripe-js": "9.17.0",
         "better-auth": "1.7.2",
         "pdfjs-dist": "6.4.299",
         "qrcode.react": "4.2.0",
@@ -613,7 +613,7 @@
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
-    "@stripe/stripe-js": ["@stripe/stripe-js@10.1.0", "", {}, "sha512-sLRPukMKMxvRVrgV3Za8LM0Yd2azrixQjfaiuzS8Fivlu/Gt7VbBuRiRZJIvfL3XxAw+FdfdmhHSvjAfLG3lkA=="],
+    "@stripe/stripe-js": ["@stripe/stripe-js@9.17.0", "", {}, "sha512-uidL4OJum5kivsOAQnVfQmYLJ2zdgirtmT0zWgskASZ4TPXxpXQ0MNrzW4NsXB90uEqmPHpSEtciLFbF1QQvNA=="],
 
     "@tsconfig/strictest": ["@tsconfig/strictest@2.0.8", "", {}, "sha512-XnQ7vNz5HRN0r88GYf1J9JJjqtZPiHt2woGJOo2dYqyHGGcd6OLGqSlBB6p1j9mpzja6Oe5BoPqWmeDx6X9rLw=="],
 

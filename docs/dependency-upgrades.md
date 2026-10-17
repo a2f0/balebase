@@ -1,7 +1,9 @@
 # Dependency upgrades
 
-Read the runtime pins from [`.mise.toml`](../.mise.toml), `packageManager` and
-`engines` in [`package.json`](../package.json), and CI. Bun owns `bun.lock`.
+Read the selected runtime from [`.mise.toml`](../.mise.toml), `packageManager`
+in [`package.json`](../package.json), and CI. The `engines` field declares the
+supported minimum; preserve it unless a migration needs a higher floor.
+Bun owns `bun.lock`.
 Preserve exact direct dependency pins and keep React, React DOM, their types,
 and the UI peer versions aligned. Run package executables with `bunx --bun` so
 their Node shebangs do not select another runtime. CI rejects direct Node, npm,
@@ -28,6 +30,11 @@ Use the `update-dependencies` skill installed from the pinned
   [1.7 upgrade guide][better-auth] requires manual index and column cleanup.
   Revisit only after reviewing a non-destructive migration against both real
   environments and passing the complete authentication and API-key tests.
+- Stripe.js stays on 9.17.0, the newest Dahlia release, while the server pins
+  Stripe API `2026-06-24.dahlia`. [Stripe.js 10][stripe-js] selects the Endive
+  release. Revisit this pair only after testing a real sandbox Checkout Session
+  through `initCheckoutElementsSdk`; the mocked checkout tests cannot prove
+  compatibility between the frontend release and the server API.
 - Follow the [Astro major upgrade guide][astro] when changing compiler,
   Markdown, whitespace, or API behavior; verify image handling against the
   [AVIF advisory][astro-advisory] and the selected release.
@@ -37,7 +44,7 @@ Use the `update-dependencies` skill installed from the pinned
 - [Lint-staged 17][lint-staged] runs on Bun here and requires Git 2.32.0.
   Configuration is in package.json, so the optional YAML dependency is not
   needed to load the staged-file rules.
-- [Knip 6.40][knip] reports exports used only in their declaring file. Keep
+- [Knip][knip] reports exports used only in their declaring file. Keep
   those declarations private, preserve both full and production analysis,
   and include CSS in project patterns for the font import compiler.
 
@@ -57,10 +64,10 @@ Wrangler is retained when complete real production and staging resource previews
 are unavailable. The API uses the Miniflare 5 prerelease API
 (`convertV4MiniflareOptions`); the registry's latest stable Miniflare 4 is not
 an upgrade for that integration. Revisit when a supported Miniflare 5 release
-is available and the Workerd upload test passes. Their exact Sharp and Undici
-pins can retain security advisories; a blanket override would bypass the
-owner's supported integration. Changing the deployment group also requires
-complete previews and the owning integration checks.
+is available and the Workerd upload test passes. Wrangler and Miniflare's
+exact Sharp and Undici pins can retain security advisories; a blanket override
+would bypass the owner's supported integration. Changing the deployment group
+also requires complete previews and the owning integration checks.
 
 [PR #95](https://github.com/a2f0/stealth/pull/95) recorded the following constraints
 and exposure analysis. They explain the retained choices, not a fresh audit or
@@ -112,13 +119,14 @@ upgrade. Keep the upgrade PR's ledger of selected and constrained dependencies,
 audits, checks, warnings, previews, review, merge, and deployment results there;
 promote only ongoing procedures or active constraints into this guide.
 
+[stripe-js]: https://github.com/stripe/stripe-js/releases/tag/v10.0.0
 [better-auth]: https://www.better-auth.com/docs/guides/1-7-upgrade-guide
 [typescript]: https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html
 [astro]: https://docs.astro.build/en/guides/upgrade-to/v7/
 [astro-advisory]: https://github.com/withastro/astro/security/advisories/GHSA-26w7-cxv4-gfx2
 [commitlint]: https://github.com/conventional-changelog/commitlint/releases/tag/v21.0.0
 [lint-staged]: https://github.com/lint-staged/lint-staged/releases/tag/v17.0.0
-[knip]: https://github.com/webpro-nl/knip/releases/tag/knip%406.40.0
+[knip]: https://github.com/webpro-nl/knip/releases/tag/knip%406.41.0
 
 [toml-advisory]: https://github.com/advisories/GHSA-r4xh-jqrq-34v2
 [braces-advisory]: https://github.com/advisories/GHSA-vfj7-8cjw-p6xm
