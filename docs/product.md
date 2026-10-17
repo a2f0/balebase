@@ -119,6 +119,15 @@ only its SHA-256 hash and an identifying prefix. An organization can have 50
 active keys. Creating and revoking keys appear in the Activity feed, and each
 key records when it was last used, to the minute.
 
+The API keys page has **Claude Code**, **Codex**, and **Generic** tabs with
+copy buttons for connection setup. New keys fill in the secret until you click
+**Done**. On later visits, the same tabs use `YOUR_API_KEY`; replace it with
+your saved active key. A key's displayed prefix cannot authenticate a client.
+Claude Code offers a terminal command, Codex offers a `~/.codex/config.toml`
+entry, and Generic offers the Streamable HTTP URL and authorization header.
+The syntax follows the [Claude Code MCP guide](https://code.claude.com/docs/en/mcp)
+and [Codex MCP guide](https://developers.openai.com/codex/mcp).
+
 Activity recorded through a key still names its creator, and also names the
 key and whether an MCP tool or a direct REST call made the change, for example
 "Sam via Claude Desktop (MCP)". Give each agent or integration its own key to

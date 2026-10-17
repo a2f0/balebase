@@ -22,6 +22,7 @@ let createRoot: (container: Element) => Root;
 let OrganizationApiKeys: typeof import("./OrganizationApiKeys").OrganizationApiKeys;
 let root: Root | undefined;
 let container: HTMLElement;
+let clipboardFails = false;
 
 beforeAll(async () => {
   for (const [key, value] of Object.entries(domGlobals)) {
@@ -34,7 +35,12 @@ beforeAll(async () => {
   }
   Object.defineProperty(dom.navigator, "clipboard", {
     configurable: true,
-    value: { writeText: async (text: string) => void copied.push(text) },
+    value: {
+      writeText: async (text: string) => {
+        if (clipboardFails) throw new Error("Clipboard unavailable");
+        copied.push(text);
+      },
+    },
   });
   ({ createRoot } = await import("react-dom/client"));
   ({ OrganizationApiKeys } = await import("./OrganizationApiKeys"));
@@ -46,6 +52,7 @@ afterEach(async () => {
   container?.remove();
   globalThis.fetch = originalFetch;
   copied.length = 0;
+  clipboardFails = false;
 });
 
 afterAll(async () => {
@@ -74,6 +81,7 @@ function apiKey(overrides: Partial<ApiKey>): ApiKey {
 }
 
 const token = `tlk_${"a".repeat(64)}`;
+const serverUrl = "http://localhost:8787/mcp";
 
 /** Serves the key list and records writes. */
 function stubApi(initial: ApiKey[], options: { failList?: boolean } = {}) {
@@ -215,11 +223,121 @@ describe("organization API keys", () => {
     expect(copied).toEqual([token]);
     expect(container.textContent).toContain("API key copied.");
 
+    await click(button(container, "Copy command"));
+    expect(copied.at(-1)).toBe(
+      `claude mcp add --transport http balebase ${serverUrl} --header "Authorization: Bearer ${token}"`,
+    );
+    await click(button(container, "Codex"));
+    await click(button(container, "Copy configuration"));
+    expect(Bun.TOML.parse(copied.at(-1) ?? "")).toEqual({
+      mcp_servers: {
+        balebase: {
+          url: serverUrl,
+          http_headers: { Authorization: `Bearer ${token}` },
+        },
+      },
+    });
+    await click(button(container, "Generic"));
+    await click(button(container, "Copy header"));
+    expect(copied.at(-1)).toBe(`Authorization: Bearer ${token}`);
+
     await click(button(container, "Done"));
     expect(container.querySelector('input[aria-label="API key"]')).toBeNull();
     expect(container.textContent).not.toContain(token);
     expect(button(container, "Create API key")).toBeTruthy();
     expect(container.textContent).toContain("1 active key");
+    await click(button(container, "Copy command"));
+    expect(copied.at(-1)).toContain("Bearer YOUR_API_KEY");
+    expect(copied.at(-1)).not.toContain(token);
+    await click(button(container, "Codex"));
+    expect(container.textContent).not.toContain(token);
+    await click(button(container, "Generic"));
+    expect(container.textContent).not.toContain(token);
+  });
+
+  it("copies setup templates for existing keys in every client tab", async () => {
+    const requests = stubApi([apiKey({})]);
+    await render();
+    expect(container.textContent).toContain("Replace YOUR_API_KEY");
+    expect(container.textContent).toContain(
+      "Existing key secrets cannot be shown again.",
+    );
+    await click(button(container, "Copy command"));
+    expect(copied.at(-1)).toBe(
+      `claude mcp add --transport http balebase ${serverUrl} --header "Authorization: Bearer YOUR_API_KEY"`,
+    );
+    expect(container.textContent).toContain("Copied to clipboard.");
+
+    await click(button(container, "Codex"));
+    expect(button(container, "Codex")?.getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    expect(container.textContent).toContain("~/.codex/config.toml");
+    expect(container.textContent).not.toContain("Copied to clipboard.");
+    await click(button(container, "Copy configuration"));
+    expect(Bun.TOML.parse(copied.at(-1) ?? "")).toEqual({
+      mcp_servers: {
+        balebase: {
+          url: serverUrl,
+          http_headers: { Authorization: "Bearer YOUR_API_KEY" },
+        },
+      },
+    });
+
+    await click(button(container, "Generic"));
+    expect(container.textContent).toContain("Streamable HTTP");
+    await click(button(container, "Copy server URL"));
+    expect(copied.at(-1)).toBe(serverUrl);
+    await click(button(container, "Copy header"));
+    expect(copied.at(-1)).toBe("Authorization: Bearer YOUR_API_KEY");
+    expect(copied.join("\n")).not.toContain("tlk_1234abcd");
+    expect(requests).toEqual([]);
+  });
+
+  it("supports keyboard navigation between configuration tabs", async () => {
+    stubApi([apiKey({})]);
+    await render();
+    button(container, "Claude Code")?.focus();
+    const moves = [
+      ["ArrowRight", "Codex"],
+      ["End", "Generic"],
+      ["ArrowRight", "Claude Code"],
+      ["ArrowLeft", "Generic"],
+      ["Home", "Claude Code"],
+    ] as const;
+    for (const [key, label] of moves) {
+      await act(async () => {
+        document.activeElement?.dispatchEvent(
+          new dom.KeyboardEvent("keydown", { bubbles: true, key }) as never,
+        );
+      });
+      const selected = button(container, label);
+      expect(document.activeElement).toBe(selected);
+      expect(selected?.getAttribute("aria-selected")).toBe("true");
+      expect(selected?.tabIndex).toBe(0);
+      expect(
+        container
+          .querySelector('[role="tabpanel"]')
+          ?.getAttribute("aria-labelledby"),
+      ).toBe(selected?.id);
+      expect(
+        container.querySelectorAll('[role="tab"][tabindex="0"]').length,
+      ).toBe(1);
+    }
+  });
+
+  it("keeps configuration selectable when copying fails", async () => {
+    stubApi([apiKey({})]);
+    await render();
+    clipboardFails = true;
+    await click(button(container, "Codex"));
+    const configuration = container.querySelector("pre")?.textContent;
+    await click(button(container, "Copy configuration"));
+    expect(container.textContent).toContain(
+      "Copy failed. Select it and copy manually.",
+    );
+    expect(container.querySelector("pre")?.textContent).toBe(configuration);
+    expect(copied).toEqual([]);
   });
 
   it("revokes a key after confirmation", async () => {
