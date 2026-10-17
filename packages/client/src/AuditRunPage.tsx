@@ -14,7 +14,11 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
-import { ActivityFeed, formatActivityTime } from "./ActivityFeed";
+import {
+  ActivityFeed,
+  ApiKeyAttribution,
+  formatActivityTime,
+} from "./ActivityFeed";
 import {
   confirmDiscard,
   RunHeader,
@@ -567,8 +571,9 @@ export function AnswerAttribution({
         Updated by{" "}
         <span title={activity.actor.email}>
           {activity.actor.name || activity.actor.email}
-        </span>{" "}
-        · {formatActivityTime(activity.occurredAt)}
+        </span>
+        <ApiKeyAttribution actor={activity.actor} /> ·{" "}
+        {formatActivityTime(activity.occurredAt)}
       </p>
     );
   }

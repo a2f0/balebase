@@ -119,6 +119,13 @@ only its SHA-256 hash and an identifying prefix. An organization can have 50
 active keys. Creating and revoking keys appear in the Activity feed, and each
 key records when it was last used, to the minute.
 
+Activity recorded through a key still names its creator, and also names the
+key and whether an MCP tool or a direct REST call made the change, for example
+"Sam via Claude Desktop (MCP)". Give each agent or integration its own key to
+tell them apart. Activity API responses carry this as `actor.apiKey`
+(`{ id, name, channel }`, with `channel` either `mcp` or `rest`), or `null` for
+changes made in the app.
+
 A key acts as the person who created it, inside its own organization only. It
 never carries the platform `admin` role, cannot be created while impersonating,
 and follows the same seat, Finance group, and two-factor rules as its creator's
@@ -152,7 +159,8 @@ claude mcp add --transport http balebase https://api.balebase.com/mcp \
 
 Other clients need Streamable HTTP and a custom header. There is no OAuth
 authorization server yet, so clients that only support OAuth cannot connect.
-Apply migration `0060_create_organization_api_keys.sql` before deploying.
+Apply migrations `0060_create_organization_api_keys.sql` and
+`0061_attribute_activity_to_api_keys.sql` before deploying.
 
 ## Library folders and inbox links
 

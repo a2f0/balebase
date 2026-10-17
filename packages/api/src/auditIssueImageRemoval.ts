@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { activityStatement } from "./activity";
+import { activityBatch, activityStatement } from "./activity";
 import {
   deletePendingAuditIssueObject,
   findAuditIssueImage,
@@ -29,45 +29,53 @@ auditIssueImageRemoval.delete("/:issueId/images/:imageId", async (context) => {
   // Atomically hide the image and release its unique issue slot before R2
   // cleanup. A failed R2 delete leaves a durable object tombstone for cron.
   // Each statement rechecks the discard, so one after the read keeps the image.
-  const [, hidden] = await context.env.DB.batch([
-    activityStatement(
-      context.env.DB,
-      {
-        action: "audit.image_removed",
-        actorId: context.get("authSession").user.id,
-        details: {
-          filename: row.filename,
-          issueId: row.issue_id,
-          title: row.title,
+  const [, hidden] = await activityBatch(
+    context.env.DB,
+    context.get("apiKey"),
+    [
+      activityStatement(
+        context.env.DB,
+        {
+          action: "audit.image_removed",
+          actorId: context.get("authSession").user.id,
+          details: {
+            filename: row.filename,
+            issueId: row.issue_id,
+            title: row.title,
+          },
+          occurredAt: new Date().toISOString(),
+          organizationId,
+          root: {
+            id: row.audit_id,
+            label: row.template_name,
+            type: "audit_run",
+          },
+          subject: { id: row.id, type: "audit_issue_image" },
         },
-        occurredAt: new Date().toISOString(),
-        organizationId,
-        root: { id: row.audit_id, label: row.template_name, type: "audit_run" },
-        subject: { id: row.id, type: "audit_issue_image" },
-      },
-      {
-        bindings: [row.id, row.object_id, organizationId, row.id],
-        sql: `EXISTS (
+        {
+          bindings: [row.id, row.object_id, organizationId, row.id],
+          sql: `EXISTS (
         SELECT 1 FROM audit_issue_images AS image
         JOIN objects AS object ON object.id = image.object_id
         WHERE image.id = ? AND object.id = ? AND object.organization_id = ?
           AND object.deletion_pending = 0
       ) AND ${imageAuditNotDiscarded}`,
-      },
-    ),
-    context.env.DB.prepare(
-      `UPDATE objects
+        },
+      ),
+      context.env.DB.prepare(
+        `UPDATE objects
        SET deletion_pending = 1, cleanup_token = NULL,
            cleanup_claimed_at = NULL, upload_token = NULL,
            upload_lease_expires_at = NULL
        WHERE id = ? AND organization_id = ? AND kind = 'audit_issue_image'
          AND ${imageAuditNotDiscarded}`,
-    ).bind(row.object_id, organizationId, row.id),
-    context.env.DB.prepare(
-      `DELETE FROM audit_issue_images
+      ).bind(row.object_id, organizationId, row.id),
+      context.env.DB.prepare(
+        `DELETE FROM audit_issue_images
        WHERE id = ? AND object_id = ? AND ${imageAuditNotDiscarded}`,
-    ).bind(row.id, row.object_id, row.id),
-  ]);
+      ).bind(row.id, row.object_id, row.id),
+    ],
+  );
   if (Number(hidden?.meta.changes) === 0) {
     const current = await findAuditIssueImage(
       context.env.DB,

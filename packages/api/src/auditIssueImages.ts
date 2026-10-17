@@ -1,4 +1,6 @@
 import { type Context, Hono } from "hono";
+import { activityBatch } from "./activity";
+import type { ApiKeyPrincipal } from "./apiKeys";
 import {
   discardedAuditError,
   issueAuditDiscarded,
@@ -179,15 +181,20 @@ async function uploadReservedAuditIssueImage(
     imageType.extension,
   );
   try {
-    await persistAuditIssueImage(context.env, stream, {
-      contentType: imageType.contentType,
-      filename,
-      issueId,
-      objectId: reservation.objectId,
-      objectKey: reservation.objectKey,
-      organizationId,
-      uploadToken: reservation.uploadToken,
-    });
+    await persistAuditIssueImage(
+      context.env,
+      stream,
+      {
+        contentType: imageType.contentType,
+        filename,
+        issueId,
+        objectId: reservation.objectId,
+        objectKey: reservation.objectKey,
+        organizationId,
+        uploadToken: reservation.uploadToken,
+      },
+      context.get("apiKey"),
+    );
   } catch (cause) {
     if (cause instanceof AuditIssueImageUploadError) {
       return context.json({ error: cause.message }, cause.status);
@@ -370,6 +377,7 @@ async function persistAuditIssueImage(
   environment: Pick<Bindings, "DB" | "STORAGE">,
   stream: ReadableStream<Uint8Array>,
   image: AuditIssueImageInsert,
+  apiKey: ApiKeyPrincipal | undefined,
 ) {
   await refreshAuditIssueImageUploadLease(environment.DB, image);
   const normalizedSize = await writeNormalizedAuditIssueImage(
@@ -378,7 +386,7 @@ async function persistAuditIssueImage(
     image,
   );
   try {
-    const activated = await environment.DB.prepare(
+    const activation = environment.DB.prepare(
       `UPDATE objects
        SET size = ?, deletion_pending = 0, upload_token = NULL,
            upload_lease_expires_at = NULL
@@ -391,16 +399,18 @@ async function persistAuditIssueImage(
              AND reservation.issue_id = ?
          )
          AND ${issueAuditNotDiscarded}`,
-    )
-      .bind(
-        normalizedSize,
-        image.objectId,
-        image.uploadToken,
-        image.issueId,
-        image.issueId,
-      )
-      .run();
-    if (Number(activated.meta.changes) === 0) {
+    ).bind(
+      normalizedSize,
+      image.objectId,
+      image.uploadToken,
+      image.issueId,
+      image.issueId,
+    );
+    // Activation records the upload's activity.
+    const [activated] = await activityBatch(environment.DB, apiKey, [
+      activation,
+    ]);
+    if (Number(activated?.meta.changes) === 0) {
       throw new Error("Issue image reservation could not be activated.");
     }
   } catch (cause) {

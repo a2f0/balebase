@@ -278,6 +278,169 @@ describe("organization API keys", () => {
       ["api_key.created", "read"],
     ]);
   });
+
+  it("attributes activity to the key and whether MCP or REST called it", async () => {
+    const fixture = await createFixture();
+    const { apiKey, token } = await fixture.createKey("write");
+    const created = await fixture.withKey<{ equipment: { id: string } }>(
+      token,
+      "POST",
+      "/api/equipment",
+      { make: "Apple", model: "iPhone", type: "cell_phone" },
+    );
+    expect(created.status).toBe(201);
+    const { id } = created.body.equipment;
+    const renamed = await fixture.callTool<{ isError?: boolean }>(
+      token,
+      "update_equipment",
+      { id, model: "iPhone Pro" },
+    );
+    expect(renamed.isError).toBeUndefined();
+    const edited = await fixture.session("PATCH", `/api/equipment/${id}`, {
+      serialNumber: "SN-1",
+    });
+    expect(edited.status).toBe(200);
+    const deleted = await fixture.callTool<{ isError?: boolean }>(
+      token,
+      "delete_equipment",
+      { id },
+    );
+    expect(deleted.isError).toBeUndefined();
+
+    const activity = await fixture.session<{
+      events: Array<{
+        action: string;
+        actor: { apiKey: unknown; id: string };
+        root: { type: string };
+      }>;
+    }>("GET", "/api/activity");
+    const viaKey = (channel: string) => ({
+      channel,
+      id: apiKey.id,
+      name: "write key",
+    });
+    expect(
+      activity.body.events
+        .filter(({ root }) => root.type === "equipment")
+        .map(({ action, actor }) => [action, actor.id, actor.apiKey]),
+    ).toEqual([
+      ["equipment.deleted", fixture.userId, viaKey("mcp")],
+      ["equipment.updated", fixture.userId, null],
+      ["equipment.updated", fixture.userId, viaKey("mcp")],
+      ["equipment.created", fixture.userId, viaKey("rest")],
+    ]);
+    expect(
+      fixture.database
+        .query("SELECT COUNT(*) AS count FROM activity_api_key_context")
+        .get(),
+    ).toEqual({ count: 0 });
+  });
+
+  it("attributes trigger-recorded audit activity to the key", async () => {
+    const fixture = await createFixture();
+    const { apiKey, token } = await fixture.createKey("write");
+    const templates = await fixture.withKey<{
+      templates: Array<{ id: string }>;
+    }>(token, "GET", "/api/audits/templates");
+    const templateId = templates.body.templates[0]?.id;
+    const created = await fixture.withKey<{ template: { id: string } }>(
+      token,
+      "POST",
+      "/api/audits/templates",
+      { name: "Key form" },
+    );
+    expect(created.status).toBe(201);
+    const started = await fixture.withKey<{ auditId: string }>(
+      token,
+      "POST",
+      `/api/audits/templates/${templateId}/runs`,
+    );
+    expect(started.status).toBe(201);
+    const discarded = await fixture.callTool<{ isError?: boolean }>(
+      token,
+      "discard_audit",
+      { id: started.body.auditId },
+    );
+    expect(discarded.isError).toBeUndefined();
+
+    const activity = await fixture.session<{
+      events: Array<{ action: string; actor: { apiKey: unknown } }>;
+    }>("GET", "/api/activity");
+    const viaKey = (channel: string) => ({
+      channel,
+      id: apiKey.id,
+      name: "write key",
+    });
+    expect(
+      activity.body.events
+        .filter(({ action }) => action.startsWith("audit."))
+        .map(({ action, actor }) => [action, actor.apiKey]),
+    ).toEqual([
+      ["audit.discarded", viaKey("mcp")],
+      ["audit.started", viaKey("rest")],
+      ["audit.template_created", viaKey("rest")],
+    ]);
+  });
+
+  it("credits a key only with its creator's activity in its organization", async () => {
+    const fixture = await createFixture();
+    const { apiKey } = await fixture.createKey("write");
+    const record = (actorId: string, organizationId: string | null) => {
+      fixture.database
+        .query(
+          `INSERT INTO activity_events (
+             organization_id, root_type, root_id, root_label, subject_type,
+             subject_id, action, actor_user_id, actor_name, actor_email,
+             occurred_at, details
+           )
+           SELECT ?, 'equipment', 'item', 'Item', 'equipment', 'item',
+                  'equipment.updated', id, name, email, ?, '{}'
+           FROM user WHERE id = ?`,
+        )
+        .run(organizationId, now(), actorId);
+      return fixture.database
+        .query(
+          `SELECT actor_api_key_id, actor_api_key_name, actor_api_key_channel
+           FROM activity_events WHERE id = last_insert_rowid()`,
+        )
+        .get();
+    };
+    fixture.database
+      .query(
+        `INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt)
+         VALUES ('someone-else', 'Someone Else', 'else@example.com', 1, ?, ?)`,
+      )
+      .run(now(), now());
+    fixture.database
+      .query(
+        `INSERT INTO activity_api_key_context (slot, api_key_id, channel)
+         VALUES (1, ?, 'mcp')`,
+      )
+      .run(apiKey.id);
+
+    const unattributed = {
+      actor_api_key_channel: null,
+      actor_api_key_id: null,
+      actor_api_key_name: null,
+    };
+    expect(record("someone-else", fixture.organizationId)).toEqual(
+      unattributed,
+    );
+    expect(record(fixture.userId, null)).toEqual(unattributed);
+    expect(record(fixture.userId, fixture.organizationId)).toEqual({
+      actor_api_key_channel: "mcp",
+      actor_api_key_id: apiKey.id,
+      actor_api_key_name: "write key",
+    });
+    expect(() =>
+      fixture.database
+        .query(
+          `INSERT INTO activity_api_key_context (api_key_id, channel)
+           VALUES (?, 'rest')`,
+        )
+        .run(apiKey.id),
+    ).toThrow();
+  });
 });
 
 describe("API key security boundaries", () => {

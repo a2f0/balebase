@@ -198,6 +198,54 @@ describe("activity feed, mounted", () => {
     },
   );
 
+  it.each([true, false])(
+    "names the API key and channel behind a change (compact: %s)",
+    async (compact) => {
+      const viaKey = (
+        id: number,
+        channel: "mcp" | "rest",
+        name: string,
+      ): ActivityEvent => ({
+        ...event(id, "fail"),
+        actor: {
+          ...event(id, "fail").actor,
+          apiKey: { channel, id: `key-${id}`, name },
+        },
+      });
+      globalThis.fetch = (async (_input) =>
+        Response.json({
+          events: [
+            viaKey(3, "mcp", "Claude Desktop"),
+            viaKey(2, "rest", "Reporting"),
+            event(1, "pass"),
+          ],
+          nextCursor: null,
+        })) as typeof fetch;
+      container = document.createElement("div");
+      document.body.append(container);
+      root = createRoot(container);
+      await act(async () => root?.render(<ActivityFeed compact={compact} />));
+      await settle();
+      expect(
+        [...container.querySelectorAll(".activityHeading")].map(
+          (heading) => heading.textContent,
+        ),
+      ).toEqual([
+        "Sam via Claude Desktop (MCP) changed an answer",
+        "Sam via Reporting (API) changed an answer",
+        "Sam changed an answer",
+      ]);
+      expect(
+        [...container.querySelectorAll(".activityApiKey")].map((label) =>
+          label.getAttribute("title"),
+        ),
+      ).toEqual([
+        "API key, called through MCP",
+        "API key, called through the REST API",
+      ]);
+    },
+  );
+
   it("shows equipment history and links only to equipment that still exists", async () => {
     globalThis.fetch = (async (_input) =>
       Response.json({

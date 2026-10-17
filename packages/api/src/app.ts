@@ -6,7 +6,7 @@ import { activity } from "./activity";
 import { adminAuditTemplates } from "./adminAuditTemplates";
 import { adminJobs } from "./adminJobs";
 import { adminOrganizations } from "./adminOrganizations";
-import { apiKeys } from "./apiKeys";
+import { apiKeys, mcpToolRequest } from "./apiKeys";
 import { audits } from "./audits";
 import { createAuth } from "./auth";
 import {
@@ -156,7 +156,7 @@ app.all(
     // keeps that work out of every isolate's startup.
     const { handleMcpRequest } = await import("./mcp");
     return handleMcpRequest(context, (request) =>
-      app.fetch(request, context.env, context.executionCtx),
+      app.fetch(mcpToolRequest(request), context.env, context.executionCtx),
     );
   },
 );

@@ -1,7 +1,17 @@
 import { fetchApi } from "./apiVersion";
 import { apiUrl } from "./config";
 
+/** The API key behind an event, and whether MCP or REST called it. */
+interface ActivityApiKey {
+  channel: "mcp" | "rest";
+  /** Null only once the key itself is removed; its name is kept. */
+  id: string | null;
+  name: string;
+}
+
 export interface ActivityActor {
+  /** Set when the person acted through an API key. */
+  apiKey?: ActivityApiKey | null;
   email: string;
   id: string;
   name: string;

@@ -2,6 +2,7 @@ import type { Context, Next } from "hono";
 import { createMiddleware } from "hono/factory";
 import {
   type ApiKeyPrincipal,
+  apiKeyChannel,
   apiKeyFromHeader,
   apiKeyRouteDenial,
   authenticateApiKey,
@@ -106,7 +107,10 @@ async function authenticateRequestApiKey(
     }
     return context.json({ error: result.error }, result.status);
   }
-  context.set("apiKey", result.principal);
+  context.set("apiKey", {
+    ...result.principal,
+    channel: apiKeyChannel(context.req.raw),
+  });
   context.set("authSession", result.session);
   // Integration traffic is not the creator being active, so only the key's
   // own last use is recorded.

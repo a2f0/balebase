@@ -1,8 +1,11 @@
 import { Hono } from "hono";
 import {
+  type ActivityActor,
   type ActivityRow,
+  activityBatch,
   auditAnswerActivityStatement,
   findActivity,
+  requestActor,
   toAuditAnswerActivity,
 } from "./activity";
 import { type AuditDefinition, isRecord, validText } from "./auditDefinition";
@@ -108,10 +111,10 @@ audits.post("/templates", async (context) => {
     context.env.STRIPE_PRO_LEGACY_PRICE_IDS,
   );
   const template = await createTemplate(context.env.DB, {
+    actor: requestActor(context),
     name: body.name.trim(),
     organizationId,
     templateLimit,
-    userId: context.get("authSession").user.id,
   });
   if (!template) {
     return context.json(
@@ -145,7 +148,7 @@ audits.post("/templates/:id/copies", async (context) => {
   const saved = await copyGlobalTemplate(
     context.env.DB,
     context.get("organizationId"),
-    context.get("authSession").user.id,
+    requestActor(context),
     input,
     new Date().toISOString(),
     await organizationTemplateLimit(
@@ -252,7 +255,7 @@ audits.put("/templates/:id", async (context) => {
     context.env.DB,
     organizationId,
     current,
-    context.get("authSession").user.id,
+    requestActor(context),
     input,
   );
   return saved === "stale"
@@ -269,26 +272,25 @@ audits.post("/templates/:id/runs", async (context) => {
   if (!template) return context.json({ error: "Template not found." }, 404);
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  await context.env.DB.prepare(
+  const insert = context.env.DB.prepare(
     `INSERT INTO audits
      (id, organization_id, template_id, template_family_id,
       template_version_id, template_version, template_name, definition,
       responses, status, started_by, created_at, updated_at)
      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, '{}', 'in_progress', ?, ?, ?)`,
-  )
-    .bind(
-      id,
-      context.get("organizationId"),
-      template.id,
-      template.version_id,
-      template.version,
-      template.name,
-      template.definition,
-      context.get("authSession").user.id,
-      now,
-      now,
-    )
-    .run();
+  ).bind(
+    id,
+    context.get("organizationId"),
+    template.id,
+    template.version_id,
+    template.version,
+    template.name,
+    template.definition,
+    context.get("authSession").user.id,
+    now,
+    now,
+  );
+  await activityBatch(context.env.DB, context.get("apiKey"), [insert]);
   return context.json({ auditId: id }, 201);
 });
 
@@ -441,24 +443,25 @@ audits.patch("/runs/:id", async (context) => {
     return context.json({ error: "Complete every required item first." }, 400);
   }
   const now = new Date().toISOString();
-  const updated = await context.env.DB.prepare(
+  const update = context.env.DB.prepare(
     `UPDATE audits SET responses = ?, status = ?, completed_at = ?, updated_at = ?,
                        activity_actor_id = ?, revision = revision + 1
      WHERE revision = ? AND id = ? AND organization_id = ?
        AND deleted_at IS NULL`,
-  )
-    .bind(
-      JSON.stringify(responses),
-      status,
-      status === "completed" ? (audit.completed_at ?? now) : null,
-      now,
-      context.get("authSession").user.id,
-      audit.revision,
-      audit.id,
-      organizationId,
-    )
-    .run();
-  if (Number(updated.meta.changes) === 0) {
+  ).bind(
+    JSON.stringify(responses),
+    status,
+    status === "completed" ? (audit.completed_at ?? now) : null,
+    now,
+    context.get("authSession").user.id,
+    audit.revision,
+    audit.id,
+    organizationId,
+  );
+  const [updated] = await activityBatch(context.env.DB, context.get("apiKey"), [
+    update,
+  ]);
+  if (Number(updated?.meta.changes) === 0) {
     const exists = await findAudit(context.env.DB, organizationId, audit.id);
     if (!exists) return context.json({ error: "Audit not found." }, 404);
     return context.json(
@@ -494,7 +497,7 @@ audits.post("/runs/:id/issues", async (context) => {
     return context.json({ error: "Invalid issue details." }, 400);
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const inserted = await context.env.DB.prepare(
+  const insert = context.env.DB.prepare(
     `INSERT INTO audit_issues
      (id, organization_id, audit_id, item_id, title, description, priority,
       status, assigned_to, created_by, created_at, updated_at)
@@ -503,24 +506,27 @@ audits.post("/runs/:id/issues", async (context) => {
        SELECT 1 FROM audits
        WHERE id = ? AND organization_id = ? AND deleted_at IS NULL
      )`,
-  )
-    .bind(
-      id,
-      organizationId,
-      audit.id,
-      issueInput.itemId,
-      issueInput.title,
-      issueInput.description,
-      issueInput.priority,
-      issueInput.assignedTo,
-      context.get("authSession").user.id,
-      now,
-      now,
-      audit.id,
-      organizationId,
-    )
-    .run();
-  if (Number(inserted.meta.changes) === 0) {
+  ).bind(
+    id,
+    organizationId,
+    audit.id,
+    issueInput.itemId,
+    issueInput.title,
+    issueInput.description,
+    issueInput.priority,
+    issueInput.assignedTo,
+    context.get("authSession").user.id,
+    now,
+    now,
+    audit.id,
+    organizationId,
+  );
+  const [inserted] = await activityBatch(
+    context.env.DB,
+    context.get("apiKey"),
+    [insert],
+  );
+  if (Number(inserted?.meta.changes) === 0) {
     return (await findAudit(context.env.DB, organizationId, audit.id))
       ? context.json({ error: discardedAuditError }, 409)
       : context.json({ error: "Audit not found." }, 404);
@@ -567,7 +573,7 @@ audits.patch("/issues/:id", async (context) => {
       ? body.status
       : issue.status;
   const now = new Date().toISOString();
-  const result = await context.env.DB.prepare(
+  const update = context.env.DB.prepare(
     `UPDATE audit_issues
      SET status = CASE WHEN ? = 1 THEN ? ELSE status END,
          assigned_to = CASE WHEN ? = 1 THEN ? ELSE assigned_to END,
@@ -580,23 +586,24 @@ audits.patch("/issues/:id", async (context) => {
          SELECT 1 FROM audits
          WHERE audits.id = audit_issues.audit_id AND audits.deleted_at IS NOT NULL
        )`,
-  )
-    .bind(
-      changesStatus ? 1 : 0,
-      status,
-      changesAssignee ? 1 : 0,
-      assignedTo ?? null,
-      now,
-      context.get("authSession").user.id,
-      issue.id,
-      organizationId,
-      changesAssignee ? 1 : 0,
-      assignedTo ?? null,
-      organizationId,
-      assignedTo ?? null,
-    )
-    .run();
-  if (result.meta.changes > 0) {
+  ).bind(
+    changesStatus ? 1 : 0,
+    status,
+    changesAssignee ? 1 : 0,
+    assignedTo ?? null,
+    now,
+    context.get("authSession").user.id,
+    issue.id,
+    organizationId,
+    changesAssignee ? 1 : 0,
+    assignedTo ?? null,
+    organizationId,
+    assignedTo ?? null,
+  );
+  const [result] = await activityBatch(context.env.DB, context.get("apiKey"), [
+    update,
+  ]);
+  if (Number(result?.meta.changes) > 0) {
     return context.json({ assignedTo, status, updatedAt: now });
   }
   const rejected = await rejectedIssueUpdate(
@@ -631,14 +638,14 @@ audits.route("/issues", auditIssueImageRemoval);
 async function copyGlobalTemplate(
   database: D1Database,
   organizationId: string,
-  userId: string,
+  actor: ActivityActor,
   input: TemplateSaveInput,
   now: string,
   templateLimit: number | null,
 ) {
   const id = crypto.randomUUID();
   const versionId = crypto.randomUUID();
-  const results = await database.batch([
+  const results = await activityBatch(database, actor.apiKey, [
     database
       .prepare(
         `INSERT INTO audit_template_families
@@ -653,7 +660,7 @@ async function copyGlobalTemplate(
       .bind(
         id,
         organizationId,
-        userId,
+        actor.userId,
         now,
         now,
         templateLimit,
@@ -676,7 +683,7 @@ async function copyGlobalTemplate(
         input.name,
         input.description,
         JSON.stringify(input.definition),
-        userId,
+        actor.userId,
         now,
         id,
       ),

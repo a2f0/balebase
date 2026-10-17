@@ -6,9 +6,13 @@ import type { Bindings } from "./types";
 
 export type ApiKeyAccess = "read" | "write";
 
+/** Whether an API-key request came from an MCP tool or straight to REST. */
+export type ApiKeyChannel = "mcp" | "rest";
+
 /** The key behind an API-key request, set beside the creator's session. */
 export interface ApiKeyPrincipal {
   access: ApiKeyAccess;
+  channel: ApiKeyChannel;
   id: string;
   organizationId: string;
 }
@@ -62,7 +66,7 @@ interface CredentialRow {
 export type ApiKeyAuthentication =
   | {
       ok: true;
-      principal: ApiKeyPrincipal;
+      principal: Omit<ApiKeyPrincipal, "channel">;
       session: AuthSession;
       /** Whether `last_used_at` is stale enough to be worth a write. */
       stale: boolean;
@@ -101,6 +105,20 @@ const apiKeyRoutes: Array<{ prefix: string; writable: boolean }> = [
 ];
 
 const safeMethods = new Set(["GET", "HEAD"]);
+
+// MCP tools call REST routes in-process. Membership is by object identity, so
+// a request from outside the Worker can never pass itself off as a tool call.
+const mcpToolRequests = new WeakSet<Request>();
+
+/** Marks a request an MCP tool is about to dispatch to a REST route. */
+export function mcpToolRequest(request: Request) {
+  mcpToolRequests.add(request);
+  return request;
+}
+
+export function apiKeyChannel(request: Request): ApiKeyChannel {
+  return mcpToolRequests.has(request) ? "mcp" : "rest";
+}
 
 /** The bearer token, when the Authorization header carries an API key. */
 export function apiKeyFromHeader(header: string | undefined) {

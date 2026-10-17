@@ -714,6 +714,10 @@ function toD1(database: Database) {
       statements.map((statement) => statement.execute()),
     prepare: (query: string) => {
       let values: SQLQueryBindings[] = [];
+      const run = () => {
+        const result = database.query(query).run(...values);
+        return { meta: { changes: result.changes }, success: true };
+      };
       const statement = {
         all: async () => ({
           results: database.query(query).all(...values),
@@ -723,12 +727,9 @@ function toD1(database: Database) {
           values = nextValues;
           return statement;
         },
-        execute: () => database.query(query).run(...values),
+        execute: () => run(),
         first: async () => database.query(query).get(...values),
-        run: async () => {
-          const result = database.query(query).run(...values);
-          return { meta: { changes: result.changes }, success: true };
-        },
+        run: async () => run(),
       };
       return statement;
     },
