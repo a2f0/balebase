@@ -12,8 +12,10 @@ import {
 } from "@balebase/ui/react";
 import { type FormEvent, useState } from "react";
 import type { LinkedEmail } from "./api";
+import { FinanceTransactionFilters } from "./FinanceTransactionFilters";
 import type {
   ExpenseCategory,
+  FinanceFilters,
   FinanceTransaction,
   FinanceTransactionAnnotationInput,
 } from "./financeApi";
@@ -40,37 +42,47 @@ interface AnnotationHandlers {
 export function FinanceTransactionHistory({
   accountName,
   onClearFilter,
+  filters,
+  onFiltersChange,
+  hasMore,
+  loadingMore,
+  loadError,
+  loadMoreError,
+  onLoadMore,
+  onReload,
   transactions,
   ...handlers
 }: AnnotationHandlers & {
   accountName: string | undefined;
   onClearFilter: () => void;
+  filters: FinanceFilters;
+  onFiltersChange: (filters: FinanceFilters) => void;
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadError: string | undefined;
+  loadMoreError: string | undefined;
+  onLoadMore: () => Promise<void>;
+  onReload: () => Promise<void>;
   transactions: FinanceTransaction[] | undefined;
 }) {
   return (
     <PageSection
       actions={
-        (accountName || Boolean(transactions?.length)) && (
-          <div className="cluster">
-            <span className="sectionCount">
-              {transactions?.length ?? 0}
-              {accountName ? ` for ${accountName}` : " recent"}
-            </span>
-            {accountName && (
-              <Button
-                icon="close"
-                onClick={onClearFilter}
-                size="sm"
-                variant="ghost"
-              >
-                All accounts
-              </Button>
-            )}
-          </div>
-        )
+        <TransactionSummary
+          accountName={accountName}
+          onClearFilter={onClearFilter}
+          transactions={transactions}
+        />
       }
       title="Transactions"
     >
+      <FinanceTransactionFilters filters={filters} onChange={onFiltersChange} />
+      {filters.uncategorized && (
+        <p className="textSm textSubtle">
+          Posted expenses without a category. Income, transfers, and loan or
+          card payments are excluded.
+        </p>
+      )}
       {Boolean(transactions?.length) && !handlers.categories.length && (
         <Banner
           actions={
@@ -88,36 +100,89 @@ export function FinanceTransactionHistory({
           Give each transaction a category to see totals by category in Reports.
         </Banner>
       )}
-      <TransactionContent
-        accountName={accountName}
-        transactions={transactions}
-        {...handlers}
-      />
+      {loadError && (
+        <Banner
+          tone="danger"
+          actions={
+            <Button onClick={() => void onReload()} size="sm">
+              Retry
+            </Button>
+          }
+        >
+          {loadError}
+        </Banner>
+      )}
+      {(!loadError || transactions) && (
+        <TransactionContent
+          filtered={
+            filters.accountIds.length > 0 ||
+            filters.year !== null ||
+            filters.uncategorized
+          }
+          transactions={transactions}
+          {...handlers}
+        />
+      )}
+      {loadMoreError && <Banner tone="danger">{loadMoreError}</Banner>}
+      {hasMore && transactions && (
+        <Button
+          busy={loadingMore}
+          disabled={handlers.busy}
+          onClick={() => void onLoadMore()}
+          size="sm"
+        >
+          {loadMoreError ? "Retry loading more" : "Load more transactions"}
+        </Button>
+      )}
     </PageSection>
   );
 }
 
-function TransactionContent({
+function TransactionSummary({
   accountName,
+  onClearFilter,
+  transactions,
+}: {
+  accountName: string | undefined;
+  onClearFilter: () => void;
+  transactions: FinanceTransaction[] | undefined;
+}) {
+  return (
+    <div className="cluster">
+      <span className="sectionCount" aria-live="polite">
+        {transactions ? `${transactions.length} shown` : ""}
+        {accountName ? ` for ${accountName}` : ""}
+      </span>
+      {accountName && (
+        <Button icon="close" onClick={onClearFilter} size="sm" variant="ghost">
+          All accounts
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function TransactionContent({
+  filtered,
   transactions,
   ...handlers
 }: AnnotationHandlers & {
-  accountName: string | undefined;
+  filtered: boolean;
   transactions: FinanceTransaction[] | undefined;
 }) {
   if (!transactions) return <LoadingState label="Loading finances…" />;
   if (!transactions.length) {
     return (
       <EmptyState
-        icon={accountName ? "search" : "finance"}
+        icon={filtered ? "search" : "finance"}
         title={
-          accountName
-            ? `No transactions for ${accountName}`
+          filtered
+            ? "No transactions match these filters"
             : "No transactions imported yet"
         }
       >
-        {accountName
-          ? "Choose another account or show all accounts."
+        {filtered
+          ? "Try another account or period, or clear the filters."
           : "Connect an account or sync an existing connection."}
       </EmptyState>
     );

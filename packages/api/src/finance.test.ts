@@ -14,6 +14,136 @@ import type { Bindings } from "./types";
 const encryptionKey = btoa(String.fromCharCode(...new Uint8Array(32).fill(9)));
 
 describe("finance", () => {
+  it("filters the full history by multiple accounts and calendar year before paging", async () => {
+    const fixture = await createFixture();
+    seedTransactions(fixture.database);
+    const db = fixture.database;
+    db.run(`INSERT INTO plaid_accounts
+      (id, plaid_account_id, organization_id, plaid_item_record_id, name, type, updated_at)
+      VALUES ('account-second', 'plaid-second', 'org_user-1', 'item-report', 'Savings', 'depository', '2026-01-01')`);
+    db.run(
+      "UPDATE plaid_transactions SET transaction_date = '2025-01-01' WHERE id = 'report-txn-0'",
+    );
+    db.run(
+      "UPDATE plaid_transactions SET transaction_date = '2025-12-31', account_record_id = 'account-second' WHERE id = 'report-txn-1'",
+    );
+    db.run(
+      "UPDATE plaid_transactions SET transaction_date = '2024-12-31' WHERE id = 'report-txn-2'",
+    );
+    for (let index = 0; index < 260; index++) {
+      db.query(`INSERT INTO plaid_transactions
+        (id, plaid_transaction_id, organization_id, plaid_item_record_id, account_record_id,
+         name, amount, transaction_date, pending, source_status, updated_at)
+        VALUES (?, ?, 'org_user-1', 'item-report', 'account-report', 'Recent expense', 1,
+                '2026-01-01', 0, 'active', '2026-01-01')`).run(
+        `recent-${index}`,
+        `plaid-recent-${index}`,
+      );
+    }
+    const list = (query: string) =>
+      jsonRequest<FinanceListing>(fixture.app, fixture.bindings, query, "GET");
+    const prior = await list(
+      "?year=2025&accountId=account-report&accountId=account-second&uncategorized=true",
+    );
+    expect(prior.body.transactions.map((txn) => txn.id)).toEqual([
+      "report-txn-1",
+      "report-txn-0",
+    ]);
+    expect(prior.body.nextCursor).toBeNull();
+    const single = await list("?year=2025&accountId=account-second");
+    expect(single.body.transactions.map((txn) => txn.id)).toEqual([
+      "report-txn-1",
+    ]);
+    const missing = await list("?accountId=unknown");
+    expect(missing.body.transactions).toEqual([]);
+    const first = await list("?year=2026");
+    expect(first.body.transactions).toHaveLength(250);
+    expect(first.body.nextCursor).toBeString();
+    const second = await list(
+      `?year=2026&cursor=${encodeURIComponent(first.body.nextCursor ?? "")}`,
+    );
+    expect(second.body.nextCursor).toBeNull();
+    expect(second.body.transactions).toHaveLength(18);
+    expect(
+      new Set(
+        [...first.body.transactions, ...second.body.transactions].map(
+          (txn) => txn.id,
+        ),
+      ).size,
+    ).toBe(268);
+    const hidden = await jsonRequest<FinanceListing>(
+      testApp("organization-2", fixture.requestPlaid),
+      fixture.bindings,
+      `?year=2026&accountId=account-report&cursor=${encodeURIComponent(first.body.nextCursor ?? "")}`,
+      "GET",
+    );
+    expect(hidden.body.transactions).toEqual([]);
+  });
+
+  it("finds uncategorized expenses using the report rules and reflects category changes", async () => {
+    const fixture = await createFixture();
+    seedTransactions(fixture.database);
+    const categoryId = await createCategory(fixture, "Meals");
+    await jsonRequest(
+      fixture.app,
+      fixture.bindings,
+      "/transactions/report-txn-0/category",
+      "PUT",
+      { categoryId },
+    );
+    fixture.database.run(
+      "UPDATE plaid_transactions SET category_primary = NULL WHERE id = 'report-txn-1'",
+    );
+    const listing = await jsonRequest<FinanceListing>(
+      fixture.app,
+      fixture.bindings,
+      "?year=2026&uncategorized=true",
+      "GET",
+    );
+    expect(listing.body.transactions.map((txn) => txn.id)).toEqual([
+      "report-txn-10",
+      "report-txn-3",
+      "report-txn-1",
+      "report-txn-9",
+    ]);
+    await jsonRequest(
+      fixture.app,
+      fixture.bindings,
+      "/transactions/report-txn-0/category",
+      "PUT",
+      { categoryId: null },
+    );
+    const cleared = await jsonRequest<FinanceListing>(
+      fixture.app,
+      fixture.bindings,
+      "?uncategorized=true",
+      "GET",
+    );
+    expect(cleared.body.transactions.map((txn) => txn.id)).toContain(
+      "report-txn-0",
+    );
+  });
+
+  it("rejects malformed transaction filters", async () => {
+    const fixture = await createFixture();
+    for (const query of [
+      "year=nope",
+      "year=2025-01-01",
+      "accountId=",
+      "uncategorized=false",
+      "cursor=broken",
+      "cursor=null",
+    ]) {
+      const result = await jsonRequest(
+        fixture.app,
+        fixture.bindings,
+        `?${query}`,
+        "GET",
+      );
+      expect(result.response.status).toBe(400);
+    }
+  });
+
   it("retains and reconciles imported history after a disconnect", async () => {
     const fixture = await createFixture();
     const linkToken = await jsonRequest(
@@ -828,6 +958,7 @@ function seedTransactions(database: Database) {
 }
 
 interface FinanceListing {
+  nextCursor: string | null;
   accounts: { id: string }[];
   categories: Category[];
   configured: boolean;

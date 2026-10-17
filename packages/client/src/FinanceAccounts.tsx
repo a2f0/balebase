@@ -141,11 +141,11 @@ function ConnectionActions({
 export function FinanceAccounts({
   accounts,
   onSelect,
-  selectedAccountId,
+  selectedAccountIds,
 }: {
   accounts: FinanceAccount[] | undefined;
-  onSelect: (accountId: string) => void;
-  selectedAccountId: string | undefined;
+  onSelect: (accountId: string, shiftKey: boolean) => void;
+  selectedAccountIds: string[];
 }) {
   if (!accounts?.length) return null;
   return (
@@ -155,7 +155,7 @@ export function FinanceAccounts({
           {countLabel(accounts.length, "account")}
         </span>
       }
-      description="Select an account to filter its transactions."
+      description="Select an account to filter transactions. Hold Shift while clicking to add or remove accounts. No selection shows all accounts."
       title="Accounts"
     >
       <div className="gridAuto financeAccountGrid">
@@ -164,7 +164,7 @@ export function FinanceAccounts({
             account={account}
             key={account.id}
             onSelect={onSelect}
-            selected={selectedAccountId === account.id}
+            selected={selectedAccountIds.includes(account.id)}
           />
         ))}
       </div>
@@ -178,7 +178,7 @@ function AccountCard({
   selected,
 }: {
   account: FinanceAccount;
-  onSelect: (accountId: string) => void;
+  onSelect: (accountId: string, shiftKey: boolean) => void;
   selected: boolean;
 }) {
   return (
@@ -188,7 +188,7 @@ function AccountCard({
         "card cardInteractive financeAccount",
         selected && "cardSelected",
       )}
-      onClick={() => onSelect(account.id)}
+      onClick={(event) => onSelect(account.id, event.shiftKey)}
       type="button"
     >
       <span className="financeAccountHeader">
