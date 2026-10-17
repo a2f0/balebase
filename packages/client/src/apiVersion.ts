@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import { useSyncExternalStore } from "react";
 
 // The API names its version in this header on every response.
@@ -13,6 +14,21 @@ const listeners = new Set<() => void>();
  * deploy while the app is open shows up with the next response.
  */
 export async function fetchApi(input: RequestInfo | URL, init?: RequestInit) {
+  if (Capacitor.isNativePlatform()) {
+    // Request strips the forbidden Origin header before Capacitor forwards it.
+    // Send a native-only marker; the API restores Origin only when no browser
+    // Origin is present. This header is deliberately excluded from CORS.
+    const headers = new Headers(
+      init?.headers ?? (input instanceof Request ? input.headers : undefined),
+    );
+    headers.set(
+      "X-Balebase-Native-Origin",
+      Capacitor.getPlatform() === "ios"
+        ? "capacitor://localhost"
+        : "https://localhost",
+    );
+    init = { ...init, headers };
+  }
   const response = await fetch(input, init);
   const version = response.headers.get(apiVersionHeader);
   if (version !== null && version !== apiVersion) {

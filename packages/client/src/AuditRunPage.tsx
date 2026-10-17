@@ -19,6 +19,8 @@ import {
   ApiKeyAttribution,
   formatActivityTime,
 } from "./ActivityFeed";
+import { ApiDownload } from "./ApiDownload";
+import { ApiImage } from "./ApiImage";
 import {
   confirmDiscard,
   RunHeader,
@@ -1345,20 +1347,22 @@ function IssueImages({
         <ul className="runThumbs">
           {issue.images.map((image) => (
             <li className="runThumb" key={image.id}>
-              <a
+              <ApiDownload
+                plain
+                filename={image.filename}
                 className="runThumbLink"
                 href={auditIssueImageUrl(issue.id, image.id)}
                 rel="noreferrer"
                 target="_blank"
               >
-                <img
+                <ApiImage
                   alt={image.filename}
                   className="runThumbImage"
                   decoding="async"
                   loading="lazy"
                   src={auditIssueImageUrl(issue.id, image.id, "thumbnail")}
                 />
-              </a>
+              </ApiDownload>
               <Button
                 aria-label={`Remove ${image.filename}`}
                 className="runThumbRemove"

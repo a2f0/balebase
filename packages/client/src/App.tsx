@@ -26,6 +26,7 @@ import { useAccountSessions } from "./accountSessions";
 import { authClient } from "./authClient";
 import { Businesses } from "./Businesses";
 import { Contracts } from "./Contracts";
+import { authCallbackUrl } from "./config";
 import { Equipment } from "./Equipment";
 import { Finance } from "./Finance";
 import { FinanceTransactionPage } from "./FinanceTransactionPage";
@@ -157,7 +158,7 @@ function AuthenticationRoute({
 }) {
   const returnTo = accountReturnPath(
     window.location.search,
-    window.location.origin,
+    window.location.href,
   );
   const invitationNotice =
     pathname === "/invite"
@@ -182,7 +183,7 @@ function AuthenticationRoute({
           action === "sign-up"
             ? invitationIdForPath(
                 addingAccount ? returnTo : currentLocation(),
-                window.location.origin,
+                window.location.href,
               )
             : undefined;
         if (invitationId) {
@@ -384,7 +385,7 @@ function NoOrganization() {
 
 async function resendVerification(email: string) {
   const result = await authClient.sendVerificationEmail({
-    callbackURL: `${window.location.origin}/?verified=true`,
+    callbackURL: authCallbackUrl("/?verified=true"),
     email,
   });
   if (result.error) {

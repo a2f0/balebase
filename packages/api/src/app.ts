@@ -29,6 +29,7 @@ import { finance } from "./finance";
 import { inbox } from "./inbox";
 import { issues } from "./issues";
 import { libraryFolders } from "./libraryFolders";
+import { withNativeOrigin } from "./nativeRequest";
 import { objects } from "./objects";
 import { organizationGroups, requireCapability } from "./organizationGroups";
 import { organizationSettings } from "./organizationSettings";
@@ -50,6 +51,11 @@ app.use("*", async (context, next) => {
   context.header(apiVersionHeader, apiVersion);
 });
 
+app.use("/api/*", async (context, next) => {
+  context.req.raw = withNativeOrigin(context.req.raw, context.env.CORS_ORIGIN);
+  await next();
+});
+
 app.use(
   "/api/*",
   cors({
@@ -57,7 +63,8 @@ app.use(
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     credentials: true,
     exposeHeaders: ["Retry-After", "X-Document-Revision", apiVersionHeader],
-    origin: (_origin, context) => context.env.CORS_ORIGIN,
+    origin: (origin, context) =>
+      origin === context.env.CORS_ORIGIN ? origin : undefined,
   }),
 );
 

@@ -13,3 +13,7 @@ ignore:
   - packages/*/.turbo
   - packages/*/.astro
   - packages/*/.wrangler
+  - packages/*/dist-mobile
+  # Native SDKs require names such as App.xcodeproj and mipmap-anydpi-v26.
+  - packages/client/ios
+  - packages/client/android

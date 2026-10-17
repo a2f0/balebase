@@ -142,9 +142,17 @@ class WorkspaceHistory {
       return;
     }
     const { location } = this.#browser;
-    const destination = new URL(pathname, location.origin);
+    const source = new URL(location.href);
+    const destination = new URL(pathname, source);
     const origin = location.href;
-    if (destination.origin !== location.origin || destination.href === origin)
+    // Custom-scheme URLs have an opaque ("null") origin in the URL API. Compare
+    // scheme and authority so Capacitor navigation works without allowing an
+    // arbitrary opaque origin to navigate inside the app.
+    if (
+      destination.protocol !== source.protocol ||
+      destination.host !== source.host ||
+      destination.href === origin
+    )
       return;
     if (!navigationGuarded()) {
       this.#push(destination);

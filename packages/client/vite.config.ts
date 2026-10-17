@@ -3,10 +3,36 @@ import { cp } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 
-export default defineConfig({
-  plugins: [react(), pdfjsAssets()],
+export default defineConfig(({ mode }) => {
+  if (mode !== "mobile") return { plugins: [react(), pdfjsAssets()] };
+
+  const { VITE_API_URL, VITE_APP_URL } = loadEnv(mode, process.cwd());
+  const apiUrl = VITE_API_URL ?? "https://api.balebase.com";
+  const appUrl = VITE_APP_URL ?? "https://app.balebase.com";
+  for (const [name, url] of Object.entries({
+    VITE_API_URL: apiUrl,
+    VITE_APP_URL: appUrl,
+  })) {
+    let protocol: string;
+    try {
+      protocol = new URL(url).protocol;
+    } catch {
+      throw new Error(`${name} must be a valid HTTPS URL for mobile builds.`);
+    }
+    if (protocol !== "https:") {
+      throw new Error(`${name} must use HTTPS for mobile builds.`);
+    }
+  }
+  return {
+    plugins: [react(), pdfjsAssets()],
+    build: { outDir: "dist-mobile" },
+    define: {
+      "import.meta.env.VITE_API_URL": JSON.stringify(apiUrl),
+      "import.meta.env.VITE_APP_URL": JSON.stringify(appUrl),
+    },
+  };
 });
 
 /**

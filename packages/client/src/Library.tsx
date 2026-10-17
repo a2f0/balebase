@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { ApiDownload } from "./ApiDownload";
 import {
   createLibraryFolder,
   deleteLibraryFolder,
@@ -558,7 +559,12 @@ function FileCard({
   useMenuDismissal(moving, card, trigger, close);
   return (
     <article className="card cardInteractive fileCard" ref={card}>
-      <a className="fileCardLink" href={objectDownloadUrl(object.id)}>
+      <ApiDownload
+        plain
+        filename={object.filename}
+        className="fileCardLink"
+        href={objectDownloadUrl(object.id)}
+      >
         <div className="filePreview">
           <Icon name="document" size={28} strokeWidth={1.5} />
           <span className="filePreviewExtension">
@@ -571,7 +577,7 @@ function FileCard({
             {formatBytes(object.size)} · {formatDate(object.createdAt)}
           </span>
         </div>
-      </a>
+      </ApiDownload>
       <div className="fileActions" data-open={moving || undefined}>
         {destinations.length > 0 && (
           <button

@@ -6,6 +6,7 @@ import { adminJobs } from "./adminJobs";
 import type { AuthSession } from "./auth";
 import type { AuthVariables } from "./authMiddleware";
 import { runMaintenanceJob } from "./maintenance";
+import { withNativeOrigin } from "./nativeRequest";
 import type { Bindings } from "./types";
 import { purgeRequestedUsers, userDeletion } from "./userDeletion";
 
@@ -59,6 +60,10 @@ async function fixture(role = "admin", impersonatedBy?: string) {
   } as unknown as Bindings;
   const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
   app.use("*", async (context, next) => {
+    context.req.raw = withNativeOrigin(
+      context.req.raw,
+      context.env.CORS_ORIGIN,
+    );
     context.set("authSession", {
       user: { id: "actor", role },
       session: { impersonatedBy },
@@ -263,6 +268,67 @@ it.each([
     expect(
       f.database.query("SELECT id FROM user WHERE id = 'eligible'").get(),
     ).not.toBeNull();
+  },
+);
+
+it.each(["capacitor://localhost", "https://localhost"])(
+  "permits account deletion and admin maintenance from %s",
+  async (nativeOrigin) => {
+    const nativePost = (confirm: string) => ({
+      ...post(confirm),
+      headers: {
+        "Content-Type": "application/json",
+        "X-Balebase-Native-Origin": nativeOrigin,
+      },
+    });
+    const f = await fixture("user");
+    f.insertUser("actor");
+    expect(
+      (await f.request("/deletion", nativePost("delete my account"))).status,
+    ).toBe(200);
+    expect(await (await f.request("/deletion")).json()).toMatchObject({
+      requestedAt: expect.any(String),
+    });
+    expect(
+      (
+        await f.request("/deletion", {
+          method: "DELETE",
+          headers: {
+            Origin: "https://evil.example",
+            "X-Balebase-Native-Origin": nativeOrigin,
+          },
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await f.request("/deletion", {
+          method: "DELETE",
+          headers: { "X-Balebase-Native-Origin": nativeOrigin },
+        })
+      ).status,
+    ).toBe(200);
+    const deletionStatus: unknown = await (await f.request("/deletion")).json();
+    expect(deletionStatus).toEqual({
+      requestedAt: null,
+    });
+    expect(
+      (
+        await f.request(
+          "/jobs/purgeRequestedUsers/run",
+          nativePost("purgeRequestedUsers"),
+        )
+      ).status,
+    ).toBe(403);
+    const admin = await fixture();
+    expect(
+      (
+        await admin.request(
+          "/jobs/purgeRequestedUsers/run",
+          nativePost("purgeRequestedUsers"),
+        )
+      ).status,
+    ).toBe(200);
   },
 );
 

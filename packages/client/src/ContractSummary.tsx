@@ -2,7 +2,6 @@ import {
   Badge,
   Banner,
   Button,
-  ButtonLink,
   Card,
   cx,
   PageSection,
@@ -10,6 +9,7 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import { useState } from "react";
+import { ApiDownload } from "./ApiDownload";
 import { fetchApi } from "./apiVersion";
 import { boxStyle, ContractPages } from "./ContractDocument";
 import {
@@ -230,17 +230,22 @@ function SummaryActions({
         </>
       )}
       {contract.status === "completed" && (
-        <ButtonLink
+        <ApiDownload
+          filename={`signed-${contract.document.filename}`}
           href={contractFinalUrl(contract.id)}
           icon="download"
           variant="primary"
         >
           Download signed PDF
-        </ButtonLink>
+        </ApiDownload>
       )}
-      <ButtonLink href={contractDocumentUrl(contract.id)} icon="download">
+      <ApiDownload
+        filename={contract.document.filename}
+        href={contractDocumentUrl(contract.id)}
+        icon="download"
+      >
         Original
-      </ButtonLink>
+      </ApiDownload>
       {contract.status !== "sent" && (
         <Button
           disabled={actions.busy}

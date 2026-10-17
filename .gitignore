@@ -11,6 +11,7 @@ wrangler.staging.jsonc
 .terraform
 .terraform-lint
 dist
+dist-mobile
 node_modules
 
 # Favicons generated from assets/brand/logo.svg on each dev or build.

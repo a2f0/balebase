@@ -13,6 +13,7 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ApiDownload } from "./ApiDownload";
 import { AttachmentPreviewTile } from "./AttachmentPreview";
 import {
   archiveInboundEmail,
@@ -726,7 +727,9 @@ function AttachmentChips({
   return (
     <div className="inboxAttachmentList">
       {attachments.map((attachment) => (
-        <a
+        <ApiDownload
+          plain
+          filename={attachment.filename}
           className="inboxAttachment"
           href={inboundAttachmentUrl(email.id, attachment.id, folder)}
           key={attachment.id}
@@ -736,7 +739,7 @@ function AttachmentChips({
           <span className="inboxAttachmentSize">
             {formatBytes(attachment.size)}
           </span>
-        </a>
+        </ApiDownload>
       ))}
     </div>
   );
