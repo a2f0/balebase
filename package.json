@@ -4,8 +4,11 @@
   "license": "UNLICENSED",
   "packageManager": "bun@1.4.2",
   "scripts": {
+    "agent-tool": "agent-tool",
     "agent:run": "bunx --bun --no-install agent-tool run",
     "agent:logs": "bunx --bun --no-install agent-tool logs",
+    "agents:check": "bun run agent-tool skills check",
+    "agents:sync": "bun run agent-tool skills install --apply",
     "auth:set-role": "bash scripts/setUserRole.sh",
     "build": "bunx --bun --no-install turbo run build",
     "check": "export OPENSSL_CONF=/dev/null; bun --bun run lint && bunx --bun --no-install turbo run check && bun --bun run check:scripts",
@@ -59,7 +62,7 @@
     "*.md": "bun --bun x markdownlint-cli2 --fix"
   },
   "devDependencies": {
-    "@a2f0/agent-tool": "0.1.11",
+    "@a2f0/agent-tool": "0.1.12",
     "@biomejs/biome": "2.5.15",
     "@commitlint/cli": "21.2.3",
     "@commitlint/config-conventional": "21.2.3",

@@ -17,7 +17,7 @@ repository root unless a command specifies `--cwd`.
 | Shared components, icons, styles | `packages/ui/src` |
 | Public website | `packages/website/src` |
 | Deployment and maintenance commands | `scripts`, `terraform` |
-| Review and PR automation | `packages/agent-tool` |
+| Agent review and merge policy | `agent-tool.json`, `AGENTS.md` |
 
 In the client, a screen such as `Finance.tsx` owns loading and mutations.
 `FinanceAccounts.tsx` renders connections and account selection;
@@ -69,13 +69,6 @@ verdicts, structured audit results, and infrastructure previews visible. Do not
 wrap interactive tools or persistent servers, and do not silence warnings or
 reduce test coverage to save output.
 
-The repository-owned shipping skills continue using the trusted-base
-`packages/agent-tool` implementation described under pull requests below.
-Their credential-bearing orchestration shell must not execute the feature
-checkout's `agent:run` script or installed dependency. Continue running validation
-through the trusted `runPreflight` action there. Adopting the public skill bundle
-would replace this repository's shipping policy and is not part of this setup.
-
 ## Keep changes readable
 
 - Keep related behavior together. Extract a module when it has a clear job;
@@ -109,11 +102,19 @@ such as `refactor(client): split finance views`. Commits must be signed and
 must not include co-author trailers. Run `bun run hooks:install` after hook
 changes land.
 
-For agent-assisted shipping, invoke `ship-pr` from `.codex/skills` or
-`.claude/skills`. It commits, bumps changed API/client versions, reviews the
-branch before pushing, waits for CI, merges, and reinstalls hooks. Invoke the
-skills themselves: they load automation from the trusted base before running
-credential-free checks or handling GitHub and reviewer credentials.
+For agent-assisted shipping, invoke the `ship-pr` skill. The skills in
+`.claude/skills` and `.agents/skills` are installed from the pinned
+`@a2f0/agent-tool` package; do not edit them. `agent-tool.json` holds the title
+policy, the required CI check, and the versioned packages: a change to
+`packages/api` or `packages/client` ships with a patch bump from
+`agent-tool versions prepare`. Pushes run the normal hooks, with your usual
+environment and credentials, so review script and dependency changes before
+pushing them. After a merge, run `bun run hooks:install` once the checkout is
+back on `main`.
+
+After changing the `@a2f0/agent-tool` pin, run `bun run agents:sync` and commit
+the lockfile, skills, and `.agent-tool-skills.json` together. CI runs
+`bun run agents:check`, so drifted skills fail the required check.
 
 Use [the dependency upgrade workflow](docs/dependency-upgrades.md) when changing
 tool or package versions. Keep README focused on purpose, setup, and essential

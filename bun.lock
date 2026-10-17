@@ -5,7 +5,7 @@
     "": {
       "name": "balebase",
       "devDependencies": {
-        "@a2f0/agent-tool": "0.1.11",
+        "@a2f0/agent-tool": "0.1.12",
         "@biomejs/biome": "2.5.15",
         "@commitlint/cli": "21.2.3",
         "@commitlint/config-conventional": "21.2.3",
@@ -20,16 +20,9 @@
         "wrangler": "4.123.0",
       },
     },
-    "packages/agent-tool": {
-      "name": "@balebase/agent-tool",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@types/bun": "1.4.2",
-      },
-    },
     "packages/api": {
       "name": "@balebase/api",
-      "version": "0.1.26",
+      "version": "0.1.27",
       "dependencies": {
         "@better-auth/core": "1.7.0",
         "@modelcontextprotocol/server": "2.3.1",
@@ -46,7 +39,7 @@
     },
     "packages/client": {
       "name": "@balebase/client",
-      "version": "0.1.34",
+      "version": "0.1.36",
       "dependencies": {
         "@balebase/ui": "workspace:*",
         "@stripe/stripe-js": "9.17.0",
@@ -108,7 +101,7 @@
     },
   },
   "packages": {
-    "@a2f0/agent-tool": ["@a2f0/agent-tool@0.1.11", "", { "bin": { "agent-tool": "src/index.ts" } }, "sha512-eRAHiNz+sujqHS+nyCWcKBQKGqU9tlm0iCvm6CghZ5+KjSWCjWKJQgeq3pd6Ax45amSltFToryR/m68T0XMnIg=="],
+    "@a2f0/agent-tool": ["@a2f0/agent-tool@0.1.12", "", { "bin": { "agent-tool": "src/index.ts" } }, "sha512-+/AD6QUIZyOS0rzEk5jH/IEMsoTpttFtUE+eQqjD0omQvZW7qtPqzJyV1XQiHbs31LlSWM1I4aIThfQZNMYR8w=="],
 
     "@astrojs/check": ["@astrojs/check@0.9.10", "", { "dependencies": { "@astrojs/language-server": "^2.16.7", "chokidar": "^4.0.3", "kleur": "^4.1.5", "yargs": "^18.0.0" }, "peerDependencies": { "typescript": "^5.0.0 || ^6.0.0" }, "bin": { "astro-check": "./bin/astro-check.js" } }, "sha512-zgx/UQMozdjOa3bOxjgeCFdtpE3c9rRX6xHwa+2QXvy8z8Akifu2AtubHyv/zzC2znO8dl8fFWL4K+Ba9kS8HQ=="],
 
@@ -159,8 +152,6 @@
     "@babel/parser": ["@babel/parser@7.29.8", "", { "dependencies": { "@babel/types": "^7.29.8" }, "bin": "./bin/babel-parser.js" }, "sha512-E8lTAYNB1KW+FH+VGJuZM1ioAx2E6oVlvQFRrf5P8ZZmsiJXYAD9vTFV7yyEURNzgh1dFqMZuO6tUwcARbqFCA=="],
 
     "@babel/types": ["@babel/types@7.29.8", "", { "dependencies": { "@babel/helper-string-parser": "^7.29.7", "@babel/helper-validator-identifier": "^7.29.7" } }, "sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg=="],
-
-    "@balebase/agent-tool": ["@balebase/agent-tool@workspace:packages/agent-tool"],
 
     "@balebase/api": ["@balebase/api@workspace:packages/api"],
 

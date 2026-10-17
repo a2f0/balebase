@@ -13,15 +13,14 @@ in its PR. Update or remove guidance when constraints change; do not append run
 journals. Attribute historical findings to their PR and recheck them before
 claiming current upstream status or production safety.
 
-Use the `update-dependencies` skill for either harness. It references the
-published shared workflow at `@a2f0/agent-tool@0.1.11` while keeping this
-repository's trusted-base `packages/agent-tool` shipping implementation.
+Use the `update-dependencies` skill installed from the pinned
+`@a2f0/agent-tool` package for either harness.
 
 ## Compatibility
 
 - TypeScript stays on 6.0.3 because `@astrojs/check` supports TypeScript 5/6.
   The native TypeScript 7 release removes APIs used by language tooling.
-  Explicit Bun types in the automation workspace account for TypeScript 6's
+  Explicit Bun types in the workspace tsconfigs account for TypeScript 6's
   new default type inclusion. See the [TypeScript 6 release notes][typescript].
 - Follow the [Astro major upgrade guide][astro] when changing compiler,
   Markdown, whitespace, or API behavior; verify image handling against the
@@ -96,11 +95,10 @@ integration requires local sockets; provider validation and TFLint require
 the installed provider/plugin runtime. An unavailable platform or service is
 a validation gap, even when unrelated checks pass.
 
-Use the repository-owned `ship-pr` skill with `chore: update dependencies`.
-It fetches and materializes the trusted base automation, runs its
-credential-free preflight, signs commits, bumps changed API/client packages,
-independently reviews each changed HEAD, and checks CI and the exact fresh
-reviewed head/base before merging. Preserve every gate when resuming a held
+Use the `ship-pr` skill with `chore: update dependencies`. It bumps changed
+API/client packages, independently reviews each changed HEAD, and checks CI and
+the exact reviewed head against a fresh base before merging. Commits must be
+signed; pushes run the normal hooks. Preserve every gate when resuming a held
 upgrade. Keep the upgrade PR's ledger of selected and constrained dependencies,
 audits, checks, warnings, previews, review, merge, and deployment results there;
 promote only ongoing procedures or active constraints into this guide.

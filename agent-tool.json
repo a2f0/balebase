@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "subject": {
+    "maxLength": 50,
+    "types": [
+      "build",
+      "chore",
+      "ci",
+      "cleanup",
+      "docs",
+      "feat",
+      "fix",
+      "perf",
+      "refactor",
+      "revert",
+      "style",
+      "test"
+    ]
+  },
+  "merge": {
+    "requiredChecks": [{ "name": "Check, test, and build", "workflow": "CI" }],
+    "requireStrictBaseFreshness": true
+  },
+  "versions": {
+    "packages": ["packages/api", "packages/client"]
+  },
+  "pr": { "rejectClaudeBranding": true }
+}
