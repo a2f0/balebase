@@ -60,20 +60,12 @@
   text-decoration: none;
 }
 
+/* The logo is a 16-unit pixel grid: keep its sizes multiples of 16px. */
 .brandMark {
-  display: inline-grid;
-  width: 1.75rem;
-  height: 1.75rem;
+  display: block;
+  width: 2rem;
+  height: 2rem;
   flex: none;
-  border-radius: var(--radius-md);
-  place-items: center;
-  color: var(--color-ink);
-  background: var(--color-lime);
-  font-family: var(--font-mono);
-  font-size: var(--text-base);
-  font-weight: 500;
-  letter-spacing: 0;
-  line-height: 1;
 }
 
 /* Icons. */
@@ -484,15 +476,31 @@ a.row:focus-visible {
   margin-top: var(--space-2);
 }
 
+/*
+ * A 2x2 pixel spinner in currentColor, echoing the pixel logo: quarter turns
+ * step the lit pixel clockwise with a fading trail behind it.
+ */
 .spinner {
+  position: relative;
   display: inline-block;
   width: 1rem;
   height: 1rem;
   flex: none;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: spin 700ms linear infinite;
+  animation: spin 800ms steps(4) infinite;
+}
+
+.spinner::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  background: currentColor;
+  box-shadow:
+    0.5625rem 0 color-mix(in srgb, currentColor 20%, transparent),
+    0.5625rem 0.5625rem color-mix(in srgb, currentColor 20%, transparent),
+    0 0.5625rem color-mix(in srgb, currentColor 55%, transparent);
+  content: "";
 }
 
 @keyframes spin {

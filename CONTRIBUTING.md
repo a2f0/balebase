@@ -15,6 +15,7 @@ repository root unless a command specifies `--cwd`.
 | Database schema | `packages/api/migrations` |
 | Application screens | `packages/client/src` |
 | Shared components, icons, styles | `packages/ui/src` |
+| Logo and generated images | `packages/ui/assets`, `packages/ui/scripts` |
 | Public website | `packages/website/src` |
 | Deployment and maintenance commands | `scripts`, `terraform` |
 | Agent review and merge policy | `agent-tool.json`, `AGENTS.md` |
@@ -24,6 +25,13 @@ In the client, a screen such as `Finance.tsx` owns loading and mutations.
 `FinanceTransactionHistory.tsx` owns transaction rows and annotation forms.
 `financeApi.ts` contains HTTP calls, and `financeFormat.ts` formats amounts.
 Follow those concrete responsibilities when a screen needs to be split.
+
+`packages/ui/assets/logo.svg` is the pixel B logo, drawn only with whole-unit
+`<rect>` elements. Website and client builds write their favicons to
+`public/`. `bun run images` writes the full set to `packages/ui/dist/images`:
+favicons, iOS and Android icons and splash screens in Capacitor's project
+layout, and the 1024×1024 Plaid icon at `plaid/icon-1024.png`. Generated images
+are ignored; keep binary files out of commits.
 
 ## Check a change
 

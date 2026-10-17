@@ -12,6 +12,11 @@ wrangler.staging.jsonc
 .terraform-lint
 dist
 node_modules
+
+# Favicons generated from packages/ui/assets/logo.svg on each dev or build.
+packages/*/public/favicon.svg
+packages/*/public/favicon.ico
+packages/*/public/apple-touch-icon.png
 *.tsbuildinfo
 
 # Terraform local state and plans
