@@ -340,7 +340,9 @@ search titles. Issues have a title, description, priority, assignee, open/resolv
 status, and their own activity history. Updates require `expectedRevision` and
 reject stale saves. **Raise issue** on a transaction attaches its source; the
 issue links back to that exact transaction regardless of the overview's filters.
-Transaction detail pages show related issues and annotation activity.
+Transaction detail pages show related issues and annotation activity, plus a
+**Source data** list of the stored Plaid fields: the raw description, category
+codes, payment channel, institution and account, and Plaid transaction IDs.
 
 The shared `issues` table uses `target_type` and `target_id`,
 with an optional audit item ID. Existing audit issue IDs, images, and activity

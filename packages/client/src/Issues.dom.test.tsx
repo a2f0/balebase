@@ -76,9 +76,22 @@ const transaction = {
   amount: 25,
   currencyCode: "USD",
   transactionDate: "2018-01-01",
+  authorizedDate: null,
+  categoryDetailed: "FOOD_AND_DRINK_COFFEE",
+  pending: false,
   annotation: { labels: [], note: "", reviewed: false },
   linkedEmails: [],
   expenseCategoryId: null,
+};
+const source = {
+  accountMask: "1234",
+  accountOfficialName: null,
+  accountSubtype: "checking",
+  accountType: "depository",
+  institutionName: "First Test Bank",
+  pendingTransactionId: null,
+  plaidTransactionId: "plaid-old-txn",
+  updatedAt: "2018-01-02T12:00:00.000Z",
 };
 async function mount(node: ReactNode) {
   container = document.createElement("div");
@@ -108,7 +121,7 @@ function baseResponse(url: URL) {
   if (url.pathname.endsWith("/activity"))
     return Response.json({ events: [], nextCursor: null });
   if (url.pathname === "/api/finance/transactions/old-txn")
-    return Response.json({ transaction, categories: [] });
+    return Response.json({ transaction, categories: [], source });
   throw new Error(`Unexpected request ${url}`);
 }
 
@@ -287,6 +300,11 @@ describe("workspace issues, mounted", () => {
         .querySelector(".financeTransaction")
         ?.closest(".financeListCard"),
     ).not.toBeNull();
+    const sourceData = container.querySelector(".keyValue")?.textContent;
+    expect(sourceData).toContain("Plaid transaction IDplaid-old-txn");
+    expect(sourceData).toContain("Detailed categoryFOOD_AND_DRINK_COFFEE");
+    expect(sourceData).toContain("Authorized dateNot provided");
+    expect(sourceData).toContain("Account typedepository / checking");
     expect(requests).toContain("/api/finance/transactions/old-txn/activity");
     expect(requests.some((url) => url.includes("targetId=old-txn"))).toBe(true);
     await click("Raise issue");
