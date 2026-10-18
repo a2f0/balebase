@@ -353,10 +353,15 @@ The `/api/issues` routes and matching MCP tools support listing, creating,
 editing, assigning, resolving, reopening, and reading issue history.
 
 Annotation changes appear in workspace Activity and transaction history with
-before/after notes, labels, and review status. Unchanged saves and category-only
-changes do not create annotation events. Earlier annotation edits cannot be
-reconstructed. Finance capability checks apply to transaction issues and
-annotation activity, including the shared feeds and API-key access.
+before/after notes, labels, and review status. Expense category changes are
+separate events that name who set, changed, or cleared the category, with the
+category names as they were then. Deleting a category records the removal on
+each of its transactions, attributed to the person who deleted it. Unchanged
+saves create no events, and edits or categories from before migrations
+`0063_record_finance_annotations.sql` and
+`0064_record_finance_categorization.sql` cannot be reconstructed. Finance
+capability checks apply to transaction issues and annotation activity,
+including the shared feeds and API-key access.
 
 ## Finance and Plaid
 

@@ -534,7 +534,7 @@ describe("workspace issues", () => {
 });
 
 describe("transaction annotation activity", () => {
-  it("records before/after changes and clearing, skips no-ops/categories, and attributes API keys", async () => {
+  it("records before/after changes and clearing, skips no-ops, and attributes API keys", async () => {
     const f = await fixture();
     const path = "/finance/transactions/txn/annotation";
     expect(
@@ -571,8 +571,12 @@ describe("transaction annotation activity", () => {
     let history = await f.request<{ events: Event[] }>(
       "/finance/transactions/txn/activity",
     );
-    expect(history.body.events).toHaveLength(1);
-    expect(history.body.events[0]).toMatchObject({
+    // The category change is its own event, never an annotation change.
+    expect(history.body.events.map(({ action }) => action)).toEqual([
+      "finance.transaction_categorized",
+      "finance.transaction_annotated",
+    ]);
+    expect(history.body.events[1]).toMatchObject({
       action: "finance.transaction_annotated",
       actor: { id: "user-1" },
       details: { before: { note: "", labels: [], reviewed: false }, after },
@@ -587,7 +591,7 @@ describe("transaction annotation activity", () => {
     history = await f.request<{ events: Event[] }>(
       "/finance/transactions/txn/activity",
     );
-    expect(history.body.events).toHaveLength(2);
+    expect(history.body.events).toHaveLength(3);
     expect(history.body.events[0]).toMatchObject({
       actor: { apiKey: { name: "Automation", channel: "rest" } },
       details: {
@@ -610,6 +614,115 @@ describe("transaction annotation activity", () => {
       ).body.transaction,
     ).toMatchObject({ id: "txn", transactionDate: "2018-01-01" });
     expect((await f.request("/finance/transactions/missing")).status).toBe(404);
+  });
+
+  it("records who set, changed, or removed a category, with names as they were", async () => {
+    const f = await fixture();
+    for (const [id, name] of [
+      ["travel", "Travel"],
+      ["meals", "Meals"],
+    ] as const)
+      f.db
+        .query(
+          `INSERT INTO finance_expense_categories (id, organization_id, name, created_at, updated_at) VALUES (?, 'org_user-1', ?, ?, ?)`,
+        )
+        .run(id, name, now, now);
+    const path = "/finance/transactions/txn/category";
+    const history = async () =>
+      (
+        await f.request<{ events: Event[] }>(
+          "/finance/transactions/txn/activity",
+        )
+      ).body.events;
+
+    expect(
+      (await f.request(path, "PUT", { categoryId: "travel" })).status,
+    ).toBe(200);
+    await f.request(path, "PUT", { categoryId: "travel" });
+    await f.request(path, "PUT", { categoryId: "meals" });
+    await f.request("/finance/categories/meals", "PATCH", {
+      name: "Client meals",
+    });
+    // A second finance member deletes the category the transaction is in.
+    f.db
+      .query(
+        `INSERT INTO teamMember (id, teamId, userId) SELECT 'finance-user-2', team_id, 'user-2' FROM organization_group_capability WHERE organization_id = 'org_user-1' AND capability = 'finance' LIMIT 1`,
+      )
+      .run();
+    f.user = "user-2";
+    expect(
+      (await f.request("/finance/categories/meals", "DELETE")).status,
+    ).toBe(204);
+
+    expect(await history()).toMatchObject([
+      {
+        action: "finance.transaction_categorized",
+        actor: { id: "user-2", apiKey: null },
+        details: {
+          before: "meals",
+          beforeName: "Client meals",
+          after: null,
+          afterName: null,
+        },
+      },
+      {
+        actor: { id: "user-1" },
+        details: {
+          before: "travel",
+          beforeName: "Travel",
+          after: "meals",
+          afterName: "Meals",
+        },
+      },
+      {
+        actor: { id: "user-1" },
+        details: {
+          before: null,
+          beforeName: null,
+          after: "travel",
+          afterName: "Travel",
+        },
+      },
+    ]);
+
+    f.user = "user-1";
+    f.db
+      .query(
+        `INSERT INTO organization_api_keys (id, organization_id, name, access, token_prefix, token_hash, created_by, created_at) VALUES ('key', 'org_user-1', 'Automation', 'write', 'test', 'hash', 'user-1', ?)`,
+      )
+      .run(now);
+    f.apiKey = true;
+    await f.request(path, "PUT", { categoryId: "travel" });
+    const [latest] = await history();
+    expect(latest).toMatchObject({
+      actor: { id: "user-1", apiKey: { name: "Automation" } },
+      details: { before: null, after: "travel", afterName: "Travel" },
+    });
+    expect(f.db.query("SELECT * FROM activity_api_key_context").all()).toEqual(
+      [],
+    );
+  });
+
+  it("rolls back a category change when activity recording fails", async () => {
+    const f = await fixture();
+    f.db
+      .query(
+        `INSERT INTO finance_expense_categories (id, organization_id, name, created_at, updated_at) VALUES ('travel', 'org_user-1', 'Travel', ?, ?)`,
+      )
+      .run(now, now);
+    f.db.exec(
+      `CREATE TRIGGER reject_category_activity BEFORE INSERT ON activity_events WHEN NEW.action = 'finance.transaction_categorized' BEGIN SELECT RAISE(ABORT, 'Activity unavailable'); END`,
+    );
+    expect(
+      (
+        await f.request("/finance/transactions/txn/category", "PUT", {
+          categoryId: "travel",
+        })
+      ).status,
+    ).toBe(500);
+    expect(
+      f.db.query("SELECT * FROM finance_transaction_annotations").all(),
+    ).toEqual([]);
   });
 
   it("rolls back annotations when activity recording fails", async () => {

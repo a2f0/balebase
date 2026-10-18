@@ -465,3 +465,59 @@ it("shows annotation changes and links issue events to their issue", async () =>
   await click("Open issue");
   expect(paths).toEqual(["/finance/transactions/txn%2F1", "/issues/issue%2F1"]);
 });
+
+it("names who changed an expense category, using the names recorded then", async () => {
+  const category = (
+    id: number,
+    details: Record<string, unknown>,
+    name: string,
+  ): ActivityEvent => ({
+    ...event(id, ""),
+    action: "finance.transaction_categorized",
+    actor: { email: `${name.toLowerCase()}@example.com`, id: name, name },
+    root: { type: "finance_transaction", id: "txn-1", label: "Coffee" },
+    subject: { type: "finance_transaction", id: "txn-1" },
+    details,
+  });
+  const changes = [
+    category(
+      3,
+      { before: "meals", beforeName: "Meals", after: null, afterName: null },
+      "Alex",
+    ),
+    category(
+      2,
+      {
+        before: "travel",
+        beforeName: null,
+        after: "meals",
+        afterName: "Meals",
+      },
+      "Sam",
+    ),
+    category(
+      1,
+      { before: null, beforeName: null, after: "travel", afterName: "Travel" },
+      "Sam",
+    ),
+  ];
+  globalThis.fetch = (async (_input) =>
+    Response.json({ events: changes, nextCursor: null })) as typeof fetch;
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  await act(async () =>
+    root?.render(
+      <ActivityFeed source={{ type: "finance_transaction", id: "txn-1" }} />,
+    ),
+  );
+  const rows = [...container.querySelectorAll(".activityRow")].map(
+    (row) => row.textContent ?? "",
+  );
+  expect(rows).toHaveLength(3);
+  expect(rows[0]).toContain("Alex changed the expense category");
+  expect(rows[0]).toContain("Meals→changed toUncategorized");
+  expect(rows[1]).toContain("Sam changed the expense category");
+  expect(rows[1]).toContain("Deleted category→changed toMeals");
+  expect(rows[2]).toContain("Uncategorized→changed toTravel");
+});

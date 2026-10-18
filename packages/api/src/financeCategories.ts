@@ -1,3 +1,4 @@
+import { activityBatch } from "./activity";
 import type { FinanceContext } from "./financeContext";
 
 interface CategoryRow {
@@ -103,12 +104,19 @@ export async function deleteCategory(context: FinanceContext) {
   if (!id || !(await findCategory(context.env.DB, organizationId, id))) {
     return categoryNotFound(context);
   }
-  // Unassign explicitly rather than relying on the foreign-key action alone.
-  await context.env.DB.batch([
+  // Unassign explicitly rather than relying on the foreign-key action alone,
+  // so each transaction's activity names who removed its category.
+  await activityBatch(context.env.DB, context.get("apiKey"), [
     context.env.DB.prepare(
-      `UPDATE finance_transaction_annotations SET expense_category_id = NULL
+      `UPDATE finance_transaction_annotations
+       SET expense_category_id = NULL, updated_by = ?, updated_at = ?
        WHERE organization_id = ? AND expense_category_id = ?`,
-    ).bind(organizationId, id),
+    ).bind(
+      context.get("authSession").user.id,
+      new Date().toISOString(),
+      organizationId,
+      id,
+    ),
     context.env.DB.prepare(
       `DELETE FROM finance_expense_categories
        WHERE id = ? AND organization_id = ?`,
@@ -159,7 +167,7 @@ export async function assignTransactionCategory(context: FinanceContext) {
   }
   const now = new Date().toISOString();
   const userId = context.get("authSession").user.id;
-  await database
+  const statement = database
     .prepare(
       `INSERT INTO finance_transaction_annotations
          (transaction_id, organization_id, note, labels, reviewed,
@@ -170,8 +178,8 @@ export async function assignTransactionCategory(context: FinanceContext) {
          updated_by = excluded.updated_by,
          updated_at = excluded.updated_at`,
     )
-    .bind(transactionId, organizationId, categoryId, userId, userId, now, now)
-    .run();
+    .bind(transactionId, organizationId, categoryId, userId, userId, now, now);
+  await activityBatch(database, context.get("apiKey"), [statement]);
   return context.json({ expenseCategoryId: categoryId });
 }
 

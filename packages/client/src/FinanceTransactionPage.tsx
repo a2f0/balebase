@@ -175,6 +175,7 @@ function useTransaction(id: string) {
             },
           },
       );
+      setRefresh((value) => value + 1);
     } catch (cause) {
       setError(message(cause));
     } finally {
