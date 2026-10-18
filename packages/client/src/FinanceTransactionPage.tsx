@@ -11,10 +11,12 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
 import { FinanceTransactionRow } from "./FinanceTransactionHistory";
+import { FinanceTransactionSourceData } from "./FinanceTransactionSourceData";
 import {
   type ExpenseCategory,
   type FinanceTransaction,
   type FinanceTransactionAnnotationInput,
+  type FinanceTransactionSource,
   getFinanceTransaction,
   setTransactionCategory,
   updateFinanceTransactionAnnotation,
@@ -81,6 +83,10 @@ export function FinanceTransactionPage({
                 />
               </ul>
             </Card>
+            <FinanceTransactionSourceData
+              source={data.source}
+              transaction={data.transaction}
+            />
             <PageSection
               title="Issues"
               actions={
@@ -109,6 +115,7 @@ function useTransaction(id: string) {
   const [data, setData] = useState<{
     transaction: FinanceTransaction;
     categories: ExpenseCategory[];
+    source: FinanceTransactionSource;
   }>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);

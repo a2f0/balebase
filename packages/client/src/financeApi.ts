@@ -47,6 +47,18 @@ export interface FinanceTransaction {
   transactionDate: string;
 }
 
+/** Stored Plaid fields returned only by the transaction detail request. */
+export interface FinanceTransactionSource {
+  accountMask: string | null;
+  accountOfficialName: string | null;
+  accountSubtype: string | null;
+  accountType: string;
+  institutionName: string | null;
+  pendingTransactionId: string | null;
+  plaidTransactionId: string;
+  updatedAt: string;
+}
+
 export interface FinanceTransactionMatch {
   accountName: string;
   amount: number;
@@ -258,5 +270,6 @@ export function getFinanceTransaction(id: string) {
   return request<{
     transaction: FinanceTransaction;
     categories: ExpenseCategory[];
+    source: FinanceTransactionSource;
   }>(`/transactions/${encodeURIComponent(id)}`);
 }

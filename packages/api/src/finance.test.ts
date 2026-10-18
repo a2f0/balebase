@@ -230,6 +230,24 @@ describe("finance", () => {
     expect(accountId).toBeString();
     expect(transactionId).toBeString();
 
+    const detail = await jsonRequest<{ source: unknown }>(
+      fixture.app,
+      fixture.bindings,
+      `/transactions/${transactionId}`,
+      "GET",
+    );
+    expect(detail.response.status).toBe(200);
+    expect(detail.body.source).toEqual({
+      accountMask: "1234",
+      accountOfficialName: "Plaid Gold Checking",
+      accountSubtype: "checking",
+      accountType: "depository",
+      institutionName: "First Test Bank",
+      pendingTransactionId: null,
+      plaidTransactionId: "transaction-test-1",
+      updatedAt: expect.any(String),
+    });
+
     const annotated = await jsonRequest(
       fixture.app,
       fixture.bindings,
@@ -276,6 +294,13 @@ describe("finance", () => {
       "POST",
     );
     expect(cannotSync.response.status).toBe(404);
+    const cannotRead = await jsonRequest(
+      otherOrganization,
+      fixture.bindings,
+      `/transactions/${transactionId}`,
+      "GET",
+    );
+    expect(cannotRead.response.status).toBe(404);
     const cannotAnnotate = await jsonRequest(
       otherOrganization,
       fixture.bindings,

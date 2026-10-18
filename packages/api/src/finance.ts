@@ -174,12 +174,17 @@ async function financeListing(context: FinanceContext) {
 
 async function transactionDetail(context: FinanceContext) {
   const organizationId = context.get("organizationId");
-  const [row] = await listTransactions(context.env.DB, {
-    where:
-      "txn.organization_id = ? AND txn.id = ? AND txn.source_status = 'active'",
-    bindings: [organizationId, context.req.param("id") ?? ""],
-  });
-  if (!row) return context.json({ error: "Transaction not found." }, 404);
+  const id = context.req.param("id") ?? "";
+  const [[row], source] = await Promise.all([
+    listTransactions(context.env.DB, {
+      where:
+        "txn.organization_id = ? AND txn.id = ? AND txn.source_status = 'active'",
+      bindings: [organizationId, id],
+    }),
+    findTransactionSource(context.env.DB, organizationId, id),
+  ]);
+  if (!row || !source)
+    return context.json({ error: "Transaction not found." }, 404);
   const [categories, emails] = await Promise.all([
     listExpenseCategories(context.env.DB, organizationId),
     listLinkedEmails(
@@ -192,7 +197,42 @@ async function transactionDetail(context: FinanceContext) {
   return context.json({
     transaction: toTransaction(row, emails.map(toLinkedEmail)),
     categories,
+    source,
   });
+}
+
+/** Stored Plaid fields that the listing omits, for the transaction page. */
+async function findTransactionSource(
+  database: D1Database,
+  organizationId: string,
+  id: string,
+) {
+  return database
+    .prepare(
+      `SELECT txn.plaid_transaction_id AS plaidTransactionId,
+              txn.pending_transaction_id AS pendingTransactionId,
+              txn.updated_at AS updatedAt,
+              item.institution_name AS institutionName,
+              account.official_name AS accountOfficialName,
+              account.mask AS accountMask, account.type AS accountType,
+              account.subtype AS accountSubtype
+       FROM plaid_transactions AS txn
+       JOIN plaid_accounts AS account ON account.id = txn.account_record_id
+       JOIN plaid_items AS item ON item.id = txn.plaid_item_record_id
+       WHERE txn.organization_id = ? AND txn.id = ?
+         AND txn.source_status = 'active'`,
+    )
+    .bind(organizationId, id)
+    .first<{
+      accountMask: string | null;
+      accountOfficialName: string | null;
+      accountSubtype: string | null;
+      accountType: string;
+      institutionName: string | null;
+      pendingTransactionId: string | null;
+      plaidTransactionId: string;
+      updatedAt: string;
+    }>();
 }
 
 async function transactionActivity(context: FinanceContext) {
