@@ -28,6 +28,7 @@ import { equipmentPath } from "./workspacePaths";
 
 const actionLabels: Record<string, string> = {
   "finance.transaction_annotated": "updated a transaction annotation",
+  "finance.transaction_categorized": "changed the expense category",
   "issue.created": "raised an issue",
   "issue.assigned": "changed the issue assignee",
   "issue.resolved": "resolved an issue",
@@ -258,6 +259,9 @@ function activitySummary(event: ActivityEvent) {
   const { details } = event;
   if (event.action === "finance.transaction_annotated")
     return "Annotation changes";
+  if (event.action === "finance.transaction_categorized") {
+    return `${categoryLabel(details.before, details.beforeName)} → ${categoryLabel(details.after, details.afterName)}`;
+  }
   if (event.root.type === "equipment") return equipmentActivitySummary(event);
   if (event.root.type === "api_key") return apiKeySummary(event);
   if (event.action === "organization.member_role_changed") {
@@ -329,6 +333,17 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
   switch (event.action) {
     case "organization.member_role_changed":
       return <MemberRoleDetails event={event} />;
+    case "finance.transaction_categorized":
+      return (
+        <div className="activityDetails">
+          <p className="activityChange">
+            <span>{categoryLabel(details.before, details.beforeName)}</span>
+            <span aria-hidden="true">→</span>
+            <span className="srOnly">changed to</span>
+            <span>{categoryLabel(details.after, details.afterName)}</span>
+          </p>
+        </div>
+      );
     case "audit.answer_changed":
       return (
         <div className="activityDetails">
@@ -423,6 +438,12 @@ function answerLabel(value: unknown, responseType: unknown) {
     if (value === "fail") return "Fail";
   }
   return textValue(value);
+}
+
+/** Names the category as it was when the event was recorded. */
+function categoryLabel(id: unknown, name: unknown) {
+  if (id == null) return "Uncategorized";
+  return textValue(name) || "Deleted category";
 }
 
 function activityPath(event: ActivityEvent) {
