@@ -6,6 +6,8 @@ export function financeListingFilters(context: FinanceContext) {
   const year = context.req.query("year");
   const uncategorized = context.req.query("uncategorized");
   const category = context.req.query("category");
+  // Clients before 0.1.52, including installed mobile apps, filter by id.
+  const categoryId = context.req.query("categoryId");
   const cursor = parseCursor(context.req.query("cursor"));
   if (
     accountIds.length > 200 ||
@@ -13,6 +15,7 @@ export function financeListingFilters(context: FinanceContext) {
     (year !== undefined && !/^[1-9]\d{3}$/.test(year)) ||
     (uncategorized !== undefined && uncategorized !== "true") ||
     (category !== undefined && (!category || category.length > 200)) ||
+    (categoryId !== undefined && (!categoryId || categoryId.length > 200)) ||
     cursor === false
   ) {
     return null;
@@ -50,6 +53,10 @@ export function financeListingFilters(context: FinanceContext) {
        )`,
     );
     bindings.push(category);
+  }
+  if (categoryId) {
+    conditions.push("annotation.expense_category_id = ?");
+    bindings.push(categoryId);
   }
   if (cursor) {
     conditions.push("(txn.transaction_date, txn.id) < (?, ?)");

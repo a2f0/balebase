@@ -158,6 +158,11 @@ describe("finance", () => {
     expect(year.body.transactions.map((txn) => txn.id)).toEqual([
       "report-txn-2",
     ]);
+    const byId = await list(`?categoryId=${meals}`);
+    expect(byId.body.transactions.map((txn) => txn.id)).toEqual([
+      "report-txn-0",
+      "report-txn-2",
+    ]);
     const unknown = await list("?category=dining");
     expect(unknown.response.status).toBe(200);
     expect(unknown.body.transactions).toEqual([]);
@@ -180,6 +185,7 @@ describe("finance", () => {
       "accountId=",
       "uncategorized=false",
       "category=",
+      "categoryId=",
       "cursor=broken",
       "cursor=null",
     ]) {
@@ -717,6 +723,29 @@ describe("expense categories", () => {
     ).toThrow(/UNIQUE/);
   });
 
+  it("chooses another slug when a concurrent write takes it first", async () => {
+    const fixture = await createFixture();
+    const tea = await createCategory(fixture, "Tea");
+    const raced = await jsonRequest<{ category: Category }>(
+      fixture.app,
+      raceForSlug(fixture, "cafe-bar"),
+      "/categories",
+      "POST",
+      { name: "Cafe/Bar" },
+    );
+    expect(raced.response.status).toBe(201);
+    expect(raced.body.category.slug).toBe("cafe-bar-2");
+    const renamed = await jsonRequest<{ category: Category }>(
+      fixture.app,
+      raceForSlug(fixture, "snacks"),
+      `/categories/${tea}`,
+      "PATCH",
+      { name: "Snacks" },
+    );
+    expect(renamed.response.status).toBe(200);
+    expect(renamed.body.category.slug).toBe("snacks-2");
+  });
+
   it("assigns at most one category per transaction and unassigns on delete", async () => {
     const fixture = await createFixture();
     const [transactionId] = seedTransactions(fixture.database);
@@ -1033,7 +1062,7 @@ describe("expense categories", () => {
         .all(),
     ).toEqual([
       { id: "a1234567-first", slug: "meals-drinks" },
-      { id: "b1234567-second", slug: "meals-drinks-2-b1234567" },
+      { id: "b1234567-second", slug: "b1234567-second" },
       { id: "c1234567-third", slug: "meals-drinks-2" },
       { id: "d1234567-fourth", slug: "uncategorized-2" },
       { id: "e1234567-fifth", slug: "taxes-2026" },
@@ -1042,6 +1071,20 @@ describe("expense categories", () => {
       { id: "g1234567-seventh", slug: "caf" },
       { id: "h1234567-eighth", slug: "meals-drinks" },
     ]);
+
+    // Categories the previous Worker creates during deployment get a slug.
+    database.run(
+      `INSERT INTO finance_expense_categories
+         (id, organization_id, name, created_at, updated_at)
+       VALUES ('i1234567-ninth', 'org-a', 'Postage', '', '')`,
+    );
+    expect(
+      database
+        .query(
+          "SELECT slug FROM finance_expense_categories WHERE id = 'i1234567-ninth'",
+        )
+        .get(),
+    ).toEqual({ slug: "i1234567-ninth" });
   });
 });
 
@@ -1082,6 +1125,40 @@ async function createCategory(
   );
   expect(created.response.status).toBe(201);
   return created.body.category.id;
+}
+
+/** Bindings where another category takes `slug` just before the first write. */
+function raceForSlug(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  slug: string,
+): Bindings {
+  const database = fixture.bindings.DB;
+  let raced = false;
+  const prepare = (query: string) => {
+    const statement = database.prepare(query);
+    if (!/^\s*(INSERT INTO|UPDATE) finance_expense_categories\b/.test(query))
+      return statement;
+    const run = statement.run.bind(statement);
+    return Object.assign(statement, {
+      run: () => {
+        if (!raced) {
+          raced = true;
+          fixture.database
+            .query(
+              `INSERT INTO finance_expense_categories
+                 (id, organization_id, name, slug, created_at, updated_at)
+               VALUES (?, 'org_user-1', ?, ?, '', '')`,
+            )
+            .run(`rival-${slug}`, `Rival ${slug}`, slug);
+        }
+        return run();
+      },
+    });
+  };
+  return {
+    ...fixture.bindings,
+    DB: { ...database, prepare } as unknown as D1Database,
+  };
 }
 
 /**

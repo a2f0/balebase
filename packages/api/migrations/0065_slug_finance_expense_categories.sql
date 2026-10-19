@@ -2,7 +2,7 @@
 -- bookmarkable /finance/expenses/category/<slug> routes. "uncategorized" names
 -- the bucket of expenses without a category, so no category may use it.
 -- SQLite cannot add a NOT NULL column without a default; the API sets the slug
--- whenever it writes a category.
+-- whenever it writes a category, and the trigger below covers older Workers.
 ALTER TABLE finance_expense_categories ADD COLUMN slug TEXT;
 
 -- Existing names become lowercase ASCII letters and digits separated by single
@@ -44,13 +44,13 @@ SET slug = (
   SELECT CASE
            -- A numbered slug can repeat another category's: "Meals/drinks"
            -- after "Meals & drinks" and "Meals drinks 2" would both take
-           -- meals-drinks-2. Part of the id keeps the numbered one unique.
+           -- meals-drinks-2. The numbered one takes its random, unique id.
            WHEN candidate.number > 1 AND EXISTS (
              SELECT 1 FROM candidates AS other
              WHERE other.organization_id = candidate.organization_id
                AND other.slug = candidate.slug
                AND other.id <> candidate.id
-           ) THEN candidate.slug || '-' || substr(candidate.id, 1, 8)
+           ) THEN candidate.id
            ELSE candidate.slug
          END
   FROM candidates AS candidate
@@ -59,3 +59,12 @@ SET slug = (
 
 CREATE UNIQUE INDEX finance_expense_categories_slug_idx
 ON finance_expense_categories (organization_id, slug);
+
+-- The Worker running while this migration deploys inserts categories without
+-- a slug. They take their id until a rename slugs the name.
+CREATE TRIGGER finance_expense_categories_default_slug
+AFTER INSERT ON finance_expense_categories
+WHEN NEW.slug IS NULL
+BEGIN
+  UPDATE finance_expense_categories SET slug = NEW.id WHERE id = NEW.id;
+END;

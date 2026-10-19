@@ -72,19 +72,24 @@ export async function createCategory(context: FinanceContext) {
   if (await nameTaken(context.env.DB, organizationId, name)) {
     return duplicateName(context);
   }
+  const database = context.env.DB;
   const id = crypto.randomUUID();
-  const slug = uniqueSlug(
-    name,
-    await takenSlugs(context.env.DB, organizationId),
-  );
   const now = new Date().toISOString();
-  await context.env.DB.prepare(
-    `INSERT INTO finance_expense_categories
-       (id, organization_id, name, slug, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  )
-    .bind(id, organizationId, name, slug, now, now)
-    .run();
+  const slug = await writeWithSlug(
+    database,
+    organizationId,
+    name,
+    null,
+    (slug) =>
+      database
+        .prepare(
+          `INSERT INTO finance_expense_categories
+           (id, organization_id, name, slug, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(id, organizationId, name, slug, now, now)
+        .run(),
+  );
   return context.json(
     { category: { id, name, slug, transactionCount: 0 } },
     201,
@@ -103,16 +108,17 @@ export async function renameCategory(context: FinanceContext) {
     return duplicateName(context);
   }
   // The slug follows the name, so a renamed category's old link stops working.
-  const slug = uniqueSlug(
-    name,
-    await takenSlugs(context.env.DB, organizationId, id),
+  const database = context.env.DB;
+  const slug = await writeWithSlug(database, organizationId, name, id, (slug) =>
+    database
+      .prepare(
+        `UPDATE finance_expense_categories
+         SET name = ?, slug = ?, updated_at = ?
+         WHERE id = ? AND organization_id = ?`,
+      )
+      .bind(name, slug, new Date().toISOString(), id, organizationId)
+      .run(),
   );
-  await context.env.DB.prepare(
-    `UPDATE finance_expense_categories SET name = ?, slug = ?, updated_at = ?
-     WHERE id = ? AND organization_id = ?`,
-  )
-    .bind(name, slug, new Date().toISOString(), id, organizationId)
-    .run();
   return context.json({ category: { id, name, slug } });
 }
 
@@ -274,19 +280,39 @@ function uniqueSlug(name: string, taken: Set<string>) {
   return slug;
 }
 
-async function takenSlugs(
+/**
+ * Writes a category with the name's next free slug, choosing again when a
+ * concurrent write takes that slug first.
+ */
+async function writeWithSlug(
   database: D1Database,
   organizationId: string,
-  exceptId: string | null = null,
+  name: string,
+  exceptId: string | null,
+  write: (slug: string) => Promise<unknown>,
 ) {
-  const result = await database
-    .prepare(
-      `SELECT slug FROM finance_expense_categories
-       WHERE organization_id = ? AND id IS NOT ?`,
-    )
-    .bind(organizationId, exceptId)
-    .all<{ slug: string }>();
-  return new Set(result.results.map(({ slug }) => slug));
+  for (let attempt = 1; ; attempt++) {
+    const taken = await database
+      .prepare(
+        `SELECT slug FROM finance_expense_categories
+         WHERE organization_id = ? AND id IS NOT ?`,
+      )
+      .bind(organizationId, exceptId)
+      .all<{ slug: string }>();
+    const slug = uniqueSlug(
+      name,
+      new Set(taken.results.map((row) => row.slug)),
+    );
+    try {
+      await write(slug);
+      return slug;
+    } catch (error) {
+      const slugTaken =
+        error instanceof Error &&
+        error.message.includes("finance_expense_categories.slug");
+      if (!slugTaken || attempt === 3) throw error;
+    }
+  }
 }
 
 async function categoryName(context: FinanceContext) {
