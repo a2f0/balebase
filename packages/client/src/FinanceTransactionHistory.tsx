@@ -83,12 +83,12 @@ export function FinanceTransactionHistory({
         filters={filters}
         onChange={onFiltersChange}
       />
-      {filters.uncategorized && (
-        <p className="textSm textSubtle">
-          Posted expenses without a category. Income, transfers, and loan or
-          card payments are excluded.
-        </p>
-      )}
+      <CategoryFilterNotice
+        categories={handlers.categories}
+        filters={filters}
+        loaded={Boolean(transactions)}
+        onNavigate={handlers.onNavigate}
+      />
       {Boolean(transactions?.length) && !handlers.categories.length && (
         <Banner
           actions={
@@ -122,7 +122,7 @@ export function FinanceTransactionHistory({
         <TransactionContent
           filtered={
             filters.accountIds.length > 0 ||
-            filters.categoryId !== null ||
+            filters.categorySlug !== null ||
             filters.year !== null ||
             filters.uncategorized
           }
@@ -166,6 +166,46 @@ function TransactionSummary({
         </Button>
       )}
     </div>
+  );
+}
+
+/** Explains the uncategorized filter, or a category path that matches nothing. */
+function CategoryFilterNotice({
+  categories,
+  filters,
+  loaded,
+  onNavigate,
+}: {
+  categories: ExpenseCategory[];
+  filters: FinanceFilters;
+  loaded: boolean;
+  onNavigate: (pathname: string) => void;
+}) {
+  if (filters.uncategorized) {
+    return (
+      <p className="textSm textSubtle">
+        Posted expenses without a category. Income, transfers, and loan or card
+        payments are excluded.
+      </p>
+    );
+  }
+  const slug = filters.categorySlug;
+  if (!slug || !loaded || categories.some((item) => item.slug === slug)) {
+    return null;
+  }
+  return (
+    <Banner
+      actions={
+        <Button onClick={() => onNavigate("/finance/categories")} size="sm">
+          View categories
+        </Button>
+      }
+      title="Category not found"
+      tone="warning"
+    >
+      No expense category uses the link “{slug}”. Renaming a category changes
+      its link.
+    </Banner>
   );
 }
 

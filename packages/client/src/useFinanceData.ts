@@ -5,17 +5,22 @@ import {
   getFinanceData,
 } from "./financeApi";
 
+type CategoryRoute = Pick<FinanceFilters, "categorySlug" | "uncategorized">;
+
 export const initialFilters: FinanceFilters = {
   accountIds: [],
-  categoryId: null,
+  categorySlug: null,
   year: null,
   uncategorized: false,
 };
 
-/** Keep account cards visible while loading, but never show a stale result set. */
-export function useFinanceData() {
+/**
+ * Keep account cards visible while loading, but never show a stale result set.
+ * The overview's path selects the category filters; other pages pass null.
+ */
+export function useFinanceData(route: CategoryRoute | null) {
   const [data, setData] = useState<FinanceData>();
-  const [filters, setFilters] = useState(initialFilters);
+  const [filters, setFilters] = useState({ ...initialFilters, ...route });
   const currentFilters = useRef(filters);
   const loadedFilters = useRef(filters);
   const loadedData = useRef(data);
@@ -69,11 +74,15 @@ export function useFinanceData() {
       ++requestId.current;
     };
   }, [load]);
-  function onFiltersChange(next: FinanceFilters) {
-    currentFilters.current = next;
-    setFilters(next);
-    void load(undefined, true);
-  }
+  const onFiltersChange = useCallback(
+    (next: FinanceFilters) => {
+      currentFilters.current = next;
+      setFilters(next);
+      void load(undefined, true);
+    },
+    [load],
+  );
+  useCategoryRoute(route, currentFilters, onFiltersChange);
   async function onLoadMore() {
     if (
       data?.nextCursor &&
@@ -103,6 +112,27 @@ export type FinanceListingState = Omit<
   ReturnType<typeof useFinanceData>,
   "load" | "setData"
 >;
+
+/** Back, Forward, and links to a category path keep the other filters. */
+function useCategoryRoute(
+  route: CategoryRoute | null,
+  currentFilters: { current: FinanceFilters },
+  onFiltersChange: (next: FinanceFilters) => void,
+) {
+  const slug = route?.categorySlug;
+  const uncategorized = route?.uncategorized;
+  useEffect(() => {
+    const current = currentFilters.current;
+    if (
+      slug === undefined ||
+      uncategorized === undefined ||
+      (current.categorySlug === slug && current.uncategorized === uncategorized)
+    ) {
+      return;
+    }
+    onFiltersChange({ ...current, categorySlug: slug, uncategorized });
+  }, [currentFilters, onFiltersChange, slug, uncategorized]);
+}
 
 /** Refresh every loaded page so saving a note does not lose the user's place. */
 async function loadFinancePages(

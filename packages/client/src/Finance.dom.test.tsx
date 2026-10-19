@@ -11,6 +11,7 @@ const originalFetch = globalThis.fetch;
 let createRoot: (container: Element) => Root;
 let root: Root | undefined;
 let container: HTMLElement;
+let currentPath = "";
 const year = new Date().getFullYear();
 const account = (id: string, name: string) => ({
   availableBalance: null,
@@ -52,7 +53,9 @@ const data: FinanceData = {
     account("savings", "Savings"),
     account("card", "Card"),
   ],
-  categories: [{ id: "meals", name: "Meals", transactionCount: 0 }],
+  categories: [
+    { id: "meals", name: "Meals", slug: "meals", transactionCount: 0 },
+  ],
   configured: true,
   connections: [],
   nextCursor: null,
@@ -100,13 +103,17 @@ function respond(
   globalThis.fetch = ((input, init) =>
     Promise.resolve(handler(new URL(input.toString()), init))) as typeof fetch;
 }
+/** Renders Finance at a path; the result navigates as Back or a link would. */
 async function mount(pathname = "/finance") {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const render = (path: string) =>
+  const render = (path: string) => {
+    currentPath = path;
     root?.render(<Finance onNavigate={render} pathname={path} />);
+  };
   await act(async () => render(pathname));
+  return (path: string) => act(async () => render(path));
 }
 function button(label: string) {
   const match = [
@@ -156,6 +163,7 @@ describe("Finance filters", () => {
     expect(selectedAccounts()).toEqual(["Checking", "Savings"]);
     await click("Current year");
     await click("Uncategorized expenses");
+    expect(currentPath).toBe("/finance/expenses/category/uncategorized");
     expect(queries.at(-1)?.getAll("accountId")).toEqual([
       "checking",
       "savings",
@@ -173,6 +181,7 @@ describe("Finance filters", () => {
     expect(queries.at(-1)?.get("year")).toBe(String(year - 1));
     expect(queries.at(-1)?.get("uncategorized")).toBe("true");
     await click("Clear filters");
+    expect(currentPath).toBe("/finance");
     expect(queries.at(-1)?.size).toBe(0);
     expect(selectedAccounts()).toEqual([]);
     expect(button("All time").getAttribute("aria-pressed")).toBe("true");
@@ -380,28 +389,31 @@ describe("Finance filters", () => {
   it("drills into one category from Categories, drops recategorized rows, and clears back to all", async () => {
     const queries: URLSearchParams[] = [];
     const categories = [
-      { id: "meals", name: "Meals", transactionCount: 2 },
-      { id: "travel", name: "Travel", transactionCount: 0 },
+      { id: "category-1", name: "Meals", slug: "meals", transactionCount: 2 },
+      { id: "category-2", name: "Travel", slug: "travel", transactionCount: 0 },
     ];
     respond((url, init) => {
       if (init?.method === "PUT")
-        return Response.json({ expenseCategoryId: "travel" });
+        return Response.json({ expenseCategoryId: "category-2" });
       queries.push(url.searchParams);
-      const categoryId = url.searchParams.get("categoryId");
+      const slug = url.searchParams.get("category");
+      const expenseCategoryId =
+        categories.find((category) => category.slug === slug)?.id ?? null;
       return Response.json({
         ...data,
         categories,
-        transactions: categoryId
+        transactions: slug
           ? [
-              transaction("Lunch", { expenseCategoryId: categoryId }),
-              transaction("Dinner", { expenseCategoryId: categoryId }),
+              transaction("Lunch", { expenseCategoryId }),
+              transaction("Dinner", { expenseCategoryId }),
             ]
           : data.transactions,
       });
     });
     await mount("/finance/categories");
     await click("Meals");
-    expect(queries.at(-1)?.get("categoryId")).toBe("meals");
+    expect(currentPath).toBe("/finance/expenses/category/meals");
+    expect(queries.at(-1)?.get("category")).toBe("meals");
     expect(rowNames()).toEqual(["Lunch", "Dinner"]);
     expect(button("Category: Meals").getAttribute("aria-pressed")).toBe("true");
     const select = container.querySelector<HTMLSelectElement>(
@@ -409,14 +421,15 @@ describe("Finance filters", () => {
     );
     if (!select) throw new Error("Missing category picker");
     await act(async () => {
-      select.value = "travel";
+      select.value = "category-2";
       select.dispatchEvent(
         new dom.Event("change", { bubbles: true }) as unknown as Event,
       );
     });
     expect(rowNames()).toEqual(["Dinner"]);
     await click("Category: Meals");
-    expect(queries.at(-1)?.has("categoryId")).toBe(false);
+    expect(currentPath).toBe("/finance");
+    expect(queries.at(-1)?.has("category")).toBe(false);
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
   });
 
@@ -426,10 +439,15 @@ describe("Finance filters", () => {
       queries.push(url.searchParams);
       return Response.json({
         ...data,
-        categories: [{ id: "travel", name: "Travel", transactionCount: 0 }],
-        transactions: url.searchParams.has("categoryId")
-          ? []
-          : data.transactions,
+        categories: [
+          {
+            id: "travel",
+            name: "Travel",
+            slug: "travel",
+            transactionCount: 0,
+          },
+        ],
+        transactions: url.searchParams.has("category") ? [] : data.transactions,
       });
     });
     await mount("/finance/categories");
@@ -452,7 +470,7 @@ describe("Finance filters", () => {
     ].find((item) => item.textContent === "Show transactions");
     if (!show) throw new Error("Missing Show transactions");
     await act(async () => show.click());
-    expect(queries.at(-1)?.get("categoryId")).toBe("travel");
+    expect(queries.at(-1)?.get("category")).toBe("travel");
     expect(document.querySelector('[role="menu"]')).toBeNull();
     expect(button("Category: Travel").getAttribute("aria-pressed")).toBe(
       "true",
@@ -460,6 +478,68 @@ describe("Finance filters", () => {
     expect(container.textContent).toContain(
       "No transactions match these filters",
     );
+  });
+
+  it("opens a bookmarked category path with one filtered request", async () => {
+    const queries: URLSearchParams[] = [];
+    respond((url) => {
+      queries.push(url.searchParams);
+      return Response.json(data);
+    });
+    await mount("/finance/expenses/category/meals");
+    expect(queries.map((query) => query.get("category"))).toEqual(["meals"]);
+    expect(button("Category: Meals").getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toBe(
+      "Overview",
+    );
+  });
+
+  it("opens and leaves the bookmarked uncategorized path", async () => {
+    const queries: URLSearchParams[] = [];
+    respond((url) => {
+      queries.push(url.searchParams);
+      return Response.json(data);
+    });
+    await mount("/finance/expenses/category/uncategorized");
+    expect(queries).toHaveLength(1);
+    expect(queries[0]?.get("uncategorized")).toBe("true");
+    expect(queries[0]?.has("category")).toBe(false);
+    expect(button("Uncategorized expenses").getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    await click("Uncategorized expenses");
+    expect(currentPath).toBe("/finance");
+    expect(queries.at(-1)?.has("uncategorized")).toBe(false);
+  });
+
+  it("follows Back to a category path and keeps the other filters", async () => {
+    const queries: URLSearchParams[] = [];
+    respond((url) => {
+      queries.push(url.searchParams);
+      return Response.json(data);
+    });
+    const navigate = await mount();
+    await click("Previous year");
+    await navigate("/finance/expenses/category/meals");
+    expect(queries.at(-1)?.get("category")).toBe("meals");
+    expect(queries.at(-1)?.get("year")).toBe(String(year - 1));
+    const count = queries.length;
+    await navigate("/finance/categories");
+    expect(queries).toHaveLength(count);
+    await navigate("/finance");
+    expect(queries.at(-1)?.has("category")).toBe(false);
+    expect(queries.at(-1)?.get("year")).toBe(String(year - 1));
+  });
+
+  it("explains a category path that matches no category", async () => {
+    respond(() => Response.json({ ...data, transactions: [] }));
+    await mount("/finance/expenses/category/dining");
+    expect(button("Category: dining").getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(container.textContent).toContain("Category not found");
+    await click("View categories");
+    expect(currentPath).toBe("/finance/categories");
   });
 
   it("removes newly categorized expenses immediately and restores them if saving fails", async () => {

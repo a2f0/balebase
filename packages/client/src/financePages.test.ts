@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { formatMoney } from "./financeFormat";
 import {
   categoryShare,
+  expenseCategoryFiltersFor,
+  financeOverviewPath,
   financePageFor,
   isFinancePath,
   presetRange,
@@ -17,6 +19,34 @@ describe("finance pages", () => {
     expect(financePageFor("/finance/categories")).toBe("categories");
     expect(financePageFor("/finance/connections")).toBe("connections");
     expect(financePageFor("/finance/unknown")).toBe("overview");
+    expect(financePageFor("/finance/expenses/category/meals")).toBe("overview");
+  });
+
+  it("maps expense category paths to and from their filters", () => {
+    const none = { categorySlug: null, uncategorized: false };
+    const uncategorized = { categorySlug: null, uncategorized: true };
+    const meals = { categorySlug: "meals-2", uncategorized: false };
+    expect(financeOverviewPath(none)).toBe("/finance");
+    expect(financeOverviewPath(uncategorized)).toBe(
+      "/finance/expenses/category/uncategorized",
+    );
+    expect(financeOverviewPath(meals)).toBe(
+      "/finance/expenses/category/meals-2",
+    );
+    for (const filters of [none, uncategorized, meals]) {
+      expect(expenseCategoryFiltersFor(financeOverviewPath(filters))).toEqual(
+        filters,
+      );
+    }
+    expect(expenseCategoryFiltersFor("/finance/expenses/category/")).toEqual(
+      none,
+    );
+    expect(
+      expenseCategoryFiltersFor("/finance/expenses/category/caf%C3%A9"),
+    ).toEqual({ categorySlug: "café", uncategorized: false });
+    expect(expenseCategoryFiltersFor("/finance/expenses/category/%E0")).toEqual(
+      { categorySlug: "%E0", uncategorized: false },
+    );
   });
 });
 

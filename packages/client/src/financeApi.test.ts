@@ -49,7 +49,7 @@ describe("finance API", () => {
       await getFinanceData(
         {
           accountIds: ["checking/1", "savings"],
-          categoryId: "category/1",
+          categorySlug: "meals-2",
           year: 2025,
           uncategorized: true,
         },
@@ -62,7 +62,7 @@ describe("finance API", () => {
       "checking/1",
       "savings",
     ]);
-    expect(url.searchParams.get("categoryId")).toBe("category/1");
+    expect(url.searchParams.get("category")).toBe("meals-2");
     expect(url.searchParams.get("year")).toBe("2025");
     expect(url.searchParams.get("uncategorized")).toBe("true");
     expect(url.searchParams.get("cursor")).toBe(cursor);

@@ -41,7 +41,7 @@ export const financeTools: McpTool[] = [
   },
   {
     description:
-      "Lists expense categories with how many transactions each has.",
+      "Lists expense categories with their URL slugs and how many transactions each has.",
     method: "GET",
     name: "list_expense_categories",
     path: "/api/finance/categories",

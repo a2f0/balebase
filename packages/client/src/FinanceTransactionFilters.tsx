@@ -12,9 +12,9 @@ export function FinanceTransactionFilters({
   onChange: (filters: FinanceFilters) => void;
 }) {
   const year = new Date().getFullYear();
-  const categoryName = filters.categoryId
-    ? (categories.find(({ id }) => id === filters.categoryId)?.name ??
-      "Selected")
+  const categoryName = filters.categorySlug
+    ? (categories.find(({ slug }) => slug === filters.categorySlug)?.name ??
+      filters.categorySlug)
     : undefined;
   return (
     <div className="financeTransactionFilters">
@@ -39,7 +39,7 @@ export function FinanceTransactionFilters({
         <Button
           aria-pressed
           iconEnd="close"
-          onClick={() => onChange({ ...filters, categoryId: null })}
+          onClick={() => onChange({ ...filters, categorySlug: null })}
           size="sm"
           variant="primary"
         >
@@ -51,7 +51,7 @@ export function FinanceTransactionFilters({
         onClick={() =>
           onChange({
             ...filters,
-            categoryId: null,
+            categorySlug: null,
             uncategorized: !filters.uncategorized,
           })
         }
@@ -61,7 +61,7 @@ export function FinanceTransactionFilters({
         Uncategorized expenses
       </Button>
       {(filters.accountIds.length > 0 ||
-        filters.categoryId !== null ||
+        filters.categorySlug !== null ||
         filters.year !== null ||
         filters.uncategorized) && (
         <Button
