@@ -245,6 +245,60 @@ a.row:focus-visible {
   outline-offset: -2px;
 }
 
+/*
+ * A row that also holds its own buttons: its primary link or button
+ * (.rowTarget) stretches over the whole row, and .rowActions stay on top.
+ * The corners follow a surrounding card's, since cards do not clip.
+ */
+.rowInteractive {
+  --row-radius-top: 0;
+  --row-radius-bottom: 0;
+
+  position: relative;
+  border-radius: var(--row-radius-top) var(--row-radius-top)
+    var(--row-radius-bottom) var(--row-radius-bottom);
+  transition: background-color var(--duration-fast) var(--ease);
+}
+
+.rowInteractive:hover {
+  background: var(--color-surface-hover);
+}
+
+.rowInteractive:first-child {
+  --row-radius-top: calc(var(--radius-lg) - 1px);
+}
+
+.rowInteractive:last-child {
+  --row-radius-bottom: calc(var(--radius-lg) - 1px);
+}
+
+.rowTarget {
+  justify-self: start;
+}
+
+.rowTarget::after {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--row-radius-top, 0) var(--row-radius-top, 0)
+    var(--row-radius-bottom, 0) var(--row-radius-bottom, 0);
+  content: "";
+}
+
+.rowTarget:focus-visible {
+  outline: none;
+}
+
+.rowTarget:focus-visible::after {
+  outline: 2px solid var(--focus-color);
+  outline-offset: -2px;
+}
+
+/* Only the controls rise, so the gaps between them still open the row. */
+.rowInteractive > .rowActions > * {
+  position: relative;
+  z-index: 1;
+}
+
 /* Badges. */
 .badge {
   display: inline-flex;
