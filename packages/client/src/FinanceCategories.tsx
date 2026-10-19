@@ -23,9 +23,11 @@ const maxNameLength = 60;
 export function FinanceCategories({
   categories,
   onChanged,
+  onShowTransactions,
 }: {
   categories: ExpenseCategory[] | undefined;
   onChanged: () => Promise<void>;
+  onShowTransactions: (category: ExpenseCategory) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -88,7 +90,7 @@ export function FinanceCategories({
             </div>
           ) : undefined
         }
-        description="Each transaction can have one expense category. Reports total spending by category."
+        description="Each transaction can have one expense category. Reports total spending by category. Select a category to see its transactions."
         title="Expense categories"
       >
         <CategoryList
@@ -107,6 +109,7 @@ export function FinanceCategories({
               return `Renamed to “${name}”.`;
             })
           }
+          onShowTransactions={onShowTransactions}
         />
       </PageSection>
     </>
@@ -162,12 +165,14 @@ function CategoryList({
   onAddDefaults,
   onDelete,
   onRename,
+  onShowTransactions,
 }: {
   busy: boolean;
   categories: ExpenseCategory[] | undefined;
   onAddDefaults: () => Promise<boolean>;
   onDelete: (category: ExpenseCategory) => Promise<boolean>;
   onRename: (category: ExpenseCategory, name: string) => Promise<boolean>;
+  onShowTransactions: (category: ExpenseCategory) => void;
 }) {
   if (!categories) return <LoadingState label="Loading categories…" />;
   if (!categories.length) {
@@ -200,6 +205,7 @@ function CategoryList({
             key={category.id}
             onDelete={onDelete}
             onRename={onRename}
+            onShowTransactions={onShowTransactions}
           />
         ))}
       </ul>
@@ -212,11 +218,13 @@ function CategoryRow({
   category,
   onDelete,
   onRename,
+  onShowTransactions,
 }: {
   busy: boolean;
   category: ExpenseCategory;
   onDelete: (category: ExpenseCategory) => Promise<boolean>;
   onRename: (category: ExpenseCategory, name: string) => Promise<boolean>;
+  onShowTransactions: (category: ExpenseCategory) => void;
 }) {
   const [editing, setEditing] = useState(false);
   if (editing) {
@@ -237,7 +245,17 @@ function CategoryRow({
   return (
     <li className="row">
       <div className="rowMain">
-        <span className="rowTitle">{category.name}</span>
+        {category.transactionCount ? (
+          <Button
+            className="rowTitle financeCategoryLink"
+            onClick={() => onShowTransactions(category)}
+            variant="link"
+          >
+            {category.name}
+          </Button>
+        ) : (
+          <span className="rowTitle">{category.name}</span>
+        )}
         <span className="rowMeta">
           {countLabel(category.transactionCount, "transaction")}
         </span>

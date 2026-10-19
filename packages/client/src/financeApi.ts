@@ -120,6 +120,8 @@ export interface FinanceData {
 
 export interface FinanceFilters {
   accountIds: string[];
+  /** One expense category's transactions, opened from the Categories tab. */
+  categoryId: string | null;
   year: number | null;
   uncategorized: boolean;
 }
@@ -132,6 +134,7 @@ export async function getFinanceData(
   for (const id of filters?.accountIds ?? []) query.append("accountId", id);
   if (filters?.year) query.set("year", String(filters.year));
   if (filters?.uncategorized) query.set("uncategorized", "true");
+  if (filters?.categoryId) query.set("categoryId", filters.categoryId);
   if (cursor) query.set("cursor", cursor);
   return request<FinanceData>(query.size ? `?${query}` : "");
 }

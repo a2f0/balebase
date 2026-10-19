@@ -99,13 +99,13 @@ function respond(
   globalThis.fetch = ((input, init) =>
     Promise.resolve(handler(new URL(input.toString()), init))) as typeof fetch;
 }
-async function mount() {
+async function mount(pathname = "/finance") {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  await act(async () =>
-    root?.render(<Finance onNavigate={() => undefined} pathname="/finance" />),
-  );
+  const render = (path: string) =>
+    root?.render(<Finance onNavigate={render} pathname={path} />);
+  await act(async () => render(pathname));
 }
 function button(label: string) {
   const match = [
@@ -374,6 +374,50 @@ describe("Finance filters", () => {
     );
     expect(container.textContent).not.toContain("No transactions imported yet");
     expect(button("Previous year").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("drills into one category from Categories, drops recategorized rows, and clears back to all", async () => {
+    const queries: URLSearchParams[] = [];
+    const categories = [
+      { id: "meals", name: "Meals", transactionCount: 2 },
+      { id: "travel", name: "Travel", transactionCount: 0 },
+    ];
+    respond((url, init) => {
+      if (init?.method === "PUT")
+        return Response.json({ expenseCategoryId: "travel" });
+      queries.push(url.searchParams);
+      const categoryId = url.searchParams.get("categoryId");
+      return Response.json({
+        ...data,
+        categories,
+        transactions: categoryId
+          ? [
+              transaction("Lunch", { expenseCategoryId: categoryId }),
+              transaction("Dinner", { expenseCategoryId: categoryId }),
+            ]
+          : data.transactions,
+      });
+    });
+    await mount("/finance/categories");
+    expect(() => button("Travel")).toThrow();
+    await click("Meals");
+    expect(queries.at(-1)?.get("categoryId")).toBe("meals");
+    expect(rowNames()).toEqual(["Lunch", "Dinner"]);
+    expect(button("Category: Meals").getAttribute("aria-pressed")).toBe("true");
+    const select = container.querySelector<HTMLSelectElement>(
+      '[aria-label="Expense category for Lunch"]',
+    );
+    if (!select) throw new Error("Missing category picker");
+    await act(async () => {
+      select.value = "travel";
+      select.dispatchEvent(
+        new dom.Event("change", { bubbles: true }) as unknown as Event,
+      );
+    });
+    expect(rowNames()).toEqual(["Dinner"]);
+    await click("Category: Meals");
+    expect(queries.at(-1)?.has("categoryId")).toBe(false);
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
   });
 
   it("removes newly categorized expenses immediately and restores them if saving fails", async () => {

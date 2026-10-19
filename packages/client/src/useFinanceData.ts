@@ -5,8 +5,9 @@ import {
   getFinanceData,
 } from "./financeApi";
 
-const initialFilters: FinanceFilters = {
+export const initialFilters: FinanceFilters = {
   accountIds: [],
+  categoryId: null,
   year: null,
   uncategorized: false,
 };

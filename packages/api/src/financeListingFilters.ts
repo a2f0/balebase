@@ -5,12 +5,14 @@ export function financeListingFilters(context: FinanceContext) {
   const accountIds = context.req.queries("accountId") ?? [];
   const year = context.req.query("year");
   const uncategorized = context.req.query("uncategorized");
+  const categoryId = context.req.query("categoryId");
   const cursor = parseCursor(context.req.query("cursor"));
   if (
     accountIds.length > 200 ||
     accountIds.some((id) => !id || id.length > 200) ||
     (year !== undefined && !/^[1-9]\d{3}$/.test(year)) ||
     (uncategorized !== undefined && uncategorized !== "true") ||
+    (categoryId !== undefined && (!categoryId || categoryId.length > 200)) ||
     cursor === false
   ) {
     return null;
@@ -38,6 +40,10 @@ export function financeListingFilters(context: FinanceContext) {
       "txn.amount > 0",
       "COALESCE(txn.category_primary, '') NOT IN ('TRANSFER_OUT', 'LOAN_PAYMENTS')",
     );
+  }
+  if (categoryId) {
+    conditions.push("annotation.expense_category_id = ?");
+    bindings.push(categoryId);
   }
   if (cursor) {
     conditions.push("(txn.transaction_date, txn.id) < (?, ?)");
