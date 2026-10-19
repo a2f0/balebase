@@ -14,7 +14,7 @@ export {
   promptDialog,
 } from "./Dialog";
 export { EmptyState, LoadingState } from "./EmptyState";
-export { Field } from "./Field";
+export { Field, PasswordField } from "./Field";
 export { Icon } from "./Icon";
 export { Avatar, BrandMark, Logo } from "./Identity";
 export { Page, PageBody, PageHeader, PageSection } from "./Page";

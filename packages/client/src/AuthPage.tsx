@@ -7,6 +7,7 @@ import {
   Icon,
   type IconName,
   Logo,
+  PasswordField,
   Toast,
 } from "@balebase/ui/react";
 import { type FormEvent, type ReactNode, useState } from "react";
@@ -793,8 +794,10 @@ function AuthFields(props: AuthFieldsProps) {
           value={props.email}
         />
       )}
+      {/* Keyed by mode, so a revealed password is hidden on the next form. */}
       {needsPassword && (
         <AuthInput
+          key={`${mode}-password`}
           autoComplete={
             mode === "sign-in" ? "current-password" : "new-password"
           }
@@ -810,6 +813,7 @@ function AuthFields(props: AuthFieldsProps) {
       )}
       {needsConfirmation && (
         <AuthInput
+          key={`${mode}-confirmation`}
           autoComplete="new-password"
           label="Confirm password"
           maxLength={128}
@@ -846,6 +850,18 @@ function AuthInput({
   type = undefined,
   ...props
 }: AuthInputProps) {
+  if (type === "password") {
+    return (
+      <PasswordField
+        {...props}
+        hint={help}
+        id={props.name}
+        label={label}
+        onChange={(event) => onValue(event.target.value)}
+        required
+      />
+    );
+  }
   return (
     <Field hint={help} label={label}>
       <input
