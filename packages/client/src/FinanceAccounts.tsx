@@ -261,7 +261,6 @@ function AccountCard({
   const details = [
     account.institutionName,
     formatLabel(account.subtype ?? account.type),
-    account.mask && `••••\u00a0${account.mask}`,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -284,8 +283,15 @@ function AccountCard({
         </span>
       </span>
       <span className="financeAccountLine">
-        <span className="financeAccountMeta" title={details}>
-          {details}
+        <span className="financeAccountMeta">
+          <span className="financeAccountDetails" title={details}>
+            {details}
+          </span>
+          {account.mask && (
+            <span className="financeAccountMask">
+              ·&nbsp;••••&nbsp;{account.mask}
+            </span>
+          )}
         </span>
         {selected && (
           <span className="financeAccountCheck">

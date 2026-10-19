@@ -48,7 +48,7 @@
 }
 
 .financeAccountName,
-.financeAccountMeta {
+.financeAccountDetails {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -67,10 +67,19 @@
   font-weight: 650;
 }
 
+/* Long institution names truncate before the account number does. */
 .financeAccountMeta {
+  display: flex;
+  gap: var(--space-1);
+  min-width: 0;
   color: var(--color-text-subtle);
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
+}
+
+.financeAccountMask {
+  flex: none;
+  white-space: nowrap;
 }
 
 .financeAccountCheck {
