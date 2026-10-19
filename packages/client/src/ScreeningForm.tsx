@@ -54,46 +54,17 @@ type UpdateAnswers = (change: Partial<Answers>) => void;
  * orders the Checkr report only after they sign.
  */
 export function ScreeningForm({
-  activeOrganizationId,
   memberId,
   onNavigate,
-  onOrganizationChange,
-  organizationIds,
   requirementId,
 }: {
-  activeOrganizationId: string | undefined;
   memberId: string;
   onNavigate: (pathname: string) => void;
-  onOrganizationChange: (organizationId: string) => Promise<void>;
-  /** The organizations the person belongs to. */
-  organizationIds: string[];
   requirementId: string;
 }) {
   const [form, setForm] = useState<ScreeningFormData>();
   const [error, setError] = useState<string>();
-  // An emailed link names its organization; open it there first.
-  const [linked] = useState(() =>
-    new URLSearchParams(window.location.search).get("organization"),
-  );
-  const switching = Boolean(linked && linked !== activeOrganizationId);
   useEffect(() => {
-    if (!linked || linked === activeOrganizationId) return;
-    if (!organizationIds.includes(linked)) {
-      setError(
-        "This background check belongs to an organization you're not a member of.",
-      );
-      return;
-    }
-    onOrganizationChange(linked).catch((cause: unknown) =>
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Could not open this organization.",
-      ),
-    );
-  }, [activeOrganizationId, linked, onOrganizationChange, organizationIds]);
-  useEffect(() => {
-    if (switching) return;
     let current = true;
     getScreeningForm(requirementId).then(
       (loaded) => current && setForm(loaded),
@@ -108,7 +79,7 @@ export function ScreeningForm({
     return () => {
       current = false;
     };
-  }, [requirementId, switching]);
+  }, [requirementId]);
   const back = organizationPeoplePath(memberId);
   if (error) {
     return (

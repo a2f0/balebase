@@ -38,7 +38,6 @@ export function OrganizationSettings({
   memberRole,
   onAccessChanged,
   onNavigate,
-  onOrganizationChange,
   onWorkspaceChanged,
   organizations,
   ownerCount,
@@ -49,7 +48,6 @@ export function OrganizationSettings({
   memberRole: string | undefined;
   onAccessChanged: () => Promise<void>;
   onNavigate: (pathname: string) => void;
-  onOrganizationChange: (organizationId: string) => Promise<void>;
   onWorkspaceChanged: () => Promise<void>;
   organizations: WorkspaceOrganization[];
   ownerCount: number;
@@ -88,7 +86,6 @@ export function OrganizationSettings({
           memberRole={memberRole}
           onAccessChanged={onAccessChanged}
           onNavigate={onNavigate}
-          onOrganizationChange={onOrganizationChange}
           onWorkspaceChanged={onWorkspaceChanged}
           organization={organization}
           organizations={organizations}
@@ -108,7 +105,6 @@ function OrganizationSettingsPageContent({
   memberRole,
   onAccessChanged,
   onNavigate,
-  onOrganizationChange,
   onWorkspaceChanged,
   organization,
   organizations,
@@ -122,7 +118,6 @@ function OrganizationSettingsPageContent({
   memberRole: string | undefined;
   onAccessChanged: () => Promise<void>;
   onNavigate: (pathname: string) => void;
-  onOrganizationChange: (organizationId: string) => Promise<void>;
   onWorkspaceChanged: () => Promise<void>;
   organization: WorkspaceOrganization | undefined;
   organizations: WorkspaceOrganization[];
@@ -134,12 +129,9 @@ function OrganizationSettingsPageContent({
   if (page === "people" && screening) {
     return (
       <ScreeningForm
-        activeOrganizationId={organization.id}
         key={`${organization.id}:${screening.requirementId}`}
         memberId={screening.memberId}
         onNavigate={onNavigate}
-        onOrganizationChange={onOrganizationChange}
-        organizationIds={organizations.map(({ id }) => id)}
         requirementId={screening.requirementId}
       />
     );

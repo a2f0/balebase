@@ -34,6 +34,7 @@ import { isFinancePath } from "./financePages";
 import { Inbox } from "./Inbox";
 import { Issues } from "./Issues";
 import { Library } from "./Library";
+import { useLinkedOrganization } from "./linkedOrganization";
 import {
   guardWorkspaceChange,
   useDismissDialogsOnWorkspaceChange,
@@ -70,6 +71,7 @@ export function App() {
   const isResetPage = pathname === "/reset-password";
   const verification = verificationFeedback();
   const workspace = useWorkspaceOrganizations(session, () => refetch());
+  useLinkedOrganization(workspace);
   const access = useOrganizationAccess(
     session?.user.id,
     workspace.activeOrganizationId,
@@ -527,7 +529,6 @@ function contentForPath(
         memberRole={access.memberRole}
         onAccessChanged={access.refresh}
         onNavigate={navigate}
-        onOrganizationChange={workspace.switchOrganization}
         onWorkspaceChanged={workspace.refresh}
         organizations={workspace.organizations}
         ownerCount={access.ownerCount}

@@ -106,15 +106,8 @@ const form: ScreeningFormData = {
   workLocation: { city: "San Jose", state: "CA" },
 };
 
-async function mount(
-  data: ScreeningFormData,
-  submitted: unknown[],
-  switched: string[] = [],
-  organizationIds = ["org-1", "org-2"],
-  requests: string[] = [],
-) {
+async function mount(data: ScreeningFormData, submitted: unknown[]) {
   globalThis.fetch = (async (input, init) => {
-    requests.push(String(input));
     if (init?.method === "POST") {
       submitted.push(JSON.parse(String(init.body)));
       expect(String(input)).toEndWith(
@@ -130,13 +123,8 @@ async function mount(
   await act(async () =>
     root?.render(
       <ScreeningForm
-        activeOrganizationId="org-1"
         memberId="member"
         onNavigate={() => undefined}
-        onOrganizationChange={async (organizationId) => {
-          switched.push(organizationId);
-        }}
-        organizationIds={organizationIds}
         requirementId="check"
       />,
     ),
@@ -261,30 +249,6 @@ describe("screening form", () => {
       },
     ]);
     expect(heading()).toBe("Background check submitted");
-  });
-
-  it("opens an emailed link in its organization before loading the form", async () => {
-    const path = "/organization/people/member/screening/check";
-    for (const [organizationIds, expected] of [
-      [["org-1", "org-2"], ["org-2"]],
-      [["org-1"], []],
-    ] as const) {
-      dom.history.replaceState(null, "", `${path}?organization=org-2`);
-      const requests: string[] = [];
-      const switched: string[] = [];
-      await mount(form, [], switched, [...organizationIds], requests);
-      expect(switched).toEqual([...expected]);
-      expect(requests).toEqual([]);
-      if (!expected.length) {
-        expect(container.textContent).toContain(
-          "This background check belongs to an organization you're not a member of.",
-        );
-      }
-      if (root) await act(async () => root?.unmount());
-      root = undefined;
-      container.remove();
-    }
-    dom.history.replaceState(null, "", path);
   });
 
   it("skips state notices and test candidates when neither applies", async () => {
