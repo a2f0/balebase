@@ -78,29 +78,6 @@ export function organizationPeoplePath(memberId?: string) {
     : "/organization/people";
 }
 
-/** Where a member completes a background check their organization requested. */
-export function organizationScreeningPath(
-  memberId: string,
-  requirementId: string,
-) {
-  return `${organizationPeoplePath(memberId)}/screening/${encodeURIComponent(requirementId)}`;
-}
-
-export function organizationScreeningForPath(pathname: string) {
-  const match = /^\/organization\/people\/([^/]+)\/screening\/([^/]+)\/?$/.exec(
-    pathname,
-  );
-  if (!match?.[1] || !match[2]) return undefined;
-  try {
-    return {
-      memberId: decodeURIComponent(match[1]),
-      requirementId: decodeURIComponent(match[2]),
-    };
-  } catch {
-    return undefined;
-  }
-}
-
 export function organizationMemberIdForPath(pathname: string) {
   const segment = /^\/organization\/people\/([^/]+)\/?$/.exec(pathname)?.[1];
   if (!segment) return undefined;
@@ -116,8 +93,7 @@ export function organizationSettingsPage(
 ): OrganizationSettingsPage {
   if (
     pathname === "/organization/people" ||
-    organizationMemberIdForPath(pathname) ||
-    organizationScreeningForPath(pathname)
+    organizationMemberIdForPath(pathname)
   ) {
     return "people";
   }

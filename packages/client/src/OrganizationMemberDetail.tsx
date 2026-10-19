@@ -28,12 +28,12 @@ import {
   organizationPeoplePath,
   type WorkspaceOrganization,
 } from "./organizationState";
-import { handleNavigation } from "./workspacePaths";
+import { handleNavigation, myDocumentsPath } from "./workspacePaths";
 
 /**
- * One member: who they are, their role and two-factor requirement, and the
- * forms and checks requested from them. Managers see and change everything;
- * a member sees their own requests here.
+ * One member: who they are, their role and two-factor requirement, and, for
+ * managers, the forms and checks requested from them. People complete their
+ * own requests in My documents, which their own page links to.
  */
 export function OrganizationMemberDetail({
   memberId,
@@ -120,15 +120,38 @@ export function OrganizationMemberDetail({
           data.members.map(({ role }) => role),
         )}
       />
-      {(canManage || isSelf) && (
+      {isSelf && <MyDocumentsNotice onNavigate={onNavigate} />}
+      {canManage && (
         <EmployeeForms
-          canManage={canManage}
           key={member.id}
-          onNavigate={onNavigate}
           scope={{ kind: "member", memberId: member.id }}
         />
       )}
     </>
+  );
+}
+
+function MyDocumentsNotice({
+  onNavigate,
+}: {
+  onNavigate: (pathname: string) => void;
+}) {
+  const path = myDocumentsPath();
+  return (
+    <Banner
+      actions={
+        <ButtonLink
+          href={path}
+          onClick={(event) => handleNavigation(event, path, onNavigate)}
+          size="sm"
+        >
+          Open My documents
+        </ButtonLink>
+      }
+      tone="info"
+    >
+      Fill out the forms and checks requested from you in My documents.
+    </Banner>
   );
 }
 

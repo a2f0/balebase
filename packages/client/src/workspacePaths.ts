@@ -101,6 +101,34 @@ export function contractTemplateIdForPath(pathname: string) {
   }
 }
 
+/** My documents, or the background check form for one request there. */
+export function myDocumentsPath(screeningId?: string) {
+  return screeningId
+    ? `/me/screening/${encodeURIComponent(screeningId)}`
+    : "/me";
+}
+
+export function isMyDocumentsPath(pathname: string) {
+  return pathname === "/me" || pathname.startsWith("/me/");
+}
+
+/** The request in a `/me/screening/<id>` path, if any. */
+export function myScreeningIdForPath(pathname: string) {
+  const segment = /^\/me\/screening\/([^/]+)\/?$/.exec(pathname)?.[1];
+  return segment ? decodeRecordId(segment) : undefined;
+}
+
+/**
+ * Where an older link now lives. Background check emails sent before My
+ * documents linked to a form under the person's People page.
+ */
+export function movedWorkspacePath(pathname: string) {
+  const segment = /^\/organization\/people\/[^/]+\/screening\/([^/]+)\/?$/.exec(
+    pathname,
+  )?.[1];
+  return segment ? `/me/screening/${segment}` : undefined;
+}
+
 /** The token in a public `/sign/<token>` signing link, if the path is one. */
 export function signingTokenForPath(pathname: string) {
   return /^\/sign\/([A-Za-z0-9_-]{43})\/?$/.exec(pathname)?.[1];

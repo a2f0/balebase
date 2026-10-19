@@ -50,8 +50,14 @@ export interface RequirementDraft {
 
 const endpoint = `${apiUrl}/api/employee-forms`;
 
-export async function listEmployeeRequirements() {
-  const response = await fetchApi(endpoint, { credentials: "include" });
+/**
+ * Requests visible to the signed-in person. `own` keeps only those sent to
+ * them, as they see them, for My documents.
+ */
+export async function listEmployeeRequirements({ own = false } = {}) {
+  const response = await fetchApi(own ? `${endpoint}?for=me` : endpoint, {
+    credentials: "include",
+  });
   return (
     await parseResponse<{ requirements: EmployeeRequirement[] }>(response)
   ).requirements;

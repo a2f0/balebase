@@ -6,7 +6,7 @@ import type { ScreeningForm as ScreeningFormData } from "./employeeFormsApi";
 import { ScreeningForm } from "./ScreeningForm";
 
 const dom = new Window({
-  url: "http://localhost:5173/organization/people/member/screening/check",
+  url: "http://localhost:5173/me/screening/check",
 });
 const domGlobals = {
   document: dom.document,
@@ -123,7 +123,7 @@ async function mount(data: ScreeningFormData, submitted: unknown[]) {
   await act(async () =>
     root?.render(
       <ScreeningForm
-        memberId="member"
+        back="/me"
         onNavigate={() => undefined}
         requirementId="check"
       />,

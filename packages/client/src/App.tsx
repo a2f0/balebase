@@ -37,6 +37,7 @@ import { Inbox } from "./Inbox";
 import { Issues } from "./Issues";
 import { Library } from "./Library";
 import { useLinkedOrganization } from "./linkedOrganization";
+import { MyDocuments } from "./MyDocuments";
 import {
   guardWorkspaceChange,
   useDismissDialogsOnWorkspaceChange,
@@ -63,12 +64,14 @@ import {
   isBusinessesPath,
   isContractsPath,
   isEquipmentPath,
+  isMyDocumentsPath,
+  movedWorkspacePath,
   signingTokenForPath,
 } from "./workspacePaths";
 
 export function App() {
   const { data: session, error, isPending, refetch } = authClient.useSession();
-  const [pathname, setPathname] = useState(window.location.pathname);
+  const [pathname, setPathname] = useState(initialPathname);
   const isAddAccountPage = pathname === "/add-account";
   const isResetPage = pathname === "/reset-password";
   const verification = verificationFeedback();
@@ -481,7 +484,7 @@ function contentForPath(
   twoFactorEnabled: boolean,
   onSecurityChanged: () => Promise<unknown>,
 ) {
-  if (pathname === "/issues" || pathname.startsWith("/issues/"))
+  if (isWithin(pathname, "/issues"))
     return (
       <Issues
         pathname={pathname}
@@ -490,8 +493,19 @@ function contentForPath(
       />
     );
   if (pathname === "/activity") return <Activity onNavigate={navigate} />;
-  if (pathname === "/audits" || pathname.startsWith("/audits/")) {
+  if (isWithin(pathname, "/audits")) {
     return <Audits onNavigate={navigate} pathname={pathname} />;
+  }
+  if (isMyDocumentsPath(pathname)) {
+    return (
+      <MyDocuments
+        onNavigate={navigate}
+        organization={workspace.organizations.find(
+          ({ id }) => id === workspace.activeOrganizationId,
+        )}
+        pathname={pathname}
+      />
+    );
   }
   if (isFinancePath(pathname)) {
     return financeContent(pathname, navigate);
@@ -598,17 +612,37 @@ function rootAdminPage(pathname: string) {
   return "rootOrganizations" as const;
 }
 
+/**
+ * The path to open, moving an older link to where it now lives. The address
+ * bar is updated in place, so Back does not return to the old address.
+ */
+function initialPathname() {
+  const moved = movedWorkspacePath(window.location.pathname);
+  if (!moved) return window.location.pathname;
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${moved}${window.location.search}${window.location.hash}`,
+  );
+  return moved;
+}
+
+/** The page at `base`, or a page beneath it. */
+function isWithin(pathname: string, base: string) {
+  return pathname === base || pathname.startsWith(`${base}/`);
+}
+
 function currentLocation() {
   return `${window.location.pathname}${window.location.search}${window.location.hash}`;
 }
 
 function activePageFor(pathname: string) {
-  if (pathname === "/issues" || pathname.startsWith("/issues/"))
-    return "issues" as const;
+  if (isWithin(pathname, "/issues")) return "issues" as const;
   if (pathname === "/activity") return "activity" as const;
-  if (pathname === "/audits" || pathname.startsWith("/audits/")) {
+  if (isWithin(pathname, "/audits")) {
     return "audits" as const;
   }
+  if (isMyDocumentsPath(pathname)) return "myDocuments" as const;
   if (isFinancePath(pathname)) return "finance" as const;
   if (isBusinessesPath(pathname)) return "businesses" as const;
   if (isContractsPath(pathname)) return "contracts" as const;

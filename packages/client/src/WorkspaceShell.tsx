@@ -39,6 +39,7 @@ type WorkspacePage =
   | "finance"
   | "inbox"
   | "library"
+  | "myDocuments"
   | "organization"
   | "rootGlobalAudits"
   | "rootJobs"
@@ -244,6 +245,12 @@ function useNavigationDismissal(
 function navigationFor(canAccessFinance: boolean, isAdmin: boolean) {
   const workspace: NavigationItem[] = [
     { href: "/", icon: "library", label: "Library", page: "library" },
+    {
+      href: "/me",
+      icon: "document",
+      label: "My documents",
+      page: "myDocuments",
+    },
     { href: "/audits", icon: "audits", label: "Audits", page: "audits" },
     { href: "/issues", icon: "issues", label: "Issues", page: "issues" },
     { href: "/activity", icon: "layers", label: "Activity", page: "activity" },

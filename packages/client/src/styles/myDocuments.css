@@ -1,0 +1,103 @@
+/* My documents: the signed-in person's own forms and checks. */
+
+.myDocumentsSummary {
+  --grid-min: 9rem;
+  --grid-gap: var(--space-3);
+  margin: 0;
+}
+
+.myDocumentsStat {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.myDocumentsStat dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.myDocumentsStat dd {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: var(--leading-tight);
+}
+
+.myDocumentsStatAlert {
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-bg);
+}
+
+.myDocumentsStatAlert dd {
+  color: var(--color-danger-fg);
+}
+
+.myDocumentList {
+  container-type: inline-size;
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Icon, details, status, then actions; actions wrap beneath on narrow screens. */
+.myDocument {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.myDocumentIcon {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  place-items: center;
+  color: var(--color-text-muted);
+  background: var(--color-surface-sunken);
+}
+
+.myDocumentMain {
+  display: grid;
+  gap: var(--space-0-5);
+  min-width: 0;
+}
+
+.myDocumentHint {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.myDocumentActions {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 2 / -1;
+  gap: var(--space-2);
+}
+
+.myDocumentActions:empty {
+  display: none;
+}
+
+@container (min-width: 48rem) {
+  .myDocument {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+
+  .myDocumentActions {
+    grid-column: auto;
+    justify-content: flex-end;
+  }
+}

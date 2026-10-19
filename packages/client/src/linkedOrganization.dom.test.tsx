@@ -74,14 +74,14 @@ describe("linked organizations", () => {
   it("switches to the organization an emailed link names, once", async () => {
     const switched: string[] = [];
     await open(
-      "/organization/people/m/screening/r?organization=org-2#form",
+      "/me/screening/r?organization=org-2#form",
       ["org-1", "org-2"],
       switched,
     );
     expect(switched).toEqual(["org-2"]);
     expect(
       `${dom.location.pathname}${dom.location.search}${dom.location.hash}`,
-    ).toBe("/organization/people/m/screening/r#form");
+    ).toBe("/me/screening/r#form");
   });
 
   it("stays put for the active organization or one the person is not in", async () => {

@@ -73,7 +73,11 @@ const documentTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
 
 employeeForms.get("/", async (context) => {
   const organizationId = context.get("organizationId");
-  const manager = canManageOrganization(context.get("organizationRole"));
+  // My documents lists only the person's own requests, as the person sees
+  // them, even when they also manage the organization.
+  const own = context.req.query("for") === "me";
+  const manager =
+    !own && canManageOrganization(context.get("organizationRole"));
   const userId = context.get("authSession").user.id;
   const result = await context.env.DB.prepare(
     `SELECT requirement.id, requirement.kind, requirement.title,

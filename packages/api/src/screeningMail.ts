@@ -17,20 +17,17 @@ export interface ScreeningRequestMail {
 }
 
 /**
- * The page where the person completes their background check. It names the
- * organization, which the app switches to when another one is active.
+ * A page in My documents, such as the one where the person completes their
+ * background check. It names the organization, which the app switches to
+ * when another one is active.
  */
-function screeningFormUrl(
+function myDocumentsUrl(
   environment: Pick<Bindings, "CORS_ORIGIN">,
-  mail: Pick<ScreeningRequestMail, "organizationId" | "requirementId"> & {
-    memberId: string;
-  },
+  organizationId: string,
+  path = "",
 ) {
-  const url = new URL(
-    `/organization/people/${encodeURIComponent(mail.memberId)}/screening/${encodeURIComponent(mail.requirementId)}`,
-    environment.CORS_ORIGIN,
-  );
-  url.searchParams.set("organization", mail.organizationId);
+  const url = new URL(`/me${path}`, environment.CORS_ORIGIN);
+  url.searchParams.set("organization", organizationId);
   return url.toString();
 }
 
@@ -60,11 +57,15 @@ export function sendScreeningRequest(
       ...(mail.memberId
         ? [
             "Review the disclosures, enter your details, and sign the authorization in Balebase:",
-            screeningFormUrl(environment, { ...mail, memberId: mail.memberId }),
+            myDocumentsUrl(
+              environment,
+              mail.organizationId,
+              `/screening/${encodeURIComponent(mail.requirementId)}`,
+            ),
           ]
         : [
-            `Accept your invitation to ${mail.organizationName} first. The check then appears on your page under Organization → People:`,
-            new URL("/", environment.CORS_ORIGIN).toString(),
+            `Accept your invitation to ${mail.organizationName} first. The check then appears in My documents:`,
+            myDocumentsUrl(environment, mail.organizationId),
           ]),
       "",
       "Balebase sends your details to Checkr only after you sign.",

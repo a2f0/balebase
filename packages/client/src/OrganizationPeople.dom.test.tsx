@@ -506,9 +506,9 @@ describe("the member list", () => {
       "Your organization has requested a form or check from you.",
     );
     const link = [...container.querySelectorAll("a")].find(
-      (element) => element.textContent === "View your forms",
+      (element) => element.textContent === "Open My documents",
     );
     await click(link);
-    expect(paths).toEqual(["/organization/people/mark"]);
+    expect(paths).toEqual(["/me"]);
   });
 });
