@@ -293,7 +293,8 @@ a.row:focus-visible {
   outline-offset: -2px;
 }
 
-.rowInteractive > .rowActions {
+/* Only the controls rise, so the gaps between them still open the row. */
+.rowInteractive > .rowActions > * {
   position: relative;
   z-index: 1;
 }

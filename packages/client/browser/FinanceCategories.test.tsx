@@ -77,7 +77,15 @@ it("opens a category from anywhere on its row except its own buttons", async () 
             .querySelector(".rowActions")
             ?.getBoundingClientRect();
           if (!actions) throw new Error("Missing row actions");
+          const [rename, remove] = [
+            ...row.querySelectorAll(".rowActions button"),
+          ].map((button) => button.getBoundingClientRect());
+          if (!rename || !remove) throw new Error("Missing row buttons");
           return {
+            betweenActions: hit(
+              (rename.right + remove.left) / 2,
+              rename.top + rename.height / 2,
+            ),
             beforeActions: hit(
               actions.left - 4,
               actions.top + actions.height / 2,
@@ -92,6 +100,7 @@ it("opens a category from anywhere on its row except its own buttons", async () 
       expect(hits).toEqual(
         Array(2).fill({
           beforeActions: "row",
+          betweenActions: "row",
           corner: "row",
           count: "row",
           delete: "Delete",
