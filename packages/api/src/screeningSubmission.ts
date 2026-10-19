@@ -110,7 +110,7 @@ function parseCandidate(
   if (!firstName || !lastName || (!noMiddleName && !middleName)) {
     return {
       error:
-        "Enter your legal first and last name, and your middle name or that you have none, in the letters on your government ID.",
+        "Enter your legal first and last name, and your middle name or that you have none. Checkr accepts letters A–Z and accented letters such as é or ñ.",
     };
   }
   const dob = birthDate(candidate.dob, today);
@@ -163,7 +163,7 @@ function parseSignature(value: unknown, candidate: Candidate) {
   if (
     !signed ||
     signed.length > 200 ||
-    !latinName.test(signed) ||
+    !checkrName.test(signed) ||
     !lower.includes(candidate.firstName.toLowerCase()) ||
     !lower.includes(candidate.lastName.toLowerCase())
   ) {
@@ -172,17 +172,22 @@ function parseSignature(value: unknown, candidate: Candidate) {
   return signed;
 }
 
-// Latin letters, including accented ones, as on US government records. The
-// signed authorization PDF renders exactly these, so no name is lost in it.
-const latinName = /^[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF '.,-]+$/;
+// Checkr's candidate API accepts names only in these characters, documented as
+// [a-zA-Z0-9ªµºÀ-ÖØ-öø-ÿ\-'., ]: other scripts, such as Vietnamese "ễ", are
+// rejected by Checkr itself. The signed authorization PDF draws every one of
+// them, so no accepted name is altered in it.
+const checkrName =
+  /^[A-Za-z0-9\u00AA\u00B5\u00BA\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF '.,-]+$/;
+const checkrLetter =
+  /[A-Za-z\u00AA\u00B5\u00BA\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF]/;
 
 function name(value: unknown, minimum: number) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim().replace(/\s+/g, " ");
   return trimmed.length >= minimum &&
     trimmed.length <= 50 &&
-    /[A-Za-z\u00C0-\u00FF]/.test(trimmed) &&
-    latinName.test(trimmed)
+    checkrLetter.test(trimmed) &&
+    checkrName.test(trimmed)
     ? trimmed
     : null;
 }

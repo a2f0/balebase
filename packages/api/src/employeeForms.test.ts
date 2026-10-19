@@ -1008,7 +1008,7 @@ describe("employee forms", () => {
         ],
         [
           { ...valid, candidate: { ...valid.candidate, noMiddleName: false } },
-          "Enter your legal first and last name, and your middle name or that you have none, in the letters on your government ID.",
+          "Enter your legal first and last name, and your middle name or that you have none. Checkr accepts letters A–Z and accented letters such as é or ñ.",
         ],
       ];
       for (const [body, error] of cases) {

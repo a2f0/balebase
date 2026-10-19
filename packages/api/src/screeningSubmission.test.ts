@@ -51,7 +51,7 @@ describe("screening submissions", () => {
     });
   });
 
-  it("rejects names the signed authorization could not render", () => {
+  it("rejects names Checkr's candidate API does not accept", () => {
     for (const name of [
       { first: "李", last: "雷雷", signature: "李 雷雷" },
       { first: "Nguyen", last: "Van", signature: "Nguyễn Van" },
