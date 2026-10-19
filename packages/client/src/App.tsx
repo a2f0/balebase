@@ -29,6 +29,7 @@ import { Contracts } from "./Contracts";
 import { authCallbackUrl } from "./config";
 import { Equipment } from "./Equipment";
 import { Finance } from "./Finance";
+import { FinanceAccountPage } from "./FinanceAccountPage";
 import { FinanceConnectionPage } from "./FinanceConnectionPage";
 import { FinanceTransactionPage } from "./FinanceTransactionPage";
 import { isFinancePath } from "./financePages";
@@ -551,6 +552,14 @@ function contentForPath(
 }
 
 function financeContent(pathname: string, navigate: (path: string) => void) {
+  if (pathname.startsWith("/finance/accounts/"))
+    return (
+      <FinanceAccountPage
+        key={pathname}
+        id={decodeRecordId(pathname.slice("/finance/accounts/".length))}
+        onNavigate={navigate}
+      />
+    );
   if (pathname.startsWith("/finance/connections/"))
     return (
       <FinanceConnectionPage

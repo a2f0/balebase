@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { activityBatch, findActivity } from "./activity";
+import { accountDetail } from "./financeAccountDetail";
 import {
   addDefaultCategories,
   assignTransactionCategory,
@@ -115,6 +116,7 @@ export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
     disconnectConnection(context, requestPlaid),
   );
   finance.delete("/connections/:id/data", deleteConnectionData);
+  finance.get("/accounts/:id", accountDetail);
   finance.get("/transactions", searchTransactions);
   finance.get("/transactions/:id", transactionDetail);
   finance.get("/transactions/:id/activity", transactionActivity);

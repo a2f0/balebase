@@ -27,8 +27,14 @@ import {
   confirmDisconnect,
   syncNotice,
 } from "./financeConnectionActions";
-import { formatMoney } from "./financeFormat";
+import {
+  formatDateTime,
+  formatImportedHistory,
+  formatMoney,
+} from "./financeFormat";
+import { financeAccountPath } from "./financePages";
 import { countLabel, formatLabel } from "./labels";
+import { handleNavigation } from "./workspacePaths";
 
 type Connection = FinanceConnectionDetail["connection"];
 
@@ -67,7 +73,10 @@ export function FinanceConnectionPage({
         {data && (
           <>
             <ConnectionSummary connection={data.connection} />
-            <ConnectionAccounts accounts={data.accounts} />
+            <ConnectionAccounts
+              accounts={data.accounts}
+              onNavigate={onNavigate}
+            />
             <PageSection
               description="Identifiers as Plaid reports them. Plaid support asks for the Item ID."
               title="Source data"
@@ -127,7 +136,6 @@ function ConnectionActions({
 }
 
 function ConnectionSummary({ connection }: { connection: Connection }) {
-  const { transactions } = connection;
   return (
     <PageSection title="Connection">
       <Card>
@@ -166,12 +174,7 @@ function ConnectionSummary({ connection }: { connection: Connection }) {
             </>
           )}
           <dt>Imported history</dt>
-          <dd>
-            {countLabel(transactions.count, "transaction")}
-            {transactions.firstDate &&
-              transactions.lastDate &&
-              ` · ${formatDay(transactions.firstDate)} – ${formatDay(transactions.lastDate)}`}
-          </dd>
+          <dd>{formatImportedHistory(connection.transactions)}</dd>
         </dl>
       </Card>
     </PageSection>
@@ -180,8 +183,10 @@ function ConnectionSummary({ connection }: { connection: Connection }) {
 
 function ConnectionAccounts({
   accounts,
+  onNavigate,
 }: {
   accounts: FinanceConnectionAccount[];
+  onNavigate: (path: string) => void;
 }) {
   return (
     <PageSection
@@ -196,9 +201,21 @@ function ConnectionAccounts({
         <Card className="financeListCard" flush>
           <ul className="rowList">
             {accounts.map((account) => (
-              <li className="row" key={account.id}>
+              <li className="row rowInteractive" key={account.id}>
                 <div className="rowMain">
-                  <span className="rowTitle">{account.name}</span>
+                  <a
+                    className="rowTitle rowTarget"
+                    href={financeAccountPath(account.id)}
+                    onClick={(event) =>
+                      handleNavigation(
+                        event,
+                        financeAccountPath(account.id),
+                        onNavigate,
+                      )
+                    }
+                  >
+                    {account.name}
+                  </a>
                   <span className="rowMeta">{accountMeta(account)}</span>
                 </div>
                 <span className="financeAmount">
@@ -307,20 +324,6 @@ function accountMeta(account: FinanceConnectionAccount) {
   ]
     .filter(Boolean)
     .join(" · ");
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
-/** Transaction dates are calendar days; noon keeps them in every time zone. */
-function formatDay(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(`${value}T12:00:00`),
-  );
 }
 
 function message(cause: unknown) {

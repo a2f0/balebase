@@ -3,6 +3,7 @@ import { formatMoney } from "./financeFormat";
 import {
   categoryShare,
   expenseCategoryFiltersFor,
+  financeAccountPath,
   financeConnectionPath,
   financeOverviewPath,
   financePageFor,
@@ -23,9 +24,12 @@ describe("finance pages", () => {
     expect(financePageFor("/finance/expenses/category/meals")).toBe("overview");
   });
 
-  it("links to a connection's own page", () => {
+  it("links to connection and account pages by raw id", () => {
     expect(financeConnectionPath("item/1")).toBe(
       "/finance/connections/item%2F1",
+    );
+    expect(financeAccountPath("account/1")).toBe(
+      "/finance/accounts/account%2F1",
     );
   });
 
