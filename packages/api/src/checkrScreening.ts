@@ -131,6 +131,8 @@ export interface ScreeningSubject {
   organizationId: string;
   organizationName: string;
   packageSlug: string;
+  /** The request the person's form answered; a newer request supersedes it. */
+  requestedAt: string;
   requirementId: string;
   requirementTitle: string;
   userId: string;
@@ -374,10 +376,11 @@ export async function recoverCheckrAttempt(
   // The claim returns the attempt as it is now; a retry may have moved it on
   // since the row was read.
   const attempt = await env.DB.prepare(
-    `UPDATE employee_requirements SET checkr_starting_at = ?
-     WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?
+    `UPDATE employee_requirements
+     SET checkr_starting_at = ?1, checkr_checked_at = ?1
+     WHERE id = ?2 AND organization_id = ?3 AND checkr_start_nonce = ?4
        AND checkr_report_id IS NULL
-       AND (checkr_starting_at IS NULL OR checkr_starting_at < ?)
+       AND (checkr_starting_at IS NULL OR checkr_starting_at < ?5)
      RETURNING checkr_attempt_consent_id, checkr_candidate_id,
                checkr_report_requested_at, checkr_start_nonce`,
   )
@@ -578,7 +581,8 @@ async function markAttempt(
   return marked.meta.changes > 0;
 }
 
-// Holds the screening for one submission at a time. An attempt keeps its
+// Holds the screening for one submission at a time, while the person is still
+// a member and the request they answered is still current. An attempt keeps its
 // nonce, package, and candidate until it succeeds or Checkr rejects it, so a
 // retry after a lost response reuses its idempotency keys.
 async function claimSubmission(
@@ -594,9 +598,15 @@ async function claimSubmission(
            checkr_start_package = COALESCE(checkr_start_package, ?),
            checkr_starting_at = ?, updated_at = ?
        WHERE id = ? AND organization_id = ? AND kind = 'background_check'
-         AND checkr_requested_at IS NOT NULL AND checkr_report_id IS NULL
+         AND checkr_requested_at = ? AND checkr_report_id IS NULL
          AND status <> 'complete'
          AND (checkr_starting_at IS NULL OR checkr_starting_at < ?)
+         AND EXISTS (
+           SELECT 1 FROM member
+           WHERE member.id = employee_requirements.member_id
+             AND member.organizationId = employee_requirements.organization_id
+             AND member.userId = ?
+         )
        RETURNING checkr_attempt_consent_id, checkr_attempt_digest,
                  checkr_candidate_id, checkr_report_requested_at,
                  checkr_start_nonce, checkr_start_nonce_at,
@@ -610,7 +620,9 @@ async function claimSubmission(
       now.toISOString(),
       subject.requirementId,
       subject.organizationId,
+      subject.requestedAt,
       new Date(now.getTime() - 5 * 60_000).toISOString(),
+      subject.userId,
     )
     .first<SubmitClaim>();
 }

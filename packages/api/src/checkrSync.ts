@@ -130,7 +130,8 @@ export async function refreshActiveCheckrScreenings(env: Bindings) {
 }
 
 // Attempts idle long enough that no report request can still arrive: their
-// person may have lost a response or left the organization.
+// person may have lost a response or left the organization. Each recovery
+// records checkr_checked_at, so attempts Checkr keeps failing on rotate out.
 async function recoverStaleAttempts(env: Bindings) {
   const now = Date.now();
   const settled = new Date(now - reportSettleMs).toISOString();
@@ -143,7 +144,7 @@ async function recoverStaleAttempts(env: Bindings) {
        AND checkr_start_nonce_at < ?
        AND (checkr_report_requested_at IS NULL
             OR checkr_report_requested_at < ?)
-     ORDER BY checkr_start_nonce_at ASC
+     ORDER BY checkr_checked_at ASC, checkr_start_nonce_at ASC
      LIMIT ?`,
   )
     .bind(

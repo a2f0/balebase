@@ -552,6 +552,7 @@ employeeForms.post("/:id/checkr/submit", async (context) => {
       organizationId: context.get("organizationId"),
       organizationName: subject.organization_name,
       packageSlug,
+      requestedAt: subject.checkr_requested_at ?? "",
       requirementId: subject.id,
       requirementTitle: subject.title,
       userId: subject.user_id,

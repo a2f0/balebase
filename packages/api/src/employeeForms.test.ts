@@ -1676,6 +1676,86 @@ describe("employee forms", () => {
     }
   });
 
+  it("does not order a check the request or membership changed under", async () => {
+    for (const change of [
+      "UPDATE employee_requirements SET checkr_requested_at = '2999-01-01T00:00:00.000Z', checkr_work_state = 'NV'",
+      "DELETE FROM member WHERE id = 'employee-member'",
+    ]) {
+      const fixture = await createFixture();
+      const id = await requestedScreening(fixture);
+      const checkr = mockCheckr(checkrResponses);
+      fixture.beforeFirst((query) => {
+        if (query.includes("SET checkr_start_nonce = COALESCE")) {
+          fixture.database.query(change).run();
+        }
+      });
+      try {
+        const raced = await submitScreening(fixture, id, homerSubmission());
+        expect(raced.status).toBe(409);
+        expect(checkr.calls).toEqual([]);
+        expect(
+          fixture.database
+            .query(
+              "SELECT checkr_start_nonce, checkr_report_id FROM employee_requirements WHERE id = ?",
+            )
+            .get(id),
+        ).toEqual({ checkr_report_id: null, checkr_start_nonce: null });
+      } finally {
+        checkr.restore();
+      }
+    }
+  });
+
+  it("rotates attempt recovery past attempts that keep failing", async () => {
+    const fixture = await createFixture();
+    configureCheckr(fixture);
+    const candidates = Array.from(
+      { length: 26 },
+      (_, index) => `stuck-${String(index).padStart(2, "0")}`,
+    );
+    for (const candidate of candidates) {
+      const id = await createRequirement(fixture, "background_check", "Check");
+      fixture.database
+        .query(`UPDATE employee_requirements
+                SET checkr_requested_at = ?, checkr_start_nonce = ?,
+                    checkr_start_nonce_at = '2026-01-01T00:00:00.000Z',
+                    checkr_candidate_id = ?
+                WHERE id = ?`)
+        .run(now(), `nonce-${candidate}`, candidate, id);
+    }
+    const attempted: string[][] = [];
+    const checkr = mockCheckr((call) => {
+      const candidate = /^\/candidates\/(.+)$/.exec(call.url)?.[1];
+      if (candidate) attempted.at(-1)?.push(candidate);
+      return Response.json({ error: "unavailable" }, { status: 503 });
+    });
+    try {
+      for (let run = 0; run < 2; run += 1) {
+        attempted.push([]);
+        await expect(
+          refreshActiveCheckrScreenings(fixture.bindings),
+        ).rejects.toThrow();
+      }
+      expect(attempted[0]).toHaveLength(24);
+      const skipped = candidates.filter(
+        (candidate) => !attempted[0]?.includes(candidate),
+      );
+      expect(skipped).toHaveLength(2);
+      for (const candidate of skipped) {
+        expect(attempted[1]).toContain(candidate);
+      }
+      expect(
+        fixture.database
+          .query(`SELECT COUNT(*) AS held FROM employee_requirements
+                  WHERE checkr_start_nonce IS NOT NULL
+                    AND checkr_starting_at IS NULL`)
+          .get(),
+      ).toEqual({ held: 26 });
+    } finally {
+      checkr.restore();
+    }
+  });
+
   it("refreshes canceled reports and lets managers request the check again", async () => {
     const fixture = await createFixture();
     const id = await orderedScreening(fixture);
@@ -2576,11 +2656,13 @@ async function createFixture() {
   const storageState = { failPutAfterWrite: false, failDelete: false };
   const hooks: {
     beforeBatch: (() => void) | undefined;
+    beforeFirst: ((query: string) => void) | undefined;
     beforeRun: ((query: string) => void) | undefined;
     afterRun: (() => void) | undefined;
     beforeDocumentUpdate: (() => void) | undefined;
   } = {
     beforeBatch: undefined,
+    beforeFirst: undefined,
     beforeRun: undefined,
     afterRun: undefined,
     beforeDocumentUpdate: undefined,
@@ -2643,6 +2725,9 @@ async function createFixture() {
     beforeBatch: (callback: () => void) => {
       hooks.beforeBatch = callback;
     },
+    beforeFirst: (callback: (query: string) => void) => {
+      hooks.beforeFirst = callback;
+    },
     beforeRun: (callback: (query: string) => void) => {
       hooks.beforeRun = callback;
     },
@@ -2663,6 +2748,7 @@ function toD1(
   database: Database,
   hooks: {
     beforeBatch: (() => void) | undefined;
+    beforeFirst: ((query: string) => void) | undefined;
     beforeRun: ((query: string) => void) | undefined;
     afterRun: (() => void) | undefined;
     beforeDocumentUpdate: (() => void) | undefined;
@@ -2687,7 +2773,10 @@ function toD1(
           const result = database.query(query).run(...values);
           return { meta: { changes: result.changes } };
         },
-        first: async () => database.query(query).get(...values),
+        first: async () => {
+          hooks.beforeFirst?.(query);
+          return database.query(query).get(...values);
+        },
         run: async () => {
           if (
             query.includes("SET document_key = ?") &&
