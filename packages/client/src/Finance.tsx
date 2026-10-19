@@ -2,7 +2,6 @@ import {
   Banner,
   Button,
   ButtonLink,
-  confirmDialog,
   Page,
   PageBody,
   PageHeader,
@@ -38,6 +37,11 @@ import {
   syncFinanceConnection,
   updateFinanceTransactionAnnotation,
 } from "./financeApi";
+import {
+  confirmDataDeletion,
+  confirmDisconnect,
+  syncNotice,
+} from "./financeConnectionActions";
 import {
   expenseCategoryFiltersFor,
   type FinancePage,
@@ -277,6 +281,7 @@ export function FinanceView({
             onConnect={handlers.onConnect}
             onDeleteData={handlers.onDeleteData}
             onDisconnect={handlers.onDisconnect}
+            onNavigate={handlers.onNavigate}
             onReload={onReload}
             onSync={handlers.onSync}
           />
@@ -625,38 +630,6 @@ function clearOAuthState() {
     window.history.replaceState(window.history.state, "", "/finance");
 }
 
-function syncNotice(result: {
-  added: number;
-  modified: number;
-  removed: number;
-}) {
-  return `Sync complete: ${result.added} added, ${result.modified} updated, ${result.removed} removed.`;
-}
-
 function messageFrom(cause: unknown) {
   return cause instanceof Error ? cause.message : "Could not update finances.";
-}
-
-function institutionName(connection: FinanceConnection) {
-  return connection.institutionName ?? "this institution";
-}
-
-function confirmDataDeletion(connection: FinanceConnection) {
-  return confirmDialog({
-    confirmLabel: "Delete data",
-    message:
-      "This also deletes its transaction annotations and cannot be undone.",
-    title: `Permanently delete all imported data for ${institutionName(connection)}?`,
-    tone: "danger",
-  });
-}
-
-function confirmDisconnect(connection: FinanceConnection) {
-  return confirmDialog({
-    confirmLabel: "Disconnect",
-    message:
-      "Plaid access will be revoked, but imported transactions and annotations will remain.",
-    title: `Disconnect ${institutionName(connection)}?`,
-    tone: "danger",
-  });
 }

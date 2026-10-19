@@ -9,6 +9,7 @@ import {
   listExpenseCategories,
   renameCategory,
 } from "./financeCategories";
+import { connectionDetail } from "./financeConnectionDetail";
 import type { FinanceContext, FinanceEnv } from "./financeContext";
 import { financeListingFilters } from "./financeListingFilters";
 import { expenseReport } from "./financeReports";
@@ -109,6 +110,7 @@ export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
   finance.post("/connections/:id/sync", async (context) =>
     syncConnection(context, requestPlaid),
   );
+  finance.get("/connections/:id", connectionDetail);
   finance.delete("/connections/:id", async (context) =>
     disconnectConnection(context, requestPlaid),
   );
@@ -366,7 +368,8 @@ async function disconnectConnection(
   await context.env.DB.prepare(
     `UPDATE plaid_items
        SET access_token_ciphertext = '', access_token_iv = '', cursor = NULL,
-           status = 'disconnected', error_code = NULL, disconnected_at = ?,
+           status = 'disconnected', error_code = NULL, error_message = NULL,
+           disconnected_at = ?,
            updated_at = ?
        WHERE id = ? AND organization_id = ?`,
   )

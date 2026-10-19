@@ -13,13 +13,16 @@ import {
 } from "@balebase/ui/react";
 import type { FinanceAccount, FinanceConnection } from "./financeApi";
 import { formatMoney } from "./financeFormat";
+import { financeConnectionPath } from "./financePages";
 import { countLabel, formatLabel } from "./labels";
+import { handleNavigation } from "./workspacePaths";
 
 interface ConnectionHandlers {
   busy: boolean;
   onConnect: () => Promise<void>;
   onDeleteData: (connection: FinanceConnection) => Promise<void>;
   onDisconnect: (connection: FinanceConnection) => Promise<void>;
+  onNavigate: (pathname: string) => void;
   onSync: (id: string) => Promise<void>;
 }
 
@@ -42,7 +45,7 @@ export function FinanceConnections({
           </span>
         ) : undefined
       }
-      description="Sync each institution, disconnect it, or delete the data it imported."
+      description="Sync each institution, disconnect it, or delete the data it imported. Select one for its accounts and Plaid identifiers."
       title="Connections"
     >
       {loadError && (
@@ -133,11 +136,20 @@ function ConnectionRow({
   ...handlers
 }: ConnectionHandlers & { connection: FinanceConnection }) {
   const name = connection.institutionName ?? "Financial institution";
+  const path = financeConnectionPath(connection.id);
   return (
-    <li className="row financeConnection">
+    <li className="row rowInteractive financeConnection">
       <Avatar className="financeInstitutionMark" name={name} size="lg" />
       <div className="rowMain financeConnectionMain">
-        <span className="rowTitle financeConnectionName">{name}</span>
+        <a
+          className="rowTitle rowTarget financeConnectionName"
+          href={path}
+          onClick={(event) =>
+            handleNavigation(event, path, handlers.onNavigate)
+          }
+        >
+          {name}
+        </a>
         <span className="rowMeta financeConnectionMeta">
           {countLabel(connection.accountCount, "account")} ·{" "}
           {syncTime(connection)}
@@ -309,7 +321,7 @@ function syncTime(connection: FinanceConnection) {
     : "not synced yet";
 }
 
-function connectionTone(status: string): BadgeTone {
+export function connectionTone(status: string): BadgeTone {
   if (status === "active") return "success";
   if (status === "error") return "danger";
   return "neutral";

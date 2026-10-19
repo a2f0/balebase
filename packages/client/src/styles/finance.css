@@ -443,3 +443,19 @@
   flex-wrap: wrap;
   gap: var(--space-1);
 }
+
+/* An imported value with its copy button beside the text. */
+.financeSourceValue {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.financeSourceValue > span {
+  min-width: 0;
+}
+
+.financeSourceValue .button {
+  flex: none;
+  margin-block: calc((1lh - var(--control-height-sm)) / 2);
+}

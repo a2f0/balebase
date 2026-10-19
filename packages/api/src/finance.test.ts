@@ -5,10 +5,11 @@ import { Hono } from "hono";
 import type { AuthSession } from "./auth";
 import type { AuthVariables } from "./authMiddleware";
 import { createFinanceRouter } from "./finance";
-import type {
-  PlaidRequest,
-  PlaidRequestBody,
-  TransactionsSyncResponse,
+import {
+  PlaidApiError,
+  type PlaidRequest,
+  type PlaidRequestBody,
+  type TransactionsSyncResponse,
 } from "./plaid";
 import type { Bindings } from "./types";
 
@@ -481,6 +482,124 @@ describe("finance", () => {
     expect(afterDelete.body.connections).toEqual([]);
     expect(afterDelete.body.accounts).toEqual([]);
     expect(afterDelete.body.transactions).toEqual([]);
+  });
+
+  it("details a connection with its accounts, history, and Plaid identifiers", async () => {
+    const fixture = await createFixture();
+    const plaid = mockPlaid();
+    let failSync = false;
+    const requestPlaid: PlaidRequest = async <T>(
+      env: Bindings,
+      path: string,
+      body: PlaidRequestBody,
+    ) => {
+      if (failSync && path === "/transactions/sync") {
+        throw new PlaidApiError(
+          "The login details of this item have changed.",
+          "ITEM_LOGIN_REQUIRED",
+          400,
+        );
+      }
+      return plaid<T>(env, path, body);
+    };
+    const app = testApp("org_user-1", requestPlaid);
+    const exchange = await jsonRequest<{ connectionId: string }>(
+      app,
+      fixture.bindings,
+      "/exchange",
+      "POST",
+      {
+        institutionId: "ins_test",
+        institutionName: "First Test Bank",
+        publicToken: "public-sandbox-test",
+      },
+    );
+    const id = exchange.body.connectionId;
+    const sync = () =>
+      jsonRequest(app, fixture.bindings, `/connections/${id}/sync`, "POST");
+    const detail = () =>
+      jsonRequest<ConnectionDetail>(
+        app,
+        fixture.bindings,
+        `/connections/${id}`,
+        "GET",
+      );
+    expect((await sync()).response.status).toBe(200);
+
+    const synced = await detail();
+    expect(synced.response.status).toBe(200);
+    expect(synced.body.connection).toMatchObject({
+      createdBy: { email: "person@example.com", name: "Example Person" },
+      disconnectedAt: null,
+      errorCode: null,
+      errorMessage: null,
+      id,
+      institutionId: "ins_test",
+      institutionName: "First Test Bank",
+      plaidItemId: "item-sandbox-test-1",
+      status: "active",
+      transactions: {
+        count: 1,
+        firstDate: "2026-08-19",
+        lastDate: "2026-08-19",
+      },
+    });
+    expect(synced.body.connection.lastSyncedAt).toBeString();
+    expect(synced.body.accounts).toEqual([
+      {
+        availableBalance: 1200,
+        currencyCode: "USD",
+        currentBalance: 1250.5,
+        id: expect.any(String),
+        mask: "1234",
+        name: "Checking",
+        officialName: "Plaid Gold Checking",
+        plaidAccountId: "account-test-1",
+        subtype: "checking",
+        transactionCount: 1,
+        type: "depository",
+      },
+    ]);
+    expect(JSON.stringify(synced.body)).not.toContain("access-sandbox");
+
+    failSync = true;
+    expect((await sync()).response.status).toBe(502);
+    expect((await detail()).body.connection).toMatchObject({
+      errorCode: "ITEM_LOGIN_REQUIRED",
+      errorMessage: "The login details of this item have changed.",
+      status: "error",
+    });
+    failSync = false;
+    expect((await sync()).response.status).toBe(200);
+    expect((await detail()).body.connection).toMatchObject({
+      errorCode: null,
+      errorMessage: null,
+      status: "active",
+    });
+
+    const disconnected = await app.request(
+      financePath(`/connections/${id}`),
+      { method: "DELETE" },
+      fixture.bindings,
+    );
+    expect(disconnected.status).toBe(204);
+    const afterDisconnect = await detail();
+    expect(afterDisconnect.body.connection.status).toBe("disconnected");
+    expect(afterDisconnect.body.connection.disconnectedAt).toBeString();
+    expect(afterDisconnect.body.connection.transactions.count).toBe(1);
+
+    for (const [organizationId, path] of [
+      ["organization-2", `/connections/${id}`],
+      ["org_user-1", "/connections/unknown"],
+    ] as const) {
+      const missing = await jsonRequest(
+        testApp(organizationId, requestPlaid),
+        fixture.bindings,
+        path,
+        "GET",
+      );
+      expect(missing.response.status).toBe(404);
+    }
   });
 
   it("preserves an annotation when a pending transaction posts", async () => {
@@ -1105,6 +1224,16 @@ interface Category {
   name: string;
   slug: string;
   transactionCount: number;
+}
+
+interface ConnectionDetail {
+  accounts: Record<string, unknown>[];
+  connection: {
+    disconnectedAt: string | null;
+    lastSyncedAt: string | null;
+    status: string;
+    transactions: { count: number };
+  };
 }
 
 interface ExpenseReport {

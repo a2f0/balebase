@@ -3,6 +3,7 @@ import { formatMoney } from "./financeFormat";
 import {
   categoryShare,
   expenseCategoryFiltersFor,
+  financeConnectionPath,
   financeOverviewPath,
   financePageFor,
   isFinancePath,
@@ -20,6 +21,12 @@ describe("finance pages", () => {
     expect(financePageFor("/finance/connections")).toBe("connections");
     expect(financePageFor("/finance/unknown")).toBe("overview");
     expect(financePageFor("/finance/expenses/category/meals")).toBe("overview");
+  });
+
+  it("links to a connection's own page", () => {
+    expect(financeConnectionPath("item/1")).toBe(
+      "/finance/connections/item%2F1",
+    );
   });
 
   it("maps expense category paths to and from their filters", () => {
