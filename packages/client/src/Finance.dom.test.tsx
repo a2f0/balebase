@@ -65,6 +65,7 @@ const data: FinanceData = {
 beforeAll(async () => {
   for (const [key, value] of Object.entries({
     document: dom.document,
+    Element: dom.Element,
     HTMLElement: dom.HTMLElement,
     Node: dom.Node,
     IS_REACT_ACT_ENVIRONMENT: true,
@@ -399,7 +400,6 @@ describe("Finance filters", () => {
       });
     });
     await mount("/finance/categories");
-    expect(() => button("Travel")).toThrow();
     await click("Meals");
     expect(queries.at(-1)?.get("categoryId")).toBe("meals");
     expect(rowNames()).toEqual(["Lunch", "Dinner"]);
@@ -418,6 +418,48 @@ describe("Finance filters", () => {
     await click("Category: Meals");
     expect(queries.at(-1)?.has("categoryId")).toBe(false);
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+  });
+
+  it("opens a category from its row's context menu, including an empty one", async () => {
+    const queries: URLSearchParams[] = [];
+    respond((url) => {
+      queries.push(url.searchParams);
+      return Response.json({
+        ...data,
+        categories: [{ id: "travel", name: "Travel", transactionCount: 0 }],
+        transactions: url.searchParams.has("categoryId")
+          ? []
+          : data.transactions,
+      });
+    });
+    await mount("/finance/categories");
+    const row = button("Travel").closest("li");
+    if (!row) throw new Error("Missing category row");
+    await act(async () => {
+      row.dispatchEvent(
+        new dom.MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 20,
+          clientY: 20,
+        }) as unknown as MouseEvent,
+      );
+    });
+    const menu = document.querySelector('[role="menu"]');
+    expect(menu?.getAttribute("aria-label")).toBe("Actions for Travel");
+    const show = [
+      ...(menu?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []),
+    ].find((item) => item.textContent === "Show transactions");
+    if (!show) throw new Error("Missing Show transactions");
+    await act(async () => show.click());
+    expect(queries.at(-1)?.get("categoryId")).toBe("travel");
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(button("Category: Travel").getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(container.textContent).toContain(
+      "No transactions match these filters",
+    );
   });
 
   it("removes newly categorized expenses immediately and restores them if saving fails", async () => {

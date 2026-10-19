@@ -1,6 +1,7 @@
 import {
   Button,
   Card,
+  ContextMenu,
   confirmDialog,
   EmptyState,
   Field,
@@ -243,44 +244,54 @@ function CategoryRow({
     if (await confirmCategoryDeletion(category)) void onDelete(category);
   }
   return (
-    <li className="row">
-      <div className="rowMain">
-        {category.transactionCount ? (
-          <Button
-            className="rowTitle financeCategoryLink"
-            onClick={() => onShowTransactions(category)}
-            variant="link"
-          >
-            {category.name}
-          </Button>
-        ) : (
-          <span className="rowTitle">{category.name}</span>
-        )}
-        <span className="rowMeta">
-          {countLabel(category.transactionCount, "transaction")}
-        </span>
-      </div>
-      <div className="rowActions">
-        <Button
-          disabled={busy}
-          icon="edit"
-          onClick={() => setEditing(true)}
-          size="sm"
-          variant="ghost"
-        >
-          Rename
-        </Button>
-        <Button
-          disabled={busy}
-          icon="trash"
-          onClick={() => void remove()}
-          size="sm"
-          variant="danger"
-        >
-          Delete
-        </Button>
-      </div>
-    </li>
+    <ContextMenu
+      items={[
+        {
+          icon: "list",
+          id: "show-transactions",
+          label: "Show transactions",
+          onSelect: () => onShowTransactions(category),
+        },
+      ]}
+      label={`Actions for ${category.name}`}
+    >
+      {(targetProps) => (
+        <li className="row rowInteractive" {...targetProps}>
+          <div className="rowMain">
+            <Button
+              className="rowTitle rowTarget"
+              onClick={() => onShowTransactions(category)}
+              variant="link"
+            >
+              {category.name}
+            </Button>
+            <span className="rowMeta">
+              {countLabel(category.transactionCount, "transaction")}
+            </span>
+          </div>
+          <div className="rowActions">
+            <Button
+              disabled={busy}
+              icon="edit"
+              onClick={() => setEditing(true)}
+              size="sm"
+              variant="ghost"
+            >
+              Rename
+            </Button>
+            <Button
+              disabled={busy}
+              icon="trash"
+              onClick={() => void remove()}
+              size="sm"
+              variant="danger"
+            >
+              Delete
+            </Button>
+          </div>
+        </li>
+      )}
+    </ContextMenu>
   );
 }
 

@@ -384,8 +384,8 @@ all imported history; **Load more transactions** retrieves the next 250 matches.
 Each organization keeps its own list of expense categories at
 `/finance/categories` (with a one-click common set), and each transaction can
 have at most one category, chosen inline in the transaction list. Selecting a
-category's name opens the overview filtered to that category's transactions
-across all imported history. Deleting a
+category's row, or **Show transactions** in its context menu, opens the overview
+filtered to that category's transactions across all imported history. Deleting a
 category leaves its transactions uncategorized. `/finance/reports` totals
 expenses by category over a period: posted outflows count as spending, refunds
 assigned to a category reduce it, and unassigned transfers and loan or card
