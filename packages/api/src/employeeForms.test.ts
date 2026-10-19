@@ -1006,7 +1006,7 @@ describe("employee forms", () => {
         ],
         [
           { ...valid, candidate: { ...valid.candidate, noMiddleName: false } },
-          "Enter your legal first and last name, and your middle name or that you have none.",
+          "Enter your legal first and last name, and your middle name or that you have none, in the letters on your government ID.",
         ],
       ];
       for (const [body, error] of cases) {
@@ -1444,6 +1444,12 @@ describe("employee forms", () => {
       ).toBe(500);
       const [, upload, firstReport] = checkr.calls;
       const authorization = upload?.idempotencyKey?.split(":consent:")[1];
+      // Even a day later, the replay keeps the report request's key.
+      fixture.database
+        .query(`UPDATE employee_requirements
+                SET checkr_start_nonce_at = '2026-01-01T00:00:00.000Z'
+                WHERE id = ?`)
+        .run(id);
       lost = false;
       checkr.calls.length = 0;
       expect(

@@ -201,7 +201,7 @@ export async function submitCheckrScreening(
         "Your earlier submission may still be reaching Checkr. Wait a few minutes, then submit again.",
       );
     }
-    nonce = await freshNonce(env.DB, subject, claim, plan.nonce);
+    nonce = plan.nonce;
     // The report was already requested with this attempt's authorization;
     // ask again under the same key rather than attaching a newer one.
     if (plan.kind === "replay") {
@@ -656,41 +656,6 @@ async function restartAttempt(
     .run();
   if (!restarted.meta.changes)
     throw new Error("The screening attempt changed.");
-  claim.checkr_start_nonce_at = now;
-  return next;
-}
-
-// Checkr keeps idempotency keys for a day, so an older attempt continues
-// under a new nonce; its stored candidate still prevents a second report.
-async function freshNonce(
-  database: D1Database,
-  scope: AttemptScope,
-  claim: SubmitClaim,
-  nonce: string,
-) {
-  if (
-    new Date(claim.checkr_start_nonce_at).getTime() >=
-    Date.now() - 23 * 60 * 60_000
-  ) {
-    return nonce;
-  }
-  const next = crypto.randomUUID();
-  const rotated = await database
-    .prepare(
-      `UPDATE employee_requirements
-       SET checkr_start_nonce = ?, checkr_start_nonce_at = ?, updated_at = ?
-       WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?`,
-    )
-    .bind(
-      next,
-      new Date().toISOString(),
-      new Date().toISOString(),
-      scope.requirementId,
-      scope.organizationId,
-      nonce,
-    )
-    .run();
-  if (!rotated.meta.changes) throw new Error("The screening attempt changed.");
   return next;
 }
 

@@ -112,7 +112,7 @@ function parseCandidate(
   if (!firstName || !lastName || (!noMiddleName && !middleName)) {
     return {
       error:
-        "Enter your legal first and last name, and your middle name or that you have none.",
+        "Enter your legal first and last name, and your middle name or that you have none, in the letters on your government ID.",
     };
   }
   const dob = birthDate(candidate.dob, today);
@@ -165,6 +165,7 @@ function parseSignature(value: unknown, candidate: Candidate) {
   if (
     !signed ||
     signed.length > 200 ||
+    !latinName.test(signed) ||
     !lower.includes(candidate.firstName.toLowerCase()) ||
     !lower.includes(candidate.lastName.toLowerCase())
   ) {
@@ -173,13 +174,17 @@ function parseSignature(value: unknown, candidate: Candidate) {
   return signed;
 }
 
+// Latin letters, including accented ones, as on US government records. The
+// signed authorization PDF renders exactly these, so no name is lost in it.
+const latinName = /^[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF '.,-]+$/;
+
 function name(value: unknown, minimum: number) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim().replace(/\s+/g, " ");
   return trimmed.length >= minimum &&
     trimmed.length <= 50 &&
-    /\p{L}/u.test(trimmed) &&
-    /^[\p{L}0-9 '.,-]+$/u.test(trimmed)
+    /[A-Za-z\u00C0-\u00FF]/.test(trimmed) &&
+    latinName.test(trimmed)
     ? trimmed
     : null;
 }
