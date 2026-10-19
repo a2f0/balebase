@@ -443,15 +443,28 @@ redirect URI for OAuth institutions.
 
 Organization managers assign forms, background checks, and credit checks while
 inviting a member or later from Organization → People. Each requirement has a
-due date. Members upload PDF, JPEG, or PNG forms (up to 10 MB) to private R2
-storage; managers review and complete them. Only the member and organization
-managers can download a submitted form. Checkr results are visible only to
-managers. Deleted or replaced form files are queued for R2 cleanup.
+due date. People complete their own requests in My documents (`/me`), a page
+for the signed-in person in the active organization. It sorts their requests
+into To do, With the organization, and Done, flags overdue ones, and is where
+they upload forms, start their background check, and download what they sent.
+Organization → People is for managers: a member's own People page links to My
+documents instead of listing their requests. Members upload PDF, JPEG, or PNG
+forms (up to 10 MB) to private R2 storage; managers review and complete them.
+Only the member and organization managers can download a submitted form.
+Checkr results are visible only to managers, and not in a manager's own My
+documents. Deleted or replaced form files are queued for R2 cleanup.
+
+A manager's list labels each Checkr background check by stage: Not requested,
+Waiting for details (requested, waiting on the person), Submitting to Checkr,
+Report in progress, Report canceled, or Complete. Forms and checks tracked by
+hand keep their plain status.
 
 Background checks use Checkr's self-hosted flow. A manager requests a check
 with the person's US work state and optional city, and Balebase emails the
-person a link to their screening form under Organization → People; the link
-switches to that organization if another one is active. Only the person,
+person a link to their screening form in My documents
+(`/me/screening/<request>`); the link switches to that organization if another
+one is active, and links from emails sent before My documents still open the
+form. Only the person,
 signed in themselves, can open or submit the form: not an API key, and not an
 admin impersonating them. The form
 shows A Summary of Your Rights Under the Fair Credit Reporting Act, the

@@ -15,7 +15,6 @@ import {
   type ScreeningForm as ScreeningFormData,
   submitScreening,
 } from "./employeeFormsApi";
-import { organizationPeoplePath } from "./organizationState";
 import {
   DetailFields,
   emptyDetails,
@@ -54,11 +53,12 @@ type UpdateAnswers = (change: Partial<Answers>) => void;
  * orders the Checkr report only after they sign.
  */
 export function ScreeningForm({
-  memberId,
+  back,
   onNavigate,
   requirementId,
 }: {
-  memberId: string;
+  /** Where the person returns to: My documents. */
+  back: string;
   onNavigate: (pathname: string) => void;
   requirementId: string;
 }) {
@@ -80,7 +80,6 @@ export function ScreeningForm({
       current = false;
     };
   }, [requirementId]);
-  const back = organizationPeoplePath(memberId);
   if (error) {
     return (
       <Banner
@@ -90,7 +89,7 @@ export function ScreeningForm({
             onClick={(event) => handleNavigation(event, back, onNavigate)}
             size="sm"
           >
-            Back to your page
+            Back to My documents
           </ButtonLink>
         }
         tone="danger"
@@ -581,7 +580,7 @@ function Submitted({
             onClick={(event) => handleNavigation(event, back, onNavigate)}
             variant="primary"
           >
-            Back to your page
+            Back to My documents
           </ButtonLink>
         </>
       }

@@ -63,7 +63,7 @@ import {
   type WorkspaceOrganization,
 } from "./organizationState";
 import { useFocusWhenFolded } from "./useFocusWhenFolded";
-import { handleNavigation } from "./workspacePaths";
+import { handleNavigation, myDocumentsPath } from "./workspacePaths";
 
 /**
  * The first invitation is sent from an open form. Once anyone else has joined
@@ -185,10 +185,11 @@ function PeopleBody({
       {state.error && <Toast tone="danger">{state.error}</Toast>}
       {state.notice && <Toast tone="success">{state.notice}</Toast>}
       <SummaryError summary={summary} />
-      {!canManage && data.currentMemberId && (
+      {data.currentMemberId && (
         <OwnRequestsNotice
-          count={openCount(() => true)}
-          memberId={data.currentMemberId}
+          count={openCount(
+            (requirement) => requirement.memberId === data.currentMemberId,
+          )}
           onNavigate={onNavigate}
         />
       )}
@@ -242,7 +243,6 @@ function PeopleBody({
           inRequirementScope(unattached, requirement),
         ) && (
           <EmployeeForms
-            canManage
             key={`${peopleKey(data)}:${summary.version}`}
             scope={unattached}
           />
@@ -328,17 +328,16 @@ function SummaryError({
   );
 }
 
+/** Points people at My documents, where they complete their own requests. */
 function OwnRequestsNotice({
   count,
-  memberId,
   onNavigate,
 }: {
   count: number;
-  memberId: string;
   onNavigate: (pathname: string) => void;
 }) {
   if (count === 0) return null;
-  const path = organizationPeoplePath(memberId);
+  const path = myDocumentsPath();
   return (
     <Banner
       actions={
@@ -347,7 +346,7 @@ function OwnRequestsNotice({
           onClick={(event) => handleNavigation(event, path, onNavigate)}
           size="sm"
         >
-          View your forms
+          Open My documents
         </ButtonLink>
       }
       tone="info"

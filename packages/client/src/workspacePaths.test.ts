@@ -12,12 +12,32 @@ import {
   isBusinessesPath,
   isContractsPath,
   isEquipmentPath,
+  isMyDocumentsPath,
   libraryFolderIdForPath,
   libraryPath,
+  movedWorkspacePath,
+  myDocumentsPath,
+  myScreeningIdForPath,
   signingTokenForPath,
 } from "./workspacePaths";
 
 describe("workspace paths", () => {
+  it("round-trips My documents paths and moves older screening links", () => {
+    expect(myDocumentsPath()).toBe("/me");
+    expect(myDocumentsPath("check/1")).toBe("/me/screening/check%2F1");
+    expect(myScreeningIdForPath(myDocumentsPath("check/1"))).toBe("check/1");
+    expect(myScreeningIdForPath("/me")).toBeUndefined();
+    expect(myScreeningIdForPath("/me/screening/%E0%A4%A")).toBe("%E0%A4%A");
+    expect(isMyDocumentsPath("/me")).toBe(true);
+    expect(isMyDocumentsPath("/me/screening/check")).toBe(true);
+    expect(isMyDocumentsPath("/media")).toBe(false);
+    expect(
+      movedWorkspacePath("/organization/people/member/screening/check%2F1"),
+    ).toBe("/me/screening/check%2F1");
+    expect(movedWorkspacePath("/organization/people/member")).toBeUndefined();
+    expect(movedWorkspacePath("/me/screening/check")).toBeUndefined();
+  });
+
   it("round-trips business paths", () => {
     expect(businessPath()).toBe("/businesses");
     expect(businessPath("business/1")).toBe("/businesses/business%2F1");

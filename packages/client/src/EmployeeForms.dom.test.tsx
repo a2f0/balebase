@@ -78,11 +78,7 @@ function screening(
   };
 }
 
-async function render(
-  requirements: EmployeeRequirement[],
-  canManage = true,
-  onNavigate?: (pathname: string) => void,
-) {
+async function render(requirements: EmployeeRequirement[]) {
   globalThis.fetch = (async () =>
     Response.json({ requirements })) as unknown as typeof fetch;
   container = document.createElement("div");
@@ -90,11 +86,7 @@ async function render(
   root = createRoot(container);
   await act(async () =>
     root?.render(
-      <EmployeeForms
-        canManage={canManage}
-        onNavigate={onNavigate}
-        scope={{ kind: "member", memberId: "member" }}
-      />,
+      <EmployeeForms scope={{ kind: "member", memberId: "member" }} />,
     ),
   );
 }
@@ -105,6 +97,10 @@ function button(within: Element, label: string) {
   );
   if (!match) throw new Error(`No button labeled ${label}`);
   return match;
+}
+
+function badgeText(within: Element) {
+  return within.querySelector(".requirementItemHeader .badge")?.textContent;
 }
 
 function item(title: string) {
@@ -139,10 +135,7 @@ describe("requesting forms on a member's page", () => {
     root = createRoot(container);
     await act(async () =>
       root?.render(
-        <EmployeeForms
-          canManage
-          scope={{ kind: "member", memberId: "member" }}
-        />,
+        <EmployeeForms scope={{ kind: "member", memberId: "member" }} />,
       ),
     );
     expect(item("Own check")).toBeTruthy();
@@ -230,7 +223,8 @@ describe("Checkr screening results", () => {
 
     const pending = item("Pending check");
     expect(pending.querySelector(".checkrResult")).toBeNull();
-    expect(pending.textContent).toContain("Checkr: pending");
+    expect(badgeText(pending)).toBe("Report in progress");
+    expect(pending.textContent).not.toContain("Checkr: pending");
   });
 
   it("keeps the report status beside a result from a canceled report", async () => {
@@ -245,7 +239,7 @@ describe("Checkr screening results", () => {
 
     const partial = item("Partial check");
     expect(partial.textContent).toContain("Checkr result: Consider");
-    expect(partial.textContent).toContain("Checkr: partially canceled");
+    expect(badgeText(partial)).toBe("Report partly canceled");
     expect(partial.textContent).toContain("Request again");
   });
 
@@ -259,7 +253,7 @@ describe("Checkr screening results", () => {
       }),
     ]);
     const credit = item("Credit check");
-    expect(credit.textContent).toContain("Checkr: pending");
+    expect(badgeText(credit)).toBe("Report in progress");
     expect(button(credit, "Refresh check")).toBeTruthy();
   });
 
@@ -274,31 +268,11 @@ describe("Checkr screening results", () => {
       }),
     ]);
     const credit = item("Credit check");
-    expect(credit.textContent).toContain("Checkr: canceled");
+    expect(badgeText(credit)).toBe("Report canceled");
     expect(credit.textContent).not.toContain("Request again");
     expect(
       credit.querySelector('[aria-label="Status for Credit check"]'),
     ).toBeTruthy();
-  });
-
-  it("hides the result from the screened person", async () => {
-    await render(
-      [
-        screening({
-          checkrResult: "clear",
-          completedAt: "2026-10-07T11:09:40.000Z",
-          status: "complete",
-          title: "Own check",
-        }),
-      ],
-      false,
-    );
-
-    const own = item("Own check");
-    expect(own.querySelector(".checkrResult")).toBeNull();
-    expect(own.textContent).toContain("Complete");
-    expect(own.textContent).toContain("Submitted to Checkr");
-    expect(own.textContent).toContain("Signed authorization");
   });
 });
 
@@ -334,13 +308,11 @@ describe("requesting a Checkr background check", () => {
     root = createRoot(container);
     await act(async () =>
       root?.render(
-        <EmployeeForms
-          canManage
-          scope={{ kind: "member", memberId: "member" }}
-        />,
+        <EmployeeForms scope={{ kind: "member", memberId: "member" }} />,
       ),
     );
     const check = item("Background check");
+    expect(badgeText(check)).toBe("Not requested");
     const setValue = Object.getOwnPropertyDescriptor(
       dom.HTMLInputElement.prototype,
       "value",
@@ -370,44 +342,12 @@ describe("requesting a Checkr background check", () => {
       "Background check requested, but the email to Pat Person couldn’t be sent.",
     );
     const waiting = item("Background check");
-    expect(waiting.textContent).toContain("Waiting for Pat Person’s details");
+    expect(badgeText(waiting)).toBe("Waiting for details");
     expect(button(waiting, "Update request")).toBeTruthy();
     expect(
       waiting.querySelector<HTMLInputElement>(
         '[aria-label="Work state for Background check"]',
       )?.value,
     ).toBe("TX");
-  });
-
-  it("links the person to their screening form", async () => {
-    const paths: string[] = [];
-    await render(
-      [
-        screening({
-          canSubmitCheckr: true,
-          checkrReportStatus: null,
-          checkrRequested: true,
-          hasCheckrConsent: false,
-          status: "pending",
-        }),
-      ],
-      false,
-      (pathname) => paths.push(pathname),
-    );
-    const link =
-      item("Background check").querySelector<HTMLAnchorElement>("a.button");
-    expect(link?.textContent).toBe("Complete background check");
-    expect(link?.getAttribute("href")).toBe(
-      "/organization/people/member/screening/screening",
-    );
-    await act(async () =>
-      link?.dispatchEvent(
-        new dom.MouseEvent("click", {
-          bubbles: true,
-          cancelable: true,
-        }) as never,
-      ),
-    );
-    expect(paths).toEqual(["/organization/people/member/screening/screening"]);
   });
 });

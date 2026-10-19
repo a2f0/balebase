@@ -211,14 +211,22 @@ describe("a member's page", () => {
     expect(paths).toEqual(["/organization/people"]);
   });
 
-  it("shows a member their own requests without manager controls", async () => {
-    stubApi({ currentMemberId: "mark", memberRole: "member" });
-    await render("mark");
+  it("sends a member to My documents for their own requests", async () => {
+    const paths: string[] = [];
+    const requests = stubApi({ currentMemberId: "mark", memberRole: "member" });
+    await render("mark", (path) => paths.push(path));
 
     const text = container.textContent ?? "";
     expect(text).toContain("You");
-    expect(text).toContain("W-9");
-    expect(text).toContain("requested from you");
+    expect(text).toContain("requested from you in My documents");
+    expect(text).not.toContain("W-9");
+    expect(requests).toEqual([]);
+    const link = [...container.querySelectorAll("a")].find(
+      (element) => element.textContent === "Open My documents",
+    );
+    expect(link?.getAttribute("href")).toBe("/me");
+    await click(link);
+    expect(paths).toEqual(["/me"]);
     expect(button(container, "Send requests")).toBeNull();
     expect(button(container, "Remove from organization")).toBeNull();
     expect(text).not.toContain("Require 2FA");

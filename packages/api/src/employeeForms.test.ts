@@ -696,7 +696,7 @@ describe("employee forms", () => {
       "Acme requested a background check",
     );
     expect(fixture.emails[0]?.text).toContain(
-      `https://app.balebase.test/organization/people/employee-member/screening/${id}?organization=${orgId}`,
+      `https://app.balebase.test/me/screening/${id}?organization=${orgId}`,
     );
     const listed = (await (
       await fixture.app("employee", "member").request("/")
@@ -733,6 +733,52 @@ describe("employee forms", () => {
     expect((await request(invitedId ?? "", { state: "NY" })).status).toBe(200);
     expect(fixture.emails[1]?.to.email).toBe("invitee@example.com");
     expect(fixture.emails[1]?.text).toContain("Accept your invitation to Acme");
+    expect(fixture.emails[1]?.text).toContain(
+      `https://app.balebase.test/me?organization=${orgId}`,
+    );
+  });
+
+  it("lists a manager's own requests, as the person sees them, for My documents", async () => {
+    const fixture = await createFixture();
+    const employees = await createRequirement(fixture, "form", "W-4");
+    const created = await fixture.app("owner", "owner").request(
+      "/",
+      jsonPost({
+        memberId: "member_owner",
+        requirements: [
+          { dueDate: "2026-10-01", kind: "background_check", title: "Own" },
+        ],
+      }),
+    );
+    const own =
+      ((await created.json()) as { ids: string[] }).ids[0] ?? "missing";
+    fixture.database
+      .query(
+        `UPDATE employee_requirements
+         SET checkr_report_id = 'report', checkr_report_status = 'complete',
+             checkr_result = 'clear', status = 'complete'
+         WHERE id = ?`,
+      )
+      .run(own);
+    const list = async (path: string, user = "owner", role = "owner") =>
+      (
+        (await (await fixture.app(user, role).request(path)).json()) as {
+          requirements: Array<{ checkrResult: string | null; id: string }>;
+        }
+      ).requirements;
+
+    expect((await list("/")).map(({ id }) => id).sort()).toEqual(
+      [employees, own].sort(),
+    );
+    expect((await list("/")).find(({ id }) => id === own)?.checkrResult).toBe(
+      "clear",
+    );
+    expect(await list("/?for=me")).toEqual([
+      expect.objectContaining({ checkrResult: null, id: own }),
+    ]);
+    expect(
+      (await list("/?for=me", "employee", "member")).map(({ id }) => id),
+    ).toEqual([employees]);
   });
 
   it("serves the screening form only to the person, with test candidates in staging", async () => {
