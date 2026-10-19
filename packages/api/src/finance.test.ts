@@ -596,16 +596,18 @@ describe("expense categories", () => {
       "POST",
     );
     expect(defaults.response.status).toBe(200);
-    expect(defaults.body.categories).toHaveLength(15);
+    expect(defaults.body.categories).toHaveLength(17);
     const again = await jsonRequest<{ categories: Category[] }>(
       fixture.app,
       fixture.bindings,
       "/categories/defaults",
       "POST",
     );
-    expect(again.body.categories).toHaveLength(15);
-    const travel = again.body.categories.find(({ name }) => name === "Travel");
-    expect(travel).toBeDefined();
+    expect(again.body.categories).toHaveLength(17);
+    const names = again.body.categories.map(({ name }) => name);
+    expect(names).toContain("Charitable contributions");
+    expect(names).toContain("Personal");
+    expect(names).toContain("Travel");
     const clash = await jsonRequest(
       fixture.app,
       fixture.bindings,

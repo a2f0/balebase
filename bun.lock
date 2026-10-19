@@ -22,7 +22,7 @@
     },
     "packages/api": {
       "name": "@balebase/api",
-      "version": "0.1.38",
+      "version": "0.1.39",
       "dependencies": {
         "@better-auth/core": "1.7.2",
         "@modelcontextprotocol/server": "2.3.1",
