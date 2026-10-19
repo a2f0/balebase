@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import type { AuthSession } from "./auth";
 import type { AuthVariables } from "./authMiddleware";
 import { verifyCheckrWebhook } from "./checkr";
+import { recoverCheckrAttempt } from "./checkrScreening";
 import {
   handleCheckrWebhook,
   refreshActiveCheckrScreenings,
@@ -1569,6 +1570,107 @@ describe("employee forms", () => {
             .request(`/${abandoned}`, { method: "DELETE" })
         ).status,
       ).toBe(200);
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("keeps an attempt when Checkr refuses access instead of the details", async () => {
+    const fixture = await createFixture();
+    const id = await requestedScreening(fixture);
+    let failure: { status: number; url: string } = {
+      status: 503,
+      url: "/candidates/candidate-1/documents",
+    };
+    const checkr = mockCheckr((call) =>
+      call.url === failure.url
+        ? Response.json({ error: "Not allowed" }, { status: failure.status })
+        : call.url === "/candidates/candidate-1"
+          ? Response.json({ id: "candidate-1", report_ids: [] })
+          : checkrResponses(call),
+    );
+    const attempt = () =>
+      fixture.database
+        .query(`SELECT checkr_candidate_id, checkr_start_nonce IS NOT NULL AS held
+                FROM employee_requirements WHERE id = ?`)
+        .get(id);
+    try {
+      expect(
+        (await submitScreening(fixture, id, homerSubmission())).status,
+      ).toBe(502);
+      for (const next of [
+        { status: 401, url: "/candidates/candidate-1" },
+        { status: 403, url: "/reports" },
+      ]) {
+        failure = next;
+        const response = await submitScreening(fixture, id, homerSubmission());
+        expect(response.status).toBe(502);
+        expect(attempt()).toEqual({
+          checkr_candidate_id: "candidate-1",
+          held: 1,
+        });
+      }
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("recovers an attempt as it is when claimed, not as it was read", async () => {
+    const fixture = await createFixture();
+    const id = await requestedScreening(fixture);
+    let report = false;
+    const checkr = mockCheckr((call) =>
+      call.url === "/candidates/candidate-1"
+        ? Response.json({
+            id: "candidate-1",
+            report_ids: report ? ["report-1"] : [],
+          })
+        : Response.json({ id: "report-1", result: null, status: "pending" }),
+    );
+    const stale = {
+      checkr_attempt_consent_id: "consent-old",
+      checkr_candidate_id: "candidate-1",
+      checkr_report_requested_at: null,
+      checkr_start_nonce: "attempt",
+      id,
+      organization_id: orgId,
+    };
+    try {
+      // A retry asked for the report after the row was read.
+      fixture.database
+        .query(`UPDATE employee_requirements
+                SET checkr_start_nonce = 'attempt',
+                    checkr_start_nonce_at = '2026-01-01T00:00:00.000Z',
+                    checkr_candidate_id = 'candidate-1',
+                    checkr_attempt_consent_id = 'consent-new',
+                    checkr_report_requested_at = ?
+                WHERE id = ?`)
+        .run(new Date().toISOString(), id);
+      expect(await recoverCheckrAttempt(fixture.bindings, stale)).toBe(
+        "waiting",
+      );
+      expect(
+        fixture.database
+          .query(
+            "SELECT checkr_start_nonce, checkr_starting_at FROM employee_requirements WHERE id = ?",
+          )
+          .get(id),
+      ).toEqual({ checkr_start_nonce: "attempt", checkr_starting_at: null });
+
+      report = true;
+      expect(await recoverCheckrAttempt(fixture.bindings, stale)).toBe(
+        "adopted",
+      );
+      expect(
+        fixture.database
+          .query(
+            "SELECT checkr_report_id, checkr_consent_id FROM employee_requirements WHERE id = ?",
+          )
+          .get(id),
+      ).toEqual({
+        checkr_consent_id: "consent-new",
+        checkr_report_id: "report-1",
+      });
     } finally {
       checkr.restore();
     }

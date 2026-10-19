@@ -42,16 +42,6 @@ export class CheckrRequestError extends Error {
   }
 }
 
-export function isDefinitiveCheckrRejection(cause: unknown) {
-  return (
-    cause instanceof CheckrRequestError &&
-    cause.status >= 400 &&
-    cause.status < 500 &&
-    cause.status !== 409 &&
-    cause.status !== 429
-  );
-}
-
 // Checkr's self-hosted flow does not support credit screenings, so only
 // background checks are ordered through Checkr; managers track credit checks.
 export function checkrPackage(env: Bindings) {

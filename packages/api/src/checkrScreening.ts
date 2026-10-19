@@ -4,7 +4,6 @@ import {
   createCheckrReport,
   getCheckrCandidate,
   getCheckrReport,
-  isDefinitiveCheckrRejection,
   uploadCheckrConsent,
 } from "./checkr";
 import { buildScreeningConsentPdf } from "./screeningConsentPdf";
@@ -238,13 +237,38 @@ export async function submitCheckrScreening(
       report,
     );
   } catch (cause) {
-    const rejected = isDefinitiveCheckrRejection(cause);
+    const rejected = cause instanceof RejectedDetails;
     await releaseSubmission(env.DB, subject, nonce, rejected);
-    if (rejected && cause instanceof CheckrRequestError) {
+    if (rejected) {
       return {
         kind: "rejected",
         message: `Checkr couldn't accept these details: ${cause.detail}`,
       };
+    }
+    throw cause;
+  }
+}
+
+/**
+ * Checkr refused the person's details when creating the candidate or report.
+ * Only this clears an attempt: an outage, a lookup failure, or a credentials
+ * problem keeps it, so its keys still prevent a second report.
+ */
+class RejectedDetails extends Error {
+  constructor(readonly detail: string) {
+    super(detail);
+  }
+}
+
+async function rejectingDetails<T>(request: () => Promise<T>) {
+  try {
+    return await request();
+  } catch (cause) {
+    if (
+      cause instanceof CheckrRequestError &&
+      (cause.status === 400 || cause.status === 422)
+    ) {
+      throw new RejectedDetails(cause.detail);
     }
     throw cause;
   }
@@ -347,11 +371,15 @@ export async function recoverCheckrAttempt(
 ) {
   const scope = { organizationId: row.organization_id, requirementId: row.id };
   const now = new Date();
-  const claimed = await env.DB.prepare(
+  // The claim returns the attempt as it is now; a retry may have moved it on
+  // since the row was read.
+  const attempt = await env.DB.prepare(
     `UPDATE employee_requirements SET checkr_starting_at = ?
      WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?
        AND checkr_report_id IS NULL
-       AND (checkr_starting_at IS NULL OR checkr_starting_at < ?)`,
+       AND (checkr_starting_at IS NULL OR checkr_starting_at < ?)
+     RETURNING checkr_attempt_consent_id, checkr_candidate_id,
+               checkr_report_requested_at, checkr_start_nonce`,
   )
     .bind(
       now.toISOString(),
@@ -360,28 +388,37 @@ export async function recoverCheckrAttempt(
       row.checkr_start_nonce,
       new Date(now.getTime() - 5 * 60_000).toISOString(),
     )
-    .run();
-  if (!claimed.meta.changes) return "busy";
+    .first<
+      Pick<
+        CheckrAttemptRow,
+        | "checkr_attempt_consent_id"
+        | "checkr_candidate_id"
+        | "checkr_report_requested_at"
+        | "checkr_start_nonce"
+      >
+    >();
+  if (!attempt) return "busy";
+  const nonce = attempt.checkr_start_nonce;
   try {
-    const report = row.checkr_candidate_id
-      ? await candidateReport(env, row.checkr_candidate_id)
+    const report = attempt.checkr_candidate_id
+      ? await candidateReport(env, attempt.checkr_candidate_id)
       : null;
-    if (report && row.checkr_candidate_id) {
+    if (report && attempt.checkr_candidate_id) {
       await storeReport(
         env.DB,
         scope,
-        row.checkr_start_nonce,
-        row.checkr_candidate_id,
-        row.checkr_attempt_consent_id,
+        nonce,
+        attempt.checkr_candidate_id,
+        attempt.checkr_attempt_consent_id,
         report,
       );
       return "adopted";
     }
-    const waiting = reportMayArrive(row.checkr_report_requested_at);
-    await releaseSubmission(env.DB, scope, row.checkr_start_nonce, !waiting);
+    const waiting = reportMayArrive(attempt.checkr_report_requested_at);
+    await releaseSubmission(env.DB, scope, nonce, !waiting);
     return waiting ? "waiting" : "cleared";
   } catch (cause) {
-    await releaseSubmission(env.DB, scope, row.checkr_start_nonce, false);
+    await releaseSubmission(env.DB, scope, nonce, false);
     throw cause;
   }
 }
@@ -438,12 +475,14 @@ async function createCandidate(
   // Recorded first: if this request's response is lost, a retry with other
   // details must not replay its key and receive the old candidate.
   if (!(await markAttempt(env.DB, subject, nonce, { digest }))) return null;
-  const created = await createCheckrCandidate(
-    env,
-    { ...submission.candidate, email: subject.email },
-    subject.requirementId,
-    submission.copyRequested,
-    `${nonce}:candidate`,
+  const created = await rejectingDetails(() =>
+    createCheckrCandidate(
+      env,
+      { ...submission.candidate, email: subject.email },
+      subject.requirementId,
+      submission.copyRequested,
+      `${nonce}:candidate`,
+    ),
   );
   if (!created.id) throw new Error("Checkr did not return a candidate ID.");
   return (await markAttempt(env.DB, subject, nonce, {
@@ -485,13 +524,15 @@ async function requestReport(
   if (!(await markAttempt(env.DB, subject, nonce, { requestedAt }))) {
     throw new Error("The screening attempt changed.");
   }
-  const report = await createCheckrReport(
-    env,
-    candidateId,
-    claim.checkr_start_package,
-    subject.workState,
-    subject.workCity ?? "",
-    `${nonce}:report`,
+  const report = await rejectingDetails(() =>
+    createCheckrReport(
+      env,
+      candidateId,
+      claim.checkr_start_package,
+      subject.workState,
+      subject.workCity ?? "",
+      `${nonce}:report`,
+    ),
   );
   if (!report.id) throw new Error("Checkr did not return a report ID.");
   return {
