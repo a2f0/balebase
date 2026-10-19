@@ -15,6 +15,7 @@ describe("finance pages", () => {
     expect(financePageFor("/finance")).toBe("overview");
     expect(financePageFor("/finance/reports")).toBe("reports");
     expect(financePageFor("/finance/categories")).toBe("categories");
+    expect(financePageFor("/finance/connections")).toBe("connections");
     expect(financePageFor("/finance/unknown")).toBe("overview");
   });
 });

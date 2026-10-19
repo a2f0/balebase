@@ -17,7 +17,11 @@ import {
   useState,
 } from "react";
 import { websiteUrl } from "./config";
-import { FinanceAccounts, FinanceConnections } from "./FinanceAccounts";
+import {
+  FinanceAccounts,
+  FinanceConnectionAlert,
+  FinanceConnections,
+} from "./FinanceAccounts";
 import { FinanceCategories } from "./FinanceCategories";
 import { FinanceReports } from "./FinanceReports";
 import { FinanceTransactionHistory } from "./FinanceTransactionHistory";
@@ -207,10 +211,12 @@ export function FinanceView({
     page: FinancePage;
   }) {
   const unconfigured = data?.configured === false;
+  const connectable = page === "overview" || page === "connections";
   return (
     <Page>
       <FinanceHeader
         busy={handlers.busy}
+        connectable={connectable}
         onConnect={handlers.onConnect}
         onNavigate={handlers.onNavigate}
         page={page}
@@ -218,11 +224,14 @@ export function FinanceView({
       />
       <PageBody>
         <FinanceNotices
+          connectable={connectable}
           error={
-            error ?? (page === "overview" ? undefined : handlers.loadError)
+            error ??
+            (page === "overview" || page === "connections"
+              ? undefined
+              : handlers.loadError)
           }
           notice={notice}
-          overview={page === "overview"}
           showDataNotice={data?.accounts.length === 0}
           unconfigured={unconfigured}
         />
@@ -233,6 +242,18 @@ export function FinanceView({
           <FinanceCategories
             categories={data?.categories}
             onChanged={onReload}
+          />
+        )}
+        {page === "connections" && (
+          <FinanceConnections
+            busy={handlers.busy}
+            connections={data?.connections}
+            loadError={handlers.loadError}
+            onConnect={handlers.onConnect}
+            onDeleteData={handlers.onDeleteData}
+            onDisconnect={handlers.onDisconnect}
+            onReload={onReload}
+            onSync={handlers.onSync}
           />
         )}
         {page === "overview" && (
@@ -275,13 +296,9 @@ function FinanceOverview({
       );
   return (
     <>
-      <FinanceConnections
-        busy={handlers.busy}
+      <FinanceConnectionAlert
         connections={data?.connections}
-        onConnect={handlers.onConnect}
-        onDeleteData={handlers.onDeleteData}
-        onDisconnect={handlers.onDisconnect}
-        onSync={handlers.onSync}
+        onNavigate={handlers.onNavigate}
       />
       <FinanceAccounts
         accounts={data?.accounts}
@@ -327,12 +344,14 @@ function FinanceOverview({
 
 function FinanceHeader({
   busy,
+  connectable,
   onConnect,
   onNavigate,
   page,
   unconfigured,
 }: {
   busy: boolean;
+  connectable: boolean;
   onConnect: () => Promise<void>;
   onNavigate: (pathname: string) => void;
   page: FinancePage;
@@ -341,7 +360,7 @@ function FinanceHeader({
   return (
     <PageHeader
       actions={
-        page === "overview" && (
+        connectable && (
           <Button
             aria-describedby={unconfigured ? setupNoticeId : undefined}
             busy={busy}
@@ -374,16 +393,16 @@ function FinanceHeader({
 }
 
 function FinanceNotices({
+  connectable,
   error,
   notice,
-  overview,
   showDataNotice,
   unconfigured,
 }: {
+  /** Setup and data-handling notices belong beside the Connect bank action. */
+  connectable: boolean;
   error: string | undefined;
   notice: string | undefined;
-  /** Setup and data-handling notices belong with the connections. */
-  overview: boolean;
   showDataNotice: boolean;
   unconfigured: boolean;
 }) {
@@ -391,7 +410,7 @@ function FinanceNotices({
     <>
       {error && <Toast tone="danger">{error}</Toast>}
       {notice && <Toast tone="success">{notice}</Toast>}
-      {overview && (unconfigured || showDataNotice) && (
+      {connectable && (unconfigured || showDataNotice) && (
         <div className="stack stackMd">
           {unconfigured && <FinanceSetupNotice />}
           {showDataNotice && <FinanceDataNotice />}

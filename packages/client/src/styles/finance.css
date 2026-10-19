@@ -1,4 +1,4 @@
-/* Finance: institution connections, account cards, and transaction history. */
+/* Finance: institution connections, account tiles, and transaction history. */
 
 /* Connections share columns so statuses and actions line up. */
 .financeConnections {
@@ -21,75 +21,76 @@
   background: var(--color-ink);
 }
 
-/* Account cards double as the transaction filter. */
+/* Compact account tiles double as the transaction filter. */
 .financeAccountGrid {
   --grid-min: 15rem;
+  --grid-gap: var(--space-2);
 }
 
-/* The name row absorbs spare height so balances line up across a row. */
+/* Name and balance share a line; details and the selection mark sit beneath. */
 .financeAccount {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto 1fr auto auto;
-  gap: var(--space-1);
+  gap: var(--space-0-5);
   width: 100%;
-  padding: var(--space-5);
+  padding: var(--space-2-5) var(--space-3);
   color: var(--color-text);
   cursor: pointer;
   text-align: left;
   user-select: none;
 }
 
-.financeAccountHeader {
+.financeAccountLine {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
-  min-height: 1.5rem;
+  gap: var(--space-3);
+  min-width: 0;
 }
 
-.financeAccountInstitution {
+.financeAccountName,
+.financeAccountDetails {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.financeAccountName {
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.financeAccountBalance {
+  flex: none;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+/* Long institution names truncate before the account number does. */
+.financeAccountMeta {
+  display: flex;
+  gap: var(--space-1);
   min-width: 0;
   color: var(--color-text-subtle);
-  font-family: var(--font-mono);
   font-size: var(--text-xs);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
-  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.financeAccountMask {
+  flex: none;
+  white-space: nowrap;
 }
 
 .financeAccountCheck {
   display: grid;
   flex: none;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1rem;
+  height: 1rem;
   border-radius: var(--radius-full);
   place-items: center;
   color: var(--color-ink);
   background: var(--color-lime);
-}
-
-.financeAccountName {
-  margin-top: var(--space-1);
-  font-size: var(--text-base);
-  font-weight: 650;
-  overflow-wrap: anywhere;
-}
-
-.financeAccountBalance {
-  margin-top: var(--space-3);
-  font-size: var(--text-2xl);
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  letter-spacing: var(--tracking-tighter);
-  line-height: var(--leading-tight);
-  overflow-wrap: anywhere;
-}
-
-.financeAccountMeta {
-  color: var(--color-text-subtle);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
 }
 
 /*
@@ -325,18 +326,26 @@
 }
 
 @media (max-width: 720px) {
-  /* Two account tiles per row keep the balances scannable on phones. */
+  /*
+   * Phones swipe through one row of tiles; the next tile peeks in to show
+   * there are more. Padding keeps the selection ring and focus outline clear
+   * of the scroll edge.
+   */
   .financeAccountGrid {
-    --grid-min: 9.5rem;
-    --grid-gap: var(--space-3);
+    grid-auto-columns: min(85%, 20rem);
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    margin: calc(var(--space-1) * -1);
+    padding: var(--space-1);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: var(--space-1);
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
   }
 
   .financeAccount {
-    padding: var(--space-4);
-  }
-
-  .financeAccountBalance {
-    font-size: var(--text-xl);
+    scroll-snap-align: start;
   }
 }
 

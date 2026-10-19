@@ -370,8 +370,10 @@ The organization-scoped Finance page at `/finance` uses
 and [Transactions Sync](https://plaid.com/docs/api/products/transactions/) to
 import up to 24 months of account and transaction history. Syncing is manual in
 this first release; Plaid webhooks can be added later for automatic updates.
-Users can add organization-scoped notes, labels, and a reviewed flag to
-imported transactions. Select an account card to focus on it; Shift-click adds
+Each institution's sync, disconnect, and delete actions live at
+`/finance/connections`; the overview only warns when a connection stops
+syncing. Users can add organization-scoped notes, labels, and a reviewed flag to
+imported transactions. Select an account tile to focus on it; Shift-click adds
 or removes individual accounts from the selection. No selection shows all
 accounts. The transaction toolbar combines account selection with the current
 calendar year, previous calendar year, or all time, and an uncategorized-expense

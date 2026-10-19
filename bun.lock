@@ -39,7 +39,7 @@
     },
     "packages/client": {
       "name": "@balebase/client",
-      "version": "0.1.48",
+      "version": "0.1.49",
       "dependencies": {
         "@balebase/ui": "workspace:*",
         "@capacitor/app": "8.1.2",

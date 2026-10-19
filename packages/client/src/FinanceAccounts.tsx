@@ -2,10 +2,13 @@ import {
   Avatar,
   Badge,
   type BadgeTone,
+  Banner,
   Button,
   Card,
   cx,
+  EmptyState,
   Icon,
+  LoadingState,
   PageSection,
 } from "@balebase/ui/react";
 import type { FinanceAccount, FinanceConnection } from "./financeApi";
@@ -22,32 +25,106 @@ interface ConnectionHandlers {
 
 export function FinanceConnections({
   connections,
+  loadError,
+  onReload,
+  ...handlers
+}: ConnectionHandlers & {
+  connections: FinanceConnection[] | undefined;
+  loadError: string | undefined;
+  onReload: () => Promise<void>;
+}) {
+  return (
+    <PageSection
+      actions={
+        connections?.length ? (
+          <span className="sectionCount">
+            {countLabel(connections.length, "institution")}
+          </span>
+        ) : undefined
+      }
+      description="Sync each institution, disconnect it, or delete the data it imported."
+      title="Connections"
+    >
+      {loadError && (
+        <Banner
+          actions={
+            <Button onClick={() => void onReload()} size="sm">
+              Retry
+            </Button>
+          }
+          tone="danger"
+        >
+          {loadError}
+        </Banner>
+      )}
+      {(!loadError || connections) && (
+        <ConnectionList connections={connections} {...handlers} />
+      )}
+    </PageSection>
+  );
+}
+
+function ConnectionList({
+  connections,
   ...handlers
 }: ConnectionHandlers & {
   connections: FinanceConnection[] | undefined;
 }) {
-  if (!connections?.length) return null;
+  if (!connections) return <LoadingState label="Loading connections…" />;
+  if (!connections.length) {
+    return (
+      <EmptyState icon="link" title="No banks connected yet">
+        Connect a bank to import its balances and transactions.
+      </EmptyState>
+    );
+  }
   return (
-    <PageSection
+    <Card className="financeListCard" flush>
+      <ul className="rowList financeConnections">
+        {connections.map((connection) => (
+          <ConnectionRow
+            connection={connection}
+            key={connection.id}
+            {...handlers}
+          />
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+/**
+ * Connections live on their own tab, so the overview only flags the ones
+ * that stopped syncing and would otherwise leave balances quietly stale.
+ */
+export function FinanceConnectionAlert({
+  connections,
+  onNavigate,
+}: {
+  connections: FinanceConnection[] | undefined;
+  onNavigate: (pathname: string) => void;
+}) {
+  const failing =
+    connections?.filter((connection) => connection.status === "error") ?? [];
+  const [first] = failing;
+  if (!first) return null;
+  return (
+    <Banner
       actions={
-        <span className="sectionCount">
-          {countLabel(connections.length, "institution")}
-        </span>
+        <Button onClick={() => onNavigate("/finance/connections")} size="sm">
+          Review connections
+        </Button>
       }
-      title="Connections"
+      announce={false}
+      title={
+        failing.length === 1
+          ? `${first.institutionName ?? "A connection"} stopped syncing`
+          : `${failing.length} connections stopped syncing`
+      }
+      tone="warning"
     >
-      <Card className="financeListCard" flush>
-        <ul className="rowList financeConnections">
-          {connections.map((connection) => (
-            <ConnectionRow
-              connection={connection}
-              key={connection.id}
-              {...handlers}
-            />
-          ))}
-        </ul>
-      </Card>
-    </PageSection>
+      Balances and transactions may be out of date.
+    </Banner>
   );
 }
 
@@ -155,7 +232,7 @@ export function FinanceAccounts({
           {countLabel(accounts.length, "account")}
         </span>
       }
-      description="Select an account to filter transactions. Hold Shift while clicking to add or remove accounts. No selection shows all accounts."
+      description="Select accounts to filter transactions. Shift-click to select more than one."
       title="Accounts"
     >
       <div className="gridAuto financeAccountGrid">
@@ -181,6 +258,12 @@ function AccountCard({
   onSelect: (accountId: string, shiftKey: boolean) => void;
   selected: boolean;
 }) {
+  const details = [
+    account.institutionName,
+    formatLabel(account.subtype ?? account.type),
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <button
       aria-pressed={selected}
@@ -191,23 +274,30 @@ function AccountCard({
       onClick={(event) => onSelect(account.id, event.shiftKey)}
       type="button"
     >
-      <span className="financeAccountHeader">
-        <span className="financeAccountInstitution">
-          {account.institutionName ?? account.type}
+      <span className="financeAccountLine">
+        <span className="financeAccountName" title={account.name}>
+          {account.name}
+        </span>
+        <span className="financeAccountBalance">
+          {formatMoney(account.currentBalance, account.currencyCode)}
+        </span>
+      </span>
+      <span className="financeAccountLine">
+        <span className="financeAccountMeta">
+          <span className="financeAccountDetails" title={details}>
+            {details}
+          </span>
+          {account.mask && (
+            <span className="financeAccountMask">
+              ·&nbsp;••••&nbsp;{account.mask}
+            </span>
+          )}
         </span>
         {selected && (
           <span className="financeAccountCheck">
-            <Icon name="check" size={14} strokeWidth={2.5} />
+            <Icon name="check" size={10} strokeWidth={3} />
           </span>
         )}
-      </span>
-      <span className="financeAccountName">{account.name}</span>
-      <span className="financeAccountBalance">
-        {formatMoney(account.currentBalance, account.currencyCode)}
-      </span>
-      <span className="financeAccountMeta">
-        {formatLabel(account.subtype ?? account.type)}
-        {account.mask ? ` · ••••\u00a0${account.mask}` : ""}
       </span>
     </button>
   );

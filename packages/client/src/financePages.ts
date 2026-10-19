@@ -1,4 +1,4 @@
-export type FinancePage = "categories" | "overview" | "reports";
+export type FinancePage = "categories" | "connections" | "overview" | "reports";
 
 export const financePages: {
   label: string;
@@ -8,6 +8,7 @@ export const financePages: {
   { label: "Overview", page: "overview", path: "/finance" },
   { label: "Reports", page: "reports", path: "/finance/reports" },
   { label: "Categories", page: "categories", path: "/finance/categories" },
+  { label: "Connections", page: "connections", path: "/finance/connections" },
 ];
 
 export function isFinancePath(pathname: string) {
