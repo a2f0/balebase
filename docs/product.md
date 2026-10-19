@@ -161,7 +161,7 @@ It accepts only API keys and rejects browser origins other than the client.
 Each tool calls one REST route with the caller's key, so the route's own
 validation and permissions apply; read keys are offered only the read tools.
 Tools do not upload or download files, connect or remove Plaid institutions,
-or reconcile Checkr invitations; use the app for those. Connect Claude Code
+or submit a person's screening form; use the app for those. Connect Claude Code
 with:
 
 ```sh
@@ -444,20 +444,49 @@ storage; managers review and complete them. Only the member and organization
 managers can download a submitted form. Checkr results are visible only to
 managers. Deleted or replaced form files are queued for R2 cleanup.
 
-Background and credit screening use Checkr's hosted invitation flow. A manager
-starts a screening with the person's US work state and optional city. Checkr
-emails the person to collect the information and authorization it requires.
-Checkr webhooks update a screening when its invitation or report changes. An
-hourly Worker task refreshes up to 24 screenings that are unfinished or whose
-webhook refresh failed, least recently checked first, in case a webhook was
-missed. Managers can also use **Refresh check** to retrieve the current
-invitation and report status at any time. A completed report is marked complete
-in the app; a `consider` result still needs the manager's review in Checkr.
-If a start request loses its response, retry it while Checkr's idempotency key
-is valid. For an older unresolved request, look up the invitation in Checkr and
-enter its ID in **Link invitation**. The app verifies the candidate, package,
-and creation time before linking it. Do not start a new check until the old
-request is reconciled.
+Background checks use Checkr's self-hosted flow. A manager requests a check
+with the person's US work state and optional city, and Balebase emails the
+person a link to their screening form under Organization → People; the link
+switches to that organization if another one is active. Only the person,
+signed in themselves, can open or submit the form: not an API key, and not an
+admin impersonating them. The form
+shows A Summary of Your Rights Under the Fair Credit Reporting Act, the
+standalone background check disclosure, any notices for the work state and the
+state where the person lives, and the authorization. The person enters their
+legal name, date of birth, Social Security number, ZIP code, and, when the
+package includes a driving record search, their driver's license, then types
+their name to sign. Balebase then creates the Checkr candidate with those
+details, uploads the signed authorization PDF as the candidate's consent
+document, and orders the report. It sends the Social Security number, birth
+date, and license number only to Checkr and never stores them; an unfinished
+attempt keeps only an HMAC fingerprint of its details, under the Worker's
+secret, to recognize corrections on retry. Balebase keeps each signed
+authorization (the disclosures shown, the signature, time, IP address, and
+device) as a private PDF in R2 that the person and managers can download. A
+submission carries a fingerprint of the exact disclosures its form showed,
+including the organization name, and the request it answered; the API rejects
+it if either has since changed, and orders nothing once the person leaves the
+organization.
+The disclosure wording in `packages/api/src/screeningDisclosures.ts` is a draft
+that counsel and Checkr must review before production use; Checkr also reviews
+the flow before credentialing a production account. Checkr does not support
+credit screenings in this flow, so managers track credit checks manually.
+
+Checkr webhooks update a screening when its report changes. An hourly Worker
+task refreshes up to 24 screenings that are unfinished or whose webhook refresh
+failed, least recently checked first, in case a webhook was missed. Managers can
+also use **Refresh check** to retrieve the current report status at any time. A
+completed report is marked complete in the app; a `consider` result still needs
+the manager's review in Checkr. A canceled report lets the manager request the
+check again. Each submission carries Checkr idempotency keys, so if its response
+is lost the person submits again: the retry replays the same requests, or adopts
+the report the candidate already has, linked to the authorization that ordered
+it, instead of ordering a second one. Corrected details start a new candidate,
+after a ten-minute wait if a lost report request might still reach Checkr. When
+Checkr rejects the details, the form shows Checkr's reason and the person
+corrects them and submits a new attempt. The deployment migration stops if a
+hosted Checkr invitation could still produce a report; finish or cancel it in
+Checkr first.
 
 Set these optional values in `.secrets/prod/app.env` for production deployment
 or `.secrets/staging/app.env` for staging and local development:
@@ -465,14 +494,12 @@ or `.secrets/staging/app.env` for staging and local development:
 ```sh
 CHECKR_API_KEY=your-checkr-secret-key
 CHECKR_BACKGROUND_PACKAGE=your-background-package-slug
-CHECKR_CREDIT_PACKAGE=your-employment-credit-package-slug
 ```
 
 The local and staging Workers use Checkr staging; the production Worker uses
 Checkr production. Checkr must credential the account and provision a staging
-account. Obtain the package slugs from the matching Checkr account, and ask
-Checkr to enable an employment credit screening package if needed. The
-deployment scripts upload the three values as Worker secrets when present.
+account. Obtain the background package slug from the matching Checkr account.
+The deployment scripts upload both values as Worker secrets when present.
 Without a configured package and key, managers can still track a check
 manually.
 
@@ -489,7 +516,12 @@ Checkr signs each delivery with the account's API key, so the Worker's
 rejects unsigned or mis-signed requests and acknowledges valid ones before
 refreshing the matching screening. Checkr staging completes reports only for
 the mocked candidates in the data document Checkr provides with the staging
-account; any other candidate's report stays `pending` indefinitely.
+account; any other candidate's report stays `pending` indefinitely. While the
+Worker uses Checkr staging, the screening form shows those candidates, with
+the result each produces, in a **Test candidates** panel like Stripe's test
+cards: **Fill** enters a candidate's details exactly and varies only the phone
+number. The candidates are in `packages/api/src/checkrTestCandidates.ts`, and
+production never returns them.
 
 ## Billing and plans
 

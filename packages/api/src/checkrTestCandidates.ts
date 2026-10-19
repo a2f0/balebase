@@ -1,0 +1,119 @@
+/**
+ * Checkr's mocked staging candidates, from the data sheet Checkr sends with a
+ * staging account. Staging completes a report only when these details are
+ * entered exactly; anything else stays pending. Like Stripe's test cards, each
+ * one produces a known result. Served only while Checkr is in staging.
+ */
+export interface CheckrTestCandidate {
+  dob: string;
+  driverLicenseNumber: string;
+  driverLicenseState: string;
+  expectedResult: "clear" | "consider";
+  findings: string[];
+  firstName: string;
+  id: string;
+  lastName: string;
+  location: string;
+  middleName: string | null;
+  ssn: string;
+  state: string;
+  zipcode: string;
+}
+
+export const checkrTestCandidates: CheckrTestCandidate[] = [
+  {
+    dob: "1983-02-10",
+    driverLicenseNumber: "M2233344",
+    driverLicenseState: "CA",
+    expectedResult: "clear",
+    findings: [],
+    firstName: "Homer",
+    id: "homer-simpson",
+    lastName: "Simpson",
+    location: "San Jose, CA",
+    middleName: null,
+    ssn: "110-11-1100",
+    state: "CA",
+    zipcode: "94088",
+  },
+  {
+    dob: "1965-01-01",
+    driverLicenseNumber: "D50078340001",
+    driverLicenseState: "IL",
+    expectedResult: "clear",
+    findings: [],
+    firstName: "George",
+    id: "george-grey",
+    lastName: "Grey",
+    location: "Chicago, IL",
+    middleName: null,
+    ssn: "255-34-2255",
+    state: "IL",
+    zipcode: "60644",
+  },
+  {
+    dob: "1983-02-10",
+    driverLicenseNumber: "Q2233344",
+    driverLicenseState: "CA",
+    expectedResult: "clear",
+    findings: ["Federal district criminal (10 years): Stalking"],
+    firstName: "Nick",
+    id: "nick-jonas",
+    lastName: "Jonas",
+    location: "Denver, CO",
+    middleName: null,
+    ssn: "556-57-5566",
+    state: "CO",
+    zipcode: "80205",
+  },
+  {
+    dob: "1983-02-10",
+    driverLicenseNumber: "N00000328",
+    driverLicenseState: "NE",
+    expectedResult: "consider",
+    findings: ["County criminal: Kidnapping"],
+    firstName: "Bruce",
+    id: "bruce-ralph-clark",
+    lastName: "Clark",
+    location: "Omaha, NE",
+    middleName: "Ralph",
+    ssn: "001-01-0011",
+    state: "NE",
+    zipcode: "68101",
+  },
+  {
+    dob: "1983-02-10",
+    driverLicenseNumber: "W426545307610",
+    driverLicenseState: "FL",
+    expectedResult: "consider",
+    findings: [
+      "County criminal: Sell/Distribute/Manufacture Drugs",
+      "Motor vehicle record: Failed to yield",
+    ],
+    firstName: "Jess",
+    id: "jess-noir-nat",
+    lastName: "Nat",
+    location: "Miami, FL",
+    middleName: "Noir",
+    ssn: "667-67-6670",
+    state: "FL",
+    zipcode: "33145",
+  },
+  {
+    dob: "1983-02-10",
+    driverLicenseNumber: "U2233344",
+    driverLicenseState: "CA",
+    expectedResult: "consider",
+    findings: [
+      "Motor vehicle record: Driving without liability insurance (2 violations)",
+    ],
+    firstName: "George",
+    id: "george-washington",
+    lastName: "Washington",
+    location: "Pittsburgh, PA",
+    middleName: null,
+    ssn: "778-79-7789",
+    state: "PA",
+    zipcode: "15106",
+  },
+];

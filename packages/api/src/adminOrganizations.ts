@@ -109,7 +109,8 @@ interface AdminRequirementRow {
   target_name: string | null;
   target_email: string;
   completed_at: string | null;
-  checkr_invitation_status: string | null;
+  checkr_requested_at: string | null;
+  checkr_report_status: string | null;
   checkr_result: string | null;
   checkr_report_id: string | null;
 }
@@ -121,8 +122,8 @@ async function listAdminRequirements(env: Bindings, organizationId: string) {
             target.name AS target_name,
             COALESCE(target.email, invitation.email, requirement.target_email)
               AS target_email,
-            requirement.checkr_invitation_status, requirement.checkr_result,
-            requirement.checkr_report_id
+            requirement.checkr_requested_at, requirement.checkr_report_status,
+            requirement.checkr_result, requirement.checkr_report_id
      FROM employee_requirements AS requirement
      LEFT JOIN member ON member.id = requirement.member_id
      LEFT JOIN user AS target ON target.id = member.userId
@@ -145,7 +146,12 @@ async function listAdminRequirements(env: Bindings, organizationId: string) {
     targetName: row.target_name,
     targetEmail: row.target_email,
     completedAt: row.completed_at,
-    checkrInvitationStatus: row.checkr_invitation_status,
+    // The report's status, or requested while the person has not submitted.
+    checkrStatus: row.checkr_report_id
+      ? row.checkr_report_status
+      : row.checkr_requested_at
+        ? "requested"
+        : null,
     checkrResult: row.checkr_result,
     checkrReportUrl: row.checkr_report_id
       ? `${dashboard}/reports/${encodeURIComponent(row.checkr_report_id)}`

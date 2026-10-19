@@ -43,8 +43,7 @@ done
 
 for secret_name in \
   CHECKR_API_KEY \
-  CHECKR_BACKGROUND_PACKAGE \
-  CHECKR_CREDIT_PACKAGE; do
+  CHECKR_BACKGROUND_PACKAGE; do
   if [[ -n "${!secret_name:-}" ]]; then
     printf '%s' "${!secret_name}" | bunx --bun wrangler secret put \
       "$secret_name" \

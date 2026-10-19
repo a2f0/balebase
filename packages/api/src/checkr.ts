@@ -2,21 +2,7 @@ import type { Bindings } from "./types";
 
 interface CheckrCandidate {
   id: string;
-}
-
-interface CheckrInvitation {
-  candidate_id?: string;
-  created_at?: string;
-  deleted_at?: string | null;
-  id: string;
-  package?: string;
-  tags?: string[];
-  report_id: string | null;
-  status: string;
-}
-
-interface CheckrInvitationList {
-  data: CheckrInvitation[];
+  report_ids?: string[];
 }
 
 interface CheckrReport {
@@ -27,62 +13,115 @@ interface CheckrReport {
   status: string;
 }
 
+interface CheckrPackageList {
+  data: Array<{ screenings?: Array<{ type?: string }>; slug?: string }>;
+}
+
+/** What the person entered on the screening form, already validated. */
+export interface CheckrCandidateDetails {
+  dob: string;
+  driverLicenseNumber: string | null;
+  driverLicenseState: string | null;
+  email: string;
+  firstName: string;
+  lastName: string;
+  middleName: string | null;
+  phone: string | null;
+  ssn: string;
+  zipcode: string;
+}
+
 export class CheckrRequestError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** Checkr's own explanation, such as which field it rejected. */
+    readonly detail: string,
   ) {
     super(message);
   }
 }
 
-export function isDefinitiveCheckrRejection(cause: unknown) {
-  return (
-    cause instanceof CheckrRequestError &&
-    cause.status >= 400 &&
-    cause.status < 500 &&
-    cause.status !== 409 &&
-    cause.status !== 429
+// Checkr's self-hosted flow does not support credit screenings, so only
+// background checks are ordered through Checkr; managers track credit checks.
+export function checkrPackage(env: Bindings) {
+  return env.CHECKR_BACKGROUND_PACKAGE;
+}
+
+export function checkrConfigured(env: Bindings, kind: string) {
+  return Boolean(
+    kind === "background_check" && env.CHECKR_API_KEY && checkrPackage(env),
   );
 }
 
-export function checkrPackage(
-  env: Bindings,
-  kind: "background_check" | "credit_check",
-) {
-  return kind === "background_check"
-    ? env.CHECKR_BACKGROUND_PACKAGE
-    : env.CHECKR_CREDIT_PACKAGE;
-}
-
-export function checkrConfigured(
-  env: Bindings,
-  kind: "background_check" | "credit_check",
-) {
-  return Boolean(env.CHECKR_API_KEY && checkrPackage(env, kind));
+/** Checkr staging completes reports only for its mocked candidates. */
+export function checkrTestMode(env: Bindings) {
+  return env.CHECKR_ENV !== "production";
 }
 
 export async function createCheckrCandidate(
   env: Bindings,
-  email: string,
+  details: CheckrCandidateDetails,
   requirementId: string,
+  copyRequested: boolean,
+  idempotencyKey: string,
 ) {
-  const body = new URLSearchParams({ email, custom_id: requirementId });
+  const body = new URLSearchParams({
+    custom_id: requirementId,
+    dob: details.dob,
+    email: details.email,
+    first_name: details.firstName,
+    last_name: details.lastName,
+    ssn: details.ssn,
+    zipcode: details.zipcode,
+  });
+  if (details.middleName) body.set("middle_name", details.middleName);
+  else body.set("no_middle_name", "true");
+  if (details.phone) body.set("phone", details.phone);
+  if (details.driverLicenseNumber && details.driverLicenseState) {
+    body.set("driver_license_number", details.driverLicenseNumber);
+    body.set("driver_license_state", details.driverLicenseState);
+  }
+  if (copyRequested) body.set("copy_requested", "true");
   return checkrRequest<CheckrCandidate>(env, "/candidates", {
     body,
-    headers: { "Idempotency-Key": requirementId },
+    headers: { "Idempotency-Key": idempotencyKey },
     method: "POST",
   });
 }
 
-export async function createCheckrInvitation(
+export async function getCheckrCandidate(env: Bindings, id: string) {
+  return checkrRequest<CheckrCandidate>(
+    env,
+    `/candidates/${encodeURIComponent(id)}`,
+  );
+}
+
+/** Attaches the signed authorization, which Checkr requires before a report. */
+export async function uploadCheckrConsent(
+  env: Bindings,
+  candidateId: string,
+  pdf: Uint8Array,
+  filename: string,
+  idempotencyKey: string,
+) {
+  const body = new FormData();
+  body.set("type", "consent");
+  body.set("file", new File([pdf], filename, { type: "application/pdf" }));
+  return checkrRequest<{ id: string }>(
+    env,
+    `/candidates/${encodeURIComponent(candidateId)}/documents`,
+    { body, headers: { "Idempotency-Key": idempotencyKey }, method: "POST" },
+  );
+}
+
+export async function createCheckrReport(
   env: Bindings,
   candidateId: string,
   packageSlug: string,
   state: string,
   city: string,
   idempotencyKey: string,
-  attemptTag: string,
 ) {
   const body = new URLSearchParams({
     candidate_id: candidateId,
@@ -91,42 +130,33 @@ export async function createCheckrInvitation(
     "work_locations[][state]": state,
   });
   if (city) body.set("work_locations[][city]", city);
-  body.set("tags[]", attemptTag);
-  return checkrRequest<CheckrInvitation>(env, "/invitations", {
+  return checkrRequest<CheckrReport>(env, "/reports", {
     body,
     headers: { "Idempotency-Key": idempotencyKey },
     method: "POST",
   });
 }
 
-export async function cancelCheckrInvitation(env: Bindings, id: string) {
-  await checkrRequest<CheckrInvitation>(
-    env,
-    `/invitations/${encodeURIComponent(id)}`,
-    { method: "DELETE" },
-  );
-}
-
-export async function getCheckrInvitation(env: Bindings, id: string) {
-  return checkrRequest<CheckrInvitation>(
-    env,
-    `/invitations/${encodeURIComponent(id)}?include_deleted=true`,
-  );
-}
-
-export async function listCheckrCandidateInvitations(
-  env: Bindings,
-  candidateId: string,
-) {
-  const query = new URLSearchParams({
-    candidate_id: candidateId,
-    per_page: "100",
-  });
-  return checkrRequest<CheckrInvitationList>(env, `/invitations?${query}`);
-}
-
 export async function getCheckrReport(env: Bindings, id: string) {
   return checkrRequest<CheckrReport>(env, `/reports/${encodeURIComponent(id)}`);
+}
+
+/**
+ * The screening types in a package, such as `motor_vehicle_report`, or null
+ * when Checkr does not list it.
+ */
+export async function checkrPackageScreenings(
+  env: Bindings,
+  packageSlug: string,
+) {
+  const packages = await checkrRequest<CheckrPackageList>(
+    env,
+    "/packages?per_page=100",
+  );
+  const match = packages.data.find(({ slug }) => slug === packageSlug);
+  return match
+    ? (match.screenings ?? []).flatMap(({ type }) => (type ? [type] : []))
+    : null;
 }
 
 // Checkr signs each webhook with an HMAC-SHA256 hex digest of the compact
@@ -169,12 +199,21 @@ async function checkrRequest<T>(
   });
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as {
-      error?: string;
-      message?: string;
+      error?: unknown;
+      message?: unknown;
     } | null;
+    const reason = payload?.message ?? payload?.error;
+    const detail =
+      typeof reason === "string"
+        ? reason
+        : Array.isArray(reason) &&
+            reason.every((item) => typeof item === "string")
+          ? reason.join(" ")
+          : "Please check the package and account settings.";
     throw new CheckrRequestError(
-      `Checkr request failed (${response.status}): ${payload?.message ?? payload?.error ?? "Please check the package and account settings."}`,
+      `Checkr request failed (${response.status}): ${detail}`,
       response.status,
+      detail,
     );
   }
   return response.json() as Promise<T>;

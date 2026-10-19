@@ -1,6 +1,7 @@
 import {
   Badge,
   Button,
+  ButtonLink,
   Card,
   Field,
   LoadingState,
@@ -11,14 +12,14 @@ import {
   createEmployeeRequirements,
   deleteEmployeeRequirement,
   downloadEmployeeForm,
+  downloadScreeningConsent,
   type EmployeeRequirement,
   type EmployeeRequirementKind,
   type EmployeeRequirementStatus,
   listEmployeeRequirements,
   type RequirementDraft,
-  reconcileCheckrScreening,
   refreshCheckrScreening,
-  startCheckrScreening,
+  requestCheckrScreening,
   updateEmployeeRequirement,
   uploadEmployeeForm,
 } from "./employeeFormsApi";
@@ -26,6 +27,8 @@ import {
   canCompleteRequirement,
   reviewRevisionForStatus,
 } from "./employeeOnboarding";
+import { organizationScreeningPath } from "./organizationState";
+import { handleNavigation } from "./workspacePaths";
 
 const options: Array<{ kind: EmployeeRequirementKind; title: string }> = [
   { kind: "form", title: "W-4" },
@@ -161,9 +164,12 @@ export function inRequirementScope(
  */
 export function EmployeeForms({
   canManage,
+  onNavigate,
   scope,
 }: {
   canManage: boolean;
+  /** Opens the person's own screening form; omit where no one completes one. */
+  onNavigate?: ((pathname: string) => void) | undefined;
   scope: RequirementScope;
 }) {
   // Compared by value, so a new scope object for the same people is no change.
@@ -191,14 +197,17 @@ export function EmployeeForms({
     void load();
   }, [load]);
 
-  async function action(work: () => Promise<unknown>, success: string) {
+  async function action<T>(
+    work: () => Promise<T>,
+    success: string | ((result: T) => string),
+  ) {
     setBusy(true);
     setError(undefined);
     setNotice(undefined);
     try {
-      await work();
+      const result = await work();
       await load();
-      setNotice(success);
+      setNotice(typeof success === "string" ? success : success(result));
     } catch (cause) {
       const message = messageFrom(cause);
       setRequirements(undefined);
@@ -243,6 +252,7 @@ export function EmployeeForms({
               busy={busy}
               canManage={canManage}
               key={requirement.id}
+              onNavigate={onNavigate}
               requirement={requirement}
               showTarget={scope.kind === "unattached"}
             />
@@ -291,26 +301,29 @@ function RequirementAssignmentForm({
   );
 }
 
-type RequirementAction = (
-  work: () => Promise<unknown>,
-  success: string,
+type RequirementAction = <T>(
+  work: () => Promise<T>,
+  success: string | ((result: T) => string),
 ) => Promise<void>;
 
 function RequirementItem({
   action,
   busy,
   canManage,
+  onNavigate,
   requirement,
   showTarget,
 }: {
   action: RequirementAction;
   busy: boolean;
   canManage: boolean;
+  onNavigate: ((pathname: string) => void) | undefined;
   requirement: EmployeeRequirement;
   /** Name the person when the list is not already one person's page. */
   showTarget: boolean;
 }) {
   const [reviewedRevision, setReviewedRevision] = useState<number | null>(null);
+  const locked = screeningLocked(requirement);
   return (
     <li className="requirementItem">
       <div className="requirementItemHeader">
@@ -345,25 +358,30 @@ function RequirementItem({
           onDownloaded={setReviewedRevision}
           requirement={requirement}
         />
+        <OwnScreeningControl
+          action={action}
+          busy={busy}
+          canManage={canManage}
+          onNavigate={onNavigate}
+          requirement={requirement}
+        />
         {canManage && (
           <>
-            {requirement.kind !== "form" &&
+            {/* Credit reports ordered through hosted invitations still refresh. */}
+            {((requirement.kind === "background_check" &&
               (requirement.checkrAvailable ||
-                requirement.checkrStarted ||
-                requirement.checkrPendingStart) && (
-                <CheckrControl
-                  action={action}
-                  busy={busy}
-                  requirement={requirement}
-                />
-              )}
+                requirement.checkrRequested ||
+                requirement.checkrSubmitting)) ||
+              requirement.checkrReportStatus) && (
+              <CheckrControl
+                action={action}
+                busy={busy}
+                requirement={requirement}
+              />
+            )}
             {(requirement.kind === "form" ||
-              (!requirement.checkrAvailable &&
-                !requirement.checkrStarted &&
-                !requirement.checkrPendingStart) ||
-              ["expired", "canceled", "deleted", "partially_canceled"].includes(
-                requirement.checkrInvitationStatus ?? "",
-              )) && (
+              (!requirement.checkrAvailable && !locked) ||
+              isClosedReportStatus(requirement.checkrReportStatus)) && (
               <RequirementStatusControl
                 action={action}
                 busy={busy}
@@ -387,7 +405,7 @@ function RequirementItem({
               type="date"
               value={requirement.dueDate}
             />
-            {!requirement.checkrStarted && !requirement.checkrPendingStart && (
+            {!locked && (
               <Button
                 disabled={busy}
                 onClick={() =>
@@ -409,6 +427,73 @@ function RequirementItem({
   );
 }
 
+/**
+ * The person's side of a background check: a link to their screening form
+ * while it waits for them, then their signed authorization.
+ */
+function OwnScreeningControl({
+  action,
+  busy,
+  canManage,
+  onNavigate,
+  requirement,
+}: {
+  action: RequirementAction;
+  busy: boolean;
+  canManage: boolean;
+  onNavigate: ((pathname: string) => void) | undefined;
+  requirement: EmployeeRequirement;
+}) {
+  if (requirement.canSubmitCheckr && requirement.memberId && onNavigate) {
+    const path = organizationScreeningPath(
+      requirement.memberId,
+      requirement.id,
+    );
+    return (
+      <ButtonLink
+        href={path}
+        onClick={(event) => handleNavigation(event, path, onNavigate)}
+        size="sm"
+        variant="primary"
+      >
+        Complete background check
+      </ButtonLink>
+    );
+  }
+  if (canManage || !requirement.checkrReportStatus) return null;
+  return (
+    <>
+      <span className="rowMeta">Submitted to Checkr</span>
+      {requirement.hasCheckrConsent && (
+        <ConsentDownload action={action} busy={busy} id={requirement.id} />
+      )}
+    </>
+  );
+}
+
+function ConsentDownload({
+  action,
+  busy,
+  id,
+}: {
+  action: RequirementAction;
+  busy: boolean;
+  id: string;
+}) {
+  return (
+    <Button
+      disabled={busy}
+      onClick={() =>
+        void action(() => downloadScreeningConsent(id), "Download started.")
+      }
+      size="sm"
+      variant="ghost"
+    >
+      Signed authorization
+    </Button>
+  );
+}
+
 function CheckrControl({
   action,
   busy,
@@ -418,76 +503,107 @@ function CheckrControl({
   busy: boolean;
   requirement: EmployeeRequirement;
 }) {
-  const [state, setState] = useState("");
-  const [city, setCity] = useState("");
-  const [invitationId, setInvitationId] = useState("");
-  if (requirement.checkrStarted) {
-    // Once the report has a result, a completed invitation adds nothing.
-    const settled =
-      requirement.checkrResult !== null &&
-      requirement.checkrInvitationStatus === "completed";
+  const status = requirement.checkrReportStatus;
+  if (status && !isClosedReportStatus(status)) {
     return (
-      <>
-        {!settled && (
-          <span className="rowMeta">
-            Checkr:{" "}
-            {requirement.checkrInvitationStatus?.replaceAll("_", " ") ??
-              "pending"}
-          </span>
-        )}
-        <Button
-          disabled={busy}
-          onClick={() =>
-            void action(
-              () => refreshCheckrScreening(requirement.id),
-              "Checkr status refreshed.",
-            )
-          }
-          size="sm"
-        >
-          Refresh check
-        </Button>
-      </>
+      <CheckrReportControl
+        action={action}
+        busy={busy}
+        requirement={requirement}
+        status={status}
+      />
+    );
+  }
+  // Checkr orders only background checks now; a hosted credit report that was
+  // canceled is tracked by hand.
+  if (requirement.kind !== "background_check") {
+    return status ? (
+      <span className="rowMeta">Checkr: {formatCheckrStatus(status)}</span>
+    ) : null;
+  }
+  // A submission Checkr did not finish resumes when the person submits again.
+  if (requirement.checkrSubmitting) {
+    return (
+      <span className="rowMeta">
+        Waiting for{" "}
+        {requirement.targetName ?? requirement.targetEmail ?? "the person"} to
+        finish submitting
+      </span>
     );
   }
   return (
-    <div className="checkrStart">
-      {requirement.checkrPendingStart && (
-        <div className="checkrReconcile">
-          <input
-            aria-label={`Checkr invitation ID for ${requirement.title}`}
-            className="input inputSm"
-            disabled={busy}
-            onChange={(event) => setInvitationId(event.target.value.trim())}
-            placeholder="Checkr invitation ID"
-            value={invitationId}
-          />
-          <Button
-            disabled={busy || !invitationId}
-            onClick={() =>
-              void action(
-                () => reconcileCheckrScreening(requirement.id, invitationId),
-                "Checkr invitation linked.",
-              )
-            }
-            size="sm"
-          >
-            Link invitation
-          </Button>
-        </div>
+    <CheckrRequestControl
+      action={action}
+      busy={busy}
+      requirement={requirement}
+    />
+  );
+}
+
+function CheckrReportControl({
+  action,
+  busy,
+  requirement,
+  status,
+}: {
+  action: RequirementAction;
+  busy: boolean;
+  requirement: EmployeeRequirement;
+  status: string;
+}) {
+  return (
+    <>
+      {!(status === "complete" && requirement.checkrResult) && (
+        <span className="rowMeta">Checkr: {formatCheckrStatus(status)}</span>
       )}
-      {(requirement.checkrInvitationStatus ||
-        requirement.checkrPendingStart) && (
+      <Button
+        disabled={busy}
+        onClick={() =>
+          void action(
+            () => refreshCheckrScreening(requirement.id),
+            "Checkr status refreshed.",
+          )
+        }
+        size="sm"
+      >
+        Refresh check
+      </Button>
+      {requirement.hasCheckrConsent && (
+        <ConsentDownload action={action} busy={busy} id={requirement.id} />
+      )}
+    </>
+  );
+}
+
+/** Asks the person to complete a check, or changes a waiting request. */
+function CheckrRequestControl({
+  action,
+  busy,
+  requirement,
+}: {
+  action: RequirementAction;
+  busy: boolean;
+  requirement: EmployeeRequirement;
+}) {
+  const [state, setState] = useState(
+    requirement.checkrWorkLocation?.state ?? "",
+  );
+  const [city, setCity] = useState(requirement.checkrWorkLocation?.city ?? "");
+  const status = requirement.checkrReportStatus;
+  const person = requirement.targetName ?? requirement.targetEmail ?? "them";
+  return (
+    <div className="checkrStart">
+      {(requirement.checkrRequested || status) && (
         <span className="rowMeta">
-          Checkr:{" "}
-          {requirement.checkrInvitationStatus?.replaceAll("_", " ") ??
-            "retry needed"}
+          {requirement.checkrRequested
+            ? `Waiting for ${person}’s details`
+            : `Checkr: ${formatCheckrStatus(status ?? "")}`}
         </span>
       )}
       <input
         aria-label={`Work state for ${requirement.title}`}
         autoCapitalize="characters"
-        className="input inputSm"
+        className="input inputSm checkrState"
         disabled={busy}
         maxLength={2}
         onChange={(event) => setState(event.target.value.toUpperCase())}
@@ -496,7 +612,7 @@ function CheckrControl({
       />
       <input
         aria-label={`Work city for ${requirement.title}`}
-        className="input inputSm"
+        className="input inputSm checkrCity"
         disabled={busy}
         maxLength={100}
         onChange={(event) => setCity(event.target.value)}
@@ -507,15 +623,20 @@ function CheckrControl({
         disabled={busy || !/^[A-Z]{2}$/.test(state)}
         onClick={() =>
           void action(
-            () => startCheckrScreening(requirement.id, state, city),
-            "Checkr invitation sent to the person.",
+            () => requestCheckrScreening(requirement.id, state, city),
+            ({ emailed }) =>
+              emailed
+                ? `Background check requested. ${person} was emailed a link.`
+                : `Background check requested, but the email to ${person} couldn’t be sent. Ask them to open Forms and checks in Balebase.`,
           )
         }
         size="sm"
       >
-        {requirement.checkrInvitationStatus || requirement.checkrPendingStart
-          ? "Restart Checkr check"
-          : "Start Checkr check"}
+        {requirement.checkrRequested
+          ? "Update request"
+          : status
+            ? "Request again"
+            : "Request background check"}
       </Button>
     </div>
   );
@@ -666,8 +787,26 @@ function scopeDescription(scope: RequirementScope, canManage: boolean) {
     return "Requests for people who haven’t accepted their invitation yet, or who have left the organization.";
   }
   return canManage
-    ? "Request tax forms, set due dates, and start or track background and credit checks."
+    ? "Request tax forms, set due dates, request Checkr background checks, and track credit checks."
     : "Forms and checks your organization has requested from you.";
+}
+
+// A canceled report frees the screening to be requested again.
+function isClosedReportStatus(status: string | null) {
+  return status === "canceled" || status === "partially_canceled";
+}
+
+/** Submitted to Checkr, or being submitted, and not canceled. */
+function screeningLocked(requirement: EmployeeRequirement) {
+  return (
+    requirement.checkrSubmitting ||
+    (requirement.checkrReportStatus !== null &&
+      !isClosedReportStatus(requirement.checkrReportStatus))
+  );
+}
+
+function formatCheckrStatus(status: string) {
+  return status.replaceAll("_", " ");
 }
 
 function statusTone(status: EmployeeRequirementStatus) {

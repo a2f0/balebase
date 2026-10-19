@@ -68,16 +68,19 @@ function member(id: string, name: string, role = "member"): OrganizationMember {
 
 function requirement(memberId: string, title: string): EmployeeRequirement {
   return {
+    canSubmitCheckr: false,
     checkrAvailable: false,
-    checkrInvitationStatus: null,
-    checkrPendingStart: false,
+    checkrReportStatus: null,
+    checkrRequested: false,
     checkrResult: null,
-    checkrStarted: false,
+    checkrSubmitting: false,
+    checkrWorkLocation: null,
     completedAt: null,
     documentFilename: null,
     documentRevision: 0,
     documentSize: null,
     dueDate: "2026-11-15",
+    hasCheckrConsent: false,
     hasDocument: false,
     id: `${memberId}-${title}`,
     invitationId: null,

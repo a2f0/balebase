@@ -281,9 +281,7 @@ function ScreeningResult({
           {formatStatus(requirement.checkrResult)}
         </Badge>
       ) : (
-        <span>
-          {formatStatus(requirement.checkrInvitationStatus ?? "Not started")}
-        </span>
+        <span>{formatStatus(requirement.checkrStatus ?? "Not requested")}</span>
       )}
       {requirement.completedAt && (
         <span className="textXs textSubtle">

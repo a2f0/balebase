@@ -124,6 +124,7 @@ export function OrganizationMemberDetail({
         <EmployeeForms
           canManage={canManage}
           key={member.id}
+          onNavigate={onNavigate}
           scope={{ kind: "member", memberId: member.id }}
         />
       )}

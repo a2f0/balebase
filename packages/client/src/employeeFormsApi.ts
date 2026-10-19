@@ -14,15 +14,21 @@ export type EmployeeRequirementStatus =
 
 export interface EmployeeRequirement {
   checkrAvailable: boolean;
-  checkrPendingStart: boolean;
-  checkrStarted: boolean;
-  checkrInvitationStatus: string | null;
+  /** Checkr's report status once the person submitted, such as pending. */
+  checkrReportStatus: string | null;
+  /** Requested and waiting for the person to submit their details. */
+  checkrRequested: boolean;
   checkrResult: string | null;
+  checkrSubmitting: boolean;
+  checkrWorkLocation: { city: string | null; state: string } | null;
+  /** The signed-in person can submit this check's screening form. */
+  canSubmitCheckr: boolean;
   completedAt: string | null;
   documentFilename: string | null;
   documentRevision: number;
   documentSize: number | null;
   dueDate: string;
+  hasCheckrConsent: boolean;
   hasDocument: boolean;
   id: string;
   invitationId: string | null;
@@ -103,37 +109,115 @@ export async function uploadEmployeeForm(id: string, file: File) {
   return parseResponse<{ filename: string; status: string }>(response);
 }
 
-export async function startCheckrScreening(
+export async function requestCheckrScreening(
   id: string,
   state: string,
   city: string,
 ) {
   const response = await fetchApi(
-    `${endpoint}/${encodeURIComponent(id)}/checkr/start`,
+    `${endpoint}/${encodeURIComponent(id)}/checkr/request`,
     {
-      body: JSON.stringify({ state, city }),
+      body: JSON.stringify({ city, state }),
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       method: "POST",
     },
   );
-  return parseResponse<{ invitationId: string; status: string }>(response);
+  return parseResponse<{ emailed: boolean }>(response);
 }
 
-export async function reconcileCheckrScreening(
+interface DisclosureSection {
+  paragraphs: string[];
+  title: string;
+}
+
+/** One of Checkr's mocked staging candidates and the result it produces. */
+export interface CheckrTestCandidate {
+  dob: string;
+  driverLicenseNumber: string;
+  driverLicenseState: string;
+  expectedResult: "clear" | "consider";
+  findings: string[];
+  firstName: string;
+  id: string;
+  lastName: string;
+  location: string;
+  middleName: string | null;
+  ssn: string;
+  state: string;
+  zipcode: string;
+}
+
+export interface ScreeningForm {
+  candidate: { email: string; name: string };
+  disclosureFingerprint: string;
+  disclosures: {
+    authorization: DisclosureSection;
+    disclosure: DisclosureSection;
+    electronicRecords: DisclosureSection;
+    stateNotices: Record<string, DisclosureSection & { offersCopy: boolean }>;
+    summaryOfRights: DisclosureSection;
+    version: string;
+  };
+  organizationName: string;
+  /** Identifies the request this form answers; submissions must repeat it. */
+  requestRevision: string;
+  requiresDriverLicense: boolean;
+  summaryOfRightsUrl: string;
+  /** Present only while Checkr is in staging. */
+  testCandidates: CheckrTestCandidate[] | null;
+  title: string;
+  workLocation: { city: string | null; state: string };
+}
+
+export interface ScreeningSubmission {
+  acknowledgments: {
+    disclosure: boolean;
+    stateNotices: string[];
+    summaryOfRights: boolean;
+  };
+  candidate: {
+    dob: string;
+    driverLicenseNumber: string;
+    driverLicenseState: string;
+    firstName: string;
+    lastName: string;
+    middleName: string;
+    noMiddleName: boolean;
+    phone: string;
+    ssn: string;
+    zipcode: string;
+  };
+  copyRequested: boolean;
+  /** Identifies the exact wording the person read; the API requires it. */
+  disclosureFingerprint: string;
+  requestRevision: string;
+  residenceState: string;
+  signature: { authorize: boolean; electronicRecords: boolean; name: string };
+}
+
+export async function getScreeningForm(id: string) {
+  const response = await fetchApi(
+    `${endpoint}/${encodeURIComponent(id)}/checkr/form`,
+    { credentials: "include" },
+  );
+  return parseResponse<ScreeningForm>(response);
+}
+
+export async function submitScreening(
   id: string,
-  invitationId: string,
+  submission: ScreeningSubmission,
 ) {
   const response = await fetchApi(
-    `${endpoint}/${encodeURIComponent(id)}/checkr/reconcile`,
+    `${endpoint}/${encodeURIComponent(id)}/checkr/submit`,
     {
-      body: JSON.stringify({ invitationId }),
+      body: JSON.stringify(submission),
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       method: "POST",
     },
   );
-  return parseResponse<{ invitationId: string; status: string }>(response);
+  return parseResponse<{ status: string }>(response);
 }
 
 export async function refreshCheckrScreening(id: string) {
@@ -145,10 +229,29 @@ export async function refreshCheckrScreening(id: string) {
     },
   );
   return parseResponse<{
-    invitationStatus: string;
-    reportStatus: string | null;
+    reportStatus: string;
     result: string | null;
   }>(response);
+}
+
+/** Saves the signed background check authorization behind a report. */
+export async function downloadScreeningConsent(id: string) {
+  const response = await fetchApi(
+    `${endpoint}/${encodeURIComponent(id)}/checkr/consent`,
+    { credentials: "include" },
+  );
+  if (!response.ok) {
+    await parseResponse(response);
+    throw new Error("Could not download the authorization.");
+  }
+  if (
+    !(await saveFile(
+      await response.blob(),
+      "background-check-authorization.pdf",
+    ))
+  ) {
+    throw new Error("Saving the authorization was canceled.");
+  }
 }
 
 export async function downloadEmployeeForm(id: string, filename: string) {

@@ -51,16 +51,19 @@ function screening(
   overrides: Partial<EmployeeRequirement>,
 ): EmployeeRequirement {
   return {
+    canSubmitCheckr: false,
     checkrAvailable: true,
-    checkrPendingStart: false,
-    checkrStarted: true,
-    checkrInvitationStatus: "completed",
+    checkrReportStatus: "complete",
+    checkrRequested: false,
     checkrResult: null,
+    checkrSubmitting: false,
+    checkrWorkLocation: { city: "San Jose", state: "CA" },
     completedAt: null,
     documentFilename: null,
     documentRevision: 0,
     documentSize: null,
     dueDate: "2026-10-31",
+    hasCheckrConsent: true,
     hasDocument: false,
     id: "screening",
     invitationId: null,
@@ -75,7 +78,11 @@ function screening(
   };
 }
 
-async function render(requirements: EmployeeRequirement[], canManage = true) {
+async function render(
+  requirements: EmployeeRequirement[],
+  canManage = true,
+  onNavigate?: (pathname: string) => void,
+) {
   globalThis.fetch = (async () =>
     Response.json({ requirements })) as unknown as typeof fetch;
   container = document.createElement("div");
@@ -85,10 +92,19 @@ async function render(requirements: EmployeeRequirement[], canManage = true) {
     root?.render(
       <EmployeeForms
         canManage={canManage}
+        onNavigate={onNavigate}
         scope={{ kind: "member", memberId: "member" }}
       />,
     ),
   );
+}
+
+function button(within: Element, label: string) {
+  const match = [...within.querySelectorAll("button")].find(
+    (element) => element.textContent?.trim() === label,
+  );
+  if (!match) throw new Error(`No button labeled ${label}`);
+  return match;
 }
 
 function item(title: string) {
@@ -185,7 +201,7 @@ describe("Checkr screening results", () => {
         title: "Consider check",
       }),
       screening({
-        checkrInvitationStatus: "pending",
+        checkrReportStatus: "pending",
         id: "pending",
         title: "Pending check",
       }),
@@ -200,8 +216,9 @@ describe("Checkr screening results", () => {
     }).format(new Date("2026-10-07T11:09:40.000Z"));
     expect(clear.textContent).toContain(`Completed ${completedOn}`);
     expect(clear.textContent).not.toContain("Review it in Checkr");
-    expect(clear.textContent).not.toContain("Checkr: completed");
+    expect(clear.textContent).not.toContain("Checkr: complete");
     expect(clear.textContent).toContain("Refresh check");
+    expect(clear.textContent).toContain("Signed authorization");
 
     const consider = item("Consider check");
     const considerBadge = consider.querySelector(".checkrResult .badge");
@@ -216,10 +233,10 @@ describe("Checkr screening results", () => {
     expect(pending.textContent).toContain("Checkr: pending");
   });
 
-  it("keeps the invitation status beside a result from a canceled report", async () => {
+  it("keeps the report status beside a result from a canceled report", async () => {
     await render([
       screening({
-        checkrInvitationStatus: "partially_canceled",
+        checkrReportStatus: "partially_canceled",
         checkrResult: "consider",
         status: "pending",
         title: "Partial check",
@@ -229,6 +246,39 @@ describe("Checkr screening results", () => {
     const partial = item("Partial check");
     expect(partial.textContent).toContain("Checkr result: Consider");
     expect(partial.textContent).toContain("Checkr: partially canceled");
+    expect(partial.textContent).toContain("Request again");
+  });
+
+  it("keeps refreshing a credit report ordered through a hosted invitation", async () => {
+    await render([
+      screening({
+        checkrAvailable: false,
+        checkrReportStatus: "pending",
+        kind: "credit_check",
+        title: "Credit check",
+      }),
+    ]);
+    const credit = item("Credit check");
+    expect(credit.textContent).toContain("Checkr: pending");
+    expect(button(credit, "Refresh check")).toBeTruthy();
+  });
+
+  it("does not offer to request a canceled credit report again", async () => {
+    await render([
+      screening({
+        checkrAvailable: false,
+        checkrReportStatus: "canceled",
+        kind: "credit_check",
+        status: "pending",
+        title: "Credit check",
+      }),
+    ]);
+    const credit = item("Credit check");
+    expect(credit.textContent).toContain("Checkr: canceled");
+    expect(credit.textContent).not.toContain("Request again");
+    expect(
+      credit.querySelector('[aria-label="Status for Credit check"]'),
+    ).toBeTruthy();
   });
 
   it("hides the result from the screened person", async () => {
@@ -247,5 +297,117 @@ describe("Checkr screening results", () => {
     const own = item("Own check");
     expect(own.querySelector(".checkrResult")).toBeNull();
     expect(own.textContent).toContain("Complete");
+    expect(own.textContent).toContain("Submitted to Checkr");
+    expect(own.textContent).toContain("Signed authorization");
+  });
+});
+
+describe("requesting a Checkr background check", () => {
+  it("requests a check at a work location and says whether the person was emailed", async () => {
+    const posted: Array<{ body: unknown; url: string }> = [];
+    let requested = false;
+    globalThis.fetch = (async (input, init) => {
+      if (init?.method === "POST") {
+        posted.push({
+          body: JSON.parse(String(init.body)),
+          url: String(input),
+        });
+        requested = true;
+        return Response.json({ emailed: false });
+      }
+      return Response.json({
+        requirements: [
+          screening({
+            checkrReportStatus: null,
+            checkrRequested: requested,
+            checkrWorkLocation: requested
+              ? { city: "Austin", state: "TX" }
+              : null,
+            hasCheckrConsent: false,
+            status: "pending",
+          }),
+        ],
+      });
+    }) as typeof fetch;
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root?.render(
+        <EmployeeForms
+          canManage
+          scope={{ kind: "member", memberId: "member" }}
+        />,
+      ),
+    );
+    const check = item("Background check");
+    const setValue = Object.getOwnPropertyDescriptor(
+      dom.HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    for (const [label, value] of [
+      ["Work state for Background check", "tx"],
+      ["Work city for Background check", "Austin"],
+    ] as const) {
+      const input = check.querySelector<HTMLInputElement>(
+        `[aria-label="${label}"]`,
+      );
+      await act(async () => {
+        setValue?.call(input, value);
+        input?.dispatchEvent(
+          new dom.Event("input", { bubbles: true }) as never,
+        );
+      });
+    }
+    await act(async () => button(check, "Request background check").click());
+    expect(posted).toEqual([
+      {
+        body: { city: "Austin", state: "TX" },
+        url: "http://localhost:8787/api/employee-forms/screening/checkr/request",
+      },
+    ]);
+    expect(container.textContent).toContain(
+      "Background check requested, but the email to Pat Person couldn’t be sent.",
+    );
+    const waiting = item("Background check");
+    expect(waiting.textContent).toContain("Waiting for Pat Person’s details");
+    expect(button(waiting, "Update request")).toBeTruthy();
+    expect(
+      waiting.querySelector<HTMLInputElement>(
+        '[aria-label="Work state for Background check"]',
+      )?.value,
+    ).toBe("TX");
+  });
+
+  it("links the person to their screening form", async () => {
+    const paths: string[] = [];
+    await render(
+      [
+        screening({
+          canSubmitCheckr: true,
+          checkrReportStatus: null,
+          checkrRequested: true,
+          hasCheckrConsent: false,
+          status: "pending",
+        }),
+      ],
+      false,
+      (pathname) => paths.push(pathname),
+    );
+    const link =
+      item("Background check").querySelector<HTMLAnchorElement>("a.button");
+    expect(link?.textContent).toBe("Complete background check");
+    expect(link?.getAttribute("href")).toBe(
+      "/organization/people/member/screening/screening",
+    );
+    await act(async () =>
+      link?.dispatchEvent(
+        new dom.MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+        }) as never,
+      ),
+    );
+    expect(paths).toEqual(["/organization/people/member/screening/screening"]);
   });
 });

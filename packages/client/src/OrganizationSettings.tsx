@@ -24,9 +24,11 @@ import {
   canLeaveOrganizationWithOwnerCount,
   canManageOrganization,
   organizationMemberIdForPath,
+  organizationScreeningForPath,
   organizationSettingsPage,
   type WorkspaceOrganization,
 } from "./organizationState";
+import { ScreeningForm } from "./ScreeningForm";
 
 type OrganizationGeneralAction = "delete" | "leave" | "save";
 
@@ -89,6 +91,7 @@ export function OrganizationSettings({
           organizations={organizations}
           ownerCount={ownerCount}
           page={page}
+          screening={organizationScreeningForPath(pathname)}
         />
       </PageBody>
     </Page>
@@ -107,6 +110,7 @@ function OrganizationSettingsPageContent({
   organizations,
   ownerCount,
   page,
+  screening,
 }: {
   accessError: string | undefined;
   canManage: boolean;
@@ -119,8 +123,19 @@ function OrganizationSettingsPageContent({
   organizations: WorkspaceOrganization[];
   ownerCount: number;
   page: ReturnType<typeof organizationSettingsPage>;
+  screening: ReturnType<typeof organizationScreeningForPath>;
 }) {
   if (!organization) return <LoadingState label="Loading organization…" />;
+  if (page === "people" && screening) {
+    return (
+      <ScreeningForm
+        key={`${organization.id}:${screening.requirementId}`}
+        memberId={screening.memberId}
+        onNavigate={onNavigate}
+        requirementId={screening.requirementId}
+      />
+    );
+  }
   if (page === "people" && memberId) {
     return (
       <OrganizationMemberDetail

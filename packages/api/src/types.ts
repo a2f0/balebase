@@ -6,7 +6,6 @@ export interface Bindings {
   CHECKR_API_KEY?: string;
   CHECKR_ENV?: "staging" | "production";
   CHECKR_BACKGROUND_PACKAGE?: string;
-  CHECKR_CREDIT_PACKAGE?: string;
   DB: D1Database;
   EMAIL: SendEmail;
   INBOUND_EMAIL_DOMAIN: string;
