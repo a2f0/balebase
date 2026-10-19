@@ -86,6 +86,10 @@ describe("registration", () => {
 
     await act(async () => toggles[0]?.click());
     expect([password.type, confirmation.type]).toEqual(["text", "password"]);
+    // Revealed text must not reach spelling or autocorrect services.
+    expect(password.getAttribute("spellcheck")).toBe("false");
+    expect(password.getAttribute("autocorrect")).toBe("off");
+    expect(password.getAttribute("autocapitalize")).toBe("none");
     expect(toggles[0]?.getAttribute("aria-pressed")).toBe("true");
     expect(toggles[0]?.title).toBe("Hide password");
 

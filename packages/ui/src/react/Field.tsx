@@ -62,8 +62,13 @@ export function PasswordField({
         <input
           {...input}
           aria-describedby={hintId}
+          // A revealed password is plain text; keep it away from spelling and
+          // autocorrect services that may send what is typed elsewhere.
+          autoCapitalize="none"
+          autoCorrect="off"
           className="input"
           id={id}
+          spellCheck={false}
           type={visible ? "text" : "password"}
         />
         <button
