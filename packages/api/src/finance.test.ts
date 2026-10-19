@@ -602,6 +602,63 @@ describe("finance", () => {
     }
   });
 
+  it("details an account with its connection and newest transactions", async () => {
+    const fixture = await createFixture();
+    seedTransactions(fixture.database);
+    const detail = await jsonRequest<AccountDetail>(
+      fixture.app,
+      fixture.bindings,
+      "/accounts/account-report",
+      "GET",
+    );
+    expect(detail.response.status).toBe(200);
+    expect(detail.body.account).toMatchObject({
+      id: "account-report",
+      name: "Operating",
+      plaidAccountId: "plaid-account-report",
+      transactions: {
+        count: 11,
+        firstDate: "2026-07-20",
+        lastDate: "2026-08-22",
+      },
+      type: "depository",
+    });
+    expect(detail.body.connection).toEqual({
+      id: "item-report",
+      institutionId: null,
+      institutionName: null,
+      plaidItemId: "plaid-item-report",
+      status: "active",
+    });
+    // The removed transaction and the oldest active one are left out.
+    expect(detail.body.recentTransactions.map(({ id }) => id)).toEqual(
+      [11, 10, 7, 6, 5, 4, 3, 2, 1, 0].map((index) => `report-txn-${index}`),
+    );
+    expect(detail.body.recentTransactions[0]).toEqual({
+      amount: 25,
+      currencyCode: "USD",
+      id: "report-txn-11",
+      merchantName: null,
+      name: "Transaction 11",
+      pending: false,
+      transactionDate: "2026-08-22",
+    });
+    expect(JSON.stringify(detail.body)).not.toContain("access_token");
+
+    for (const [organizationId, path] of [
+      ["organization-2", "/accounts/account-report"],
+      ["org_user-1", "/accounts/unknown"],
+    ] as const) {
+      const missing = await jsonRequest(
+        testApp(organizationId, fixture.requestPlaid),
+        fixture.bindings,
+        path,
+        "GET",
+      );
+      expect(missing.response.status).toBe(404);
+    }
+  });
+
   it("preserves an annotation when a pending transaction posts", async () => {
     const fixture = await createFixture({ pendingTransition: true });
     const exchange = await jsonRequest<{ connectionId: string }>(
@@ -1224,6 +1281,12 @@ interface Category {
   name: string;
   slug: string;
   transactionCount: number;
+}
+
+interface AccountDetail {
+  account: Record<string, unknown>;
+  connection: Record<string, unknown>;
+  recentTransactions: (Record<string, unknown> & { id: string })[];
 }
 
 interface ConnectionDetail {

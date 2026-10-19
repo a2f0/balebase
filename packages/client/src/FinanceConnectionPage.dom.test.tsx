@@ -158,6 +158,11 @@ describe("Finance connection page", () => {
     expect(text).toContain("Plaid Gold Checking");
     expect(text).toContain("plaid-item-1");
     expect(text).not.toContain("Last error");
+    expect(text).toContain("42 transactions · ");
+    const account = container.querySelector<HTMLAnchorElement>(
+      ".rowTarget[href='/finance/accounts/account-1']",
+    );
+    expect(account?.textContent).toBe("Checking");
     await click("Copy Plaid Item ID");
     await click("Copy Plaid account ID · Checking ••1234");
     await click("Copy Plaid institution ID");

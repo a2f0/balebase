@@ -57,6 +57,34 @@ export interface FinanceConnectionDetail {
   };
 }
 
+export interface FinanceAccountDetail {
+  account: Omit<FinanceConnectionAccount, "transactionCount"> & {
+    /** When a Plaid sync last wrote this account's balances. */
+    updatedAt: string;
+    /** Active imported transactions and their date range. */
+    transactions: {
+      count: number;
+      firstDate: string | null;
+      lastDate: string | null;
+    };
+  };
+  connection: Pick<
+    FinanceConnectionDetail["connection"],
+    "id" | "institutionId" | "institutionName" | "plaidItemId" | "status"
+  >;
+  /** The ten newest active transactions. */
+  recentTransactions: Pick<
+    FinanceTransaction,
+    | "amount"
+    | "currencyCode"
+    | "id"
+    | "merchantName"
+    | "name"
+    | "pending"
+    | "transactionDate"
+  >[];
+}
+
 export interface FinanceTransaction {
   accountId: string;
   accountName: string;
@@ -190,6 +218,10 @@ export async function exchangePlaidPublicToken(
     }),
     method: "POST",
   });
+}
+
+export function getFinanceAccount(id: string) {
+  return request<FinanceAccountDetail>(`/accounts/${encodeURIComponent(id)}`);
 }
 
 export function getFinanceConnection(id: string) {

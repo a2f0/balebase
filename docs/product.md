@@ -377,7 +377,11 @@ shows its status, Plaid's last error code and message, who connected it and
 when, the last sync and disconnect times, the imported transaction count and
 date range, and its accounts. Its source data lists the Plaid institution,
 Item, and account IDs with copy buttons for Plaid support, as a transaction's
-source data does for its Plaid transaction IDs. Users can add
+source data does for its Plaid transaction IDs. Selecting an account there
+opens `/finance/accounts/<id>`, addressed by the account's Balebase ID, with its
+balances, its connection's status, its imported history, its ten newest
+transactions (each opening the transaction's page), and its Plaid account and
+Item IDs. Users can add
 organization-scoped notes, labels, and a reviewed flag to imported
 transactions. Select an account tile to focus on it; Shift-click adds
 or removes individual accounts from the selection. No selection shows all
