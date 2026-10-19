@@ -1831,6 +1831,69 @@ describe("employee forms", () => {
     }
   });
 
+  it("lets only a signed-in person open or sign their screening form", async () => {
+    const fixture = await createFixture();
+    const id = await requestedScreening(fixture);
+    const checkr = mockCheckr(checkrResponses);
+    try {
+      const viaKey = fixture.app("employee", "member", true);
+      for (const response of [
+        await viaKey.request(`/${id}/checkr/form`),
+        await viaKey.request(
+          `/${id}/checkr/submit`,
+          jsonPost(homerSubmission()),
+        ),
+      ]) {
+        expect(response.status).toBe(403);
+        expect(await response.json()).toEqual({
+          error: "Sign in to complete your own background check.",
+        });
+      }
+      expect(checkr.calls).toEqual([]);
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("fences a submission whose claim expired out of the newer claim", async () => {
+    const fixture = await createFixture();
+    const id = await requestedScreening(fixture);
+    const checkr = mockCheckr((call) => {
+      if (call.url.endsWith("/documents")) {
+        // This request is slow; its claim expires and another one takes over.
+        fixture.database
+          .query(`UPDATE employee_requirements
+                  SET checkr_start_lease = 'newer-claim',
+                      checkr_starting_at = '2999-01-01T00:00:00.000Z'
+                  WHERE id = ?`)
+          .run(id);
+      }
+      return checkrResponses(call);
+    });
+    try {
+      const slow = await submitScreening(fixture, id, homerSubmission());
+      expect(slow.status).toBe(409);
+      expect(
+        checkr.calls.some(
+          ({ method, url }) => method === "POST" && url === "/reports",
+        ),
+      ).toBe(false);
+      expect(
+        fixture.database
+          .query(`SELECT checkr_start_lease, checkr_starting_at,
+                         checkr_attempt_consent_id
+                  FROM employee_requirements WHERE id = ?`)
+          .get(id),
+      ).toEqual({
+        checkr_attempt_consent_id: null,
+        checkr_start_lease: "newer-claim",
+        checkr_starting_at: "2999-01-01T00:00:00.000Z",
+      });
+    } finally {
+      checkr.restore();
+    }
+  });
+
   it("refreshes canceled reports and lets managers request the check again", async () => {
     const fixture = await createFixture();
     const id = await orderedScreening(fixture);
@@ -2386,7 +2449,7 @@ describe("employee forms", () => {
       null,
     );
     await expect(
-      migrationInTransaction(database, "0065_self_host_checkr_screenings.sql"),
+      migrationInTransaction(database, "0066_self_host_checkr_screenings.sql"),
     ).rejects.toThrow("Finish or cancel open hosted Checkr invitations first");
     expect(
       database
@@ -2401,7 +2464,7 @@ describe("employee forms", () => {
       .run();
     await migrationInTransaction(
       database,
-      "0065_self_host_checkr_screenings.sql",
+      "0066_self_host_checkr_screenings.sql",
     );
     expect(
       database
@@ -2733,7 +2796,7 @@ async function createFixture() {
   await migration(database, "0046_version_employee_screening_refresh.sql");
   await migration(database, "0047_bind_employee_screening_attempt.sql");
   await migration(database, "0052_track_checkr_refreshes.sql");
-  await migration(database, "0065_self_host_checkr_screenings.sql");
+  await migration(database, "0066_self_host_checkr_screenings.sql");
   const files = new Map<string, File>();
   const emails: Array<{
     subject: string;
@@ -2794,12 +2857,17 @@ async function createFixture() {
     },
   } as unknown as Bindings;
   return {
-    app: (userId: string, role: string) => {
+    app: (userId: string, role: string, apiKey = false) => {
       const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
       app.use("*", async (context, next) => {
         context.set("organizationId", orgId);
         context.set("organizationRole", role);
         context.set("authSession", { user: { id: userId } } as AuthSession);
+        if (apiKey) {
+          context.set("apiKey", {
+            access: "write",
+          } as AuthVariables["apiKey"] & object);
+        }
         await next();
       });
       app.route("/", employeeForms);

@@ -14,6 +14,9 @@ ALTER TABLE employee_requirements ADD COLUMN checkr_consent_id TEXT;
 ALTER TABLE employee_requirements ADD COLUMN checkr_attempt_consent_id TEXT;
 ALTER TABLE employee_requirements ADD COLUMN checkr_report_requested_at TEXT;
 ALTER TABLE employee_requirements ADD COLUMN checkr_attempt_digest TEXT;
+-- The claim holding an attempt; each claim takes a new lease, so a request
+-- whose claim expired cannot write over a newer one.
+ALTER TABLE employee_requirements ADD COLUMN checkr_start_lease TEXT;
 
 -- Stop if a hosted invitation could still produce a report Balebase would no
 -- longer track: finish or cancel it in Checkr, record its report, and apply

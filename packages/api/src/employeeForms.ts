@@ -478,6 +478,7 @@ employeeForms.post("/:id/checkr/request", async (context) => {
 // The person's own screening form: the disclosures to read, the work
 // location, and, while Checkr is in staging, its mocked test candidates.
 employeeForms.get("/:id/checkr/form", async (context) => {
+  if (context.get("apiKey")) return signInRequired(context);
   const subject = await findScreeningSubject(context);
   if (!subject) {
     return context.json({ error: "Screening requirement not found." }, 404);
@@ -524,6 +525,8 @@ employeeForms.get("/:id/checkr/form", async (context) => {
 });
 
 employeeForms.post("/:id/checkr/submit", async (context) => {
+  // An API key acts as its creator; only the person may sign for themselves.
+  if (context.get("apiKey")) return signInRequired(context);
   const subject = await findScreeningSubject(context);
   if (!subject) {
     return context.json({ error: "Screening requirement not found." }, 404);
@@ -952,6 +955,13 @@ async function canAccessRequirement(
     )
     .first<{ id: string }>();
   return Boolean(member);
+}
+
+function signInRequired(context: Context<EmployeeFormsEnv>) {
+  return context.json(
+    { error: "Sign in to complete your own background check." },
+    403,
+  );
 }
 
 function managerRequired(context: Context<EmployeeFormsEnv>) {

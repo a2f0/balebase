@@ -152,9 +152,20 @@ interface SubmitClaim {
   checkr_attempt_digest: string | null;
   checkr_candidate_id: string | null;
   checkr_report_requested_at: string | null;
+  checkr_start_lease: string;
   checkr_start_nonce: string;
   checkr_start_nonce_at: string;
   checkr_start_package: string;
+}
+
+/**
+ * Fences an attempt's writes to the claim that holds it: the nonce names the
+ * attempt and its idempotency keys, and the lease names this claim, so a
+ * request whose claim expired cannot overwrite or release a newer one.
+ */
+interface AttemptFence {
+  lease: string;
+  nonce: string;
 }
 
 /** How long a report request may take to reach Checkr after its response is lost. */
@@ -183,27 +194,30 @@ export async function submitCheckrScreening(
       "This background check is changing. Refresh and try again.",
     );
   }
-  let nonce = claim.checkr_start_nonce;
+  const fence = {
+    lease: claim.checkr_start_lease,
+    nonce: claim.checkr_start_nonce,
+  };
   try {
     const digest = await attemptDigest(env, subject, submission);
-    const plan = await planAttempt(env, subject, claim, digest);
+    const plan = await planAttempt(env, subject, claim, fence, digest);
     if (plan.kind === "adopt") {
       return await storeReport(
         env.DB,
         subject,
-        nonce,
+        fence,
         plan.candidateId,
         claim.checkr_attempt_consent_id,
         plan.report,
       );
     }
     if (plan.kind === "wait") {
-      await releaseSubmission(env.DB, subject, nonce, false);
+      await releaseSubmission(env.DB, subject, fence, false);
       return conflict(
         "Your earlier submission may still be reaching Checkr. Wait a few minutes, then submit again.",
       );
     }
-    nonce = plan.nonce;
+    fence.nonce = plan.nonce;
     // The report was already requested with this attempt's authorization;
     // ask again under the same key rather than attaching a newer one.
     if (plan.kind === "replay") {
@@ -212,12 +226,12 @@ export async function submitCheckrScreening(
         subject,
         claim,
         plan.candidateId,
-        nonce,
+        fence,
       );
       return await storeReport(
         env.DB,
         subject,
-        nonce,
+        fence,
         plan.candidateId,
         claim.checkr_attempt_consent_id,
         report,
@@ -226,23 +240,23 @@ export async function submitCheckrScreening(
     const consent = await recordConsent(env, subject, submission, signer);
     const candidateId =
       plan.candidateId ??
-      (await createCandidate(env, subject, submission, nonce, digest));
+      (await createCandidate(env, subject, submission, fence, digest));
     if (!candidateId) {
       return conflict("This background check changed. Refresh and try again.");
     }
-    await uploadConsent(env, subject, candidateId, consent, nonce);
-    const report = await requestReport(env, subject, claim, candidateId, nonce);
+    await uploadConsent(env, subject, candidateId, consent, fence);
+    const report = await requestReport(env, subject, claim, candidateId, fence);
     return await storeReport(
       env.DB,
       subject,
-      nonce,
+      fence,
       candidateId,
       consent.id,
       report,
     );
   } catch (cause) {
     const rejected = cause instanceof RejectedDetails;
-    await releaseSubmission(env.DB, subject, nonce, rejected);
+    await releaseSubmission(env.DB, subject, fence, rejected);
     if (cause instanceof AttemptChanged) {
       return conflict("This background check changed. Refresh and try again.");
     }
@@ -317,9 +331,10 @@ async function planAttempt(
   env: Bindings,
   subject: ScreeningSubject,
   claim: SubmitClaim,
+  fence: AttemptFence,
   digest: string,
 ): Promise<AttemptPlan> {
-  const nonce = claim.checkr_start_nonce;
+  const nonce = fence.nonce;
   const candidateId = claim.checkr_candidate_id;
   const sameDetails = claim.checkr_attempt_digest === digest;
   if (!candidateId) {
@@ -328,7 +343,7 @@ async function planAttempt(
       : {
           candidateId: null,
           kind: "continue",
-          nonce: await restartAttempt(env.DB, subject, claim),
+          nonce: await restartAttempt(env.DB, subject, fence),
         };
   }
   const report = await candidateReport(env, candidateId);
@@ -343,7 +358,7 @@ async function planAttempt(
   return {
     candidateId: null,
     kind: "continue",
-    nonce: await restartAttempt(env.DB, subject, claim),
+    nonce: await restartAttempt(env.DB, subject, fence),
   };
 }
 
@@ -387,9 +402,11 @@ export async function recoverCheckrAttempt(
   const now = new Date();
   // The claim returns the attempt as it is now; a retry may have moved it on
   // since the row was read.
+  const lease = crypto.randomUUID();
   const attempt = await env.DB.prepare(
     `UPDATE employee_requirements
-     SET checkr_starting_at = ?1, checkr_checked_at = ?1
+     SET checkr_starting_at = ?1, checkr_checked_at = ?1,
+         checkr_start_lease = ?6
      WHERE id = ?2 AND organization_id = ?3 AND checkr_start_nonce = ?4
        AND checkr_report_id IS NULL
        AND (checkr_starting_at IS NULL OR checkr_starting_at < ?5)
@@ -402,6 +419,7 @@ export async function recoverCheckrAttempt(
       row.organization_id,
       row.checkr_start_nonce,
       new Date(now.getTime() - 5 * 60_000).toISOString(),
+      lease,
     )
     .first<
       Pick<
@@ -413,7 +431,7 @@ export async function recoverCheckrAttempt(
       >
     >();
   if (!attempt) return "busy";
-  const nonce = attempt.checkr_start_nonce;
+  const fence = { lease, nonce: attempt.checkr_start_nonce };
   try {
     const report = attempt.checkr_candidate_id
       ? await candidateReport(env, attempt.checkr_candidate_id)
@@ -422,7 +440,7 @@ export async function recoverCheckrAttempt(
       await storeReport(
         env.DB,
         scope,
-        nonce,
+        fence,
         attempt.checkr_candidate_id,
         attempt.checkr_attempt_consent_id,
         report,
@@ -430,10 +448,10 @@ export async function recoverCheckrAttempt(
       return "adopted";
     }
     const waiting = reportMayArrive(attempt.checkr_report_requested_at);
-    await releaseSubmission(env.DB, scope, nonce, !waiting);
+    await releaseSubmission(env.DB, scope, fence, !waiting);
     return waiting ? "waiting" : "cleared";
   } catch (cause) {
-    await releaseSubmission(env.DB, scope, nonce, false);
+    await releaseSubmission(env.DB, scope, fence, false);
     throw cause;
   }
 }
@@ -484,23 +502,23 @@ async function createCandidate(
   env: Bindings,
   subject: ScreeningSubject,
   submission: ScreeningSubmission,
-  nonce: string,
+  fence: AttemptFence,
   digest: string,
 ) {
   // Recorded first: if this request's response is lost, a retry with other
   // details must not replay its key and receive the old candidate.
-  if (!(await markAttempt(env.DB, subject, nonce, { digest }))) return null;
+  if (!(await markAttempt(env.DB, subject, fence, { digest }))) return null;
   const created = await rejectingDetails(() =>
     createCheckrCandidate(
       env,
       { ...submission.candidate, email: subject.email },
       subject.requirementId,
       submission.copyRequested,
-      `${nonce}:candidate`,
+      `${fence.nonce}:candidate`,
     ),
   );
   if (!created.id) throw new Error("Checkr did not return a candidate ID.");
-  return (await markAttempt(env.DB, subject, nonce, {
+  return (await markAttempt(env.DB, subject, fence, {
     candidateId: created.id,
   }))
     ? created.id
@@ -512,16 +530,16 @@ async function uploadConsent(
   subject: ScreeningSubject,
   candidateId: string,
   consent: { id: string; pdf: Uint8Array },
-  nonce: string,
+  fence: AttemptFence,
 ) {
   await uploadCheckrConsent(
     env,
     candidateId,
     consent.pdf,
     "background-check-authorization.pdf",
-    `${nonce}:consent:${consent.id}`,
+    `${fence.nonce}:consent:${consent.id}`,
   );
-  if (!(await markAttempt(env.DB, subject, nonce, { consentId: consent.id }))) {
+  if (!(await markAttempt(env.DB, subject, fence, { consentId: consent.id }))) {
     throw new AttemptChanged();
   }
 }
@@ -531,13 +549,13 @@ async function requestReport(
   subject: ScreeningSubject,
   claim: SubmitClaim,
   candidateId: string,
-  nonce: string,
+  fence: AttemptFence,
 ): Promise<StoredReport> {
   // Recorded before asking, so a retry adopts any report and waits for a
   // request whose response was lost.
   const requestedAt = new Date().toISOString();
   if (
-    !(await markAttempt(env.DB, subject, nonce, {
+    !(await markAttempt(env.DB, subject, fence, {
       memberUserId: subject.userId,
       requestedAt,
     }))
@@ -551,7 +569,7 @@ async function requestReport(
       claim.checkr_start_package,
       subject.workState,
       subject.workCity ?? "",
-      `${nonce}:report`,
+      `${fence.nonce}:report`,
     ),
   );
   if (!report.id) throw new Error("Checkr did not return a report ID.");
@@ -566,7 +584,7 @@ async function requestReport(
 async function markAttempt(
   database: D1Database,
   scope: AttemptScope,
-  nonce: string,
+  fence: AttemptFence,
   step: {
     candidateId?: string;
     consentId?: string;
@@ -585,6 +603,7 @@ async function markAttempt(
            checkr_report_requested_at = COALESCE(?, checkr_report_requested_at),
            updated_at = ?
        WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?
+         AND checkr_start_lease = ?
          AND (? IS NULL OR EXISTS (
            SELECT 1 FROM member
            WHERE member.id = employee_requirements.member_id
@@ -600,7 +619,8 @@ async function markAttempt(
       new Date().toISOString(),
       scope.requirementId,
       scope.organizationId,
-      nonce,
+      fence.nonce,
+      fence.lease,
       step.memberUserId ?? null,
       step.memberUserId ?? null,
     )
@@ -623,7 +643,7 @@ async function claimSubmission(
        SET checkr_start_nonce = COALESCE(checkr_start_nonce, ?),
            checkr_start_nonce_at = COALESCE(checkr_start_nonce_at, ?),
            checkr_start_package = COALESCE(checkr_start_package, ?),
-           checkr_starting_at = ?, updated_at = ?
+           checkr_start_lease = ?, checkr_starting_at = ?, updated_at = ?
        WHERE id = ? AND organization_id = ? AND kind = 'background_check'
          AND checkr_requested_at = ? AND checkr_report_id IS NULL
          AND status <> 'complete'
@@ -636,13 +656,14 @@ async function claimSubmission(
          )
        RETURNING checkr_attempt_consent_id, checkr_attempt_digest,
                  checkr_candidate_id, checkr_report_requested_at,
-                 checkr_start_nonce, checkr_start_nonce_at,
-                 checkr_start_package`,
+                 checkr_start_lease, checkr_start_nonce,
+                 checkr_start_nonce_at, checkr_start_package`,
     )
     .bind(
       crypto.randomUUID(),
       now.toISOString(),
       subject.packageSlug,
+      crypto.randomUUID(),
       now.toISOString(),
       now.toISOString(),
       subject.requirementId,
@@ -659,7 +680,7 @@ async function claimSubmission(
 async function restartAttempt(
   database: D1Database,
   scope: AttemptScope,
-  claim: SubmitClaim,
+  fence: AttemptFence,
 ) {
   const next = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -670,7 +691,8 @@ async function restartAttempt(
            checkr_candidate_id = NULL, checkr_attempt_consent_id = NULL,
            checkr_attempt_digest = NULL, checkr_report_requested_at = NULL,
            updated_at = ?
-       WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?`,
+       WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?
+         AND checkr_start_lease = ?`,
     )
     .bind(
       next,
@@ -678,7 +700,8 @@ async function restartAttempt(
       now,
       scope.requirementId,
       scope.organizationId,
-      claim.checkr_start_nonce,
+      fence.nonce,
+      fence.lease,
     )
     .run();
   if (!restarted.meta.changes) throw new AttemptChanged();
@@ -761,7 +784,7 @@ async function recordConsent(
 async function storeReport(
   database: D1Database,
   scope: AttemptScope,
-  nonce: string,
+  fence: AttemptFence,
   candidateId: string,
   consentId: string | null,
   report: StoredReport,
@@ -772,13 +795,15 @@ async function storeReport(
        SET checkr_candidate_id = ?, checkr_report_id = ?,
            checkr_report_status = ?, checkr_result = ?, checkr_consent_id = ?,
            status = 'in_progress', checkr_starting_at = NULL,
-           checkr_start_nonce = NULL, checkr_start_nonce_at = NULL,
+           checkr_start_lease = NULL, checkr_start_nonce = NULL,
+           checkr_start_nonce_at = NULL,
            checkr_attempt_consent_id = NULL, checkr_attempt_digest = NULL,
            checkr_report_requested_at = NULL,
            checkr_refresh_requested_at = ?,
            checkr_refresh_revision = checkr_refresh_revision + 1,
            updated_at = ?
-       WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?`,
+       WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?
+         AND checkr_start_lease = ?`,
     )
     .bind(
       candidateId,
@@ -791,7 +816,8 @@ async function storeReport(
       new Date().toISOString(),
       scope.requirementId,
       scope.organizationId,
-      nonce,
+      fence.nonce,
+      fence.lease,
     )
     .run();
   if (!stored.meta.changes)
@@ -805,13 +831,13 @@ async function storeReport(
 async function releaseSubmission(
   database: D1Database,
   scope: AttemptScope,
-  nonce: string,
+  fence: AttemptFence,
   clear: boolean,
 ) {
   await database
     .prepare(
       `UPDATE employee_requirements
-       SET checkr_starting_at = NULL,
+       SET checkr_starting_at = NULL, checkr_start_lease = NULL,
            checkr_start_nonce = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_start_nonce END,
            checkr_start_nonce_at = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_start_nonce_at END,
            checkr_start_package = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_start_package END,
@@ -820,14 +846,16 @@ async function releaseSubmission(
            checkr_attempt_digest = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_attempt_digest END,
            checkr_report_requested_at = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_report_requested_at END,
            updated_at = ?2
-       WHERE id = ?3 AND organization_id = ?4 AND checkr_start_nonce = ?5`,
+       WHERE id = ?3 AND organization_id = ?4 AND checkr_start_nonce = ?5
+         AND checkr_start_lease = ?6`,
     )
     .bind(
       clear ? 1 : 0,
       new Date().toISOString(),
       scope.requirementId,
       scope.organizationId,
-      nonce,
+      fence.nonce,
+      fence.lease,
     )
     .run();
 }
