@@ -78,7 +78,11 @@ export function FinanceTransactionHistory({
       }
       title="Transactions"
     >
-      <FinanceTransactionFilters filters={filters} onChange={onFiltersChange} />
+      <FinanceTransactionFilters
+        categories={handlers.categories}
+        filters={filters}
+        onChange={onFiltersChange}
+      />
       {filters.uncategorized && (
         <p className="textSm textSubtle">
           Posted expenses without a category. Income, transfers, and loan or
@@ -118,6 +122,7 @@ export function FinanceTransactionHistory({
         <TransactionContent
           filtered={
             filters.accountIds.length > 0 ||
+            filters.categoryId !== null ||
             filters.year !== null ||
             filters.uncategorized
           }

@@ -40,7 +40,11 @@ import {
 } from "./financeApi";
 import { type FinancePage, financePageFor, financePages } from "./financePages";
 import { selectFinanceAccount } from "./financeTransactions";
-import { type FinanceListingState, useFinanceData } from "./useFinanceData";
+import {
+  type FinanceListingState,
+  initialFilters,
+  useFinanceData,
+} from "./useFinanceData";
 import { handleNavigation } from "./workspacePaths";
 
 const linkTokenStorageKey = "balebase.plaid.linkToken";
@@ -242,6 +246,13 @@ export function FinanceView({
           <FinanceCategories
             categories={data?.categories}
             onChanged={onReload}
+            onShowTransactions={(category) => {
+              handlers.onFiltersChange({
+                ...initialFilters,
+                categoryId: category.id,
+              });
+              handlers.onNavigate("/finance");
+            }}
           />
         )}
         {page === "connections" && (
@@ -292,7 +303,9 @@ function FinanceOverview({
     ? undefined
     : data?.transactions.filter(
         (transaction) =>
-          !filters.uncategorized || !transaction.expenseCategoryId,
+          (!filters.uncategorized || !transaction.expenseCategoryId) &&
+          (!filters.categoryId ||
+            transaction.expenseCategoryId === filters.categoryId),
       );
   return (
     <>

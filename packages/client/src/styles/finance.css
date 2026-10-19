@@ -417,6 +417,11 @@
   line-height: var(--leading-normal);
 }
 
+/* A category's name opens its transactions on the overview. */
+.financeCategoryLink {
+  justify-self: start;
+}
+
 /* Category rename editor within a row. */
 .financeCategoryRename {
   display: flex;

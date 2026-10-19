@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { FinanceView } from "./Finance";
 import type { FinanceConnection, FinanceData } from "./financeApi";
 import type { FinancePage } from "./financePages";
+import { initialFilters } from "./useFinanceData";
 
 const emptyData: FinanceData = {
   accounts: [],
@@ -56,7 +57,7 @@ function renderFinance(
 ) {
   return renderToStaticMarkup(
     <FinanceView
-      filters={{ accountIds: [], year: null, uncategorized: false }}
+      filters={initialFilters}
       loading={false}
       loadingMore={false}
       refreshing={false}

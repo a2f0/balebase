@@ -1,14 +1,21 @@
 import { Button } from "@balebase/ui/react";
-import type { FinanceFilters } from "./financeApi";
+import type { ExpenseCategory, FinanceFilters } from "./financeApi";
+import { initialFilters } from "./useFinanceData";
 
 export function FinanceTransactionFilters({
+  categories,
   filters,
   onChange,
 }: {
+  categories: ExpenseCategory[];
   filters: FinanceFilters;
   onChange: (filters: FinanceFilters) => void;
 }) {
   const year = new Date().getFullYear();
+  const categoryName = filters.categoryId
+    ? (categories.find(({ id }) => id === filters.categoryId)?.name ??
+      "Selected")
+    : undefined;
   return (
     <div className="financeTransactionFilters">
       <fieldset className="segmented">
@@ -28,10 +35,25 @@ export function FinanceTransactionFilters({
           </button>
         ))}
       </fieldset>
+      {categoryName && (
+        <Button
+          aria-pressed
+          iconEnd="close"
+          onClick={() => onChange({ ...filters, categoryId: null })}
+          size="sm"
+          variant="primary"
+        >
+          Category: {categoryName}
+        </Button>
+      )}
       <Button
         aria-pressed={filters.uncategorized}
         onClick={() =>
-          onChange({ ...filters, uncategorized: !filters.uncategorized })
+          onChange({
+            ...filters,
+            categoryId: null,
+            uncategorized: !filters.uncategorized,
+          })
         }
         size="sm"
         variant={filters.uncategorized ? "primary" : "secondary"}
@@ -39,13 +61,12 @@ export function FinanceTransactionFilters({
         Uncategorized expenses
       </Button>
       {(filters.accountIds.length > 0 ||
+        filters.categoryId !== null ||
         filters.year !== null ||
         filters.uncategorized) && (
         <Button
           icon="close"
-          onClick={() =>
-            onChange({ accountIds: [], year: null, uncategorized: false })
-          }
+          onClick={() => onChange(initialFilters)}
           size="sm"
           variant="ghost"
         >

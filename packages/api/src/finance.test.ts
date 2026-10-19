@@ -125,6 +125,48 @@ describe("finance", () => {
     );
   });
 
+  it("lists one expense category's transactions across the full history", async () => {
+    const fixture = await createFixture();
+    seedTransactions(fixture.database);
+    const meals = await createCategory(fixture, "Meals");
+    const software = await createCategory(fixture, "Software");
+    for (const [id, categoryId] of [
+      ["report-txn-0", meals],
+      ["report-txn-2", meals],
+      ["report-txn-1", software],
+    ]) {
+      await jsonRequest(
+        fixture.app,
+        fixture.bindings,
+        `/transactions/${id}/category`,
+        "PUT",
+        { categoryId },
+      );
+    }
+    fixture.database.run(
+      "UPDATE plaid_transactions SET transaction_date = '2024-06-01' WHERE id = 'report-txn-2'",
+    );
+    const list = (query: string) =>
+      jsonRequest<FinanceListing>(fixture.app, fixture.bindings, query, "GET");
+
+    const all = await list(`?categoryId=${meals}`);
+    expect(all.body.transactions.map((txn) => txn.id)).toEqual([
+      "report-txn-0",
+      "report-txn-2",
+    ]);
+    const year = await list(`?categoryId=${meals}&year=2024`);
+    expect(year.body.transactions.map((txn) => txn.id)).toEqual([
+      "report-txn-2",
+    ]);
+    const hidden = await jsonRequest<FinanceListing>(
+      testApp("organization-2", fixture.requestPlaid),
+      fixture.bindings,
+      `?categoryId=${meals}`,
+      "GET",
+    );
+    expect(hidden.body.transactions).toEqual([]);
+  });
+
   it("rejects malformed transaction filters", async () => {
     const fixture = await createFixture();
     for (const query of [
@@ -132,6 +174,7 @@ describe("finance", () => {
       "year=2025-01-01",
       "accountId=",
       "uncategorized=false",
+      "categoryId=",
       "cursor=broken",
       "cursor=null",
     ]) {
