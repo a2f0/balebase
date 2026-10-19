@@ -7,11 +7,13 @@ ALTER TABLE employee_requirements ADD COLUMN checkr_work_city TEXT;
 ALTER TABLE employee_requirements ADD COLUMN checkr_requested_at TEXT;
 ALTER TABLE employee_requirements ADD COLUMN checkr_report_status TEXT;
 ALTER TABLE employee_requirements ADD COLUMN checkr_consent_id TEXT;
--- The authorization an attempt uploaded, and when it asked for the report, so
--- a retry adopts a report with its own consent and knows whether one may be
--- on its way.
+-- For an unfinished attempt: the authorization it uploaded, when it asked for
+-- the report, and a keyed fingerprint of the details it sent, so a retry can
+-- adopt the report with its own consent, wait for a request that may still
+-- arrive, and tell corrected details from the same ones.
 ALTER TABLE employee_requirements ADD COLUMN checkr_attempt_consent_id TEXT;
 ALTER TABLE employee_requirements ADD COLUMN checkr_report_requested_at TEXT;
+ALTER TABLE employee_requirements ADD COLUMN checkr_attempt_digest TEXT;
 
 -- Stop if a hosted invitation could still produce a report Balebase would no
 -- longer track: finish or cancel it in Checkr, record its report, and apply

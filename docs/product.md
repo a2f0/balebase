@@ -445,9 +445,13 @@ package includes a driving record search, their driver's license, then types
 their name to sign. Balebase then creates the Checkr candidate with those
 details, uploads the signed authorization PDF as the candidate's consent
 document, and orders the report. It sends the Social Security number, birth
-date, and license number only to Checkr and never stores them; it keeps each
-signed authorization (the disclosures shown, the signature, time, IP address,
-and device) as a private PDF in R2 that the person and managers can download.
+date, and license number only to Checkr and never stores them; an unfinished
+attempt keeps only an HMAC fingerprint of its details, under the Worker's
+secret, to recognize corrections on retry. Balebase keeps each signed
+authorization (the disclosures shown, the signature, time, IP address, and
+device) as a private PDF in R2 that the person and managers can download. A
+submission names the disclosure version it was signed against, and the API
+rejects a version that is no longer current.
 The disclosure wording in `packages/api/src/screeningDisclosures.ts` is a draft
 that counsel and Checkr must review before production use; Checkr also reviews
 the flow before credentialing a production account. Checkr does not support
@@ -461,9 +465,13 @@ completed report is marked complete in the app; a `consider` result still needs
 the manager's review in Checkr. A canceled report lets the manager request the
 check again. Each submission carries Checkr idempotency keys, so if its response
 is lost the person submits again: the retry replays the same requests, or adopts
-the report the candidate already has instead of ordering a second one. When
+the report the candidate already has, linked to the authorization that ordered
+it, instead of ordering a second one. Corrected details start a new candidate,
+after a ten-minute wait if a lost report request might still reach Checkr. When
 Checkr rejects the details, the form shows Checkr's reason and the person
-corrects them and submits a new attempt.
+corrects them and submits a new attempt. The deployment migration stops if a
+hosted Checkr invitation could still produce a report; finish or cancel it in
+Checkr first.
 
 Set these optional values in `.secrets/prod/app.env` for production deployment
 or `.secrets/staging/app.env` for staging and local development:

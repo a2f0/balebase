@@ -1,5 +1,4 @@
 import {
-  type CheckrCandidate,
   CheckrRequestError,
   createCheckrCandidate,
   createCheckrReport,
@@ -147,6 +146,7 @@ export type ScreeningSubmitResult =
 
 interface SubmitClaim {
   checkr_attempt_consent_id: string | null;
+  checkr_attempt_digest: string | null;
   checkr_candidate_id: string | null;
   checkr_report_requested_at: string | null;
   checkr_start_nonce: string;
@@ -164,9 +164,9 @@ const reportSettleMs = 10 * 60_000;
  * a retry after a lost response replays it. A retry first asks Checkr about
  * the attempt's candidate: it adopts a report the candidate already has, with
  * the authorization that ordered it; continues with the candidate when the
- * details match; and otherwise starts a new candidate once no report request
- * can still be on its way. When Checkr rejects the details, the attempt is
- * cleared so the person can correct them and submit again.
+ * person sent the same details; and otherwise starts a new candidate once no
+ * report request can still be on its way. When Checkr rejects the details, the
+ * attempt is cleared so the person can correct them and submit again.
  */
 export async function submitCheckrScreening(
   env: Bindings,
@@ -181,9 +181,10 @@ export async function submitCheckrScreening(
     );
   let nonce = claim.checkr_start_nonce;
   try {
+    const digest = await attemptDigest(env, subject, submission);
     let candidateId = claim.checkr_candidate_id;
     if (candidateId) {
-      const resumed = await resumeAttempt(env, subject, submission, claim);
+      const resumed = await resumeAttempt(env, subject, claim, digest);
       if (resumed.kind === "adopt") {
         return await storeReport(
           env.DB,
@@ -207,7 +208,13 @@ export async function submitCheckrScreening(
     }
     nonce = await freshNonce(env.DB, subject, claim, nonce);
     const consent = await recordConsent(env, subject, submission, signer);
-    candidateId ??= await createCandidate(env, subject, submission, nonce);
+    candidateId ??= await createCandidate(
+      env,
+      subject,
+      submission,
+      nonce,
+      digest,
+    );
     if (!candidateId)
       return conflict("This background check changed. Refresh and try again.");
     const report = await orderReport(
@@ -258,8 +265,8 @@ interface StoredReport {
 async function resumeAttempt(
   env: Bindings,
   subject: ScreeningSubject,
-  submission: ScreeningSubmission,
   claim: SubmitClaim,
+  digest: string,
 ): Promise<Resumed> {
   const candidate = await getCheckrCandidate(
     env,
@@ -277,8 +284,7 @@ async function resumeAttempt(
       },
     };
   }
-  if (sameDetails(candidate, subject.email, submission))
-    return { kind: "reuse" };
+  if (claim.checkr_attempt_digest === digest) return { kind: "reuse" };
   const requestedAt = Date.parse(claim.checkr_report_requested_at ?? "");
   if (
     Number.isFinite(requestedAt) &&
@@ -293,39 +299,45 @@ async function resumeAttempt(
 }
 
 /**
- * Whether the person submitted what Checkr holds for the candidate. Fields
- * Checkr leaves out or redacts count as matching; the SSN's last four digits
- * stand in for the rest.
+ * A keyed fingerprint of the details an attempt sends to Checkr, so a retry
+ * can tell corrected details from the same ones without keeping them: an
+ * HMAC under the Worker's secret, cleared when the attempt ends.
  */
-function sameDetails(
-  candidate: CheckrCandidate,
-  email: string,
-  { candidate: details, copyRequested }: ScreeningSubmission,
+async function attemptDigest(
+  env: Bindings,
+  subject: ScreeningSubject,
+  { candidate, copyRequested }: ScreeningSubmission,
 ) {
-  const same = (
-    stored: string | null | undefined,
-    value: string | null,
-    normalize = (text: string) => text.trim().toLowerCase(),
-  ) =>
-    stored === undefined || normalize(stored ?? "") === normalize(value ?? "");
-  const digits = (text: string) =>
-    text.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
-  const license = candidate.driver_license_number;
-  return (
-    same(candidate.first_name, details.firstName) &&
-    same(candidate.middle_name, details.middleName) &&
-    same(candidate.last_name, details.lastName) &&
-    same(candidate.dob, details.dob) &&
-    same(candidate.zipcode, details.zipcode) &&
-    same(candidate.email, email) &&
-    same(candidate.phone, details.phone, digits) &&
-    same(candidate.driver_license_state, details.driverLicenseState) &&
-    (/x/i.test(license ?? "") || same(license, details.driverLicenseNumber)) &&
-    (typeof candidate.ssn !== "string" ||
-      candidate.ssn.slice(-4) === details.ssn.slice(-4)) &&
-    (candidate.copy_requested === undefined ||
-      candidate.copy_requested === copyRequested)
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(`checkr-attempt:${env.BETTER_AUTH_SECRET}`),
+    { hash: "SHA-256", name: "HMAC" },
+    false,
+    ["sign"],
   );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(
+      JSON.stringify([
+        subject.requirementId,
+        subject.email,
+        candidate.firstName,
+        candidate.middleName,
+        candidate.lastName,
+        candidate.dob,
+        candidate.ssn,
+        candidate.zipcode,
+        candidate.phone,
+        candidate.driverLicenseNumber,
+        candidate.driverLicenseState,
+        copyRequested,
+      ]),
+    ),
+  );
+  return [...new Uint8Array(signature)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 async function createCandidate(
@@ -333,6 +345,7 @@ async function createCandidate(
   subject: ScreeningSubject,
   submission: ScreeningSubmission,
   nonce: string,
+  digest: string,
 ) {
   const created = await createCheckrCandidate(
     env,
@@ -344,11 +357,12 @@ async function createCandidate(
   if (!created.id) throw new Error("Checkr did not return a candidate ID.");
   const stored = await env.DB.prepare(
     `UPDATE employee_requirements
-     SET checkr_candidate_id = ?, updated_at = ?
+     SET checkr_candidate_id = ?, checkr_attempt_digest = ?, updated_at = ?
      WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?`,
   )
     .bind(
       created.id,
+      digest,
       new Date().toISOString(),
       subject.requirementId,
       subject.organizationId,
@@ -424,9 +438,10 @@ async function claimSubmission(
          AND checkr_requested_at IS NOT NULL AND checkr_report_id IS NULL
          AND status <> 'complete'
          AND (checkr_starting_at IS NULL OR checkr_starting_at < ?)
-       RETURNING checkr_attempt_consent_id, checkr_candidate_id,
-                 checkr_report_requested_at, checkr_start_nonce,
-                 checkr_start_nonce_at, checkr_start_package`,
+       RETURNING checkr_attempt_consent_id, checkr_attempt_digest,
+                 checkr_candidate_id, checkr_report_requested_at,
+                 checkr_start_nonce, checkr_start_nonce_at,
+                 checkr_start_package`,
     )
     .bind(
       crypto.randomUUID(),
@@ -455,7 +470,8 @@ async function restartAttempt(
       `UPDATE employee_requirements
        SET checkr_start_nonce = ?, checkr_start_nonce_at = ?,
            checkr_candidate_id = NULL, checkr_attempt_consent_id = NULL,
-           checkr_report_requested_at = NULL, updated_at = ?
+           checkr_attempt_digest = NULL, checkr_report_requested_at = NULL,
+           updated_at = ?
        WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?`,
     )
     .bind(
@@ -585,7 +601,7 @@ async function storeReport(
            checkr_report_status = ?, checkr_result = ?, checkr_consent_id = ?,
            status = 'in_progress', checkr_starting_at = NULL,
            checkr_start_nonce = NULL, checkr_start_nonce_at = NULL,
-           checkr_attempt_consent_id = NULL,
+           checkr_attempt_consent_id = NULL, checkr_attempt_digest = NULL,
            checkr_report_requested_at = NULL,
            checkr_refresh_requested_at = ?,
            checkr_refresh_revision = checkr_refresh_revision + 1,
@@ -629,6 +645,7 @@ async function releaseSubmission(
            checkr_start_package = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_start_package END,
            checkr_candidate_id = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_candidate_id END,
            checkr_attempt_consent_id = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_attempt_consent_id END,
+           checkr_attempt_digest = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_attempt_digest END,
            checkr_report_requested_at = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_report_requested_at END,
            updated_at = ?2
        WHERE id = ?3 AND organization_id = ?4 AND checkr_start_nonce = ?5`,

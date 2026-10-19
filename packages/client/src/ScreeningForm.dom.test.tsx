@@ -236,6 +236,7 @@ describe("screening form", () => {
           zipcode: "94088",
         },
         copyRequested: true,
+        disclosureVersion: "2026-10-19",
         residenceState: "CA",
         signature: {
           authorize: true,

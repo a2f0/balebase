@@ -186,6 +186,8 @@ export interface ScreeningSubmission {
     zipcode: string;
   };
   copyRequested: boolean;
+  /** The disclosure version the person read, which the API requires. */
+  disclosureVersion: string;
   residenceState: string;
   signature: { authorize: boolean; electronicRecords: boolean; name: string };
 }

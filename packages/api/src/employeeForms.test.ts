@@ -953,6 +953,10 @@ describe("employee forms", () => {
       const valid = homerSubmission();
       const cases: Array<[unknown, string]> = [
         [
+          { ...valid, disclosureVersion: "2000-01-01" },
+          "These disclosures changed after you opened the form. Reload the page to review the current version.",
+        ],
+        [
           {
             ...valid,
             acknowledgments: {
@@ -1235,7 +1239,7 @@ describe("employee forms", () => {
       checkr.calls.length = 0;
       const corrected = {
         ...homerSubmission(),
-        candidate: { ...homerSubmission().candidate, ssn: "110-11-1101" },
+        candidate: { ...homerSubmission().candidate, ssn: "111-11-1100" },
       };
       expect((await submitScreening(fixture, id, corrected)).status).toBe(200);
       expect(checkr.calls.map(({ method, url }) => `${method} ${url}`)).toEqual(
@@ -1248,7 +1252,7 @@ describe("employee forms", () => {
       );
       expect(
         new URLSearchParams(String(checkr.calls[1]?.body)).get("ssn"),
-      ).toBe("110-11-1101");
+      ).toBe("111-11-1100");
       expect(
         fixture.database
           .query(
@@ -1286,7 +1290,7 @@ describe("employee forms", () => {
     });
     const corrected = {
       ...homerSubmission(),
-      candidate: { ...homerSubmission().candidate, ssn: "110-11-1101" },
+      candidate: { ...homerSubmission().candidate, ssn: "111-11-1100" },
     };
     try {
       expect(
@@ -2057,6 +2061,7 @@ function homerSubmission() {
       zipcode: "94088",
     },
     copyRequested: true,
+    disclosureVersion: screeningDisclosureVersion,
     residenceState: "CA",
     signature: {
       authorize: true,
@@ -2235,6 +2240,7 @@ async function createFixture() {
   };
   const bindings = {
     AUTH_EMAIL_FROM: "no-reply@balebase.test",
+    BETTER_AUTH_SECRET: "test-secret",
     CORS_ORIGIN: "https://app.balebase.test",
     DB: toD1(database, hooks),
     EMAIL: {
