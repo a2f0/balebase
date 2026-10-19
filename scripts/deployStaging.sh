@@ -10,7 +10,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/cloudflareEnv.sh"
 unset TF_VAR_cloudflare_api_token TF_VAR_cloudflare_account_id
 unset BETTER_AUTH_SECRET PLAID_CLIENT_ID PLAID_SECRET \
-  CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE CHECKR_CREDIT_PACKAGE \
+  CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE \
   PLAID_TOKEN_ENCRYPTION_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET \
   STAGING_STRIPE_PRO_PRICE_ID STAGING_STRIPE_PORTAL_CONFIGURATION_ID \
   STAGING_STRIPE_PUBLISHABLE_KEY
@@ -76,7 +76,7 @@ else
       "$secret_name" --config "$api_config" >/dev/null
   done
   for secret_name in \
-    CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE CHECKR_CREDIT_PACKAGE; do
+    CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE; do
     if [[ -n "${!secret_name:-}" ]]; then
       printf '%s' "${!secret_name}" | bunx --bun wrangler secret put \
         "$secret_name" --config "$api_config" >/dev/null

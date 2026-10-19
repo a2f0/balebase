@@ -46,11 +46,11 @@ done
 # production tier's Plaid key still encrypts local access tokens.
 if [[ -f "$REPO_ROOT/.secrets/staging/app.env" ]]; then
   (
-    unset CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE CHECKR_CREDIT_PACKAGE \
+    unset CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE \
       PLAID_CLIENT_ID PLAID_SECRET
     load_tier_env staging "$REPO_ROOT"
     for secret_name in \
-      CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE CHECKR_CREDIT_PACKAGE \
+      CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE \
       PLAID_CLIENT_ID PLAID_SECRET; do
       if [[ -n "${!secret_name:-}" ]]; then
         printf '%s=%s\n' "$secret_name" "${!secret_name}" >>"$auth_env_file"

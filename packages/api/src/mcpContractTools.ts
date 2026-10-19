@@ -373,7 +373,7 @@ export const contractTools: McpTool[] = [
       },
     },
     description:
-      "Changes a requirement's status or due date. Status cannot change while a Checkr screening is active.",
+      "Changes a requirement's status or due date. Status cannot change while a screening is submitted to Checkr.",
     method: "PATCH",
     name: "update_employee_requirement",
     params: { id: requirementId },
@@ -382,7 +382,7 @@ export const contractTools: McpTool[] = [
   },
   {
     description:
-      "Deletes a requirement and its upload. Requirements with a started screening cannot be deleted.",
+      "Deletes a requirement and its upload. Requirements with a screening submitted to Checkr cannot be deleted.",
     destructive: true,
     method: "DELETE",
     name: "delete_employee_requirement",
@@ -401,17 +401,17 @@ export const contractTools: McpTool[] = [
       required: ["state"],
     },
     description:
-      "Starts a Checkr background or credit screening. Checkr emails the person to collect their information and consent.",
+      "Requests a Checkr background check at a work location. Balebase emails the person, who reviews the disclosures, enters their details, and signs the authorization in the app; Balebase then orders the report. Credit checks are tracked manually.",
     method: "POST",
-    name: "start_checkr_screening",
+    name: "request_checkr_screening",
     openWorld: true,
     params: { id: requirementId },
-    path: "/api/employee-forms/{id}/checkr/start",
-    title: "Start Checkr screening",
+    path: "/api/employee-forms/{id}/checkr/request",
+    title: "Request Checkr screening",
   },
   {
     description:
-      "Fetches the latest Checkr invitation and report status for a screening.",
+      "Fetches the latest Checkr report status for a submitted screening.",
     method: "POST",
     name: "refresh_checkr_screening",
     openWorld: true,

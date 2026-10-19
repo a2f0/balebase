@@ -116,21 +116,12 @@
   gap: var(--space-2);
 }
 
-.checkrStart input:first-child {
+.checkrState {
   width: 5rem;
 }
 
-.checkrStart input:nth-child(2) {
+.checkrCity {
   width: 10rem;
-}
-
-.checkrReconcile {
-  display: flex;
-  gap: var(--space-2);
-}
-
-.checkrReconcile input {
-  width: 12rem;
 }
 
 /* Member rows share one column grid so controls line up across rows. */

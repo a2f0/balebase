@@ -75,7 +75,7 @@ function detail(id = "other/org"): AdminOrganizationDetail {
     ],
     requirements: [
       {
-        checkrInvitationStatus: "completed",
+        checkrStatus: "complete",
         checkrReportUrl:
           "https://dashboard.checkrhq-staging.net/reports/report-1",
         checkrResult: "consider",

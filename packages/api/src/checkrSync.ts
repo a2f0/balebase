@@ -1,9 +1,9 @@
 import type { Context } from "hono";
-import { getCheckrReport, verifyCheckrWebhook } from "./checkr";
+import { verifyCheckrWebhook } from "./checkr";
 import {
   type CheckrScreeningRow,
   refreshCheckrScreening,
-} from "./employeeForms";
+} from "./checkrScreening";
 import type { Bindings } from "./types";
 import { readWebhookPayload } from "./webhookPayload";
 
@@ -15,14 +15,13 @@ const screeningRefreshConcurrency = 4;
 interface CheckrEventSubject {
   candidateId: string | null;
   id: string;
-  kind: "invitation" | "report";
 }
 
-// Checkr posts invitation and report events here. A verified event marks its
-// screenings for refresh and is acknowledged at once, as Checkr asks; the
-// refresh then reads the Checkr API, so duplicate or out-of-order deliveries
-// settle on the current state. When that refresh fails, the mark keeps the
-// screening in the hourly refresh below, even if it was already complete.
+// Checkr posts report events here. A verified event marks its screenings for
+// refresh and is acknowledged at once, as Checkr asks; the refresh then reads
+// the Checkr API, so duplicate or out-of-order deliveries settle on the
+// current state. When that refresh fails, the mark keeps the screening in the
+// hourly refresh below, even if it was already complete.
 export async function handleCheckrWebhook(
   context: Context<{ Bindings: Bindings }>,
 ) {
@@ -64,11 +63,9 @@ export async function handleCheckrWebhook(
     );
     await requestScreeningRefreshes(context.env.DB, screenings);
     context.executionCtx.waitUntil(
-      refreshEventScreenings(context.env, subject, screenings).catch(
-        (cause) => {
-          console.error("Could not apply a Checkr webhook event.", cause);
-        },
-      ),
+      refreshEventScreenings(context.env, screenings).catch((cause) => {
+        console.error("Could not apply a Checkr webhook event.", cause);
+      }),
     );
   }
   return context.json({ received: true });
@@ -80,15 +77,14 @@ export async function handleCheckrWebhook(
 export async function refreshActiveCheckrScreenings(env: Bindings) {
   if (!env.CHECKR_API_KEY) return { refreshed: 0, skipped: true };
   const { results } = await env.DB.prepare(
-    `SELECT id, organization_id, status, checkr_invitation_id,
-            checkr_report_id, checkr_invitation_status,
-            checkr_refresh_revision
+    `SELECT id, organization_id, status, checkr_report_id,
+            checkr_report_status, checkr_refresh_revision
      FROM employee_requirements
-     WHERE checkr_invitation_id IS NOT NULL
+     WHERE checkr_report_id IS NOT NULL
        AND (checkr_refresh_requested_at IS NOT NULL OR (
          status <> 'complete'
-         AND (checkr_invitation_status IS NULL OR checkr_invitation_status NOT IN
-                ('expired', 'canceled', 'deleted', 'partially_canceled'))))
+         AND (checkr_report_status IS NULL OR checkr_report_status NOT IN
+                ('canceled', 'partially_canceled'))))
      ORDER BY checkr_checked_at ASC, updated_at ASC
      LIMIT ?`,
   )
@@ -122,26 +118,8 @@ export async function refreshActiveCheckrScreenings(env: Bindings) {
 
 async function refreshEventScreenings(
   env: Bindings,
-  subject: CheckrEventSubject,
-  matched: CheckrScreeningRow[],
+  screenings: CheckrScreeningRow[],
 ) {
-  let screenings = matched;
-  // Without include_object a report event carries only its ID, and a new
-  // report is not linked to its screening until the first refresh. That
-  // screening is unfinished, so the hourly refresh covers a failed lookup.
-  if (
-    screenings.length === 0 &&
-    subject.kind === "report" &&
-    !subject.candidateId
-  ) {
-    const report = await getCheckrReport(env, subject.id);
-    screenings = await screeningsForEvent(
-      env.DB,
-      subject.id,
-      report.candidate_id ?? null,
-    );
-    await requestScreeningRefreshes(env.DB, screenings);
-  }
   for (const screening of screenings) {
     await refreshCheckrScreening(env, screening);
   }
@@ -182,19 +160,13 @@ function checkrEventSubject(
   ) {
     return null;
   }
-  const kind = event.type.startsWith("invitation.")
-    ? "invitation"
-    : event.type.startsWith("report.")
-      ? "report"
-      : null;
-  if (!kind) return "ignored";
+  if (!event.type.startsWith("report.")) return "ignored";
   return {
     candidateId:
       typeof object.candidate_id === "string" && object.candidate_id
         ? object.candidate_id
         : null,
     id: object.id,
-    kind,
   };
 }
 
@@ -205,15 +177,13 @@ async function screeningsForEvent(
 ) {
   const { results } = await database
     .prepare(
-      `SELECT id, organization_id, status, checkr_invitation_id,
-              checkr_report_id, checkr_invitation_status,
-              checkr_refresh_revision
+      `SELECT id, organization_id, status, checkr_report_id,
+              checkr_report_status, checkr_refresh_revision
        FROM employee_requirements
-       WHERE checkr_invitation_id IS NOT NULL
-         AND (checkr_invitation_id = ? OR checkr_report_id = ?
-              OR checkr_candidate_id = ?)`,
+       WHERE checkr_report_id IS NOT NULL
+         AND (checkr_report_id = ? OR checkr_candidate_id = ?)`,
     )
-    .bind(objectId, objectId, candidateId)
+    .bind(objectId, candidateId)
     .all<CheckrScreeningRow>();
   return results;
 }

@@ -14,6 +14,8 @@ import {
   organizationPathRequiresAccess,
   organizationPeoplePath,
   organizationRoleValue,
+  organizationScreeningForPath,
+  organizationScreeningPath,
   organizationSettingsPage,
   resolveActiveOrganizationId,
 } from "./organizationState";
@@ -67,6 +69,19 @@ describe("organization state", () => {
     expect(organizationPeoplePath("member/1")).toBe(
       "/organization/people/member%2F1",
     );
+    const screening = organizationScreeningPath("member/1", "check/1");
+    expect(screening).toBe(
+      "/organization/people/member%2F1/screening/check%2F1",
+    );
+    expect(organizationScreeningForPath(screening)).toEqual({
+      memberId: "member/1",
+      requirementId: "check/1",
+    });
+    expect(organizationSettingsPage(screening)).toBe("people");
+    expect(organizationMemberIdForPath(screening)).toBeUndefined();
+    expect(
+      organizationScreeningForPath("/organization/people/m/screening/%E0%A4%A"),
+    ).toBeUndefined();
     expect(organizationSettingsPage("/organization/access")).toBe("access");
     expect(organizationSettingsPage("/organization/api-keys")).toBe("api-keys");
     expect(organizationSettingsPage("/organization/unknown")).toBe("general");

@@ -7,6 +7,12 @@ import {
   rgb,
   StandardFonts,
 } from "pdf-lib";
+import {
+  addTextPages,
+  encodable,
+  formatUtcTimestamp,
+  type PdfLine,
+} from "./pdfText";
 
 /** A field's box as fractions of its page as displayed (after /Rotate). */
 export interface FieldRect {
@@ -276,30 +282,13 @@ function drawTextInBox(
   });
 }
 
-/** Replaces characters the standard font cannot encode, such as CJK. */
-function encodable(value: string, font: PDFFont) {
-  const supported = new Set(font.getCharacterSet());
-  return [...value.replace(/[\r\n\t]+/g, " ")]
-    .map((character) =>
-      supported.has(character.codePointAt(0) ?? 0) ? character : "?",
-    )
-    .join("");
-}
-
-const certificatePage = { height: 792, margin: 54, width: 612 };
-
 function appendCertificate(
   document: PDFDocument,
   certificate: Certificate,
   font: PDFFont,
   bold: PDFFont,
 ) {
-  const lines: Array<{
-    bold?: boolean;
-    gap?: number;
-    size: number;
-    text: string;
-  }> = [
+  const lines: PdfLine[] = [
     { bold: true, size: 18, text: "Certificate of completion" },
     { gap: 6, size: 10, text: `${certificate.organizationName} · Balebase` },
     { bold: true, gap: 18, size: 12, text: certificate.title },
@@ -312,10 +301,10 @@ function appendCertificate(
       size: 9,
       text: `Document SHA-256 before signing: ${certificate.documentSha256}`,
     },
-    { size: 9, text: `Sent: ${formatTimestamp(certificate.sentAt)}` },
+    { size: 9, text: `Sent: ${formatUtcTimestamp(certificate.sentAt)}` },
     {
       size: 9,
-      text: `Completed: ${formatTimestamp(certificate.completedAt)}`,
+      text: `Completed: ${formatUtcTimestamp(certificate.completedAt)}`,
     },
     { bold: true, gap: 18, size: 12, text: "Signers" },
   ];
@@ -327,7 +316,7 @@ function appendCertificate(
         size: 10,
         text: `${signer.name} <${signer.email}>`,
       },
-      { size: 9, text: `Signed: ${formatTimestamp(signer.signedAt)}` },
+      { size: 9, text: `Signed: ${formatUtcTimestamp(signer.signedAt)}` },
       { size: 9, text: `IP address: ${signer.ip ?? "Unknown"}` },
       { size: 9, text: `Device: ${signer.userAgent ?? "Unknown"}` },
     );
@@ -336,7 +325,7 @@ function appendCertificate(
   for (const event of certificate.events) {
     lines.push({
       size: 9,
-      text: `${formatTimestamp(event.at)}  ${event.description}`,
+      text: `${formatUtcTimestamp(event.at)}  ${event.description}`,
     });
   }
   lines.push({
@@ -345,70 +334,5 @@ function appendCertificate(
     text: "Each signer agreed to use electronic records and signatures before signing. Signing links were delivered by email and are unique to each signer.",
   });
 
-  const width = certificatePage.width - certificatePage.margin * 2;
-  let page = document.addPage([certificatePage.width, certificatePage.height]);
-  let y = certificatePage.height - certificatePage.margin;
-  for (const line of lines) {
-    const face = line.bold ? bold : font;
-    y -= line.gap ?? 0;
-    for (const wrapped of wrap(
-      encodable(line.text, face),
-      face,
-      line.size,
-      width,
-    )) {
-      if (y - line.size < certificatePage.margin) {
-        page = document.addPage([
-          certificatePage.width,
-          certificatePage.height,
-        ]);
-        y = certificatePage.height - certificatePage.margin;
-      }
-      y -= line.size * 1.35;
-      page.drawText(wrapped, {
-        color: rgb(0.08, 0.09, 0.1),
-        font: face,
-        size: line.size,
-        x: certificatePage.margin,
-        y,
-      });
-    }
-  }
-}
-
-/** Breaks text into lines that fit, splitting long unbroken runs too. */
-function wrap(text: string, font: PDFFont, size: number, width: number) {
-  const lines: string[] = [];
-  let line = "";
-  for (const word of text.split(" ")) {
-    const candidate = line ? `${line} ${word}` : word;
-    if (font.widthOfTextAtSize(candidate, size) <= width) {
-      line = candidate;
-      continue;
-    }
-    if (line) lines.push(line);
-    line = "";
-    let rest = word;
-    while (font.widthOfTextAtSize(rest, size) > width) {
-      let cut = rest.length - 1;
-      while (
-        cut > 1 &&
-        font.widthOfTextAtSize(rest.slice(0, cut), size) > width
-      ) {
-        cut -= 1;
-      }
-      lines.push(rest.slice(0, cut));
-      rest = rest.slice(cut);
-    }
-    line = rest;
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
-function formatTimestamp(value: string) {
-  return `${value
-    .replace("T", " ")
-    .replace(/\.\d+Z$/, "")
-    .replace(/Z$/, "")} UTC`;
+  addTextPages(document, lines, font, bold);
 }

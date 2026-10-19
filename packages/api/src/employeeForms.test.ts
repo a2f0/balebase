@@ -14,6 +14,10 @@ import {
   assignRenewedInvitationRequirements,
   employeeForms,
 } from "./employeeForms";
+import {
+  screeningDisclosureVersion,
+  summaryOfRightsUrl,
+} from "./screeningDisclosures";
 import type { Bindings } from "./types";
 
 const orgId = "org_owner";
@@ -568,7 +572,7 @@ describe("employee forms", () => {
     );
     fixture.database
       .query(`UPDATE employee_requirements
-              SET checkr_invitation_id = 'active-check', checkr_invitation_status = 'pending'
+              SET checkr_report_id = 'active-check', checkr_report_status = 'pending'
               WHERE id = ?`)
       .run(id);
     fixture.database
@@ -577,13 +581,13 @@ describe("employee forms", () => {
     expect(
       fixture.database
         .query(
-          "SELECT member_id, target_email, checkr_invitation_id FROM employee_requirements WHERE id = ?",
+          "SELECT member_id, target_email, checkr_report_id FROM employee_requirements WHERE id = ?",
         )
         .get(id),
     ).toEqual({
       member_id: null,
       target_email: "employee@example.com",
-      checkr_invitation_id: "active-check",
+      checkr_report_id: "active-check",
     });
     const removal = await fixture.app("owner", "owner").request(`/${id}`, {
       method: "DELETE",
@@ -591,7 +595,7 @@ describe("employee forms", () => {
     expect(removal.status).toBe(409);
   });
 
-  it("allows manual completion after a Checkr invitation expires", async () => {
+  it("allows manual completion after a Checkr report is canceled", async () => {
     const fixture = await createFixture();
     const id = await createRequirement(
       fixture,
@@ -600,8 +604,8 @@ describe("employee forms", () => {
     );
     fixture.database
       .query(`UPDATE employee_requirements
-              SET checkr_invitation_id = 'expired-check',
-                  checkr_invitation_status = 'expired' WHERE id = ?`)
+              SET checkr_report_id = 'canceled-check',
+                  checkr_report_status = 'canceled' WHERE id = ?`)
       .run(id);
     const completed = await fixture.app("owner", "owner").request(`/${id}`, {
       body: JSON.stringify({ status: "complete" }),
@@ -652,381 +656,636 @@ describe("employee forms", () => {
     ).toEqual({ invitation_id: null, assigned_user_id: "employee" });
   });
 
-  it("starts and refreshes a Checkr screening with the configured package", async () => {
+  it("requests a background check at a work location and emails the person", async () => {
     const fixture = await createFixture();
-    fixture.bindings.CHECKR_API_KEY = "staging-key";
-    fixture.bindings.CHECKR_ENV = "staging";
-    fixture.bindings.CHECKR_CREDIT_PACKAGE = "employment_credit";
-    const id = await createRequirement(fixture, "credit_check", "Credit check");
-    const requests: Array<{
-      url: string;
-      body: string | null;
-      idempotencyKey: string | null;
-    }> = [];
-    const screeningRace: { deletionStatus: number | null } = {
-      deletionStatus: null,
-    };
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input, init) => {
-      requests.push({
-        url: String(input),
-        body: init?.body?.toString() ?? null,
-        idempotencyKey: new Headers(init?.headers).get("Idempotency-Key"),
-      });
-      if (String(input).endsWith("/candidates"))
-        return Response.json({ id: "candidate-1" });
-      if (String(input).endsWith("/invitations") && init?.method === "POST") {
-        screeningRace.deletionStatus = (
-          await fixture.app("owner", "owner").request(`/${id}`, {
-            method: "DELETE",
+    configureCheckr(fixture);
+    const id = await createRequirement(
+      fixture,
+      "background_check",
+      "Background check",
+    );
+    const credit = await createRequirement(fixture, "credit_check", "Credit");
+    const request = (
+      requirementId: string,
+      body: unknown,
+      user = "owner",
+      role = "owner",
+    ) =>
+      fixture
+        .app(user, role)
+        .request(`/${requirementId}/checkr/request`, jsonPost(body));
+
+    expect(
+      (await request(id, { state: "CA" }, "employee", "member")).status,
+    ).toBe(403);
+    expect((await request(id, { state: "ZZ" })).status).toBe(400);
+    expect((await request(credit, { state: "CA" })).status).toBe(404);
+    delete fixture.bindings.CHECKR_BACKGROUND_PACKAGE;
+    expect((await request(id, { state: "CA" })).status).toBe(503);
+    configureCheckr(fixture);
+
+    const requested = await request(id, { city: " San Jose ", state: "CA" });
+    expect(requested.status).toBe(200);
+    expect(await requested.json()).toEqual({ emailed: true });
+    expect(fixture.emails).toHaveLength(1);
+    expect(fixture.emails[0]?.to.email).toBe("employee@example.com");
+    expect(fixture.emails[0]?.subject).toBe(
+      "Acme requested a background check",
+    );
+    expect(fixture.emails[0]?.text).toContain(
+      `https://app.balebase.test/organization/people/employee-member/screening/${id}`,
+    );
+    const listed = (await (
+      await fixture.app("employee", "member").request("/")
+    ).json()) as { requirements: Array<{ id: string }> };
+    expect(listed.requirements.find((item) => item.id === id)).toMatchObject({
+      canSubmitCheckr: true,
+      checkrAvailable: true,
+      checkrReportStatus: null,
+      checkrRequested: true,
+      checkrResult: null,
+      checkrWorkLocation: { city: "San Jose", state: "CA" },
+    });
+    expect(
+      listed.requirements.find((item) => item.id === credit),
+    ).toMatchObject({ checkrAvailable: false, checkrRequested: false });
+    const managed = (await (
+      await fixture.app("owner", "owner").request("/")
+    ).json()) as { requirements: Array<{ id: string }> };
+    expect(managed.requirements.find((item) => item.id === id)).toMatchObject({
+      canSubmitCheckr: false,
+      checkrRequested: true,
+    });
+
+    const invited = await fixture.app("owner", "owner").request(
+      "/",
+      jsonPost({
+        invitationId: "invite",
+        requirements: [
+          { dueDate: "2026-10-01", kind: "background_check", title: "Check" },
+        ],
+      }),
+    );
+    const [invitedId] = ((await invited.json()) as { ids: string[] }).ids;
+    expect((await request(invitedId ?? "", { state: "NY" })).status).toBe(200);
+    expect(fixture.emails[1]?.to.email).toBe("invitee@example.com");
+    expect(fixture.emails[1]?.text).toContain("Accept your invitation to Acme");
+  });
+
+  it("serves the screening form only to the person, with test candidates in staging", async () => {
+    const fixture = await createFixture();
+    const id = await requestedScreening(fixture);
+    const checkr = mockCheckr((call) =>
+      call.url.startsWith("/packages")
+        ? Response.json({
+            data: [
+              { screenings: [{ type: "ssn_trace" }], slug: "other_package" },
+              {
+                screenings: [
+                  { type: "ssn_trace" },
+                  { type: "motor_vehicle_report" },
+                ],
+                slug: "background_package",
+              },
+            ],
           })
-        ).status;
-        return Response.json({
-          id: "invitation-1",
-          report_id: null,
-          status: "pending",
-        });
-      }
-      if (String(input).includes("/invitations/invitation-1?")) {
-        return Response.json({
-          id: "invitation-1",
-          report_id: "report-1",
-          status: "completed",
-        });
-      }
-      return Response.json({
-        id: "report-1",
-        result: "consider",
-        status: "complete",
-      });
-    }) as typeof fetch;
+        : Response.json({ error: "unavailable" }, { status: 503 }),
+    );
     try {
-      const denied = await fixture
+      const managerView = await fixture
+        .app("owner", "owner")
+        .request(`/${id}/checkr/form`);
+      expect(managerView.status).toBe(404);
+      const form = await fixture
         .app("employee", "member")
-        .request(
-          `/${id}/checkr/start`,
-          jsonPost({ state: "NY", city: "New York" }),
-        );
-      expect(denied.status).toBe(403);
-      const started = await fixture
-        .app("owner", "owner")
-        .request(
-          `/${id}/checkr/start`,
-          jsonPost({ state: "NY", city: "New York" }),
-        );
-      expect(started.status).toBe(200);
-      expect(screeningRace.deletionStatus).toBe(409);
-      expect(requests[1]?.url).toBe(
-        "https://api.checkr-staging.com/v1/invitations",
+        .request(`/${id}/checkr/form`);
+      expect(form.status).toBe(200);
+      const body = (await form.json()) as {
+        disclosures: { stateNotices: Record<string, unknown>; version: string };
+        testCandidates: Array<{ expectedResult: string; id: string }> | null;
+      } & Record<string, unknown>;
+      expect(body).toMatchObject({
+        candidate: { email: "employee@example.com", name: "employee" },
+        organizationName: "Acme",
+        requiresDriverLicense: true,
+        summaryOfRightsUrl,
+        title: "Background check",
+        workLocation: { city: "San Jose", state: "CA" },
+      });
+      expect(body.disclosures.version).toBe(screeningDisclosureVersion);
+      expect(Object.keys(body.disclosures.stateNotices)).toContain("CA");
+      expect(body.testCandidates).toHaveLength(6);
+      expect(body.testCandidates?.[0]).toMatchObject({
+        expectedResult: "clear",
+        id: "homer-simpson",
+      });
+
+      fixture.bindings.CHECKR_ENV = "production";
+      checkr.respond = () =>
+        Response.json({ error: "unavailable" }, { status: 503 });
+      const production = (await (
+        await fixture.app("employee", "member").request(`/${id}/checkr/form`)
+      ).json()) as { requiresDriverLicense: boolean; testCandidates: unknown };
+      expect(production.testCandidates).toBeNull();
+      expect(production.requiresDriverLicense).toBe(false);
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("orders a report with the person's details and signed authorization", async () => {
+    const fixture = await createFixture();
+    const id = await requestedScreening(fixture);
+    const checkr = mockCheckr(checkrResponses);
+    try {
+      const submitted = await submitScreening(fixture, id, homerSubmission());
+      expect(submitted.status).toBe(200);
+      expect(await submitted.json()).toEqual({ status: "pending" });
+      expect(checkr.calls.map(({ method, url }) => `${method} ${url}`)).toEqual(
+        [
+          "POST /candidates",
+          "POST /candidates/candidate-1/documents",
+          "POST /reports",
+        ],
       );
-      expect(requests[1]?.body).toContain("package=employment_credit");
-      expect(requests[0]?.idempotencyKey).toBe(id);
-      expect(requests[1]?.idempotencyKey).not.toBe(id);
-      expect(requests[1]?.body).toContain("work_locations%5B%5D%5Bstate%5D=NY");
-      const duplicate = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(duplicate.status).toBe(409);
+      const [candidateCall, documentCall, reportCall] = checkr.calls;
+      const candidate = new URLSearchParams(String(candidateCall?.body));
+      expect(Object.fromEntries(candidate)).toEqual({
+        copy_requested: "true",
+        custom_id: id,
+        dob: "1983-02-10",
+        driver_license_number: "M2233344",
+        driver_license_state: "CA",
+        email: "employee@example.com",
+        first_name: "Homer",
+        last_name: "Simpson",
+        no_middle_name: "true",
+        ssn: "110-11-1100",
+        zipcode: "94088",
+      });
+      const nonce = candidateCall?.idempotencyKey?.replace(/:candidate$/, "");
+      expect(nonce).toEqual(expect.any(String));
+      expect(documentCall?.idempotencyKey).toStartWith(`${nonce}:consent:`);
+      expect(reportCall?.idempotencyKey).toBe(`${nonce}:report`);
+      const document = documentCall?.body as FormData;
+      expect(document.get("type")).toBe("consent");
+      expect((document.get("file") as File).type).toBe("application/pdf");
+      expect(
+        Object.fromEntries(new URLSearchParams(String(reportCall?.body))),
+      ).toEqual({
+        candidate_id: "candidate-1",
+        package: "background_package",
+        "work_locations[][city]": "San Jose",
+        "work_locations[][country]": "US",
+        "work_locations[][state]": "CA",
+      });
+
+      const requirement = fixture.database
+        .query(`SELECT status, checkr_candidate_id, checkr_report_id,
+                       checkr_report_status, checkr_consent_id,
+                       checkr_start_nonce
+                FROM employee_requirements WHERE id = ?`)
+        .get(id) as { checkr_consent_id: string };
+      expect(requirement).toMatchObject({
+        checkr_candidate_id: "candidate-1",
+        checkr_report_id: "report-1",
+        checkr_report_status: "pending",
+        checkr_start_nonce: null,
+        status: "in_progress",
+      });
+      const consent = fixture.database
+        .query("SELECT * FROM employee_screening_consents")
+        .get() as { document_key: string };
+      expect(consent).toMatchObject({
+        copy_requested: 1,
+        disclosure_version: screeningDisclosureVersion,
+        id: requirement.checkr_consent_id,
+        ip_address: "203.0.113.7",
+        requirement_id: id,
+        signature_name: "Homer Simpson",
+        state_notices: '["CA"]',
+        user_agent: "Test browser",
+        user_id: "employee",
+      });
+      const stored = JSON.stringify([
+        fixture.database.query("SELECT * FROM employee_requirements").all(),
+        fixture.database
+          .query("SELECT * FROM employee_screening_consents")
+          .all(),
+      ]);
+      expect(stored).not.toContain("110-11-1100");
+      expect(stored).not.toContain("1983-02-10");
+      const pdf = fixture.files.get(String(consent.document_key));
+      expect(
+        new TextDecoder().decode((await pdf?.arrayBuffer())?.slice(0, 5)),
+      ).toBe("%PDF-");
+
+      for (const [user, role, status] of [
+        ["employee", "member", 200],
+        ["owner", "owner", 200],
+        ["invitee", "member", 404],
+      ] as const) {
+        const download = await fixture
+          .app(user, role)
+          .request(`/${id}/checkr/consent`);
+        expect(download.status).toBe(status);
+      }
+
+      expect(
+        (await submitScreening(fixture, id, homerSubmission())).status,
+      ).toBe(409);
+      expect(
+        (
+          await fixture
+            .app("owner", "owner")
+            .request(`/${id}`, { method: "DELETE" })
+        ).status,
+      ).toBe(409);
+      const manual = await fixture.app("owner", "owner").request(`/${id}`, {
+        body: JSON.stringify({ status: "complete" }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+      expect(manual.status).toBe(400);
+      const ownView = (await (
+        await fixture.app("employee", "member").request("/")
+      ).json()) as { requirements: Array<Record<string, unknown>> };
+      expect(ownView.requirements[0]).toMatchObject({
+        checkrReportStatus: "pending",
+        checkrRequested: false,
+        checkrResult: null,
+        hasCheckrConsent: true,
+      });
+
       const refreshed = await fixture
         .app("owner", "owner")
         .request(`/${id}/checkr/refresh`, { method: "POST" });
-      expect(refreshed.status).toBe(200);
+      expect(await refreshed.json()).toEqual({
+        reportStatus: "complete",
+        result: "clear",
+      });
       expect(
         fixture.database
           .query(
             "SELECT status, checkr_result FROM employee_requirements WHERE id = ?",
           )
           .get(id),
-      ).toEqual({ status: "complete", checkr_result: "consider" });
-      fixture.database
-        .query(
-          "UPDATE employee_requirements SET completed_at = '2026-01-01T00:00:00.000Z' WHERE id = ?",
-        )
-        .run(id);
-      const refreshedAgain = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/refresh`, { method: "POST" });
-      expect(refreshedAgain.status).toBe(200);
-      expect(
-        fixture.database
-          .query("SELECT completed_at FROM employee_requirements WHERE id = ?")
-          .get(id),
-      ).toEqual({ completed_at: "2026-01-01T00:00:00.000Z" });
-      const visible = await fixture.app("employee", "member").request("/");
-      const body = (await visible.json()) as {
-        requirements: Array<{ checkrResult: string | null }>;
-      };
-      expect(body.requirements[0]?.checkrResult).toBeNull();
+      ).toEqual({ checkr_result: "clear", status: "complete" });
+      const hidden = (await (
+        await fixture.app("employee", "member").request("/")
+      ).json()) as { requirements: Array<{ checkrResult: string | null }> };
+      expect(hidden.requirements[0]?.checkrResult).toBeNull();
     } finally {
-      globalThis.fetch = originalFetch;
+      checkr.restore();
     }
   });
 
-  it("does not complete a report with canceled screenings", async () => {
+  it("checks acknowledgments and details before contacting Checkr", async () => {
     const fixture = await createFixture();
-    fixture.bindings.CHECKR_API_KEY = "staging-key";
-    const id = await createRequirement(
+    const id = await requestedScreening(fixture);
+    const unrequested = await createRequirement(
       fixture,
       "background_check",
-      "Background check",
+      "Not requested",
     );
-    fixture.database
-      .query(`UPDATE employee_requirements
-              SET checkr_invitation_id = 'invitation-1',
-                  checkr_invitation_status = 'pending', status = 'in_progress'
-              WHERE id = ?`)
-      .run(id);
-    let reportResult: string | null = null;
-    let reportStatus = "pending";
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input) => {
-      if (String(input).includes("/invitations/invitation-1?")) {
+    const checkr = mockCheckr(checkrResponses);
+    try {
+      const valid = homerSubmission();
+      const cases: Array<[unknown, string]> = [
+        [
+          {
+            ...valid,
+            acknowledgments: {
+              ...valid.acknowledgments,
+              summaryOfRights: false,
+            },
+          },
+          "Acknowledge the summary of your rights and the disclosure before submitting.",
+        ],
+        [
+          {
+            ...valid,
+            acknowledgments: { ...valid.acknowledgments, stateNotices: [] },
+          },
+          "Acknowledge each state notice before submitting.",
+        ],
+        [
+          { ...valid, residenceState: "NY" },
+          "Acknowledge each state notice before submitting.",
+        ],
+        [
+          { ...valid, signature: { ...valid.signature, name: "Someone Else" } },
+          "Type your full legal name to sign.",
+        ],
+        [
+          {
+            ...valid,
+            signature: { ...valid.signature, electronicRecords: false },
+          },
+          "Agree to sign electronically and authorize the background check to submit.",
+        ],
+        [
+          { ...valid, candidate: { ...valid.candidate, ssn: "12345" } },
+          "Enter a 9-digit Social Security number.",
+        ],
+        [
+          { ...valid, candidate: { ...valid.candidate, dob: "2999-01-01" } },
+          "Enter a valid date of birth.",
+        ],
+        [
+          {
+            ...valid,
+            candidate: { ...valid.candidate, driverLicenseState: "" },
+          },
+          "Enter both your driver's license number and its state, or leave both blank.",
+        ],
+        [
+          { ...valid, candidate: { ...valid.candidate, noMiddleName: false } },
+          "Enter your legal first and last name, and your middle name or that you have none.",
+        ],
+      ];
+      for (const [body, error] of cases) {
+        const response = await submitScreening(fixture, id, body);
+        expect(response.status).toBe(400);
+        expect(await response.json()).toEqual({ error });
+      }
+      expect(
+        (await submitScreening(fixture, id, valid, "owner", "owner")).status,
+      ).toBe(404);
+      expect((await submitScreening(fixture, unrequested, valid)).status).toBe(
+        409,
+      );
+      expect(checkr.calls).toEqual([]);
+      expect(
+        fixture.database
+          .query("SELECT COUNT(*) AS count FROM employee_screening_consents")
+          .get(),
+      ).toEqual({ count: 0 });
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("clears an attempt Checkr rejects so the person can correct it", async () => {
+    const fixture = await createFixture();
+    const id = await requestedScreening(fixture);
+    let reject: "candidate" | "report" | null = "candidate";
+    let candidates = 0;
+    const checkr = mockCheckr((call) => {
+      if (call.method === "POST" && call.url === "/candidates") {
+        if (reject === "candidate") {
+          return Response.json({ error: "Ssn is invalid" }, { status: 400 });
+        }
+        candidates += 1;
+        return Response.json({ id: `candidate-${candidates}` });
+      }
+      if (call.method === "POST" && call.url === "/reports" && reject) {
+        return Response.json(
+          { error: ["Driver license number is required"] },
+          { status: 422 },
+        );
+      }
+      return checkrResponses(call);
+    });
+    try {
+      const rejected = await submitScreening(fixture, id, homerSubmission());
+      expect(rejected.status).toBe(422);
+      expect(await rejected.json()).toEqual({
+        error: "Checkr couldn't accept these details: Ssn is invalid",
+      });
+      const cleared = () =>
+        fixture.database
+          .query(`SELECT checkr_start_nonce, checkr_candidate_id, status
+                  FROM employee_requirements WHERE id = ?`)
+          .get(id);
+      expect(cleared()).toEqual({
+        checkr_candidate_id: null,
+        checkr_start_nonce: null,
+        status: "pending",
+      });
+
+      reject = "report";
+      const missingLicense = await submitScreening(
+        fixture,
+        id,
+        homerSubmission(),
+      );
+      expect(missingLicense.status).toBe(422);
+      expect(await missingLicense.json()).toEqual({
+        error:
+          "Checkr couldn't accept these details: Driver license number is required",
+      });
+      expect(cleared()).toEqual({
+        checkr_candidate_id: null,
+        checkr_start_nonce: null,
+        status: "pending",
+      });
+
+      reject = null;
+      const corrected = await submitScreening(fixture, id, homerSubmission());
+      expect(corrected.status).toBe(200);
+      const candidateKeys = checkr.calls
+        .filter(({ method, url }) => method === "POST" && url === "/candidates")
+        .map(({ idempotencyKey }) => idempotencyKey);
+      expect(new Set(candidateKeys).size).toBe(3);
+      expect(
+        fixture.database
+          .query(
+            "SELECT checkr_candidate_id, checkr_report_id FROM employee_requirements WHERE id = ?",
+          )
+          .get(id),
+      ).toEqual({
+        checkr_candidate_id: "candidate-2",
+        checkr_report_id: "report-1",
+      });
+      // Each signed attempt keeps its authorization record.
+      expect(
+        fixture.database
+          .query("SELECT COUNT(*) AS count FROM employee_screening_consents")
+          .get(),
+      ).toEqual({ count: 3 });
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("resumes a lost submission without ordering a second report", async () => {
+    const fixture = await createFixture();
+    const id = await requestedScreening(fixture);
+    let reportOrdered = false;
+    let failUpload = true;
+    const checkr = mockCheckr((call) => {
+      if (call.url === "/candidates/candidate-1/documents" && failUpload) {
+        return Response.json({ error: "unavailable" }, { status: 503 });
+      }
+      if (call.method === "POST" && call.url === "/reports") {
+        reportOrdered = true;
+        throw new TypeError("Network connection lost.");
+      }
+      if (call.url === "/candidates/candidate-1") {
         return Response.json({
-          id: "invitation-1",
-          report_id: "report-1",
-          status: "completed",
+          id: "candidate-1",
+          report_ids: reportOrdered ? ["report-1"] : [],
         });
       }
-      return Response.json({
+      if (call.url === "/reports/report-1") {
+        return Response.json({
+          id: "report-1",
+          result: null,
+          status: "pending",
+        });
+      }
+      return checkrResponses(call);
+    });
+    try {
+      const unavailable = await submitScreening(fixture, id, homerSubmission());
+      expect(unavailable.status).toBe(502);
+      const kept = fixture.database
+        .query(`SELECT checkr_start_nonce, checkr_candidate_id,
+                       checkr_starting_at
+                FROM employee_requirements WHERE id = ?`)
+        .get(id) as { checkr_start_nonce: string | null };
+      expect(kept).toMatchObject({
+        checkr_candidate_id: "candidate-1",
+        checkr_starting_at: null,
+      });
+      expect(checkr.calls[0]?.idempotencyKey).toBe(
+        `${kept.checkr_start_nonce}:candidate`,
+      );
+
+      failUpload = false;
+      checkr.calls.length = 0;
+      const lost = await submitScreening(fixture, id, homerSubmission());
+      expect(lost.status).toBe(500);
+      expect(checkr.calls.map(({ method, url }) => `${method} ${url}`)).toEqual(
+        [
+          "GET /candidates/candidate-1",
+          "POST /candidates/candidate-1/documents",
+          "POST /reports",
+        ],
+      );
+      expect(checkr.calls[2]?.idempotencyKey).toBe(
+        `${kept.checkr_start_nonce}:report`,
+      );
+
+      checkr.calls.length = 0;
+      const resumed = await submitScreening(fixture, id, homerSubmission());
+      expect(resumed.status).toBe(200);
+      expect(checkr.calls.map(({ method, url }) => `${method} ${url}`)).toEqual(
+        ["GET /candidates/candidate-1", "GET /reports/report-1"],
+      );
+      expect(
+        fixture.database
+          .query(`SELECT checkr_report_id, checkr_start_nonce, status
+                  FROM employee_requirements WHERE id = ?`)
+          .get(id),
+      ).toEqual({
+        checkr_report_id: "report-1",
+        checkr_start_nonce: null,
+        status: "in_progress",
+      });
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("refreshes canceled reports and lets managers request the check again", async () => {
+    const fixture = await createFixture();
+    const id = await orderedScreening(fixture);
+    fixture.database
+      .query(`INSERT INTO employee_screening_consents
+              (id, organization_id, requirement_id, user_id, signature_name,
+               signed_at, disclosure_version, state_notices, document_key,
+               created_at)
+              VALUES ('consent-1', ?, ?, 'employee', 'Homer Simpson', ?, 'v',
+                      '[]', 'consents/consent-1.pdf', ?)`)
+      .run(orgId, id, now(), now());
+    let reportResult: string | null = null;
+    let reportStatus = "pending";
+    const checkr = mockCheckr(() =>
+      Response.json({
         id: "report-1",
         includes_canceled: true,
         result: reportResult,
         status: reportStatus,
-      });
-    }) as typeof fetch;
+      }),
+    );
+    const refresh = async () => {
+      const response = await fixture
+        .app("owner", "owner")
+        .request(`/${id}/checkr/refresh`, { method: "POST" });
+      expect(response.status).toBe(200);
+      return response.json();
+    };
+    const state = () =>
+      fixture.database
+        .query(`SELECT status, completed_at, checkr_result,
+                       checkr_report_status
+                FROM employee_requirements WHERE id = ?`)
+        .get(id);
     try {
-      const refreshed = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/refresh`, { method: "POST" });
-      expect(refreshed.status).toBe(200);
-      expect(await refreshed.json()).toMatchObject({
-        invitationStatus: "completed",
+      expect(await refresh()).toEqual({
         reportStatus: "pending",
-      });
-      expect(
-        fixture.database
-          .query(`SELECT status, checkr_invitation_status
-                  FROM employee_requirements WHERE id = ?`)
-          .get(id),
-      ).toEqual({
-        status: "in_progress",
-        checkr_invitation_status: "completed",
-      });
-      const blockedRemoval = await fixture
-        .app("owner", "owner")
-        .request(`/${id}`, { method: "DELETE" });
-      expect(blockedRemoval.status).toBe(409);
-      reportStatus = "complete";
-      const canceled = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/refresh`, { method: "POST" });
-      expect(canceled.status).toBe(200);
-      expect(await canceled.json()).toMatchObject({
-        invitationStatus: "canceled",
         result: null,
       });
-      expect(
-        fixture.database
-          .query(`SELECT status, completed_at, checkr_invitation_status
-                  FROM employee_requirements WHERE id = ?`)
-          .get(id),
-      ).toEqual({
-        status: "pending",
+      expect(state()).toEqual({
+        checkr_report_status: "pending",
+        checkr_result: null,
         completed_at: null,
-        checkr_invitation_status: "canceled",
+        status: "in_progress",
+      });
+      reportStatus = "complete";
+      expect(await refresh()).toEqual({
+        reportStatus: "canceled",
+        result: null,
+      });
+      expect(state()).toEqual({
+        checkr_report_status: "canceled",
+        checkr_result: null,
+        completed_at: null,
+        status: "pending",
       });
       reportResult = "consider";
-      const partial = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/refresh`, { method: "POST" });
-      expect(partial.status).toBe(200);
-      expect(await partial.json()).toMatchObject({
-        invitationStatus: "partially_canceled",
+      expect(await refresh()).toEqual({
+        reportStatus: "partially_canceled",
         result: "consider",
       });
+
+      const again = await fixture
+        .app("owner", "owner")
+        .request(`/${id}/checkr/request`, jsonPost({ state: "NV" }));
+      expect(again.status).toBe(200);
       expect(
         fixture.database
-          .query(`SELECT status, checkr_result, checkr_invitation_status
+          .query(`SELECT status, checkr_report_id, checkr_report_status,
+                         checkr_result, checkr_candidate_id, checkr_work_state
                   FROM employee_requirements WHERE id = ?`)
           .get(id),
       ).toEqual({
-        status: "pending",
-        checkr_result: "consider",
-        checkr_invitation_status: "partially_canceled",
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("restarts an expired Checkr invitation with a new attempt", async () => {
-    const fixture = await createFixture();
-    fixture.bindings.CHECKR_API_KEY = "staging-key";
-    fixture.bindings.CHECKR_ENV = "staging";
-    fixture.bindings.CHECKR_BACKGROUND_PACKAGE = "background_package";
-    const id = await createRequirement(
-      fixture,
-      "background_check",
-      "Background check",
-    );
-    const invitationKeys: string[] = [];
-    let invitationCount = 0;
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input, init) => {
-      const url = String(input);
-      if (url.endsWith("/candidates")) {
-        return Response.json({ id: "candidate-1" });
-      }
-      if (url.endsWith("/invitations") && init?.method === "POST") {
-        invitationCount += 1;
-        invitationKeys.push(
-          new Headers(init.headers).get("Idempotency-Key") ?? "",
-        );
-        return Response.json({
-          id: `invitation-${invitationCount}`,
-          report_id: null,
-          status: "pending",
-        });
-      }
-      if (url.includes("/invitations/invitation-1?")) {
-        return Response.json({
-          id: "invitation-1",
-          report_id: null,
-          status: "expired",
-        });
-      }
-      throw new Error(`Unexpected Checkr request: ${url}`);
-    }) as typeof fetch;
-    try {
-      const first = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(first.status).toBe(200);
-      const refreshed = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/refresh`, { method: "POST" });
-      expect(refreshed.status).toBe(200);
-      const visible = await fixture.app("owner", "owner").request("/");
-      const body = (await visible.json()) as {
-        requirements: Array<{
-          checkrStarted: boolean;
-          checkrInvitationStatus: string;
-          status: string;
-        }>;
-      };
-      expect(body.requirements[0]).toMatchObject({
-        checkrStarted: false,
-        checkrInvitationStatus: "expired",
+        checkr_candidate_id: null,
+        checkr_report_id: null,
+        checkr_report_status: null,
+        checkr_result: null,
+        checkr_work_state: "NV",
         status: "pending",
       });
-      const manuallyCompleted = await fixture
+      const removed = await fixture
         .app("owner", "owner")
-        .request(`/${id}`, {
-          body: JSON.stringify({ status: "complete" }),
-          headers: { "Content-Type": "application/json" },
-          method: "PATCH",
-        });
-      expect(manuallyCompleted.status).toBe(200);
+        .request(`/${id}`, { method: "DELETE" });
+      expect(removed.status).toBe(200);
       expect(
         fixture.database
-          .query("SELECT completed_at FROM employee_requirements WHERE id = ?")
-          .get(id),
-      ).toMatchObject({ completed_at: expect.any(String) });
-      const restarted = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(restarted.status).toBe(200);
-      expect(await restarted.json()).toMatchObject({
-        invitationId: "invitation-2",
-      });
-      expect(invitationKeys).toHaveLength(2);
-      expect(invitationKeys[0]).not.toBe(invitationKeys[1]);
-      expect(
-        fixture.database
-          .query(
-            "SELECT checkr_invitation_id, checkr_attempt, completed_at FROM employee_requirements WHERE id = ?",
-          )
-          .get(id),
-      ).toEqual({
-        checkr_invitation_id: "invitation-2",
-        checkr_attempt: 1,
-        completed_at: null,
-      });
+          .query("SELECT object_key FROM deleted_object_cleanup")
+          .all(),
+      ).toEqual([{ object_key: "consents/consent-1.pdf" }]);
     } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("retrieves a canceled Checkr invitation for restart", async () => {
-    const fixture = await createFixture();
-    fixture.bindings.CHECKR_API_KEY = "staging-key";
-    fixture.bindings.CHECKR_BACKGROUND_PACKAGE = "background_package";
-    const id = await createRequirement(
-      fixture,
-      "background_check",
-      "Background check",
-    );
-    fixture.database
-      .query(`UPDATE employee_requirements
-              SET checkr_candidate_id = 'candidate-1',
-                  checkr_invitation_id = 'invitation-1',
-                  checkr_invitation_status = 'pending', status = 'in_progress'
-              WHERE id = ?`)
-      .run(id);
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input, init) => {
-      const url = String(input);
-      if (url.endsWith("/invitations/invitation-1?include_deleted=true")) {
-        return Response.json({
-          id: "invitation-1",
-          deleted_at: new Date().toISOString(),
-          report_id: null,
-          status: "pending",
-        });
-      }
-      if (url.endsWith("/invitations") && init?.method === "POST") {
-        return Response.json({
-          id: "invitation-2",
-          report_id: null,
-          status: "pending",
-        });
-      }
-      throw new Error(`Unexpected Checkr request: ${url}`);
-    }) as typeof fetch;
-    try {
-      const refreshed = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/refresh`, { method: "POST" });
-      expect(refreshed.status).toBe(200);
-      expect(await refreshed.json()).toMatchObject({
-        invitationStatus: "deleted",
-      });
-      const restarted = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(restarted.status).toBe(200);
-      expect(await restarted.json()).toMatchObject({
-        invitationId: "invitation-2",
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
+      checkr.restore();
     }
   });
 
   it("keeps a completed screening when an older refresh finishes last", async () => {
     const fixture = await createFixture();
-    fixture.bindings.CHECKR_API_KEY = "staging-key";
-    const id = await createRequirement(
-      fixture,
-      "background_check",
-      "Background check",
-    );
-    fixture.database
-      .query(`UPDATE employee_requirements
-              SET checkr_invitation_id = 'check-1',
-                  checkr_invitation_status = 'pending', status = 'in_progress'
-              WHERE id = ?`)
-      .run(id);
+    const id = await orderedScreening(fixture);
     fixture.beforeRun((query) => {
       if (
         query.includes("checkr_refresh_revision = checkr_refresh_revision + 1")
@@ -1034,18 +1293,14 @@ describe("employee forms", () => {
         fixture.database
           .query(`UPDATE employee_requirements
                   SET status = 'complete', checkr_result = 'clear',
-                      checkr_refresh_revision = 1 WHERE id = ?`)
+                      checkr_refresh_revision = checkr_refresh_revision + 1
+                  WHERE id = ?`)
           .run(id);
       }
     });
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () =>
-      Response.json({
-        id: "check-1",
-        deleted_at: null,
-        report_id: null,
-        status: "pending",
-      })) as unknown as typeof fetch;
+    const checkr = mockCheckr(() =>
+      Response.json({ id: "report-1", result: null, status: "pending" }),
+    );
     try {
       const refreshed = await fixture
         .app("owner", "owner")
@@ -1057,41 +1312,38 @@ describe("employee forms", () => {
             "SELECT status, checkr_result FROM employee_requirements WHERE id = ?",
           )
           .get(id),
-      ).toEqual({ status: "complete", checkr_result: "clear" });
+      ).toEqual({ checkr_result: "clear", status: "complete" });
     } finally {
-      globalThis.fetch = originalFetch;
+      checkr.restore();
     }
   });
 
-  it("keeps manual completion when an expired invitation refresh overlaps", async () => {
+  it("keeps manual completion when a canceled report refresh overlaps", async () => {
     const fixture = await createFixture();
-    fixture.bindings.CHECKR_API_KEY = "staging-key";
-    const id = await createRequirement(
-      fixture,
-      "background_check",
-      "Background check",
-    );
+    const id = await orderedScreening(fixture);
     fixture.database
       .query(`UPDATE employee_requirements
-              SET checkr_invitation_id = 'check-1',
-                  checkr_invitation_status = 'expired' WHERE id = ?`)
+              SET checkr_report_status = 'canceled', status = 'pending'
+              WHERE id = ?`)
       .run(id);
     let manualStatus = 0;
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => {
-      manualStatus = (
-        await fixture.app("owner", "owner").request(`/${id}`, {
-          body: JSON.stringify({ status: "complete" }),
-          headers: { "Content-Type": "application/json" },
-          method: "PATCH",
-        })
-      ).status;
+    const checkr = mockCheckr(async () => {
+      if (!manualStatus) {
+        manualStatus = (
+          await fixture.app("owner", "owner").request(`/${id}`, {
+            body: JSON.stringify({ status: "complete" }),
+            headers: { "Content-Type": "application/json" },
+            method: "PATCH",
+          })
+        ).status;
+      }
       return Response.json({
-        id: "check-1",
-        report_id: null,
-        status: "expired",
+        id: "report-1",
+        includes_canceled: true,
+        result: null,
+        status: "complete",
       });
-    }) as unknown as typeof fetch;
+    });
     try {
       const refreshed = await fixture
         .app("owner", "owner")
@@ -1100,524 +1352,20 @@ describe("employee forms", () => {
       expect(refreshed.status).toBe(409);
       expect(
         fixture.database
-          .query(
-            "SELECT status, checkr_refresh_revision FROM employee_requirements WHERE id = ?",
-          )
+          .query("SELECT status FROM employee_requirements WHERE id = ?")
           .get(id),
-      ).toEqual({ status: "complete", checkr_refresh_revision: 1 });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("lets managers remove a screening after a definite Checkr rejection", async () => {
-    const fixture = await createFixture();
-    fixture.bindings.CHECKR_API_KEY = "staging-key";
-    fixture.bindings.CHECKR_BACKGROUND_PACKAGE = "background_package";
-    const id = await createRequirement(
-      fixture,
-      "background_check",
-      "Background check",
-    );
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input) => {
-      if (String(input).endsWith("/candidates")) {
-        return Response.json({ id: "candidate-1" });
-      }
-      if (String(input).endsWith("/invitations")) {
-        return Response.json(
-          { message: "Package is not enabled." },
-          { status: 400 },
-        );
-      }
-      throw new Error(`Unexpected Checkr request: ${input}`);
-    }) as typeof fetch;
-    try {
-      const rejected = await fixture
+      ).toEqual({ status: "complete" });
+      const settled = await fixture
         .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(rejected.status).toBe(502);
-      expect((await rejected.json()) as { error: string }).toEqual({
-        error: "Checkr request failed (400): Package is not enabled.",
-      });
+        .request(`/${id}/checkr/refresh`, { method: "POST" });
+      expect(settled.status).toBe(200);
       expect(
         fixture.database
-          .query(
-            "SELECT checkr_start_nonce FROM employee_requirements WHERE id = ?",
-          )
+          .query("SELECT status FROM employee_requirements WHERE id = ?")
           .get(id),
-      ).toEqual({ checkr_start_nonce: null });
-      const removed = await fixture.app("owner", "owner").request(`/${id}`, {
-        method: "DELETE",
-      });
-      expect(removed.status).toBe(200);
+      ).toEqual({ status: "complete" });
     } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("reconciles a lost Checkr response before allowing removal", async () => {
-    const fixture = await createFixture();
-    fixture.bindings.CHECKR_API_KEY = "staging-key";
-    fixture.bindings.CHECKR_BACKGROUND_PACKAGE = "background_package";
-    const id = await createRequirement(
-      fixture,
-      "background_check",
-      "Background check",
-    );
-    let invitationPosts = 0;
-    let attemptTag = "";
-    let includeExpected = false;
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input, init) => {
-      const url = String(input);
-      if (url.endsWith("/candidates")) {
-        return Response.json({ id: "candidate-1" });
-      }
-      if (url.endsWith("/invitations") && init?.method === "POST") {
-        invitationPosts += 1;
-        attemptTag = new URLSearchParams(String(init.body)).get("tags[]") ?? "";
-        return Response.json({ message: "response lost" }, { status: 504 });
-      }
-      if (url.includes("/invitations?candidate_id=")) {
-        return Response.json({
-          data: [
-            {
-              id: "unrelated-credit-invitation",
-              package: "credit_package",
-              tags: [attemptTag],
-              report_id: "unrelated-report",
-              status: "completed",
-            },
-            {
-              id: "older-background-invitation",
-              package: "background_package",
-              tags: ["tearleads-screening:older-attempt"],
-              report_id: null,
-              status: "pending",
-            },
-            {
-              id: "tagless-background-invitation",
-              package: "background_package",
-              report_id: null,
-              status: "pending",
-            },
-            ...(includeExpected
-              ? [
-                  {
-                    id: "invitation-1",
-                    package: "background_package",
-                    tags: [attemptTag],
-                    report_id: null,
-                    status: "pending",
-                  },
-                ]
-              : []),
-          ],
-        });
-      }
-      throw new Error(`Unexpected Checkr request: ${url}`);
-    }) as typeof fetch;
-    try {
-      const failed = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(failed.status).toBe(502);
-      fixture.database
-        .query("DELETE FROM member WHERE id = 'employee-member'")
-        .run();
-      const removal = await fixture.app("owner", "owner").request(`/${id}`, {
-        method: "DELETE",
-      });
-      expect(removal.status).toBe(409);
-      delete fixture.bindings.CHECKR_BACKGROUND_PACKAGE;
-      const mismatched = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(mismatched.status).toBe(409);
-      expect(
-        fixture.database
-          .query(
-            "SELECT checkr_invitation_id FROM employee_requirements WHERE id = ?",
-          )
-          .get(id),
-      ).toEqual({ checkr_invitation_id: null });
-      includeExpected = true;
-      fixture.bindings.CHECKR_BACKGROUND_PACKAGE = "changed_package";
-      const recovered = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(recovered.status).toBe(200);
-      expect(await recovered.json()).toMatchObject({
-        invitationId: "invitation-1",
-      });
-      expect(invitationPosts).toBe(1);
-      expect(
-        fixture.database
-          .query(
-            "SELECT checkr_start_nonce, checkr_invitation_id FROM employee_requirements WHERE id = ?",
-          )
-          .get(id),
-      ).toEqual({
-        checkr_start_nonce: null,
-        checkr_invitation_id: "invitation-1",
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("replays a recent idempotent start when invitation tags are empty", async () => {
-    const fixture = await createFixture();
-    fixture.bindings.CHECKR_API_KEY = "staging-key";
-    fixture.bindings.CHECKR_BACKGROUND_PACKAGE = "background_package";
-    const id = await createRequirement(
-      fixture,
-      "background_check",
-      "Background check",
-    );
-    const invitationKeys: string[] = [];
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input, init) => {
-      const url = String(input);
-      if (url.endsWith("/candidates")) {
-        return Response.json({ id: "candidate-1" });
-      }
-      if (url.endsWith("/invitations") && init?.method === "POST") {
-        invitationKeys.push(
-          new Headers(init.headers).get("Idempotency-Key") ?? "",
-        );
-        if (invitationKeys.length === 1) {
-          return Response.json({ message: "response lost" }, { status: 504 });
-        }
-        return Response.json({
-          id: "invitation-1",
-          package: "background_package",
-          report_id: null,
-          status: "pending",
-        });
-      }
-      if (url.includes("/invitations?candidate_id=")) {
-        return Response.json({
-          data: [
-            {
-              id: "invitation-1",
-              package: "background_package",
-              report_id: null,
-              status: "pending",
-              tags: [],
-            },
-          ],
-        });
-      }
-      throw new Error(`Unexpected Checkr request: ${url}`);
-    }) as typeof fetch;
-    try {
-      const failed = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(failed.status).toBe(502);
-      fixture.database
-        .query(
-          "UPDATE employee_requirements SET checkr_start_nonce_at = ? WHERE id = ?",
-        )
-        .run(new Date(Date.now() - 25 * 60 * 60_000).toISOString(), id);
-      const stale = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(stale.status).toBe(409);
-      expect(invitationKeys).toHaveLength(1);
-      fixture.database
-        .query(
-          "UPDATE employee_requirements SET checkr_start_nonce_at = ? WHERE id = ?",
-        )
-        .run(new Date().toISOString(), id);
-      const recovered = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(recovered.status).toBe(200);
-      expect(invitationKeys).toHaveLength(2);
-      expect(invitationKeys[0]).toBe(invitationKeys[1]);
-      expect(await recovered.json()).toMatchObject({
-        invitationId: "invitation-1",
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("ignores tagless invitations from an earlier screening attempt", async () => {
-    const fixture = await createFixture();
-    fixture.bindings.CHECKR_API_KEY = "staging-key";
-    fixture.bindings.CHECKR_BACKGROUND_PACKAGE = "background_package";
-    const id = await createRequirement(
-      fixture,
-      "background_check",
-      "Background check",
-    );
-    fixture.database
-      .query(`UPDATE employee_requirements
-              SET checkr_candidate_id = 'candidate-1',
-                  checkr_start_nonce = 'new-attempt',
-                  checkr_start_nonce_at = ?,
-                  checkr_start_package = 'background_package'
-              WHERE id = ?`)
-      .run(new Date().toISOString(), id);
-    let invitationPosts = 0;
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input, init) => {
-      const url = String(input);
-      if (url.includes("/invitations?candidate_id=")) {
-        return Response.json({
-          data: [
-            {
-              id: "old-invitation",
-              package: "background_package",
-              created_at: new Date(Date.now() - 86_400_000).toISOString(),
-              report_id: "old-canceled-report",
-              status: "completed",
-              tags: [],
-            },
-          ],
-        });
-      }
-      if (url.endsWith("/invitations") && init?.method === "POST") {
-        invitationPosts += 1;
-        return Response.json({
-          id: "new-invitation",
-          report_id: null,
-          status: "pending",
-        });
-      }
-      throw new Error(`Unexpected Checkr request: ${url}`);
-    }) as typeof fetch;
-    try {
-      const started = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(started.status).toBe(200);
-      expect(invitationPosts).toBe(1);
-      expect(await started.json()).toMatchObject({
-        invitationId: "new-invitation",
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("lets managers reconcile an older tagless Checkr invitation", async () => {
-    const fixture = await createFixture();
-    fixture.bindings.CHECKR_API_KEY = "staging-key";
-    const id = await createRequirement(
-      fixture,
-      "background_check",
-      "Background check",
-    );
-    fixture.database
-      .query(`UPDATE employee_requirements
-              SET checkr_candidate_id = 'candidate-1',
-                  checkr_start_nonce = 'old-attempt',
-                  checkr_start_nonce_at = ?,
-                  checkr_start_package = 'background_package'
-              WHERE id = ?`)
-      .run(new Date(Date.now() - 25 * 60 * 60_000).toISOString(), id);
-    let candidateId = "other-candidate";
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () =>
-      Response.json({
-        id: "invitation-1",
-        candidate_id: candidateId,
-        created_at: new Date(Date.now() - 24 * 60 * 60_000).toISOString(),
-        package: "background_package",
-        report_id: null,
-        status: "pending",
-        tags: [],
-      })) as unknown as typeof fetch;
-    try {
-      const wrongCandidate = await fixture
-        .app("owner", "owner")
-        .request(
-          `/${id}/checkr/reconcile`,
-          jsonPost({ invitationId: "invitation-1" }),
-        );
-      expect(wrongCandidate.status).toBe(409);
-      candidateId = "candidate-1";
-      const linked = await fixture
-        .app("owner", "owner")
-        .request(
-          `/${id}/checkr/reconcile`,
-          jsonPost({ invitationId: "invitation-1" }),
-        );
-      expect(linked.status).toBe(200);
-      expect(
-        fixture.database
-          .query(`SELECT checkr_start_nonce, checkr_invitation_id, status
-                  FROM employee_requirements WHERE id = ?`)
-          .get(id),
-      ).toEqual({
-        checkr_start_nonce: null,
-        checkr_invitation_id: "invitation-1",
-        status: "in_progress",
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("reconciles an unresolved screening after its invitation is canceled", async () => {
-    const fixture = await createFixture();
-    fixture.bindings.CHECKR_API_KEY = "staging-key";
-    fixture.bindings.CHECKR_BACKGROUND_PACKAGE = "background_package";
-    const assigned = await fixture.app("owner", "owner").request(
-      "/",
-      jsonPost({
-        invitationId: "invite",
-        requirements: [
-          {
-            kind: "background_check",
-            title: "Background check",
-            dueDate: "2026-10-01",
-          },
-        ],
-      }),
-    );
-    const id = ((await assigned.json()) as { ids: string[] }).ids[0] ?? "";
-    fixture.database
-      .query(`UPDATE employee_requirements
-              SET checkr_candidate_id = 'candidate-1',
-                  checkr_start_nonce = 'unresolved-nonce',
-                  checkr_start_package = 'background_package',
-                  checkr_start_nonce_at = ? WHERE id = ?`)
-      .run(new Date().toISOString(), id);
-    fixture.database
-      .query("UPDATE invitation SET status = 'canceled' WHERE id = 'invite'")
-      .run();
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input) => {
-      if (String(input).includes("/invitations?candidate_id=")) {
-        return Response.json({
-          data: [
-            {
-              id: "check-1",
-              package: "background_package",
-              tags: ["tearleads-screening:unresolved-nonce"],
-              report_id: null,
-              status: "pending",
-            },
-          ],
-        });
-      }
-      throw new Error(`Unexpected Checkr request: ${input}`);
-    }) as typeof fetch;
-    try {
-      const recovered = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(recovered.status).toBe(200);
-      expect(await recovered.json()).toMatchObject({ invitationId: "check-1" });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("does not order a new screening for a former member", async () => {
-    const fixture = await createFixture();
-    fixture.bindings.CHECKR_API_KEY = "staging-key";
-    fixture.bindings.CHECKR_BACKGROUND_PACKAGE = "background_package";
-    const id = await createRequirement(
-      fixture,
-      "background_check",
-      "Background check",
-    );
-    fixture.database
-      .query(`UPDATE employee_requirements
-              SET checkr_candidate_id = 'candidate-1',
-                  checkr_start_nonce = 'unresolved-nonce',
-                  checkr_start_nonce_at = ? WHERE id = ?`)
-      .run(new Date(Date.now() - 10 * 60_000).toISOString(), id);
-    fixture.database
-      .query("DELETE FROM member WHERE id = 'employee-member'")
-      .run();
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input) => {
-      if (String(input).includes("/invitations?candidate_id=")) {
-        return Response.json({ data: [] });
-      }
-      throw new Error(`Unexpected Checkr request: ${input}`);
-    }) as typeof fetch;
-    try {
-      const resumed = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(resumed.status).toBe(409);
-      expect(
-        fixture.database
-          .query(
-            "SELECT checkr_start_nonce FROM employee_requirements WHERE id = ?",
-          )
-          .get(id),
-      ).toEqual({ checkr_start_nonce: null });
-      const removed = await fixture.app("owner", "owner").request(`/${id}`, {
-        method: "DELETE",
-      });
-      expect(removed.status).toBe(200);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("starts a new Checkr attempt after an old failed request is reconciled", async () => {
-    const fixture = await createFixture();
-    fixture.bindings.CHECKR_API_KEY = "staging-key";
-    fixture.bindings.CHECKR_BACKGROUND_PACKAGE = "background_package";
-    const id = await createRequirement(
-      fixture,
-      "background_check",
-      "Background check",
-    );
-    const invitationKeys: string[] = [];
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input, init) => {
-      const url = String(input);
-      if (url.endsWith("/candidates")) {
-        return Response.json({ id: "candidate-1" });
-      }
-      if (url.endsWith("/invitations") && init?.method === "POST") {
-        invitationKeys.push(
-          new Headers(init.headers).get("Idempotency-Key") ?? "",
-        );
-        if (invitationKeys.length === 1) {
-          return Response.json({ message: "temporary error" }, { status: 503 });
-        }
-        return Response.json({
-          id: "invitation-2",
-          report_id: null,
-          status: "pending",
-        });
-      }
-      if (url.includes("/invitations?candidate_id=")) {
-        return Response.json({ data: [] });
-      }
-      throw new Error(`Unexpected Checkr request: ${url}`);
-    }) as typeof fetch;
-    try {
-      const first = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(first.status).toBe(502);
-      fixture.database
-        .query(
-          "UPDATE employee_requirements SET checkr_start_nonce_at = ? WHERE id = ?",
-        )
-        .run(new Date(Date.now() - 25 * 60 * 60_000).toISOString(), id);
-      const retry = await fixture
-        .app("owner", "owner")
-        .request(`/${id}/checkr/start`, jsonPost({ state: "NY" }));
-      expect(retry.status).toBe(200);
-      expect(invitationKeys).toHaveLength(2);
-      expect(invitationKeys[0]).not.toBe(invitationKeys[1]);
-    } finally {
-      globalThis.fetch = originalFetch;
+      checkr.restore();
     }
   });
 
@@ -1641,320 +1389,103 @@ describe("employee forms", () => {
     );
   });
 
-  it("refreshes a screening from a signed Checkr invitation webhook", async () => {
+  it("refreshes a screening from a signed Checkr report webhook", async () => {
     const fixture = await createFixture();
-    const id = await startedScreening(fixture);
-    const requests: string[] = [];
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input) => {
-      requests.push(String(input));
-      if (String(input).includes("/invitations/invitation-1?")) {
-        return Response.json({
-          id: "invitation-1",
-          report_id: "report-1",
-          status: "completed",
-        });
-      }
-      return Response.json({
-        id: "report-1",
-        result: "clear",
-        status: "complete",
-      });
-    }) as typeof fetch;
+    const id = await orderedScreening(fixture);
+    const checkr = mockCheckr(() =>
+      Response.json({ id: "report-1", result: "clear", status: "complete" }),
+    );
     try {
       const event = {
+        data: { object: { id: "report-1", object: "report" } },
         id: "event-1",
         object: "event",
-        type: "invitation.completed",
-        data: { object: { id: "invitation-1", object: "invitation" } },
+        type: "report.completed",
       };
-      const unconfigured = await checkrWebhook(
-        withoutCheckrKey(fixture.bindings),
-        event,
+      expect(
+        (await checkrWebhook(withoutCheckrKey(fixture.bindings), event)).status,
+      ).toBe(503);
+      expect(
+        (await checkrWebhook(fixture.bindings, event, "other-key")).status,
+      ).toBe(400);
+      expect((await checkrWebhook(fixture.bindings, event, null)).status).toBe(
+        400,
       );
-      expect(unconfigured.status).toBe(503);
-      const forged = await checkrWebhook(fixture.bindings, event, "other-key");
-      expect(forged.status).toBe(400);
-      const unsigned = await checkrWebhook(fixture.bindings, event, null);
-      expect(unsigned.status).toBe(400);
-      expect(requests).toEqual([]);
-
-      const ignored = await checkrWebhook(fixture.bindings, {
-        ...event,
-        type: "candidate.created",
-        data: { object: { id: "candidate-1", object: "candidate" } },
-      });
-      expect(ignored.status).toBe(200);
+      for (const type of ["invitation.completed", "candidate.created"]) {
+        const ignored = await checkrWebhook(fixture.bindings, {
+          data: { object: { id: "candidate-1", object: "candidate" } },
+          type,
+        });
+        expect(ignored.status).toBe(200);
+      }
       const malformed = await checkrWebhook(fixture.bindings, {
-        type: "invitation.completed",
         data: {},
+        type: "report.completed",
       });
       expect(malformed.status).toBe(400);
-      expect(requests).toEqual([]);
+      expect(checkr.calls).toEqual([]);
 
       const received = await checkrWebhook(fixture.bindings, event);
       expect(received.status).toBe(200);
-      expect((await received.json()) as { received: boolean }).toEqual({
-        received: true,
-      });
-      expect(requests).toEqual([
-        "https://api.checkr-staging.com/v1/invitations/invitation-1?include_deleted=true",
-        "https://api.checkr-staging.com/v1/reports/report-1",
-      ]);
+      expect(await received.json()).toEqual({ received: true });
+      expect(checkr.calls.map(({ url }) => url)).toEqual(["/reports/report-1"]);
       expect(
         fixture.database
-          .query(`SELECT status, checkr_report_id, checkr_result,
-                         checkr_invitation_status, checkr_refresh_requested_at
+          .query(`SELECT status, checkr_result, checkr_report_status,
+                         checkr_refresh_requested_at
                   FROM employee_requirements WHERE id = ?`)
           .get(id),
       ).toEqual({
-        status: "complete",
-        checkr_report_id: "report-1",
-        checkr_result: "clear",
-        checkr_invitation_status: "completed",
         checkr_refresh_requested_at: null,
+        checkr_report_status: "complete",
+        checkr_result: "clear",
+        status: "complete",
       });
     } finally {
-      globalThis.fetch = originalFetch;
+      checkr.restore();
     }
   });
 
-  it("links a Checkr report webhook to its screening through the candidate", async () => {
+  it("matches a report webhook through its candidate and retries failed refreshes", async () => {
     const fixture = await createFixture();
-    const id = await startedScreening(fixture);
-    const requests: string[] = [];
+    const id = await orderedScreening(fixture);
     let checkrAvailable = true;
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input) => {
-      const url = String(input);
-      requests.push(url);
-      if (!checkrAvailable) {
-        return Response.json({ error: "unavailable" }, { status: 503 });
-      }
-      if (url.endsWith("/reports/stranger-report")) {
-        return Response.json({
-          candidate_id: "someone-else",
-          id: "stranger-report",
-          status: "complete",
-        });
-      }
-      if (url.includes("/invitations/invitation-1?")) {
-        return Response.json({
-          id: "invitation-1",
-          report_id: "report-9",
-          status: "completed",
-        });
-      }
-      return Response.json({
-        candidate_id: "candidate-1",
-        id: "report-9",
-        result: "consider",
-        status: "complete",
-      });
-    }) as typeof fetch;
+    const checkr = mockCheckr(() =>
+      checkrAvailable
+        ? Response.json({
+            candidate_id: "candidate-1",
+            id: "report-1",
+            result: "consider",
+            status: "complete",
+          })
+        : Response.json({ error: "unavailable" }, { status: 503 }),
+    );
     try {
       const stranger = await checkrWebhook(fixture.bindings, {
-        type: "report.completed",
         data: { object: { id: "stranger-report", object: "report" } },
+        type: "report.completed",
       });
       expect(stranger.status).toBe(200);
-      expect(requests).toEqual([
-        "https://api.checkr-staging.com/v1/reports/stranger-report",
-      ]);
+      expect(checkr.calls).toEqual([]);
 
       checkrAvailable = false;
-      requests.length = 0;
       const unavailable = await checkrWebhook(fixture.bindings, {
-        type: "report.completed",
-        data: { object: { id: "report-9", object: "report" } },
+        data: {
+          object: {
+            candidate_id: "candidate-1",
+            id: "upgraded-report",
+            object: "report",
+          },
+        },
+        type: "report.upgraded",
       });
       expect(unavailable.status).toBe(200);
-      expect(
-        fixture.database
-          .query("SELECT status FROM employee_requirements WHERE id = ?")
-          .get(id),
-      ).toEqual({ status: "in_progress" });
-
-      checkrAvailable = true;
-      requests.length = 0;
-      const completed = await checkrWebhook(fixture.bindings, {
-        type: "report.completed",
-        data: { object: { id: "report-9", object: "report" } },
-      });
-      expect(completed.status).toBe(200);
-      expect(requests).toEqual([
-        "https://api.checkr-staging.com/v1/reports/report-9",
-        "https://api.checkr-staging.com/v1/invitations/invitation-1?include_deleted=true",
-        "https://api.checkr-staging.com/v1/reports/report-9",
-      ]);
-      expect(
-        fixture.database
-          .query(`SELECT status, checkr_report_id, checkr_result
-                  FROM employee_requirements WHERE id = ?`)
-          .get(id),
-      ).toEqual({
-        status: "complete",
-        checkr_report_id: "report-9",
-        checkr_result: "consider",
-      });
-
-      requests.length = 0;
-      const duplicate = await checkrWebhook(fixture.bindings, {
-        type: "report.completed",
-        data: { object: { id: "report-9", object: "report" } },
-      });
-      expect(duplicate.status).toBe(200);
-      expect(requests).toEqual([
-        "https://api.checkr-staging.com/v1/invitations/invitation-1?include_deleted=true",
-        "https://api.checkr-staging.com/v1/reports/report-9",
-      ]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("refreshes unfinished Checkr screenings on schedule", async () => {
-    const fixture = await createFixture();
-    const active = await startedScreening(fixture);
-    const failing = await startedScreening(fixture, "invitation-2");
-    const finished = await startedScreening(fixture, "invitation-3");
-    const expired = await startedScreening(fixture, "invitation-4");
-    const manual = await createRequirement(
-      fixture,
-      "background_check",
-      "Manual check",
-    );
-    fixture.database
-      .query(
-        "UPDATE employee_requirements SET status = 'complete' WHERE id = ?",
-      )
-      .run(finished);
-    fixture.database
-      .query(`UPDATE employee_requirements
-              SET status = 'pending', checkr_invitation_status = 'expired'
-              WHERE id = ?`)
-      .run(expired);
-    const requests: string[] = [];
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input) => {
-      const url = String(input);
-      requests.push(url);
-      if (url.includes("/invitations/invitation-2?")) {
-        return Response.json({ error: "unavailable" }, { status: 503 });
-      }
-      return Response.json({
-        id: "invitation-1",
-        report_id: null,
-        status: "pending",
-      });
-    }) as typeof fetch;
-    try {
-      expect(
-        await refreshActiveCheckrScreenings(withoutCheckrKey(fixture.bindings)),
-      ).toEqual({ refreshed: 0, skipped: true });
-      expect(requests).toEqual([]);
-      await expect(
-        refreshActiveCheckrScreenings(fixture.bindings),
-      ).rejects.toThrow("Could not refresh 1 Checkr screening(s).");
-      expect(requests.toSorted()).toEqual([
-        "https://api.checkr-staging.com/v1/invitations/invitation-1?include_deleted=true",
-        "https://api.checkr-staging.com/v1/invitations/invitation-2?include_deleted=true",
-      ]);
-      const rows = fixture.database
-        .query(`SELECT id, checkr_refresh_revision
-                FROM employee_requirements ORDER BY id`)
-        .all() as Array<{ id: string; checkr_refresh_revision: number }>;
-      const revisions = Object.fromEntries(
-        rows.map((row) => [row.id, row.checkr_refresh_revision]),
-      );
-      expect(revisions[active]).toBe(1);
-      expect(revisions[failing]).toBe(0);
-      expect(revisions[finished]).toBe(0);
-      expect(revisions[expired]).toBe(0);
-      expect(revisions[manual]).toBe(0);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("rotates scheduled Checkr refreshes past screenings that keep failing", async () => {
-    const fixture = await createFixture();
-    const invitations = Array.from(
-      { length: 26 },
-      (_, index) => `rotating-${String(index).padStart(2, "0")}`,
-    );
-    for (const invitation of invitations) {
-      await startedScreening(fixture, invitation);
-    }
-    const attempted: string[][] = [];
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input) => {
-      const invitation = /invitations\/([^?]+)/.exec(String(input))?.[1];
-      if (invitation) attempted.at(-1)?.push(invitation);
-      return Response.json({ error: "unavailable" }, { status: 503 });
-    }) as typeof fetch;
-    try {
-      for (let run = 0; run < 2; run += 1) {
-        attempted.push([]);
-        await expect(
-          refreshActiveCheckrScreenings(fixture.bindings),
-        ).rejects.toThrow("Could not refresh 24 Checkr screening(s).");
-      }
-      expect(attempted[0]).toHaveLength(24);
-      const skipped = invitations.filter(
-        (invitation) => !attempted[0]?.includes(invitation),
-      );
-      expect(skipped).toHaveLength(2);
-      for (const invitation of skipped) {
-        expect(attempted[1]).toContain(invitation);
-      }
-      expect(
-        fixture.database
-          .query(`SELECT COUNT(*) AS unchecked FROM employee_requirements
-                  WHERE checkr_checked_at IS NULL`)
-          .get(),
-      ).toEqual({ unchecked: 0 });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("retries a failed webhook refresh even after the screening completed", async () => {
-    const fixture = await createFixture();
-    const id = await startedScreening(fixture);
-    fixture.database
-      .query(`UPDATE employee_requirements
-              SET status = 'complete', checkr_report_id = 'report-1',
-                  checkr_result = 'clear',
-                  checkr_invitation_status = 'completed'
-              WHERE id = ?`)
-      .run(id);
-    let checkrAvailable = false;
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input) => {
-      if (!checkrAvailable) {
-        return Response.json({ error: "unavailable" }, { status: 503 });
-      }
-      if (String(input).includes("/invitations/invitation-1?")) {
-        return Response.json({
-          id: "invitation-1",
-          report_id: "report-1",
-          status: "completed",
-        });
-      }
-      return Response.json({ id: "report-1", result: null, status: "pending" });
-    }) as typeof fetch;
-    try {
-      const upgraded = await checkrWebhook(fixture.bindings, {
-        type: "report.upgraded",
-        data: { object: { id: "report-1", object: "report" } },
-      });
-      expect(upgraded.status).toBe(200);
+      expect(checkr.calls.map(({ url }) => url)).toEqual(["/reports/report-1"]);
       const requested = fixture.database
         .query(`SELECT status, checkr_refresh_requested_at
                 FROM employee_requirements WHERE id = ?`)
-        .get(id) as { status: string; checkr_refresh_requested_at: string };
-      expect(requested.status).toBe("complete");
+        .get(id) as { checkr_refresh_requested_at: string; status: string };
+      expect(requested.status).toBe("in_progress");
       expect(requested.checkr_refresh_requested_at).toEqual(expect.any(String));
 
       checkrAvailable = true;
@@ -1968,71 +1499,152 @@ describe("employee forms", () => {
                   FROM employee_requirements WHERE id = ?`)
           .get(id),
       ).toEqual({
-        status: "in_progress",
-        checkr_result: null,
         checkr_refresh_requested_at: null,
+        checkr_result: "consider",
+        status: "complete",
       });
     } finally {
-      globalThis.fetch = originalFetch;
+      checkr.restore();
+    }
+  });
+
+  it("refreshes unfinished Checkr screenings on schedule", async () => {
+    const fixture = await createFixture();
+    const active = await orderedScreening(fixture);
+    const failing = await orderedScreening(fixture, "report-2");
+    const finished = await orderedScreening(fixture, "report-3");
+    const canceled = await orderedScreening(fixture, "report-4");
+    const waiting = await requestedScreening(fixture);
+    fixture.database
+      .query(
+        "UPDATE employee_requirements SET status = 'complete' WHERE id = ?",
+      )
+      .run(finished);
+    fixture.database
+      .query(`UPDATE employee_requirements
+              SET status = 'pending', checkr_report_status = 'canceled'
+              WHERE id = ?`)
+      .run(canceled);
+    const checkr = mockCheckr((call) =>
+      call.url === "/reports/report-2"
+        ? Response.json({ error: "unavailable" }, { status: 503 })
+        : Response.json({ id: "report-1", result: null, status: "pending" }),
+    );
+    try {
+      expect(
+        await refreshActiveCheckrScreenings(withoutCheckrKey(fixture.bindings)),
+      ).toEqual({ refreshed: 0, skipped: true });
+      expect(checkr.calls).toEqual([]);
+      await expect(
+        refreshActiveCheckrScreenings(fixture.bindings),
+      ).rejects.toThrow("Could not refresh 1 Checkr screening(s).");
+      expect(checkr.calls.map(({ url }) => url).toSorted()).toEqual([
+        "/reports/report-1",
+        "/reports/report-2",
+      ]);
+      const rows = fixture.database
+        .query("SELECT id, checkr_refresh_revision FROM employee_requirements")
+        .all() as Array<{ checkr_refresh_revision: number; id: string }>;
+      const revisions = Object.fromEntries(
+        rows.map((row) => [row.id, row.checkr_refresh_revision]),
+      );
+      expect(revisions[active]).toBe(1);
+      expect(revisions[failing]).toBe(0);
+      expect(revisions[finished]).toBe(0);
+      expect(revisions[canceled]).toBe(0);
+      expect(revisions[waiting]).toBe(1);
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("rotates scheduled Checkr refreshes past screenings that keep failing", async () => {
+    const fixture = await createFixture();
+    const reports = Array.from(
+      { length: 26 },
+      (_, index) => `rotating-${String(index).padStart(2, "0")}`,
+    );
+    for (const report of reports) await orderedScreening(fixture, report);
+    const attempted: string[][] = [];
+    const checkr = mockCheckr((call) => {
+      const report = /\/reports\/(.+)$/.exec(call.url)?.[1];
+      if (report) attempted.at(-1)?.push(report);
+      return Response.json({ error: "unavailable" }, { status: 503 });
+    });
+    try {
+      for (let run = 0; run < 2; run += 1) {
+        attempted.push([]);
+        await expect(
+          refreshActiveCheckrScreenings(fixture.bindings),
+        ).rejects.toThrow("Could not refresh 24 Checkr screening(s).");
+      }
+      expect(attempted[0]).toHaveLength(24);
+      const skipped = reports.filter(
+        (report) => !attempted[0]?.includes(report),
+      );
+      expect(skipped).toHaveLength(2);
+      for (const report of skipped) expect(attempted[1]).toContain(report);
+      expect(
+        fixture.database
+          .query(`SELECT COUNT(*) AS unchecked FROM employee_requirements
+                  WHERE checkr_checked_at IS NULL`)
+          .get(),
+      ).toEqual({ unchecked: 0 });
+    } finally {
+      checkr.restore();
     }
   });
 
   it("keeps a Checkr refresh request that a racing refresh cannot settle", async () => {
     const newer = "2999-01-01T00:00:00.000Z";
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () =>
-      Response.json({
-        id: "invitation-1",
-        report_id: null,
-        status: "pending",
-      })) as unknown as typeof fetch;
+    const event = {
+      data: { object: { id: "report-1", object: "report" } },
+      type: "report.completed",
+    };
+    const checkr = mockCheckr(() =>
+      Response.json({ id: "report-1", result: null, status: "pending" }),
+    );
     try {
       const requestedDuringRefresh = await createFixture();
-      const first = await startedScreening(requestedDuringRefresh);
+      const first = await orderedScreening(requestedDuringRefresh);
       beforeCheckrRefreshWrite(requestedDuringRefresh, () => {
         requestedDuringRefresh.database
           .query(`UPDATE employee_requirements
                   SET checkr_refresh_requested_at = ? WHERE id = ?`)
           .run(newer, first);
       });
-      const delivered = await checkrWebhook(requestedDuringRefresh.bindings, {
-        type: "invitation.completed",
-        data: { object: { id: "invitation-1", object: "invitation" } },
-      });
-      expect(delivered.status).toBe(200);
+      expect(
+        (await checkrWebhook(requestedDuringRefresh.bindings, event)).status,
+      ).toBe(200);
       expect(
         requestedDuringRefresh.database
           .query(`SELECT checkr_refresh_revision, checkr_refresh_requested_at
                   FROM employee_requirements WHERE id = ?`)
           .get(first),
       ).toEqual({
-        checkr_refresh_revision: 1,
         checkr_refresh_requested_at: newer,
+        checkr_refresh_revision: 1,
       });
 
       const reordered = await createFixture();
-      const delayed = await startedScreening(reordered);
+      const delayed = await orderedScreening(reordered);
       reordered.database
         .query(`UPDATE employee_requirements
                 SET checkr_refresh_requested_at = ? WHERE id = ?`)
         .run(newer, delayed);
-      const late = await checkrWebhook(reordered.bindings, {
-        type: "invitation.completed",
-        data: { object: { id: "invitation-1", object: "invitation" } },
-      });
-      expect(late.status).toBe(200);
+      expect((await checkrWebhook(reordered.bindings, event)).status).toBe(200);
       expect(
         reordered.database
           .query(`SELECT checkr_refresh_revision, checkr_refresh_requested_at
                   FROM employee_requirements WHERE id = ?`)
           .get(delayed),
       ).toEqual({
-        checkr_refresh_revision: 1,
         checkr_refresh_requested_at: newer,
+        checkr_refresh_revision: 1,
       });
 
       const conflicted = await createFixture();
-      const second = await startedScreening(conflicted);
+      const second = await orderedScreening(conflicted);
       beforeCheckrRefreshWrite(conflicted, () => {
         conflicted.database
           .query(`UPDATE employee_requirements
@@ -2040,17 +1652,15 @@ describe("employee forms", () => {
                   WHERE id = ?`)
           .run(second);
       });
-      const raced = await checkrWebhook(conflicted.bindings, {
-        type: "invitation.completed",
-        data: { object: { id: "invitation-1", object: "invitation" } },
-      });
-      expect(raced.status).toBe(200);
+      expect((await checkrWebhook(conflicted.bindings, event)).status).toBe(
+        200,
+      );
       const kept = conflicted.database
         .query(`SELECT checkr_refresh_revision, checkr_refresh_requested_at
                 FROM employee_requirements WHERE id = ?`)
         .get(second) as {
-        checkr_refresh_revision: number;
         checkr_refresh_requested_at: string | null;
+        checkr_refresh_revision: number;
       };
       expect(kept.checkr_refresh_revision).toBe(1);
       expect(kept.checkr_refresh_requested_at).toEqual(expect.any(String));
@@ -2064,21 +1674,196 @@ describe("employee forms", () => {
                   FROM employee_requirements WHERE id = ?`)
           .get(second),
       ).toEqual({
-        checkr_refresh_revision: 2,
         checkr_refresh_requested_at: null,
+        checkr_refresh_revision: 2,
       });
     } finally {
-      globalThis.fetch = originalFetch;
+      checkr.restore();
     }
+  });
+
+  it("keeps hosted reports and resets hosted invitations when migrating", async () => {
+    const database = new Database(":memory:");
+    await migration(database, "0003_create_auth.sql");
+    await migration(database, "0004_create_organizations.sql");
+    database.exec(`CREATE TABLE deleted_object_cleanup (
+      id TEXT PRIMARY KEY, organization_id TEXT, object_key TEXT UNIQUE,
+      deleted_at TEXT, cleanup_token TEXT, cleanup_claimed_at TEXT)`);
+    for (const file of [
+      "0041_create_employee_requirements.sql",
+      "0042_add_checkr_screenings.sql",
+      "0043_queue_employee_document_cleanup.sql",
+      "0044_guard_employee_screenings.sql",
+      "0045_track_employee_form_uploads.sql",
+      "0046_version_employee_screening_refresh.sql",
+      "0047_bind_employee_screening_attempt.sql",
+      "0052_track_checkr_refreshes.sql",
+    ]) {
+      await migration(database, file);
+    }
+    const insert = database.query(`INSERT INTO employee_requirements
+      (id, organization_id, target_email, kind, title, due_date, status,
+       created_at, updated_at, checkr_candidate_id, checkr_invitation_id,
+       checkr_invitation_status, checkr_report_id, checkr_result)
+      VALUES (?, ?, 'a@example.com', 'background_check', 'Check',
+              '2026-10-01', ?, ?, ?, ?, ?, ?, ?, ?)`);
+    insert.run(
+      "reported",
+      orgId,
+      "complete",
+      now(),
+      now(),
+      "c1",
+      "i1",
+      "completed",
+      "r1",
+      "clear",
+    );
+    insert.run(
+      "canceled",
+      orgId,
+      "pending",
+      now(),
+      now(),
+      "c2",
+      "i2",
+      "partially_canceled",
+      "r2",
+      "consider",
+    );
+    insert.run(
+      "invited",
+      orgId,
+      "in_progress",
+      now(),
+      now(),
+      "c3",
+      "i3",
+      "pending",
+      null,
+      null,
+    );
+    await migration(database, "0065_self_host_checkr_screenings.sql");
+    expect(
+      database
+        .query(`SELECT id, status, checkr_candidate_id, checkr_report_id,
+                       checkr_report_status
+                FROM employee_requirements ORDER BY id`)
+        .all(),
+    ).toEqual([
+      {
+        checkr_candidate_id: "c2",
+        checkr_report_id: "r2",
+        checkr_report_status: "partially_canceled",
+        id: "canceled",
+        status: "pending",
+      },
+      {
+        checkr_candidate_id: null,
+        checkr_report_id: null,
+        checkr_report_status: null,
+        id: "invited",
+        status: "pending",
+      },
+      {
+        checkr_candidate_id: "c1",
+        checkr_report_id: "r1",
+        checkr_report_status: "complete",
+        id: "reported",
+        status: "complete",
+      },
+    ]);
   });
 });
 
-async function startedScreening(
-  fixture: Awaited<ReturnType<typeof createFixture>>,
-  invitationId = "invitation-1",
+interface CheckrCall {
+  body: FormData | string | null;
+  idempotencyKey: string | null;
+  method: string;
+  url: string;
+}
+
+/** Records Checkr API calls, by path, and answers them with respond. */
+function mockCheckr(
+  respond: (call: CheckrCall) => Response | Promise<Response>,
 ) {
+  const original = globalThis.fetch;
+  const mock = {
+    calls: [] as CheckrCall[],
+    respond,
+    restore: () => {
+      globalThis.fetch = original;
+    },
+  };
+  globalThis.fetch = (async (input, init) => {
+    const call: CheckrCall = {
+      body:
+        init?.body instanceof FormData
+          ? init.body
+          : (init?.body?.toString() ?? null),
+      idempotencyKey: new Headers(init?.headers).get("Idempotency-Key"),
+      method: init?.method ?? "GET",
+      url: String(input).replace("https://api.checkr-staging.com/v1", ""),
+    };
+    mock.calls.push(call);
+    return mock.respond(call);
+  }) as typeof fetch;
+  return mock;
+}
+
+/** Checkr staging accepting a submission and completing its report. */
+function checkrResponses(call: CheckrCall) {
+  if (call.method === "POST" && call.url === "/candidates") {
+    return Response.json({ id: "candidate-1" });
+  }
+  if (call.url.endsWith("/documents")) {
+    return Response.json({ id: "document-1" }, { status: 201 });
+  }
+  if (call.method === "POST" && call.url === "/reports") {
+    return Response.json({ id: "report-1", result: null, status: "pending" });
+  }
+  if (call.url === "/reports/report-1") {
+    return Response.json({
+      id: "report-1",
+      result: "clear",
+      status: "complete",
+    });
+  }
+  return Response.json({ error: "unexpected" }, { status: 500 });
+}
+
+function configureCheckr(fixture: Awaited<ReturnType<typeof createFixture>>) {
   fixture.bindings.CHECKR_API_KEY = "staging-key";
   fixture.bindings.CHECKR_ENV = "staging";
+  fixture.bindings.CHECKR_BACKGROUND_PACKAGE = "background_package";
+}
+
+/** A background check requested in San Jose, CA and awaiting the person. */
+async function requestedScreening(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+) {
+  configureCheckr(fixture);
+  const id = await createRequirement(
+    fixture,
+    "background_check",
+    "Background check",
+  );
+  const requested = await fixture
+    .app("owner", "owner")
+    .request(
+      `/${id}/checkr/request`,
+      jsonPost({ city: "San Jose", state: "CA" }),
+    );
+  expect(requested.status).toBe(200);
+  return id;
+}
+
+/** A background check whose report Checkr is preparing. */
+async function orderedScreening(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  reportId = "report-1",
+) {
+  configureCheckr(fixture);
   const id = await createRequirement(
     fixture,
     "background_check",
@@ -2086,15 +1871,64 @@ async function startedScreening(
   );
   fixture.database
     .query(`UPDATE employee_requirements
-            SET checkr_candidate_id = ?, checkr_invitation_id = ?,
-                checkr_invitation_status = 'pending', status = 'in_progress'
+            SET checkr_candidate_id = ?, checkr_report_id = ?,
+                checkr_report_status = 'pending', status = 'in_progress',
+                checkr_requested_at = ?, checkr_work_state = 'CA'
             WHERE id = ?`)
     .run(
-      invitationId === "invitation-1" ? "candidate-1" : `candidate-${id}`,
-      invitationId,
+      reportId === "report-1" ? "candidate-1" : `candidate-${id}`,
+      reportId,
+      now(),
       id,
     );
   return id;
+}
+
+/** Mocked candidate Homer Simpson, whom Checkr staging always clears. */
+function homerSubmission() {
+  return {
+    acknowledgments: {
+      disclosure: true,
+      stateNotices: ["CA"],
+      summaryOfRights: true,
+    },
+    candidate: {
+      dob: "1983-02-10",
+      driverLicenseNumber: "M2233344",
+      driverLicenseState: "CA",
+      firstName: "Homer",
+      lastName: "Simpson",
+      noMiddleName: true,
+      phone: "",
+      ssn: "110-11-1100",
+      zipcode: "94088",
+    },
+    copyRequested: true,
+    residenceState: "CA",
+    signature: {
+      authorize: true,
+      electronicRecords: true,
+      name: "Homer Simpson",
+    },
+  };
+}
+
+function submitScreening(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  id: string,
+  body: unknown,
+  user = "employee",
+  role = "member",
+) {
+  return fixture.app(user, role).request(`/${id}/checkr/submit`, {
+    body: JSON.stringify(body),
+    headers: {
+      "Content-Type": "application/json",
+      "cf-connecting-ip": "203.0.113.7",
+      "user-agent": "Test browser",
+    },
+    method: "POST",
+  });
 }
 
 // Runs action just before a Checkr refresh records its result, skipping any
@@ -2201,6 +2035,9 @@ async function createFixture() {
   }
   await migration(database, "0004_create_organizations.sql");
   database
+    .query("UPDATE organization SET name = 'Acme' WHERE id = ?")
+    .run(orgId);
+  database
     .query(`INSERT INTO member (id, organizationId, userId, role, createdAt)
     VALUES ('employee-member', ?, 'employee', 'member', ?)`)
     .run(orgId, now());
@@ -2224,7 +2061,13 @@ async function createFixture() {
   await migration(database, "0046_version_employee_screening_refresh.sql");
   await migration(database, "0047_bind_employee_screening_attempt.sql");
   await migration(database, "0052_track_checkr_refreshes.sql");
+  await migration(database, "0065_self_host_checkr_screenings.sql");
   const files = new Map<string, File>();
+  const emails: Array<{
+    subject: string;
+    text: string;
+    to: { email: string; name: string };
+  }> = [];
   const storageState = { failPutAfterWrite: false, failDelete: false };
   const hooks: {
     beforeBatch: (() => void) | undefined;
@@ -2238,10 +2081,22 @@ async function createFixture() {
     beforeDocumentUpdate: undefined,
   };
   const bindings = {
+    AUTH_EMAIL_FROM: "no-reply@balebase.test",
+    CORS_ORIGIN: "https://app.balebase.test",
     DB: toD1(database, hooks),
+    EMAIL: {
+      send: async (message: (typeof emails)[number]) => {
+        emails.push(message);
+      },
+    },
     STORAGE: {
-      put: async (key: string, file: File) => {
-        files.set(key, file);
+      put: async (key: string, file: File | Uint8Array) => {
+        files.set(
+          key,
+          file instanceof File
+            ? file
+            : new File([file], key, { type: "application/pdf" }),
+        );
         if (storageState.failPutAfterWrite) {
           throw new Error("Upload interrupted.");
         }
@@ -2292,6 +2147,7 @@ async function createFixture() {
       hooks.beforeDocumentUpdate = callback;
     },
     database,
+    emails,
     files,
     storageState,
   };

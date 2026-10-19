@@ -124,7 +124,8 @@ export interface AdminOrganization {
 }
 
 export interface AdminOrganizationRequirement {
-  checkrInvitationStatus: string | null;
+  /** Checkr's report status, or requested while the person hasn't submitted. */
+  checkrStatus: string | null;
   checkrReportUrl: string | null;
   checkrResult: string | null;
   completedAt: string | null;

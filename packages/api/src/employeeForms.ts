@@ -2,18 +2,26 @@ import { type Context, Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
 import {
   CheckrRequestError,
-  cancelCheckrInvitation,
   checkrConfigured,
   checkrPackage,
-  createCheckrCandidate,
-  createCheckrInvitation,
-  getCheckrInvitation,
-  getCheckrReport,
-  isDefinitiveCheckrRejection,
-  listCheckrCandidateInvitations,
+  checkrPackageScreenings,
+  checkrTestMode,
 } from "./checkr";
+import {
+  isClosedReportStatus,
+  refreshCheckrScreening,
+  requestCheckrScreening,
+  submitCheckrScreening,
+} from "./checkrScreening";
+import { checkrTestCandidates } from "./checkrTestCandidates";
 import { normalizeFilename } from "./filenames";
 import { canManageOrganization } from "./organizationMembers";
+import {
+  screeningDisclosures,
+  summaryOfRightsUrl,
+} from "./screeningDisclosures";
+import { sendScreeningRequest } from "./screeningMail";
+import { isUsStateCode, parseScreeningSubmission } from "./screeningSubmission";
 import type { Bindings } from "./types";
 
 type RequirementKind = "form" | "background_check" | "credit_check";
@@ -39,17 +47,18 @@ interface RequirementRow {
   target_email: string | null;
   target_name: string | null;
   completed_at: string | null;
-  checkr_candidate_id: string | null;
-  checkr_invitation_id: string | null;
   checkr_report_id: string | null;
+  checkr_report_status: string | null;
   checkr_result: string | null;
-  checkr_invitation_status: string | null;
+  checkr_consent_id: string | null;
+  checkr_requested_at: string | null;
+  checkr_work_state: string | null;
+  checkr_work_city: string | null;
   checkr_starting_at: string | null;
   checkr_start_nonce: string | null;
-  checkr_start_nonce_at: string | null;
-  checkr_start_package: string | null;
-  checkr_attempt: number;
   checkr_refresh_revision: number;
+  /** Listing only: the requirement belongs to the signed-in person. */
+  is_subject?: number;
 }
 
 type EmployeeFormsEnv = {
@@ -72,16 +81,16 @@ employeeForms.get("/", async (context) => {
             requirement.document_revision,
             requirement.invitation_id, invitation.status AS invitation_status,
             requirement.member_id,
-            requirement.completed_at, requirement.checkr_candidate_id,
-            requirement.checkr_invitation_id, requirement.checkr_report_id,
-            requirement.checkr_result, requirement.checkr_invitation_status,
+            requirement.completed_at, requirement.checkr_report_id,
+            requirement.checkr_report_status, requirement.checkr_result,
+            requirement.checkr_consent_id, requirement.checkr_requested_at,
+            requirement.checkr_work_state, requirement.checkr_work_city,
             requirement.checkr_starting_at, requirement.checkr_start_nonce,
-            requirement.checkr_start_nonce_at, requirement.checkr_attempt,
-            requirement.checkr_start_package,
             requirement.checkr_refresh_revision,
             COALESCE(target.email, invitation.email, requirement.target_email)
               AS target_email,
-            target.name AS target_name
+            target.name AS target_name,
+            COALESCE(member.userId = ?, 0) AS is_subject
      FROM employee_requirements AS requirement
      LEFT JOIN member ON member.id = requirement.member_id
      LEFT JOIN user AS target ON target.id = member.userId
@@ -90,7 +99,11 @@ employeeForms.get("/", async (context) => {
        AND (${manager ? "1 = 1" : "member.userId = ?"})
      ORDER BY requirement.due_date ASC, requirement.created_at ASC`,
   )
-    .bind(...(manager ? [organizationId] : [organizationId, userId]))
+    .bind(
+      ...(manager
+        ? [userId, organizationId]
+        : [userId, organizationId, userId]),
+    )
     .all<RequirementRow>();
   return context.json({
     requirements: result.results.map((row) =>
@@ -206,9 +219,8 @@ employeeForms.patch("/:id", async (context) => {
          updated_at = ?
      WHERE id = ? AND organization_id = ?
        AND (? IS NULL OR kind <> 'form' OR document_revision = ?)
-       AND (? IS NULL OR checkr_invitation_id IS NULL OR
-            checkr_invitation_status IN
-              ('expired', 'canceled', 'deleted', 'partially_canceled'))
+       AND (? IS NULL OR checkr_report_id IS NULL OR
+            checkr_report_status IN ('canceled', 'partially_canceled'))
        AND (? IS NULL OR
             (checkr_starting_at IS NULL AND checkr_start_nonce IS NULL))`,
   )
@@ -240,13 +252,9 @@ employeeForms.delete("/:id", async (context) => {
   }
   const row = await findRequirement(context);
   if (!row) return context.json({ error: "Requirement not found." }, 404);
-  if (
-    row.checkr_starting_at ||
-    row.checkr_start_nonce ||
-    (row.checkr_invitation_id && !isExpiredCheckrInvitation(row))
-  ) {
+  if (screeningActive(row)) {
     return context.json(
-      { error: "A started Checkr screening cannot be removed." },
+      { error: "An ordered Checkr screening cannot be removed." },
       409,
     );
   }
@@ -254,9 +262,8 @@ employeeForms.delete("/:id", async (context) => {
     `DELETE FROM employee_requirements
      WHERE id = ? AND organization_id = ? AND checkr_starting_at IS NULL
        AND checkr_start_nonce IS NULL
-       AND (checkr_invitation_id IS NULL OR
-            checkr_invitation_status IN
-              ('expired', 'canceled', 'deleted', 'partially_canceled'))`,
+       AND (checkr_report_id IS NULL OR
+            checkr_report_status IN ('canceled', 'partially_canceled'))`,
   )
     .bind(row.id, context.get("organizationId"))
     .run();
@@ -414,127 +421,156 @@ employeeForms.get("/:id/document", async (context) => {
   return new Response(object.body, { headers });
 });
 
-employeeForms.post("/:id/checkr/start", async (context) => {
+employeeForms.post("/:id/checkr/request", async (context) => {
   if (!canManageOrganization(context.get("organizationRole"))) {
     return managerRequired(context);
   }
   const row = await findRequirement(context);
   if (
-    !row ||
-    row.kind === "form" ||
-    !row.target_email ||
-    (!row.member_id && !row.invitation_id && !row.checkr_start_nonce) ||
-    (row.invitation_id &&
-      row.invitation_status !== "pending" &&
-      !row.checkr_start_nonce)
+    row?.kind !== "background_check" ||
+    !(row.member_id || row.invitation_status === "pending")
   ) {
     return context.json({ error: "Screening requirement not found." }, 404);
   }
-  if (row.checkr_invitation_id && !isExpiredCheckrInvitation(row)) {
-    return context.json({ error: "Screening already started." }, 409);
-  }
-  if (
-    !checkrConfigured(context.env, row.kind) &&
-    !(
-      row.checkr_start_nonce &&
-      row.checkr_start_package &&
-      context.env.CHECKR_API_KEY
-    )
-  ) {
+  if (!checkrConfigured(context.env, row.kind)) {
     return context.json(
       { error: "Checkr is not configured for this screening." },
       503,
     );
   }
   const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord(body) || !isUsState(body.state) || !isCity(body.city)) {
+  if (!isRecord(body) || !isUsStateCode(body.state) || !isCity(body.city)) {
     return context.json(
       { error: "A US work state and optional city are required." },
       400,
     );
   }
-  const claim = await claimCheckrStart(context, row);
-  if (!claim)
+  if (screeningActive(row)) {
+    return context.json(
+      { error: "This screening was already submitted to Checkr." },
+      409,
+    );
+  }
+  const requested = await requestCheckrScreening(
+    context.env.DB,
+    context.get("organizationId"),
+    row.id,
+    body.state,
+    body.city?.trim() || null,
+  );
+  if (!requested) {
     return context.json(
       { error: "Screening is changing. Try again later." },
       409,
     );
-  let invitation: Awaited<ReturnType<typeof launchCheckrScreening>>;
-  try {
-    invitation = await launchCheckrScreening(
-      context,
-      row,
-      claim,
-      body.state,
-      body.city ?? "",
-    );
-  } catch (cause) {
-    if (cause instanceof CheckrReconciliationRequired) {
-      return context.json({ error: cause.message }, 409);
-    }
-    throw cause;
   }
-  if (!invitation)
-    return context.json({ error: "Screening could not be resumed." }, 409);
-  return context.json({
-    invitationId: invitation.id,
-    status: invitation.status,
-  });
+  const emailed = await emailScreeningRequest(context, row).then(
+    () => true,
+    (cause: unknown) => {
+      console.error("Could not email a background check request.", cause);
+      return false;
+    },
+  );
+  return context.json({ emailed });
 });
 
-employeeForms.post("/:id/checkr/reconcile", async (context) => {
-  if (!canManageOrganization(context.get("organizationRole"))) {
-    return managerRequired(context);
+// The person's own screening form: the disclosures to read, the work
+// location, and, while Checkr is in staging, its mocked test candidates.
+employeeForms.get("/:id/checkr/form", async (context) => {
+  const subject = await findScreeningSubject(context);
+  if (!subject) {
+    return context.json({ error: "Screening requirement not found." }, 404);
   }
-  const row = await findRequirement(context);
-  if (
-    !row?.checkr_start_nonce ||
-    !row.checkr_candidate_id ||
-    !row.checkr_start_package ||
-    !context.env.CHECKR_API_KEY
-  ) {
-    return context.json({ error: "No unresolved Checkr screening." }, 404);
-  }
-  const body: unknown = await context.req.json().catch(() => null);
-  if (
-    !isRecord(body) ||
-    typeof body.invitationId !== "string" ||
-    !/^[A-Za-z0-9_-]{1,100}$/.test(body.invitationId)
-  ) {
-    return context.json({ error: "A Checkr invitation ID is required." }, 400);
-  }
-  const invitation = await getCheckrInvitation(context.env, body.invitationId);
-  const createdAt = invitation.created_at
-    ? Date.parse(invitation.created_at)
-    : NaN;
-  const attemptAt = Date.parse(row.checkr_start_nonce_at ?? "");
-  if (
-    invitation.id !== body.invitationId ||
-    invitation.candidate_id !== row.checkr_candidate_id ||
-    invitation.package !== row.checkr_start_package ||
-    !Number.isFinite(createdAt) ||
-    !Number.isFinite(attemptAt) ||
-    createdAt < attemptAt - 60_000 ||
-    (Array.isArray(invitation.tags) &&
-      invitation.tags.length > 0 &&
-      !invitation.tags.includes(checkrAttemptTag(row.checkr_start_nonce)))
-  ) {
+  const packageSlug = checkrPackage(context.env);
+  if (!checkrConfigured(context.env, subject.kind) || !packageSlug) {
     return context.json(
-      { error: "Invitation does not match this screening attempt." },
+      { error: "Checkr is not configured for this screening." },
+      503,
+    );
+  }
+  if (!awaitingSubmission(subject)) {
+    return context.json(
+      { error: "This background check is not waiting for your details." },
       409,
     );
   }
-  const stored = await storeCheckrInvitation(
-    context,
-    row,
-    row.checkr_start_nonce,
-    invitation,
-    false,
-  );
-  if (!stored) {
-    return context.json({ error: "Screening changed. Please refresh." }, 409);
+  // Without the package's screenings, the license stays optional and Checkr
+  // reports it missing if a driving record search needs it.
+  const screenings = await checkrPackageScreenings(
+    context.env,
+    packageSlug,
+  ).catch((cause: unknown) => {
+    console.error("Could not read the Checkr package.", cause);
+    return null;
+  });
+  return context.json({
+    candidate: { email: subject.email, name: subject.name },
+    disclosures: screeningDisclosures(subject.organization_name),
+    organizationName: subject.organization_name,
+    requiresDriverLicense:
+      screenings?.includes("motor_vehicle_report") ?? false,
+    summaryOfRightsUrl,
+    testCandidates: checkrTestMode(context.env) ? checkrTestCandidates : null,
+    title: subject.title,
+    workLocation: {
+      city: subject.checkr_work_city,
+      state: subject.checkr_work_state,
+    },
+  });
+});
+
+employeeForms.post("/:id/checkr/submit", async (context) => {
+  const subject = await findScreeningSubject(context);
+  if (!subject) {
+    return context.json({ error: "Screening requirement not found." }, 404);
   }
-  return context.json({ invitationId: stored.id, status: stored.status });
+  const packageSlug = checkrPackage(context.env);
+  if (!checkrConfigured(context.env, subject.kind) || !packageSlug) {
+    return context.json(
+      { error: "Checkr is not configured for this screening." },
+      503,
+    );
+  }
+  if (!awaitingSubmission(subject) || !subject.checkr_work_state) {
+    return context.json(
+      { error: "This background check is not waiting for your details." },
+      409,
+    );
+  }
+  const submission = parseScreeningSubmission(
+    await context.req.json().catch(() => null),
+    subject.checkr_work_state,
+    new Date().toISOString().slice(0, 10),
+  );
+  if ("error" in submission) {
+    return context.json({ error: submission.error }, 400);
+  }
+  const result = await submitCheckrScreening(
+    context.env,
+    {
+      email: subject.email,
+      organizationId: context.get("organizationId"),
+      organizationName: subject.organization_name,
+      packageSlug,
+      requirementId: subject.id,
+      requirementTitle: subject.title,
+      userId: subject.user_id,
+      workCity: subject.checkr_work_city,
+      workState: subject.checkr_work_state,
+    },
+    submission,
+    {
+      ipAddress: context.req.header("cf-connecting-ip") ?? null,
+      userAgent: context.req.header("user-agent") ?? null,
+    },
+  );
+  if (result.kind === "conflict") {
+    return context.json({ error: result.message }, 409);
+  }
+  if (result.kind === "rejected") {
+    return context.json({ error: result.message }, 422);
+  }
+  return context.json({ status: result.reportStatus });
 });
 
 employeeForms.post("/:id/checkr/refresh", async (context) => {
@@ -542,18 +578,46 @@ employeeForms.post("/:id/checkr/refresh", async (context) => {
     return managerRequired(context);
   }
   const row = await findRequirement(context);
-  if (!row?.checkr_invitation_id) {
-    return context.json({ error: "Screening not started." }, 404);
+  if (!row?.checkr_report_id) {
+    return context.json({ error: "Screening not submitted." }, 404);
   }
   const refreshed = await refreshCheckrScreening(context.env, {
     ...row,
-    checkr_invitation_id: row.checkr_invitation_id,
+    checkr_report_id: row.checkr_report_id,
     organization_id: context.get("organizationId"),
   });
   if (!refreshed) {
     return context.json({ error: "Screening changed. Please refresh." }, 409);
   }
   return context.json(refreshed);
+});
+
+// The signed authorization behind the ordered report, for the person and
+// managers.
+employeeForms.get("/:id/checkr/consent", async (context) => {
+  const row = await findRequirement(context);
+  if (!row?.checkr_consent_id || !(await canAccessRequirement(context, row))) {
+    return context.json({ error: "Authorization not found." }, 404);
+  }
+  const consent = await context.env.DB.prepare(
+    `SELECT document_key FROM employee_screening_consents
+     WHERE id = ? AND organization_id = ? AND requirement_id = ?`,
+  )
+    .bind(row.checkr_consent_id, context.get("organizationId"), row.id)
+    .first<{ document_key: string }>();
+  const object = consent
+    ? await context.env.STORAGE.get(consent.document_key)
+    : null;
+  if (!object) return context.json({ error: "Authorization not found." }, 404);
+  return new Response(object.body, {
+    headers: {
+      "Cache-Control": "private, no-store",
+      "Content-Disposition":
+        'attachment; filename="background-check-authorization.pdf"',
+      "Content-Type": "application/pdf",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 });
 
 employeeForms.onError((error, context) => {
@@ -564,449 +628,75 @@ employeeForms.onError((error, context) => {
   return context.json({ error: "Unexpected server error." }, 500);
 });
 
-export interface CheckrScreeningRow {
-  id: string;
-  organization_id: string;
-  status: RequirementStatus;
-  checkr_invitation_id: string;
+interface ScreeningSubjectRow {
   checkr_report_id: string | null;
-  checkr_invitation_status: string | null;
-  checkr_refresh_revision: number;
+  checkr_requested_at: string | null;
+  checkr_work_city: string | null;
+  checkr_work_state: string | null;
+  email: string;
+  id: string;
+  kind: string;
+  name: string;
+  organization_name: string;
+  status: string;
+  title: string;
+  user_id: string;
 }
 
-// Records the current Checkr invitation and report state on a started
-// screening, and clears any refresh requested before this one began. Returns
-// null when another refresh or edit changed it first. Every attempt records
-// checkr_checked_at, so a screening Checkr keeps failing on cannot hold its
-// place at the front of the scheduled refresh.
-export async function refreshCheckrScreening(
-  env: Bindings,
-  row: CheckrScreeningRow,
-) {
-  const checkedAt = new Date().toISOString();
-  const { invitationStatus, report, reportId } = await readCheckrScreening(
-    env,
-    row,
-  ).catch(async (cause: unknown) => {
-    await env.DB.prepare(
-      `UPDATE employee_requirements SET checkr_checked_at = ?
-       WHERE id = ? AND organization_id = ?`,
-    )
-      .bind(checkedAt, row.id, row.organization_id)
-      .run();
-    throw cause;
-  });
-  const screeningStatus =
-    report?.status === "complete" && report.includes_canceled
-      ? report.result
-        ? "partially_canceled"
-        : "canceled"
-      : invitationStatus;
-  const complete =
-    (report?.status === "complete" && !report.includes_canceled) ||
-    (row.status === "complete" &&
-      isExpiredCheckrStatus(row.checkr_invitation_status));
-  const nextStatus = complete
-    ? "complete"
-    : isExpiredCheckrStatus(screeningStatus)
-      ? "pending"
-      : "in_progress";
-  const now = new Date().toISOString();
-  const refreshed = await env.DB.prepare(
-    `UPDATE employee_requirements
-     SET checkr_invitation_status = ?, checkr_report_id = ?,
-         checkr_result = ?, status = ?,
-         completed_at = CASE WHEN ? = 'complete'
-           THEN COALESCE(completed_at, ?) ELSE NULL END,
-         updated_at = ?, checkr_checked_at = ?,
-         checkr_refresh_requested_at = CASE
-           WHEN checkr_refresh_requested_at <= ? THEN NULL
-           ELSE checkr_refresh_requested_at
-         END,
-         checkr_refresh_revision = checkr_refresh_revision + 1
-     WHERE id = ? AND organization_id = ? AND checkr_invitation_id = ?
-       AND checkr_refresh_revision = ?`,
-  )
-    .bind(
-      screeningStatus,
-      reportId,
-      report?.result ?? null,
-      nextStatus,
-      nextStatus,
-      now,
-      now,
-      checkedAt,
-      checkedAt,
-      row.id,
-      row.organization_id,
-      row.checkr_invitation_id,
-      row.checkr_refresh_revision,
-    )
-    .run();
-  if (!refreshed.meta.changes) return null;
-  return {
-    invitationStatus: screeningStatus,
-    reportStatus: report?.status ?? null,
-    result: report?.result ?? null,
-  };
-}
-
-async function readCheckrScreening(env: Bindings, row: CheckrScreeningRow) {
-  const invitation = await getCheckrInvitation(env, row.checkr_invitation_id);
-  const invitationStatus = invitation.deleted_at
-    ? "deleted"
-    : invitation.status;
-  const reportId = invitation.report_id ?? row.checkr_report_id;
-  const report = reportId ? await getCheckrReport(env, reportId) : null;
-  return { invitationStatus, report, reportId };
-}
-
-interface CheckrStartClaim {
-  checkr_candidate_id: string | null;
-  checkr_start_nonce: string;
-  checkr_start_nonce_at: string;
-  checkr_start_package: string;
-}
-
-async function claimCheckrStart(
-  context: Context<EmployeeFormsEnv>,
-  row: RequirementRow,
-) {
-  const now = new Date();
-  const nonce = crypto.randomUUID();
-  const packageSlug =
-    checkrPackage(
-      context.env,
-      row.kind as "background_check" | "credit_check",
-    ) || row.checkr_start_package;
+/** The requirement when it belongs to the signed-in person, not a manager. */
+async function findScreeningSubject(context: Context<EmployeeFormsEnv>) {
   return context.env.DB.prepare(
-    `UPDATE employee_requirements
-     SET checkr_start_nonce = CASE
-           WHEN checkr_invitation_id IS NOT NULL THEN ?
-           ELSE COALESCE(checkr_start_nonce, ?)
-         END,
-         checkr_start_nonce_at = CASE
-           WHEN checkr_invitation_id IS NOT NULL OR checkr_start_nonce_at IS NULL
-             THEN ? ELSE checkr_start_nonce_at
-         END,
-         checkr_starting_at = ?,
-         checkr_start_package = CASE
-           WHEN checkr_start_nonce IS NULL OR checkr_invitation_id IS NOT NULL
-             THEN ? ELSE COALESCE(checkr_start_package, ?) END,
-         checkr_attempt = CASE WHEN checkr_invitation_id IS NOT NULL
-           THEN checkr_attempt + 1 ELSE checkr_attempt END,
-         checkr_invitation_id = NULL, checkr_invitation_status = NULL,
-         checkr_report_id = NULL, checkr_result = NULL,
-         status = 'pending', completed_at = NULL, updated_at = ?
-     WHERE id = ? AND organization_id = ?
-       AND (checkr_invitation_id IS NULL OR
-            checkr_invitation_status IN
-              ('expired', 'canceled', 'deleted', 'partially_canceled'))
-       AND (checkr_starting_at IS NULL OR checkr_starting_at < ?)
-     RETURNING checkr_candidate_id, checkr_start_nonce,
-               checkr_start_nonce_at, checkr_start_package`,
-  )
-    .bind(
-      nonce,
-      nonce,
-      now.toISOString(),
-      now.toISOString(),
-      packageSlug,
-      packageSlug,
-      now.toISOString(),
-      row.id,
-      context.get("organizationId"),
-      new Date(now.getTime() - 5 * 60_000).toISOString(),
-    )
-    .first<CheckrStartClaim>();
-}
-
-async function launchCheckrScreening(
-  context: Context<EmployeeFormsEnv>,
-  row: RequirementRow,
-  claim: CheckrStartClaim,
-  state: string,
-  city: string,
-) {
-  let nonce = claim.checkr_start_nonce;
-  try {
-    if (
-      !claim.checkr_candidate_id &&
-      !(await screeningTargetActive(context, row.id))
-    ) {
-      await releaseUnresolvedCheckrStart(context, row.id, nonce, true);
-      return null;
-    }
-    const candidateId =
-      claim.checkr_candidate_id ??
-      (
-        await requestCheckrForStart(context, row.id, nonce, () =>
-          createCheckrCandidate(context.env, row.target_email ?? "", row.id),
-        )
-      ).id;
-    if (!candidateId) throw new Error("Checkr did not return a candidate ID.");
-    if (!claim.checkr_candidate_id) {
-      const stored = await context.env.DB.prepare(
-        `UPDATE employee_requirements
-         SET checkr_candidate_id = ?, updated_at = ?
-         WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?`,
-      )
-        .bind(
-          candidateId,
-          new Date().toISOString(),
-          row.id,
-          context.get("organizationId"),
-          claim.checkr_start_nonce,
-        )
-        .run();
-      if (!stored.meta.changes) return null;
-    }
-    if (row.kind === "form") return null;
-    const existing = await findPriorCheckrInvitation(
-      context,
-      row,
-      claim,
-      candidateId,
-    );
-    if (existing) {
-      return await storeCheckrInvitation(context, row, nonce, existing, false);
-    }
-    if (!(await screeningTargetActive(context, row.id))) {
-      await releaseUnresolvedCheckrStart(
-        context,
-        row.id,
-        nonce,
-        new Date(claim.checkr_start_nonce_at).getTime() <
-          Date.now() - 5 * 60_000,
-      );
-      return null;
-    }
-    const freshNonce = await rotateExpiredCheckrNonce(
-      context,
-      row.id,
-      claim,
-      nonce,
-    );
-    if (!freshNonce) return null;
-    nonce = freshNonce;
-    const invitation = await requestCheckrForStart(context, row.id, nonce, () =>
-      createCheckrInvitation(
-        context.env,
-        candidateId,
-        claim.checkr_start_package,
-        state,
-        city,
-        nonce,
-        checkrAttemptTag(nonce),
-      ),
-    );
-    if (!invitation.id)
-      throw new Error("Checkr did not return an invitation ID.");
-    return await storeCheckrInvitation(context, row, nonce, invitation, true);
-  } catch (cause) {
-    await context.env.DB.prepare(
-      `UPDATE employee_requirements SET checkr_starting_at = NULL
-       WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?`,
-    )
-      .bind(row.id, context.get("organizationId"), nonce)
-      .run();
-    throw cause;
-  }
-}
-
-async function requestCheckrForStart<T>(
-  context: Context<EmployeeFormsEnv>,
-  requirementId: string,
-  nonce: string,
-  request: () => Promise<T>,
-) {
-  try {
-    return await request();
-  } catch (cause) {
-    if (isDefinitiveCheckrRejection(cause)) {
-      await releaseUnresolvedCheckrStart(context, requirementId, nonce, true);
-    }
-    throw cause;
-  }
-}
-
-async function rotateExpiredCheckrNonce(
-  context: Context<EmployeeFormsEnv>,
-  requirementId: string,
-  claim: CheckrStartClaim,
-  nonce: string,
-) {
-  if (
-    new Date(claim.checkr_start_nonce_at).getTime() >=
-    Date.now() - 23 * 60 * 60_000
-  ) {
-    return nonce;
-  }
-  const nextNonce = crypto.randomUUID();
-  const rotated = await context.env.DB.prepare(
-    `UPDATE employee_requirements
-     SET checkr_start_nonce = ?, checkr_start_nonce_at = ?, updated_at = ?
-     WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?
-       AND checkr_starting_at IS NOT NULL`,
-  )
-    .bind(
-      nextNonce,
-      new Date().toISOString(),
-      new Date().toISOString(),
-      requirementId,
-      context.get("organizationId"),
-      nonce,
-    )
-    .run();
-  return rotated.meta.changes ? nextNonce : null;
-}
-
-async function screeningTargetActive(
-  context: Context<EmployeeFormsEnv>,
-  requirementId: string,
-) {
-  const active = await context.env.DB.prepare(
-    `SELECT requirement.id FROM employee_requirements AS requirement
-     LEFT JOIN member ON member.id = requirement.member_id
-     LEFT JOIN invitation ON invitation.id = requirement.invitation_id
+    `SELECT requirement.id, requirement.kind, requirement.title,
+            requirement.status, requirement.checkr_report_id,
+            requirement.checkr_requested_at, requirement.checkr_work_state,
+            requirement.checkr_work_city, target.id AS user_id, target.email,
+            target.name, organization.name AS organization_name
+     FROM employee_requirements AS requirement
+     JOIN member ON member.id = requirement.member_id
+       AND member.organizationId = requirement.organization_id
+     JOIN user AS target ON target.id = member.userId
+     JOIN organization ON organization.id = requirement.organization_id
      WHERE requirement.id = ? AND requirement.organization_id = ?
-       AND (member.id IS NOT NULL OR invitation.status = 'pending')`,
-  )
-    .bind(requirementId, context.get("organizationId"))
-    .first<{ id: string }>();
-  return Boolean(active);
-}
-
-async function releaseUnresolvedCheckrStart(
-  context: Context<EmployeeFormsEnv>,
-  requirementId: string,
-  nonce: string,
-  clearNonce: boolean,
-) {
-  await context.env.DB.prepare(
-    `UPDATE employee_requirements
-     SET checkr_starting_at = NULL,
-         checkr_start_nonce = CASE WHEN ? = 1 THEN NULL ELSE checkr_start_nonce END,
-         checkr_start_nonce_at = CASE WHEN ? = 1 THEN NULL ELSE checkr_start_nonce_at END,
-         updated_at = ?
-     WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?`,
+       AND member.userId = ?`,
   )
     .bind(
-      clearNonce ? 1 : 0,
-      clearNonce ? 1 : 0,
-      new Date().toISOString(),
-      requirementId,
+      context.req.param("id"),
       context.get("organizationId"),
-      nonce,
+      context.get("authSession").user.id,
     )
-    .run();
+    .first<ScreeningSubjectRow>();
 }
 
-async function findPriorCheckrInvitation(
+function awaitingSubmission(subject: ScreeningSubjectRow) {
+  return (
+    subject.kind === "background_check" &&
+    Boolean(subject.checkr_requested_at) &&
+    !subject.checkr_report_id &&
+    subject.status !== "complete"
+  );
+}
+
+async function emailScreeningRequest(
   context: Context<EmployeeFormsEnv>,
   row: RequirementRow,
-  claim: CheckrStartClaim,
-  candidateId: string,
 ) {
-  if (!row.checkr_start_nonce || !claim.checkr_candidate_id) return null;
-  const invitations = await listCheckrCandidateInvitations(
-    context.env,
-    candidateId,
-  );
-  const attemptAt = Date.parse(claim.checkr_start_nonce_at);
-  const active = invitations.data.filter((invitation) => {
-    const invitationAt = Date.parse(invitation.created_at ?? "");
-    return (
-      !isExpiredCheckrStatus(invitation.status) &&
-      (invitation.package === claim.checkr_start_package ||
-        invitation.package === undefined) &&
-      (!Number.isFinite(invitationAt) ||
-        !Number.isFinite(attemptAt) ||
-        invitationAt >= attemptAt - 60_000)
-    );
+  const organization = await context.env.DB.prepare(
+    "SELECT name FROM organization WHERE id = ?",
+  )
+    .bind(context.get("organizationId"))
+    .first<{ name: string }>();
+  if (!row.target_email) return;
+  await sendScreeningRequest(context.env, {
+    dueDate: row.due_date,
+    memberId: row.member_id,
+    organizationName: organization?.name ?? "Your organization",
+    recipient: {
+      email: row.target_email,
+      name: row.target_name ?? row.target_email.split("@")[0] ?? "there",
+    },
+    requirementId: row.id,
+    title: row.title,
   });
-  const matched = active.filter((invitation) =>
-    invitation.tags?.includes(checkrAttemptTag(claim.checkr_start_nonce)),
-  );
-  if (matched.length > 1) {
-    throw new CheckrReconciliationRequired();
-  }
-  if (matched[0]) return matched[0];
-  const ambiguous = active.some(
-    (invitation) =>
-      invitation.package === undefined ||
-      !Array.isArray(invitation.tags) ||
-      invitation.tags.length === 0,
-  );
-  if (ambiguous) {
-    const nonceStillIdempotent =
-      new Date(claim.checkr_start_nonce_at).getTime() >=
-      Date.now() - 23 * 60 * 60_000;
-    if (
-      !nonceStillIdempotent ||
-      !(await screeningTargetActive(context, row.id))
-    ) {
-      throw new CheckrReconciliationRequired();
-    }
-    return null;
-  }
-  if (invitations.data.length >= 100) {
-    throw new CheckrReconciliationRequired();
-  }
-  return null;
-}
-
-class CheckrReconciliationRequired extends Error {
-  constructor() {
-    super("Checkr invitations need manual reconciliation before retrying.");
-  }
-}
-
-function checkrAttemptTag(nonce: string) {
-  // Pre-rename prefix: Checkr holds tags in this form for open invitations.
-  return `tearleads-screening:${nonce}`;
-}
-
-async function storeCheckrInvitation(
-  context: Context<EmployeeFormsEnv>,
-  row: RequirementRow,
-  nonce: string,
-  invitation: Awaited<ReturnType<typeof createCheckrInvitation>>,
-  cancelIfOrphaned: boolean,
-) {
-  const stored = await context.env.DB.prepare(
-    `UPDATE employee_requirements
-     SET checkr_invitation_id = ?, checkr_invitation_status = ?,
-         checkr_report_id = ?, status = ?,
-         checkr_starting_at = NULL, checkr_start_nonce = NULL,
-         checkr_start_nonce_at = NULL, updated_at = ?
-     WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?`,
-  )
-    .bind(
-      invitation.id,
-      invitation.status,
-      invitation.report_id,
-      isExpiredCheckrStatus(invitation.status) ? "pending" : "in_progress",
-      new Date().toISOString(),
-      row.id,
-      context.get("organizationId"),
-      nonce,
-    )
-    .run();
-  if (stored.meta.changes) return invitation;
-  const current = await findRequirement(context);
-  if (current?.checkr_invitation_id === invitation.id) return invitation;
-  if (cancelIfOrphaned) {
-    try {
-      await cancelCheckrInvitation(context.env, invitation.id);
-    } catch (cause) {
-      console.error(
-        "Could not cancel a screening whose requirement disappeared.",
-        cause,
-      );
-    }
-  }
-  return null;
 }
 
 export async function assignAcceptedInvitationRequirements(
@@ -1090,17 +780,21 @@ function toRequirement(row: RequirementRow, manager: boolean, env: Bindings) {
     targetName: row.target_name,
     completedAt: row.completed_at,
     checkrAvailable:
-      row.kind !== "form" &&
-      Boolean(row.member_id || row.invitation_id || row.checkr_start_nonce) &&
-      (!row.invitation_id ||
-        row.invitation_status === "pending" ||
-        Boolean(row.checkr_start_nonce)) &&
+      Boolean(row.member_id || row.invitation_status === "pending") &&
       checkrConfigured(env, row.kind),
-    checkrStarted:
-      Boolean(row.checkr_invitation_id) && !isExpiredCheckrInvitation(row),
-    checkrPendingStart: Boolean(row.checkr_start_nonce),
-    checkrInvitationStatus: row.checkr_invitation_status,
+    // Requested and waiting for the person to submit their details.
+    checkrRequested: awaitingDetails(row),
+    canSubmitCheckr:
+      Boolean(row.is_subject) &&
+      awaitingDetails(row) &&
+      checkrConfigured(env, row.kind),
+    checkrSubmitting: Boolean(row.checkr_start_nonce),
+    checkrWorkLocation: row.checkr_work_state
+      ? { city: row.checkr_work_city, state: row.checkr_work_state }
+      : null,
+    checkrReportStatus: row.checkr_report_id ? row.checkr_report_status : null,
     checkrResult: manager ? row.checkr_result : null,
+    hasCheckrConsent: Boolean(row.checkr_consent_id),
   };
 }
 
@@ -1167,29 +861,26 @@ function isValidRequirementUpdate(row: RequirementRow, body: InputRecord) {
     (row.kind === "form" &&
       status !== undefined &&
       documentRevision === undefined) ||
-    (row.checkr_invitation_id &&
-      !isExpiredCheckrInvitation(row) &&
-      status !== undefined) ||
-    (status !== undefined &&
-      (row.checkr_starting_at !== null || row.checkr_start_nonce !== null))
+    (status !== undefined && screeningActive(row))
   );
 }
 
-function isExpiredCheckrStatus(status: string | null) {
+function awaitingDetails(row: RequirementRow) {
   return (
-    status === "expired" ||
-    status === "canceled" ||
-    status === "deleted" ||
-    status === "partially_canceled"
+    Boolean(row.checkr_requested_at) &&
+    !row.checkr_report_id &&
+    row.status !== "complete"
   );
 }
 
-function isExpiredCheckrInvitation(row: RequirementRow) {
-  return isExpiredCheckrStatus(row.checkr_invitation_status);
-}
-
-function isUsState(value: unknown): value is string {
-  return typeof value === "string" && /^[A-Z]{2}$/.test(value);
+/** Submitted to Checkr, or being submitted, and not canceled. */
+function screeningActive(row: RequirementRow) {
+  return (
+    row.checkr_starting_at !== null ||
+    row.checkr_start_nonce !== null ||
+    (row.checkr_report_id !== null &&
+      !isClosedReportStatus(row.checkr_report_status))
+  );
 }
 
 function isCity(value: unknown): value is string | undefined {
@@ -1205,11 +896,10 @@ async function findRequirement(context: Context<EmployeeFormsEnv>) {
             document_filename, document_size, document_revision,
             invitation_id,
             invitation.status AS invitation_status, member_id,
-            completed_at, checkr_candidate_id, checkr_invitation_id,
-            checkr_report_id, checkr_result, checkr_invitation_status,
-            checkr_starting_at, checkr_start_nonce,
-            checkr_start_nonce_at, checkr_start_package,
-            checkr_attempt, checkr_refresh_revision,
+            completed_at, checkr_report_id, checkr_report_status,
+            checkr_result, checkr_consent_id, checkr_requested_at,
+            checkr_work_state, checkr_work_city, checkr_starting_at,
+            checkr_start_nonce, checkr_refresh_revision,
             COALESCE(target.email, invitation.email, requirement.target_email)
               AS target_email,
             target.name AS target_name

@@ -64,7 +64,7 @@ describe("admin organizations", () => {
         targetEmail: "member@example.com",
         targetName: "Member Person",
         completedAt: "2026-10-07T11:09:18.000Z",
-        checkrInvitationStatus: "completed",
+        checkrStatus: "complete",
         checkrResult: "clear",
         checkrReportUrl:
           "https://dashboard.checkrhq-staging.net/reports/report%2F1",
@@ -102,7 +102,7 @@ describe("admin organizations", () => {
     const database = await createDetailFixture();
     database
       .query(
-        "UPDATE employee_requirements SET checkr_report_id = NULL, checkr_result = NULL, checkr_invitation_status = NULL, status = 'pending', completed_at = NULL WHERE id = 'background-check'",
+        "UPDATE employee_requirements SET checkr_report_id = NULL, checkr_result = NULL, checkr_report_status = NULL, status = 'pending', completed_at = NULL WHERE id = 'background-check'",
       )
       .run();
     database.query("DELETE FROM member WHERE id = 'member_member-user'").run();
@@ -645,7 +645,12 @@ async function createDetailFixture() {
     "0031_require_member_two_factor.sql",
     "0041_create_employee_requirements.sql",
     "0042_add_checkr_screenings.sql",
+    "0044_guard_employee_screenings.sql",
+    "0046_version_employee_screening_refresh.sql",
+    "0047_bind_employee_screening_attempt.sql",
+    "0052_track_checkr_refreshes.sql",
     "0055_track_user_last_active.sql",
+    "0065_self_host_checkr_screenings.sql",
   ]) {
     database.exec(
       await Bun.file(
@@ -658,11 +663,11 @@ async function createDetailFixture() {
       `INSERT INTO employee_requirements
      (id, organization_id, member_id, target_email, kind, title, due_date, status,
       created_at, updated_at, completed_at, checkr_report_id, checkr_result,
-      checkr_invitation_status)
+      checkr_report_status)
      VALUES ('background-check', ?, 'member_member-user', 'original@example.com',
              'background_check', 'Background check', '2026-10-31', 'complete',
              '2026-10-07T11:00:00.000Z', '2026-10-07T11:09:18.000Z',
-             '2026-10-07T11:09:18.000Z', 'report/1', 'clear', 'completed')`,
+             '2026-10-07T11:09:18.000Z', 'report/1', 'clear', 'complete')`,
     )
     .run(targetOrganizationId);
   database
