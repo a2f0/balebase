@@ -120,6 +120,10 @@ function isoDate(date: Date) {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+export function financeConnectionPath(id: string) {
+  return `/finance/connections/${encodeURIComponent(id)}`;
+}
+
 export function financeTransactionPath(id: string) {
   return `/finance/transactions/${encodeURIComponent(id)}`;
 }

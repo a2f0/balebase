@@ -26,6 +26,37 @@ export interface FinanceAccount {
   type: string;
 }
 
+/** A connection's own account, with the identifier Plaid support asks for. */
+export interface FinanceConnectionAccount
+  extends Omit<FinanceAccount, "institutionName"> {
+  plaidAccountId: string;
+  transactionCount: number;
+}
+
+export interface FinanceConnectionDetail {
+  accounts: FinanceConnectionAccount[];
+  connection: {
+    createdAt: string;
+    createdBy: { email: string; name: string } | null;
+    disconnectedAt: string | null;
+    errorCode: string | null;
+    /** Plaid's explanation; older failures have only a code. */
+    errorMessage: string | null;
+    id: string;
+    institutionId: string | null;
+    institutionName: string | null;
+    lastSyncedAt: string | null;
+    plaidItemId: string;
+    status: string;
+    /** Active imported transactions and their date range. */
+    transactions: {
+      count: number;
+      firstDate: string | null;
+      lastDate: string | null;
+    };
+  };
+}
+
 export interface FinanceTransaction {
   accountId: string;
   accountName: string;
@@ -159,6 +190,12 @@ export async function exchangePlaidPublicToken(
     }),
     method: "POST",
   });
+}
+
+export function getFinanceConnection(id: string) {
+  return request<FinanceConnectionDetail>(
+    `/connections/${encodeURIComponent(id)}`,
+  );
 }
 
 export function syncFinanceConnection(id: string) {

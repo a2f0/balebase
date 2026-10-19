@@ -392,7 +392,7 @@ async function recordSyncSuccess(
   await database
     .prepare(
       `UPDATE plaid_items SET cursor = ?, status = 'active', error_code = NULL,
-       last_synced_at = ?, updated_at = ? WHERE id = ?`,
+       error_message = NULL, last_synced_at = ?, updated_at = ? WHERE id = ?`,
     )
     .bind(cursor, now, now, itemId)
     .run();
@@ -403,13 +403,19 @@ async function recordSyncError(
   itemId: string,
   error: unknown,
 ) {
-  const code = error instanceof PlaidApiError ? error.code : "SYNC_ERROR";
+  // Only Plaid's own message is kept; other errors may describe internals.
+  const plaid = error instanceof PlaidApiError ? error : null;
   await database
     .prepare(
-      `UPDATE plaid_items SET status = 'error', error_code = ?, updated_at = ?
-       WHERE id = ?`,
+      `UPDATE plaid_items SET status = 'error', error_code = ?,
+       error_message = ?, updated_at = ? WHERE id = ?`,
     )
-    .bind(code, new Date().toISOString(), itemId)
+    .bind(
+      plaid?.code ?? "SYNC_ERROR",
+      plaid?.message ?? null,
+      new Date().toISOString(),
+      itemId,
+    )
     .run();
 }
 
