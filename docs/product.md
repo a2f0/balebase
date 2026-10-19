@@ -372,8 +372,14 @@ import up to 24 months of account and transaction history. Syncing is manual in
 this first release; Plaid webhooks can be added later for automatic updates.
 Each institution's sync, disconnect, and delete actions live at
 `/finance/connections`; the overview only warns when a connection stops
-syncing. Users can add organization-scoped notes, labels, and a reviewed flag to
-imported transactions. Select an account tile to focus on it; Shift-click adds
+syncing. Selecting an institution opens `/finance/connections/<id>`, which
+shows its status, Plaid's last error code and message, who connected it and
+when, the last sync and disconnect times, the imported transaction count and
+date range, and its accounts. Its source data lists the Plaid institution,
+Item, and account IDs with copy buttons for Plaid support, as a transaction's
+source data does for its Plaid transaction IDs. Users can add
+organization-scoped notes, labels, and a reviewed flag to imported
+transactions. Select an account tile to focus on it; Shift-click adds
 or removes individual accounts from the selection. No selection shows all
 accounts. The transaction toolbar combines account selection with the current
 calendar year, previous calendar year, or all time, and an uncategorized-expense

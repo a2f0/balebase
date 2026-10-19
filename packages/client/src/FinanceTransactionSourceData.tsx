@@ -1,16 +1,9 @@
-import { Card, PageSection } from "@balebase/ui/react";
-import { Fragment } from "react";
+import { PageSection } from "@balebase/ui/react";
+import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
 import type {
   FinanceTransaction,
   FinanceTransactionSource,
 } from "./financeApi";
-
-interface SourceField {
-  label: string;
-  value: string | null;
-  /** Explains a value whose meaning is not obvious from the raw text. */
-  hint?: string;
-}
 
 /** The imported Plaid record behind a transaction, with values unformatted. */
 export function FinanceTransactionSourceData({
@@ -25,20 +18,7 @@ export function FinanceTransactionSourceData({
       title="Source data"
       description="Fields as imported from Plaid. Notes and categories you add are not included."
     >
-      <Card>
-        <dl className="keyValue">
-          {sourceFields(transaction, source).map(({ hint, label, value }) => (
-            <Fragment key={label}>
-              <dt title={hint}>{label}</dt>
-              {value === null ? (
-                <dd className="textSubtle">Not provided</dd>
-              ) : (
-                <dd className="mono">{value}</dd>
-              )}
-            </Fragment>
-          ))}
-        </dl>
-      </Card>
+      <FinanceSourceFields fields={sourceFields(transaction, source)} />
     </PageSection>
   );
 }
@@ -73,9 +53,17 @@ function sourceFields(
         .filter((part) => part !== null)
         .join(" / "),
     },
-    { label: "Plaid transaction ID", value: source.plaidTransactionId },
-    { label: "Pending transaction ID", value: source.pendingTransactionId },
-    { label: "Balebase ID", value: transaction.id },
+    {
+      copyable: true,
+      label: "Plaid transaction ID",
+      value: source.plaidTransactionId,
+    },
+    {
+      copyable: true,
+      label: "Pending transaction ID",
+      value: source.pendingTransactionId,
+    },
+    { copyable: true, label: "Balebase ID", value: transaction.id },
     {
       label: "Last synced",
       value: source.updatedAt,

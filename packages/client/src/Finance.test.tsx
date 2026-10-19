@@ -118,6 +118,7 @@ describe("Finance connections", () => {
     const markup = renderFinance(data, { page: "connections" });
     expect(markup).toContain("Sync now");
     expect(markup).toContain("Connect bank");
+    expect(markup).toContain('href="/finance/connections/connection-1"');
   });
 
   it("explains an empty connections tab", () => {
