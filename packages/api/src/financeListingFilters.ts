@@ -5,6 +5,8 @@ export function financeListingFilters(context: FinanceContext) {
   const accountIds = context.req.queries("accountId") ?? [];
   const year = context.req.query("year");
   const uncategorized = context.req.query("uncategorized");
+  const category = context.req.query("category");
+  // Clients before 0.1.52, including installed mobile apps, filter by id.
   const categoryId = context.req.query("categoryId");
   const cursor = parseCursor(context.req.query("cursor"));
   if (
@@ -12,6 +14,7 @@ export function financeListingFilters(context: FinanceContext) {
     accountIds.some((id) => !id || id.length > 200) ||
     (year !== undefined && !/^[1-9]\d{3}$/.test(year)) ||
     (uncategorized !== undefined && uncategorized !== "true") ||
+    (category !== undefined && (!category || category.length > 200)) ||
     (categoryId !== undefined && (!categoryId || categoryId.length > 200)) ||
     cursor === false
   ) {
@@ -40,6 +43,16 @@ export function financeListingFilters(context: FinanceContext) {
       "txn.amount > 0",
       "COALESCE(txn.category_primary, '') NOT IN ('TRANSFER_OUT', 'LOAN_PAYMENTS')",
     );
+  }
+  if (category) {
+    // An unknown slug matches nothing rather than failing the whole listing.
+    conditions.push(
+      `annotation.expense_category_id = (
+         SELECT id FROM finance_expense_categories
+         WHERE organization_id = txn.organization_id AND slug = ?
+       )`,
+    );
+    bindings.push(category);
   }
   if (categoryId) {
     conditions.push("annotation.expense_category_id = ?");

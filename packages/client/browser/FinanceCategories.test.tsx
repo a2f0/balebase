@@ -22,8 +22,8 @@ it("opens a category from anywhere on its row except its own buttons", async () 
   const markup = renderToStaticMarkup(
     <FinanceCategories
       categories={[
-        { id: "meals", name: "Meals", transactionCount: 2 },
-        { id: "travel", name: "Travel", transactionCount: 0 },
+        { id: "meals", name: "Meals", slug: "meals", transactionCount: 2 },
+        { id: "travel", name: "Travel", slug: "travel", transactionCount: 0 },
       ]}
       onChanged={async () => undefined}
       onShowTransactions={() => undefined}

@@ -149,19 +149,29 @@ describe("finance", () => {
     const list = (query: string) =>
       jsonRequest<FinanceListing>(fixture.app, fixture.bindings, query, "GET");
 
-    const all = await list(`?categoryId=${meals}`);
+    const all = await list("?category=meals");
     expect(all.body.transactions.map((txn) => txn.id)).toEqual([
       "report-txn-0",
       "report-txn-2",
     ]);
-    const year = await list(`?categoryId=${meals}&year=2024`);
+    const year = await list("?category=meals&year=2024");
     expect(year.body.transactions.map((txn) => txn.id)).toEqual([
       "report-txn-2",
     ]);
+    const byId = await list(`?categoryId=${meals}`);
+    expect(byId.body.transactions.map((txn) => txn.id)).toEqual([
+      "report-txn-0",
+      "report-txn-2",
+    ]);
+    const unknown = await list("?category=dining");
+    expect(unknown.response.status).toBe(200);
+    expect(unknown.body.transactions).toEqual([]);
+    const otherOrganization = testApp("organization-2", fixture.requestPlaid);
+    await createCategory({ ...fixture, app: otherOrganization }, "Meals");
     const hidden = await jsonRequest<FinanceListing>(
-      testApp("organization-2", fixture.requestPlaid),
+      otherOrganization,
       fixture.bindings,
-      `?categoryId=${meals}`,
+      "?category=meals",
       "GET",
     );
     expect(hidden.body.transactions).toEqual([]);
@@ -174,6 +184,7 @@ describe("finance", () => {
       "year=2025-01-01",
       "accountId=",
       "uncategorized=false",
+      "category=",
       "categoryId=",
       "cursor=broken",
       "cursor=null",
@@ -549,6 +560,7 @@ describe("expense categories", () => {
     expect(created.response.status).toBe(201);
     expect(created.body.category).toMatchObject({
       name: "Meals and drinks",
+      slug: "meals-and-drinks",
       transactionCount: 0,
     });
     const categoryId = created.body.category.id;
@@ -580,6 +592,11 @@ describe("expense categories", () => {
       { name: "Client meals" },
     );
     expect(renamed.response.status).toBe(200);
+    expect(renamed.body.category).toMatchObject({
+      id: categoryId,
+      name: "Client meals",
+      slug: "client-meals",
+    });
     const sameNameOtherCase = await jsonRequest(
       fixture.app,
       fixture.bindings,
@@ -639,6 +656,104 @@ describe("expense categories", () => {
       fixture.bindings,
     );
     expect(cannotDelete.status).toBe(404);
+  });
+
+  it("slugs category names uniquely within each organization", async () => {
+    const fixture = await createFixture();
+    const create = async (name: string, app = fixture.app) => {
+      const created = await jsonRequest<{ category: Category }>(
+        app,
+        fixture.bindings,
+        "/categories",
+        "POST",
+        { name },
+      );
+      expect(created.response.status).toBe(201);
+      return created.body.category;
+    };
+    const cafe = await create("Café & Bar");
+    expect(cafe.slug).toBe("cafe-bar");
+    const repeat = await create("--Cafe/Bar--");
+    expect(repeat.slug).toBe("cafe-bar-2");
+    expect((await create("Uncategorized")).slug).toBe("uncategorized-2");
+    expect((await create("🍔")).slug).toBe("category");
+    expect((await create("Travel!")).slug).toBe("travel");
+    const elsewhere = await create(
+      "Café & Bar",
+      testApp("organization-2", fixture.requestPlaid),
+    );
+    expect(elsewhere.slug).toBe("cafe-bar");
+
+    const rename = async (id: string, name: string) => {
+      const renamed = await jsonRequest<{ category: Category }>(
+        fixture.app,
+        fixture.bindings,
+        `/categories/${id}`,
+        "PATCH",
+        { name },
+      );
+      expect(renamed.response.status).toBe(200);
+      return renamed.body.category.slug;
+    };
+    expect(await rename(repeat.id, "Cafe Bar!")).toBe("cafe-bar-2");
+    expect(await rename(cafe.id, "Coffee")).toBe("coffee");
+    expect(await rename(repeat.id, "Cafe & bar")).toBe("cafe-bar");
+
+    const defaults = await jsonRequest<{ categories: Category[] }>(
+      fixture.app,
+      fixture.bindings,
+      "/categories/defaults",
+      "POST",
+    );
+    const slugs = defaults.body.categories.map(({ name, slug }) => [
+      name,
+      slug,
+    ]);
+    expect(slugs).toContainEqual(["Travel", "travel-2"]);
+    expect(slugs).toContainEqual([
+      "Software and subscriptions",
+      "software-and-subscriptions",
+    ]);
+    expect(() =>
+      fixture.database.run(
+        `INSERT INTO finance_expense_categories
+           (id, organization_id, name, slug, created_at, updated_at)
+         VALUES ('copy', 'org_user-1', 'Copy', 'coffee', '', '')`,
+      ),
+    ).toThrow(/UNIQUE/);
+  });
+
+  it("chooses another slug when a concurrent write takes it first", async () => {
+    const fixture = await createFixture();
+    const tea = await createCategory(fixture, "Tea");
+    const raced = await jsonRequest<{ category: Category }>(
+      fixture.app,
+      raceForSlug(fixture, "cafe-bar"),
+      "/categories",
+      "POST",
+      { name: "Cafe/Bar" },
+    );
+    expect(raced.response.status).toBe(201);
+    expect(raced.body.category.slug).toBe("cafe-bar-2");
+    const renamed = await jsonRequest<{ category: Category }>(
+      fixture.app,
+      raceForSlug(fixture, "snacks"),
+      `/categories/${tea}`,
+      "PATCH",
+      { name: "Snacks" },
+    );
+    expect(renamed.response.status).toBe(200);
+    expect(renamed.body.category.slug).toBe("snacks-2");
+    const defaults = await jsonRequest<{ categories: Category[] }>(
+      fixture.app,
+      raceForSlug(fixture, "travel"),
+      "/categories/defaults",
+      "POST",
+    );
+    expect(
+      defaults.body.categories.find(({ name }) => name === "Travel")?.slug,
+    ).toBe("travel-2");
+    expect(defaults.body.categories).toHaveLength(21);
   });
 
   it("assigns at most one category per transaction and unassigns on delete", async () => {
@@ -921,11 +1036,74 @@ describe("expense categories", () => {
       { name: null, organization_id: null, transaction_id: "txn-f" },
     ]);
   });
+
+  it("backfills category slugs that are unique in each organization", async () => {
+    const database = new Database(":memory:");
+    const migrations = (await readdir(`${import.meta.dir}/../migrations`))
+      .filter((name) => name.endsWith(".sql"))
+      .sort();
+    const slugMigration = "0065_slug_finance_expense_categories.sql";
+    for (const migration of migrations.filter((name) => name < slugMigration))
+      await applyMigration(database, migration);
+    const categories: [string, string, string][] = [
+      ["a1234567-first", "org-a", "Meals & drinks"],
+      ["b1234567-second", "org-a", "Meals/drinks"],
+      ["c1234567-third", "org-a", "Meals drinks 2"],
+      ["d1234567-fourth", "org-a", "Uncategorized"],
+      ["e1234567-fifth", "org-a", "Taxes (2026)"],
+      ["f1234567-sixth", "org-a", "🍔"],
+      ["g1234567-seventh", "org-a", "Café"],
+      ["h1234567-eighth", "org-b", "Meals/drinks"],
+      ["j1234567-tenth", "org-a", "b1234567-second"],
+    ];
+    for (const [index, [id, organizationId, name]] of categories.entries()) {
+      database
+        .query(
+          `INSERT INTO finance_expense_categories
+             (id, organization_id, name, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)`,
+        )
+        .run(id, organizationId, name, `2026-08-0${index + 1}`, "");
+    }
+    await applyMigration(database, slugMigration);
+
+    expect(
+      database
+        .query("SELECT id, slug FROM finance_expense_categories ORDER BY id")
+        .all(),
+    ).toEqual([
+      { id: "a1234567-first", slug: "meals-drinks" },
+      { id: "b1234567-second", slug: "meals-drinks-2--b1234567-second" },
+      { id: "c1234567-third", slug: "meals-drinks-2" },
+      { id: "d1234567-fourth", slug: "uncategorized-2" },
+      { id: "e1234567-fifth", slug: "taxes-2026" },
+      { id: "f1234567-sixth", slug: "category" },
+      // Unlike the API, the backfill cannot fold accents.
+      { id: "g1234567-seventh", slug: "caf" },
+      { id: "h1234567-eighth", slug: "meals-drinks" },
+      { id: "j1234567-tenth", slug: "b1234567-second" },
+    ]);
+
+    // Categories the previous Worker creates during deployment get a slug.
+    database.run(
+      `INSERT INTO finance_expense_categories
+         (id, organization_id, name, created_at, updated_at)
+       VALUES ('i1234567-ninth', 'org-a', 'Postage', '', '')`,
+    );
+    expect(
+      database
+        .query(
+          "SELECT slug FROM finance_expense_categories WHERE id = 'i1234567-ninth'",
+        )
+        .get(),
+    ).toEqual({ slug: "i1234567-ninth" });
+  });
 });
 
 interface Category {
   id: string;
   name: string;
+  slug: string;
   transactionCount: number;
 }
 
@@ -959,6 +1137,49 @@ async function createCategory(
   );
   expect(created.response.status).toBe(201);
   return created.body.category.id;
+}
+
+/** Bindings where another category takes `slug` just before the first write. */
+function raceForSlug(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  slug: string,
+): Bindings {
+  const database = fixture.bindings.DB;
+  let raced = false;
+  const race = () => {
+    if (raced) return;
+    raced = true;
+    fixture.database
+      .query(
+        `INSERT INTO finance_expense_categories
+           (id, organization_id, name, slug, created_at, updated_at)
+         VALUES (?, 'org_user-1', ?, ?, '', '')`,
+      )
+      .run(`rival-${slug}`, `Rival ${slug}`, slug);
+  };
+  const prepare = (query: string) => {
+    const statement = database.prepare(query);
+    if (!/^\s*(INSERT|UPDATE)\b.*finance_expense_categories\b/.test(query))
+      return statement;
+    // Single writes run; the defaults batch executes each statement.
+    const { execute, run } = statement as unknown as TestStatement & {
+      run: () => Promise<unknown>;
+    };
+    return Object.assign(statement, {
+      execute: () => {
+        race();
+        return execute();
+      },
+      run: () => {
+        race();
+        return run();
+      },
+    });
+  };
+  return {
+    ...fixture.bindings,
+    DB: { ...database, prepare } as unknown as D1Database,
+  };
 }
 
 /**

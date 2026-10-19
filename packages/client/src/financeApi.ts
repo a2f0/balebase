@@ -84,6 +84,8 @@ export interface FinanceTransactionAnnotationInput {
 export interface ExpenseCategory {
   id: string;
   name: string;
+  /** Unique in the organization; changes when the category is renamed. */
+  slug: string;
   transactionCount: number;
 }
 
@@ -120,8 +122,8 @@ export interface FinanceData {
 
 export interface FinanceFilters {
   accountIds: string[];
-  /** One expense category's transactions, opened from the Categories tab. */
-  categoryId: string | null;
+  /** One expense category's transactions, from its bookmarkable path. */
+  categorySlug: string | null;
   year: number | null;
   uncategorized: boolean;
 }
@@ -134,7 +136,7 @@ export async function getFinanceData(
   for (const id of filters?.accountIds ?? []) query.append("accountId", id);
   if (filters?.year) query.set("year", String(filters.year));
   if (filters?.uncategorized) query.set("uncategorized", "true");
-  if (filters?.categoryId) query.set("categoryId", filters.categoryId);
+  if (filters?.categorySlug) query.set("category", filters.categorySlug);
   if (cursor) query.set("cursor", cursor);
   return request<FinanceData>(query.size ? `?${query}` : "");
 }
@@ -218,7 +220,7 @@ export function createExpenseCategory(name: string) {
 }
 
 export function renameExpenseCategory(id: string, name: string) {
-  return request<{ category: { id: string; name: string } }>(
+  return request<{ category: { id: string; name: string; slug: string } }>(
     `/categories/${encodeURIComponent(id)}`,
     { body: JSON.stringify({ name }), method: "PATCH" },
   );

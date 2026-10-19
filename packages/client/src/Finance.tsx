@@ -38,7 +38,13 @@ import {
   syncFinanceConnection,
   updateFinanceTransactionAnnotation,
 } from "./financeApi";
-import { type FinancePage, financePageFor, financePages } from "./financePages";
+import {
+  expenseCategoryFiltersFor,
+  type FinancePage,
+  financeOverviewPath,
+  financePageFor,
+  financePages,
+} from "./financePages";
 import { selectFinanceAccount } from "./financeTransactions";
 import {
   type FinanceListingState,
@@ -56,7 +62,10 @@ export function Finance({
   onNavigate: (pathname: string) => void;
   pathname: string;
 }) {
-  const { load, setData, ...listing } = useFinanceData();
+  const page = financePageFor(pathname);
+  const { load, setData, onFiltersChange, ...listing } = useFinanceData(
+    page === "overview" ? expenseCategoryFiltersFor(pathname) : null,
+  );
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
@@ -75,10 +84,16 @@ export function Finance({
       onConnect={plaid.connect}
       onDeleteData={actions.deleteData}
       onDisconnect={actions.disconnect}
+      onFiltersChange={(next) => {
+        onFiltersChange(next);
+        // Category filters live in the path so they can be bookmarked.
+        const path = financeOverviewPath(next);
+        if (path !== pathname) onNavigate(path);
+      }}
       onNavigate={onNavigate}
       onReload={load}
       onSync={actions.sync}
-      page={financePageFor(pathname)}
+      page={page}
     />
   );
 }
@@ -246,13 +261,12 @@ export function FinanceView({
           <FinanceCategories
             categories={data?.categories}
             onChanged={onReload}
-            onShowTransactions={(category) => {
+            onShowTransactions={(category) =>
               handlers.onFiltersChange({
                 ...initialFilters,
-                categoryId: category.id,
-              });
-              handlers.onNavigate("/finance");
-            }}
+                categorySlug: category.slug,
+              })
+            }
           />
         )}
         {page === "connections" && (
@@ -299,13 +313,16 @@ function FinanceOverview({
       : filters.accountIds.length > 1
         ? `${filters.accountIds.length} accounts`
         : undefined;
+  const categoryId = data?.categories.find(
+    ({ slug }) => slug === filters.categorySlug,
+  )?.id;
   const transactions = loading
     ? undefined
     : data?.transactions.filter(
         (transaction) =>
           (!filters.uncategorized || !transaction.expenseCategoryId) &&
-          (!filters.categoryId ||
-            transaction.expenseCategoryId === filters.categoryId),
+          (!filters.categorySlug ||
+            transaction.expenseCategoryId === categoryId),
       );
   return (
     <>

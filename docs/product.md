@@ -378,15 +378,19 @@ or removes individual accounts from the selection. No selection shows all
 accounts. The transaction toolbar combines account selection with the current
 calendar year, previous calendar year, or all time, and an uncategorized-expense
 filter. That filter follows the Reports rules: posted outflows without an
-expense category, excluding transfers and loan or card payments. Filters search
+expense category, excluding transfers and loan or card payments, and it has the
+bookmarkable path `/finance/expenses/category/uncategorized`. Filters search
 all imported history; **Load more transactions** retrieves the next 250 matches.
 
 Each organization keeps its own list of expense categories at
 `/finance/categories` (with a one-click common set), and each transaction can
-have at most one category, chosen inline in the transaction list. Selecting a
-category's row, or **Show transactions** in its context menu, opens the overview
-filtered to that category's transactions across all imported history. Deleting a
-category leaves its transactions uncategorized. `/finance/reports` totals
+have at most one category, chosen inline in the transaction list. Each category
+has a slug derived from its name and unique within the organization; renaming a
+category changes its slug, and `uncategorized` is reserved. Selecting a
+category's row, or **Show transactions** in its context menu, opens
+`/finance/expenses/category/<slug>`, the overview filtered to that category's
+transactions across all imported history. Deleting a category leaves its
+transactions uncategorized. `/finance/reports` totals
 expenses by category over a period: posted outflows count as spending, refunds
 assigned to a category reduce it, and unassigned transfers and loan or card
 payments are reported separately so money moved between the organization's own
