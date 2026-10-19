@@ -622,7 +622,7 @@ function requiredNotices(
 function submission(
   answers: Answers,
   notices: string[],
-  form: Pick<ScreeningFormData, "disclosures" | "requestRevision">,
+  form: Pick<ScreeningFormData, "disclosureFingerprint" | "requestRevision">,
 ) {
   const { residenceState, ...candidate } = answers.details;
   return {
@@ -633,7 +633,7 @@ function submission(
     },
     candidate,
     copyRequested: answers.copyRequested,
-    disclosureVersion: form.disclosures.version,
+    disclosureFingerprint: form.disclosureFingerprint,
     requestRevision: form.requestRevision,
     residenceState,
     signature: {

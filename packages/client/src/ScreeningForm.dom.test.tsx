@@ -54,6 +54,7 @@ const section = (title: string) => ({ paragraphs: [`${title} text.`], title });
 
 const form: ScreeningFormData = {
   candidate: { email: "homer@example.com", name: "Homer" },
+  disclosureFingerprint: "shown-wording",
   disclosures: {
     authorization: section("Authorization"),
     disclosure: section("Disclosure Regarding Background Investigation"),
@@ -237,7 +238,7 @@ describe("screening form", () => {
           zipcode: "94088",
         },
         copyRequested: true,
-        disclosureVersion: "2026-10-19",
+        disclosureFingerprint: "shown-wording",
         requestRevision: "2026-10-19T12:00:00.000Z",
         residenceState: "CA",
         signature: {

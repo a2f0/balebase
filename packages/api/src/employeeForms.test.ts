@@ -16,6 +16,8 @@ import {
   employeeForms,
 } from "./employeeForms";
 import {
+  disclosureFingerprint,
+  screeningDisclosures,
   screeningDisclosureVersion,
   summaryOfRightsUrl,
 } from "./screeningDisclosures";
@@ -954,7 +956,7 @@ describe("employee forms", () => {
       const valid = homerSubmission();
       const cases: Array<[unknown, string]> = [
         [
-          { ...valid, disclosureVersion: "2000-01-01" },
+          { ...valid, disclosureFingerprint: "stale" },
           "These disclosures changed after you opened the form. Reload the page to review the current version.",
         ],
         [
@@ -1771,6 +1773,64 @@ describe("employee forms", () => {
     }
   });
 
+  it("rejects a signature over wording that changed after the form loaded", async () => {
+    const fixture = await createFixture();
+    const id = await requestedScreening(fixture);
+    const checkr = mockCheckr(checkrResponses);
+    try {
+      const form = (await (
+        await fixture.app("employee", "member").request(`/${id}/checkr/form`)
+      ).json()) as { disclosureFingerprint: string };
+      fixture.database
+        .query("UPDATE organization SET name = 'Acme Holdings' WHERE id = ?")
+        .run(orgId);
+      checkr.calls.length = 0;
+      const stale = await submitScreening(fixture, id, {
+        ...homerSubmission(),
+        disclosureFingerprint: form.disclosureFingerprint,
+      });
+      expect(stale.status).toBe(400);
+      expect(await stale.json()).toEqual({
+        error:
+          "These disclosures changed after you opened the form. Reload the page to review the current version.",
+      });
+      expect(checkr.calls).toEqual([]);
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("orders no report for a person removed while submitting", async () => {
+    const fixture = await createFixture();
+    const id = await requestedScreening(fixture);
+    const checkr = mockCheckr((call) => {
+      if (call.url.endsWith("/documents")) {
+        fixture.database
+          .query("DELETE FROM member WHERE id = 'employee-member'")
+          .run();
+      }
+      return checkrResponses(call);
+    });
+    try {
+      const response = await submitScreening(fixture, id, homerSubmission());
+      expect(response.status).toBe(409);
+      expect(
+        checkr.calls.some(
+          ({ method, url }) => method === "POST" && url === "/reports",
+        ),
+      ).toBe(false);
+      expect(
+        fixture.database
+          .query(
+            "SELECT checkr_report_id, checkr_report_requested_at FROM employee_requirements WHERE id = ?",
+          )
+          .get(id),
+      ).toEqual({ checkr_report_id: null, checkr_report_requested_at: null });
+    } finally {
+      checkr.restore();
+    }
+  });
+
   it("refreshes canceled reports and lets managers request the check again", async () => {
     const fixture = await createFixture();
     const id = await orderedScreening(fixture);
@@ -2503,7 +2563,6 @@ function homerSubmission() {
       zipcode: "94088",
     },
     copyRequested: true,
-    disclosureVersion: screeningDisclosureVersion,
     residenceState: "CA",
     signature: {
       authorize: true,
@@ -2513,8 +2572,11 @@ function homerSubmission() {
   };
 }
 
-/** Submits the form, answering the current request unless body names one. */
-function submitScreening(
+/**
+ * Submits the form, answering the current request with Acme's current
+ * disclosures unless the body names others.
+ */
+async function submitScreening(
   fixture: Awaited<ReturnType<typeof createFixture>>,
   id: string,
   body: unknown,
@@ -2526,6 +2588,9 @@ function submitScreening(
     .get(id) as { checkr_requested_at: string | null } | null;
   return fixture.app(user, role).request(`/${id}/checkr/submit`, {
     body: JSON.stringify({
+      disclosureFingerprint: await disclosureFingerprint(
+        screeningDisclosures("Acme"),
+      ),
       requestRevision: current?.checkr_requested_at,
       ...(body as object),
     }),

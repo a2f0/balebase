@@ -150,6 +150,7 @@ export interface CheckrTestCandidate {
 
 export interface ScreeningForm {
   candidate: { email: string; name: string };
+  disclosureFingerprint: string;
   disclosures: {
     authorization: DisclosureSection;
     disclosure: DisclosureSection;
@@ -188,8 +189,8 @@ export interface ScreeningSubmission {
     zipcode: string;
   };
   copyRequested: boolean;
-  /** The disclosure version the person read, which the API requires. */
-  disclosureVersion: string;
+  /** Identifies the exact wording the person read; the API requires it. */
+  disclosureFingerprint: string;
   requestRevision: string;
   residenceState: string;
   signature: { authorize: boolean; electronicRecords: boolean; name: string };

@@ -1,8 +1,5 @@
 import type { CheckrCandidateDetails } from "./checkr";
-import {
-  requiredStateNotices,
-  screeningDisclosureVersion,
-} from "./screeningDisclosures";
+import { requiredStateNotices } from "./screeningDisclosures";
 
 export interface ScreeningSubmission {
   candidate: Omit<CheckrCandidateDetails, "email">;
@@ -26,26 +23,27 @@ export function isUsStateCode(value: unknown): value is string {
 type Candidate = ScreeningSubmission["candidate"];
 
 /**
- * Checks the screening form against the disclosure version in effect and the
- * acknowledgments its work location requires. Returns the details to send to
- * Checkr, or a message for the person.
+ * Checks the screening form against the disclosures in effect, by their
+ * fingerprint, and the acknowledgments its work location requires. Returns the
+ * details to send to Checkr, or a message for the person.
  */
 export function parseScreeningSubmission(
   body: unknown,
   workState: string,
   today: string,
+  disclosureFingerprint: string,
 ): ScreeningSubmission | { error: string } {
   if (!isRecord(body)) return { error: "Complete the screening form." };
   const form = fields<
     | "acknowledgments"
     | "candidate"
     | "copyRequested"
-    | "disclosureVersion"
+    | "disclosureFingerprint"
     | "residenceState"
     | "signature"
   >(body);
   // The person signs only the wording they were shown.
-  if (form.disclosureVersion !== screeningDisclosureVersion) {
+  if (form.disclosureFingerprint !== disclosureFingerprint) {
     return {
       error:
         "These disclosures changed after you opened the form. Reload the page to review the current version.",

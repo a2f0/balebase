@@ -263,6 +263,24 @@ describe("Checkr screening results", () => {
     expect(button(credit, "Refresh check")).toBeTruthy();
   });
 
+  it("does not offer to request a canceled credit report again", async () => {
+    await render([
+      screening({
+        checkrAvailable: false,
+        checkrReportStatus: "canceled",
+        kind: "credit_check",
+        status: "pending",
+        title: "Credit check",
+      }),
+    ]);
+    const credit = item("Credit check");
+    expect(credit.textContent).toContain("Checkr: canceled");
+    expect(credit.textContent).not.toContain("Request again");
+    expect(
+      credit.querySelector('[aria-label="Status for Credit check"]'),
+    ).toBeTruthy();
+  });
+
   it("hides the result from the screened person", async () => {
     await render(
       [

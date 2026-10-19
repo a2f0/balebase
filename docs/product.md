@@ -450,8 +450,10 @@ attempt keeps only an HMAC fingerprint of its details, under the Worker's
 secret, to recognize corrections on retry. Balebase keeps each signed
 authorization (the disclosures shown, the signature, time, IP address, and
 device) as a private PDF in R2 that the person and managers can download. A
-submission names the disclosure version it was signed against, and the API
-rejects a version that is no longer current.
+submission carries a fingerprint of the exact disclosures its form showed,
+including the organization name, and the request it answered; the API rejects
+it if either has since changed, and orders nothing once the person leaves the
+organization.
 The disclosure wording in `packages/api/src/screeningDisclosures.ts` is a draft
 that counsel and Checkr must review before production use; Checkr also reviews
 the flow before credentialing a production account. Checkr does not support

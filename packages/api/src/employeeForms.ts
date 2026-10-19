@@ -17,6 +17,7 @@ import { checkrTestCandidates } from "./checkrTestCandidates";
 import { normalizeFilename } from "./filenames";
 import { canManageOrganization } from "./organizationMembers";
 import {
+  disclosureFingerprint,
   screeningDisclosures,
   summaryOfRightsUrl,
 } from "./screeningDisclosures";
@@ -503,9 +504,11 @@ employeeForms.get("/:id/checkr/form", async (context) => {
     console.error("Could not read the Checkr package.", cause);
     return null;
   });
+  const disclosures = screeningDisclosures(subject.organization_name);
   return context.json({
     candidate: { email: subject.email, name: subject.name },
-    disclosures: screeningDisclosures(subject.organization_name),
+    disclosureFingerprint: await disclosureFingerprint(disclosures),
+    disclosures,
     organizationName: subject.organization_name,
     requestRevision: subject.checkr_requested_at,
     requiresDriverLicense:
@@ -553,10 +556,12 @@ employeeForms.post("/:id/checkr/submit", async (context) => {
       409,
     );
   }
+  const disclosures = screeningDisclosures(subject.organization_name);
   const submission = parseScreeningSubmission(
     body,
     subject.checkr_work_state,
     new Date().toISOString().slice(0, 10),
+    await disclosureFingerprint(disclosures),
   );
   if ("error" in submission) {
     return context.json({ error: submission.error }, 400);
@@ -564,6 +569,7 @@ employeeForms.post("/:id/checkr/submit", async (context) => {
   const result = await submitCheckrScreening(
     context.env,
     {
+      disclosures,
       email: subject.email,
       organizationId: context.get("organizationId"),
       organizationName: subject.organization_name,

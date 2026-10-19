@@ -7,7 +7,7 @@ import {
   uploadCheckrConsent,
 } from "./checkr";
 import { buildScreeningConsentPdf } from "./screeningConsentPdf";
-import { screeningDisclosures } from "./screeningDisclosures";
+import type { ScreeningDisclosures } from "./screeningDisclosures";
 import type { ScreeningSubmission } from "./screeningSubmission";
 import type { Bindings } from "./types";
 
@@ -127,6 +127,8 @@ export async function requestCheckrScreening(
 }
 
 export interface ScreeningSubject {
+  /** The wording the person's form showed, which their signature records. */
+  disclosures: ScreeningDisclosures;
   email: string;
   organizationId: string;
   organizationName: string;
@@ -241,6 +243,9 @@ export async function submitCheckrScreening(
   } catch (cause) {
     const rejected = cause instanceof RejectedDetails;
     await releaseSubmission(env.DB, subject, nonce, rejected);
+    if (cause instanceof AttemptChanged) {
+      return conflict("This background check changed. Refresh and try again.");
+    }
     if (rejected) {
       return {
         kind: "rejected",
@@ -248,6 +253,13 @@ export async function submitCheckrScreening(
       };
     }
     throw cause;
+  }
+}
+
+/** Another request moved the attempt on, or the person left the organization. */
+class AttemptChanged extends Error {
+  constructor() {
+    super("The screening attempt changed.");
   }
 }
 
@@ -510,7 +522,7 @@ async function uploadConsent(
     `${nonce}:consent:${consent.id}`,
   );
   if (!(await markAttempt(env.DB, subject, nonce, { consentId: consent.id }))) {
-    throw new Error("The screening attempt changed.");
+    throw new AttemptChanged();
   }
 }
 
@@ -524,8 +536,13 @@ async function requestReport(
   // Recorded before asking, so a retry adopts any report and waits for a
   // request whose response was lost.
   const requestedAt = new Date().toISOString();
-  if (!(await markAttempt(env.DB, subject, nonce, { requestedAt }))) {
-    throw new Error("The screening attempt changed.");
+  if (
+    !(await markAttempt(env.DB, subject, nonce, {
+      memberUserId: subject.userId,
+      requestedAt,
+    }))
+  ) {
+    throw new AttemptChanged();
   }
   const report = await rejectingDetails(() =>
     createCheckrReport(
@@ -554,6 +571,8 @@ async function markAttempt(
     candidateId?: string;
     consentId?: string;
     digest?: string;
+    /** Also require this person to still be the requirement's member. */
+    memberUserId?: string;
     requestedAt?: string;
   },
 ) {
@@ -565,7 +584,13 @@ async function markAttempt(
            checkr_attempt_consent_id = COALESCE(?, checkr_attempt_consent_id),
            checkr_report_requested_at = COALESCE(?, checkr_report_requested_at),
            updated_at = ?
-       WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?`,
+       WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?
+         AND (? IS NULL OR EXISTS (
+           SELECT 1 FROM member
+           WHERE member.id = employee_requirements.member_id
+             AND member.organizationId = employee_requirements.organization_id
+             AND member.userId = ?
+         ))`,
     )
     .bind(
       step.digest ?? null,
@@ -576,6 +601,8 @@ async function markAttempt(
       scope.requirementId,
       scope.organizationId,
       nonce,
+      step.memberUserId ?? null,
+      step.memberUserId ?? null,
     )
     .run();
   return marked.meta.changes > 0;
@@ -654,8 +681,7 @@ async function restartAttempt(
       claim.checkr_start_nonce,
     )
     .run();
-  if (!restarted.meta.changes)
-    throw new Error("The screening attempt changed.");
+  if (!restarted.meta.changes) throw new AttemptChanged();
   return next;
 }
 
@@ -668,7 +694,7 @@ async function recordConsent(
 ) {
   const id = crypto.randomUUID();
   const signedAt = new Date().toISOString();
-  const disclosures = screeningDisclosures(subject.organizationName);
+  const disclosures = subject.disclosures;
   const pdf = await buildScreeningConsentPdf(
     {
       consentId: id,

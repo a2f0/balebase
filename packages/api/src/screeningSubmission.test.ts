@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { screeningDisclosureVersion } from "./screeningDisclosures";
 import { parseScreeningSubmission } from "./screeningSubmission";
 
 function form(name: { first: string; last: string; signature: string }) {
@@ -18,7 +17,7 @@ function form(name: { first: string; last: string; signature: string }) {
       ssn: "110111100",
       zipcode: "94088",
     },
-    disclosureVersion: screeningDisclosureVersion,
+    disclosureFingerprint: "shown",
     residenceState: "TX",
     signature: {
       authorize: true,
@@ -38,6 +37,7 @@ describe("screening submissions", () => {
       }),
       "TX",
       "2026-10-19",
+      "shown",
     );
     expect(parsed).toMatchObject({
       candidate: {
@@ -57,7 +57,7 @@ describe("screening submissions", () => {
       { first: "Nguyen", last: "Van", signature: "Nguyễn Van" },
     ]) {
       expect(
-        parseScreeningSubmission(form(name), "TX", "2026-10-19"),
+        parseScreeningSubmission(form(name), "TX", "2026-10-19", "shown"),
       ).toHaveProperty("error");
     }
   });
@@ -74,6 +74,7 @@ describe("screening submissions", () => {
         form({ first: name, last: "Lee", signature: `${name} Lee` }),
         "TX",
         "2026-10-19",
+        "shown",
       );
       if ("error" in parsed) continue;
       for (const character of parsed.signatureName +

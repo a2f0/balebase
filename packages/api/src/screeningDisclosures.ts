@@ -64,6 +64,20 @@ export function screeningDisclosures(organizationName: string) {
 
 export type ScreeningDisclosures = ReturnType<typeof screeningDisclosures>;
 
+/**
+ * A fingerprint of the exact wording a form showed, organization name
+ * included, so a submission authorizes only what the person read.
+ */
+export async function disclosureFingerprint(disclosures: ScreeningDisclosures) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify(disclosures)),
+  );
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 /** States with a notice, for the work location and where the person lives. */
 export function requiredStateNotices(
   workState: string,
