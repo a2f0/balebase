@@ -226,7 +226,10 @@ export function FinanceView({
         <FinanceNotices
           connectable={connectable}
           error={
-            error ?? (page === "overview" ? undefined : handlers.loadError)
+            error ??
+            (page === "overview" || page === "connections"
+              ? undefined
+              : handlers.loadError)
           }
           notice={notice}
           showDataNotice={data?.accounts.length === 0}
@@ -245,9 +248,11 @@ export function FinanceView({
           <FinanceConnections
             busy={handlers.busy}
             connections={data?.connections}
+            loadError={handlers.loadError}
             onConnect={handlers.onConnect}
             onDeleteData={handlers.onDeleteData}
             onDisconnect={handlers.onDisconnect}
+            onReload={onReload}
             onSync={handlers.onSync}
           />
         )}

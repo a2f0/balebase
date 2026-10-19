@@ -25,9 +25,13 @@ interface ConnectionHandlers {
 
 export function FinanceConnections({
   connections,
+  loadError,
+  onReload,
   ...handlers
 }: ConnectionHandlers & {
   connections: FinanceConnection[] | undefined;
+  loadError: string | undefined;
+  onReload: () => Promise<void>;
 }) {
   return (
     <PageSection
@@ -41,7 +45,21 @@ export function FinanceConnections({
       description="Sync each institution, disconnect it, or delete the data it imported."
       title="Connections"
     >
-      <ConnectionList connections={connections} {...handlers} />
+      {loadError && (
+        <Banner
+          actions={
+            <Button onClick={() => void onReload()} size="sm">
+              Retry
+            </Button>
+          }
+          tone="danger"
+        >
+          {loadError}
+        </Banner>
+      )}
+      {(!loadError || connections) && (
+        <ConnectionList connections={connections} {...handlers} />
+      )}
     </PageSection>
   );
 }

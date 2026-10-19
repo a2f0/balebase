@@ -47,7 +47,12 @@ const connection = (
 
 function renderFinance(
   data: FinanceData | undefined,
-  options: { error?: string; notice?: string; page?: FinancePage } = {},
+  options: {
+    error?: string;
+    loadError?: string;
+    notice?: string;
+    page?: FinancePage;
+  } = {},
 ) {
   return renderToStaticMarkup(
     <FinanceView
@@ -55,7 +60,7 @@ function renderFinance(
       loading={false}
       loadingMore={false}
       refreshing={false}
-      loadError={undefined}
+      loadError={options.loadError}
       loadMoreError={undefined}
       onFiltersChange={() => undefined}
       onLoadMore={async () => undefined}
@@ -119,6 +124,17 @@ describe("Finance connections", () => {
 
     expect(markup).toContain("No banks connected yet");
     expect(markup).toContain("Before you add an account");
+  });
+
+  it("offers a retry instead of loading forever after a failed load", () => {
+    const markup = renderFinance(undefined, {
+      loadError: "Could not load finances.",
+      page: "connections",
+    });
+
+    expect(markup).toContain("Could not load finances.");
+    expect(markup).toContain("Retry");
+    expect(markup).not.toContain("Loading connections");
   });
 
   it("flags connections that stopped syncing on the overview", () => {
