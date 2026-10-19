@@ -96,5 +96,16 @@ describe("registration", () => {
     await act(async () => toggles[0]?.click());
     expect(password.type).toBe("password");
     expect(toggles[0]?.getAttribute("aria-pressed")).toBe("false");
+
+    // A password revealed on one form starts hidden on the next.
+    await act(async () => toggles[0]?.click());
+    const signIn = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "Back to sign in",
+    );
+    await act(async () => signIn?.click());
+    expect(input("password").type).toBe("password");
+    expect(
+      container.querySelector(".passwordToggle")?.getAttribute("aria-pressed"),
+    ).toBe("false");
   });
 });

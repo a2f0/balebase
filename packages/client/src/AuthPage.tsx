@@ -794,8 +794,10 @@ function AuthFields(props: AuthFieldsProps) {
           value={props.email}
         />
       )}
+      {/* Keyed by mode, so a revealed password is hidden on the next form. */}
       {needsPassword && (
         <AuthInput
+          key={`${mode}-password`}
           autoComplete={
             mode === "sign-in" ? "current-password" : "new-password"
           }
@@ -811,6 +813,7 @@ function AuthFields(props: AuthFieldsProps) {
       )}
       {needsConfirmation && (
         <AuthInput
+          key={`${mode}-confirmation`}
           autoComplete="new-password"
           label="Confirm password"
           maxLength={128}
