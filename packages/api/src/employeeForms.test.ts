@@ -1167,23 +1167,159 @@ describe("employee forms", () => {
       expect(checkr.calls[2]?.idempotencyKey).toBe(
         `${kept.checkr_start_nonce}:report`,
       );
+      const uploaded = checkr.calls[1]?.idempotencyKey?.split(":consent:")[1];
 
       checkr.calls.length = 0;
-      const resumed = await submitScreening(fixture, id, homerSubmission());
+      const resumed = await submitScreening(fixture, id, {
+        ...homerSubmission(),
+        candidate: { ...homerSubmission().candidate, ssn: "999-99-9999" },
+      });
       expect(resumed.status).toBe(200);
       expect(checkr.calls.map(({ method, url }) => `${method} ${url}`)).toEqual(
         ["GET /candidates/candidate-1", "GET /reports/report-1"],
       );
+      // The adopted report keeps the authorization that ordered it.
       expect(
         fixture.database
-          .query(`SELECT checkr_report_id, checkr_start_nonce, status
+          .query(`SELECT checkr_report_id, checkr_consent_id,
+                         checkr_start_nonce, status
                   FROM employee_requirements WHERE id = ?`)
           .get(id),
       ).toEqual({
+        checkr_consent_id: uploaded,
         checkr_report_id: "report-1",
         checkr_start_nonce: null,
         status: "in_progress",
       });
+      expect(
+        fixture.database
+          .query("SELECT COUNT(*) AS count FROM employee_screening_consents")
+          .get(),
+      ).toEqual({ count: 2 });
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("starts a new candidate when the person corrects details after a failed attempt", async () => {
+    const fixture = await createFixture();
+    const id = await requestedScreening(fixture);
+    let candidates = 0;
+    let uploadAvailable = false;
+    const checkr = mockCheckr((call) => {
+      if (call.method === "POST" && call.url === "/candidates") {
+        candidates += 1;
+        return Response.json({ id: `candidate-${candidates}` });
+      }
+      if (call.url === "/candidates/candidate-1") {
+        return Response.json({
+          dob: "1983-02-10",
+          first_name: "Homer",
+          id: "candidate-1",
+          last_name: "Simpson",
+          report_ids: [],
+          ssn: "XXX-XX-1100",
+          zipcode: "94088",
+        });
+      }
+      if (call.url.endsWith("/documents") && !uploadAvailable) {
+        return Response.json({ error: "unavailable" }, { status: 503 });
+      }
+      return checkrResponses(call);
+    });
+    try {
+      expect(
+        (await submitScreening(fixture, id, homerSubmission())).status,
+      ).toBe(502);
+      uploadAvailable = true;
+      checkr.calls.length = 0;
+      const corrected = {
+        ...homerSubmission(),
+        candidate: { ...homerSubmission().candidate, ssn: "110-11-1101" },
+      };
+      expect((await submitScreening(fixture, id, corrected)).status).toBe(200);
+      expect(checkr.calls.map(({ method, url }) => `${method} ${url}`)).toEqual(
+        [
+          "GET /candidates/candidate-1",
+          "POST /candidates",
+          "POST /candidates/candidate-2/documents",
+          "POST /reports",
+        ],
+      );
+      expect(
+        new URLSearchParams(String(checkr.calls[1]?.body)).get("ssn"),
+      ).toBe("110-11-1101");
+      expect(
+        fixture.database
+          .query(
+            "SELECT checkr_candidate_id FROM employee_requirements WHERE id = ?",
+          )
+          .get(id),
+      ).toEqual({ checkr_candidate_id: "candidate-2" });
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("asks the person to wait while a lost report request may still reach Checkr", async () => {
+    const fixture = await createFixture();
+    const id = await requestedScreening(fixture);
+    let candidates = 0;
+    let reportLost = true;
+    const checkr = mockCheckr((call) => {
+      if (call.method === "POST" && call.url === "/candidates") {
+        candidates += 1;
+        return Response.json({ id: `candidate-${candidates}` });
+      }
+      if (call.url === "/candidates/candidate-1") {
+        return Response.json({
+          first_name: "Homer",
+          id: "candidate-1",
+          report_ids: [],
+          ssn: "XXX-XX-1100",
+        });
+      }
+      if (call.method === "POST" && call.url === "/reports" && reportLost) {
+        throw new TypeError("Network connection lost.");
+      }
+      return checkrResponses(call);
+    });
+    const corrected = {
+      ...homerSubmission(),
+      candidate: { ...homerSubmission().candidate, ssn: "110-11-1101" },
+    };
+    try {
+      expect(
+        (await submitScreening(fixture, id, homerSubmission())).status,
+      ).toBe(500);
+      checkr.calls.length = 0;
+      const early = await submitScreening(fixture, id, corrected);
+      expect(early.status).toBe(409);
+      expect(await early.json()).toEqual({
+        error:
+          "Your earlier submission may still be reaching Checkr. Wait a few minutes, then submit again.",
+      });
+      expect(checkr.calls.map(({ method, url }) => `${method} ${url}`)).toEqual(
+        ["GET /candidates/candidate-1"],
+      );
+
+      reportLost = false;
+      fixture.database
+        .query(`UPDATE employee_requirements
+                SET checkr_report_requested_at = '2026-01-01T00:00:00.000Z'
+                WHERE id = ?`)
+        .run(id);
+      checkr.calls.length = 0;
+      expect((await submitScreening(fixture, id, corrected)).status).toBe(200);
+      expect(
+        checkr.calls
+          .filter(({ method }) => method === "POST")
+          .map(({ url }) => url),
+      ).toEqual([
+        "/candidates",
+        "/candidates/candidate-2/documents",
+        "/reports",
+      ]);
     } finally {
       checkr.restore();
     }
@@ -1682,7 +1818,7 @@ describe("employee forms", () => {
     }
   });
 
-  it("keeps hosted reports and resets hosted invitations when migrating", async () => {
+  it("keeps hosted reports, stops on open invitations, and resets closed ones when migrating", async () => {
     const database = new Database(":memory:");
     await migration(database, "0003_create_auth.sql");
     await migration(database, "0004_create_organizations.sql");
@@ -1743,7 +1879,24 @@ describe("employee forms", () => {
       null,
       null,
     );
-    await migration(database, "0065_self_host_checkr_screenings.sql");
+    await expect(
+      migrationInTransaction(database, "0065_self_host_checkr_screenings.sql"),
+    ).rejects.toThrow("Finish or cancel open hosted Checkr invitations first");
+    expect(
+      database
+        .query(
+          "SELECT checkr_invitation_id FROM employee_requirements WHERE id = 'invited'",
+        )
+        .get(),
+    ).toEqual({ checkr_invitation_id: "i3" });
+    database
+      .query(`UPDATE employee_requirements
+              SET checkr_invitation_status = 'expired' WHERE id = 'invited'`)
+      .run();
+    await migrationInTransaction(
+      database,
+      "0065_self_host_checkr_screenings.sql",
+    );
     expect(
       database
         .query(`SELECT id, status, checkr_candidate_id, checkr_report_id,
@@ -2206,6 +2359,38 @@ function toD1(
       return statement;
     },
   } as unknown as D1Database;
+}
+
+/**
+ * Applies a migration atomically and statement by statement, as D1 does;
+ * bun:sqlite's exec would skip a statement that fails partway through.
+ */
+async function migrationInTransaction(database: Database, filename: string) {
+  const sql = await Bun.file(
+    new URL(`../migrations/${filename}`, import.meta.url),
+  ).text();
+  const statements: string[] = [];
+  let statement = "";
+  for (const line of sql.split("\n")) {
+    if (line.trim().startsWith("--")) continue;
+    statement += `${line}\n`;
+    const ended = /^\s*CREATE TRIGGER/i.test(statement)
+      ? /^END;$/i.test(line.trim())
+      : line.trim().endsWith(";");
+    if (ended) {
+      statements.push(statement);
+      statement = "";
+    }
+  }
+  database.run("BEGIN");
+  try {
+    // A trailing semicolon would make Bun treat each as a script again.
+    for (const next of statements) database.run(next.trim().replace(/;$/, ""));
+    database.run("COMMIT");
+  } catch (cause) {
+    database.run("ROLLBACK");
+    throw cause;
+  }
 }
 
 async function migration(database: Database, filename: string) {

@@ -7,6 +7,30 @@ ALTER TABLE employee_requirements ADD COLUMN checkr_work_city TEXT;
 ALTER TABLE employee_requirements ADD COLUMN checkr_requested_at TEXT;
 ALTER TABLE employee_requirements ADD COLUMN checkr_report_status TEXT;
 ALTER TABLE employee_requirements ADD COLUMN checkr_consent_id TEXT;
+-- The authorization an attempt uploaded, and when it asked for the report, so
+-- a retry adopts a report with its own consent and knows whether one may be
+-- on its way.
+ALTER TABLE employee_requirements ADD COLUMN checkr_attempt_consent_id TEXT;
+ALTER TABLE employee_requirements ADD COLUMN checkr_report_requested_at TEXT;
+
+-- Stop if a hosted invitation could still produce a report Balebase would no
+-- longer track: finish or cancel it in Checkr, record its report, and apply
+-- this migration again.
+CREATE TABLE checkr_hosted_invitation_guard (open_invitations INTEGER);
+CREATE TRIGGER stop_on_open_hosted_invitations
+BEFORE INSERT ON checkr_hosted_invitation_guard
+WHEN NEW.open_invitations > 0
+BEGIN
+  SELECT RAISE(ABORT, 'Finish or cancel open hosted Checkr invitations first');
+END;
+INSERT INTO checkr_hosted_invitation_guard
+SELECT COUNT(*) FROM employee_requirements
+WHERE checkr_report_id IS NULL
+  AND (checkr_start_nonce IS NOT NULL OR (
+    checkr_invitation_id IS NOT NULL
+    AND COALESCE(checkr_invitation_status, '')
+      NOT IN ('expired', 'canceled', 'deleted')));
+DROP TABLE checkr_hosted_invitation_guard;
 
 -- Reports already ordered through a hosted invitation keep refreshing.
 UPDATE employee_requirements
@@ -18,16 +42,14 @@ SET checkr_report_status = CASE
     END
 WHERE checkr_report_id IS NOT NULL;
 
--- Hosted invitations without a report cannot continue; the manager requests
--- the check again.
+-- Expired or canceled hosted invitations cannot produce a report; the manager
+-- requests the check again.
 UPDATE employee_requirements
-SET checkr_candidate_id = NULL, checkr_starting_at = NULL,
-    checkr_start_nonce = NULL, checkr_start_nonce_at = NULL,
-    checkr_start_package = NULL, checkr_refresh_requested_at = NULL,
+SET checkr_candidate_id = NULL, checkr_start_package = NULL,
+    checkr_refresh_requested_at = NULL,
     status = CASE WHEN status = 'complete' THEN status ELSE 'pending' END,
     checkr_refresh_revision = checkr_refresh_revision + 1
-WHERE checkr_report_id IS NULL
-  AND (checkr_invitation_id IS NOT NULL OR checkr_start_nonce IS NOT NULL);
+WHERE checkr_report_id IS NULL AND checkr_invitation_id IS NOT NULL;
 
 ALTER TABLE employee_requirements DROP COLUMN checkr_invitation_id;
 ALTER TABLE employee_requirements DROP COLUMN checkr_invitation_status;

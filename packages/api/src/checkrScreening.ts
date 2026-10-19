@@ -1,4 +1,5 @@
 import {
+  type CheckrCandidate,
   CheckrRequestError,
   createCheckrCandidate,
   createCheckrReport,
@@ -145,20 +146,27 @@ export type ScreeningSubmitResult =
   | { kind: "submitted"; reportStatus: string };
 
 interface SubmitClaim {
+  checkr_attempt_consent_id: string | null;
   checkr_candidate_id: string | null;
+  checkr_report_requested_at: string | null;
   checkr_start_nonce: string;
   checkr_start_nonce_at: string;
   checkr_start_package: string;
 }
 
+/** How long a report request may take to reach Checkr after its response is lost. */
+const reportSettleMs = 10 * 60_000;
+
 /**
  * Orders the person's report: records their signed authorization, creates the
  * Checkr candidate with their details, attaches the authorization, and creates
  * the report. Each Checkr call carries an idempotency key from this attempt, so
- * a retry after a lost response replays it; a retry with a stored candidate
- * adopts any report that candidate already has instead of ordering another.
- * When Checkr rejects the details, the attempt is cleared so the person can
- * correct them and submit again.
+ * a retry after a lost response replays it. A retry first asks Checkr about
+ * the attempt's candidate: it adopts a report the candidate already has, with
+ * the authorization that ordered it; continues with the candidate when the
+ * details match; and otherwise starts a new candidate once no report request
+ * can still be on its way. When Checkr rejects the details, the attempt is
+ * cleared so the person can correct them and submit again.
  */
 export async function submitCheckrScreening(
   env: Bindings,
@@ -167,59 +175,57 @@ export async function submitCheckrScreening(
   signer: { ipAddress: string | null; userAgent: string | null },
 ): Promise<ScreeningSubmitResult> {
   const claim = await claimSubmission(env.DB, subject);
-  if (!claim) {
-    return {
-      kind: "conflict",
-      message: "This background check is changing. Refresh and try again.",
-    };
-  }
+  if (!claim)
+    return conflict(
+      "This background check is changing. Refresh and try again.",
+    );
   let nonce = claim.checkr_start_nonce;
   try {
-    const consent = await recordConsent(env, subject, submission, signer);
-    nonce = await freshNonce(env.DB, subject, claim, nonce);
     let candidateId = claim.checkr_candidate_id;
-    let priorReportId: string | undefined;
     if (candidateId) {
-      const candidate = await getCheckrCandidate(env, candidateId);
-      priorReportId = candidate.report_ids?.at(-1);
-    } else {
-      const created = await createCheckrCandidate(
-        env,
-        { ...submission.candidate, email: subject.email },
-        subject.requirementId,
-        submission.copyRequested,
-        `${nonce}:candidate`,
-      );
-      if (!created.id) throw new Error("Checkr did not return a candidate ID.");
-      candidateId = created.id;
-      const stored = await env.DB.prepare(
-        `UPDATE employee_requirements
-         SET checkr_candidate_id = ?, updated_at = ?
-         WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?`,
-      )
-        .bind(
-          candidateId,
-          new Date().toISOString(),
-          subject.requirementId,
-          subject.organizationId,
+      const resumed = await resumeAttempt(env, subject, submission, claim);
+      if (resumed.kind === "adopt") {
+        return await storeReport(
+          env.DB,
+          subject,
           nonce,
-        )
-        .run();
-      if (!stored.meta.changes) {
-        return {
-          kind: "conflict",
-          message: "This background check changed. Refresh and try again.",
-        };
+          candidateId,
+          claim.checkr_attempt_consent_id,
+          resumed.report,
+        );
+      }
+      if (resumed.kind === "wait") {
+        await releaseSubmission(env.DB, subject, nonce, false);
+        return conflict(
+          "Your earlier submission may still be reaching Checkr. Wait a few minutes, then submit again.",
+        );
+      }
+      if (resumed.kind === "restart") {
+        nonce = resumed.nonce;
+        candidateId = null;
       }
     }
-    const report = priorReportId
-      ? await getCheckrReport(env, priorReportId)
-      : await orderReport(env, subject, claim, candidateId, consent, nonce);
-    return await storeReport(env.DB, subject, nonce, candidateId, consent, {
-      id: report.id,
-      result: report.result ?? null,
-      status: report.status,
-    });
+    nonce = await freshNonce(env.DB, subject, claim, nonce);
+    const consent = await recordConsent(env, subject, submission, signer);
+    candidateId ??= await createCandidate(env, subject, submission, nonce);
+    if (!candidateId)
+      return conflict("This background check changed. Refresh and try again.");
+    const report = await orderReport(
+      env,
+      subject,
+      claim,
+      candidateId,
+      consent,
+      nonce,
+    );
+    return await storeReport(
+      env.DB,
+      subject,
+      nonce,
+      candidateId,
+      consent.id,
+      report,
+    );
   } catch (cause) {
     const rejected = isDefinitiveCheckrRejection(cause);
     await releaseSubmission(env.DB, subject, nonce, rejected);
@@ -233,6 +239,125 @@ export async function submitCheckrScreening(
   }
 }
 
+function conflict(message: string): ScreeningSubmitResult {
+  return { kind: "conflict", message };
+}
+
+type Resumed =
+  | { kind: "adopt"; report: StoredReport }
+  | { kind: "restart"; nonce: string }
+  | { kind: "reuse" }
+  | { kind: "wait" };
+
+interface StoredReport {
+  id: string;
+  result: string | null;
+  status: string;
+}
+
+async function resumeAttempt(
+  env: Bindings,
+  subject: ScreeningSubject,
+  submission: ScreeningSubmission,
+  claim: SubmitClaim,
+): Promise<Resumed> {
+  const candidate = await getCheckrCandidate(
+    env,
+    claim.checkr_candidate_id ?? "",
+  );
+  const reportId = candidate.report_ids?.at(-1);
+  if (reportId) {
+    const report = await getCheckrReport(env, reportId);
+    return {
+      kind: "adopt",
+      report: {
+        id: report.id,
+        result: report.result ?? null,
+        status: report.status,
+      },
+    };
+  }
+  if (sameDetails(candidate, subject.email, submission))
+    return { kind: "reuse" };
+  const requestedAt = Date.parse(claim.checkr_report_requested_at ?? "");
+  if (
+    Number.isFinite(requestedAt) &&
+    requestedAt > Date.now() - reportSettleMs
+  ) {
+    return { kind: "wait" };
+  }
+  return {
+    kind: "restart",
+    nonce: await restartAttempt(env.DB, subject, claim),
+  };
+}
+
+/**
+ * Whether the person submitted what Checkr holds for the candidate. Fields
+ * Checkr leaves out or redacts count as matching; the SSN's last four digits
+ * stand in for the rest.
+ */
+function sameDetails(
+  candidate: CheckrCandidate,
+  email: string,
+  { candidate: details, copyRequested }: ScreeningSubmission,
+) {
+  const same = (
+    stored: string | null | undefined,
+    value: string | null,
+    normalize = (text: string) => text.trim().toLowerCase(),
+  ) =>
+    stored === undefined || normalize(stored ?? "") === normalize(value ?? "");
+  const digits = (text: string) =>
+    text.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+  const license = candidate.driver_license_number;
+  return (
+    same(candidate.first_name, details.firstName) &&
+    same(candidate.middle_name, details.middleName) &&
+    same(candidate.last_name, details.lastName) &&
+    same(candidate.dob, details.dob) &&
+    same(candidate.zipcode, details.zipcode) &&
+    same(candidate.email, email) &&
+    same(candidate.phone, details.phone, digits) &&
+    same(candidate.driver_license_state, details.driverLicenseState) &&
+    (/x/i.test(license ?? "") || same(license, details.driverLicenseNumber)) &&
+    (typeof candidate.ssn !== "string" ||
+      candidate.ssn.slice(-4) === details.ssn.slice(-4)) &&
+    (candidate.copy_requested === undefined ||
+      candidate.copy_requested === copyRequested)
+  );
+}
+
+async function createCandidate(
+  env: Bindings,
+  subject: ScreeningSubject,
+  submission: ScreeningSubmission,
+  nonce: string,
+) {
+  const created = await createCheckrCandidate(
+    env,
+    { ...submission.candidate, email: subject.email },
+    subject.requirementId,
+    submission.copyRequested,
+    `${nonce}:candidate`,
+  );
+  if (!created.id) throw new Error("Checkr did not return a candidate ID.");
+  const stored = await env.DB.prepare(
+    `UPDATE employee_requirements
+     SET checkr_candidate_id = ?, updated_at = ?
+     WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?`,
+  )
+    .bind(
+      created.id,
+      new Date().toISOString(),
+      subject.requirementId,
+      subject.organizationId,
+      nonce,
+    )
+    .run();
+  return stored.meta.changes ? created.id : null;
+}
+
 async function orderReport(
   env: Bindings,
   subject: ScreeningSubject,
@@ -240,7 +365,7 @@ async function orderReport(
   candidateId: string,
   consent: { id: string; pdf: Uint8Array },
   nonce: string,
-) {
+): Promise<StoredReport> {
   await uploadCheckrConsent(
     env,
     candidateId,
@@ -248,6 +373,22 @@ async function orderReport(
     "background-check-authorization.pdf",
     `${nonce}:consent:${consent.id}`,
   );
+  // Recorded before asking, so a retry adopts any report with this consent
+  // and waits for a request whose response was lost.
+  const marked = await env.DB.prepare(
+    `UPDATE employee_requirements
+     SET checkr_attempt_consent_id = ?, checkr_report_requested_at = ?
+     WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?`,
+  )
+    .bind(
+      consent.id,
+      new Date().toISOString(),
+      subject.requirementId,
+      subject.organizationId,
+      nonce,
+    )
+    .run();
+  if (!marked.meta.changes) throw new Error("The screening attempt changed.");
   const report = await createCheckrReport(
     env,
     candidateId,
@@ -257,12 +398,16 @@ async function orderReport(
     `${nonce}:report`,
   );
   if (!report.id) throw new Error("Checkr did not return a report ID.");
-  return report;
+  return {
+    id: report.id,
+    result: report.result ?? null,
+    status: report.status,
+  };
 }
 
 // Holds the screening for one submission at a time. An attempt keeps its
-// nonce and package until it succeeds or Checkr rejects it, so a retry after
-// a lost response reuses its idempotency keys.
+// nonce, package, and candidate until it succeeds or Checkr rejects it, so a
+// retry after a lost response reuses its idempotency keys.
 async function claimSubmission(
   database: D1Database,
   subject: ScreeningSubject,
@@ -279,7 +424,8 @@ async function claimSubmission(
          AND checkr_requested_at IS NOT NULL AND checkr_report_id IS NULL
          AND status <> 'complete'
          AND (checkr_starting_at IS NULL OR checkr_starting_at < ?)
-       RETURNING checkr_candidate_id, checkr_start_nonce,
+       RETURNING checkr_attempt_consent_id, checkr_candidate_id,
+                 checkr_report_requested_at, checkr_start_nonce,
                  checkr_start_nonce_at, checkr_start_package`,
     )
     .bind(
@@ -293,6 +439,38 @@ async function claimSubmission(
       new Date(now.getTime() - 5 * 60_000).toISOString(),
     )
     .first<SubmitClaim>();
+}
+
+// Replaces an attempt whose candidate holds other details and never got a
+// report, so corrected details go to a new candidate under new keys.
+async function restartAttempt(
+  database: D1Database,
+  subject: ScreeningSubject,
+  claim: SubmitClaim,
+) {
+  const next = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const restarted = await database
+    .prepare(
+      `UPDATE employee_requirements
+       SET checkr_start_nonce = ?, checkr_start_nonce_at = ?,
+           checkr_candidate_id = NULL, checkr_attempt_consent_id = NULL,
+           checkr_report_requested_at = NULL, updated_at = ?
+       WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?`,
+    )
+    .bind(
+      next,
+      now,
+      now,
+      subject.requirementId,
+      subject.organizationId,
+      claim.checkr_start_nonce,
+    )
+    .run();
+  if (!restarted.meta.changes)
+    throw new Error("The screening attempt changed.");
+  claim.checkr_start_nonce_at = now;
+  return next;
 }
 
 // Checkr keeps idempotency keys for a day, so an older attempt continues
@@ -397,8 +575,8 @@ async function storeReport(
   subject: ScreeningSubject,
   nonce: string,
   candidateId: string,
-  consent: { id: string },
-  report: { id: string; result: string | null; status: string },
+  consentId: string | null,
+  report: StoredReport,
 ): Promise<ScreeningSubmitResult> {
   const stored = await database
     .prepare(
@@ -407,6 +585,8 @@ async function storeReport(
            checkr_report_status = ?, checkr_result = ?, checkr_consent_id = ?,
            status = 'in_progress', checkr_starting_at = NULL,
            checkr_start_nonce = NULL, checkr_start_nonce_at = NULL,
+           checkr_attempt_consent_id = NULL,
+           checkr_report_requested_at = NULL,
            checkr_refresh_requested_at = ?,
            checkr_refresh_revision = checkr_refresh_revision + 1,
            updated_at = ?
@@ -417,7 +597,7 @@ async function storeReport(
       report.id,
       report.status,
       report.result,
-      consent.id,
+      consentId,
       // An adopted report may already be finished; the next refresh settles it.
       report.status === "pending" ? null : new Date().toISOString(),
       new Date().toISOString(),
@@ -426,12 +606,8 @@ async function storeReport(
       nonce,
     )
     .run();
-  if (!stored.meta.changes) {
-    return {
-      kind: "conflict",
-      message: "This background check changed. Refresh and try again.",
-    };
-  }
+  if (!stored.meta.changes)
+    return conflict("This background check changed. Refresh and try again.");
   return { kind: "submitted", reportStatus: report.status };
 }
 
@@ -448,17 +624,16 @@ async function releaseSubmission(
     .prepare(
       `UPDATE employee_requirements
        SET checkr_starting_at = NULL,
-           checkr_start_nonce = CASE WHEN ? = 1 THEN NULL ELSE checkr_start_nonce END,
-           checkr_start_nonce_at = CASE WHEN ? = 1 THEN NULL ELSE checkr_start_nonce_at END,
-           checkr_start_package = CASE WHEN ? = 1 THEN NULL ELSE checkr_start_package END,
-           checkr_candidate_id = CASE WHEN ? = 1 THEN NULL ELSE checkr_candidate_id END,
-           updated_at = ?
-       WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?`,
+           checkr_start_nonce = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_start_nonce END,
+           checkr_start_nonce_at = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_start_nonce_at END,
+           checkr_start_package = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_start_package END,
+           checkr_candidate_id = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_candidate_id END,
+           checkr_attempt_consent_id = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_attempt_consent_id END,
+           checkr_report_requested_at = CASE WHEN ?1 = 1 THEN NULL ELSE checkr_report_requested_at END,
+           updated_at = ?2
+       WHERE id = ?3 AND organization_id = ?4 AND checkr_start_nonce = ?5`,
     )
     .bind(
-      clear ? 1 : 0,
-      clear ? 1 : 0,
-      clear ? 1 : 0,
       clear ? 1 : 0,
       new Date().toISOString(),
       subject.requirementId,

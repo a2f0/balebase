@@ -1,8 +1,20 @@
 import type { Bindings } from "./types";
 
-interface CheckrCandidate {
+/** A candidate as Checkr returns it; Checkr redacts all but the SSN's end. */
+export interface CheckrCandidate {
+  copy_requested?: boolean;
+  dob?: string | null;
+  driver_license_number?: string | null;
+  driver_license_state?: string | null;
+  email?: string | null;
+  first_name?: string | null;
   id: string;
+  last_name?: string | null;
+  middle_name?: string | null;
+  phone?: string | null;
   report_ids?: string[];
+  ssn?: string | null;
+  zipcode?: string | null;
 }
 
 interface CheckrReport {
