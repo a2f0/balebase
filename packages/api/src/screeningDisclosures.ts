@@ -17,6 +17,9 @@ export interface StateNotice extends DisclosureSection {
   offersCopy: boolean;
 }
 
+// The CFPB's official summary. Despite its 2018 file name, the CFPB updates
+// this file in place: it carries the 2023 revision of Regulation V appendix K
+// (mandatory from March 20, 2024), with the updated agency contacts.
 export const summaryOfRightsUrl =
   "https://files.consumerfinance.gov/f/documents/bcfp_consumer-rights-summary_2018-09.pdf";
 
