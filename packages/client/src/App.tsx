@@ -527,6 +527,7 @@ function contentForPath(
         memberRole={access.memberRole}
         onAccessChanged={access.refresh}
         onNavigate={navigate}
+        onOrganizationChange={workspace.switchOrganization}
         onWorkspaceChanged={workspace.refresh}
         organizations={workspace.organizations}
         ownerCount={access.ownerCount}

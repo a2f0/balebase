@@ -440,7 +440,10 @@ managers. Deleted or replaced form files are queued for R2 cleanup.
 
 Background checks use Checkr's self-hosted flow. A manager requests a check
 with the person's US work state and optional city, and Balebase emails the
-person a link to their screening form under Organization → People. The form
+person a link to their screening form under Organization → People; the link
+switches to that organization if another one is active. Only the person,
+signed in themselves, can open or submit the form: not an API key, and not an
+admin impersonating them. The form
 shows A Summary of Your Rights Under the Fair Credit Reporting Act, the
 standalone background check disclosure, any notices for the work state and the
 state where the person lives, and the authorization. The person enters their

@@ -696,7 +696,7 @@ describe("employee forms", () => {
       "Acme requested a background check",
     );
     expect(fixture.emails[0]?.text).toContain(
-      `https://app.balebase.test/organization/people/employee-member/screening/${id}`,
+      `https://app.balebase.test/organization/people/employee-member/screening/${id}?organization=${orgId}`,
     );
     const listed = (await (
       await fixture.app("employee", "member").request("/")
@@ -1831,15 +1831,23 @@ describe("employee forms", () => {
     }
   });
 
-  it("lets only a signed-in person open or sign their screening form", async () => {
+  it("lets only the signed-in person, not a key or impersonator, open or sign their form", async () => {
     const fixture = await createFixture();
     const id = await requestedScreening(fixture);
     const checkr = mockCheckr(checkrResponses);
     try {
-      const viaKey = fixture.app("employee", "member", true);
+      const viaKey = fixture.app("employee", "member", { apiKey: true });
+      const impersonated = fixture.app("employee", "member", {
+        impersonatedBy: "root-admin",
+      });
       for (const response of [
         await viaKey.request(`/${id}/checkr/form`),
         await viaKey.request(
+          `/${id}/checkr/submit`,
+          jsonPost(homerSubmission()),
+        ),
+        await impersonated.request(`/${id}/checkr/form`),
+        await impersonated.request(
           `/${id}/checkr/submit`,
           jsonPost(homerSubmission()),
         ),
@@ -2857,13 +2865,20 @@ async function createFixture() {
     },
   } as unknown as Bindings;
   return {
-    app: (userId: string, role: string, apiKey = false) => {
+    app: (
+      userId: string,
+      role: string,
+      via: { apiKey?: boolean; impersonatedBy?: string } = {},
+    ) => {
       const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
       app.use("*", async (context, next) => {
         context.set("organizationId", orgId);
         context.set("organizationRole", role);
-        context.set("authSession", { user: { id: userId } } as AuthSession);
-        if (apiKey) {
+        context.set("authSession", {
+          session: { impersonatedBy: via.impersonatedBy ?? null },
+          user: { id: userId },
+        } as AuthSession);
+        if (via.apiKey) {
           context.set("apiKey", {
             access: "write",
           } as AuthVariables["apiKey"] & object);

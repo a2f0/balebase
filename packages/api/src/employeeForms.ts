@@ -478,7 +478,7 @@ employeeForms.post("/:id/checkr/request", async (context) => {
 // The person's own screening form: the disclosures to read, the work
 // location, and, while Checkr is in staging, its mocked test candidates.
 employeeForms.get("/:id/checkr/form", async (context) => {
-  if (context.get("apiKey")) return signInRequired(context);
+  if (!signedInAsSelf(context)) return signInRequired(context);
   const subject = await findScreeningSubject(context);
   if (!subject) {
     return context.json({ error: "Screening requirement not found." }, 404);
@@ -525,8 +525,9 @@ employeeForms.get("/:id/checkr/form", async (context) => {
 });
 
 employeeForms.post("/:id/checkr/submit", async (context) => {
-  // An API key acts as its creator; only the person may sign for themselves.
-  if (context.get("apiKey")) return signInRequired(context);
+  // Only the person may sign for themselves: not an API key acting as its
+  // creator, nor an admin impersonating them.
+  if (!signedInAsSelf(context)) return signInRequired(context);
   const subject = await findScreeningSubject(context);
   if (!subject) {
     return context.json({ error: "Screening requirement not found." }, 404);
@@ -715,6 +716,7 @@ async function emailScreeningRequest(
   await sendScreeningRequest(context.env, {
     dueDate: row.due_date,
     memberId: row.member_id,
+    organizationId: context.get("organizationId"),
     organizationName: organization?.name ?? "Your organization",
     recipient: {
       email: row.target_email,
@@ -955,6 +957,13 @@ async function canAccessRequirement(
     )
     .first<{ id: string }>();
   return Boolean(member);
+}
+
+function signedInAsSelf(context: Context<EmployeeFormsEnv>) {
+  return (
+    !context.get("apiKey") &&
+    !context.get("authSession").session?.impersonatedBy
+  );
 }
 
 function signInRequired(context: Context<EmployeeFormsEnv>) {

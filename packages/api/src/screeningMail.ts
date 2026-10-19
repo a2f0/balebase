@@ -9,22 +9,29 @@ export interface ScreeningRequestMail {
   dueDate: string;
   /** The person's member ID, or null while they are still invited. */
   memberId: string | null;
+  organizationId: string;
   organizationName: string;
   recipient: { email: string; name: string };
   requirementId: string;
   title: string;
 }
 
-/** The page where the person completes their background check. */
+/**
+ * The page where the person completes their background check. It names the
+ * organization, which the app switches to when another one is active.
+ */
 function screeningFormUrl(
   environment: Pick<Bindings, "CORS_ORIGIN">,
-  memberId: string,
-  requirementId: string,
+  mail: Pick<ScreeningRequestMail, "organizationId" | "requirementId"> & {
+    memberId: string;
+  },
 ) {
-  return new URL(
-    `/organization/people/${encodeURIComponent(memberId)}/screening/${encodeURIComponent(requirementId)}`,
+  const url = new URL(
+    `/organization/people/${encodeURIComponent(mail.memberId)}/screening/${encodeURIComponent(mail.requirementId)}`,
     environment.CORS_ORIGIN,
-  ).toString();
+  );
+  url.searchParams.set("organization", mail.organizationId);
+  return url.toString();
 }
 
 /** Asks the person to complete a background check that a manager requested. */
@@ -53,7 +60,7 @@ export function sendScreeningRequest(
       ...(mail.memberId
         ? [
             "Review the disclosures, enter your details, and sign the authorization in Balebase:",
-            screeningFormUrl(environment, mail.memberId, mail.requirementId),
+            screeningFormUrl(environment, { ...mail, memberId: mail.memberId }),
           ]
         : [
             `Accept your invitation to ${mail.organizationName} first. The check then appears on your page under Organization → People:`,
