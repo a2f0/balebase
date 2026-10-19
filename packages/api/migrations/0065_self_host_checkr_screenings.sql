@@ -79,6 +79,13 @@ CREATE TABLE employee_screening_consents (
 CREATE INDEX employee_screening_consents_requirement_idx
 ON employee_screening_consents (organization_id, requirement_id, signed_at);
 
+-- A consent PDF is queued for cleanup before it is written; its row claims it.
+CREATE TRIGGER clear_completed_screening_consent_upload
+AFTER INSERT ON employee_screening_consents
+BEGIN
+  DELETE FROM deleted_object_cleanup WHERE object_key = NEW.document_key;
+END;
+
 CREATE TRIGGER queue_screening_consent_cleanup
 BEFORE DELETE ON employee_screening_consents
 BEGIN

@@ -1,8 +1,11 @@
 import type { Context } from "hono";
 import { verifyCheckrWebhook } from "./checkr";
 import {
+  type CheckrAttemptRow,
   type CheckrScreeningRow,
+  recoverCheckrAttempt,
   refreshCheckrScreening,
+  reportSettleMs,
 } from "./checkrScreening";
 import type { Bindings } from "./types";
 import { readWebhookPayload } from "./webhookPayload";
@@ -21,7 +24,8 @@ interface CheckrEventSubject {
 // refresh and is acknowledged at once, as Checkr asks; the refresh then reads
 // the Checkr API, so duplicate or out-of-order deliveries settle on the
 // current state. When that refresh fails, the mark keeps the screening in the
-// hourly refresh below, even if it was already complete.
+// hourly refresh below, even if it was already complete. An event for the
+// candidate of an unfinished submission adopts its report at once.
 export async function handleCheckrWebhook(
   context: Context<{ Bindings: Bindings }>,
 ) {
@@ -62,8 +66,16 @@ export async function handleCheckrWebhook(
       subject.candidateId,
     );
     await requestScreeningRefreshes(context.env.DB, screenings);
+    const attempts = subject.candidateId
+      ? await attemptsForCandidate(context.env.DB, subject.candidateId)
+      : [];
     context.executionCtx.waitUntil(
-      refreshEventScreenings(context.env, screenings).catch((cause) => {
+      Promise.all([
+        refreshEventScreenings(context.env, screenings),
+        ...attempts.map((attempt) =>
+          recoverCheckrAttempt(context.env, attempt),
+        ),
+      ]).catch((cause) => {
         console.error("Could not apply a Checkr webhook event.", cause);
       }),
     );
@@ -71,11 +83,12 @@ export async function handleCheckrWebhook(
   return context.json({ received: true });
 }
 
-// Safety net for missed webhooks and failed refreshes: re-reads the least
-// recently checked screenings that Checkr has not finished or that a webhook
-// asked to refresh.
+// Safety net for missed webhooks and failed refreshes: settles submissions
+// their person left unfinished, then re-reads the least recently checked
+// screenings that Checkr has not finished or that a webhook asked to refresh.
 export async function refreshActiveCheckrScreenings(env: Bindings) {
   if (!env.CHECKR_API_KEY) return { refreshed: 0, skipped: true };
+  const recovery = await recoverStaleAttempts(env);
   const { results } = await env.DB.prepare(
     `SELECT id, organization_id, status, checkr_report_id,
             checkr_report_status, checkr_refresh_revision
@@ -90,8 +103,8 @@ export async function refreshActiveCheckrScreenings(env: Bindings) {
   )
     .bind(screeningRefreshLimit)
     .all<CheckrScreeningRow>();
-  const failures: unknown[] = [];
-  let refreshed = 0;
+  const failures: unknown[] = [...recovery.failures];
+  let refreshed = recovery.settled;
   for (
     let index = 0;
     index < results.length;
@@ -114,6 +127,60 @@ export async function refreshActiveCheckrScreenings(env: Bindings) {
     );
   }
   return { refreshed, skipped: false };
+}
+
+// Attempts idle long enough that no report request can still arrive: their
+// person may have lost a response or left the organization.
+async function recoverStaleAttempts(env: Bindings) {
+  const now = Date.now();
+  const settled = new Date(now - reportSettleMs).toISOString();
+  const { results } = await env.DB.prepare(
+    `SELECT id, organization_id, checkr_attempt_consent_id,
+            checkr_candidate_id, checkr_report_requested_at, checkr_start_nonce
+     FROM employee_requirements
+     WHERE checkr_report_id IS NULL AND checkr_start_nonce IS NOT NULL
+       AND (checkr_starting_at IS NULL OR checkr_starting_at < ?)
+       AND checkr_start_nonce_at < ?
+       AND (checkr_report_requested_at IS NULL
+            OR checkr_report_requested_at < ?)
+     ORDER BY checkr_start_nonce_at ASC
+     LIMIT ?`,
+  )
+    .bind(
+      new Date(now - 5 * 60_000).toISOString(),
+      settled,
+      settled,
+      screeningRefreshLimit,
+    )
+    .all<CheckrAttemptRow>();
+  const outcomes = await Promise.allSettled(
+    results.map((attempt) => recoverCheckrAttempt(env, attempt)),
+  );
+  return {
+    failures: outcomes.flatMap((outcome) =>
+      outcome.status === "rejected" ? [outcome.reason] : [],
+    ),
+    settled: outcomes.filter(
+      (outcome) =>
+        outcome.status === "fulfilled" &&
+        (outcome.value === "adopted" || outcome.value === "cleared"),
+    ).length,
+  };
+}
+
+async function attemptsForCandidate(database: D1Database, candidateId: string) {
+  const { results } = await database
+    .prepare(
+      `SELECT id, organization_id, checkr_attempt_consent_id,
+              checkr_candidate_id, checkr_report_requested_at,
+              checkr_start_nonce
+       FROM employee_requirements
+       WHERE checkr_report_id IS NULL AND checkr_start_nonce IS NOT NULL
+         AND checkr_candidate_id = ?`,
+    )
+    .bind(candidateId)
+    .all<CheckrAttemptRow>();
+  return results;
 }
 
 async function refreshEventScreenings(
