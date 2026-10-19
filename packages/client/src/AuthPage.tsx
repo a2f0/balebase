@@ -7,6 +7,7 @@ import {
   Icon,
   type IconName,
   Logo,
+  PasswordField,
   Toast,
 } from "@balebase/ui/react";
 import { type FormEvent, type ReactNode, useState } from "react";
@@ -846,6 +847,18 @@ function AuthInput({
   type = undefined,
   ...props
 }: AuthInputProps) {
+  if (type === "password") {
+    return (
+      <PasswordField
+        {...props}
+        hint={help}
+        id={props.name}
+        label={label}
+        onChange={(event) => onValue(event.target.value)}
+        required
+      />
+    );
+  }
   return (
     <Field hint={help} label={label}>
       <input
