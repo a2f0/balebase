@@ -18,6 +18,7 @@ import {
 import { formatMoney } from "./financeFormat";
 import {
   categoryShare,
+  financeOverviewPath,
   presetRange,
   type ReportPreset,
   type ReportRange,
@@ -281,7 +282,14 @@ function CategoryTotalRow({
               {" · "}
               <button
                 className="button buttonLink"
-                onClick={() => onNavigate("/finance")}
+                onClick={() =>
+                  onNavigate(
+                    financeOverviewPath({
+                      categorySlug: null,
+                      uncategorized: true,
+                    }),
+                  )
+                }
                 type="button"
               >
                 Categorize

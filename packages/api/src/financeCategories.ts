@@ -4,10 +4,14 @@ import type { FinanceContext } from "./financeContext";
 interface CategoryRow {
   id: string;
   name: string;
+  slug: string;
   transaction_count: number;
 }
 
 const maxCategoryNameLength = 60;
+
+/** Client routes use this slug for expenses without a category. */
+const uncategorizedSlug = "uncategorized";
 
 /** Offered in one click to organizations that have no categories yet. */
 const defaultExpenseCategories = [
@@ -35,7 +39,7 @@ export async function listExpenseCategories(
 ) {
   const result = await database
     .prepare(
-      `SELECT category.id, category.name,
+      `SELECT category.id, category.name, category.slug,
               COUNT(txn.id) AS transaction_count
        FROM finance_expense_categories AS category
        LEFT JOIN finance_transaction_annotations AS annotation
@@ -69,15 +73,22 @@ export async function createCategory(context: FinanceContext) {
     return duplicateName(context);
   }
   const id = crypto.randomUUID();
+  const slug = uniqueSlug(
+    name,
+    await takenSlugs(context.env.DB, organizationId),
+  );
   const now = new Date().toISOString();
   await context.env.DB.prepare(
     `INSERT INTO finance_expense_categories
-       (id, organization_id, name, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?)`,
+       (id, organization_id, name, slug, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
   )
-    .bind(id, organizationId, name, now, now)
+    .bind(id, organizationId, name, slug, now, now)
     .run();
-  return context.json({ category: { id, name, transactionCount: 0 } }, 201);
+  return context.json(
+    { category: { id, name, slug, transactionCount: 0 } },
+    201,
+  );
 }
 
 export async function renameCategory(context: FinanceContext) {
@@ -91,13 +102,18 @@ export async function renameCategory(context: FinanceContext) {
   if (await nameTaken(context.env.DB, organizationId, name, id)) {
     return duplicateName(context);
   }
+  // The slug follows the name, so a renamed category's old link stops working.
+  const slug = uniqueSlug(
+    name,
+    await takenSlugs(context.env.DB, organizationId, id),
+  );
   await context.env.DB.prepare(
-    `UPDATE finance_expense_categories SET name = ?, updated_at = ?
+    `UPDATE finance_expense_categories SET name = ?, slug = ?, updated_at = ?
      WHERE id = ? AND organization_id = ?`,
   )
-    .bind(name, new Date().toISOString(), id, organizationId)
+    .bind(name, slug, new Date().toISOString(), id, organizationId)
     .run();
-  return context.json({ category: { id, name } });
+  return context.json({ category: { id, name, slug } });
 }
 
 export async function deleteCategory(context: FinanceContext) {
@@ -128,17 +144,32 @@ export async function deleteCategory(context: FinanceContext) {
 }
 
 export async function addDefaultCategories(context: FinanceContext) {
+  const database = context.env.DB;
   const organizationId = context.get("organizationId");
+  const existing = await database
+    .prepare(
+      `SELECT lower(name) AS name, slug FROM finance_expense_categories
+       WHERE organization_id = ?`,
+    )
+    .bind(organizationId)
+    .all<{ name: string; slug: string }>();
+  const names = new Set(existing.results.map(({ name }) => name));
+  const slugs = new Set(existing.results.map(({ slug }) => slug));
   const now = new Date().toISOString();
-  await context.env.DB.batch(
-    defaultExpenseCategories.map((name) =>
-      context.env.DB.prepare(
-        `INSERT OR IGNORE INTO finance_expense_categories
-           (id, organization_id, name, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      ).bind(crypto.randomUUID(), organizationId, name, now, now),
-    ),
-  );
+  const inserts = defaultExpenseCategories
+    .filter((name) => !names.has(name.toLowerCase()))
+    .map((name) => {
+      const slug = uniqueSlug(name, slugs);
+      slugs.add(slug);
+      return database
+        .prepare(
+          `INSERT OR IGNORE INTO finance_expense_categories
+             (id, organization_id, name, slug, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(crypto.randomUUID(), organizationId, name, slug, now, now);
+    });
+  if (inserts.length) await database.batch(inserts);
   return listCategories(context);
 }
 
@@ -215,6 +246,49 @@ async function nameTaken(
   return Boolean(existing && existing.id !== exceptId);
 }
 
+/**
+ * Lowercase ASCII letters and digits joined by single hyphens, with accents
+ * dropped, as migration 0065 slugged existing names.
+ */
+function categorySlug(name: string) {
+  const slug = name
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return slug || "category";
+}
+
+/** The name's slug, numbered past slugs that are reserved or already used. */
+function uniqueSlug(name: string, taken: Set<string>) {
+  const base = categorySlug(name);
+  let slug = base;
+  for (
+    let number = 2;
+    slug === uncategorizedSlug || taken.has(slug);
+    number++
+  ) {
+    slug = `${base}-${number}`;
+  }
+  return slug;
+}
+
+async function takenSlugs(
+  database: D1Database,
+  organizationId: string,
+  exceptId: string | null = null,
+) {
+  const result = await database
+    .prepare(
+      `SELECT slug FROM finance_expense_categories
+       WHERE organization_id = ? AND id IS NOT ?`,
+    )
+    .bind(organizationId, exceptId)
+    .all<{ slug: string }>();
+  return new Set(result.results.map(({ slug }) => slug));
+}
+
 async function categoryName(context: FinanceContext) {
   const input: unknown = await context.req.json().catch(() => null);
   if (typeof input !== "object" || input === null) return null;
@@ -240,6 +314,7 @@ function toCategory(row: CategoryRow) {
   return {
     id: row.id,
     name: row.name,
+    slug: row.slug,
     transactionCount: row.transaction_count,
   };
 }
