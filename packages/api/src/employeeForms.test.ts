@@ -2457,7 +2457,7 @@ describe("employee forms", () => {
       null,
     );
     await expect(
-      migrationInTransaction(database, "0066_self_host_checkr_screenings.sql"),
+      migrationInTransaction(database, "0067_self_host_checkr_screenings.sql"),
     ).rejects.toThrow("Finish or cancel open hosted Checkr invitations first");
     expect(
       database
@@ -2472,7 +2472,7 @@ describe("employee forms", () => {
       .run();
     await migrationInTransaction(
       database,
-      "0066_self_host_checkr_screenings.sql",
+      "0067_self_host_checkr_screenings.sql",
     );
     expect(
       database
@@ -2804,7 +2804,7 @@ async function createFixture() {
   await migration(database, "0046_version_employee_screening_refresh.sql");
   await migration(database, "0047_bind_employee_screening_attempt.sql");
   await migration(database, "0052_track_checkr_refreshes.sql");
-  await migration(database, "0066_self_host_checkr_screenings.sql");
+  await migration(database, "0067_self_host_checkr_screenings.sql");
   const files = new Map<string, File>();
   const emails: Array<{
     subject: string;

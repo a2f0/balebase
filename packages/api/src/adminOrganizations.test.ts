@@ -650,7 +650,7 @@ async function createDetailFixture() {
     "0047_bind_employee_screening_attempt.sql",
     "0052_track_checkr_refreshes.sql",
     "0055_track_user_last_active.sql",
-    "0066_self_host_checkr_screenings.sql",
+    "0067_self_host_checkr_screenings.sql",
   ]) {
     database.exec(
       await Bun.file(
