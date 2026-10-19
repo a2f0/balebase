@@ -367,17 +367,18 @@ function RequirementItem({
         />
         {canManage && (
           <>
-            {requirement.kind === "background_check" &&
+            {/* Credit reports ordered through hosted invitations still refresh. */}
+            {((requirement.kind === "background_check" &&
               (requirement.checkrAvailable ||
-                requirement.checkrReportStatus ||
                 requirement.checkrRequested ||
-                requirement.checkrSubmitting) && (
-                <CheckrControl
-                  action={action}
-                  busy={busy}
-                  requirement={requirement}
-                />
-              )}
+                requirement.checkrSubmitting)) ||
+              requirement.checkrReportStatus) && (
+              <CheckrControl
+                action={action}
+                busy={busy}
+                requirement={requirement}
+              />
+            )}
             {(requirement.kind === "form" ||
               (!requirement.checkrAvailable && !locked) ||
               isClosedReportStatus(requirement.checkrReportStatus)) && (

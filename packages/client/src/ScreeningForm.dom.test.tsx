@@ -66,6 +66,7 @@ const form: ScreeningFormData = {
     version: "2026-10-19",
   },
   organizationName: "Acme",
+  requestRevision: "2026-10-19T12:00:00.000Z",
   requiresDriverLicense: true,
   summaryOfRightsUrl: "https://example.com/rights.pdf",
   testCandidates: [
@@ -237,6 +238,7 @@ describe("screening form", () => {
         },
         copyRequested: true,
         disclosureVersion: "2026-10-19",
+        requestRevision: "2026-10-19T12:00:00.000Z",
         residenceState: "CA",
         signature: {
           authorize: true,

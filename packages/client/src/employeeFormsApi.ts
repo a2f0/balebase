@@ -159,6 +159,8 @@ export interface ScreeningForm {
     version: string;
   };
   organizationName: string;
+  /** Identifies the request this form answers; submissions must repeat it. */
+  requestRevision: string;
   requiresDriverLicense: boolean;
   summaryOfRightsUrl: string;
   /** Present only while Checkr is in staging. */
@@ -188,6 +190,7 @@ export interface ScreeningSubmission {
   copyRequested: boolean;
   /** The disclosure version the person read, which the API requires. */
   disclosureVersion: string;
+  requestRevision: string;
   residenceState: string;
   signature: { authorize: boolean; electronicRecords: boolean; name: string };
 }

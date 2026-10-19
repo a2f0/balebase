@@ -145,10 +145,7 @@ function ScreeningSteps({
     setBusy(true);
     setError(undefined);
     try {
-      await submitScreening(
-        requirementId,
-        submission(answers, notices, form.disclosures.version),
-      );
+      await submitScreening(requirementId, submission(answers, notices, form));
       setSubmitted(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not submit.");
@@ -625,7 +622,7 @@ function requiredNotices(
 function submission(
   answers: Answers,
   notices: string[],
-  disclosureVersion: string,
+  form: Pick<ScreeningFormData, "disclosures" | "requestRevision">,
 ) {
   const { residenceState, ...candidate } = answers.details;
   return {
@@ -636,7 +633,8 @@ function submission(
     },
     candidate,
     copyRequested: answers.copyRequested,
-    disclosureVersion,
+    disclosureVersion: form.disclosures.version,
+    requestRevision: form.requestRevision,
     residenceState,
     signature: {
       authorize: answers.authorize,

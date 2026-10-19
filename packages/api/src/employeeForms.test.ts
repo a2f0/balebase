@@ -1020,6 +1020,15 @@ describe("employee forms", () => {
       expect((await submitScreening(fixture, unrequested, valid)).status).toBe(
         409,
       );
+      const stale = await submitScreening(fixture, id, {
+        ...valid,
+        requestRevision: "2026-01-01T00:00:00.000Z",
+      });
+      expect(stale.status).toBe(409);
+      expect(await stale.json()).toEqual({
+        error:
+          "This background check changed after you opened it. Reload the page to review it again.",
+      });
       expect(checkr.calls).toEqual([]);
       expect(
         fixture.database
@@ -2498,6 +2507,7 @@ function homerSubmission() {
   };
 }
 
+/** Submits the form, answering the current request unless body names one. */
 function submitScreening(
   fixture: Awaited<ReturnType<typeof createFixture>>,
   id: string,
@@ -2505,8 +2515,14 @@ function submitScreening(
   user = "employee",
   role = "member",
 ) {
+  const current = fixture.database
+    .query("SELECT checkr_requested_at FROM employee_requirements WHERE id = ?")
+    .get(id) as { checkr_requested_at: string | null } | null;
   return fixture.app(user, role).request(`/${id}/checkr/submit`, {
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      requestRevision: current?.checkr_requested_at,
+      ...(body as object),
+    }),
     headers: {
       "Content-Type": "application/json",
       "cf-connecting-ip": "203.0.113.7",

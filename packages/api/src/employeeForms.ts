@@ -507,6 +507,7 @@ employeeForms.get("/:id/checkr/form", async (context) => {
     candidate: { email: subject.email, name: subject.name },
     disclosures: screeningDisclosures(subject.organization_name),
     organizationName: subject.organization_name,
+    requestRevision: subject.checkr_requested_at,
     requiresDriverLicense:
       screenings?.includes("motor_vehicle_report") ?? false,
     summaryOfRightsUrl,
@@ -537,8 +538,23 @@ employeeForms.post("/:id/checkr/submit", async (context) => {
       409,
     );
   }
+  const body: unknown = await context.req.json().catch(() => null);
+  // The person authorizes the request their form showed, not a newer one.
+  if (
+    !isRecord(body) ||
+    (body as { requestRevision?: unknown }).requestRevision !==
+      subject.checkr_requested_at
+  ) {
+    return context.json(
+      {
+        error:
+          "This background check changed after you opened it. Reload the page to review it again.",
+      },
+      409,
+    );
+  }
   const submission = parseScreeningSubmission(
-    await context.req.json().catch(() => null),
+    body,
     subject.checkr_work_state,
     new Date().toISOString().slice(0, 10),
   );

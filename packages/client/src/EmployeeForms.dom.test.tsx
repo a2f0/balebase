@@ -249,6 +249,20 @@ describe("Checkr screening results", () => {
     expect(partial.textContent).toContain("Request again");
   });
 
+  it("keeps refreshing a credit report ordered through a hosted invitation", async () => {
+    await render([
+      screening({
+        checkrAvailable: false,
+        checkrReportStatus: "pending",
+        kind: "credit_check",
+        title: "Credit check",
+      }),
+    ]);
+    const credit = item("Credit check");
+    expect(credit.textContent).toContain("Checkr: pending");
+    expect(button(credit, "Refresh check")).toBeTruthy();
+  });
+
   it("hides the result from the screened person", async () => {
     await render(
       [
