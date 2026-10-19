@@ -744,6 +744,16 @@ describe("expense categories", () => {
     );
     expect(renamed.response.status).toBe(200);
     expect(renamed.body.category.slug).toBe("snacks-2");
+    const defaults = await jsonRequest<{ categories: Category[] }>(
+      fixture.app,
+      raceForSlug(fixture, "travel"),
+      "/categories/defaults",
+      "POST",
+    );
+    expect(
+      defaults.body.categories.find(({ name }) => name === "Travel")?.slug,
+    ).toBe("travel-2");
+    expect(defaults.body.categories).toHaveLength(21);
   });
 
   it("assigns at most one category per transaction and unassigns on delete", async () => {
@@ -1044,6 +1054,7 @@ describe("expense categories", () => {
       ["f1234567-sixth", "org-a", "🍔"],
       ["g1234567-seventh", "org-a", "Café"],
       ["h1234567-eighth", "org-b", "Meals/drinks"],
+      ["j1234567-tenth", "org-a", "b1234567-second"],
     ];
     for (const [index, [id, organizationId, name]] of categories.entries()) {
       database
@@ -1062,7 +1073,7 @@ describe("expense categories", () => {
         .all(),
     ).toEqual([
       { id: "a1234567-first", slug: "meals-drinks" },
-      { id: "b1234567-second", slug: "b1234567-second" },
+      { id: "b1234567-second", slug: "meals-drinks-2--b1234567-second" },
       { id: "c1234567-third", slug: "meals-drinks-2" },
       { id: "d1234567-fourth", slug: "uncategorized-2" },
       { id: "e1234567-fifth", slug: "taxes-2026" },
@@ -1070,6 +1081,7 @@ describe("expense categories", () => {
       // Unlike the API, the backfill cannot fold accents.
       { id: "g1234567-seventh", slug: "caf" },
       { id: "h1234567-eighth", slug: "meals-drinks" },
+      { id: "j1234567-tenth", slug: "b1234567-second" },
     ]);
 
     // Categories the previous Worker creates during deployment get a slug.
@@ -1134,23 +1146,32 @@ function raceForSlug(
 ): Bindings {
   const database = fixture.bindings.DB;
   let raced = false;
+  const race = () => {
+    if (raced) return;
+    raced = true;
+    fixture.database
+      .query(
+        `INSERT INTO finance_expense_categories
+           (id, organization_id, name, slug, created_at, updated_at)
+         VALUES (?, 'org_user-1', ?, ?, '', '')`,
+      )
+      .run(`rival-${slug}`, `Rival ${slug}`, slug);
+  };
   const prepare = (query: string) => {
     const statement = database.prepare(query);
-    if (!/^\s*(INSERT INTO|UPDATE) finance_expense_categories\b/.test(query))
+    if (!/^\s*(INSERT|UPDATE)\b.*finance_expense_categories\b/.test(query))
       return statement;
-    const run = statement.run.bind(statement);
+    // Single writes run; the defaults batch executes each statement.
+    const { execute, run } = statement as unknown as TestStatement & {
+      run: () => Promise<unknown>;
+    };
     return Object.assign(statement, {
+      execute: () => {
+        race();
+        return execute();
+      },
       run: () => {
-        if (!raced) {
-          raced = true;
-          fixture.database
-            .query(
-              `INSERT INTO finance_expense_categories
-                 (id, organization_id, name, slug, created_at, updated_at)
-               VALUES (?, 'org_user-1', ?, ?, '', '')`,
-            )
-            .run(`rival-${slug}`, `Rival ${slug}`, slug);
-        }
+        race();
         return run();
       },
     });

@@ -44,13 +44,14 @@ SET slug = (
   SELECT CASE
            -- A numbered slug can repeat another category's: "Meals/drinks"
            -- after "Meals & drinks" and "Meals drinks 2" would both take
-           -- meals-drinks-2. The numbered one takes its random, unique id.
+           -- meals-drinks-2. Names never slug to a double hyphen, and ids
+           -- are unique, so the numbered one adds "--" and its id.
            WHEN candidate.number > 1 AND EXISTS (
              SELECT 1 FROM candidates AS other
              WHERE other.organization_id = candidate.organization_id
                AND other.slug = candidate.slug
                AND other.id <> candidate.id
-           ) THEN candidate.id
+           ) THEN candidate.slug || '--' || candidate.id
            ELSE candidate.slug
          END
   FROM candidates AS candidate

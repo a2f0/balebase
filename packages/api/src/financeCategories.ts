@@ -152,6 +152,20 @@ export async function deleteCategory(context: FinanceContext) {
 export async function addDefaultCategories(context: FinanceContext) {
   const database = context.env.DB;
   const organizationId = context.get("organizationId");
+  // OR IGNORE skips a default whose name or slug a concurrent write took; the
+  // next pass adds it under a free slug unless its name now exists.
+  for (let pass = 1; pass <= 3; pass++) {
+    const inserts = await missingDefaultInserts(database, organizationId);
+    if (!inserts.length) break;
+    await database.batch(inserts);
+  }
+  return listCategories(context);
+}
+
+async function missingDefaultInserts(
+  database: D1Database,
+  organizationId: string,
+) {
   const existing = await database
     .prepare(
       `SELECT lower(name) AS name, slug FROM finance_expense_categories
@@ -162,7 +176,7 @@ export async function addDefaultCategories(context: FinanceContext) {
   const names = new Set(existing.results.map(({ name }) => name));
   const slugs = new Set(existing.results.map(({ slug }) => slug));
   const now = new Date().toISOString();
-  const inserts = defaultExpenseCategories
+  return defaultExpenseCategories
     .filter((name) => !names.has(name.toLowerCase()))
     .map((name) => {
       const slug = uniqueSlug(name, slugs);
@@ -175,8 +189,6 @@ export async function addDefaultCategories(context: FinanceContext) {
         )
         .bind(crypto.randomUUID(), organizationId, name, slug, now, now);
     });
-  if (inserts.length) await database.batch(inserts);
-  return listCategories(context);
 }
 
 /** Sets or clears a transaction's single expense category. */
