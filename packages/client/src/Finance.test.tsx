@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FinanceView } from "./Finance";
-import type { FinanceData } from "./financeApi";
+import type { FinanceConnection, FinanceData } from "./financeApi";
+import type { FinancePage } from "./financePages";
 
 const emptyData: FinanceData = {
   accounts: [],
@@ -30,9 +31,23 @@ const populatedData: FinanceData = {
   ],
 };
 
+const connection = (
+  overrides: Partial<FinanceConnection> = {},
+): FinanceConnection => ({
+  accountCount: 1,
+  createdAt: "2026-09-01T00:00:00.000Z",
+  errorCode: null,
+  id: "connection-1",
+  institutionId: null,
+  institutionName: "Bank",
+  lastSyncedAt: null,
+  status: "active",
+  ...overrides,
+});
+
 function renderFinance(
   data: FinanceData | undefined,
-  options: { error?: string; notice?: string } = {},
+  options: { error?: string; notice?: string; page?: FinancePage } = {},
 ) {
   return renderToStaticMarkup(
     <FinanceView
@@ -56,7 +71,7 @@ function renderFinance(
       onNavigate={() => undefined}
       onReload={async () => undefined}
       onSync={async () => undefined}
-      page="overview"
+      page={options.page ?? "overview"}
     />,
   );
 }
@@ -86,5 +101,46 @@ describe("Finance overview notices", () => {
     expect(markup).toContain("Plaid setup is incomplete");
     expect(markup).toContain("Could not sync");
     expect(markup).toContain("Account connected");
+  });
+});
+
+describe("Finance connections", () => {
+  it("lists connections on their own tab instead of the overview", () => {
+    const data = { ...populatedData, connections: [connection()] };
+
+    expect(renderFinance(data)).not.toContain("Sync now");
+    const markup = renderFinance(data, { page: "connections" });
+    expect(markup).toContain("Sync now");
+    expect(markup).toContain("Connect bank");
+  });
+
+  it("explains an empty connections tab", () => {
+    const markup = renderFinance(emptyData, { page: "connections" });
+
+    expect(markup).toContain("No banks connected yet");
+    expect(markup).toContain("Before you add an account");
+  });
+
+  it("flags connections that stopped syncing on the overview", () => {
+    expect(
+      renderFinance({ ...populatedData, connections: [connection()] }),
+    ).not.toContain("stopped syncing");
+    expect(
+      renderFinance({
+        ...populatedData,
+        connections: [
+          connection({ errorCode: "ITEM_LOGIN_REQUIRED", status: "error" }),
+        ],
+      }),
+    ).toContain("Bank stopped syncing");
+    expect(
+      renderFinance({
+        ...populatedData,
+        connections: [
+          connection({ status: "error" }),
+          connection({ id: "connection-2", status: "error" }),
+        ],
+      }),
+    ).toContain("2 connections stopped syncing");
   });
 });
