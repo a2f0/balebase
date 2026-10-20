@@ -7,6 +7,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import { appUrl } from "../site";
 import "../styles/home.css";
 
+// Keep pricing copy tied to the plans shared with the billing page.
 const [free, pro] = plans;
 
 const features: {
@@ -105,7 +106,7 @@ const essentials: { icon: IconName; text: string; title: string }[] = [
         </h1>
         <p class="lead heroLead">
           Manage expenses, contracts, employee paperwork, and equipment in one
-          workspace. Balebase brings the daily admin together so you and your
+          workspace. {productName} brings the daily admin together so you and your
           team can keep work moving.
         </p>
         <div class="cluster heroActions">
@@ -128,7 +129,8 @@ const essentials: { icon: IconName; text: string; title: string }[] = [
       <div class="bandIntro">
         <p class="eyebrow eyebrowDot">The tools to run your business</p>
         <h2 class="title" id="product-title">
-          From the bank statement <span class="serifAccent titleBreak">to the signed agreement.</span>
+          From the bank statement
+          <span class="serifAccent titleBreak">to the signed agreement.</span>
         </h2>
         <p class="lead">
           For owners and small teams handling the money, the people, and the
@@ -137,16 +139,18 @@ const essentials: { icon: IconName; text: string; title: string }[] = [
         </p>
       </div>
       <div class="featureGrid">
-        {features.map((feature) => (
-          <article class="card featureCard">
-            <div class="featureHead">
-              <span class="featureIcon"><Icon name={feature.icon} size={20} /></span>
-              <h3 class="featureTitle">{feature.title}</h3>
-            </div>
-            <p class="featureText">{feature.text}</p>
-            <p class="featureExample">{feature.example}</p>
-          </article>
-        ))}
+        {
+          features.map((feature) => (
+            <article class="card featureCard">
+              <div class="featureHead">
+                <span class="featureIcon"><Icon name={feature.icon} size={20} /></span>
+                <h3 class="featureTitle">{feature.title}</h3>
+              </div>
+              <p class="featureText">{feature.text}</p>
+              <p class="featureExample">{feature.example}</p>
+            </article>
+          ))
+        }
       </div>
     </div>
   </section>
@@ -154,7 +158,7 @@ const essentials: { icon: IconName; text: string; title: string }[] = [
   <section aria-labelledby="how-title" class="band bandInk onDark" id="how-it-works">
     <div class="container">
       <div class="bandIntro">
-        <p class="eyebrow eyebrowDot">A week in Balebase</p>
+        <p class="eyebrow eyebrowDot">A week in {productName}</p>
         <h2 class="title" id="how-title">
           Real work. <span class="serifAccent">A place for each part.</span>
         </h2>
@@ -163,16 +167,18 @@ const essentials: { icon: IconName; text: string; title: string }[] = [
         </p>
       </div>
       <ol class="steps">
-        {steps.map((step, index) => (
-          <li class="step">
-            <div class="stepHead">
-              <span class="stepNumber">{String(index + 1).padStart(2, "0")}</span>
-              <Icon class="stepIcon" name={step.icon} size={20} />
-            </div>
-            <h3 class="stepTitle">{step.title}</h3>
-            <p class="stepText">{step.text}</p>
-          </li>
-        ))}
+        {
+          steps.map((step, index) => (
+            <li class="step">
+              <div class="stepHead">
+                <span class="stepNumber">{String(index + 1).padStart(2, "0")}</span>
+                <Icon class="stepIcon" name={step.icon} size={20} />
+              </div>
+              <h3 class="stepTitle">{step.title}</h3>
+              <p class="stepText">{step.text}</p>
+            </li>
+          ))
+        }
       </ol>
     </div>
   </section>
@@ -186,13 +192,15 @@ const essentials: { icon: IconName; text: string; title: string }[] = [
         </h2>
       </div>
       <ul class="essentials">
-        {essentials.map((item) => (
-          <li class="essential">
-            <Icon name={item.icon} size={24} />
-            <h3 class="featureTitle">{item.title}</h3>
-            <p>{item.text}</p>
-          </li>
-        ))}
+        {
+          essentials.map((item) => (
+            <li class="essential">
+              <Icon name={item.icon} size={24} />
+              <h3 class="featureTitle">{item.title}</h3>
+              <p>{item.text}</p>
+            </li>
+          ))
+        }
       </ul>
     </div>
   </section>

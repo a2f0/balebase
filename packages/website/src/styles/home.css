@@ -156,9 +156,6 @@
 }
 
 .featureText {
-  display: grid;
-  justify-items: start;
-  gap: var(--space-3);
   color: var(--color-text-muted);
   font-size: var(--text-base);
   line-height: var(--leading-normal);
@@ -179,10 +176,6 @@
   place-items: center;
   color: var(--color-green-deep);
   background: var(--color-lime-soft);
-}
-
-.cardAccent .featureIcon {
-  background: var(--color-surface);
 }
 
 .featureTitle {

@@ -1,4 +1,7 @@
 ---
+// These illustrative records are readable by assistive technology; the label
+// distinguishes them from a live workspace or an interactive app screen.
+import { productName } from "@balebase/ui/brand";
 import type { IconName } from "@balebase/ui/icons";
 import Icon from "./Icon.astro";
 
@@ -8,7 +11,7 @@ const records: {
   title: string;
   detail: string;
   status: string;
-  tone: string;
+  tone?: "badgeSuccess" | "badgeWarning" | "badgeAccent";
 }[] = [
   {
     icon: "finance",
@@ -40,7 +43,6 @@ const records: {
     title: "Office laptop",
     detail: "Assigned to Jordan Lee",
     status: "Assigned",
-    tone: "",
   },
 ];
 ---
@@ -51,19 +53,21 @@ const records: {
     <span class="previewLabel">Illustrative records</span>
   </div>
   <ul class="previewRecords">
-    {records.map((record) => (
-      <li class="previewRecord">
-        <span class="featureIcon"><Icon name={record.icon} size={20} /></span>
-        <div class="previewRecordMain">
-          <p class="previewArea">{record.area}</p>
-          <p class="previewTitle">{record.title}</p>
-          <p class="previewDetail">{record.detail}</p>
-        </div>
-        <span class:list={["badge", record.tone]}>{record.status}</span>
-      </li>
-    ))}
+    {
+      records.map((record) => (
+        <li class="previewRecord">
+          <span class="featureIcon"><Icon name={record.icon} size={20} /></span>
+          <div class="previewRecordMain">
+            <p class="previewArea">{record.area}</p>
+            <p class="previewTitle">{record.title}</p>
+            <p class="previewDetail">{record.detail}</p>
+          </div>
+          <span class:list={["badge", record.tone]}>{record.status}</span>
+        </li>
+      ))
+    }
   </ul>
   <figcaption class="previewCaption">
-    Expenses, signatures, people, and equipment — managed in Balebase.
+    Expenses, signatures, people, and equipment — managed in {productName}.
   </figcaption>
 </figure>
