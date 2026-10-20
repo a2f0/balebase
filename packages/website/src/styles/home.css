@@ -39,7 +39,7 @@
 
 .heroInner {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
   gap: var(--space-16);
 }
@@ -67,7 +67,7 @@
 
 .heroNote {
   color: var(--color-text-subtle);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 /* Illustrative business records, not an interactive app screen. */
@@ -99,9 +99,10 @@
   list-style: none;
 }
 
+/* Wide previews put the status beside each record; narrow ones stack it. */
 .previewRecord {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: start;
   gap: var(--space-3);
   padding: var(--space-4);
@@ -111,7 +112,6 @@
 }
 
 .previewRecord .badge {
-  grid-column: 2;
   justify-self: start;
 }
 
@@ -157,7 +157,7 @@
 
 .featureText {
   color: var(--color-text-muted);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   line-height: var(--leading-normal);
 }
 
@@ -190,7 +190,7 @@
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border-subtle);
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   line-height: var(--leading-normal);
 }
 
@@ -243,7 +243,7 @@
 
 .stepText {
   color: var(--color-text-inverse-muted);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   line-height: var(--leading-normal);
 }
 
@@ -264,7 +264,7 @@
   padding-top: var(--space-5);
   border-top: 1px solid var(--color-border-strong);
   color: var(--color-text-muted);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   line-height: var(--leading-normal);
 }
 
@@ -278,7 +278,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
-  max-width: 50rem;
+  max-width: 56rem;
   margin-inline: auto;
 }
 
@@ -304,7 +304,8 @@
 
 .priceDescription {
   color: var(--color-text-muted);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
+  text-wrap: balance;
 }
 
 .price {
@@ -345,7 +346,7 @@
   align-items: flex-start;
   gap: var(--space-2-5);
   color: var(--color-text);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
 }
 
 .priceFeatures .icon {
@@ -357,7 +358,7 @@
   max-width: 34rem;
   margin: var(--space-8) auto 0;
   color: var(--color-text-subtle);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   text-align: center;
 }
 
@@ -406,6 +407,14 @@
 
   .previewRecords {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .previewRecord {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .previewRecord .badge {
+    grid-column: 2;
   }
 }
 

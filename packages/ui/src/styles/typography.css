@@ -1,11 +1,7 @@
-/* Display type is shared by the marketing site and the client's sign-in aside. */
-.display {
-  font-size: var(--text-display);
-  font-weight: 500;
-  letter-spacing: var(--tracking-display);
-  line-height: 0.92;
-}
-
+/*
+ * Display type. The marketing hero uses `.headline`; section titles are shared
+ * by the marketing site and the client's sign-in aside.
+ */
 .headline {
   font-size: var(--text-5xl);
   font-weight: 500;
