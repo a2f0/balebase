@@ -1,0 +1,69 @@
+---
+import type { IconName } from "@balebase/ui/icons";
+import Icon from "./Icon.astro";
+
+const records: {
+  icon: IconName;
+  area: string;
+  title: string;
+  detail: string;
+  status: string;
+  tone: string;
+}[] = [
+  {
+    icon: "finance",
+    area: "Expenses",
+    title: "Harbor Supply Co.",
+    detail: "Materials · Receipt linked",
+    status: "Reviewed",
+    tone: "badgeSuccess",
+  },
+  {
+    icon: "contract",
+    area: "Contracts",
+    title: "Service agreement",
+    detail: "2 signers · 1 signature received",
+    status: "Awaiting signature",
+    tone: "badgeWarning",
+  },
+  {
+    icon: "organization",
+    area: "People",
+    title: "New hire paperwork",
+    detail: "Jordan Lee · Employee forms",
+    status: "Submitted",
+    tone: "badgeAccent",
+  },
+  {
+    icon: "equipment",
+    area: "Equipment",
+    title: "Office laptop",
+    detail: "Assigned to Jordan Lee",
+    status: "Assigned",
+    tone: "",
+  },
+];
+---
+
+<figure class="businessPreview">
+  <div class="previewHeader">
+    <p class="eyebrow">One workspace. Everyday business.</p>
+    <span class="previewLabel">Illustrative records</span>
+  </div>
+  <ul class="previewRecords">
+    {records.map((record) => (
+      <li class="previewRecord">
+        <span class="featureIcon"><Icon name={record.icon} size={20} /></span>
+        <div class="previewRecordMain">
+          <p class="previewArea">{record.area}</p>
+          <p class="previewTitle">{record.title}</p>
+          <p class="previewDetail">{record.detail}</p>
+        </div>
+        <span class:list={["badge", record.tone]}>{record.status}</span>
+      </li>
+    ))}
+  </ul>
+  <figcaption class="previewCaption">
+    Expenses, signatures, people, and equipment — managed in Balebase.
+  </figcaption>
+</figure>

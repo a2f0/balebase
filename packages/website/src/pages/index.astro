@@ -1,216 +1,152 @@
 ---
 import { plans, productName } from "@balebase/ui/brand";
 import type { IconName } from "@balebase/ui/icons";
-import AuditPreview from "../components/AuditPreview.astro";
+import BusinessPreview from "../components/BusinessPreview.astro";
 import Icon from "../components/Icon.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { appUrl } from "../site";
 import "../styles/home.css";
 
-// Pricing sentences read from the shared plans so they never drift.
 const [free, pro] = plans;
 
-const features: { icon: IconName; text: string; title: string }[] = [
+const features: {
+  icon: IconName;
+  text: string;
+  title: string;
+  example: string;
+}[] = [
   {
-    icon: "issues",
-    text: "Raise an issue in the middle of an audit with a priority, a description, an assignee from your organization, and up to ten photos. Reassign it later as the work moves.",
-    title: "Issues",
+    icon: "finance",
+    title: "Know where the money goes",
+    text: "Connect bank accounts through Plaid and import transactions. Categorize expenses, add notes and labels, and see spending totals by category.",
+    example: "Review a supplier payment and link the receipt from your inbox.",
+  },
+  {
+    icon: "contract",
+    title: "Get contracts signed",
+    text: "Upload a PDF, place signature fields, and send it to your signers. Reuse contract templates, set reminders, and download the signed copy.",
+    example: "Send a service agreement and see who still needs to sign.",
   },
   {
     icon: "organization",
-    text: "Invite members as owners, admins, or members. Groups grant capabilities such as Finance, and owners can require two-factor authentication for any member.",
-    title: "People and roles",
-  },
-  {
-    icon: "security",
-    text: "Two-factor authentication with an authenticator app and recovery codes. Keep several accounts signed in on one browser and switch between them quickly.",
-    title: "Sign-in security",
+    title: "Keep employee paperwork moving",
+    text: "Assign forms with due dates and review submitted documents. Each person has a My documents page to see and complete their requests.",
+    example: "Request a new hire’s forms and track what has been submitted.",
   },
   {
     icon: "inbox",
-    text: "Upload files to your organization’s library. Each organization also gets its own inbound email address for forwarding documents and attachments, with trash and restore.",
-    title: "Library and inbox",
+    title: "Put business documents in reach",
+    text: "Organize uploaded files in folders. Forward email and attachments to your organization’s inbox, then link messages to equipment, folders, or transactions.",
+    example: "Keep a laptop’s purchase email linked to its equipment record.",
   },
   {
-    icon: "businesses",
-    text: "Keep a record for each business you run: legal name, EIN, DUNS number, incorporation date, and address.",
-    title: "Businesses",
+    icon: "equipment",
+    title: "Track the equipment you hand out",
+    text: "Record computers, phones, and monitors with their make, model, serial number, and purchase date. Assign each item to a member of your team.",
+    example:
+      "Look up which laptop a teammate has before ordering a replacement.",
+  },
+  {
+    icon: "issues",
+    title: "Give follow-up work an owner",
+    text: "Create issues with a priority and assignee. Track standalone issues alongside those raised from transactions and audits, through to resolution.",
+    example:
+      "Assign an unexpected charge to the person who can investigate it.",
   },
 ];
 
 const steps: { icon: IconName; text: string; title: string }[] = [
   {
-    icon: "checklist",
-    text: "Start from one of your organization’s templates, or customize a global starting point into your own form. Every organization has two to begin with.",
-    title: "Pick a checklist",
+    icon: "finance",
+    title: "Review the spending",
+    text: "Import your latest bank transactions, categorize expenses, and mark reviewed items. Raise an issue on a transaction that needs another look.",
   },
   {
-    icon: "camera",
-    text: "Record pass, fail, N/A, or a written response for each item. When something needs attention, raise an issue on the spot with photos and an assignee.",
-    title: "Walk the site",
+    icon: "signature",
+    title: "Move the paperwork along",
+    text: "Check which contracts are waiting for signatures and send a reminder. Review employee forms as people submit them.",
   },
   {
-    icon: "success",
-    text: "Reassign issues as the work moves. The audit keeps a snapshot of the template it started from, so the record stays exactly as it was taken.",
-    title: "Close the loop",
+    icon: "audits",
+    title: "Check the work on site",
+    text: "Run an audit from a reusable checklist. Record answers, attach photos to issues, and assign the fixes to your team.",
   },
 ];
 
-const principles: {
-  link?: { href: string; label: string };
-  text: string;
-  title: string;
-}[] = [
+const essentials: { icon: IconName; text: string; title: string }[] = [
   {
-    text: "No feeds, streaks, or manufactured urgency. The workspace stays out of the way until there is work to do.",
-    title: "Quiet by default",
+    icon: "businesses",
+    title: "Business records",
+    text: "Keep legal names, EINs, incorporation dates, and addresses for the businesses you run.",
   },
   {
-    text: "Templates are versioned and every audit keeps its own snapshot, so later edits never rewrite a finished record.",
-    title: "Built to endure",
+    icon: "security",
+    title: "Team access",
+    text: "Manage owners, admins, and members. Control Finance access with groups and require two-factor authentication for members.",
   },
   {
-    link: { href: "/data-retention", label: "How retention works" },
-    text: "Each organization’s data is isolated from every other. A deleted organization stays recoverable for 30 days before it is permanently purged.",
-    title: "Private by design",
+    icon: "audits",
+    title: "Audits and activity history",
+    text: "Build reusable checklists and track answers, issues, and changes. Each audit keeps the template version it started with.",
   },
 ];
 ---
 
 <BaseLayout
-  description={`${productName} is a calm workspace for audits, issues, files, and business records. Run audits from versioned checklists, raise issues with photos, and keep every record as it was.`}
-  title={`${productName} — Keep what matters`}
+  description={`${productName} is small business management software for expenses, contracts, employee forms, documents, equipment, and audits. Start free and add your team as you grow.`}
+  title={`${productName} — Small business management software`}
 >
   <section aria-labelledby="hero-title" class="hero">
     <div class="container heroInner">
       <div class="heroCopy">
-        <p class="eyebrow eyebrowDot">Audits · Issues · Records</p>
+        <p class="eyebrow eyebrowDot">Small business management software</p>
         <h1 class="headline heroTitle" id="hero-title">
-          Keep what matters. <span class="serifAccent">Lose the noise.</span>
+          Run the business. <span class="serifAccent">Keep it together.</span>
         </h1>
         <p class="lead heroLead">
-          A quiet workspace for your organization’s audits, issues, files, and
-          records. Walk a site, note what you find, and keep the result exactly as
-          it was recorded.
+          Manage expenses, contracts, employee paperwork, and equipment in one
+          workspace. Balebase brings the daily admin together so you and your
+          team can keep work moving.
         </p>
         <div class="cluster heroActions">
           <a class="button buttonPrimary buttonLg" href={appUrl}>
-            Start free
-            <Icon name="arrowRight" />
+            Start free <Icon name="arrowRight" />
           </a>
-          <a class="button buttonLg" href="#how-it-works">See how it works</a>
+          <a class="button buttonLg" href="#product">Explore the features</a>
         </div>
         <p class="heroNote">
-          {free.name} for {free.features[0]}. {pro.name} is {pro.price}{" "}
-          {pro.cadence}.
+          No credit card required. {free.name} for {free.features[0]}.
+          {pro.name} is {pro.price} {pro.cadence}.
         </p>
       </div>
-      <AuditPreview />
+      <BusinessPreview />
     </div>
   </section>
 
   <section aria-labelledby="product-title" class="band" id="product">
     <div class="container">
       <div class="bandIntro">
-        <p class="eyebrow eyebrowDot">Product</p>
+        <p class="eyebrow eyebrowDot">The tools to run your business</p>
         <h2 class="title" id="product-title">
-          One place for the work{" "}
-          <span class="serifAccent titleBreak">and the paperwork.</span>
+          From the bank statement <span class="serifAccent titleBreak">to the signed agreement.</span>
         </h2>
         <p class="lead">
-          Audits sit at the center. Around them are the people, files, and
-          records your organization keeps, each scoped to that organization.
+          For owners and small teams handling the money, the people, and the
+          paperwork themselves. Find the record, see its status, and take the
+          next step.
         </p>
       </div>
-
       <div class="featureGrid">
-        <article class="card cardAccent featureCard featureWide">
-          <div class="featureText">
+        {features.map((feature) => (
+          <article class="card featureCard">
             <div class="featureHead">
-              <span class="featureIcon"><Icon name="audits" size={20} /></span>
-              <h3 class="featureTitle">Audits and checklists</h3>
+              <span class="featureIcon"><Icon name={feature.icon} size={20} /></span>
+              <h3 class="featureTitle">{feature.title}</h3>
             </div>
-            <p>
-              Build checklist templates for your organization and start audits
-              from them. Record pass, fail, N/A, or a written response for each
-              item. Templates are versioned and each audit snapshots its
-              template, so later edits never rewrite history.
-            </p>
-          </div>
-          <div aria-hidden="true" class="card cardFlush featureVisual">
-            <ul class="rowList">
-              <li class="row">
-                <div class="rowMain">
-                  <span class="rowTitle">Site walkthrough</span>
-                  <span class="rowMeta">Template · version 3</span>
-                </div>
-                <span class="badge badgeAccent">Current</span>
-              </li>
-              <li class="row">
-                <div class="rowMain">
-                  <span class="rowTitle">Audit · Maple Street</span>
-                  <span class="rowMeta">Snapshot of version 2</span>
-                </div>
-                <span class="badge">Kept as recorded</span>
-              </li>
-              <li class="row">
-                <div class="rowMain">
-                  <span class="rowTitle">Audit · Harbor Lane</span>
-                  <span class="rowMeta">Snapshot of version 1</span>
-                </div>
-                <span class="badge">Kept as recorded</span>
-              </li>
-            </ul>
-          </div>
-        </article>
-
-        {
-          features.map((feature) => (
-            <article class="card featureCard">
-              <div class="featureText">
-                <div class="featureHead">
-                  <span class="featureIcon">
-                    <Icon name={feature.icon} size={20} />
-                  </span>
-                  <h3 class="featureTitle">{feature.title}</h3>
-                </div>
-                <p>{feature.text}</p>
-              </div>
-            </article>
-          ))
-        }
-
-        <article class="card featureCard featureWide">
-          <div class="featureText">
-            <div class="featureHead">
-              <span class="featureIcon"><Icon name="finance" size={20} /></span>
-              <h3 class="featureTitle">Finance</h3>
-            </div>
-            <p>
-              Members of a Finance group can connect bank accounts through Plaid,
-              import up to 24 months of transactions, sort each one into your own
-              expense categories, and see spending totals by category.
-            </p>
-          </div>
-          <div aria-hidden="true" class="card cardFlush featureVisual">
-            <ul class="rowList">
-              <li class="row">
-                <div class="rowMain">
-                  <span class="rowTitle">Harbor Supply Co.</span>
-                  <span class="rowMeta">Materials · Note added</span>
-                </div>
-                <span class="badge badgeSuccess">Reviewed</span>
-              </li>
-              <li class="row">
-                <div class="rowMain">
-                  <span class="rowTitle">City permit office</span>
-                  <span class="rowMeta">Permits · Label: Maple Street</span>
-                </div>
-                <span class="badge badgeWarning">Pending</span>
-              </li>
-            </ul>
-          </div>
-        </article>
+            <p class="featureText">{feature.text}</p>
+            <p class="featureExample">{feature.example}</p>
+          </article>
+        ))}
       </div>
     </div>
   </section>
@@ -218,80 +154,46 @@ const principles: {
   <section aria-labelledby="how-title" class="band bandInk onDark" id="how-it-works">
     <div class="container">
       <div class="bandIntro">
-        <p class="eyebrow eyebrowDot">How it works</p>
+        <p class="eyebrow eyebrowDot">A week in Balebase</p>
         <h2 class="title" id="how-title">
-          Walk the site. <span class="serifAccent">Keep the record.</span>
+          Real work. <span class="serifAccent">A place for each part.</span>
         </h2>
-      </div>
-      <ol class="steps">
-        {
-          steps.map((step, index) => (
-            <li class="step">
-              <div class="stepHead">
-                <span class="stepNumber">{String(index + 1).padStart(2, "0")}</span>
-                <Icon class="stepIcon" name={step.icon} size={20} />
-              </div>
-              <h3 class="stepTitle">{step.title}</h3>
-              <p class="stepText">{step.text}</p>
-            </li>
-          ))
-        }
-      </ol>
-      <div class="startingPoints">
-        <h3 class="startingPointsTitle">Two global starting points</h3>
-        <ul class="startingPointsList">
-          <li>
-            <Icon name="checklist" />
-            <span>
-              An electrical-safety readiness checklist based on broad NFPA 70E
-              themes.
-            </span>
-          </li>
-          <li>
-            <Icon name="checklist" />
-            <span>
-              A U.S. residential construction baseline with 253 controls for
-              detached one- and two-family homes and townhouses.
-            </span>
-          </li>
-        </ul>
-        <p class="finePrint">
-          Global checklists are starting points, not official checklists,
-          certifications, or code-compliance determinations. Review them against
-          the requirements that apply to your work.
+        <p class="lead workflowLead">
+          Start with the work on your desk today. The rest is there when you need it.
         </p>
       </div>
+      <ol class="steps">
+        {steps.map((step, index) => (
+          <li class="step">
+            <div class="stepHead">
+              <span class="stepNumber">{String(index + 1).padStart(2, "0")}</span>
+              <Icon class="stepIcon" name={step.icon} size={20} />
+            </div>
+            <h3 class="stepTitle">{step.title}</h3>
+            <p class="stepText">{step.text}</p>
+          </li>
+        ))}
+      </ol>
     </div>
   </section>
 
-  <section aria-labelledby="principles-title" class="band" id="principles">
+  <section aria-labelledby="essentials-title" class="band">
     <div class="container">
       <div class="bandIntro">
-        <p class="eyebrow eyebrowDot">Principles</p>
-        <h2 class="title" id="principles-title">
-          Software should feel like a <span class="serifAccent">well-made room.</span>
+        <p class="eyebrow eyebrowDot">The details matter, too</p>
+        <h2 class="title" id="essentials-title">
+          Keep the records. <span class="serifAccent">Control the access.</span>
         </h2>
-        <p class="lead">
-          Useful things close at hand, nothing shouting for attention, and enough
-          space to think.
-        </p>
       </div>
-      <ol class="principles">
-        {
-          principles.map((principle, index) => (
-            <li class="principle">
-              <span class="principleNumber">{String(index + 1).padStart(2, "0")}</span>
-              <h3 class="principleTitle">{principle.title}</h3>
-              <p>{principle.text}</p>
-              {principle.link && (
-                <a class="button buttonLink principleLink" href={principle.link.href}>
-                  {principle.link.label}
-                </a>
-              )}
-            </li>
-          ))
-        }
-      </ol>
+      <ul class="essentials">
+        {essentials.map((item) => (
+          <li class="essential">
+            <Icon name={item.icon} size={24} />
+            <h3 class="featureTitle">{item.title}</h3>
+            <p>{item.text}</p>
+          </li>
+        ))}
+      </ul>
     </div>
   </section>
 
@@ -300,7 +202,7 @@ const principles: {
       <div class="bandIntro bandIntroCenter">
         <p class="eyebrow eyebrowDot">Pricing</p>
         <h2 class="title" id="pricing-title">
-          Start free. <span class="serifAccent">Scale by seat.</span>
+          Start on your own. <span class="serifAccent">Grow with your team.</span>
         </h2>
       </div>
       <div class="pricingGrid">
@@ -350,18 +252,17 @@ const principles: {
   <section aria-labelledby="closing-title" class="band">
     <div class="container">
       <div class="closingPanel">
-        <p class="eyebrow eyebrowDot">Ready when you are</p>
-        <h2 class="display" id="closing-title">Make some room.</h2>
+        <p class="eyebrow eyebrowDot">Your business, organized</p>
+        <h2 class="display" id="closing-title">Put your next workday in order.</h2>
         <p class="lead closingLead">
-          Start free with {free.features[0]} and {free.features[1]}. Invite
-          your team when you’re ready.
+          Create your free workspace. Upload a document, add your equipment, or
+          connect a bank account. Upgrade to Pro when you’re ready to add your team.
         </p>
         <div class="cluster closingActions">
           <a class="button buttonPrimary buttonLg" href={appUrl}>
-            Start free
-            <Icon name="arrowRight" />
+            Start free <Icon name="arrowRight" />
           </a>
-          <a class="button buttonLg" href={appUrl}>Sign in</a>
+          <a class="button buttonLg" href="#pricing">Compare plans</a>
         </div>
       </div>
     </div>

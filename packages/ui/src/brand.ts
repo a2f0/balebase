@@ -22,7 +22,7 @@ export interface Plan {
 export const plans = [
   {
     cadence: "per month",
-    description: "For one person getting their checklists in order.",
+    description: "For an owner organizing the day-to-day business.",
     features: ["1 user", "5 form templates", "30-day audit history"],
     id: "free",
     name: "Free",
@@ -30,7 +30,7 @@ export const plans = [
   },
   {
     cadence: "per user / month",
-    description: "For teams that audit together and keep every record.",
+    description: "For teams managing the business together.",
     features: [
       "Unlimited form templates",
       "Unlimited audit history",
