@@ -78,7 +78,7 @@ main:focus {
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   color: var(--color-text-muted);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   font-weight: 600;
   text-decoration: none;
   transition:
@@ -95,6 +95,10 @@ main:focus {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.siteHeaderActions .button {
+  font-size: var(--text-md);
 }
 
 .siteMenu {
@@ -125,6 +129,12 @@ main:focus {
   right: 0;
   z-index: var(--z-popover);
   width: min(16rem, calc(100vw - var(--page-gutter) * 2));
+}
+
+/* Touch-sized rows for the small-screen menu. */
+.siteMenuPanel .menuItem {
+  min-height: 2.75rem;
+  font-size: var(--text-md);
 }
 
 .siteMenuItemEnd {
@@ -170,9 +180,9 @@ main:focus {
 }
 
 .siteFooterTagline {
-  max-width: 22rem;
+  max-width: 24rem;
   color: var(--color-text-inverse-muted);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   line-height: var(--leading-normal);
 }
 
@@ -199,7 +209,7 @@ main:focus {
 .siteFooterLinks a {
   border-radius: var(--radius-xs);
   color: var(--color-text-inverse);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   text-decoration: none;
   transition: color var(--duration-fast) var(--ease);
 }
