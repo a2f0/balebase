@@ -4,6 +4,10 @@
  */
 export const productName = "Balebase";
 
+// The company that provides Balebase. Name it wherever a legal party appears,
+// such as copyright notices; there is no "Balebase, LLC".
+export const legalEntityName = "Tearleads, LLC";
+
 export const legalLinks = [
   { href: "/privacy", label: "Privacy" },
   { href: "/terms", label: "Terms" },

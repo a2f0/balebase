@@ -1,5 +1,5 @@
 ---
-import { legalLinks, productName } from "@balebase/ui/brand";
+import { legalEntityName, legalLinks } from "@balebase/ui/brand";
 import { appUrl, siteSections } from "../site";
 import Logo from "./Logo.astro";
 
@@ -42,6 +42,6 @@ const year = new Date().getFullYear();
     </nav>
   </div>
   <div class="container">
-    <p class="siteFooterBase">© {year} {productName}, LLC</p>
+    <p class="siteFooterBase">© {year} {legalEntityName}</p>
   </div>
 </footer>

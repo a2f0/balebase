@@ -4,6 +4,11 @@ Start with [README.md](README.md) for setup and
 [CONTRIBUTING.md](CONTRIBUTING.md) for layout, validation, and pull request
 rules. Operational procedures are in [docs/operations.md](docs/operations.md).
 
+Balebase is the product; Tearleads, LLC is the company that provides it.
+Product copy uses `productName`, while copyright notices, the legal pages, and
+any other mention of the legal party use `legalEntityName` (both in
+`packages/ui/src/brand.ts`). There is no "Balebase, LLC".
+
 Resolve the GitHub repository with `gh repo view --json nameWithOwner`. Work on
 a feature branch created with `git switch --no-track -c <type>/<topic>`, use
 signed Conventional Commits without co-author trailers, and preserve unrelated
