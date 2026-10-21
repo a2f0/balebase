@@ -11,7 +11,7 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         // Capacitor's SystemBars plugin pads the window for the keyboard, and for
         // system bars and cutouts unless the page draws under them; padding here
-        // as well doubles the gaps. The page sets the bars' style (statusBar.ts).
+        // as well doubles the gaps. The page sets the bars' style (systemBars.ts).
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         findViewById(android.R.id.content).setBackgroundColor(Color.rgb(24, 25, 22));
     }

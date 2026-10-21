@@ -8,8 +8,9 @@ Android 12 (API 31) or later.
 
 On Android, the page draws under the system bars when the WebView reports
 safe-area insets (WebView 140 and later). Layouts pad themselves with the
-insets, and the status bar sits on an ink band with light icons
-(`src/statusBar.ts`). Older WebViews keep the page clear of the bars.
+insets, and the status bar sits on an ink band with light icons. The
+navigation bar's icons follow the app's theme (`src/systemBars.ts`). Older
+WebViews keep the page clear of the bars.
 
 ## Production and staging store apps
 

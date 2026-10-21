@@ -14,7 +14,7 @@ const chrome =
 
 const read = (url: URL) => readFileSync(fileURLToPath(url), "utf8");
 const css = [
-  ...["tokens", "base", "contextMenu"].map((name) =>
+  ...["tokens", "base", "contextMenu", "dialog"].map((name) =>
     read(new URL(`../../ui/src/styles/${name}.css`, import.meta.url)),
   ),
   ...["shell", "auth", "inbox"].map((name) =>
@@ -31,7 +31,8 @@ const fixtures = {
       <main class="shellMain" id="main"><div style="height: 2400px"></div></main>
     </div>
     <div class="contextMenu" id="menu"></div>
-    <dialog class="previewDialog" id="preview"></dialog>`,
+    <dialog class="previewDialog" id="preview"></dialog>
+    <dialog class="dialog" id="confirm"><div style="height: 2000px"></div></dialog>`,
   auth: `
     <div class="authShell">
       <aside class="authAside" id="topBar"><div class="authAsideInner">
@@ -79,7 +80,14 @@ async function layOut(
     const preview = document.querySelector<HTMLDialogElement>("#preview");
     preview?.showModal();
     const previewStyle = preview && getComputedStyle(preview);
+    const confirm = document.querySelector<HTMLDialogElement>("#confirm");
+    confirm?.showModal();
     return {
+      // Layout boxes, since the opening animation transforms the dialog.
+      confirm: confirm && [
+        confirm.offsetTop,
+        confirm.offsetTop + confirm.offsetHeight,
+      ],
       // ContextMenu.tsx reads these to keep menus clear of the bars.
       menuInsets: ["top", "right", "bottom", "left"].map((side) =>
         getComputedStyle(
@@ -136,6 +144,8 @@ it("keeps the app clear of the system bars it draws under", async () => {
       top: 48,
       padding: ["0px", "24px", "0px"],
     });
+    // A tall dialog stays 16px inside the bars.
+    expect(shell.confirm).toEqual([48 + 16, 800 - 24 - 16]);
 
     // Sign-in fills the screen without scrolling.
     const auth = await layOut(browser, "auth", 412, phone);

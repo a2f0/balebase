@@ -432,10 +432,26 @@ html:has(.signingShell) {
   gap: var(--space-3);
 }
 
-/* Adopting a signature. */
+/* Adopting a signature, centered within the safe area. */
 .signatureDialog {
-  width: min(40rem, calc(100vw - var(--space-8)));
+  inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  width: min(
+    40rem,
+    calc(
+      100vw -
+      var(--space-8) -
+      env(safe-area-inset-left, 0px) -
+      env(safe-area-inset-right, 0px)
+    )
+  );
   max-width: none;
+  max-height: calc(
+    100dvh -
+    var(--space-8) -
+    env(safe-area-inset-top, 0px) -
+    env(safe-area-inset-bottom, 0px)
+  );
   padding: 0;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);

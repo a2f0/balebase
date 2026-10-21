@@ -1,8 +1,8 @@
 import { renderApp } from "@balebase/app/client";
 import { capacitorHost } from "./host";
-import { syncStatusBarStyle } from "./statusBar";
+import { syncSystemBars } from "./systemBars";
 
-syncStatusBarStyle();
+syncSystemBars();
 renderApp(
   capacitorHost(import.meta.env.VITE_APP_URL ?? "https://app.balebase.com"),
 );
