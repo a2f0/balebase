@@ -1,11 +1,29 @@
+/*
+ * The Android app draws the page under the system bars, where the safe-area
+ * insets are nonzero; everywhere else they are 0. The status bar sits on an
+ * ink band that matches the top bar in either theme, and layouts keep their
+ * content clear of the bars and cutouts.
+ */
+body::before {
+  position: fixed;
+  z-index: var(--z-status-bar);
+  inset: 0 0 auto;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--color-ink);
+  content: "";
+}
+
 .shell {
   display: grid;
   grid-template-columns: var(--sidebar-width, 240px) minmax(0, 1fr);
   min-height: 100dvh;
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .shellMain {
   min-width: 0;
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* The aside stretches with the page so its ink column never ends early. */
@@ -16,11 +34,16 @@
 .sidebarInner {
   display: flex;
   position: sticky;
-  top: 0;
+  top: env(safe-area-inset-top, 0px);
   flex-direction: column;
   gap: var(--space-6);
-  height: 100dvh;
-  padding: var(--space-5) var(--space-3) var(--space-3);
+  height: calc(
+    100dvh -
+    env(safe-area-inset-top, 0px) -
+    env(safe-area-inset-bottom, 0px)
+  );
+  padding: var(--space-5) var(--space-3) var(--space-3)
+    calc(var(--space-3) + env(safe-area-inset-left, 0px));
 }
 
 .sidebarTop {
@@ -344,11 +367,15 @@ body.sidebarResizing {
 @media (max-width: 860px) {
   /* Keep focused controls clear of the sticky top bar. */
   html {
-    scroll-padding-top: var(--space-20);
+    scroll-padding-top: calc(var(--space-20) + env(safe-area-inset-top, 0px));
   }
 
   .shell {
     display: block;
+  }
+
+  .shellMain {
+    padding-left: env(safe-area-inset-left, 0px);
   }
 
   .sidebarResizeHandle {
@@ -357,7 +384,7 @@ body.sidebarResizing {
 
   .sidebar {
     position: sticky;
-    top: 0;
+    top: env(safe-area-inset-top, 0px);
     z-index: var(--z-overlay);
     box-shadow: 0 1px 0 var(--color-ink-line);
   }
@@ -366,7 +393,9 @@ body.sidebarResizing {
     position: static;
     gap: 0;
     height: auto;
-    padding: var(--space-2) var(--page-gutter);
+    padding: var(--space-2)
+      calc(var(--page-gutter) + env(safe-area-inset-right, 0px)) var(--space-2)
+      calc(var(--page-gutter) + env(safe-area-inset-left, 0px));
     overflow: visible;
   }
 
@@ -381,7 +410,12 @@ body.sidebarResizing {
 
   .sidebarPanel {
     display: none;
-    max-height: calc(100dvh - 3.5rem);
+    max-height: calc(
+      100dvh -
+      3.5rem -
+      env(safe-area-inset-top, 0px) -
+      env(safe-area-inset-bottom, 0px)
+    );
     /* Inline room keeps focus rings inside the scrolling panel. */
     margin-inline: calc(var(--space-1) * -1);
     padding: var(--space-4) var(--space-1) var(--space-3);

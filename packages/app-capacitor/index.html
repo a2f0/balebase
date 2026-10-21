@@ -3,6 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // On Android the page draws under the system bars and pads itself with
+      // the safe-area insets (packages/app/src/styles/shell.css). Capacitor's
+      // SystemBars plugin reads viewport-fit=cover from this tag. iOS keeps
+      // its content inset.
+      if (window.Capacitor?.getPlatform?.() === "android") {
+        const viewport = document.querySelector('meta[name="viewport"]');
+        viewport.content += ", viewport-fit=cover";
+      }
+    </script>
     <meta name="theme-color" content="#181916" />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />

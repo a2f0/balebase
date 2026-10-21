@@ -6,6 +6,8 @@
   display: grid;
   grid-template-columns: clamp(22rem, 42%, 44rem) minmax(0, 1fr);
   min-height: 100dvh;
+  /* Clear of the Android status bar; see the ink band in shell.css. */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 /* Brand aside. */
@@ -23,13 +25,17 @@
 .authAsideInner {
   display: flex;
   position: sticky;
-  top: 0;
+  top: env(safe-area-inset-top, 0px);
   flex-direction: column;
   justify-content: space-between;
   gap: var(--space-12);
-  min-height: 100dvh;
+  min-height: calc(100dvh - env(safe-area-inset-top, 0px));
   padding: var(--space-8) clamp(var(--space-8), 4.5vw, var(--space-16))
-    var(--space-10);
+    calc(var(--space-10) + env(safe-area-inset-bottom, 0px))
+    calc(
+      clamp(var(--space-8), 4.5vw, var(--space-16)) +
+      env(safe-area-inset-left, 0px)
+    );
 }
 
 .authBrand {
@@ -94,7 +100,9 @@
   justify-items: center;
   gap: var(--space-12);
   min-width: 0;
-  padding: var(--space-12) var(--page-gutter) var(--space-6);
+  padding: var(--space-12)
+    calc(var(--page-gutter) + env(safe-area-inset-right, 0px))
+    calc(var(--space-6) + env(safe-area-inset-bottom, 0px)) var(--page-gutter);
 }
 
 .authPanel {
@@ -168,7 +176,9 @@
     position: static;
     justify-content: center;
     min-height: 3.5rem;
-    padding: var(--space-2) var(--page-gutter);
+    padding: var(--space-2)
+      calc(var(--page-gutter) + env(safe-area-inset-right, 0px)) var(--space-2)
+      calc(var(--page-gutter) + env(safe-area-inset-left, 0px));
   }
 
   .authAsideCopy,
@@ -178,6 +188,7 @@
 
   .authMain {
     padding-top: var(--space-10);
+    padding-left: calc(var(--page-gutter) + env(safe-area-inset-left, 0px));
   }
 }
 

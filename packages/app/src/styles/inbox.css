@@ -432,7 +432,12 @@
 .previewDialog {
   width: min(64rem, calc(100vw - var(--space-8)));
   max-width: none;
-  height: calc(100dvh - var(--space-8));
+  height: calc(
+    100dvh -
+    var(--space-8) -
+    env(safe-area-inset-top, 0px) -
+    env(safe-area-inset-bottom, 0px)
+  );
   max-height: none;
   padding: 0;
   border: 1px solid var(--color-border);
@@ -558,9 +563,12 @@
     grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
   }
 
+  /* Full screen below the status bar, which keeps the backdrop. */
   .previewDialog {
     width: 100vw;
-    height: 100dvh;
+    height: calc(100dvh - env(safe-area-inset-top, 0px));
+    margin: env(safe-area-inset-top, 0px) 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     border: 0;
     border-radius: 0;
   }

@@ -29,6 +29,9 @@ const config: CapacitorConfig = {
     // Native networking keeps authenticated requests out of WebView third-party
     // cookie restrictions. This must also be enabled in release builds.
     CapacitorHttp: { enabled: true },
+    // Android draws the page under the system bars from the first frame;
+    // index.html adds viewport-fit=cover there once the page loads.
+    SystemBars: { initialViewportFitValueHint: "cover" },
   },
 };
 
