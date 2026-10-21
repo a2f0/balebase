@@ -113,9 +113,9 @@ async function layOut(
         document.getElementById("sidebarInner") ?? document.body,
       ).paddingLeft,
       overflow: document.documentElement.scrollHeight - window.innerHeight,
-      bottomStrip: (({ borderBottomColor, borderBottomWidth }) => [
-        borderBottomWidth,
-        borderBottomColor,
+      navigationStrips: (({ borderColor, borderWidth }) => [
+        borderWidth,
+        borderColor,
       ])(getComputedStyle(element("topBar"))),
     };
   });
@@ -162,8 +162,19 @@ it("keeps the app clear of the system bars it draws under", async () => {
     // Loading leaves the navigation bar's strip in the page color, which
     // its icons follow.
     const loading = await layOut(browser, "loading", 412, phone);
-    expect(loading.bottomStrip).toEqual(["24px", "rgb(245, 244, 239)"]);
+    expect(loading.navigationStrips).toEqual([
+      "0px 0px 24px",
+      "rgb(245, 244, 239)",
+    ]);
     expect(loading.overflow).toBe(0);
+    // Three-button navigation sits at a side edge in landscape.
+    const sideways = await layOut(browser, "loading", 900, {
+      top: 24,
+      right: 48,
+      bottom: 0,
+      left: 0,
+    });
+    expect(sideways.navigationStrips[0]).toBe("0px 48px 0px 0px");
 
     // In landscape the cutout's side keeps the sidebar's links clear.
     const landscape = await layOut(browser, "shell", 900, {
