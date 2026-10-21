@@ -16,3 +16,5 @@ ignore:
   # Native SDKs require names such as App.xcodeproj and mipmap-anydpi-v26.
   - packages/app-capacitor/ios
   - packages/app-capacitor/android
+  # CI's ruby/setup-ruby bundler-cache installs gems here.
+  - packages/app-capacitor/vendor/bundle
