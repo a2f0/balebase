@@ -17,9 +17,8 @@ const tierUrls = {
 };
 
 export default defineConfig(({ mode }) => {
-  const tier = (Reflect.get(process.env, "NATIVE_RELEASE_TIER") ?? "production")
-    .trim()
-    .toLowerCase();
+  const { NATIVE_RELEASE_TIER } = process.env;
+  const tier = (NATIVE_RELEASE_TIER ?? "production").trim().toLowerCase();
   if (tier !== "production" && tier !== "staging") {
     throw new Error(`Unknown NATIVE_RELEASE_TIER=${JSON.stringify(tier)}.`);
   }
