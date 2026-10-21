@@ -241,6 +241,39 @@ describe("shared context menu", () => {
     }
   });
 
+  it("keeps the menu clear of system bars the page draws under", async () => {
+    const view = await mount();
+    const insets = document.createElement("style");
+    insets.textContent = `.contextMenu {
+      --safe-area-top: 48px; --safe-area-right: 12px;
+      --safe-area-bottom: 24px; --safe-area-left: 30px;
+    }`;
+    document.head.append(insets);
+    const original = dom.HTMLElement.prototype.getBoundingClientRect;
+    dom.HTMLElement.prototype.getBoundingClientRect = function () {
+      return this.classList.contains("contextMenu")
+        ? new dom.DOMRect(0, 0, 200, 120)
+        : original.call(this);
+    };
+    try {
+      await contextClick(view.link, 0, 0);
+      expect(menu()?.style.left).toBe("38px");
+      expect(menu()?.style.top).toBe("56px");
+      await key(document.activeElement, "Escape");
+
+      await contextClick(
+        view.link,
+        window.innerWidth - 1,
+        window.innerHeight - 1,
+      );
+      expect(menu()?.style.left).toBe(`${window.innerWidth - 220}px`);
+      expect(menu()?.style.top).toBe(`${window.innerHeight - 152}px`);
+    } finally {
+      dom.HTMLElement.prototype.getBoundingClientRect = original;
+      insets.remove();
+    }
+  });
+
   it("opens from a plain click only when asked to", async () => {
     const { control } = await mount();
     await act(async () => control?.click());

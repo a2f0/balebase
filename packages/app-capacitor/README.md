@@ -6,6 +6,12 @@ WebView's origin marker, emailed links open the hosted app, and downloads go
 to the system share sheet. Native releases require iOS 18 or later and
 Android 12 (API 31) or later.
 
+On Android, the page draws under the system bars when the WebView reports
+safe-area insets (WebView 140 and later). Layouts pad themselves with the
+insets, and the status bar sits on an ink band with light icons. The
+navigation bar's icons follow the app's theme (`src/systemBars.ts`). Older
+WebViews keep the page clear of the bars.
+
 ## Production and staging store apps
 
 Native store releases have two targets backed by shared shell and Fastlane
@@ -88,9 +94,13 @@ bun run android:test:connected
 
 Runs `android/app/src/androidTest` on a connected device or emulator, against
 the web build from the last Capacitor sync. `WindowInsetsTest` checks that the
-WebView clears system bars and cutouts and ends at the keyboard. CI has no
-emulator, so run these after changing how the native shell handles insets.
-Set `ANDROID_SERIAL` when more than one device is attached.
+page asks to draw under the system bars and that the WebView ends at the
+keyboard. On WebView 140 and later, Capacitor leaves the bars and cutouts to
+the page's safe-area padding; older WebViews keep the page clear of them, and
+the test checks that the bars' icons contrast with the window background
+behind them. CI has no emulator, so run these after changing how the native
+shell handles insets. Set `ANDROID_SERIAL` when more than one device is
+attached.
 
 ## Android Google Play release
 

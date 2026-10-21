@@ -1,7 +1,26 @@
-/* Confirmations and short questions, shown one at a time over the page. */
+/*
+ * Confirmations and short questions, shown one at a time over the page and
+ * centered within the safe area, clear of any system bars.
+ */
 .dialog {
-  width: min(28rem, calc(100vw - var(--space-8)));
+  inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  width: min(
+    28rem,
+    calc(
+      100vw -
+      var(--space-8) -
+      env(safe-area-inset-left, 0px) -
+      env(safe-area-inset-right, 0px)
+    )
+  );
   max-width: none;
+  max-height: calc(
+    100dvh -
+    var(--space-8) -
+    env(safe-area-inset-top, 0px) -
+    env(safe-area-inset-bottom, 0px)
+  );
   padding: 0;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);

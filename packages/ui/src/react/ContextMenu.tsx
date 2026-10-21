@@ -193,9 +193,14 @@ function ContextMenuPanel({
     const element = menu.current;
     if (!element) return;
     const bounds = element.getBoundingClientRect();
-    const inset = 8;
-    element.style.left = `${Math.max(inset, Math.min(location.x, window.innerWidth - bounds.width - inset))}px`;
-    element.style.top = `${Math.max(inset, Math.min(location.y, window.innerHeight - bounds.height - inset))}px`;
+    // 8px inside the viewport, and clear of any system bars the page draws
+    // under (contextMenu.css exposes the safe-area insets).
+    const style = window.getComputedStyle(element);
+    const edge = (side: "bottom" | "left" | "right" | "top") =>
+      8 +
+      (Number.parseFloat(style.getPropertyValue(`--safe-area-${side}`)) || 0);
+    element.style.left = `${Math.max(edge("left"), Math.min(location.x, window.innerWidth - bounds.width - edge("right")))}px`;
+    element.style.top = `${Math.max(edge("top"), Math.min(location.y, window.innerHeight - bounds.height - edge("bottom")))}px`;
     (
       element.querySelector<HTMLButtonElement>("button:not(:disabled)") ??
       element
