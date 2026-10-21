@@ -329,6 +329,18 @@ body.sidebarResizing {
   text-align: center;
 }
 
+@media (pointer: coarse) {
+  .navItem {
+    min-height: var(--touch-target);
+  }
+
+  .sidebarBrand {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--touch-target);
+  }
+}
+
 @media (max-width: 860px) {
   /* Keep focused controls clear of the sticky top bar. */
   html {

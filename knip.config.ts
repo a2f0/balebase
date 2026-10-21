@@ -59,8 +59,8 @@ const baseConfig = {
       project: ["src/**/*.{css,ts,tsx}"],
     },
     "packages/website": {
-      entry: ["src/pages/**/*.astro"],
-      project: ["src/**/*.{astro,css,ts}"],
+      entry: ["src/pages/**/*.astro", "browser/**/*.test.ts"],
+      project: ["src/**/*.{astro,css,ts}", "browser/**/*.ts"],
     },
   },
 } satisfies KnipConfig;

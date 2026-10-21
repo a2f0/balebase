@@ -39,7 +39,7 @@
     },
     "packages/app": {
       "name": "@balebase/app",
-      "version": "0.1.58",
+      "version": "0.1.59",
       "dependencies": {
         "@balebase/ui": "workspace:*",
         "@stripe/stripe-js": "9.17.0",
@@ -120,6 +120,8 @@
       },
       "devDependencies": {
         "@astrojs/check": "0.9.10",
+        "@types/bun": "1.4.3",
+        "puppeteer-core": "25.14.0",
       },
     },
   },

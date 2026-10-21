@@ -48,6 +48,12 @@
 }
 
 /* Brand lockup. */
+@media (pointer: coarse) {
+  a.brand {
+    min-height: var(--touch-target);
+  }
+}
+
 .brand {
   display: inline-flex;
   align-items: center;
@@ -206,6 +212,14 @@
   font-size: var(--text-base);
   font-weight: 650;
   text-overflow: ellipsis;
+}
+
+/* A row's title link reaches a fingertip without moving the row's text. */
+@media (pointer: coarse) {
+  a.rowTitle {
+    padding-block: var(--space-3);
+    margin-block: calc(var(--space-3) * -1);
+  }
 }
 
 .rowMeta {
@@ -701,6 +715,14 @@ a.row:focus-visible {
     color var(--duration-fast) var(--ease);
 }
 
+/* Inside the control's 3px inset, each option keeps a 40px row. */
+@media (pointer: coarse) {
+  .segmented > button,
+  .segmented > a {
+    min-height: calc(var(--touch-target) - 0.25rem);
+  }
+}
+
 .segmented > button:hover,
 .segmented > a:hover {
   color: var(--color-text);
@@ -873,6 +895,12 @@ a.row:focus-visible {
   text-overflow: ellipsis;
   vertical-align: middle;
   white-space: nowrap;
+}
+
+@media (pointer: coarse) {
+  button.codeChip {
+    padding-block: var(--space-2-5);
+  }
 }
 
 /* Application page scaffolding. */

@@ -9,13 +9,16 @@
     "check": "bunx --bun --no-install astro check",
     "deploy": "bun --bun run build && bunx --bun --no-install wrangler deploy",
     "dev": "bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/website/public && bunx --bun --no-install astro dev",
-    "preview": "bunx --bun --no-install astro preview"
+    "preview": "bunx --bun --no-install astro preview",
+    "test:browser": "bun test browser"
   },
   "dependencies": {
     "@balebase/ui": "workspace:*",
     "astro": "7.4.0"
   },
   "devDependencies": {
-    "@astrojs/check": "0.9.10"
+    "@astrojs/check": "0.9.10",
+    "@types/bun": "1.4.3",
+    "puppeteer-core": "25.14.0"
   }
 }
