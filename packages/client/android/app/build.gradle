@@ -1,4 +1,12 @@
+import groovy.json.JsonSlurper
+
 apply plugin: 'com.android.application'
+
+def clientPackage = new JsonSlurper().parse(file('../../package.json'))
+// scripts/releaseAndroid.sh supplies the next Google Play version code and the
+// upload key from .secrets; other builds stay unsigned at version code 1.
+def versionCodeEnv = System.getenv('BALEBASE_ANDROID_VERSION_CODE')
+def uploadKeystore = System.getenv('BALEBASE_ANDROID_KEYSTORE')
 
 android {
     namespace = "com.balebase.app"
@@ -7,8 +15,8 @@ android {
         applicationId "com.balebase.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "0.1.0"
+        versionCode versionCodeEnv ? versionCodeEnv.toInteger() : 1
+        versionName clientPackage.version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +24,33 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    flavorDimensions = ['tier']
+    productFlavors {
+        production {
+            dimension 'tier'
+        }
+        staging {
+            dimension 'tier'
+            applicationId 'com.balebase.staging.app'
+        }
+    }
+    signingConfigs {
+        if (uploadKeystore) {
+            upload {
+                storeFile file(uploadKeystore)
+                storePassword System.getenv('BALEBASE_ANDROID_KEYSTORE_PASS')
+                keyAlias 'upload'
+                keyPassword System.getenv('BALEBASE_ANDROID_KEYSTORE_PASS')
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (uploadKeystore) {
+                signingConfig signingConfigs.upload
+            }
         }
     }
 }

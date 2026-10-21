@@ -53,16 +53,18 @@ copying `packages/client/.env.example` to `packages/client/.env`.
 ## Mobile development
 
 The native app is named **Balebase** and uses `com.balebase.app` on both
-platforms. Install Xcode 26 or later for iOS, or Android Studio with Android SDK
-37 and JDK 21 for Android. The app supports iOS 18+ and Android 12+; the iOS
-floor also covers the embedded PDF viewer's browser APIs.
+platforms. Android's `staging` flavor is **Balebase Staging**
+(`com.balebase.staging.app`) and installs beside it. Install Xcode 26 or later
+for iOS, or Android Studio with Android SDK 37 and JDK 21 for Android. The app
+supports iOS 18+ and Android 12+; the iOS floor also covers the embedded PDF
+viewer's browser APIs.
 
 ```sh
 bun run mobile:ios      # build, sync both native projects, and open Xcode
 bun run mobile:android  # build, sync both native projects, and open Android Studio
 bun run mobile:sync     # rebuild web assets, icons, and native dependencies
 ./scripts/buildIos.sh   # unsigned simulator build
-./scripts/buildAndroid.sh # installable debug APK
+./scripts/buildAndroid.sh # debug APK; `debug staging` for staging
 ./scripts/runIos.sh     # build and run on a selected simulator/device
 ./scripts/runAndroid.sh # build and run on a selected emulator/device
 ```
@@ -73,7 +75,9 @@ Mobile output lives in `packages/client/dist-mobile`, separately from the web
 deployment. Native networking preserves cookie authentication; deploy the API's
 mobile-origin support before testing against a remote environment.
 
-To test staging, put these values in `packages/client/.env.mobile.local`:
+`buildAndroid.sh` sets the backend from its tier argument. For the IDE and
+run scripts, put these values in `packages/client/.env.mobile.local` to test
+staging:
 
 ```dotenv
 VITE_API_URL=https://api-staging.balebase.com
@@ -83,7 +87,7 @@ VITE_APP_URL=https://app-staging.balebase.com
 Both URLs must use HTTPS. A shared `.env` pointing at the local HTTP API must
 be overridden for mobile builds. Emailed verification and password-reset links
 open the hosted app. See [mobile builds and release setup](docs/operations.md#mobile-builds-and-release-setup)
-for unsigned builds and the remaining store setup.
+for release builds and Google Play internal testing.
 
 ## Working in the repo
 

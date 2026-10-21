@@ -14,7 +14,7 @@ repository root unless a command specifies `--cwd`.
 | API routes, authorization, persistence | `packages/api/src` |
 | Database schema | `packages/api/migrations` |
 | Application screens | `packages/client/src` |
-| Native mobile projects and preparation | `packages/client/ios`, `packages/client/android`, `packages/client/scripts`, `scripts/build*.sh`, `scripts/run*.sh` |
+| Native mobile projects and preparation | `packages/client/ios`, `packages/client/android`, `packages/client/scripts`, `scripts/build*.sh`, `scripts/run*.sh`, `scripts/releaseAndroid.sh`, `scripts/googlePlay.ts` |
 | Shared components, icons, styles | `packages/ui/src` |
 | Logo and generated images | `assets/brand`, `images` in `agent-tool.json` |
 | Public website | `packages/website/src` |
