@@ -153,7 +153,8 @@ be enabled once for the zone, as described in the inbound email setup above.
 ## Mobile builds and release setup
 
 The Capacitor projects live in `packages/client/ios` and
-`packages/client/android`; both identify the app as `com.balebase.app`.
+`packages/client/android`; both identify the app as `com.balebase.app`, and
+Android adds a `staging` flavor.
 `bun run mobile:sync` always packages local assets, regenerates the brand
 images, and synchronizes native dependencies. Run it before an IDE build and
 after changing dependencies or client code. There is no hosted `server.url`
@@ -168,12 +169,17 @@ For a simulator build without Apple signing:
 For an Android debug APK, set `ANDROID_HOME` to the installed SDK directory:
 
 ```sh
-./scripts/buildAndroid.sh
+./scripts/buildAndroid.sh [debug|release] [production|staging]
 ```
 
-The APK is written to
-`packages/client/android/app/build/outputs/apk/debug/app-debug.apk`.
-Android release builds remain unsigned until an upload keystore is configured.
+The tier selects the Gradle flavor and the backend baked into the bundle:
+`production` is `com.balebase.app` against `api.balebase.com`, and `staging` is
+`com.balebase.staging.app` ("Balebase Staging") against
+`api-staging.balebase.com`. The tier overrides `.env.mobile.local`. The debug APK
+is written to
+`packages/client/android/app/build/outputs/apk/<tier>/debug/app-<tier>-debug.apk`.
+`cap run android` builds the `production` flavor set in `capacitor.config.ts`;
+pass `--flavor staging` to `runAndroid.sh` for the other.
 
 The root `scripts/` folder also contains release and run
 entrypoints. They work from any current directory and always build and sync
@@ -183,25 +189,49 @@ the web bundle before invoking the native tools:
 ./scripts/runIos.sh --target <simulator-or-device-id>
 ./scripts/runAndroid.sh --target <emulator-or-device-id>
 ./scripts/buildIosRelease.sh
-./scripts/buildAndroidRelease.sh
+./scripts/buildAndroidRelease.sh [production|staging]
 ```
 
-The release scripts produce an **unsigned** iOS device archive at
-`packages/client/ios/App/output/Balebase.xcarchive` and an unsigned Android
-bundle at `packages/client/android/app/build/outputs/bundle/release/app-release.aab`.
-They do not upload or create store records. Use the IDE's archive/export or
-signed bundle flow after configuring signing. Root `mobile:build:*` and
-`mobile:run:*` Bun scripts invoke the same entrypoints.
+The iOS release script produces an **unsigned** device archive at
+`packages/client/ios/App/output/Balebase.xcarchive`; use Xcode's archive and
+export flow after choosing a team and signing profile. `buildAndroidRelease.sh`
+writes an unsigned bundle to
+`packages/client/android/app/build/outputs/bundle/<tier>Release/app-<tier>-release.aab`.
+Root `mobile:build:*` and `mobile:run:*` Bun scripts invoke the same entrypoints.
 
-Before TestFlight or Play distribution:
+### Google Play internal testing
+
+The Play Console apps `com.balebase.app` and `com.balebase.staging.app` use
+Play App Signing. Each tier has its own upload key. To publish a signed bundle
+to the tier's internal testing track, run:
+
+```sh
+bun run mobile:release:android production   # or staging
+```
+
+`scripts/releaseAndroid.sh` reads the following from
+`.secrets/<prod|staging>/`:
+
+- `balebase-upload.keystore`, a PKCS12 upload key with alias `upload`
+- `BALEBASE_ANDROID_KEYSTORE_PASS` from `app.env`, which is both the store and
+  the key password
+- `google-play-service-account-admin.json`, the `tearleads-admin` Play
+  service account
+
+The script asks Play for the next version code (one above any uploaded bundle
+or track release) and builds the tier's flavor with that code and the client
+package version as the version name. It then uploads the bundle and rolls it
+out to every internal tester. Testers must be on the app's internal testing
+list in Play Console. Promote a build to closed, open, or production tracks in
+Play Console. If an upload key is lost or leaked, request an upload key reset
+in Play Console under App integrity.
+
+Before wider TestFlight or Play distribution:
 
 1. Create the Apple bundle identifier and App Store Connect app for
    `com.balebase.app`, then choose your team and signing profile in Xcode.
-   Create the Google Play app with the same application ID and configure its
-   upload key outside the repository.
-2. Set the release version/build number in Xcode and Android's
-   `app/build.gradle`. Store build numbers are separate from web/API patch
-   versions and must increase for each upload.
+2. Set the iOS release version and build number in Xcode. Store build numbers
+   are separate from web/API patch versions and must increase for each upload.
 3. Deploy the native request adapter in the API before using a remote backend.
    The native HTTP transport sends cookies and an origin marker. When no
    browser Origin is present, the API applies its configured web origin. The
@@ -218,7 +248,7 @@ Before TestFlight or Play distribution:
    distribution before submission; this shell does not add native purchases or
    native Plaid SDK integration.
 
-No store upload, signing identity, or automatic mobile deployment is configured.
+No iOS upload or automatic mobile deployment is configured.
 See [Capacitor's environment setup](https://capacitorjs.com/docs/getting-started/environment-setup)
 for SDK installation details.
 

@@ -49,6 +49,7 @@
     "mobile:build:ios": "bash scripts/buildIos.sh",
     "mobile:build:ios:release": "bash scripts/buildIosRelease.sh",
     "mobile:ios": "bun run --cwd packages/client mobile:ios",
+    "mobile:release:android": "bash scripts/releaseAndroid.sh",
     "mobile:run:android": "bash scripts/runAndroid.sh",
     "mobile:run:ios": "bash scripts/runIos.sh",
     "mobile:sync": "bun run --cwd packages/client mobile:sync",
