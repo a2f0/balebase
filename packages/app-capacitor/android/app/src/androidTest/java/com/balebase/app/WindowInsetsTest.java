@@ -75,6 +75,13 @@ public class WindowInsetsTest {
         }
     }
 
+    @Test
+    public void threeButtonNavigationKeepsItsScrim() {
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            scenario.onActivity((activity) -> assertTrue(activity.getWindow().isNavigationBarContrastEnforced()));
+        }
+    }
+
     private static boolean drawsUnderBars() {
         String version = WebView.getCurrentWebViewPackage().versionName;
         return Integer.parseInt(version.split("\\.")[0]) >= 140;

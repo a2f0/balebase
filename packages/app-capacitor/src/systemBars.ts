@@ -10,11 +10,12 @@ import {
  * Where Android draws the page under the system bars, the bars' icons follow
  * what the page paints behind them: light status icons over the ink band, and
  * navigation icons for the app's own theme, which can differ from the
- * system's. Capacitor writes the status bar's height to
- * `--safe-area-inset-top` on the root element. It is 0 on WebViews that keep
- * the page clear of the bars (before WebView 140); the bars then show the
- * window background, which follows the system theme, so they keep the
- * system's style.
+ * system's. Three-button navigation also keeps the system's contrast scrim
+ * (MainActivity), which covers it at a side edge in landscape. Capacitor
+ * writes the status bar's height to `--safe-area-inset-top` on the root
+ * element. It is 0 on WebViews that keep the page clear of the bars (before
+ * WebView 140); the bars then show the window background, which follows the
+ * system theme, so they keep the system's style.
  */
 export function syncSystemBars(
   root = document.documentElement,
