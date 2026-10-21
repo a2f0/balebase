@@ -79,6 +79,7 @@ bun run check
 bun run test
 bun run --cwd packages/app test:browser
 bun run --cwd packages/app-capacitor test:browser
+bun run --cwd packages/website test:browser
 bun run build
 ```
 

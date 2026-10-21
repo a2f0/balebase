@@ -323,6 +323,16 @@
   touch-action: none;
 }
 
+@media (pointer: coarse) {
+  .auditDragHandle {
+    width: var(--touch-target);
+  }
+
+  .auditSectionNumber {
+    height: var(--touch-target);
+  }
+}
+
 .auditDragHandle:hover {
   color: var(--color-text);
   background: var(--color-surface-hover);
@@ -558,6 +568,16 @@
     flex: 0 1 16rem;
     width: auto;
     min-width: 0;
+  }
+}
+
+/* Phone-width cards give the prompt and its controls the whole row. */
+@container (max-width: 28rem) {
+  .auditQuestion {
+    grid-template-areas:
+      "handle number . remove"
+      "prompt prompt prompt prompt"
+      "controls controls controls controls";
   }
 }
 

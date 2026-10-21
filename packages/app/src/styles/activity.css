@@ -96,6 +96,12 @@
   cursor: pointer;
 }
 
+@media (pointer: coarse) {
+  .activityDisclosure > summary {
+    padding-block: var(--space-3);
+  }
+}
+
 .activitySummary {
   display: inline-block;
   max-width: calc(100% - var(--space-6));

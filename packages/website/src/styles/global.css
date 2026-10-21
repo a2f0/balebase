@@ -86,6 +86,14 @@ main:focus {
     color var(--duration-fast) var(--ease);
 }
 
+@media (pointer: coarse) {
+  .siteNavLink {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--touch-target);
+  }
+}
+
 .siteNavLink:hover {
   color: var(--color-text);
   background: var(--color-surface-sunken);
@@ -216,6 +224,19 @@ main:focus {
 
 .siteFooterLinks a:hover {
   color: var(--color-lime);
+}
+
+/* Stack the footer links as full-height rows for a fingertip. */
+@media (pointer: coarse) {
+  .siteFooterLinks {
+    gap: 0;
+  }
+
+  .siteFooterLinks a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--touch-target);
+  }
 }
 
 .siteFooterBase {

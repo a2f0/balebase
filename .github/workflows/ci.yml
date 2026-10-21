@@ -81,6 +81,7 @@ jobs:
         run: |
           bun run --cwd packages/app test:browser
           bun run --cwd packages/app-capacitor test:browser
+          bun run --cwd packages/website test:browser
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
 

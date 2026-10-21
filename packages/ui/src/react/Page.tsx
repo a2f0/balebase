@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useLayoutEffect, useRef } from "react";
 import { cx } from "./cx";
 import { InsideSection } from "./sectionContext";
 
@@ -47,12 +47,35 @@ export function PageHeader({
         </div>
         {actions && <div className="pageActions">{actions}</div>}
       </div>
-      {tabs && (
-        <nav aria-label={tabsLabel} className="tabs pageTabs">
-          {tabs}
-        </nav>
-      )}
+      {tabs && <PageTabs label={tabsLabel}>{tabs}</PageTabs>}
     </header>
+  );
+}
+
+/**
+ * A narrow screen scrolls the tab strip sideways, so bring the current tab
+ * into view whenever it changes, but leave a strip the user scrolled alone.
+ */
+function PageTabs({ children, label }: { children: ReactNode; label: string }) {
+  const strip = useRef<HTMLElement>(null);
+  const shown = useRef<Element | null>(null);
+  useLayoutEffect(() => {
+    const nav = strip.current;
+    const current = nav?.querySelector(
+      '[aria-current="page"], [aria-selected="true"]',
+    );
+    if (!nav || !current || current === shown.current) return;
+    shown.current = current;
+    const bounds = nav.getBoundingClientRect();
+    const tab = current.getBoundingClientRect();
+    if (tab.left < bounds.left || tab.right > bounds.right) {
+      nav.scrollLeft += tab.left - bounds.left - (bounds.width - tab.width) / 2;
+    }
+  });
+  return (
+    <nav aria-label={label} className="tabs pageTabs" ref={strip}>
+      {children}
+    </nav>
   );
 }
 

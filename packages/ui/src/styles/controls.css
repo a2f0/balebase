@@ -406,10 +406,23 @@
   gap: var(--space-3);
 }
 
-@media (max-width: 720px) {
+/* iOS zooms into a focused field set below 16px, including on tablets. */
+@media (max-width: 720px), (pointer: coarse) {
   .input,
   .select,
   .textarea {
     font-size: 1rem;
+  }
+}
+
+@media (pointer: coarse) {
+  .check {
+    padding-block: var(--space-3);
+  }
+
+  .check input {
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-top: 0;
   }
 }
