@@ -1,7 +1,7 @@
 # @balebase/ui
 
 The design system shared by the marketing site (`packages/website`) and the
-client (`packages/client`). It owns the visual language (tokens, type, and
+app (`packages/app`). It owns the visual language (tokens, type, and
 component styles) so both apps look like one product.
 
 ## Entry points

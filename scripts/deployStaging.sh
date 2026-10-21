@@ -62,7 +62,7 @@ bun --bun run test
 bun scripts/createStagingConfigs.ts
 
 api_config="$REPO_ROOT/packages/api/wrangler.staging.jsonc"
-client_config="$REPO_ROOT/packages/client/wrangler.staging.jsonc"
+client_config="$REPO_ROOT/packages/app-web/wrangler.staging.jsonc"
 website_config="$REPO_ROOT/packages/website/wrangler.staging.jsonc"
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
@@ -87,7 +87,7 @@ fi
 
 VITE_API_URL="https://api-staging.balebase.com" \
   VITE_WEBSITE_URL="https://website-staging.balebase.com" \
-  bun --bun run --cwd "$REPO_ROOT/packages/client" build
+  bun --bun run --cwd "$REPO_ROOT/packages/app-web" build
 PUBLIC_APP_URL="https://app-staging.balebase.com" \
   bun --bun run --cwd "$REPO_ROOT/packages/website" build
 

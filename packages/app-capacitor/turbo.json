@@ -1,0 +1,18 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      "passThroughEnv": [
+        "FASTLANE_OPT_OUT_USAGE",
+        "FASTLANE_SKIP_UPDATE_CHECK"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/.ruby-version",
+        "$TURBO_ROOT$/scripts/*Release.sh",
+        "$TURBO_ROOT$/scripts/lib/**"
+      ]
+    }
+  }
+}

@@ -1,0 +1,112 @@
+import groovy.json.JsonSlurper
+
+apply plugin: 'com.android.application'
+
+def capacitorPackage = new JsonSlurper().parse(file('../../package.json'))
+
+android {
+    namespace = "com.balebase.app"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        // Every build type must add a suffix to this non-shippable base ID.
+        // Staging inherits release, then overrides its suffix below.
+        applicationId = "com.balebase"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode = configuredVersionCode()
+        versionName = capacitorPackage.version
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        release {
+            if (hasReleaseKeystore()) {
+                storeFile = releaseKeystoreFile()
+                storePassword = System.getenv("BALEBASE_ANDROID_KEYSTORE_PASS")
+                keyAlias = "upload"
+                keyPassword = System.getenv("BALEBASE_ANDROID_KEYSTORE_PASS")
+            }
+        }
+    }
+    buildTypes {
+        debug {
+            applicationIdSuffix = ".app"
+        }
+        release {
+            applicationIdSuffix = ".app"
+            signingConfig = hasReleaseKeystore() ? signingConfigs.release : signingConfigs.debug
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        staging {
+            initWith release
+            applicationIdSuffix = ".staging.app"
+            matchingFallbacks = ['release']
+        }
+    }
+}
+
+// The upload key comes from the secrets folder of the tier the native release
+// wrappers select with NATIVE_RELEASE_TIER; without one, production. Each tier
+// has its own key, registered with its Play app.
+def releaseKeystoreFile() {
+    def tier = (System.getenv("NATIVE_RELEASE_TIER") ?: "production").trim().toLowerCase()
+    def secretsTier = [production: "prod", staging: "staging"][tier]
+    if (secretsTier == null) {
+        throw new GradleException("Unknown NATIVE_RELEASE_TIER '${tier}'. Expected production or staging.")
+    }
+    return rootProject.file("../../../.secrets/${secretsTier}/balebase-upload.keystore")
+}
+
+def hasReleaseKeystore() {
+    return releaseKeystoreFile().exists() &&
+        System.getenv("BALEBASE_ANDROID_KEYSTORE_PASS") != null
+}
+
+def configuredVersionCode() {
+    def rawVersionCode = findProperty("balebaseVersionCode") ?: System.getenv("ANDROID_VERSION_CODE") ?: "1"
+    def cleanedVersionCode = rawVersionCode.toString().trim()
+    if (!cleanedVersionCode.isInteger()) {
+        throw new GradleException("balebaseVersionCode '${rawVersionCode}' is not a valid integer")
+    }
+
+    def versionCode = cleanedVersionCode.toInteger()
+    if (versionCode <= 0) {
+        throw new GradleException("balebaseVersionCode must be greater than zero")
+    }
+
+    return versionCode
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

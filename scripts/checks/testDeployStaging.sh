@@ -9,7 +9,7 @@ trap 'rm -rf "$FIXTURE"' EXIT
 
 mkdir -p "$FIXTURE/scripts" "$FIXTURE/terraform/scripts" \
   "$FIXTURE/terraform/stacks/staging" "$FIXTURE/.secrets/staging" "$FIXTURE/bin" \
-  "$FIXTURE/packages/api" "$FIXTURE/packages/client" "$FIXTURE/packages/website"
+  "$FIXTURE/packages/api" "$FIXTURE/packages/app-web" "$FIXTURE/packages/website"
 cp "$REPO_ROOT/scripts/deployStaging.sh" "$REPO_ROOT/scripts/cloudflareEnv.sh" "$FIXTURE/scripts/"
 cp "$REPO_ROOT/scripts/createStagingConfigs.ts" "$FIXTURE/scripts/"
 cp "$REPO_ROOT/terraform/scripts/run.sh" "$FIXTURE/terraform/scripts/"
@@ -19,7 +19,7 @@ for verifier in checkProductionDomains verifyStaging verifyInboundEmail; do
 printf 'verify %s tier=%s token=%s\n' "${BASH_SOURCE[0]##*/}" "${DEPLOY_TIER:-}" "${CLOUDFLARE_API_TOKEN:-}" >> "$MOCK_LOG"
 EOF
 done
-for target in api client website; do
+for target in api app-web website; do
   cp "$REPO_ROOT/packages/$target/wrangler.jsonc" "$FIXTURE/packages/$target/"
 done
 ln -s "$REPO_ROOT/node_modules" "$FIXTURE/node_modules"
@@ -79,7 +79,7 @@ PATH="$FIXTURE/bin:$PATH" DRY_RUN=1 bash "$FIXTURE/scripts/deployStaging.sh" > "
   echo 'Expected three staging dry-run deployments' >&2
   exit 1
 }
-for target in api client website; do
+for target in api app-web website; do
   [[ "$(grep -cF "wrangler deploy --config $FIXTURE/packages/$target/wrangler.staging.jsonc --dry-run" "$MOCK_LOG" || true)" == 1 ]] || {
     echo "Missing $target staging dry-run deployment" >&2
     exit 1
@@ -109,7 +109,7 @@ if (api.vars.STRIPE_PUBLISHABLE_KEY !== "pk_test_fixture") throw new Error("Stri
 if (api.d1_databases.length !== 1 || api.d1_databases[0].database_name !== "fixture-db-staging" || api.d1_databases[0].database_id !== "00000000-0000-4000-8000-000000000000") throw new Error("D1 binding ignored Terraform output");
 if (api.r2_buckets.length !== 1 || api.r2_buckets[0].bucket_name !== "fixture-objects-staging") throw new Error("R2 binding ignored Terraform output");
 if ("triggers" in api) throw new Error("Staging has production cron triggers");
-if (read("client").name !== "balebase-client-staging") throw new Error("Client Worker name is not staging");
+if (read("app-web").name !== "balebase-client-staging") throw new Error("Client Worker name is not staging");
 if (read("website").name !== "balebase-website-staging") throw new Error("Website Worker name is not staging");
 ' "$FIXTURE"
 
@@ -125,7 +125,7 @@ if grep -q 'shared-token' "$MOCK_LOG"; then
   echo 'Staging shared.env overrode the app.env Cloudflare token' >&2
   exit 1
 fi
-for target in api client website; do
+for target in api app-web website; do
   [[ "$(grep -cF "wrangler deploy --config $FIXTURE/packages/$target/wrangler.staging.jsonc token=test-token account=test-account" "$MOCK_LOG" || true)" -eq 1 ]] || {
     echo "Normal deployment did not target the $target staging Worker with staging credentials" >&2
     exit 1

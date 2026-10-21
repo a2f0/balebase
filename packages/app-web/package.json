@@ -1,0 +1,21 @@
+{
+  "name": "@balebase/app-web",
+  "version": "0.1.58",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "build": "bunx --bun --no-install tsc --noEmit && bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/app-web/public && bunx --bun --no-install vite build",
+    "check": "bunx --bun --no-install tsc --noEmit",
+    "deploy": "bun --bun run build && bunx --bun --no-install wrangler deploy",
+    "dev": "bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/app-web/public && bunx --bun --no-install vite"
+  },
+  "dependencies": {
+    "@balebase/app": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.3",
+    "@vitejs/plugin-react": "6.1.2",
+    "vite": "8.3.4"
+  }
+}

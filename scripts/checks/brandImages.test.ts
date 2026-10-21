@@ -33,9 +33,10 @@ const { targets } = JSON.parse(agentTool("images", "list")) as {
 const filesOf = (name: string) =>
   targets.find((target) => target.name === name)?.files.toSorted() ?? [];
 
-test("favicons are exactly the icons the client and website link", () => {
+test("favicons are exactly the icons the app shells and website link", () => {
   for (const page of [
-    "packages/client/index.html",
+    "packages/app-web/index.html",
+    "packages/app-capacitor/index.html",
     "packages/website/src/layouts/BaseLayout.astro",
   ]) {
     const linked = read(page).matchAll(

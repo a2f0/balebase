@@ -13,7 +13,8 @@ ignore:
   - packages/*/.turbo
   - packages/*/.astro
   - packages/*/.wrangler
-  - packages/*/dist-mobile
   # Native SDKs require names such as App.xcodeproj and mipmap-anydpi-v26.
-  - packages/client/ios
-  - packages/client/android
+  - packages/app-capacitor/ios
+  - packages/app-capacitor/android
+  # CI's ruby/setup-ruby bundler-cache installs gems here.
+  - packages/app-capacitor/vendor/bundle

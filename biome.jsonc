@@ -40,7 +40,8 @@
           "options": {
             "paths": {
               "@balebase/api": "Do not import from the API Worker package",
-              "@balebase/client": "Do not import from the client deployment target",
+              "@balebase/app-capacitor": "Do not import from the native app shell",
+              "@balebase/app-web": "Do not import from the web app shell",
               "@balebase/website": "Do not import from the website deployment target"
             }
           }
@@ -53,7 +54,7 @@
     {
       "includes": [
         "packages/api/src/**/*.ts",
-        "packages/client/src/**/*.{ts,tsx}"
+        "packages/app/src/**/*.{ts,tsx}"
       ],
       "linter": {
         "rules": {
@@ -152,7 +153,7 @@
       }
     },
     {
-      "includes": ["packages/client/src/AuditRunPage.tsx"],
+      "includes": ["packages/app/src/AuditRunPage.tsx"],
       "linter": {
         "rules": {
           "style": {
@@ -168,7 +169,7 @@
       }
     },
     {
-      "includes": ["packages/client/src/AuthPage.tsx"],
+      "includes": ["packages/app/src/AuthPage.tsx"],
       "linter": {
         "rules": {
           "style": {
@@ -184,7 +185,7 @@
       }
     },
     {
-      "includes": ["packages/client/src/Businesses.tsx"],
+      "includes": ["packages/app/src/Businesses.tsx"],
       "linter": {
         "rules": {
           "style": {
@@ -200,7 +201,7 @@
       }
     },
     {
-      "includes": ["packages/client/src/Equipment.tsx"],
+      "includes": ["packages/app/src/Equipment.tsx"],
       "linter": {
         "rules": {
           "style": {
@@ -216,7 +217,7 @@
       }
     },
     {
-      "includes": ["packages/client/src/OrganizationPeople.tsx"],
+      "includes": ["packages/app/src/OrganizationPeople.tsx"],
       "linter": {
         "rules": {
           "style": {
@@ -232,7 +233,7 @@
       }
     },
     {
-      "includes": ["packages/client/src/**/*.tsx"],
+      "includes": ["packages/app/src/**/*.tsx"],
       "linter": {
         "rules": {
           "complexity": {

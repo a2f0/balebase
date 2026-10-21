@@ -1,0 +1,35 @@
+import type { CapacitorConfig } from "@capacitor/cli";
+
+// The native release tier picks the store app; fastlane/lib/native_release_target.rb
+// maps the same tiers to Gradle build types, Xcode schemes, and secrets folders.
+const { NATIVE_RELEASE_TIER } = process.env;
+const nativeReleaseTier = (NATIVE_RELEASE_TIER ?? "production")
+  .trim()
+  .toLowerCase();
+if (nativeReleaseTier !== "production" && nativeReleaseTier !== "staging") {
+  throw new Error(
+    `Unknown NATIVE_RELEASE_TIER=${JSON.stringify(nativeReleaseTier)}. Expected production or staging.`,
+  );
+}
+const isStagingRelease = nativeReleaseTier === "staging";
+
+const config: CapacitorConfig = {
+  appId: isStagingRelease ? "com.balebase.staging.app" : "com.balebase.app",
+  appName: isStagingRelease ? "Balebase Staging" : "Balebase",
+  webDir: "dist",
+  backgroundColor: "#181916",
+  ios: { contentInset: "always" },
+  // PackageDescription 6 knows the iOS 18 deployment target used by pdf.js.
+  experimental: { ios: { spm: { swiftToolsVersion: "6.0" } } },
+  server: {
+    androidScheme: "https",
+    iosScheme: "capacitor",
+  },
+  plugins: {
+    // Native networking keeps authenticated requests out of WebView third-party
+    // cookie restrictions. This must also be enabled in release builds.
+    CapacitorHttp: { enabled: true },
+  },
+};
+
+export default config;
