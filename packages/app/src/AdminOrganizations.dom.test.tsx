@@ -3,7 +3,7 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { AdminOrganizations } from "./AdminOrganizations";
-import type { AdminOrganizationDetail } from "./api";
+import type { AdminOrganizationDetail } from "./adminOrganizationsApi";
 
 const dom = new Window({ url: "http://localhost:5173/root/organizations" });
 const domGlobals = {

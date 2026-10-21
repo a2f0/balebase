@@ -24,7 +24,7 @@ import {
   listAdminOrganizations,
   markAdminOrganizationForDeletion,
   restoreAdminOrganization,
-} from "./api";
+} from "./adminOrganizationsApi";
 import { countLabel } from "./labels";
 import { adminOrganizationIdForPath } from "./organizationState";
 

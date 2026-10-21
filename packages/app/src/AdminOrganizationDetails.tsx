@@ -16,7 +16,7 @@ import {
   type AdminOrganizationDetail,
   type AdminOrganizationRequirement,
   getAdminOrganization,
-} from "./api";
+} from "./adminOrganizationsApi";
 import { countLabel } from "./labels";
 import type { OrganizationMember } from "./organizationSettingsApi";
 
