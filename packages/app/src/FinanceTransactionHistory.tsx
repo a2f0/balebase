@@ -1,3 +1,4 @@
+import type { FinanceFilters } from "@balebase/api-client";
 import {
   Badge,
   Banner,
@@ -10,18 +11,17 @@ import {
   LoadingState,
   PageSection,
 } from "@balebase/ui/react";
-import { type FormEvent, useState } from "react";
-import type { LinkedEmail } from "./api";
-import { FinanceTransactionFilters } from "./FinanceTransactionFilters";
 import type {
   ExpenseCategory,
-  FinanceFilters,
   FinanceTransaction,
-  FinanceTransactionAnnotationInput,
-} from "./financeApi";
+  FinanceTransactionAnnotation,
+} from "@balebase/validators/finance";
+import type { LinkedEmail } from "@balebase/validators/inbox";
+import { type FormEvent, useState } from "react";
+import { FinanceTransactionFilters } from "./FinanceTransactionFilters";
 import { formatMoney } from "./financeFormat";
 import { financeTransactionPath } from "./financePages";
-import { transactionIssuePath } from "./issuesApi";
+import { transactionIssuePath } from "./issuePaths";
 import { formatLabel } from "./labels";
 import { handleNavigation, inboxEmailPath } from "./workspacePaths";
 
@@ -31,7 +31,7 @@ interface AnnotationHandlers {
   onNavigate: (pathname: string) => void;
   onAnnotate: (
     transaction: FinanceTransaction,
-    input: FinanceTransactionAnnotationInput,
+    input: FinanceTransactionAnnotation,
   ) => Promise<void>;
   onCategorize: (
     transaction: FinanceTransaction,
@@ -403,7 +403,7 @@ function TransactionAnnotationForm({
   busy: boolean;
   id: string;
   onClose: () => void;
-  onSave: (input: FinanceTransactionAnnotationInput) => Promise<void>;
+  onSave: (input: FinanceTransactionAnnotation) => Promise<void>;
   transaction: FinanceTransaction;
 }) {
   const [labels, setLabels] = useState(

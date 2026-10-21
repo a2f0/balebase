@@ -10,15 +10,13 @@ import {
   LoadingState,
   Toast,
 } from "@balebase/ui/react";
+import type {
+  ApiKey,
+  ApiKeyAccess,
+  ApiKeyExpiration,
+} from "@balebase/validators/apiKeys";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import {
-  type ApiKey,
-  type ApiKeyAccess,
-  type ApiKeyExpiration,
-  createApiKey,
-  listApiKeys,
-  revokeApiKey,
-} from "./apiKeysApi";
+import { api } from "./apiClient";
 import { McpConfiguration } from "./McpConfiguration";
 import { useClipboard } from "./useClipboard";
 
@@ -68,7 +66,7 @@ export function OrganizationApiKeys({
     if (!organizationId) return;
     setLoadError(undefined);
     try {
-      setApiKeys(await listApiKeys());
+      setApiKeys(await api.apiKeys.list());
     } catch (cause) {
       setLoadError(messageFrom(cause));
     }
@@ -131,7 +129,7 @@ function CreateApiKeyCard({
     setError(undefined);
     try {
       onCreated(
-        await createApiKey({
+        await api.apiKeys.create({
           access,
           expiresInDays: expirationDays(expiration),
           name: name.trim(),
@@ -268,7 +266,7 @@ function ApiKeyList({
     setRevokingId(apiKey.id);
     setError(undefined);
     try {
-      onRevoked(await revokeApiKey(apiKey.id));
+      onRevoked(await api.apiKeys.revoke(apiKey.id));
     } catch (cause) {
       setError(messageFrom(cause));
     } finally {

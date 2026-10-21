@@ -6,24 +6,20 @@ import {
   LoadingState,
   Toast,
 } from "@balebase/ui/react";
+import type {
+  EmployeeRequirement,
+  EmployeeRequirementKind,
+  EmployeeRequirementStatus,
+} from "@balebase/validators/employeeForms";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { api } from "./apiClient";
 import {
-  createEmployeeRequirements,
-  deleteEmployeeRequirement,
   downloadEmployeeForm,
   downloadScreeningConsent,
-  type EmployeeRequirement,
-  type EmployeeRequirementKind,
-  type EmployeeRequirementStatus,
-  listEmployeeRequirements,
-  type RequirementDraft,
-  refreshCheckrScreening,
-  requestCheckrScreening,
-  updateEmployeeRequirement,
-  uploadEmployeeForm,
-} from "./employeeFormsApi";
+} from "./employeeFormDownloads";
 import {
   canCompleteRequirement,
+  type RequirementDraft,
   reviewRevisionForStatus,
 } from "./employeeOnboarding";
 import {
@@ -178,7 +174,7 @@ export function EmployeeForms({ scope }: { scope: RequirementScope }) {
     setLoading(true);
     try {
       const current = JSON.parse(scopeKey) as RequirementScope;
-      const all = await listEmployeeRequirements();
+      const { requirements: all } = await api.employeeForms.list();
       setRequirements(all.filter((item) => inRequirementScope(current, item)));
       setError(undefined);
     } catch (cause) {
@@ -270,7 +266,7 @@ function RequirementAssignmentForm({
     event.preventDefault();
     if (!drafts.length) return;
     void action(async () => {
-      await createEmployeeRequirements({ memberId }, drafts);
+      await api.employeeForms.create({ memberId }, drafts);
       setDrafts([]);
     }, "Requests sent.");
   }
@@ -375,7 +371,7 @@ function RequirementItem({
           onChange={(event) =>
             void action(
               () =>
-                updateEmployeeRequirement(requirement.id, {
+                api.employeeForms.update(requirement.id, {
                   dueDate: event.target.value,
                 }),
               "Due date updated.",
@@ -389,7 +385,7 @@ function RequirementItem({
             disabled={busy}
             onClick={() =>
               void action(
-                () => deleteEmployeeRequirement(requirement.id),
+                () => api.employeeForms.delete(requirement.id),
                 "Requirement removed.",
               )
             }
@@ -483,7 +479,7 @@ function CheckrReportControl({
         disabled={busy}
         onClick={() =>
           void action(
-            () => refreshCheckrScreening(requirement.id),
+            () => api.employeeForms.refreshScreening(requirement.id),
             "Checkr status refreshed.",
           )
         }
@@ -538,7 +534,8 @@ function CheckrRequestControl({
         disabled={busy || !/^[A-Z]{2}$/.test(state)}
         onClick={() =>
           void action(
-            () => requestCheckrScreening(requirement.id, state, city),
+            () =>
+              api.employeeForms.requestScreening(requirement.id, state, city),
             ({ emailed }) =>
               emailed
                 ? `Background check requested. ${person} was emailed a link.`
@@ -609,7 +606,7 @@ function RequirementDocumentControl({
               const file = event.target.files?.[0];
               if (file) {
                 void action(
-                  () => uploadEmployeeForm(requirement.id, file),
+                  () => api.employeeForms.upload(requirement.id, file),
                   "Form submitted.",
                 );
               }
@@ -661,7 +658,7 @@ function RequirementStatusControl({
       onChange={(event) =>
         void action(
           () =>
-            updateEmployeeRequirement(requirement.id, {
+            api.employeeForms.update(requirement.id, {
               documentRevision: reviewRevisionForStatus(
                 requirement.kind,
                 requirement.documentRevision,

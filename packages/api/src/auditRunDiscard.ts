@@ -1,3 +1,4 @@
+import { auditsRoutes } from "@balebase/validators/audits";
 import { Hono } from "hono";
 import { activityBatch, activityStatement } from "./activity";
 import {
@@ -6,6 +7,7 @@ import {
   findAudit,
 } from "./auditRunRecords";
 import type { AuthVariables } from "./authMiddleware";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 export const auditRunDiscard = new Hono<{
@@ -67,5 +69,5 @@ auditRunDiscard.delete("/:id", async (context) => {
       409,
     );
   }
-  return context.json({ deletedAt: now });
+  return respond(context, auditsRoutes.discardRun, { deletedAt: now });
 });

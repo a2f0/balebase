@@ -1,3 +1,10 @@
+import {
+  type EmployeeRequirement,
+  type EmployeeRequirementInput,
+  type EmployeeRequirementKind,
+  type EmployeeRequirementStatus,
+  employeeFormsRoutes,
+} from "@balebase/validators/employeeForms";
 import { type Context, Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
 import {
@@ -16,6 +23,7 @@ import {
 import { checkrTestCandidates } from "./checkrTestCandidates";
 import { normalizeFilename } from "./filenames";
 import { canManageOrganization } from "./organizationMembers";
+import { respond } from "./respond";
 import {
   disclosureFingerprint,
   screeningDisclosures,
@@ -25,19 +33,12 @@ import { sendScreeningRequest } from "./screeningMail";
 import { isUsStateCode, parseScreeningSubmission } from "./screeningSubmission";
 import type { Bindings } from "./types";
 
-type RequirementKind = "form" | "background_check" | "credit_check";
-type RequirementStatus = "pending" | "in_progress" | "submitted" | "complete";
-interface RequirementInput {
-  dueDate: string;
-  kind: RequirementKind;
-  title: string;
-}
 interface RequirementRow {
   id: string;
-  kind: RequirementKind;
+  kind: EmployeeRequirementKind;
   title: string;
   due_date: string;
-  status: RequirementStatus;
+  status: EmployeeRequirementStatus;
   document_key: string | null;
   document_filename: string | null;
   document_size: number | null;
@@ -110,7 +111,7 @@ employeeForms.get("/", async (context) => {
         : [userId, organizationId, userId]),
     )
     .all<RequirementRow>();
-  return context.json({
+  return respond(context, employeeFormsRoutes.list, {
     requirements: result.results.map((row) =>
       toRequirement(row, manager, context.env),
     ),
@@ -156,7 +157,7 @@ employeeForms.post("/", async (context) => {
   if (!target) return context.json({ error: "Person not found." }, 404);
 
   const now = new Date().toISOString();
-  const requirements = body.requirements as RequirementInput[];
+  const requirements = body.requirements as EmployeeRequirementInput[];
   const ids = requirements.map(() => crypto.randomUUID());
   const inserted = await context.env.DB.batch(
     requirements.map((requirement, index) =>
@@ -194,7 +195,7 @@ employeeForms.post("/", async (context) => {
       409,
     );
   }
-  return context.json({ ids }, 201);
+  return respond(context, employeeFormsRoutes.create, { ids }, 201);
 });
 
 employeeForms.patch("/:id", async (context) => {
@@ -248,7 +249,7 @@ employeeForms.patch("/:id", async (context) => {
   if (!updated.meta.changes) {
     return context.json({ error: "The form changed. Please try again." }, 409);
   }
-  return context.json({ ok: true });
+  return respond(context, employeeFormsRoutes.update, { ok: true });
 });
 
 employeeForms.delete("/:id", async (context) => {
@@ -278,7 +279,7 @@ employeeForms.delete("/:id", async (context) => {
       409,
     );
   }
-  return context.json({ ok: true });
+  return respond(context, employeeFormsRoutes.delete, { ok: true });
 });
 
 employeeForms.post("/:id/document", async (context) => {
@@ -362,12 +363,18 @@ employeeForms.post("/:id/document", async (context) => {
       .bind(row.id, context.get("organizationId"))
       .first<{ document_key: string | null }>();
     if (linked?.document_key === key) {
-      return context.json({ filename, status: "submitted" });
+      return respond(context, employeeFormsRoutes.upload, {
+        filename,
+        status: "submitted",
+      });
     }
     await context.env.STORAGE.delete(key).catch(console.error);
     throw cause;
   }
-  return context.json({ filename, status: "submitted" });
+  return respond(context, employeeFormsRoutes.upload, {
+    filename,
+    status: "submitted",
+  });
 });
 
 async function readBoundedDocumentFile(request: Request) {
@@ -476,7 +483,7 @@ employeeForms.post("/:id/checkr/request", async (context) => {
       return false;
     },
   );
-  return context.json({ emailed });
+  return respond(context, employeeFormsRoutes.requestScreening, { emailed });
 });
 
 // The person's own screening form: the disclosures to read, the work
@@ -510,7 +517,7 @@ employeeForms.get("/:id/checkr/form", async (context) => {
     return null;
   });
   const disclosures = screeningDisclosures(subject.organization_name);
-  return context.json({
+  return respond(context, employeeFormsRoutes.screeningForm, {
     candidate: { email: subject.email, name: subject.name },
     disclosureFingerprint: await disclosureFingerprint(disclosures),
     disclosures,
@@ -601,7 +608,9 @@ employeeForms.post("/:id/checkr/submit", async (context) => {
   if (result.kind === "rejected") {
     return context.json({ error: result.message }, 422);
   }
-  return context.json({ status: result.reportStatus });
+  return respond(context, employeeFormsRoutes.submitScreening, {
+    status: result.reportStatus,
+  });
 });
 
 employeeForms.post("/:id/checkr/refresh", async (context) => {
@@ -620,7 +629,7 @@ employeeForms.post("/:id/checkr/refresh", async (context) => {
   if (!refreshed) {
     return context.json({ error: "Screening changed. Please refresh." }, 409);
   }
-  return context.json(refreshed);
+  return respond(context, employeeFormsRoutes.refreshScreening, refreshed);
 });
 
 // The signed authorization behind the ordered report, for the person and
@@ -698,7 +707,13 @@ async function findScreeningSubject(context: Context<EmployeeFormsEnv>) {
     .first<ScreeningSubjectRow>();
 }
 
-function awaitingSubmission(subject: ScreeningSubjectRow) {
+// A request sets the work state together with checkr_requested_at.
+function awaitingSubmission(
+  subject: ScreeningSubjectRow,
+): subject is ScreeningSubjectRow & {
+  checkr_requested_at: string;
+  checkr_work_state: string;
+} {
   return (
     subject.kind === "background_check" &&
     Boolean(subject.checkr_requested_at) &&
@@ -794,7 +809,11 @@ export async function assignRenewedInvitationRequirements(
   }
 }
 
-function toRequirement(row: RequirementRow, manager: boolean, env: Bindings) {
+function toRequirement(
+  row: RequirementRow,
+  manager: boolean,
+  env: Bindings,
+): EmployeeRequirement {
   return {
     id: row.id,
     kind: row.kind,
@@ -859,7 +878,7 @@ function isDate(value: unknown): value is string {
   );
 }
 
-function isRequirementInput(value: unknown): value is RequirementInput {
+function isRequirementInput(value: unknown): value is EmployeeRequirementInput {
   return (
     isRecord(value) &&
     typeof value.kind === "string" &&
@@ -871,7 +890,7 @@ function isRequirementInput(value: unknown): value is RequirementInput {
   );
 }
 
-function isStatus(value: unknown): value is RequirementStatus {
+function isStatus(value: unknown): value is EmployeeRequirementStatus {
   return (
     typeof value === "string" &&
     ["pending", "in_progress", "submitted", "complete"].includes(value)

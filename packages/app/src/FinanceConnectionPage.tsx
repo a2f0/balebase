@@ -11,17 +11,14 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
+import type {
+  FinanceConnectionAccount,
+  FinanceConnectionDetail,
+} from "@balebase/validators/finance";
 import { useEffect, useState } from "react";
+import { api } from "./apiClient";
 import { connectionTone } from "./FinanceAccounts";
 import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
-import {
-  deleteFinanceConnectionData,
-  disconnectFinanceConnection,
-  type FinanceConnectionAccount,
-  type FinanceConnectionDetail,
-  getFinanceConnection,
-  syncFinanceConnection,
-} from "./financeApi";
 import {
   confirmDataDeletion,
   confirmDisconnect,
@@ -241,7 +238,8 @@ function useConnection(id: string, onNavigate: (path: string) => void) {
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     let active = true;
-    void getFinanceConnection(id)
+    void api.finance
+      .connection(id)
       .then((next) => {
         if (active) setData(next);
       })
@@ -263,7 +261,7 @@ function useConnection(id: string, onNavigate: (path: string) => void) {
     }
     // A failed sync records the connection's error, so reload either way.
     try {
-      setData(await getFinanceConnection(id));
+      setData(await api.finance.connection(id));
     } catch (cause) {
       setError((current) => current ?? message(cause));
     }
@@ -275,7 +273,7 @@ function useConnection(id: string, onNavigate: (path: string) => void) {
       setBusy(true);
       setError(undefined);
       try {
-        await deleteFinanceConnectionData(id);
+        await api.finance.deleteConnectionData(id);
         onNavigate("/finance/connections");
       } catch (cause) {
         setError(message(cause));
@@ -285,11 +283,12 @@ function useConnection(id: string, onNavigate: (path: string) => void) {
     disconnect: async () => {
       if (!data || !(await confirmDisconnect(data.connection))) return;
       await run(async () => {
-        await disconnectFinanceConnection(id);
+        await api.finance.disconnectConnection(id);
         return "Bank disconnected. Imported history was retained.";
       });
     },
-    sync: () => run(async () => syncNotice(await syncFinanceConnection(id))),
+    sync: () =>
+      run(async () => syncNotice(await api.finance.syncConnection(id))),
   };
   return { actions, busy, data, error, notice };
 }

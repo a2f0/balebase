@@ -1,3 +1,4 @@
+import type { IssueFilters } from "@balebase/api-client";
 import {
   Banner,
   Button,
@@ -8,21 +9,19 @@ import {
   PageHeader,
   PageSection,
 } from "@balebase/ui/react";
+import type {
+  ExpenseCategory,
+  FinanceTransaction,
+  FinanceTransactionAnnotation,
+  FinanceTransactionSource,
+} from "@balebase/validators/finance";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
+import { api } from "./apiClient";
 import { FinanceTransactionRow } from "./FinanceTransactionHistory";
 import { FinanceTransactionSourceData } from "./FinanceTransactionSourceData";
-import {
-  type ExpenseCategory,
-  type FinanceTransaction,
-  type FinanceTransactionAnnotationInput,
-  type FinanceTransactionSource,
-  getFinanceTransaction,
-  setTransactionCategory,
-  updateFinanceTransactionAnnotation,
-} from "./financeApi";
 import { IssueList } from "./IssueList";
-import { type IssueFilters, transactionIssuePath } from "./issuesApi";
+import { transactionIssuePath } from "./issuePaths";
 
 export function FinanceTransactionPage({
   id,
@@ -123,7 +122,8 @@ function useTransaction(id: string) {
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     let active = true;
-    void getFinanceTransaction(id)
+    void api.finance
+      .transaction(id)
       .then((next) => {
         if (active) setData(next);
       })
@@ -136,12 +136,12 @@ function useTransaction(id: string) {
   }, [id]);
   async function annotate(
     _: FinanceTransaction,
-    input: FinanceTransactionAnnotationInput,
+    input: FinanceTransactionAnnotation,
   ) {
     setBusy(true);
     setError(undefined);
     try {
-      const { annotation } = await updateFinanceTransactionAnnotation(
+      const { annotation } = await api.finance.updateTransactionAnnotation(
         id,
         input,
       );
@@ -164,7 +164,7 @@ function useTransaction(id: string) {
     setBusy(true);
     setError(undefined);
     try {
-      await setTransactionCategory(id, categoryId);
+      await api.finance.setTransactionCategory(id, categoryId);
       setData(
         (current) =>
           current && {

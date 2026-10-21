@@ -1,11 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { api } from "./apiClient";
 import { apiUrl } from "./config";
-import {
-  createExpenseCategory,
-  getExpenseReport,
-  getFinanceData,
-  setTransactionCategory,
-} from "./financeApi";
 
 describe("finance API", () => {
   it("loads the listing from the mounted route without a trailing slash", async () => {
@@ -23,7 +18,7 @@ describe("finance API", () => {
     }) as typeof fetch;
 
     try {
-      await getFinanceData();
+      await api.finance.data();
       expect(requestedUrl).toBe(`${apiUrl}/api/finance`);
     } finally {
       globalThis.fetch = originalFetch;
@@ -32,9 +27,9 @@ describe("finance API", () => {
 
   it("requests expense reports for a range, or all time without one", async () => {
     const requested = await captureRequests(async () => {
-      await getExpenseReport({ from: "2026-08-01", to: "2026-08-31" });
-      await getExpenseReport({ from: null, to: null });
-      await getExpenseReport({ from: "2026-01-01", to: null });
+      await api.finance.expenseReport({ from: "2026-08-01", to: "2026-08-31" });
+      await api.finance.expenseReport({ from: null, to: null });
+      await api.finance.expenseReport({ from: "2026-01-01", to: null });
     });
     expect(requested.map(({ url }) => url)).toEqual([
       `${apiUrl}/api/finance/reports/expenses?from=2026-08-01&to=2026-08-31`,
@@ -46,7 +41,7 @@ describe("finance API", () => {
   it("combines account, category, year, expense, and pagination filters", async () => {
     const cursor = JSON.stringify({ date: "2025-08-01", id: "txn/1" });
     const requested = await captureRequests(async () => {
-      await getFinanceData(
+      await api.finance.data(
         {
           accountIds: ["checking/1", "savings"],
           categorySlug: "meals-2",
@@ -70,8 +65,8 @@ describe("finance API", () => {
 
   it("sets or clears a transaction's single category", async () => {
     const requested = await captureRequests(async () => {
-      await setTransactionCategory("txn/1", "category-1");
-      await setTransactionCategory("txn/1", null);
+      await api.finance.setTransactionCategory("txn/1", "category-1");
+      await api.finance.setTransactionCategory("txn/1", null);
     });
     expect(requested).toEqual([
       {
@@ -95,7 +90,7 @@ describe("finance API", () => {
         { status: 409 },
       )) as unknown as typeof fetch;
     try {
-      await expect(createExpenseCategory("Meals")).rejects.toThrow(
+      await expect(api.finance.createExpenseCategory("Meals")).rejects.toThrow(
         "A category with that name exists.",
       );
     } finally {

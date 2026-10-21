@@ -12,13 +12,13 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
+import { api } from "./apiClient";
 import { authClient } from "./authClient";
 import { OrganizationApiKeys } from "./OrganizationApiKeys";
 import { OrganizationBilling } from "./OrganizationBilling";
 import { OrganizationAccessSettings } from "./OrganizationGroups";
 import { OrganizationMemberDetail } from "./OrganizationMemberDetail";
 import { OrganizationPeople } from "./OrganizationPeople";
-import { deleteCurrentOrganization } from "./organizationSettingsApi";
 import {
   canDeleteOrganization,
   canLeaveOrganizationWithOwnerCount,
@@ -354,7 +354,7 @@ function useOrganizationGeneralActions(
     if (!(await confirmOrganizationDeletion(organization.name))) return;
     start("delete");
     try {
-      await deleteCurrentOrganization();
+      await api.organizationSettings.deleteCurrent();
       await onWorkspaceChanged();
       onNavigate("/");
     } catch (cause) {

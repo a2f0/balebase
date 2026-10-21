@@ -1,5 +1,7 @@
+import { accountSettingsRoutes } from "@balebase/validators/accountSettings";
 import { Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 export const userDeletion = new Hono<{
@@ -13,7 +15,9 @@ userDeletion.get("/", async (context) => {
   )
     .bind(context.get("authSession").user.id)
     .first<{ requestedAt: string }>();
-  return context.json({ requestedAt: request?.requestedAt ?? null });
+  return respond(context, accountSettingsRoutes.deletion, {
+    requestedAt: request?.requestedAt ?? null,
+  });
 });
 
 userDeletion.post("/", async (context) => {
@@ -44,7 +48,7 @@ userDeletion.post("/", async (context) => {
     .bind(userId, new Date().toISOString())
     .run();
   console.log({ event: "user_deletion_requested", actorUserId: userId });
-  return context.json({ ok: true });
+  return respond(context, accountSettingsRoutes.requestDeletion, { ok: true });
 });
 
 userDeletion.delete("/", async (context) => {
@@ -58,7 +62,7 @@ userDeletion.delete("/", async (context) => {
     .bind(userId)
     .run();
   console.log({ event: "user_deletion_canceled", actorUserId: userId });
-  return context.json({ ok: true });
+  return respond(context, accountSettingsRoutes.cancelDeletion, { ok: true });
 });
 
 export async function purgeRequestedUsers(

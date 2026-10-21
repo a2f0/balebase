@@ -7,6 +7,12 @@ import {
   PageHeader,
   Toast,
 } from "@balebase/ui/react";
+import type {
+  FinanceConnection,
+  FinanceData,
+  FinanceTransaction,
+  FinanceTransactionAnnotation,
+} from "@balebase/validators/finance";
 import {
   type Dispatch,
   type SetStateAction,
@@ -15,6 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { api } from "./apiClient";
 import { websiteUrl } from "./config";
 import {
   FinanceAccounts,
@@ -24,19 +31,6 @@ import {
 import { FinanceCategories } from "./FinanceCategories";
 import { FinanceReports } from "./FinanceReports";
 import { FinanceTransactionHistory } from "./FinanceTransactionHistory";
-import {
-  createPlaidLinkToken,
-  deleteFinanceConnectionData,
-  disconnectFinanceConnection,
-  exchangePlaidPublicToken,
-  type FinanceConnection,
-  type FinanceData,
-  type FinanceTransaction,
-  type FinanceTransactionAnnotationInput,
-  setTransactionCategory,
-  syncFinanceConnection,
-  updateFinanceTransactionAnnotation,
-} from "./financeApi";
 import {
   confirmDataDeletion,
   confirmDisconnect,
@@ -118,7 +112,7 @@ function categorizeTransaction(
       withCategory(current, transaction.id, previous, categoryId),
     );
     try {
-      await setTransactionCategory(transaction.id, categoryId);
+      await api.finance.setTransactionCategory(transaction.id, categoryId);
     } catch (cause) {
       setData((current) =>
         withCategory(current, transaction.id, categoryId, previous),
@@ -173,16 +167,16 @@ function financeActions(
   return {
     annotate: (
       transaction: FinanceTransaction,
-      input: FinanceTransactionAnnotationInput,
+      input: FinanceTransactionAnnotation,
     ) =>
       run(async () => {
-        await updateFinanceTransactionAnnotation(transaction.id, input);
+        await api.finance.updateTransactionAnnotation(transaction.id, input);
         return "Transaction annotation saved.";
       }),
     deleteData: async (connection: FinanceConnection) => {
       if (await confirmDataDeletion(connection)) {
         await run(async () => {
-          await deleteFinanceConnectionData(connection.id);
+          await api.finance.deleteConnectionData(connection.id);
           return "Imported bank data permanently deleted.";
         });
       }
@@ -190,13 +184,13 @@ function financeActions(
     disconnect: async (connection: FinanceConnection) => {
       if (await confirmDisconnect(connection)) {
         await run(async () => {
-          await disconnectFinanceConnection(connection.id);
+          await api.finance.disconnectConnection(connection.id);
           return "Bank disconnected. Imported history was retained.";
         });
       }
     },
     sync: (id: string) =>
-      run(async () => syncNotice(await syncFinanceConnection(id))),
+      run(async () => syncNotice(await api.finance.syncConnection(id))),
   };
 }
 
@@ -206,7 +200,7 @@ interface OverviewHandlers {
   busy: boolean;
   onAnnotate: (
     transaction: FinanceTransaction,
-    input: FinanceTransactionAnnotationInput,
+    input: FinanceTransactionAnnotation,
   ) => Promise<void>;
   onCategorize: (
     transaction: FinanceTransaction,
@@ -508,12 +502,17 @@ function usePlaidConnect(
       setBusy(true);
       setError(undefined);
       try {
-        const connection = await exchangePlaidPublicToken(publicToken, {
-          id: metadata.institution?.institution_id ?? null,
-          name: metadata.institution?.name ?? null,
-        });
+        const connection = await api.finance.exchangePlaidPublicToken(
+          publicToken,
+          {
+            id: metadata.institution?.institution_id ?? null,
+            name: metadata.institution?.name ?? null,
+          },
+        );
         clearOAuthState();
-        const result = await syncFinanceConnection(connection.connectionId);
+        const result = await api.finance.syncConnection(
+          connection.connectionId,
+        );
         await load();
         setNotice(syncNotice(result));
       } catch (cause) {
@@ -532,7 +531,7 @@ function usePlaidConnect(
     setError(undefined);
     setNotice(undefined);
     try {
-      const result = await createPlaidLinkToken();
+      const result = await api.finance.createPlaidLinkToken();
       localStorage.setItem(linkTokenStorageKey, result.linkToken);
       await launchPlaid(result.linkToken, undefined, complete, (message) => {
         setError(message);

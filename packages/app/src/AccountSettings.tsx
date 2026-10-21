@@ -10,7 +10,7 @@ import {
 import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
 import { AccountDeletion } from "./AccountDeletion";
 import { AccountSecurity } from "./AccountSecurity";
-import { saveDefaultOrganizationPreference } from "./accountSettingsApi";
+import { saveDefaultOrganizationPreference } from "./defaultOrganization";
 import type { WorkspaceOrganization } from "./organizationState";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 

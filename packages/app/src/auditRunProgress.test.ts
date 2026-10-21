@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
+import type {
+  AuditDefinition,
+  AuditTemplateItem,
+} from "@balebase/validators/audits";
 import { progressFor } from "./AuditRunPage";
-import type { AuditDefinition, AuditTemplateItem } from "./auditApi";
 
 function item(id: string, required: boolean): AuditTemplateItem {
   return { id, prompt: `Question ${id}`, required, responseType: "check" };

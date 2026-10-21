@@ -1,5 +1,6 @@
+import type { FinanceFilters } from "@balebase/api-client";
 import { Button } from "@balebase/ui/react";
-import type { ExpenseCategory, FinanceFilters } from "./financeApi";
+import type { ExpenseCategory } from "@balebase/validators/finance";
 import { initialFilters } from "./useFinanceData";
 
 export function FinanceTransactionFilters({

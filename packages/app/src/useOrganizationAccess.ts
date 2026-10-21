@@ -1,12 +1,12 @@
+import type { OrganizationCapability } from "@balebase/validators/organizationGroups";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "./apiClient";
 import {
-  getOrganizationAccess,
-  type OrganizationCapability,
   type OrganizationSeatRequirement,
   type OrganizationTwoFactorRequirement,
   seatRequirementFrom,
   twoFactorRequirementFrom,
-} from "./organizationGroupsApi";
+} from "./organizationAccessErrors";
 
 interface AccessState {
   capabilities: OrganizationCapability[];
@@ -41,7 +41,7 @@ export function useOrganizationAccess(
     }
     setLoadError(undefined);
     try {
-      const result = await getOrganizationAccess();
+      const result = await api.organizationGroups.access();
       if (requestId !== requestSequence.current) return;
       setRequirementState(undefined);
       setState({

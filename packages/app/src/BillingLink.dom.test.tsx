@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { ApiError } from "@balebase/api-client";
 import { Window } from "happy-dom";
 import { act, type ReactNode } from "react";
 import type { Root } from "react-dom/client";
-import { AuditApiError } from "./auditApi";
 import { ErrorToast, errorNotice } from "./BillingLink";
 import {
   blockingSeatRequirement,
@@ -74,11 +74,10 @@ function click(link: HTMLAnchorElement, init: { metaKey?: boolean } = {}) {
 describe("billing links", () => {
   it("links an upgrade error to Billing without a page load", async () => {
     const paths: string[] = [];
-    const limit = new AuditApiError(
-      "The Free plan is limited to 5 form templates.",
-      new Response(null, { status: 409 }),
-      "UPGRADE_REQUIRED",
-    );
+    const limit = new ApiError(new Response(null, { status: 409 }), {
+      code: "UPGRADE_REQUIRED",
+      error: "The Free plan is limited to 5 form templates.",
+    });
     await render(
       <ErrorToast
         error={errorNotice(limit, "fallback")}

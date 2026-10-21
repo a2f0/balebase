@@ -1,5 +1,10 @@
+import {
+  type ExpenseCategory,
+  financeRoutes,
+} from "@balebase/validators/finance";
 import { activityBatch } from "./activity";
 import type { FinanceContext } from "./financeContext";
+import { respond } from "./respond";
 
 interface CategoryRow {
   id: string;
@@ -57,7 +62,7 @@ export async function listExpenseCategories(
 }
 
 export async function listCategories(context: FinanceContext) {
-  return context.json({
+  return respond(context, financeRoutes.listCategories, {
     categories: await listExpenseCategories(
       context.env.DB,
       context.get("organizationId"),
@@ -90,7 +95,9 @@ export async function createCategory(context: FinanceContext) {
         .bind(id, organizationId, name, slug, now, now)
         .run(),
   );
-  return context.json(
+  return respond(
+    context,
+    financeRoutes.createCategory,
     { category: { id, name, slug, transactionCount: 0 } },
     201,
   );
@@ -119,7 +126,9 @@ export async function renameCategory(context: FinanceContext) {
       .bind(name, slug, new Date().toISOString(), id, organizationId)
       .run(),
   );
-  return context.json({ category: { id, name, slug } });
+  return respond(context, financeRoutes.renameCategory, {
+    category: { id, name, slug },
+  });
 }
 
 export async function deleteCategory(context: FinanceContext) {
@@ -159,7 +168,9 @@ export async function addDefaultCategories(context: FinanceContext) {
     if (!inserts.length) break;
     await database.batch(inserts);
   }
-  return listCategories(context);
+  return respond(context, financeRoutes.addDefaultCategories, {
+    categories: await listExpenseCategories(database, organizationId),
+  });
 }
 
 async function missingDefaultInserts(
@@ -231,7 +242,9 @@ export async function assignTransactionCategory(context: FinanceContext) {
     )
     .bind(transactionId, organizationId, categoryId, userId, userId, now, now);
   await activityBatch(database, context.get("apiKey"), [statement]);
-  return context.json({ expenseCategoryId: categoryId });
+  return respond(context, financeRoutes.setTransactionCategory, {
+    expenseCategoryId: categoryId,
+  });
 }
 
 async function findCategory(
@@ -348,7 +361,7 @@ function categoryIdFrom(input: unknown) {
     : undefined;
 }
 
-function toCategory(row: CategoryRow) {
+function toCategory(row: CategoryRow): ExpenseCategory {
   return {
     id: row.id,
     name: row.name,

@@ -7,21 +7,20 @@ import {
   LoadingState,
   PageSection,
 } from "@balebase/ui/react";
+import type {
+  ActivityActor,
+  ActivityEvent,
+  ActivityPage,
+} from "@balebase/validators/activity";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  type ActivityActor,
-  type ActivityEvent,
-  type ActivityPage,
-  type ActivitySource,
-  listActivity,
-} from "./activityApi";
 import { assigneeLabel, textValue } from "./activityLabels";
+import { type ActivitySource, listActivity } from "./activitySource";
 import {
   EquipmentActivityDetails,
   equipmentActivitySummary,
 } from "./equipmentActivity";
 import { financeTransactionPath } from "./financePages";
-import { issuePath } from "./issuesApi";
+import { issuePath } from "./issuePaths";
 import { organizationPeoplePath } from "./organizationState";
 import { RecordActivityDetails } from "./recordActivity";
 import { equipmentPath } from "./workspacePaths";

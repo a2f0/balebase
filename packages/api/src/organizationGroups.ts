@@ -1,3 +1,9 @@
+import {
+  type OrganizationCapability,
+  OrganizationCapabilitySchema,
+  type OrganizationGroup,
+  organizationGroupsRoutes,
+} from "@balebase/validators/organizationGroups";
 import { type Context, Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { AuthVariables } from "./authMiddleware";
@@ -6,10 +12,10 @@ import {
   countOrganizationOwners,
   listOrganizationMembers,
 } from "./organizationMembers";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
-const supportedCapabilities = ["finance"] as const;
-type OrganizationCapability = (typeof supportedCapabilities)[number];
+const supportedCapabilities = OrganizationCapabilitySchema.options;
 
 interface GroupRow {
   created_at: string;
@@ -58,7 +64,7 @@ organizationGroups.get("/access", async (context) => {
     ),
     countOrganizationOwners(context.env.DB, organizationId),
   ]);
-  return context.json({
+  return respond(context, organizationGroupsRoutes.access, {
     capabilities,
     memberRole: context.get("organizationRole"),
     ownerCount,
@@ -74,19 +80,21 @@ organizationGroups.get("/", async (context) => {
     listGroupMembers(context.env.DB, organizationId),
     listOrganizationMembers(context.env.DB, organizationId),
   ]);
-  return context.json({
-    groups: groups.map((group) => ({
-      capabilities: capabilities
-        .filter(({ team_id: teamId }) => teamId === group.id)
-        .map(({ capability }) => capability),
-      createdAt: group.created_at,
-      id: group.id,
-      memberUserIds: groupMembers
-        .filter(({ team_id: teamId }) => teamId === group.id)
-        .map(({ user_id: userId }) => userId),
-      name: group.name,
-      updatedAt: group.updated_at,
-    })),
+  return respond(context, organizationGroupsRoutes.list, {
+    groups: groups.map(
+      (group): OrganizationGroup => ({
+        capabilities: capabilities
+          .filter(({ team_id: teamId }) => teamId === group.id)
+          .map(({ capability }) => capability),
+        createdAt: group.created_at,
+        id: group.id,
+        memberUserIds: groupMembers
+          .filter(({ team_id: teamId }) => teamId === group.id)
+          .map(({ user_id: userId }) => userId),
+        name: group.name,
+        updatedAt: group.updated_at,
+      }),
+    ),
     members,
   });
 });
@@ -116,7 +124,12 @@ organizationGroups.post("/", async (context) => {
   }
   const groupId = crypto.randomUUID();
   await writeGroup(context.env.DB, organizationId, groupId, input, true);
-  return context.json({ id: groupId }, 201);
+  return respond(
+    context,
+    organizationGroupsRoutes.create,
+    { id: groupId },
+    201,
+  );
 });
 
 organizationGroups.patch("/:id", async (context) => {
@@ -149,7 +162,7 @@ organizationGroups.patch("/:id", async (context) => {
     );
   }
   await writeGroup(context.env.DB, organizationId, groupId, input, false);
-  return context.json({ id: groupId });
+  return respond(context, organizationGroupsRoutes.update, { id: groupId });
 });
 
 organizationGroups.delete("/:id", async (context) => {

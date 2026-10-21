@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import type {
+  Business,
+  BusinessListing,
+} from "@balebase/validators/businesses";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BusinessListView } from "./Businesses";
-import type { Business, BusinessListing } from "./businessesApi";
 import {
   type BusinessListEvent,
   type BusinessListState,

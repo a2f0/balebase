@@ -1,9 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
+import type { AuditTemplate } from "@balebase/validators/audits";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import type { AuditTemplate } from "./auditApi";
 import { apiUrl } from "./config";
 
 const dom = new Window({ url: "http://localhost:5173/root/global-audits" });

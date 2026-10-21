@@ -1,9 +1,12 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import type {
+  FinanceData,
+  FinanceTransaction,
+} from "@balebase/validators/finance";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { Finance } from "./Finance";
-import type { FinanceData, FinanceTransaction } from "./financeApi";
 
 const dom = new Window({ url: "http://localhost:5173/finance" });
 const saved = new Map<string, PropertyDescriptor | undefined>();

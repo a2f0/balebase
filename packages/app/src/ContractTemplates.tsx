@@ -11,20 +11,16 @@ import {
   PageHeader,
   Toast,
 } from "@balebase/ui/react";
+import type {
+  ContractTemplate,
+  ContractTemplateSummary,
+  TemplateVersion,
+} from "@balebase/validators/contractTemplates";
 import { useEffect, useRef, useState } from "react";
+import { api } from "./apiClient";
 import { formatDate } from "./ContractSummary";
 import { ContractTemplateEditor } from "./ContractTemplateEditor";
 import { ContractTemplateMapping } from "./ContractTemplateMapping";
-import {
-  type ContractTemplate,
-  type ContractTemplateSummary,
-  deleteContractTemplate,
-  getContractTemplate,
-  listContractTemplates,
-  listTemplateVersions,
-  type TemplateVersion,
-  uploadContractTemplate,
-} from "./contractTemplatesApi";
 import { confirmDiscardChanges } from "./unsavedChanges";
 import {
   contractPath,
@@ -62,7 +58,8 @@ function TemplateList({
   useEffect(() => {
     mounted.current = true;
     let active = true;
-    listContractTemplates()
+    api.contractTemplates
+      .list()
       .then((result) => {
         if (active) setTemplates(result);
       })
@@ -80,7 +77,8 @@ function TemplateList({
     setBusy(true);
     setError(undefined);
     try {
-      const template = await uploadContractTemplate(file);
+      const template = await api.contractTemplates.upload(file);
+      if (!template) throw new Error("Contract template not found.");
       if (mounted.current) onNavigate(contractTemplatePath(template.id));
     } catch (cause) {
       if (!mounted.current) return;
@@ -141,41 +139,49 @@ function TemplateList({
             versions stay available for future contracts.
           </EmptyState>
         ) : (
-          <Card flush>
-            <ul className="rowList contractList">
-              {templates.map((template) => {
-                const path = contractTemplatePath(template.id);
-                return (
-                  <li key={template.id}>
-                    <a
-                      className="row contractRow"
-                      href={path}
-                      onClick={(event) =>
-                        handleNavigation(event, path, onNavigate)
-                      }
-                    >
-                      <span className="contractRowMark">
-                        <Icon name="contract" size={20} />
-                      </span>
-                      <span className="rowMain">
-                        <span className="rowTitle truncate">
-                          {template.name}
-                        </span>
-                        <span className="rowMeta truncate">
-                          {template.description || "Reusable contract"} · v
-                          {template.currentVersion}
-                        </span>
-                      </span>
-                      <Icon name="chevronRight" size={16} />
-                    </a>
-                  </li>
-                );
-              })}
-            </ul>
-          </Card>
+          <TemplateRows onNavigate={onNavigate} templates={templates} />
         )}
       </PageBody>
     </Page>
+  );
+}
+
+function TemplateRows({
+  onNavigate,
+  templates,
+}: {
+  onNavigate: (pathname: string) => void;
+  templates: ContractTemplateSummary[];
+}) {
+  return (
+    <Card flush>
+      <ul className="rowList contractList">
+        {templates.map((template) => {
+          const path = contractTemplatePath(template.id);
+          return (
+            <li key={template.id}>
+              <a
+                className="row contractRow"
+                href={path}
+                onClick={(event) => handleNavigation(event, path, onNavigate)}
+              >
+                <span className="contractRowMark">
+                  <Icon name="contract" size={20} />
+                </span>
+                <span className="rowMain">
+                  <span className="rowTitle truncate">{template.name}</span>
+                  <span className="rowMeta truncate">
+                    {template.description || "Reusable contract"} · v
+                    {template.currentVersion}
+                  </span>
+                </span>
+                <Icon name="chevronRight" size={16} />
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 
@@ -288,7 +294,10 @@ function useTemplatePage(id: string, onNavigate: (pathname: string) => void) {
   const generation = useRef(0);
   useEffect(() => {
     let active = true;
-    Promise.all([getContractTemplate(id), listTemplateVersions(id)])
+    Promise.all([
+      api.contractTemplates.get(id),
+      api.contractTemplates.versions(id),
+    ])
       .then(([loaded, history]) => {
         if (active) {
           setTemplate(loaded);
@@ -310,7 +319,7 @@ function useTemplatePage(id: string, onNavigate: (pathname: string) => void) {
     setLoading(true);
     setError(undefined);
     try {
-      const loaded = await getContractTemplate(id, version);
+      const loaded = await api.contractTemplates.get(id, version);
       if (generation.current === request) {
         setTemplate(loaded);
         setDirty(false);
@@ -334,7 +343,7 @@ function useTemplatePage(id: string, onNavigate: (pathname: string) => void) {
     setDeleting(true);
     setError(undefined);
     try {
-      await deleteContractTemplate(id);
+      await api.contractTemplates.delete(id);
       if (generation.current === request) onNavigate(contractTemplatePath());
     } catch (cause) {
       if (generation.current !== request) return;

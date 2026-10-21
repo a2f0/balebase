@@ -1,26 +1,12 @@
 import { describe, expect, it } from "bun:test";
+import { ApiError } from "@balebase/api-client";
+import type { AuditTemplate } from "@balebase/validators/audits";
 import {
   appendIssueImageSelection,
   uploadIssueImagesSequentially,
 } from "./AuditRunPage";
-import { listActivity } from "./activityApi";
-import {
-  AuditApiError,
-  type AuditTemplate,
-  auditIssueImageUrl,
-  copyAuditTemplate,
-  createAuditTemplate,
-  deleteAuditIssueImage,
-  discardAuditRun,
-  getAuditTemplate,
-  getAuditTemplateVersion,
-  listAuditRuns,
-  listAuditTemplates,
-  listAuditTemplateVersions,
-  updateAuditIssue,
-  updateAuditTemplate,
-  uploadAuditIssueImage,
-} from "./auditApi";
+import { listActivity } from "./activitySource";
+import { api } from "./apiClient";
 import { apiUrl } from "./config";
 
 describe("audit template API", () => {
@@ -43,11 +29,11 @@ describe("audit template API", () => {
     }) as typeof fetch;
 
     try {
-      await createAuditTemplate("Private form");
-      await getAuditTemplateVersion("template/id", 2);
-      await listAuditTemplateVersions("template/id");
-      await updateAuditTemplate(template);
-      await copyAuditTemplate(template);
+      await api.audits.createTemplate("Private form");
+      await api.audits.getTemplateVersion("template/id", 2);
+      await api.audits.listTemplateVersions("template/id");
+      await api.audits.updateTemplate(template);
+      await api.audits.copyTemplate(template);
       expect(requests).toEqual([
         {
           body: JSON.stringify({ name: "Private form" }),
@@ -106,19 +92,24 @@ describe("audit template API", () => {
       if (input.toString().endsWith("/versions")) {
         return Response.json({ versions: [] });
       }
-      if (input.toString().endsWith("/audit-templates") && !init?.method) {
+      if (
+        input.toString().endsWith("/audit-templates") &&
+        request.method === "GET"
+      ) {
         return Response.json({ templates: [template] });
       }
       return Response.json({ template });
     }) as typeof fetch;
 
     try {
-      expect(await listAuditTemplates(true)).toEqual([template]);
-      await createAuditTemplate("Shared form", true);
-      await getAuditTemplate("template/id", true);
-      await getAuditTemplateVersion("template/id", 2, true);
-      await listAuditTemplateVersions("template/id", true);
-      await updateAuditTemplate(template, true);
+      expect(await api.adminAuditTemplates.list()).toEqual({
+        templates: [template],
+      });
+      await api.adminAuditTemplates.create("Shared form");
+      await api.adminAuditTemplates.get("template/id");
+      await api.adminAuditTemplates.getVersion("template/id", 2);
+      await api.adminAuditTemplates.listVersions("template/id");
+      await api.adminAuditTemplates.update(template);
       await listActivity(
         { id: "template/id", type: "global_audit_template" },
         "42",
@@ -152,9 +143,9 @@ describe("audit template API", () => {
     }) as typeof fetch;
 
     try {
-      const page = await listAuditRuns("cursor/with+a space");
+      const page = await api.audits.listRuns("cursor/with+a space");
       expect(requestedUrl).toBe(
-        `${apiUrl}/api/audits/runs?cursor=cursor%2Fwith%2Ba%20space`,
+        `${apiUrl}/api/audits/runs?cursor=cursor%2Fwith%2Ba+space`,
       );
       expect(page).toEqual({ audits: [], nextCursor: null });
     } finally {
@@ -173,9 +164,9 @@ describe("audit template API", () => {
     }) as typeof fetch;
 
     try {
-      await listAuditRuns(undefined, "deleted");
-      await listAuditRuns("next", "deleted");
-      expect(await discardAuditRun("run/1")).toEqual({
+      await api.audits.listRuns(undefined, "deleted");
+      await api.audits.listRuns("next", "deleted");
+      expect(await api.audits.discardRun("run/1")).toEqual({
         deletedAt: "2026-10-14T12:00:00.000Z",
       });
       expect(requests).toEqual([
@@ -259,14 +250,14 @@ describe("audit issue API", () => {
     }) as typeof fetch;
 
     try {
-      await updateAuditIssue("issue/id", { assignedTo: "user/id" });
+      await api.audits.updateIssue("issue/id", { assignedTo: "user/id" });
       const file = new File(
         [new Uint8Array([0x89, 0x50, 0x4e, 0x47])],
         "panel.png",
         { type: "image/png" },
       );
-      await uploadAuditIssueImage("issue/id", file);
-      await deleteAuditIssueImage("issue/id", "image/id");
+      await api.audits.uploadIssueImage("issue/id", file);
+      await api.audits.deleteIssueImage("issue/id", "image/id");
 
       expect(requests).toHaveLength(3);
       expect(requests[0]).toMatchObject({
@@ -291,7 +282,9 @@ describe("audit issue API", () => {
         init: { credentials: "include", method: "DELETE" },
         url: `${apiUrl}/api/audits/issues/issue%2Fid/images/image%2Fid`,
       });
-      expect(auditIssueImageUrl("issue/id", "image/id", "thumbnail")).toBe(
+      expect(
+        api.audits.issueImageUrl("issue/id", "image/id", "thumbnail"),
+      ).toBe(
         `${apiUrl}/api/audits/issues/issue%2Fid/images/image%2Fid?variant=thumbnail`,
       );
     } finally {
@@ -321,7 +314,7 @@ describe("audit issue API", () => {
       const failures = await uploadIssueImagesSequentially(
         "issue/id",
         [file],
-        uploadAuditIssueImage,
+        api.audits.uploadIssueImage,
         async (milliseconds) => {
           waits.push(milliseconds);
         },
@@ -346,9 +339,9 @@ describe("audit issue API", () => {
     });
     let calls = 0;
     const waits: number[] = [];
-    const busy = new AuditApiError(
-      "busy",
+    const busy = new ApiError(
       new Response(null, { headers: { "Retry-After": "1" }, status: 429 }),
+      { error: "busy" },
     );
 
     const failures = await uploadIssueImagesSequentially(

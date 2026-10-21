@@ -1,3 +1,12 @@
+import {
+  type FinanceAccount,
+  type FinanceConnection,
+  type FinanceTransaction,
+  type FinanceTransactionAnnotation,
+  type FinanceTransactionSource,
+  financeRoutes,
+} from "@balebase/validators/finance";
+import type { LinkedEmail } from "@balebase/validators/inbox";
 import { Hono } from "hono";
 import { activityBatch, findActivity } from "./activity";
 import { accountDetail } from "./financeAccountDetail";
@@ -19,6 +28,7 @@ import { searchTransactions } from "./financeTransactionSearch";
 import { listLinkedEmails, toLinkedEmail } from "./inboundEmailLinks";
 import { PlaidApiError, type PlaidRequest, plaidRequest } from "./plaid";
 import { decryptToken, encryptToken } from "./plaidCrypto";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 interface ConnectionRow {
@@ -88,12 +98,6 @@ interface AnnotationInput {
   reviewed?: unknown;
 }
 
-interface Annotation {
-  labels: string[];
-  note: string;
-  reviewed: boolean;
-}
-
 interface LinkTokenRequest extends Record<string, unknown> {
   redirect_uri?: string;
 }
@@ -158,7 +162,7 @@ async function financeListing(context: FinanceContext) {
   );
   const page = transactions.slice(0, 250);
   const last = page.at(-1);
-  return context.json({
+  return respond(context, financeRoutes.listing, {
     accounts: accounts.map(toAccount),
     categories,
     configured: isConfigured(context.env),
@@ -198,7 +202,7 @@ async function transactionDetail(context: FinanceContext) {
       row.id,
     ),
   ]);
-  return context.json({
+  return respond(context, financeRoutes.transaction, {
     transaction: toTransaction(row, emails.map(toLinkedEmail)),
     categories,
     source,
@@ -227,16 +231,7 @@ async function findTransactionSource(
          AND txn.source_status = 'active'`,
     )
     .bind(organizationId, id)
-    .first<{
-      accountMask: string | null;
-      accountOfficialName: string | null;
-      accountSubtype: string | null;
-      accountType: string;
-      institutionName: string | null;
-      pendingTransactionId: string | null;
-      plaidTransactionId: string;
-      updatedAt: string;
-    }>();
+    .first<FinanceTransactionSource>();
 }
 
 async function transactionActivity(context: FinanceContext) {
@@ -254,7 +249,7 @@ async function transactionActivity(context: FinanceContext) {
     true,
   );
   return page
-    ? context.json(page)
+    ? respond(context, financeRoutes.transactionActivity, page)
     : context.json({ error: "Invalid activity cursor." }, 400);
 }
 
@@ -284,7 +279,7 @@ async function createLinkToken(
     "/link/token/create",
     body,
   );
-  return context.json({
+  return respond(context, financeRoutes.createLinkToken, {
     expiration: result.expiration,
     linkToken: result.link_token,
   });
@@ -308,7 +303,9 @@ async function exchangePublicToken(
   const existing = await findItemByPlaidId(context.env.DB, result.item_id);
   if (existing) {
     return existing.organizationId === organizationId
-      ? context.json({ connectionId: existing.id })
+      ? respond(context, financeRoutes.exchangePublicToken, {
+          connectionId: existing.id,
+        })
       : context.json({ error: "That connection is already in use." }, 409);
   }
   const id = crypto.randomUUID();
@@ -318,7 +315,12 @@ async function exchangePublicToken(
     `${organizationId}:${id}`,
   );
   await insertConnection(context, input, result, encrypted, id);
-  return context.json({ connectionId: id }, 201);
+  return respond(
+    context,
+    financeRoutes.exchangePublicToken,
+    { connectionId: id },
+    201,
+  );
 }
 
 async function syncConnection(
@@ -341,7 +343,7 @@ async function syncConnection(
     item,
     requestPlaid,
   );
-  return context.json(result);
+  return respond(context, financeRoutes.syncConnection, result);
 }
 
 async function disconnectConnection(
@@ -468,7 +470,9 @@ async function updateTransactionAnnotation(context: FinanceContext) {
     now,
   );
   await activityBatch(context.env.DB, context.get("apiKey"), [statement]);
-  return context.json({ annotation });
+  return respond(context, financeRoutes.updateTransactionAnnotation, {
+    annotation,
+  });
 }
 
 async function insertConnection(
@@ -589,7 +593,7 @@ async function findItemByPlaidId(database: D1Database, plaidItemId: string) {
     .first<{ id: string; organizationId: string }>();
 }
 
-function toConnection(row: ConnectionRow) {
+function toConnection(row: ConnectionRow): FinanceConnection {
   return {
     accountCount: row.account_count,
     createdAt: row.created_at,
@@ -602,7 +606,7 @@ function toConnection(row: ConnectionRow) {
   };
 }
 
-function toAccount(row: AccountRow) {
+function toAccount(row: AccountRow): FinanceAccount {
   return {
     availableBalance: row.available_balance,
     currencyCode: row.currency_code,
@@ -619,8 +623,8 @@ function toAccount(row: AccountRow) {
 
 function toTransaction(
   row: TransactionRow,
-  linkedEmails: ReturnType<typeof toLinkedEmail>[],
-) {
+  linkedEmails: LinkedEmail[],
+): FinanceTransaction {
   return {
     accountId: row.account_id,
     accountName: row.account_name,
@@ -672,7 +676,9 @@ async function annotationInput(context: FinanceContext) {
   return isRecord(input) ? (input as AnnotationInput) : null;
 }
 
-function normalizeAnnotation(input: AnnotationInput): Annotation | null {
+function normalizeAnnotation(
+  input: AnnotationInput,
+): FinanceTransactionAnnotation | null {
   if (
     typeof input.note !== "string" ||
     input.note.length > 2_000 ||

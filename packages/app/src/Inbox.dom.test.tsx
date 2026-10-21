@@ -1,8 +1,11 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import type {
+  InboundEmailDetail,
+  InboxFolder,
+} from "@balebase/validators/inbox";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import type { InboundEmailDetail, InboxFolder } from "./api";
 import { Inbox } from "./Inbox";
 
 const dom = new Window({ url: "http://localhost:5173/inbox" });

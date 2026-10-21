@@ -14,6 +14,14 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
+import type {
+  EquipmentDetail,
+  EquipmentInput,
+  EquipmentItem,
+  EquipmentListing,
+  EquipmentMember,
+} from "@balebase/validators/equipment";
+import type { LinkedEmail } from "@balebase/validators/inbox";
 import {
   type FormEvent,
   type RefObject,
@@ -23,19 +31,7 @@ import {
   useState,
 } from "react";
 import { ActivityFeed } from "./ActivityFeed";
-import { type LinkedEmail, unlinkInboundEmail } from "./api";
-import {
-  createEquipment,
-  deleteEquipment,
-  type EquipmentDetail,
-  type EquipmentInput,
-  type EquipmentItem,
-  type EquipmentListing,
-  type EquipmentMember,
-  getEquipment,
-  listEquipment,
-  updateEquipment,
-} from "./equipmentApi";
+import { api } from "./apiClient";
 import { type AssigneeFilter, filterEquipment } from "./equipmentFilters";
 import {
   equipmentMeta,
@@ -81,7 +77,8 @@ function useEquipmentListing() {
 
   useEffect(() => {
     let active = true;
-    listEquipment()
+    api.equipment
+      .list()
       .then((result) => {
         if (active) setListing(result);
       })
@@ -97,7 +94,7 @@ function useEquipmentListing() {
     setError(undefined);
     setNotice(undefined);
     try {
-      const created = await createEquipment(input);
+      const created = await api.equipment.create(input);
       setListing((current) =>
         current
           ? { ...current, equipment: [created, ...current.equipment] }
@@ -363,7 +360,7 @@ function useEquipmentDetail(
 
   const load = useCallback(async () => {
     try {
-      setDetail(await getEquipment(id));
+      setDetail(await api.equipment.get(id));
     } catch (cause) {
       setError(messageFrom(cause));
     }
@@ -375,7 +372,7 @@ function useEquipmentDetail(
     setError(undefined);
     setNotice(undefined);
     try {
-      const equipment = await updateEquipment(id, changes);
+      const equipment = await api.equipment.update(id, changes);
       setDetail((current) => (current ? { ...current, equipment } : current));
       setNotice(message);
       return true;
@@ -392,7 +389,7 @@ function useEquipmentDetail(
     setBusy(true);
     setError(undefined);
     try {
-      await deleteEquipment(id);
+      await api.equipment.delete(id);
       onNavigate(equipmentPath());
     } catch (cause) {
       setError(messageFrom(cause));
@@ -404,7 +401,7 @@ function useEquipmentDetail(
     setBusy(true);
     setError(undefined);
     try {
-      await unlinkInboundEmail(email.id, email.linkId);
+      await api.inbox.unlink(email.id, email.linkId);
       await load();
     } catch (cause) {
       setError(messageFrom(cause));

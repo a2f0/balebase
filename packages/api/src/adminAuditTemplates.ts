@@ -1,3 +1,4 @@
+import { adminAuditTemplatesRoutes } from "@balebase/validators/adminAuditTemplates";
 import { Hono } from "hono";
 import { findActivity, requestActor } from "./activity";
 import { isRecord, validText } from "./auditDefinition";
@@ -16,6 +17,7 @@ import {
   toTemplate,
 } from "./auditTemplates";
 import type { AuthVariables } from "./authMiddleware";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 /**
@@ -35,7 +37,9 @@ adminAuditTemplates.get("/", async (context) => {
      WHERE family.scope = 'global' AND version.status != 'discarded'
      ORDER BY family.updated_at DESC`,
   ).all<TemplateRow>();
-  return context.json({ templates: result.results.map(toTemplate) });
+  return respond(context, adminAuditTemplatesRoutes.list, {
+    templates: result.results.map(toTemplate),
+  });
 });
 
 adminAuditTemplates.post("/", async (context) => {
@@ -50,7 +54,12 @@ adminAuditTemplates.post("/", async (context) => {
     templateLimit: null,
   });
   if (!template) throw new Error("Global template could not be created.");
-  return context.json({ template: toTemplate(template) }, 201);
+  return respond(
+    context,
+    adminAuditTemplatesRoutes.create,
+    { template: toTemplate(template) },
+    201,
+  );
 });
 
 adminAuditTemplates.get("/:id/versions", async (context) => {
@@ -60,7 +69,7 @@ adminAuditTemplates.get("/:id/versions", async (context) => {
     context.req.param("id"),
   );
   if (!template) return context.json({ error: "Template not found." }, 404);
-  return context.json({
+  return respond(context, adminAuditTemplatesRoutes.versions, {
     versions: await listTemplateVersions(context.env.DB, template.id),
   });
 });
@@ -76,7 +85,9 @@ adminAuditTemplates.get("/:id/versions/:version", async (context) => {
     version,
   );
   return template
-    ? context.json({ template: toTemplate(template) })
+    ? respond(context, adminAuditTemplatesRoutes.version, {
+        template: toTemplate(template),
+      })
     : context.json({ error: "Template version not found." }, 404);
 });
 
@@ -94,7 +105,7 @@ adminAuditTemplates.get("/:id/activity", async (context) => {
     { id: template.id, type: "audit_template" },
   );
   return page
-    ? context.json(page)
+    ? respond(context, adminAuditTemplatesRoutes.activity, page)
     : context.json({ error: "Invalid activity cursor." }, 400);
 });
 
@@ -105,7 +116,9 @@ adminAuditTemplates.get("/:id", async (context) => {
     context.req.param("id"),
   );
   return template
-    ? context.json({ template: toTemplate(template) })
+    ? respond(context, adminAuditTemplatesRoutes.get, {
+        template: toTemplate(template),
+      })
     : context.json({ error: "Template not found." }, 404);
 });
 
@@ -143,7 +156,9 @@ adminAuditTemplates.put("/:id", async (context) => {
   );
   return saved === "stale"
     ? context.json({ error: staleTemplateError }, 409)
-    : context.json({ template: toTemplate(saved) });
+    : respond(context, adminAuditTemplatesRoutes.update, {
+        template: toTemplate(saved),
+      });
 });
 
 adminAuditTemplates.delete("/:id", async (context) => {
@@ -184,7 +199,7 @@ adminAuditTemplates.delete("/:id", async (context) => {
   );
   return saved === "stale"
     ? context.json({ error: staleTemplateError }, 409)
-    : context.json({ discarded: true });
+    : respond(context, adminAuditTemplatesRoutes.discard, { discarded: true });
 });
 
 export { adminAuditTemplates };

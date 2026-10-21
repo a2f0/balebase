@@ -1,9 +1,14 @@
-import { UpgradeRequiredError } from "./BillingLink";
 import type {
+  EmployeeRequirementInput,
   EmployeeRequirementKind,
   EmployeeRequirementStatus,
-  RequirementDraft,
-} from "./employeeFormsApi";
+} from "@balebase/validators/employeeForms";
+import { UpgradeRequiredError } from "./BillingLink";
+
+/** A request being drafted, with an ID that keys it until it is sent. */
+export interface RequirementDraft extends EmployeeRequirementInput {
+  id: string;
+}
 
 export function canCompleteRequirement(
   kind: EmployeeRequirementKind,

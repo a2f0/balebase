@@ -11,6 +11,12 @@ import {
   LoadingState,
   Toast,
 } from "@balebase/ui/react";
+import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
+import type {
+  OrganizationInvitation,
+  OrganizationMember,
+  OrganizationPeopleData,
+} from "@balebase/validators/organizationSettings";
 import {
   type FormEvent,
   type ReactNode,
@@ -20,6 +26,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { api } from "./apiClient";
 import { authClient } from "./authClient";
 import { type ErrorNotice, ErrorToast, errorNotice } from "./BillingLink";
 import {
@@ -29,14 +36,9 @@ import {
   type RequirementScope,
 } from "./EmployeeForms";
 import {
-  createEmployeeRequirements,
-  type EmployeeRequirement,
-  listEmployeeRequirements,
-  type RequirementDraft,
-} from "./employeeFormsApi";
-import {
   inviteWithRequirements,
   RequirementAssignmentError,
+  type RequirementDraft,
 } from "./employeeOnboarding";
 import {
   MemberRoleControl,
@@ -49,11 +51,6 @@ import {
   removeOrganizationMember,
   useOrganizationPeopleData,
 } from "./organizationPeopleState";
-import type {
-  OrganizationInvitation,
-  OrganizationMember,
-  OrganizationPeopleData,
-} from "./organizationSettingsApi";
 import {
   assignableOrganizationRoles,
   canManageOrganization,
@@ -273,7 +270,7 @@ function useRequirementSummary(data: OrganizationPeopleData | undefined) {
   const load = useCallback(async (access: string) => {
     const request = ++sequence.current;
     try {
-      const requirements = await listEmployeeRequirements();
+      const { requirements } = await api.employeeForms.list();
       if (request !== sequence.current) return;
       setSummary(({ version }) => ({
         access,
@@ -497,7 +494,7 @@ function useInviteSubmission({
     setBusy(true);
     setError(undefined);
     try {
-      await createEmployeeRequirements(
+      await api.employeeForms.create(
         { invitationId: retry.invitationId },
         requirements,
       );
@@ -630,7 +627,7 @@ async function sendInvitationWithRequirements({
 }) {
   return inviteWithRequirements({
     assign: (invitationId, drafts) =>
-      createEmployeeRequirements({ invitationId }, drafts),
+      api.employeeForms.create({ invitationId }, drafts),
     invite: async () => {
       const result = await authClient.organization.inviteMember({
         email,

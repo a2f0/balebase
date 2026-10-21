@@ -1,4 +1,9 @@
+import {
+  type FinanceAccountDetail,
+  financeRoutes,
+} from "@balebase/validators/finance";
 import type { FinanceContext } from "./financeContext";
+import { respond } from "./respond";
 
 /** How many of the newest transactions the account page lists. */
 const recentTransactionLimit = 10;
@@ -77,7 +82,7 @@ export async function accountDetail(context: FinanceContext) {
       .all<TransactionRow>(),
   ]);
   if (!account) return context.json({ error: "Account not found." }, 404);
-  return context.json({
+  return respond(context, financeRoutes.account, {
     account: toAccount(account),
     connection: {
       id: account.connection_id,
@@ -90,7 +95,7 @@ export async function accountDetail(context: FinanceContext) {
   });
 }
 
-function toAccount(row: AccountRow) {
+function toAccount(row: AccountRow): FinanceAccountDetail["account"] {
   return {
     availableBalance: row.available_balance,
     currencyCode: row.currency_code,
@@ -111,7 +116,9 @@ function toAccount(row: AccountRow) {
   };
 }
 
-function toTransaction(row: TransactionRow) {
+function toTransaction(
+  row: TransactionRow,
+): FinanceAccountDetail["recentTransactions"][number] {
   return {
     amount: row.amount,
     currencyCode: row.currency_code,

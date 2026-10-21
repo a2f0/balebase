@@ -12,21 +12,16 @@ import {
   PageHeader,
   Toast,
 } from "@balebase/ui/react";
+import type {
+  InboundEmailDetail,
+  InboundEmailLink,
+  InboundEmailSummary,
+  InboxFolder,
+} from "@balebase/validators/inbox";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiDownload } from "./ApiDownload";
 import { AttachmentPreviewTile } from "./AttachmentPreview";
-import {
-  archiveInboundEmail,
-  deleteInboundEmail,
-  getInboundEmail,
-  type InboundEmailDetail,
-  type InboundEmailLink,
-  type InboundEmailSummary,
-  type InboxFolder,
-  inboundAttachmentUrl,
-  listInboundEmails,
-  restoreInboundEmail,
-} from "./api";
+import { api } from "./apiClient";
 import { EmailLinks } from "./EmailLinks";
 import { selectEmailId } from "./inboxSelection";
 import { countLabel, formatBytes } from "./labels";
@@ -81,7 +76,7 @@ function useInboxMessages(folder: InboxFolder) {
     setLoadingList(true);
     setError(undefined);
     try {
-      const listing = await listInboundEmails(folder);
+      const listing = await api.inbox.list(folder);
       if (request !== listRequest.current) return;
       const nextEmails = listing.emails;
       const requested = pending.current;
@@ -118,7 +113,8 @@ function useInboxMessages(folder: InboxFolder) {
     setError(undefined);
     setLoadingMessage(true);
     setDetail(undefined);
-    getInboundEmail(selectedId, folder)
+    api.inbox
+      .get(selectedId, folder)
       .then((email) => {
         if (active) setDetail(email);
       })
@@ -187,15 +183,15 @@ function useInboxActions(messages: ReturnType<typeof useInboxMessages>) {
     if (email.linkCount > 0) return;
     const subject = email.subject || "(no subject)";
     if (!(await confirmMoveToTrash(subject))) return;
-    await runAction(email.id, deleteInboundEmail, "Email moved to Trash.");
+    await runAction(email.id, api.inbox.delete, "Email moved to Trash.");
   }
 
   async function restore(email: InboundEmailDetail) {
-    await runAction(email.id, restoreInboundEmail, "Email restored to Inbox.");
+    await runAction(email.id, api.inbox.restore, "Email restored to Inbox.");
   }
 
   async function archive(email: InboundEmailDetail) {
-    await runAction(email.id, archiveInboundEmail, "Email archived.");
+    await runAction(email.id, api.inbox.archive, "Email archived.");
   }
 
   async function runAction(
@@ -703,7 +699,7 @@ function AttachmentList({
               attachment={attachment}
               key={attachment.id}
               kind={kind}
-              url={inboundAttachmentUrl(email.id, attachment.id, folder)}
+              url={api.inbox.attachmentUrl(email.id, attachment.id, folder)}
             />
           ))}
         </div>
@@ -731,7 +727,7 @@ function AttachmentChips({
           plain
           filename={attachment.filename}
           className="inboxAttachment"
-          href={inboundAttachmentUrl(email.id, attachment.id, folder)}
+          href={api.inbox.attachmentUrl(email.id, attachment.id, folder)}
           key={attachment.id}
         >
           <Icon name="attachment" size={16} />

@@ -8,9 +8,10 @@ import {
   promptDialog,
   Toast,
 } from "@balebase/ui/react";
+import type { ContractDetail } from "@balebase/validators/contracts";
 import { useState } from "react";
 import { ApiDownload } from "./ApiDownload";
-import { fetchApi } from "./apiVersion";
+import { api } from "./apiClient";
 import { boxStyle, ContractPages } from "./ContractDocument";
 import {
   confirmContractDeletion,
@@ -22,14 +23,6 @@ import {
   recipientTone,
   reminderOptions,
 } from "./contractFields";
-import {
-  type ContractDetail,
-  contractDocumentUrl,
-  contractFinalUrl,
-  deleteContract,
-  remindContract,
-  voidContract,
-} from "./contractsApi";
 import { contractPath } from "./workspacePaths";
 
 /** A contract that has been sent: its progress, actions, and history. */
@@ -39,7 +32,7 @@ export function ContractSummary({
   onNavigate,
 }: {
   contract: ContractDetail;
-  onChanged: (contract: ContractDetail) => void;
+  onChanged: (contract: ContractDetail | null) => void;
   onNavigate: (pathname: string) => void;
 }) {
   const actions = useSummaryActions(contract, onChanged, onNavigate);
@@ -62,11 +55,10 @@ export function ContractSummary({
           <ContractPages
             key={contract.status}
             load={() =>
-              fetchPdf(
-                contract.status === "completed"
-                  ? contractFinalUrl(contract.id)
-                  : contractDocumentUrl(contract.id),
-              )
+              (contract.status === "completed"
+                ? api.contracts.final(contract.id)
+                : api.contracts.document(contract.id)
+              ).then((response) => response.arrayBuffer())
             }
             renderOverlay={(page) =>
               contract.status === "completed"
@@ -101,7 +93,7 @@ export function ContractSummary({
 
 function useSummaryActions(
   contract: ContractDetail,
-  onChanged: (contract: ContractDetail) => void,
+  onChanged: (contract: ContractDetail | null) => void,
   onNavigate: (pathname: string) => void,
 ) {
   const [busy, setBusy] = useState(false);
@@ -127,7 +119,7 @@ function useSummaryActions(
     notice,
     remind: () =>
       run(async () => {
-        const result = await remindContract(contract.id);
+        const result = await api.contracts.remind(contract.id);
         onChanged(result.contract);
         if (result.reminded === 0)
           throw new Error("No reminder could be delivered. See Activity.");
@@ -138,7 +130,7 @@ function useSummaryActions(
     remove: async () => {
       if (!(await confirmContractDeletion(contract.title))) return;
       void run(async () => {
-        await deleteContract(contract.id);
+        await api.contracts.delete(contract.id);
         onNavigate(contractPath());
         return undefined;
       });
@@ -147,7 +139,7 @@ function useSummaryActions(
       const reason = await askVoidReason(contract.title);
       if (reason === null) return;
       void run(async () => {
-        onChanged(await voidContract(contract.id, reason));
+        onChanged(await api.contracts.void(contract.id, reason));
         return "Contract voided.";
       });
     },
@@ -232,7 +224,7 @@ function SummaryActions({
       {contract.status === "completed" && (
         <ApiDownload
           filename={`signed-${contract.document.filename}`}
-          href={contractFinalUrl(contract.id)}
+          href={api.contracts.finalUrl(contract.id)}
           icon="download"
           variant="primary"
         >
@@ -241,7 +233,7 @@ function SummaryActions({
       )}
       <ApiDownload
         filename={contract.document.filename}
-        href={contractDocumentUrl(contract.id)}
+        href={api.contracts.documentUrl(contract.id)}
         icon="download"
       >
         Original
@@ -334,12 +326,6 @@ export function ContractStatusBadge({
       {status.label}
     </Badge>
   );
-}
-
-async function fetchPdf(url: string) {
-  const response = await fetchApi(url, { credentials: "include" });
-  if (!response.ok) throw new Error("The document could not be loaded.");
-  return response.arrayBuffer();
 }
 
 export function formatDate(value: string) {

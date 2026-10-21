@@ -14,6 +14,12 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
+import type { LinkedEmail } from "@balebase/validators/inbox";
+import type {
+  LibraryFolder,
+  LibraryFolderDetail,
+} from "@balebase/validators/libraryFolders";
+import type { StoredObject } from "@balebase/validators/objects";
 import {
   type FormEvent,
   useCallback,
@@ -22,22 +28,7 @@ import {
   useState,
 } from "react";
 import { ApiDownload } from "./ApiDownload";
-import {
-  createLibraryFolder,
-  deleteLibraryFolder,
-  deleteObject,
-  getLibraryFolder,
-  type LibraryFolder,
-  type LinkedEmail,
-  listLibraryFolders,
-  listObjects,
-  moveObject,
-  objectDownloadUrl,
-  renameLibraryFolder,
-  type StoredObject,
-  unlinkInboundEmail,
-  uploadObject,
-} from "./api";
+import { api } from "./apiClient";
 import { LinkedEmailList } from "./LinkedEmailList";
 import { countLabel, formatBytes } from "./labels";
 import { useMenuDismissal } from "./useMenuDismissal";
@@ -56,11 +47,6 @@ interface LibraryProps {
   onResendVerification: () => Promise<void>;
   pathname: string;
   user: WorkspaceUser;
-}
-
-interface FolderDetail {
-  emails: LinkedEmail[];
-  folder: LibraryFolder;
 }
 
 type FolderForm = "create" | "rename";
@@ -167,7 +153,7 @@ export function Library({
 function useLibraryData(folderId: string | undefined) {
   const [folders, setFolders] = useState<LibraryFolder[]>();
   const [objects, setObjects] = useState<StoredObject[]>();
-  const [detail, setDetail] = useState<FolderDetail>();
+  const [detail, setDetail] = useState<LibraryFolderDetail>();
   const [error, setError] = useState<string>();
   const requestSequence = useRef(0);
 
@@ -175,9 +161,9 @@ function useLibraryData(folderId: string | undefined) {
     const requestId = ++requestSequence.current;
     try {
       const [nextFolders, nextObjects, nextDetail] = await Promise.all([
-        listLibraryFolders(),
-        listObjects(folderId),
-        folderId ? getLibraryFolder(folderId) : undefined,
+        api.libraryFolders.list(),
+        api.objects.list(folderId),
+        folderId ? api.libraryFolders.get(folderId) : undefined,
       ]);
       if (requestId !== requestSequence.current) return;
       setError(undefined);
@@ -236,12 +222,12 @@ function useLibraryActions(
 
   return {
     busy,
-    deleteFolder: async (detail: FolderDetail) => {
+    deleteFolder: async (detail: LibraryFolderDetail) => {
       if (!(await confirmFolderDeletion(detail.folder))) return;
       setBusy(true);
       setError(undefined);
       try {
-        await deleteLibraryFolder(detail.folder.id);
+        await api.libraryFolders.delete(detail.folder.id);
         onNavigate(libraryPath());
       } catch (cause) {
         setError(messageFrom(cause));
@@ -252,20 +238,20 @@ function useLibraryActions(
     error,
     folderForm,
     move: (object: StoredObject, destination: string | null) =>
-      run(() => moveObject(object.id, destination)),
-    remove: (object: StoredObject) => run(() => deleteObject(object.id)),
+      run(() => api.objects.move(object.id, destination)),
+    remove: (object: StoredObject) => run(() => api.objects.delete(object.id)),
     saveFolder: async (name: string) => {
       const saved = await run(() =>
         folderForm === "rename" && folderId
-          ? renameLibraryFolder(folderId, name)
-          : createLibraryFolder(name),
+          ? api.libraryFolders.rename(folderId, name)
+          : api.libraryFolders.create(name),
       );
       if (saved) setFolderForm(undefined);
     },
     setFolderForm,
     unlink: (email: LinkedEmail) =>
-      run(() => unlinkInboundEmail(email.id, email.linkId)),
-    upload: (file: File) => run(() => uploadObject(file, folderId)),
+      run(() => api.inbox.unlink(email.id, email.linkId)),
+    upload: (file: File) => run(() => api.objects.upload(file, folderId)),
   };
 }
 
@@ -284,9 +270,9 @@ function LibraryHeader({
   unavailable,
 }: {
   busy: boolean;
-  detail: FolderDetail | undefined;
+  detail: LibraryFolderDetail | undefined;
   folderId: string | undefined;
-  onDeleteFolder: (detail: FolderDetail) => Promise<void>;
+  onDeleteFolder: (detail: LibraryFolderDetail) => Promise<void>;
   onNavigate: (pathname: string) => void;
   onNewFolder: () => void;
   onRenameFolder: () => void;
@@ -563,7 +549,7 @@ function FileCard({
         plain
         filename={object.filename}
         className="fileCardLink"
-        href={objectDownloadUrl(object.id)}
+        href={api.objects.downloadUrl(object.id)}
       >
         <div className="filePreview">
           <Icon name="document" size={28} strokeWidth={1.5} />
@@ -774,11 +760,7 @@ function messageFrom(cause: unknown) {
   return cause instanceof Error ? cause.message : "Something went wrong.";
 }
 
-function confirmFolderDeletion({
-  emailCount,
-  fileCount,
-  name,
-}: FolderDetail["folder"]) {
+function confirmFolderDeletion({ emailCount, fileCount, name }: LibraryFolder) {
   const consequences = [
     fileCount
       ? `${countLabel(fileCount, "file")} will move back to the library`

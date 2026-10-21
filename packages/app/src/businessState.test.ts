@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { Business } from "./businessesApi";
+import type { Business } from "@balebase/validators/businesses";
 import {
   type BusinessListEvent,
   type BusinessListState,

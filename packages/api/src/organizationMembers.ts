@@ -1,16 +1,4 @@
-interface OrganizationMember {
-  id: string;
-  joinedAt: string;
-  lastActiveAt: string | null;
-  role: string;
-  twoFactorEnabled: boolean;
-  twoFactorRequired: boolean;
-  user: {
-    email: string;
-    id: string;
-    name: string;
-  };
-}
+import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 
 interface OrganizationMemberRow {
   created_at: string;
@@ -24,6 +12,7 @@ interface OrganizationMemberRow {
   user_id: string;
 }
 
+/** Every member, with the activity and two-factor fields managers see. */
 export async function listOrganizationMembers(
   database: D1Database,
   organizationId: string,
@@ -53,7 +42,7 @@ export async function listOrganizationMembers(
       two_factor_enabled: twoFactorEnabled,
       two_factor_required: twoFactorRequired,
       user_id: userId,
-    }): OrganizationMember => ({
+    }): Required<OrganizationMember> => ({
       id,
       joinedAt,
       lastActiveAt,

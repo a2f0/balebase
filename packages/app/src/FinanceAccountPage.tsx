@@ -11,10 +11,11 @@ import {
   PageHeader,
   PageSection,
 } from "@balebase/ui/react";
+import type { FinanceAccountDetail } from "@balebase/validators/finance";
 import { useEffect, useState } from "react";
+import { api } from "./apiClient";
 import { connectionTone } from "./FinanceAccounts";
 import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
-import { type FinanceAccountDetail, getFinanceAccount } from "./financeApi";
 import {
   formatDateTime,
   formatDay,
@@ -177,7 +178,8 @@ function useAccount(id: string) {
   const [error, setError] = useState<string>();
   useEffect(() => {
     let active = true;
-    void getFinanceAccount(id)
+    void api.finance
+      .account(id)
       .then((next) => {
         if (active) setData(next);
       })

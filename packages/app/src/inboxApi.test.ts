@@ -1,12 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  archiveInboundEmail,
-  deleteInboundEmail,
-  getInboundEmail,
-  inboundAttachmentUrl,
-  listInboundEmails,
-  restoreInboundEmail,
-} from "./api";
+import { api } from "./apiClient";
 import { apiUrl } from "./config";
 
 describe("inbox API", () => {
@@ -34,13 +27,13 @@ describe("inbox API", () => {
     }) as typeof fetch;
 
     try {
-      await listInboundEmails("trash");
-      await getInboundEmail("message/id", "trash");
-      await deleteInboundEmail("message/id");
-      await restoreInboundEmail("message/id");
-      await archiveInboundEmail("message/id");
-      await listInboundEmails("archived");
-      await getInboundEmail("message/id", "archived");
+      await api.inbox.list("trash");
+      await api.inbox.get("message/id", "trash");
+      await api.inbox.delete("message/id");
+      await api.inbox.restore("message/id");
+      await api.inbox.archive("message/id");
+      await api.inbox.list("archived");
+      await api.inbox.get("message/id", "archived");
       expect(requests).toEqual([
         { method: "GET", url: `${apiUrl}/api/inbox?folder=trash` },
         {
@@ -59,11 +52,13 @@ describe("inbox API", () => {
           url: `${apiUrl}/api/inbox/message%2Fid?folder=archived`,
         },
       ]);
-      expect(inboundAttachmentUrl("message/id", "attachment/id", "trash")).toBe(
+      expect(
+        api.inbox.attachmentUrl("message/id", "attachment/id", "trash"),
+      ).toBe(
         `${apiUrl}/api/inbox/message%2Fid/attachments/attachment%2Fid?folder=trash`,
       );
       expect(
-        inboundAttachmentUrl("message/id", "attachment/id", "archived"),
+        api.inbox.attachmentUrl("message/id", "attachment/id", "archived"),
       ).toBe(
         `${apiUrl}/api/inbox/message%2Fid/attachments/attachment%2Fid?folder=archived`,
       );

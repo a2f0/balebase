@@ -1,3 +1,7 @@
+import {
+  type AuditIssueImage,
+  auditsRoutes,
+} from "@balebase/validators/audits";
 import { type Context, Hono } from "hono";
 import { activityBatch } from "./activity";
 import type { ApiKeyPrincipal } from "./apiKeys";
@@ -9,6 +13,7 @@ import {
 import type { AuthVariables } from "./authMiddleware";
 import { maxFilenameBytes, normalizeFilename } from "./filenames";
 import { auditIssueImageUploadGraceMilliseconds } from "./objectLifecycle";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 const auditIssueImages = new Hono<{
@@ -208,7 +213,12 @@ async function uploadReservedAuditIssueImage(
     reservation.imageId,
   );
   if (!image) throw new Error("Uploaded issue image could not be loaded.");
-  return context.json({ image: toAuditIssueImage(image) }, 201);
+  return respond(
+    context,
+    auditsRoutes.uploadIssueImage,
+    { image: toAuditIssueImage(image) },
+    201,
+  );
 }
 
 interface AuditIssueImageInsert {
@@ -975,7 +985,7 @@ const imageSelect = `
   JOIN objects AS object ON object.id = image.object_id
   JOIN user AS uploader ON uploader.id = image.uploaded_by`;
 
-export function toAuditIssueImage(row: AuditIssueImageRow) {
+export function toAuditIssueImage(row: AuditIssueImageRow): AuditIssueImage {
   return {
     contentType: row.content_type,
     createdAt: row.created_at,

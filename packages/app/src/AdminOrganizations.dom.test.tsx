@@ -1,9 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import type { AdminOrganizationDetail } from "@balebase/validators/adminOrganizations";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { AdminOrganizations } from "./AdminOrganizations";
-import type { AdminOrganizationDetail } from "./api";
 
 const dom = new Window({ url: "http://localhost:5173/root/organizations" });
 const domGlobals = {

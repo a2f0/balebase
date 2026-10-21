@@ -1,3 +1,4 @@
+import { adminJobsRoutes } from "@balebase/validators/adminJobs";
 import { Hono } from "hono";
 import { type AuthVariables, requireRole } from "./authMiddleware";
 import {
@@ -5,11 +6,14 @@ import {
   maintenanceTasks,
   runMaintenanceJob,
 } from "./maintenance";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 const adminJobs = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
 adminJobs.use("*", requireRole("admin"));
-adminJobs.get("/", (context) => context.json({ jobs: maintenanceJobs }));
+adminJobs.get("/", (context) =>
+  respond(context, adminJobsRoutes.list, { jobs: [...maintenanceJobs] }),
+);
 adminJobs.post("/:jobId/run", async (context) => {
   // CORS alone does not prevent cross-origin form submissions with cookies.
   if (context.req.header("Origin") !== context.env.CORS_ORIGIN) {
@@ -31,7 +35,12 @@ adminJobs.post("/:jobId/run", async (context) => {
   });
   context.executionCtx.waitUntil(run);
   const result = await run;
-  return context.json({ run: result }, result.status === "failed" ? 500 : 200);
+  return respond(
+    context,
+    adminJobsRoutes.run,
+    { run: result },
+    result.status === "failed" ? 500 : 200,
+  );
 });
 
 export { adminJobs };

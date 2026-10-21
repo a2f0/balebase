@@ -1,6 +1,6 @@
 import { Badge } from "@balebase/ui/react";
+import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { formatRole } from "./organizationPeopleState";
-import type { OrganizationMember } from "./organizationSettingsApi";
 import {
   type OrganizationInvitationRole,
   organizationRoleValue,

@@ -1,10 +1,10 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import type { Issue } from "@balebase/validators/issues";
 import { Window } from "happy-dom";
 import { act, type ReactNode } from "react";
 import type { Root } from "react-dom/client";
 import { FinanceTransactionPage } from "./FinanceTransactionPage";
 import { Issues } from "./Issues";
-import type { Issue } from "./issuesApi";
 
 const dom = new Window({ url: "http://localhost:5173/finance" });
 const saved = new Map<string, PropertyDescriptor | undefined>();

@@ -1,7 +1,9 @@
+import { type ApiKey, apiKeysRoutes } from "@balebase/validators/apiKeys";
 import { type Context, Hono } from "hono";
 import type { AuthSession } from "./auth";
 import type { AuthVariables } from "./authMiddleware";
 import { canManageOrganization } from "./organizationMembers";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 export type ApiKeyAccess = "read" | "write";
@@ -302,7 +304,7 @@ apiKeys.get("/", async (context) => {
     .bind(context.get("organizationId"))
     .all<ApiKeyRow>();
   const now = new Date();
-  return context.json({
+  return respond(context, apiKeysRoutes.list, {
     apiKeys: result.results.map((row) => toApiKey(row, now)),
   });
 });
@@ -363,7 +365,12 @@ apiKeys.post("/", async (context) => {
   }
   const created = await findApiKey(context.env.DB, organizationId, id);
   if (!created) throw new Error("The new API key could not be read back.");
-  return context.json({ apiKey: toApiKey(created, now), token }, 201);
+  return respond(
+    context,
+    apiKeysRoutes.create,
+    { apiKey: toApiKey(created, now), token },
+    201,
+  );
 });
 
 apiKeys.delete("/:id", async (context) => {
@@ -382,7 +389,9 @@ apiKeys.delete("/:id", async (context) => {
     .run();
   const revoked = await findApiKey(context.env.DB, organizationId, id);
   if (!revoked) return notFound(context);
-  return context.json({ apiKey: toApiKey(revoked, new Date()) });
+  return respond(context, apiKeysRoutes.revoke, {
+    apiKey: toApiKey(revoked, new Date()),
+  });
 });
 
 const apiKeySelect = `
@@ -409,7 +418,7 @@ function findApiKey(database: D1Database, organizationId: string, id: string) {
     .first<ApiKeyRow>();
 }
 
-function toApiKey(row: ApiKeyRow, now: Date) {
+function toApiKey(row: ApiKeyRow, now: Date): ApiKey {
   return {
     access: row.access,
     createdAt: row.created_at,
@@ -435,15 +444,15 @@ function toApiKey(row: ApiKeyRow, now: Date) {
   };
 }
 
-function apiKeyStatus(row: ApiKeyRow, now: Date) {
-  if (row.revoked_at) return "revoked" as const;
+function apiKeyStatus(row: ApiKeyRow, now: Date): ApiKey["status"] {
+  if (row.revoked_at) return "revoked";
   if (row.expires_at && Date.parse(row.expires_at) <= now.getTime()) {
-    return "expired" as const;
+    return "expired";
   }
   if (!row.creator_role || !canManageOrganization(row.creator_role)) {
-    return "inactive" as const;
+    return "inactive";
   }
-  return "active" as const;
+  return "active";
 }
 
 function parseApiKeyInput(value: unknown) {

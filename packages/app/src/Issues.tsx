@@ -1,3 +1,4 @@
+import type { IssueFilters } from "@balebase/api-client";
 import {
   Banner,
   Button,
@@ -9,21 +10,14 @@ import {
   PageHeader,
   PageSection,
 } from "@balebase/ui/react";
+import type { Issue, IssueInput } from "@balebase/validators/issues";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
-import { getFinanceTransaction } from "./financeApi";
+import { api } from "./apiClient";
 import { financeTransactionPath } from "./financePages";
 import { IssueForm } from "./IssueForm";
 import { IssueList } from "./IssueList";
-import {
-  createIssue,
-  getIssue,
-  type Issue,
-  type IssueFilters,
-  type IssueInput,
-  issuePath,
-  updateIssue,
-} from "./issuesApi";
+import { issuePath } from "./issuePaths";
 import { decodeRecordId } from "./workspacePaths";
 
 export function Issues({
@@ -156,7 +150,8 @@ function NewIssue({
   useEffect(() => {
     if (!transactionId) return;
     let active = true;
-    void getFinanceTransaction(transactionId)
+    void api.finance
+      .transaction(transactionId)
       .then(({ transaction }) => {
         if (active) setLabel(transaction.merchantName ?? transaction.name);
       })
@@ -168,7 +163,7 @@ function NewIssue({
     };
   }, [transactionId]);
   async function save(input: IssueInput) {
-    const { issueId } = await createIssue(
+    const { issueId } = await api.issues.create(
       input,
       transactionId
         ? { type: "finance_transaction", id: transactionId }
@@ -227,7 +222,8 @@ function IssueDetail({
   useEffect(() => {
     let active = true;
     setError(undefined);
-    void getIssue(request.id)
+    void api.issues
+      .get(request.id)
       .then((data) => {
         if (active) {
           setIssue(data.issue);
@@ -247,7 +243,7 @@ function IssueDetail({
     if (!issue) return;
     setBusy(true);
     try {
-      const data = await updateIssue(id, {
+      const data = await api.issues.update(id, {
         ...input,
         expectedRevision: issue.revision,
       });

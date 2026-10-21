@@ -1,5 +1,5 @@
+import type { InlineCheckoutSession } from "@balebase/validators/billing";
 import type { Stripe, StripeCheckoutSession } from "@stripe/stripe-js";
-import type { InlineCheckoutSession } from "./billingApi";
 import { readCheckoutAppearance } from "./checkoutAppearance";
 
 export interface CheckoutSummary {

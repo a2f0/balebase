@@ -1,3 +1,7 @@
+import {
+  type EquipmentItem,
+  equipmentRoutes,
+} from "@balebase/validators/equipment";
 import { type Context, Hono } from "hono";
 import { activityBatch, findActivity } from "./activity";
 import type { AuthVariables } from "./authMiddleware";
@@ -7,6 +11,7 @@ import {
   canManageOrganization,
   listMemberDirectory,
 } from "./organizationMembers";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 type EquipmentEnv = {
@@ -76,11 +81,11 @@ equipment.get("/", async (context) => {
       .all<EquipmentRow>(),
     listMemberDirectory(context.env.DB, organizationId),
   ]);
-  return context.json({
+  return respond(context, equipmentRoutes.list, {
     canManage: canManage(context),
     equipment: items.results.map(toEquipment),
     members,
-    types: equipmentTypes,
+    types: [...equipmentTypes],
   });
 });
 
@@ -119,7 +124,12 @@ equipment.post("/", async (context) => {
   if (result?.meta.changes === 0) return assigneeNotMember(context);
   const created = await findEquipment(context.env.DB, organizationId, id);
   if (!created) return equipmentNotFound(context);
-  return context.json({ equipment: toEquipment(created) }, 201);
+  return respond(
+    context,
+    equipmentRoutes.create,
+    { equipment: toEquipment(created) },
+    201,
+  );
 });
 
 equipment.get("/:id", async (context) => {
@@ -134,12 +144,12 @@ equipment.get("/:id", async (context) => {
     listLinkedEmails(context.env.DB, organizationId, "equipment", item.id),
     listMemberDirectory(context.env.DB, organizationId),
   ]);
-  return context.json({
+  return respond(context, equipmentRoutes.get, {
     canManage: canManage(context),
     emails: emails.map(toLinkedEmail),
     equipment: toEquipment(item),
     members,
-    types: equipmentTypes,
+    types: [...equipmentTypes],
   });
 });
 
@@ -158,7 +168,7 @@ equipment.get("/:id/activity", async (context) => {
     { id: item.id, type: "equipment" },
   );
   return page
-    ? context.json(page)
+    ? respond(context, equipmentRoutes.activity, page)
     : context.json({ error: "Invalid activity cursor." }, 400);
 });
 
@@ -206,7 +216,9 @@ equipment.patch("/:id", async (context) => {
   );
   if (!updated) return equipmentNotFound(context);
   if (result?.meta.changes === 0) return assigneeNotMember(context);
-  return context.json({ equipment: toEquipment(updated) });
+  return respond(context, equipmentRoutes.update, {
+    equipment: toEquipment(updated),
+  });
 });
 
 equipment.delete("/:id", async (context) => {
@@ -386,7 +398,7 @@ function isEquipmentType(value: unknown): value is EquipmentType {
   return equipmentTypes.some((type) => type === value);
 }
 
-function toEquipment(row: EquipmentRow) {
+function toEquipment(row: EquipmentRow): EquipmentItem {
   return {
     assignee: row.assigned_user_id
       ? {

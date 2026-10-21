@@ -1,7 +1,9 @@
+import { objectsRoutes } from "@balebase/validators/objects";
 import { type Context, Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
 import { maxFilenameBytes, normalizeFilename } from "./filenames";
 import { findLibraryFolder } from "./libraryFolders";
+import { respond } from "./respond";
 import type { Bindings, StoredObjectRow } from "./types";
 import { toStoredObject } from "./types";
 
@@ -32,7 +34,9 @@ objects.get("/", async (context) => {
     .bind(organizationId, folderId)
     .all<StoredObjectRow>();
 
-  return context.json({ objects: result.results.map(toStoredObject) });
+  return respond(context, objectsRoutes.list, {
+    objects: result.results.map(toStoredObject),
+  });
 });
 
 objects.post("/", async (context) => {
@@ -106,7 +110,9 @@ objects.post("/", async (context) => {
     throw error;
   }
 
-  return context.json(
+  return respond(
+    context,
+    objectsRoutes.upload,
     {
       object: {
         folderId,
@@ -179,7 +185,7 @@ objects.patch("/:id", async (context) => {
   )
     .bind(folderId, row.id, organizationId)
     .run();
-  return context.json({
+  return respond(context, objectsRoutes.move, {
     object: toStoredObject({ ...row, folder_id: folderId }),
   });
 });

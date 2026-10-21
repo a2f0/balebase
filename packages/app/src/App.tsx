@@ -23,6 +23,7 @@ import {
   workspaceContentKey,
 } from "./accountNavigation";
 import { useAccountSessions } from "./accountSessions";
+import { api } from "./apiClient";
 import { authClient } from "./authClient";
 import { Businesses } from "./Businesses";
 import { Contracts } from "./Contracts";
@@ -46,7 +47,6 @@ import {
 import { OrganizationGate } from "./OrganizationGate";
 import { OrganizationInvitation } from "./OrganizationInvitation";
 import { OrganizationSettings } from "./OrganizationSettings";
-import { getWorkspaceOrganizations } from "./organizationSettingsApi";
 import {
   createOrganizationSlug,
   isGlobalAuditsPath,
@@ -418,7 +418,7 @@ function useWorkspaceOrganizations(
     WorkspaceOrganization[] | undefined
   >();
   const loadOrganizations = useCallback(async () => {
-    setOrganizations(await getWorkspaceOrganizations());
+    setOrganizations(await api.organizationSettings.organizations());
   }, []);
   const signedInUserId = session?.user.id;
   useEffect(() => {

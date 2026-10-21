@@ -8,13 +8,10 @@ import {
   LoadingState,
   Toast,
 } from "@balebase/ui/react";
+import type { ScreeningForm as ScreeningFormData } from "@balebase/validators/employeeForms";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
-import {
-  downloadScreeningConsent,
-  getScreeningForm,
-  type ScreeningForm as ScreeningFormData,
-  submitScreening,
-} from "./employeeFormsApi";
+import { api } from "./apiClient";
+import { downloadScreeningConsent } from "./employeeFormDownloads";
 import {
   DetailFields,
   emptyDetails,
@@ -66,7 +63,7 @@ export function ScreeningForm({
   const [error, setError] = useState<string>();
   useEffect(() => {
     let current = true;
-    getScreeningForm(requirementId).then(
+    api.employeeForms.screeningForm(requirementId).then(
       (loaded) => current && setForm(loaded),
       (cause: unknown) =>
         current &&
@@ -144,7 +141,10 @@ function ScreeningSteps({
     setBusy(true);
     setError(undefined);
     try {
-      await submitScreening(requirementId, submission(answers, notices, form));
+      await api.employeeForms.submitScreening(
+        requirementId,
+        submission(answers, notices, form),
+      );
       setSubmitted(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not submit.");

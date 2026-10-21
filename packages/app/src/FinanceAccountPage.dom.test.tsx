@@ -1,9 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import type { FinanceAccountDetail } from "@balebase/validators/finance";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { FinanceAccountPage } from "./FinanceAccountPage";
-import type { FinanceAccountDetail } from "./financeApi";
 
 const dom = new Window({
   url: "http://localhost:5173/finance/accounts/account-1",

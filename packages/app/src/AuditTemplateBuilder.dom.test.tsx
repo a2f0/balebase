@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import type { AuditTemplate } from "@balebase/validators/audits";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import type { AuditTemplate } from "./auditApi";
 
 const dom = new Window({ url: "http://localhost:5173/audits/templates/t1" });
 const domGlobals = {

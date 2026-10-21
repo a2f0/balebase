@@ -1,3 +1,10 @@
+import type {
+  AuditIssue,
+  AuditPerson,
+  AuditRun,
+  AuditStatus,
+  AuditSummary,
+} from "@balebase/validators/audits";
 import { storedDefinition } from "./auditTemplates";
 
 export interface AuditRow {
@@ -14,7 +21,7 @@ export interface AuditRow {
   id: string;
   responses: string;
   revision: number;
-  status: string;
+  status: AuditStatus;
   template_family_id: string | null;
   template_id: string | null;
   template_name: string;
@@ -65,7 +72,8 @@ export function discardRejection(audit: AuditRow) {
     : "Only in-progress audits can be discarded.";
 }
 
-export function toAudit(row: AuditRow) {
+/** The stored audit; the run page adds who last saved each answer. */
+export function toAudit(row: AuditRow): Omit<AuditRun, "answerActivity"> {
   return {
     completedAt: row.completed_at,
     createdAt: row.created_at,
@@ -89,7 +97,7 @@ export function toAudit(row: AuditRow) {
 }
 
 /** The discarding user, or null once that account has been deleted. */
-function deletedBy(row: AuditRow) {
+function deletedBy(row: AuditRow): AuditPerson | null {
   return row.deleted_by_id
     ? {
         email: row.deleted_by_email ?? "",
@@ -99,7 +107,7 @@ function deletedBy(row: AuditRow) {
     : null;
 }
 
-export function toAuditSummary(row: AuditSummaryRow) {
+export function toAuditSummary(row: AuditSummaryRow): AuditSummary {
   const audit = toAudit(row);
   return {
     completedAt: audit.completedAt,
@@ -167,6 +175,6 @@ export function findIssueForUpdate(
       assigned_to: string | null;
       audit_deleted_at: string | null;
       id: string;
-      status: string;
+      status: AuditIssue["status"];
     }>();
 }

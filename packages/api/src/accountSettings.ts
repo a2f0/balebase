@@ -1,5 +1,7 @@
+import { accountSettingsRoutes } from "@balebase/validators/accountSettings";
 import { Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 const accountSettings = new Hono<{
@@ -36,7 +38,9 @@ accountSettings.patch("/default-organization", async (context) => {
   if (!result.meta.changes) {
     return context.json({ error: "Organization is unavailable." }, 403);
   }
-  return context.json({ defaultOrganizationId: body.organizationId });
+  return respond(context, accountSettingsRoutes.updateDefaultOrganization, {
+    defaultOrganizationId: body.organizationId,
+  });
 });
 
 export { accountSettings };

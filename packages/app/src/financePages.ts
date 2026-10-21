@@ -1,4 +1,4 @@
-import type { FinanceFilters } from "./financeApi";
+import type { FinanceFilters } from "@balebase/api-client";
 import { decodeRecordId } from "./workspacePaths";
 
 export type FinancePage = "categories" | "connections" | "overview" | "reports";

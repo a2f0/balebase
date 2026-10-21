@@ -1,9 +1,9 @@
 import { PageSection } from "@balebase/ui/react";
-import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
 import type {
   FinanceTransaction,
   FinanceTransactionSource,
-} from "./financeApi";
+} from "@balebase/validators/finance";
+import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
 
 /** The imported Plaid record behind a transaction, with values unformatted. */
 export function FinanceTransactionSourceData({

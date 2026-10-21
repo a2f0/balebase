@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import {
-  createCheckoutSession,
-  createPortalSession,
-  getBillingStatus,
-  openCurrentBillingSession,
-} from "./billingApi";
+import { api } from "./apiClient";
+import { openCurrentBillingSession } from "./billingSession";
 import { apiUrl } from "./config";
 
 const originalFetch = globalThis.fetch;
@@ -42,11 +38,11 @@ describe("billing API", () => {
       });
     }) as typeof fetch;
 
-    await getBillingStatus("cs_test/session");
-    expect(await createCheckoutSession()).toEqual({
+    await api.billing.status("cs_test/session");
+    expect(await api.billing.createCheckoutSession()).toEqual({
       url: "https://checkout.stripe.test",
     });
-    expect(await createPortalSession()).toEqual({
+    expect(await api.billing.createPortalSession()).toEqual({
       url: "https://billing.stripe.test",
     });
     expect(requests).toEqual([
@@ -65,7 +61,7 @@ describe("billing API", () => {
         { error: "Organization billing access is required." },
         { status: 403 },
       )) as unknown as typeof fetch;
-    await expect(createPortalSession()).rejects.toThrow(
+    await expect(api.billing.createPortalSession()).rejects.toThrow(
       "Organization billing access is required.",
     );
   });

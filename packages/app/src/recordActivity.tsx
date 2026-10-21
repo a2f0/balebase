@@ -1,4 +1,4 @@
-import type { ActivityEvent } from "./activityApi";
+import type { ActivityEvent } from "@balebase/validators/activity";
 
 /** Only changed fields are shown; empty notes/labels explicitly show removals. */
 export function RecordActivityDetails({ event }: { event: ActivityEvent }) {

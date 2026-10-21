@@ -14,6 +14,10 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
+import type {
+  EmployeeRequirement,
+  EmployeeRequirementKind,
+} from "@balebase/validators/employeeForms";
 import {
   type ReactNode,
   useCallback,
@@ -21,14 +25,11 @@ import {
   useRef,
   useState,
 } from "react";
+import { api } from "./apiClient";
 import {
   downloadEmployeeForm,
   downloadScreeningConsent,
-  type EmployeeRequirement,
-  type EmployeeRequirementKind,
-  listEmployeeRequirements,
-  uploadEmployeeForm,
-} from "./employeeFormsApi";
+} from "./employeeFormDownloads";
 import type { WorkspaceOrganization } from "./organizationState";
 import {
   formatDueDate,
@@ -191,7 +192,9 @@ function useOwnRequirements() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      setRequirements(await listEmployeeRequirements({ own: true }));
+      setRequirements(
+        (await api.employeeForms.list({ own: true })).requirements,
+      );
       setError(undefined);
     } catch (cause) {
       setError(messageFrom(cause));
@@ -395,7 +398,7 @@ function Actions({
         label={requirement.hasDocument ? "Replace file" : "Upload file"}
         onFile={(file) =>
           action(
-            () => uploadEmployeeForm(requirement.id, file),
+            () => api.employeeForms.upload(requirement.id, file),
             `${requirement.title} sent.`,
           )
         }

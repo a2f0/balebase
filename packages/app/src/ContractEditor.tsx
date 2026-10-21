@@ -1,6 +1,10 @@
 import { Button, Card, cx, Field, Toast } from "@balebase/ui/react";
+import type {
+  ContractDetail,
+  DraftRecipient,
+} from "@balebase/validators/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchApi } from "./apiVersion";
+import { api } from "./apiClient";
 import { ContractPages } from "./ContractDocument";
 import {
   EditorOverlay,
@@ -11,19 +15,11 @@ import {
 } from "./ContractFieldEditor";
 import {
   confirmContractDeletion,
+  type DraftInput,
   localDate,
   recipientTone,
   reminderOptions,
 } from "./contractFields";
-import {
-  type ContractDetail,
-  contractDocumentUrl,
-  type DraftInput,
-  type DraftRecipient,
-  deleteContract,
-  saveContractDraft,
-  sendContract,
-} from "./contractsApi";
 
 type Editor = ReturnType<typeof useDraftEditor>;
 
@@ -37,7 +33,7 @@ export function ContractEditor({
   onDeleted,
 }: {
   contract: ContractDetail;
-  onChanged: (contract: ContractDetail) => void;
+  onChanged: (contract: ContractDetail | null) => void;
   onDeleted: () => void;
 }) {
   const editor = useDraftEditor(contract, onChanged, onDeleted);
@@ -67,7 +63,7 @@ export function ContractEditor({
 
 function useDraftEditor(
   contract: ContractDetail,
-  onChanged: (contract: ContractDetail) => void,
+  onChanged: (contract: ContractDetail | null) => void,
   onDeleted: () => void,
 ) {
   const [draft, setDraft] = useState(() => draftFrom(contract));
@@ -118,7 +114,7 @@ function useDraftSaving({
   contract: ContractDetail;
   dirty: boolean;
   draft: DraftInput;
-  onChanged: (contract: ContractDetail) => void;
+  onChanged: (contract: ContractDetail | null) => void;
   onDeleted: () => void;
   revision: { current: number };
   setDirty: (dirty: boolean) => void;
@@ -149,7 +145,7 @@ function useDraftSaving({
     async (value: DraftInput) => {
       const saving = revision.current;
       const titled = value.title.trim() ? value : { ...value, title: untitled };
-      onChanged(await saveContractDraft(contractId, titled));
+      onChanged(await api.contracts.saveDraft(contractId, titled));
       if (revision.current !== saving) return false;
       setDirty(false);
       return true;
@@ -187,7 +183,7 @@ function useDraftSaving({
         const titled = value.title.trim()
           ? value
           : { ...value, title: untitled };
-        void saveContractDraft(contractId, titled).catch(() => undefined);
+        void api.contracts.saveDraft(contractId, titled).catch(() => undefined);
       }
     },
     [contractId, untitled],
@@ -206,7 +202,7 @@ function useDraftSaving({
     remove: async () => {
       if (!(await confirmContractDeletion(contract.title))) return;
       void run(async () => {
-        await deleteContract(contractId);
+        await api.contracts.delete(contractId);
         unsaved.current = null;
         onDeleted();
       });
@@ -221,7 +217,7 @@ function useDraftSaving({
           setNotice("You edited the draft while it saved. Send it again.");
           return;
         }
-        onChanged(await sendContract(contractId));
+        onChanged(await api.contracts.send(contractId));
       }),
   };
 }
@@ -515,9 +511,5 @@ function draftFrom(contract: ContractDetail): DraftInput {
 }
 
 async function fetchDocument(id: string) {
-  const response = await fetchApi(contractDocumentUrl(id), {
-    credentials: "include",
-  });
-  if (!response.ok) throw new Error("The document could not be loaded.");
-  return response.arrayBuffer();
+  return (await api.contracts.document(id)).arrayBuffer();
 }

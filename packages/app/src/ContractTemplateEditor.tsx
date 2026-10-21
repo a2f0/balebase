@@ -1,5 +1,10 @@
 import { Button, Card, confirmDialog, Field, Toast } from "@balebase/ui/react";
+import type {
+  ContractTemplate,
+  TemplateDefinition,
+} from "@balebase/validators/contractTemplates";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "./apiClient";
 import { ContractPages } from "./ContractDocument";
 import {
   EditorOverlay,
@@ -8,14 +13,7 @@ import {
   SelectedField,
   useContractFieldEditor,
 } from "./ContractFieldEditor";
-import { reminderOptions } from "./contractFields";
-import type { DraftInput } from "./contractsApi";
-import {
-  type ContractTemplate,
-  loadTemplateDocument,
-  saveTemplateVersion,
-  type TemplateDefinition,
-} from "./contractTemplatesApi";
+import { type DraftInput, reminderOptions } from "./contractFields";
 import { countLabel } from "./labels";
 import { useUnsavedChanges } from "./unsavedChanges";
 
@@ -68,7 +66,9 @@ export function ContractTemplateEditor({
         </aside>
         <div className="contractEditorDocument">
           <ContractPages
-            load={() => loadTemplateDocument(template.id, template.version)}
+            load={() =>
+              api.contractTemplates.loadDocument(template.id, template.version)
+            }
             renderOverlay={(page) => (
               <EditorOverlay editor={editor} page={page} />
             )}
@@ -119,11 +119,12 @@ function useTemplateEditor(
     setError(undefined);
     try {
       const definition = definitionFrom(draft);
-      const saved = await saveTemplateVersion(template, {
+      const saved = await api.contractTemplates.saveVersion(template, {
         definition,
         description,
         name: draft.title,
       });
+      if (!saved) throw new Error("Contract template not found.");
       onDirtyChange(false);
       onSaved(saved);
       setDirty(false);

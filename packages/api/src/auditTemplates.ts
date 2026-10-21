@@ -1,10 +1,12 @@
+import type {
+  AuditDefinition,
+  AuditPerson,
+  AuditTemplate,
+  AuditTemplateScope,
+  AuditTemplateVersion,
+} from "@balebase/validators/audits";
 import { type ActivityActor, activityBatch } from "./activity";
-import {
-  type AuditDefinition,
-  isRecord,
-  parseAuditDefinition,
-  validText,
-} from "./auditDefinition";
+import { isRecord, parseAuditDefinition, validText } from "./auditDefinition";
 import { nfpa70eStarter } from "./nfpa70eStarter";
 import { residentialCoreStarter } from "./residentialAuditLibrary";
 
@@ -15,7 +17,7 @@ export interface TemplateRow {
   description: string;
   id: string;
   name: string;
-  scope: "global" | "organization";
+  scope: AuditTemplateScope;
   status: string;
   updated_at: string;
   version: number;
@@ -391,7 +393,7 @@ export function storedDefinition(value: string) {
   return definition;
 }
 
-export function toTemplate(row: TemplateRow) {
+export function toTemplate(row: TemplateRow): AuditTemplate {
   return {
     createdAt: row.created_at,
     currentVersion: row.current_version,
@@ -412,7 +414,7 @@ export function toTemplate(row: TemplateRow) {
   };
 }
 
-function toTemplateVersion(row: TemplateVersionRow) {
+function toTemplateVersion(row: TemplateVersionRow): AuditTemplateVersion {
   return {
     createdAt: row.created_at,
     createdBy: templateActor(
@@ -424,6 +426,6 @@ function toTemplateVersion(row: TemplateVersionRow) {
   };
 }
 
-function templateActor(id: string, name: string, email: string) {
+function templateActor(id: string, name: string, email: string): AuditPerson {
   return id === auditLibraryActor.id ? auditLibraryActor : { email, id, name };
 }

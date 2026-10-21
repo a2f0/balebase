@@ -1,4 +1,10 @@
+import {
+  type ExpenseCategoryTotal,
+  type ExpenseReportCurrency,
+  financeRoutes,
+} from "@balebase/validators/finance";
 import type { FinanceContext } from "./financeContext";
+import { respond } from "./respond";
 
 /*
  * Expense reporting rules (Plaid amounts are positive for money leaving an
@@ -33,13 +39,6 @@ interface TransferRow {
   transaction_count: number;
 }
 
-interface CategoryTotal {
-  id: string | null;
-  name: string;
-  total: number;
-  transactionCount: number;
-}
-
 interface ReportRange {
   from: string | null;
   to: string | null;
@@ -66,7 +65,7 @@ export async function expenseReport(context: FinanceContext) {
       .bind(organizationId)
       .all<{ id: string; name: string }>(),
   ]);
-  return context.json({
+  return respond(context, financeRoutes.expenseReport, {
     currencies: summarizeExpenses(expenses, transfers, categories.results),
     from: range.from,
     to: range.to,
@@ -78,7 +77,7 @@ function summarizeExpenses(
   expenses: ExpenseRow[],
   transfers: TransferRow[],
   categories: { id: string; name: string }[],
-) {
+): ExpenseReportCurrency[] {
   const currencies = [
     ...new Set([
       ...expenses.map((row) => row.currency),
@@ -87,7 +86,7 @@ function summarizeExpenses(
   ].sort();
   return currencies.map((currency) => {
     const rows = expenses.filter((row) => row.currency === currency);
-    const totals: CategoryTotal[] = categories.map((category) =>
+    const totals: ExpenseCategoryTotal[] = categories.map((category) =>
       categoryTotal(category.id, category.name, rows),
     );
     const uncategorized = categoryTotal(null, "Uncategorized", rows);
@@ -178,7 +177,7 @@ function categoryTotal(
   id: string | null,
   name: string,
   rows: ExpenseRow[],
-): CategoryTotal {
+): ExpenseCategoryTotal {
   const matching = rows.filter((row) => row.category_id === id);
   return {
     id,

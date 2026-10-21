@@ -1,4 +1,9 @@
+import {
+  type FinanceTransactionMatch,
+  financeRoutes,
+} from "@balebase/validators/finance";
 import type { FinanceContext } from "./financeContext";
+import { respond } from "./respond";
 
 interface TransactionMatchRow {
   account_name: string;
@@ -54,7 +59,9 @@ export async function searchTransactions(context: FinanceContext) {
       resultLimit,
     )
     .all<TransactionMatchRow>();
-  return context.json({ transactions: result.results.map(toMatch) });
+  return respond(context, financeRoutes.searchTransactions, {
+    transactions: result.results.map(toMatch),
+  });
 }
 
 /** "42.75", "$42.75", or "1,042" as an unsigned amount; otherwise null. */
@@ -63,7 +70,7 @@ function amountFrom(query: string) {
   return /^\d+(\.\d{1,2})?$/.test(normalized) ? Number(normalized) : null;
 }
 
-function toMatch(row: TransactionMatchRow) {
+function toMatch(row: TransactionMatchRow): FinanceTransactionMatch {
   return {
     accountName: row.account_name,
     amount: row.amount,

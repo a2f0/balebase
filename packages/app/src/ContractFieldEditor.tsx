@@ -1,4 +1,5 @@
 import { Button, Card, cx, Field, Icon } from "@balebase/ui/react";
+import type { FieldType } from "@balebase/validators/contracts";
 import {
   type KeyboardEvent,
   type MouseEvent,
@@ -10,6 +11,8 @@ import {
 import { boxStyle, type PageSize } from "./ContractDocument";
 import {
   clampBox,
+  type DraftField,
+  type DraftInput,
   fieldTypeLabel,
   fieldTypes,
   initialsFor,
@@ -17,7 +20,6 @@ import {
   placeNewField,
   recipientTone,
 } from "./contractFields";
-import type { DraftField, DraftInput, FieldType } from "./contractsApi";
 
 type Editor = ReturnType<typeof useContractFieldEditor>;
 const fieldHelpId = "contractFieldHelp";

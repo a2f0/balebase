@@ -11,15 +11,13 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
+import type {
+  BillingStatus,
+  InlineCheckoutSession,
+} from "@balebase/validators/billing";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  type BillingStatus,
-  createCheckoutSession,
-  createPortalSession,
-  getBillingStatus,
-  type InlineCheckoutSession,
-  openCurrentBillingSession,
-} from "./billingApi";
+import { api } from "./apiClient";
+import { openCurrentBillingSession } from "./billingSession";
 import { InlineCheckout } from "./InlineCheckout";
 import { countLabel, formatLabel } from "./labels";
 
@@ -66,7 +64,7 @@ export function OrganizationBilling({
     const query = new URLSearchParams(window.location.search);
     const sessionId = query.get("session_id") ?? undefined;
     try {
-      const nextStatus = await getBillingStatus(sessionId);
+      const nextStatus = await api.billing.status(sessionId);
       if (sequence !== loadSequence.current) return;
       setStatus(nextStatus);
       setNotice(checkoutNotice(query, nextStatus));
@@ -142,19 +140,25 @@ function createBillingAction(
     setNotice(undefined);
     try {
       if (action === "portal") {
-        await openCurrentBillingSession(createPortalSession, isCurrent, (s) =>
-          window.location.assign(s.url),
+        await openCurrentBillingSession(
+          api.billing.createPortalSession,
+          isCurrent,
+          (s) => window.location.assign(s.url),
         );
         return;
       }
-      await openCurrentBillingSession(createCheckoutSession, isCurrent, (s) => {
-        if ("url" in s) {
-          window.location.assign(s.url);
-          return;
-        }
-        setCheckout(s);
-        setBusy(false);
-      });
+      await openCurrentBillingSession(
+        api.billing.createCheckoutSession,
+        isCurrent,
+        (s) => {
+          if ("url" in s) {
+            window.location.assign(s.url);
+            return;
+          }
+          setCheckout(s);
+          setBusy(false);
+        },
+      );
     } catch (cause) {
       if (sequence === actionSequence.current) {
         setError(messageFrom(cause));

@@ -5,7 +5,7 @@ import {
   Icon,
   PageSection,
 } from "@balebase/ui/react";
-import type { LinkedEmail } from "./api";
+import type { LinkedEmail } from "@balebase/validators/inbox";
 import { countLabel } from "./labels";
 import { handleNavigation, inboxEmailPath } from "./workspacePaths";
 

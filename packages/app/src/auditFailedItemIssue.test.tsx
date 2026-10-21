@@ -1,4 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import type {
+  AuditDetail,
+  AuditIssueInput,
+  AuditTemplateItem,
+} from "@balebase/validators/audits";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   AnswerAttribution,
@@ -8,7 +13,6 @@ import {
   failIssueReducer,
   runStateReducer,
 } from "./AuditRunPage";
-import type { AuditDetail, AuditTemplateItem } from "./auditApi";
 
 const item: AuditTemplateItem = {
   id: "panel-labels",
@@ -197,7 +201,7 @@ describe("failed item issue panel", () => {
 });
 
 describe("creating an issue with images", () => {
-  const issue = {
+  const issue: AuditIssueInput = {
     assignedTo: "user-1",
     description: "Directory is faded.",
     itemId: item.id,

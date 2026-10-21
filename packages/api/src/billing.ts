@@ -1,6 +1,12 @@
+import {
+  type BillingStatus,
+  billingRoutes,
+  type CheckoutOutcome,
+} from "@balebase/validators/billing";
 import { type Context, Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
 import { canManageOrganization } from "./organizationMembers";
+import { respond } from "./respond";
 import {
   StripeApiError,
   StripeConfigurationError,
@@ -171,7 +177,11 @@ billing.get("/", async (context) => {
     context.env.STRIPE_PRO_PRICE_ID,
     context.env.STRIPE_PRO_LEGACY_PRICE_IDS,
   );
-  return context.json(checkout ? { ...summary, checkout } : summary);
+  return respond(
+    context,
+    billingRoutes.status,
+    checkout ? { ...summary, checkout } : summary,
+  );
 });
 
 billing.post("/checkout", async (context) => {
@@ -220,7 +230,8 @@ billing.post("/checkout", async (context) => {
         `checkout:${organizationId}:${checkoutClaim.id}`,
       ),
     );
-    if (!validCreatedCheckout(checkout, publishableKey !== null)) {
+    const opened = openedCheckout(checkout, publishableKey);
+    if (!opened) {
       throw new StripeApiError(
         publishableKey
           ? "Stripe did not return a checkout client secret."
@@ -241,11 +252,7 @@ billing.post("/checkout", async (context) => {
         409,
       );
     }
-    return context.json(
-      publishableKey
-        ? { clientSecret: checkout.client_secret, publishableKey }
-        : { url: checkout.url },
-    );
+    return respond(context, billingRoutes.checkout, opened);
   } catch (cause) {
     return checkoutCreationError(
       context,
@@ -283,7 +290,7 @@ billing.post("/portal", async (context) => {
       await stripePost(context.env, "/v1/billing_portal/sessions", parameters),
     );
     if (!portal.url) throw new Error("Stripe did not return a portal URL.");
-    return context.json({ url: portal.url });
+    return respond(context, billingRoutes.portal, { url: portal.url });
   } catch (cause) {
     return billingError(context, cause);
   }
@@ -962,7 +969,7 @@ async function billingSummary(
   organizationRole: string,
   priceId: string | undefined,
   legacyPriceIds: string | undefined,
-) {
+): Promise<BillingStatus> {
   const [record, memberCount, formTemplateCount] = await Promise.all([
     findBilling(database, organizationId),
     countMembers(database, organizationId),
@@ -992,13 +999,6 @@ async function billingSummary(
     seats: pro ? Math.max(record?.seat_quantity ?? 1, memberCount) : 1,
   };
 }
-
-/**
- * `incomplete` means the customer came back without paying: inline Checkout
- * also returns to its success URL when a redirect-based payment is canceled,
- * and the open session can still be resumed.
- */
-type CheckoutOutcome = "complete" | "incomplete";
 
 async function confirmCheckoutSession(
   environment: Pick<
@@ -1859,7 +1859,8 @@ async function pendingCheckoutResponse(
   context: Context<BillingEnv>,
   pending: { id: string; url: string | null },
 ) {
-  if (pending.url) return context.json({ url: pending.url });
+  if (pending.url)
+    return respond(context, billingRoutes.checkout, { url: pending.url });
   const publishableKey = checkoutPublishableKey(context.env);
   if (!publishableKey) return checkoutInProgressResponse(context);
   let session: StripeCheckoutSession;
@@ -1880,7 +1881,10 @@ async function pendingCheckoutResponse(
   ) {
     return checkoutInProgressResponse(context);
   }
-  return context.json({ clientSecret: session.client_secret, publishableKey });
+  return respond(context, billingRoutes.checkout, {
+    clientSecret: session.client_secret,
+    publishableKey,
+  });
 }
 
 async function checkoutState(database: D1Database, organizationId: string) {
@@ -1970,16 +1974,18 @@ function stalePendingCheckoutId(record: BillingRow | null, nowSeconds: number) {
     : null;
 }
 
-function validCreatedCheckout(
+/** What a created Checkout opens with, or null when Stripe left it out. */
+function openedCheckout(
   checkout: StripeCheckoutSession,
-  inline: boolean,
+  publishableKey: string | null,
 ) {
-  return Boolean(
-    checkout.status === "open" &&
-      (inline ? checkout.client_secret : checkout.url) &&
-      checkout.id &&
-      checkout.expires_at,
-  );
+  if (checkout.status !== "open" || !checkout.id || !checkout.expires_at)
+    return null;
+  if (publishableKey === null)
+    return checkout.url ? { url: checkout.url } : null;
+  return checkout.client_secret
+    ? { clientSecret: checkout.client_secret, publishableKey }
+    : null;
 }
 
 /**

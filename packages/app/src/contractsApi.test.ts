@@ -1,17 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { api } from "./apiClient";
 import { apiUrl } from "./config";
-import {
-  contractDocumentUrl,
-  contractFinalUrl,
-  deleteContract,
-  getContract,
-  listContracts,
-  remindContract,
-  saveContractDraft,
-  sendContract,
-  uploadContract,
-  voidContract,
-} from "./contractsApi";
 
 describe("contracts API", () => {
   it("addresses the contract endpoints", async () => {
@@ -38,14 +27,14 @@ describe("contracts API", () => {
         signingOrder: "parallel" as const,
         title: "Lease",
       };
-      await listContracts();
-      await uploadContract(new File(["%PDF-"], "lease.pdf"));
-      await getContract("c/1");
-      await saveContractDraft("c/1", draft);
-      await sendContract("c/1");
-      await remindContract("c/1");
-      await voidContract("c/1", "Wrong terms");
-      await deleteContract("c/1");
+      await api.contracts.list();
+      await api.contracts.upload(new File(["%PDF-"], "lease.pdf"));
+      await api.contracts.get("c/1");
+      await api.contracts.saveDraft("c/1", draft);
+      await api.contracts.send("c/1");
+      await api.contracts.remind("c/1");
+      await api.contracts.void("c/1", "Wrong terms");
+      await api.contracts.delete("c/1");
       expect(requests.map(({ method, url }) => `${method} ${url}`)).toEqual([
         `GET ${apiUrl}/api/contracts`,
         `POST ${apiUrl}/api/contracts`,
@@ -60,10 +49,10 @@ describe("contracts API", () => {
       expect((form.get("file") as File).name).toBe("lease.pdf");
       expect(requests[3]?.body).toBe(JSON.stringify(draft));
       expect(requests[6]?.body).toBe(JSON.stringify({ reason: "Wrong terms" }));
-      expect(contractDocumentUrl("c/1")).toBe(
+      expect(api.contracts.documentUrl("c/1")).toBe(
         `${apiUrl}/api/contracts/c%2F1/document`,
       );
-      expect(contractFinalUrl("c/1")).toBe(
+      expect(api.contracts.finalUrl("c/1")).toBe(
         `${apiUrl}/api/contracts/c%2F1/final`,
       );
     } finally {
@@ -100,9 +89,12 @@ describe("contracts API", () => {
         signingOrder: "parallel" as const,
         title: "Lease",
       };
-      const first = saveContractDraft("c1", draft);
-      const second = saveContractDraft("c1", { ...draft, title: "Lease v2" });
-      const read = getContract("c1");
+      const first = api.contracts.saveDraft("c1", draft);
+      const second = api.contracts.saveDraft("c1", {
+        ...draft,
+        title: "Lease v2",
+      });
+      const read = api.contracts.get("c1");
       await Bun.sleep(5);
       expect(log).toEqual(["start PUT"]);
       releaseFirst();
@@ -128,14 +120,14 @@ describe("contracts API", () => {
         ? Response.json({ error: "Add at least one signer." }, { status })
         : new Response("upstream failure", { status })) as typeof fetch;
     try {
-      await expect(sendContract("c1")).rejects.toThrow(
+      await expect(api.contracts.send("c1")).rejects.toThrow(
         "Add at least one signer.",
       );
       status = 502;
-      await expect(uploadContract(new File(["x"], "x.pdf"))).rejects.toThrow(
-        "Request failed with status 502.",
-      );
-      await expect(deleteContract("c1")).rejects.toThrow(
+      await expect(
+        api.contracts.upload(new File(["x"], "x.pdf")),
+      ).rejects.toThrow("Request failed with status 502.");
+      await expect(api.contracts.delete("c1")).rejects.toThrow(
         "Request failed with status 502.",
       );
     } finally {

@@ -9,15 +9,10 @@ import {
   LoadingState,
   Toast,
 } from "@balebase/ui/react";
+import type { OrganizationGroup } from "@balebase/validators/organizationGroups";
+import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import {
-  createOrganizationGroup,
-  deleteOrganizationGroup,
-  getOrganizationGroups,
-  type OrganizationGroup,
-  updateOrganizationGroup,
-} from "./organizationGroupsApi";
-import type { OrganizationMember } from "./organizationSettingsApi";
+import { api } from "./apiClient";
 
 export function OrganizationAccessSettings({
   onAccessChanged,
@@ -27,7 +22,7 @@ export function OrganizationAccessSettings({
   organizationId: string;
 }) {
   const [data, setData] = useState<Awaited<
-    ReturnType<typeof getOrganizationGroups>
+    ReturnType<typeof api.organizationGroups.list>
   > | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -36,7 +31,7 @@ export function OrganizationAccessSettings({
     setLoading(true);
     setError(undefined);
     try {
-      setData(await getOrganizationGroups());
+      setData(await api.organizationGroups.list());
     } catch (cause) {
       setError(messageFrom(cause));
     } finally {
@@ -98,7 +93,7 @@ function OrganizationGroups({
     setBusy(true);
     setError(undefined);
     try {
-      await createOrganizationGroup({
+      await api.organizationGroups.create({
         capabilities: [],
         name: nextName,
         userIds: [],
@@ -258,7 +253,7 @@ function useGroupEditor(
     event.preventDefault();
     start("save");
     try {
-      await updateOrganizationGroup(group.id, {
+      await api.organizationGroups.update(group.id, {
         capabilities: finance ? ["finance"] : [],
         name: name.trim(),
         userIds: [...memberIds],
@@ -275,7 +270,7 @@ function useGroupEditor(
     if (!(await confirmGroupDeletion(group.name))) return;
     start("delete");
     try {
-      await deleteOrganizationGroup(group.id);
+      await api.organizationGroups.delete(group.id);
       await onChanged();
     } catch (cause) {
       setError(messageFrom(cause));

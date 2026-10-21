@@ -1,7 +1,12 @@
+import {
+  type ActivityEvent,
+  activityRoutes,
+} from "@balebase/validators/activity";
 import { type Context, Hono } from "hono";
 import type { ApiKeyChannel, ApiKeyPrincipal } from "./apiKeys";
 import type { AuthVariables } from "./authMiddleware";
 import { userHasCapability } from "./organizationGroups";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 type ActivityEnv = { Bindings: Bindings; Variables: AuthVariables };
@@ -56,7 +61,7 @@ activity.get("/", async (context) => {
     ),
   );
   return page
-    ? context.json(page)
+    ? respond(context, activityRoutes.list, page)
     : context.json({ error: "Invalid activity cursor." }, 400);
 });
 
@@ -216,8 +221,9 @@ export function activityStatement(
 
 function activityActor(row: ActivityRow) {
   return {
+    // Migration 0061 added the key's name and channel together.
     apiKey:
-      row.actor_api_key_name === null
+      row.actor_api_key_name === null || row.actor_api_key_channel === null
         ? null
         : {
             channel: row.actor_api_key_channel,
@@ -230,7 +236,7 @@ function activityActor(row: ActivityRow) {
   };
 }
 
-function toActivity(row: ActivityRow) {
+function toActivity(row: ActivityRow): ActivityEvent {
   return {
     action: row.action,
     actor: activityActor(row),

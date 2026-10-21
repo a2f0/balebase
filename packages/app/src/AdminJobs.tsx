@@ -9,13 +9,12 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
+import type {
+  MaintenanceJob,
+  MaintenanceRun,
+} from "@balebase/validators/adminJobs";
 import { useEffect, useState } from "react";
-import {
-  listMaintenanceJobs,
-  type MaintenanceJob,
-  type MaintenanceRun,
-  triggerMaintenanceJob,
-} from "./adminJobsApi";
+import { api } from "./apiClient";
 
 export function AdminJobs() {
   const [jobs, setJobs] = useState<MaintenanceJob[]>();
@@ -23,7 +22,8 @@ export function AdminJobs() {
   const [error, setError] = useState<string>();
   const [run, setRun] = useState<MaintenanceRun>();
   useEffect(() => {
-    void listMaintenanceJobs()
+    void api.adminJobs
+      .list()
       .then(setJobs)
       .catch((cause: unknown) => {
         setError(messageFrom(cause));
@@ -36,7 +36,7 @@ export function AdminJobs() {
     setError(undefined);
     setRun(undefined);
     try {
-      setRun(await triggerMaintenanceJob(job.id));
+      setRun(await api.adminJobs.run(job.id));
     } catch (cause) {
       setError(
         `${messageFrom(cause)} The outcome may be unknown; check Workers Logs before retrying.`,

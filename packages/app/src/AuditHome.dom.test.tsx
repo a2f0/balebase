@@ -1,9 +1,12 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import type {
+  AuditTemplate,
+  AuditTemplateScope,
+} from "@balebase/validators/audits";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { AuditHome } from "./AuditHome";
-import type { AuditTemplate, AuditTemplateScope } from "./auditApi";
 
 // Mounts the real page in happy-dom so the layout switch renders and the
 // choice round-trips through the page's own storage.

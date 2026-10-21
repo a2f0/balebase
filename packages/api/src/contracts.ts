@@ -1,3 +1,11 @@
+import {
+  type ContractDetail,
+  type ContractEvent,
+  type ContractField,
+  type ContractRecipient,
+  type ContractSummary,
+  contractsRoutes,
+} from "@balebase/validators/contracts";
 import { type Context, Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
 import { draftInput, draftStatements, validEmail } from "./contractDraft";
@@ -20,6 +28,7 @@ import {
 } from "./contractRecords";
 import { contractTemplates } from "./contractTemplates";
 import { normalizeFilename } from "./filenames";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 type ContractEnv = {
@@ -69,7 +78,9 @@ contracts.get("/", async (context) => {
   )
     .bind(context.get("organizationId"))
     .all<SummaryRow>();
-  return context.json({ contracts: result.results.map(toSummary) });
+  return respond(context, contractsRoutes.list, {
+    contracts: result.results.map(toSummary),
+  });
 });
 
 // Uploads a PDF as a new draft.
@@ -142,13 +153,18 @@ contracts.post("/", async (context) => {
     await context.env.STORAGE.delete(objectKey);
     throw cause;
   }
-  return context.json({ contract: await detailFor(context, id) }, 201);
+  return respond(
+    context,
+    contractsRoutes.upload,
+    { contract: await detailFor(context, id) },
+    201,
+  );
 });
 
 contracts.get("/:id", async (context) => {
   const detail = await detailFor(context, context.req.param("id"));
   if (!detail) return contractNotFound(context);
-  return context.json({ contract: detail });
+  return respond(context, contractsRoutes.get, { contract: detail });
 });
 
 contracts.get("/:id/document", async (context) => {
@@ -199,7 +215,9 @@ contracts.put("/:id/draft", async (context) => {
     draftStatements(database, contract, draft, new Date().toISOString()),
   );
   if (saved[0]?.meta.changes !== 1) return notDraft(context);
-  return context.json({ contract: await detailFor(context, contract.id) });
+  return respond(context, contractsRoutes.saveDraft, {
+    contract: await detailFor(context, contract.id),
+  });
 });
 
 contracts.post("/:id/send", async (context) => {
@@ -254,7 +272,9 @@ contracts.post("/:id/send", async (context) => {
     firstSigners(sending, recipients),
     false,
   );
-  return context.json({ contract: await detailFor(context, contract.id) });
+  return respond(context, contractsRoutes.send, {
+    contract: await detailFor(context, contract.id),
+  });
 });
 
 // Emails everyone whose turn it is again.
@@ -304,7 +324,7 @@ contracts.post("/:id/remind", async (context) => {
     true,
     now,
   );
-  return context.json({
+  return respond(context, contractsRoutes.remind, {
     contract: await detailFor(context, contract.id),
     reminded,
   });
@@ -356,7 +376,9 @@ contracts.post("/:id/void", async (context) => {
       console.error("Void notice could not be sent.", cause);
     }
   }
-  return context.json({ contract: await detailFor(context, contract.id) });
+  return respond(context, contractsRoutes.void, {
+    contract: await detailFor(context, contract.id),
+  });
 });
 
 // Deletes a contract that is not awaiting signatures; its files are queued
@@ -418,7 +440,10 @@ contracts.delete("/:id", async (context) => {
   return context.body(null, 204);
 });
 
-async function detailFor(context: ContractContext, id: string) {
+async function detailFor(
+  context: ContractContext,
+  id: string,
+): Promise<ContractDetail | null> {
   const database = context.env.DB;
   const contract = await findContract(
     database,
@@ -506,7 +531,7 @@ async function pdfResponse(
   });
 }
 
-function toSummary(row: SummaryRow) {
+function toSummary(row: SummaryRow): ContractSummary {
   return {
     completedAt: row.completed_at,
     createdAt: row.created_at,
@@ -522,7 +547,7 @@ function toSummary(row: SummaryRow) {
   };
 }
 
-function toRecipient(row: RecipientRow) {
+function toRecipient(row: RecipientRow): ContractRecipient {
   return {
     declineReason: row.decline_reason,
     declinedAt: row.declined_at,
@@ -538,7 +563,7 @@ function toRecipient(row: RecipientRow) {
   };
 }
 
-function toField(row: FieldRow) {
+function toField(row: FieldRow): ContractField {
   return {
     height: row.height,
     id: row.id,
@@ -554,7 +579,7 @@ function toField(row: FieldRow) {
   };
 }
 
-function toEvent(row: EventRow) {
+function toEvent(row: EventRow): ContractEvent {
   return {
     actorName: row.actor_name,
     createdAt: row.created_at,

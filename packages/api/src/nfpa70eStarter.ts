@@ -1,4 +1,4 @@
-import type { AuditDefinition } from "./auditDefinition";
+import type { AuditDefinition } from "@balebase/validators/audits";
 
 export const nfpa70eStarter = {
   description:

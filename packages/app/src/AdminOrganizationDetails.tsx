@@ -10,15 +10,15 @@ import {
   PageHeader,
   PageSection,
 } from "@balebase/ui/react";
+import type {
+  AdminOrganizationDetail,
+  AdminOrganizationRequirement,
+} from "@balebase/validators/adminOrganizations";
+import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatDate, Identity } from "./adminDisplay";
-import {
-  type AdminOrganizationDetail,
-  type AdminOrganizationRequirement,
-  getAdminOrganization,
-} from "./api";
+import { api } from "./apiClient";
 import { countLabel } from "./labels";
-import type { OrganizationMember } from "./organizationSettingsApi";
 
 export function AdminOrganizationDetails({
   onNavigate,
@@ -35,7 +35,7 @@ export function AdminOrganizationDetails({
     setDetail(undefined);
     setError(undefined);
     try {
-      const result = await getAdminOrganization(organizationId);
+      const result = await api.adminOrganizations.get(organizationId);
       if (requestId === requestSequence.current) setDetail(result);
     } catch (cause) {
       if (requestId === requestSequence.current) {

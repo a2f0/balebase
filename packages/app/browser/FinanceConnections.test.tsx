@@ -3,10 +3,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { FinanceConnection } from "@balebase/validators/finance";
 import { type Browser, launch } from "puppeteer-core";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FinanceConnections } from "../src/FinanceAccounts";
-import type { FinanceConnection } from "../src/financeApi";
 
 const { CHROME_PATH } = process.env;
 const chrome =

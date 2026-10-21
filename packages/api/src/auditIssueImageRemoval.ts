@@ -1,3 +1,4 @@
+import { auditsRoutes } from "@balebase/validators/audits";
 import { Hono } from "hono";
 import { activityBatch, activityStatement } from "./activity";
 import {
@@ -6,6 +7,7 @@ import {
 } from "./auditIssueImages";
 import { discardedAuditError, imageAuditNotDiscarded } from "./auditRunRecords";
 import type { AuthVariables } from "./authMiddleware";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 export const auditIssueImageRemoval = new Hono<{
@@ -93,7 +95,12 @@ auditIssueImageRemoval.delete("/:issueId/images/:imageId", async (context) => {
       id: row.object_id,
     });
   } catch {
-    return context.json({ cleanupPending: true }, 202);
+    return respond(
+      context,
+      auditsRoutes.deleteIssueImage,
+      { cleanupPending: true },
+      202,
+    );
   }
   return context.body(null, 204);
 });
