@@ -22,7 +22,7 @@
     },
     "packages/api": {
       "name": "@balebase/api",
-      "version": "0.1.44",
+      "version": "0.1.45",
       "dependencies": {
         "@balebase/validators": "workspace:*",
         "@better-auth/core": "1.7.2",
@@ -52,7 +52,7 @@
     },
     "packages/app": {
       "name": "@balebase/app",
-      "version": "0.1.59",
+      "version": "0.1.60",
       "dependencies": {
         "@balebase/api-client": "workspace:*",
         "@balebase/ui": "workspace:*",
