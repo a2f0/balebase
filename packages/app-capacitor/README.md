@@ -80,6 +80,18 @@ Release builds sign with the selected tier's upload key when
 `BALEBASE_ANDROID_KEYSTORE_PASS` is set. Without it, Gradle signs the release
 APK with the debug signing config so it can still be sideloaded.
 
+## Android instrumentation tests
+
+```sh
+bun run android:test:connected
+```
+
+Runs `android/app/src/androidTest` on a connected device or emulator, against
+the web build from the last Capacitor sync. `WindowInsetsTest` checks that the
+WebView clears system bars and cutouts and ends at the keyboard. CI has no
+emulator, so run these after changing how the native shell handles insets.
+Set `ANDROID_SERIAL` when more than one device is attached.
+
 ## Android Google Play release
 
 ```sh
