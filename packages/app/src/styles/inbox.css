@@ -428,9 +428,19 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Full-size preview in a modal dialog. */
+/* Full-size preview in a modal dialog, centered within the safe area. */
 .previewDialog {
-  width: min(64rem, calc(100vw - var(--space-8)));
+  inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  width: min(
+    64rem,
+    calc(
+      100vw -
+      var(--space-8) -
+      env(safe-area-inset-left, 0px) -
+      env(safe-area-inset-right, 0px)
+    )
+  );
   max-width: none;
   height: calc(
     100dvh -
@@ -565,10 +575,12 @@
 
   /* Full screen below the status bar, which keeps the backdrop. */
   .previewDialog {
+    inset: env(safe-area-inset-top, 0px) 0 0;
     width: 100vw;
     height: calc(100dvh - env(safe-area-inset-top, 0px));
-    margin: env(safe-area-inset-top, 0px) 0 0;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    margin: 0;
+    padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px)
+      env(safe-area-inset-left, 0px);
     border: 0;
     border-radius: 0;
   }

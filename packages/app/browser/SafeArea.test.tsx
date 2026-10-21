@@ -14,10 +14,10 @@ const chrome =
 
 const read = (url: URL) => readFileSync(fileURLToPath(url), "utf8");
 const css = [
-  ...["tokens", "base"].map((name) =>
+  ...["tokens", "base", "contextMenu"].map((name) =>
     read(new URL(`../../ui/src/styles/${name}.css`, import.meta.url)),
   ),
-  ...["shell", "auth"].map((name) =>
+  ...["shell", "auth", "inbox"].map((name) =>
     read(new URL(`../src/styles/${name}.css`, import.meta.url)),
   ),
 ].join("\n");
@@ -29,7 +29,9 @@ const fixtures = {
         <div class="sidebarTop">Balebase</div>
       </div></aside>
       <main class="shellMain" id="main"><div style="height: 2400px"></div></main>
-    </div>`,
+    </div>
+    <div class="contextMenu" id="menu"></div>
+    <dialog class="previewDialog" id="preview"></dialog>`,
   auth: `
     <div class="authShell">
       <aside class="authAside" id="topBar"><div class="authAsideInner">
@@ -74,7 +76,24 @@ async function layOut(
       Math.round(element(id).getBoundingClientRect().top);
     const atRest = top("topBar");
     window.scrollTo(0, 600);
+    const preview = document.querySelector<HTMLDialogElement>("#preview");
+    preview?.showModal();
+    const previewStyle = preview && getComputedStyle(preview);
     return {
+      // ContextMenu.tsx reads these to keep menus clear of the bars.
+      menuInsets: ["top", "right", "bottom", "left"].map((side) =>
+        getComputedStyle(
+          document.getElementById("menu") ?? document.body,
+        ).getPropertyValue(`--safe-area-${side}`),
+      ),
+      preview: preview && {
+        top: Math.round(preview.getBoundingClientRect().top),
+        padding: [
+          previewStyle?.paddingRight,
+          previewStyle?.paddingBottom,
+          previewStyle?.paddingLeft,
+        ],
+      },
       band: { color: band.backgroundColor, height: band.height },
       topBar: { atRest, scrolled: top("topBar") },
       sidebarTop: document.getElementById("sidebarInner")
@@ -111,6 +130,12 @@ it("keeps the app clear of the system bars it draws under", async () => {
     expect(shell.band).toEqual({ color: "rgb(24, 25, 22)", height: "48px" });
     expect(shell.topBar).toEqual({ atRest: 48, scrolled: 48 });
     expect(shell.mainPadding).toEqual(["0px", "24px", "0px"]);
+    expect(shell.menuInsets).toEqual(["48px", "0px", "24px", "0px"]);
+    // A full-screen preview starts below the status bar and pads the rest.
+    expect(shell.preview).toEqual({
+      top: 48,
+      padding: ["0px", "24px", "0px"],
+    });
 
     // Sign-in fills the screen without scrolling.
     const auth = await layOut(browser, "auth", 412, phone);
@@ -128,6 +153,7 @@ it("keeps the app clear of the system bars it draws under", async () => {
     });
     expect(landscape.sidebarTop).toBe(24);
     expect(landscape.sidebarPaddingLeft).toBe("52px");
+    expect(landscape.menuInsets[3]).toBe("40px");
 
     // Browsers and iOS, which report no insets, lay out as before.
     const web = await layOut(browser, "shell", 412, {
