@@ -24,7 +24,7 @@ interface Track {
 const base64Url = (value: string | Buffer) =>
   Buffer.from(value).toString("base64url");
 
-async function accessToken(keyFile: string) {
+export async function accessToken(keyFile: string) {
   const key = JSON.parse(await readFile(keyFile, "utf8")) as ServiceAccount;
   const now = Math.floor(Date.now() / 1000);
   const unsigned = [
@@ -76,15 +76,19 @@ async function play<T>(
   return body;
 }
 
-async function openEdit(token: string, app: string) {
+const appPath = (packageName: string) =>
+  `/androidpublisher/v3/applications/${packageName}`;
+
+async function openEdit(token: string, packageName: string) {
+  const app = appPath(packageName);
   const { id } = await play<{ id: string }>(token, `${app}/edits`, {
     method: "POST",
   });
   return `${app}/edits/${id}`;
 }
 
-async function nextVersionCode(token: string, app: string) {
-  const edit = await openEdit(token, app);
+export async function nextVersionCode(token: string, packageName: string) {
+  const edit = await openEdit(token, packageName);
   // Play rejects any version code it has seen, including bundles left
   // outside a track, so take the largest across bundles and track releases.
   const [{ bundles = [] }, { tracks = [] }] = await Promise.all([
@@ -103,8 +107,12 @@ async function nextVersionCode(token: string, app: string) {
   return Math.max(0, ...codes) + 1;
 }
 
-async function uploadInternal(token: string, app: string, bundlePath: string) {
-  const edit = await openEdit(token, app);
+export async function uploadInternal(
+  token: string,
+  packageName: string,
+  bundlePath: string,
+) {
+  const edit = await openEdit(token, packageName);
   const { versionCode } = await play<{ versionCode: number }>(
     token,
     `/upload${edit}/bundles?uploadType=media`,
@@ -126,18 +134,19 @@ async function uploadInternal(token: string, app: string, bundlePath: string) {
   return versionCode;
 }
 
-const [command, keyFile, packageName, bundlePath] = process.argv.slice(2);
-if (!keyFile || !packageName) throw new Error(usage);
-const app = `/androidpublisher/v3/applications/${packageName}`;
-if (command === "next-version-code") {
-  console.log(await nextVersionCode(await accessToken(keyFile), app));
-} else if (command === "upload-internal" && bundlePath) {
-  const versionCode = await uploadInternal(
-    await accessToken(keyFile),
-    app,
-    bundlePath,
-  );
-  console.log(`Uploaded ${packageName} ${versionCode} to internal testing.`);
-} else {
-  throw new Error(usage);
+if (import.meta.main) {
+  const [command, keyFile, packageName, bundlePath] = process.argv.slice(2);
+  if (!keyFile || !packageName) throw new Error(usage);
+  if (command === "next-version-code") {
+    console.log(await nextVersionCode(await accessToken(keyFile), packageName));
+  } else if (command === "upload-internal" && bundlePath) {
+    const versionCode = await uploadInternal(
+      await accessToken(keyFile),
+      packageName,
+      bundlePath,
+    );
+    console.log(`Uploaded ${packageName} ${versionCode} to internal testing.`);
+  } else {
+    throw new Error(usage);
+  }
 }
