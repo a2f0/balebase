@@ -9,9 +9,10 @@ import {
 /**
  * Where Android draws the page under the status bar, the page paints an ink
  * band behind it, so the bar takes light icons in either theme. Capacitor
- * writes the bar's height to `--safe-area-inset-top` on the root element; it
- * is 0 on WebViews that keep the page below the bar, which keep the system's
- * style.
+ * writes the bar's height to `--safe-area-inset-top` on the root element. It
+ * is 0 on WebViews that keep the page below the bar (before WebView 140); the
+ * bar then shows the window background, which follows the system theme, so
+ * it keeps the system's style.
  */
 export function syncStatusBarStyle(
   root = document.documentElement,

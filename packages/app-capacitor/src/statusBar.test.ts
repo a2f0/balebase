@@ -62,6 +62,15 @@ describe("status bar style", () => {
     });
   });
 
+  it("keeps the system style where the page stays below the bar", async () => {
+    platform.mockReturnValue("android");
+    const root = dom.document.createElement("html") as unknown as HTMLElement;
+    const setStyle = mock(async (_options: SystemBarsStyleOptions) => {});
+    syncStatusBarStyle(root, { setStyle });
+    await reportInset(root, "0px");
+    expect(setStyle).not.toHaveBeenCalled();
+  });
+
   it("leaves iOS on its own style", async () => {
     platform.mockReturnValue("ios");
     const root = dom.document.createElement("html") as unknown as HTMLElement;
