@@ -203,3 +203,114 @@ puts JSON.generate(results)
     fallbackCommands: ["gh", "git"],
   });
 });
+
+test("Android release lanes choose build numbers and Play upload options", async () => {
+  const jsonKey = join(scratch, "play-upload.json");
+  await Bun.write(jsonKey, "{}");
+  const result = await runLanes(
+    `
+fastfile.define_singleton_method(:merged_release_pr_number) { |_options, _prefix| 153 }
+play = { latest: 4 }
+fastfile.define_singleton_method(:latest_google_play_build_number) { |tracks| [{}, play[:latest]] }
+number = lambda do |options|
+  fastfile.send(:next_android_release_build_number, options)[:build_number]
+rescue FastlaneCore::Interface::FastlaneError => e
+  "error: #{e.message}"
+end
+numbers = {
+  merged: number.call({}),
+  next: number.call({ next_google_play: true }),
+  explicit: number.call({ build_number: "9" }),
+  conflict: number.call({ build_number: "9", next_google_play: true }),
+  aheadOfMerged: (play[:latest] = 300; number.call({}))
+}
+aab = Fastlane::FastFile.const_get(:RELEASE_AAB_PATH)
+assets = { assets: [aab, "/tmp/mapping.txt"] }
+upload = fastfile.send(:upload_android_play_release_options, {}, assets)
+override = fastfile.send(
+  :upload_android_play_release_options,
+  { google_track: "alpha", release_status: "draft", validate_only: true },
+  { assets: [aab] }
+)
+signing = begin
+  fastfile.send(:require_android_release_signing!)
+  "ok"
+rescue FastlaneCore::Interface::FastlaneError => e
+  e.message
+end
+puts JSON.generate(
+  numbers: numbers,
+  upload: upload.slice(:package_name, :json_key, :mapping_paths, :track, :release_status, :validate_only, :skip_upload_metadata),
+  aab: upload[:aab] == aab,
+  override: override.slice(:track, :release_status, :validate_only, :mapping_paths),
+  signing: signing
+)
+`,
+    {
+      GOOGLE_PLAY_JSON_KEY_FILE: jsonKey,
+      BALEBASE_ANDROID_KEYSTORE_PASS: "",
+    },
+  );
+  expect(result.numbers).toEqual({
+    merged: 153,
+    next: 5,
+    explicit: 9,
+    conflict:
+      "error: Use either build_number/version_code or next_google_play:true, not both.",
+    aheadOfMerged: 301,
+  });
+  expect(result.upload).toEqual({
+    package_name: "com.balebase.staging.app",
+    json_key: jsonKey,
+    mapping_paths: ["/tmp/mapping.txt"],
+    track: "internal",
+    release_status: "completed",
+    validate_only: false,
+    skip_upload_metadata: true,
+  });
+  expect(result.aab).toBe(true);
+  expect(result.override).toEqual({
+    track: "alpha",
+    release_status: "draft",
+    validate_only: true,
+  });
+  expect(result.signing).toMatch(
+    /Android release keystore does not exist|Missing BALEBASE_ANDROID_KEYSTORE_PASS/,
+  );
+});
+
+test("iOS release lanes resolve the signing team and TestFlight groups", async () => {
+  const result = await runLanes(
+    `
+attempt = lambda do |&block|
+  block.call
+rescue FastlaneCore::Interface::FastlaneError => e
+  "error: #{e.message}"
+end
+puts JSON.generate(
+  teamFromIosName: fastfile.send(:ios_team_id, {}),
+  teamOption: fastfile.send(:ios_team_id, { team_id: "OPTION" }),
+  missingTeam: attempt.call { ENV.delete("IOS_TEAM_ID"); ENV.delete("TEAM_ID"); fastfile.send(:require_ios_team_id!, {}) },
+  groups: fastfile.send(:testflight_groups, { groups: " Staff, ,Beta " }),
+  emptyGroups: fastfile.send(:testflight_groups, { groups: " , " }),
+  externalWithoutGroups: attempt.call { fastfile.send(:require_testflight_distribution_options!, { distribute_external: true }) },
+  submission: [
+    fastfile.send(:testflight_skip_submission?, {}),
+    fastfile.send(:testflight_skip_submission?, { distribute_external: true })
+  ]
+)
+`,
+    { IOS_TEAM_ID: "IOSTEAM", TEAM_ID: "SHARED" },
+  );
+  expect(result).toEqual({
+    teamFromIosName: "IOSTEAM",
+    teamOption: "OPTION",
+    missingTeam:
+      "error: iOS release signing requires IOS_TEAM_ID, APPLE_TEAM_ID, DEVELOPMENT_TEAM, FASTLANE_TEAM_ID, TEAM_ID, or the team_id:<id> Fastlane option.",
+    groups: ["Staff", "Beta"],
+    emptyGroups: null,
+    externalWithoutGroups:
+      "error: External TestFlight distribution requires TESTFLIGHT_GROUPS or groups:<name,name>.",
+    submission: [true, false],
+  });
+});
