@@ -78,9 +78,13 @@ puts JSON.generate(latest: latest, next: next_build[:build_number], calls: calls
 test("the signing keychain's cleanup restores the caller's default keychain", async () => {
   const result = await runLanes(`
 commands = []
-Fastlane::Actions.define_singleton_method(:sh) do |command, **|
+# Every fastlane shell helper (Actions.sh and the Action.sh that
+# create_keychain uses to list keychains) runs through sh_control_output.
+login = "    \\"/Users/me/Library/Keychains/login.keychain-db\\"\\n"
+Fastlane::Actions.define_singleton_method(:sh_control_output) do |*command, **|
+  command = command.join(" ")
   commands << command
-  command == "security default-keychain" ? "    \\"/Users/me/Library/Keychains/login.keychain-db\\"\\n" : ""
+  ["security default-keychain", "security list-keychains -d user"].include?(command) ? login : ""
 end
 FastlaneCore::Helper.define_singleton_method(:keychain_path) { |name| "/tmp/#{name}-db" }
 restored = [true, false].map do |exists|
