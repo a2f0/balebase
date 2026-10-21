@@ -95,8 +95,8 @@ native_release_ensure_android_wrapper() {
   fi
 
   # The wrapper JAR is binary, so cap:prepare restores it from the pinned
-  # Capacitor CLI template instead of tracking it.
-  bun scripts/prepareMobile.ts
+  # Capacitor CLI template, after rendering the native images it copies.
+  bun run cap:prepare
 }
 
 native_release_url_host() {

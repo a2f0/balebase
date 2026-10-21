@@ -64,9 +64,7 @@ def android_gradle_command
     return Shellwords.escape(gradle_path)
   end
 
-  return 'mise exec -- gradle' if system('mise', '--version', out: File::NULL, err: File::NULL)
-
-  UI.user_error!('Gradle is unavailable. Run `mise install` from the repo root.')
+  UI.user_error!('The Gradle wrapper JAR is missing. Run `bun run cap:prepare` in packages/app-capacitor.')
 end
 
 def run_android_gradle(*arguments)

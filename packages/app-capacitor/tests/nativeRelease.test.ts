@@ -169,4 +169,39 @@ describe("native release wrappers", () => {
       );
     }
   });
+  test("a fresh checkout restores the Gradle wrapper with the native images", async () => {
+    const directory = await mkdtemp(resolve(tmpdir(), "balebase-gradle-"));
+    const log = resolve(directory, "bun.log");
+    await Bun.write(
+      resolve(directory, "bin/bun"),
+      '#!/bin/sh\nprintf \'%s\\n\' "$*" >> "$BUN_LOG"\n',
+    );
+    await chmod(resolve(directory, "bin/bun"), 0o755);
+    const ensure = (cwd: string) =>
+      runShell(
+        '. "$1"; cd "$2"; native_release_ensure_android_wrapper',
+        ["sh", nativeReleaseScript, cwd],
+        {
+          ...process.env,
+          BUN_LOG: log,
+          PATH: `${resolve(directory, "bin")}:${Reflect.get(process.env, "PATH") ?? ""}`,
+        },
+      );
+    try {
+      const fresh = resolve(directory, "fresh");
+      await Bun.write(resolve(fresh, "android/gradlew"), "");
+      expect((await ensure(fresh)).exitCode).toBe(0);
+      expect(await Bun.file(log).text()).toBe("run cap:prepare\n");
+
+      const prepared = resolve(directory, "prepared");
+      await Bun.write(
+        resolve(prepared, "android/gradle/wrapper/gradle-wrapper.jar"),
+        "",
+      );
+      expect((await ensure(prepared)).exitCode).toBe(0);
+      expect(await Bun.file(log).text()).toBe("run cap:prepare\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 });

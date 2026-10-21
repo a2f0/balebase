@@ -77,8 +77,13 @@ to `https://api.balebase.com`. Native networking preserves cookie
 authentication; deploy the API's mobile-origin support before testing against
 a remote environment.
 
-To test staging, build with `NATIVE_RELEASE_TIER=staging`, or put these values
-in `packages/app-capacitor/.env.local`:
+To point a local build at staging, prefix these commands with
+`NATIVE_RELEASE_TIER=staging`, or put these values in
+`packages/app-capacitor/.env.local`. The debug app keeps its
+`com.balebase.app` identifier; the staging store app comes from the release
+wrappers.
+
+The `.env.local` values:
 
 ```dotenv
 VITE_API_URL=https://api-staging.balebase.com
