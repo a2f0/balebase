@@ -111,3 +111,39 @@ puts JSON.generate([
 `);
   expect(result).toEqual([true, false, true]);
 });
+
+test("release lanes accept only a bundled config for the tier's app", async () => {
+  const configs = {
+    bundled: {
+      appId: "com.balebase.staging.app",
+      server: { iosScheme: "capacitor" },
+    },
+    production: { appId: "com.balebase.app" },
+    liveReload: {
+      appId: "com.balebase.staging.app",
+      server: { url: "http://192.168.1.20:5173" },
+    },
+  };
+  for (const [name, config] of Object.entries(configs)) {
+    await Bun.write(join(scratch, `${name}.json`), JSON.stringify(config));
+  }
+  const result = await runLanes(`
+results = %w[bundled production liveReload missing].to_h do |name|
+  path = File.join(${JSON.stringify(scratch)}, "#{name}.json")
+  fastfile.send(:ensure_bundled_release_capacitor_config!, path, "Android", "bun run cap:sync:staging android")
+  [name, "accepted"]
+rescue FastlaneCore::Interface::FastlaneError => e
+  [name, e.message]
+end
+puts JSON.generate(results)
+`);
+  expect(result).toEqual({
+    bundled: "accepted",
+    production: `Release Android builds must be fully bundled, but capacitor.config.json sets appId="com.balebase.app" instead of "com.balebase.staging.app". Run \`bun run cap:sync:staging android\` first.`,
+    liveReload:
+      "Release Android builds must be fully bundled, but capacitor.config.json sets server.url=http://192.168.1.20:5173 (usually a leftover live-reload URL). Run `bun run cap:sync:staging android` first.",
+    missing: expect.stringContaining(
+      `Could not load ${join(scratch, "missing.json")}`,
+    ),
+  });
+});
