@@ -33,6 +33,7 @@ const fixtures = {
     <div class="contextMenu" id="menu"></div>
     <dialog class="previewDialog" id="preview"></dialog>
     <dialog class="dialog" id="confirm"><div style="height: 2000px"></div></dialog>`,
+  loading: `<div class="loadingScreen" id="topBar"><div id="main"></div></div>`,
   auth: `
     <div class="authShell">
       <aside class="authAside" id="topBar"><div class="authAsideInner">
@@ -112,6 +113,10 @@ async function layOut(
         document.getElementById("sidebarInner") ?? document.body,
       ).paddingLeft,
       overflow: document.documentElement.scrollHeight - window.innerHeight,
+      bottomStrip: (({ borderBottomColor, borderBottomWidth }) => [
+        borderBottomWidth,
+        borderBottomColor,
+      ])(getComputedStyle(element("topBar"))),
     };
   });
 }
@@ -153,6 +158,12 @@ it("keeps the app clear of the system bars it draws under", async () => {
     expect(auth.topBar.atRest).toBe(48);
     expect(auth.mainPadding[1]).toBe("48px");
     expect(auth.overflow).toBe(0);
+
+    // Loading leaves the navigation bar's strip in the page color, which
+    // its icons follow.
+    const loading = await layOut(browser, "loading", 412, phone);
+    expect(loading.bottomStrip).toEqual(["24px", "rgb(245, 244, 239)"]);
+    expect(loading.overflow).toBe(0);
 
     // In landscape the cutout's side keeps the sidebar's links clear.
     const landscape = await layOut(browser, "shell", 900, {

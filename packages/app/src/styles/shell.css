@@ -310,6 +310,8 @@ body.sidebarResizing {
   place-items: center;
   align-content: center;
   gap: var(--space-5);
+  /* Navigation bar icons follow the theme; keep their strip the page color. */
+  border-bottom: env(safe-area-inset-bottom, 0px) solid var(--color-paper);
   background: var(--color-ink);
 }
 
