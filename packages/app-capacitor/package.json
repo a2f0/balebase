@@ -25,6 +25,7 @@
     "android:sideload": "NATIVE_RELEASE_TIER=production bundle exec fastlane android sideload",
     "android:sideload:debug": "NATIVE_RELEASE_TIER=production bundle exec fastlane android install_debug",
     "android:sideload:release": "NATIVE_RELEASE_TIER=production bundle exec fastlane android install_release",
+    "android:test:connected": "cd android && ./gradlew connectedDebugAndroidTest",
     "ios:build:testflight": "NATIVE_RELEASE_TIER=production bundle exec fastlane ios build_testflight_release",
     "ios:build:testflight:staging": "NATIVE_RELEASE_TIER=staging bundle exec fastlane ios build_testflight_release",
     "ios:upload:testflight": "NATIVE_RELEASE_TIER=production bundle exec fastlane ios upload_testflight_release",
