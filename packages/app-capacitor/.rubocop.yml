@@ -1,0 +1,15 @@
+AllCops:
+  Exclude:
+    - android/**/*
+    - ios/**/*
+    - node_modules/**/*
+    - public/**/*
+    - vendor/bundle/**/*
+  NewCops: enable
+  SuggestExtensions: false
+  TargetRubyVersion: 4.0
+
+Metrics/BlockLength:
+  Exclude:
+    - fastlane/lanes/android.rb
+    - fastlane/lanes/ios.rb

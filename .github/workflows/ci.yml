@@ -31,6 +31,13 @@ jobs:
       - name: Set up TFLint
         uses: terraform-linters/setup-tflint@v6
 
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          ruby-version: "4.0.7"
+          bundler-cache: true
+          working-directory: packages/app-capacitor
+
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install --yes shellcheck
 
@@ -59,6 +66,9 @@ jobs:
 
       - name: Run tests
         run: bun run test
+        env:
+          FASTLANE_OPT_OUT_USAGE: "1"
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
 
       - name: Set up Chrome for browser tests
         uses: browser-actions/setup-chrome@v2
@@ -68,7 +78,9 @@ jobs:
           install-dependencies: true
 
       - name: Test browser layout
-        run: bun run --cwd packages/client test:browser
+        run: |
+          bun run --cwd packages/app test:browser
+          bun run --cwd packages/app-capacitor test:browser
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
 
@@ -78,7 +90,7 @@ jobs:
       - name: Build and sync mobile applications
         run: |
           bun run mobile:sync
-          native_paths=(packages/client/ios packages/client/android)
+          native_paths=(packages/app-capacitor/ios packages/app-capacitor/android)
           test -z "$(git status --porcelain -- "${native_paths[@]}")" || {
             git status --short -- "${native_paths[@]}"
             exit 1

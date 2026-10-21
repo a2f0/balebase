@@ -5,7 +5,7 @@ import type { KnipConfig } from "knip";
 // Exempt the native platform on a fresh checkout, before mobile:sync creates it.
 const androidBeforeSync = existsSync(
   new URL(
-    "./packages/client/android/capacitor.settings.gradle",
+    "./packages/app-capacitor/android/capacitor.settings.gradle",
     import.meta.url,
   ),
 )
@@ -35,12 +35,24 @@ const baseConfig = {
       entry: ["src/**/*.test.ts"],
       project: ["src/**/*.{css,ts}"],
     },
-    "packages/client": {
+    "packages/app": {
       entry: ["browser/**/*.test.tsx"],
       project: ["src/**/*.{css,ts,tsx}", "browser/**/*.tsx"],
+    },
+    "packages/app-capacitor": {
+      entry: ["browser/**/*.test.tsx"],
+      project: [
+        "src/**/*.{css,ts,tsx}",
+        "browser/**/*.{ts,tsx}",
+        "tests/**/*.ts",
+        "scripts/**/*.ts",
+      ],
       // cap sync registers this native plugin; its default Android back handler
       // needs no JavaScript listener and preserves our popstate navigation guard.
       ignoreDependencies: ["@capacitor/app", ...androidBeforeSync],
+    },
+    "packages/app-web": {
+      project: ["src/**/*.{css,ts,tsx}"],
     },
     "packages/ui": {
       entry: ["src/**/*.test.ts"],
@@ -62,10 +74,18 @@ const productionConfig = {
       entry: ["src/**/*.ts!", "!src/**/*.test.ts"],
       project: [],
     },
-    "packages/client": {
+    "packages/app": {
+      entry: ["src/**/*.{ts,tsx}!"],
+      project: [],
+    },
+    "packages/app-capacitor": {
       entry: ["src/**/*.{ts,tsx}!"],
       project: [],
       ignoreDependencies: ["@capacitor/app"],
+    },
+    "packages/app-web": {
+      entry: ["src/**/*.{ts,tsx}!"],
+      project: [],
     },
     // Production mode does not follow CSS @import chains, so the partials
     // that import the font packages are listed as entries themselves.

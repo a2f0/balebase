@@ -13,22 +13,28 @@ repository root unless a command specifies `--cwd`.
 | --- | --- |
 | API routes, authorization, persistence | `packages/api/src` |
 | Database schema | `packages/api/migrations` |
-| Application screens | `packages/client/src` |
-| Native mobile projects and preparation | `packages/client/ios`, `packages/client/android`, `packages/client/scripts`, `scripts/build*.sh`, `scripts/run*.sh`, `scripts/releaseAndroid.sh`, `scripts/googlePlay.ts` |
+| Application screens | `packages/app/src` |
+| Web shell and its Worker | `packages/app-web` |
+| Native shell, mobile projects, and Fastlane lanes | `packages/app-capacitor`, `scripts/*Release.sh`, `scripts/run*.sh`, `scripts/lib/nativeRelease.sh` |
 | Shared components, icons, styles | `packages/ui/src` |
 | Logo and generated images | `assets/brand`, `images` in `agent-tool.json` |
 | Public website | `packages/website/src` |
 | Deployment and maintenance commands | `scripts`, `terraform` |
 | Agent review and merge policy | `agent-tool.json`, `AGENTS.md` |
 
-In the client, a screen such as `Finance.tsx` owns loading and mutations.
+`packages/app` holds every screen and never imports Capacitor. A shell renders
+it with `renderApp` from `@balebase/app/client`, passing the host services in
+`src/host.ts`; the native shell supplies its WebView origin, hosted app URL, and
+share-sheet saver there.
+
+In the app, a screen such as `Finance.tsx` owns loading and mutations.
 `FinanceAccounts.tsx` renders connections and account selection;
 `FinanceTransactionHistory.tsx` owns transaction rows and annotation forms.
 `financeApi.ts` contains HTTP calls, and `financeFormat.ts` formats amounts.
 Follow those concrete responsibilities when a screen needs to be split.
 
 `assets/brand/logo.svg` is the pixel B logo, drawn only with whole-unit
-`<rect>` elements; the client and website import this one copy. The `images`
+`<rect>` elements; the app shells and website import this one copy. The `images`
 section of `agent-tool.json` declares every image generated from it, and the
 pinned `agent-tool images build` renders them, with `pixelSnap` scaling the logo
 by whole numbers. Website and client dev and build write the `favicons` target
@@ -50,12 +56,15 @@ paths, signing material, and build products remain ignored. After changing Capac
 dependencies, sync and commit the updated iOS Swift package manifest, which pins
 the plugin paths resolved by Bun. CI builds and syncs
 the mobile bundle; native SDK builds are described in the operations guide.
+The Fastlane lanes need the pinned Ruby (`mise install`) and
+`bundle install` in `packages/app-capacitor`; `check` runs RuboCop and `test`
+runs the lane tests through that bundle.
 
 ## Check a change
 
 ```sh
 bun run check:fast
-bun run --cwd packages/client test src/Finance.test.tsx
+bun run --cwd packages/app test src/Finance.test.tsx
 bun run --cwd packages/api test src/app.test.ts
 ```
 
@@ -68,13 +77,15 @@ Before opening a PR, run the same commands as CI:
 ```sh
 bun run check
 bun run test
-bun run --cwd packages/client test:browser
+bun run --cwd packages/app test:browser
+bun run --cwd packages/app-capacitor test:browser
 bun run build
 ```
 
-The full check needs ShellCheck, Terraform, and TFLint. Browser tests need
-Chrome or Chromium; set `CHROME_PATH` to its executable when needed. Git's
-pre-commit hook fixes staged formatting; pre-push runs `check` and `test`.
+The full check needs ShellCheck, Terraform, TFLint, and the Ruby bundle.
+Browser tests need Chrome or Chromium; set `CHROME_PATH` to its executable when
+needed. Git's pre-commit hook fixes staged formatting; pre-push runs `check`
+and `test`.
 
 ## Compact command output
 
@@ -132,7 +143,8 @@ For agent-assisted shipping, invoke the `ship-pr` skill. The skills in
 `.claude/skills` and `.agents/skills` are installed from the pinned
 `@a2f0/agent-tool` package; do not edit them. `agent-tool.json` holds the title
 policy, the required CI check, and the versioned packages: a change to
-`packages/api` or `packages/client` ships with a patch bump from
+`packages/api`, `packages/app`, `packages/app-web`, or `packages/app-capacitor`
+ships with a patch bump from
 `agent-tool versions prepare`. Pushes run the normal hooks, with your usual
 environment and credentials, so review script and dependency changes before
 pushing them. After a merge, run `bun run hooks:install` once the checkout is

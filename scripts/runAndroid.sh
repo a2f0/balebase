@@ -1,8 +1,11 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-bun run --cwd "$REPO_ROOT" mobile:sync
-cd "$REPO_ROOT/packages/client"
-exec bunx --bun --no-install cap run android --no-sync "$@"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)"
+cd "$SCRIPT_DIR/../packages/app-capacitor" || exit 1
+
+# The bundle talks to the hosted production API unless VITE_API_URL and
+# VITE_APP_URL (or packages/app-capacitor/.env.local) point elsewhere.
+bun run build
+bun run cap:sync
+exec bun run cap:run:android "$@"

@@ -4,10 +4,13 @@ Balebase runs on Cloudflare Workers, D1, and R2. Every workspace lives
 under `packages/`:
 
 - `packages/api` — Hono API on Cloudflare Workers, with D1 and R2 bindings.
-- `packages/client` — React and Vite application, with Capacitor iOS and Android
-  projects sharing the same screens.
+- `packages/app` — the React application: screens, API calls, and the host
+  interface each shell fills in.
+- `packages/app-web` — the Vite web shell deployed to Cloudflare.
+- `packages/app-capacitor` — the Capacitor iOS and Android shell, with its
+  native projects and Fastlane release lanes.
 - `packages/ui` — the shared design system (tokens, component styles, React
-  primitives, icons, and pricing copy) used by the client and the website.
+  primitives, icons, and pricing copy) used by the app and the website.
 - `packages/website` — static Astro marketing site.
 
 Infrastructure lives outside the workspaces in `terraform` (D1, R2, and
@@ -48,14 +51,15 @@ manages and backs up. See [local secrets](docs/operations.md#local-secrets).
 
 Wrangler persists the local D1 database and R2 bucket under
 `packages/api/.wrangler/`. The client defaults to the local API. Override it by
-copying `packages/client/.env.example` to `packages/client/.env`.
+copying `packages/app-web/.env.example` to `packages/app-web/.env`.
 
 ## Mobile development
 
 The native app is named **Balebase** and uses `com.balebase.app` on both
-platforms. Android's `staging` flavor is **Balebase Staging**
-(`com.balebase.staging.app`) and installs beside it. Install Xcode 26 or later
-for iOS, or Android Studio with Android SDK 37 and JDK 21 for Android. The app
+platforms. Its staging build, **Balebase Staging**
+(`com.balebase.staging.app`), installs beside it. Install Xcode 26 or later
+for iOS, or Android Studio with Android SDK 37 and JDK 21 for Android, and
+the pinned Ruby (`mise install`) for the Fastlane release lanes. The app
 supports iOS 18+ and Android 12+; the iOS floor also covers the embedded PDF
 viewer's browser APIs.
 
@@ -63,31 +67,30 @@ viewer's browser APIs.
 bun run mobile:ios      # build, sync both native projects, and open Xcode
 bun run mobile:android  # build, sync both native projects, and open Android Studio
 bun run mobile:sync     # rebuild web assets, icons, and native dependencies
-./scripts/buildIos.sh   # unsigned simulator build
-./scripts/buildAndroid.sh # debug APK; `debug staging` for staging
 ./scripts/runIos.sh     # build and run on a selected simulator/device
 ./scripts/runAndroid.sh # build and run on a selected emulator/device
 ```
 
 Choose a simulator or connected device and run the app from the IDE. These
-commands bundle the client locally and default to `https://api.balebase.com`.
-Mobile output lives in `packages/client/dist-mobile`, separately from the web
-deployment. Native networking preserves cookie authentication; deploy the API's
-mobile-origin support before testing against a remote environment.
+commands bundle the app locally into `packages/app-capacitor/dist` and default
+to `https://api.balebase.com`. Native networking preserves cookie
+authentication; deploy the API's mobile-origin support before testing against
+a remote environment.
 
-`buildAndroid.sh` sets the backend from its tier argument. For the IDE and
-run scripts, put these values in `packages/client/.env.mobile.local` to test
-staging:
+To test staging, build with `NATIVE_RELEASE_TIER=staging`, or put these values
+in `packages/app-capacitor/.env.local`:
 
 ```dotenv
 VITE_API_URL=https://api-staging.balebase.com
 VITE_APP_URL=https://app-staging.balebase.com
 ```
 
-Both URLs must use HTTPS. A shared `.env` pointing at the local HTTP API must
-be overridden for mobile builds. Emailed verification and password-reset links
-open the hosted app. See [mobile builds and release setup](docs/operations.md#mobile-builds-and-release-setup)
-for release builds and Google Play internal testing.
+Both URLs must use HTTPS. Emailed verification and password-reset links open
+the hosted app. See
+[packages/app-capacitor/README.md](packages/app-capacitor/README.md) for the
+store release lanes and
+[mobile builds and release setup](docs/operations.md#mobile-builds-and-release-setup)
+for the remaining store setup.
 
 ## Working in the repo
 

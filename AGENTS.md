@@ -20,10 +20,11 @@ check, `check`, and `test`. Capture noisy finite commands with
 `bun run agent:run --label <check> -- <command>`.
 
 Ship with the installed `ship-pr` skill. Title, required CI, and version policy
-are in `agent-tool.json`: changes to `packages/api` or `packages/client` ship
-with `agent-tool versions prepare <base-oid>`. After a merge returns the
-checkout to `main`, run `bun run hooks:install`. Merging does not deploy;
-deploy only when asked, following docs/operations.md.
+are in `agent-tool.json`: changes to `packages/api`, `packages/app`,
+`packages/app-web`, or `packages/app-capacitor` ship with
+`agent-tool versions prepare <base-oid>`. After a merge returns the checkout to
+`main`, run `bun run hooks:install`. Merging does not deploy; deploy only when
+asked, following docs/operations.md.
 
 The skills in `.claude/skills` and `.agents/skills` come from the pinned
 `@a2f0/agent-tool`; do not edit them. After changing the pin, run

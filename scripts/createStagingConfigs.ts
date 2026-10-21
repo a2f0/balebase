@@ -72,9 +72,9 @@ api.r2_buckets = [
 delete api.triggers;
 await save("api", api);
 
-const client = await config("client");
+const client = await config("app-web");
 client.name = "balebase-client-staging";
-await save("client", client);
+await save("app-web", client);
 
 const website = await config("website");
 website.name = "balebase-website-staging";

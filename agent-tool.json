@@ -22,7 +22,12 @@
     "requireStrictBaseFreshness": true
   },
   "versions": {
-    "packages": ["packages/api", "packages/client"]
+    "packages": [
+      "packages/api",
+      "packages/app",
+      "packages/app-capacitor",
+      "packages/app-web"
+    ]
   },
   "pr": { "rejectClaudeBranding": true },
   "images": {
