@@ -96,9 +96,11 @@ Runs `android/app/src/androidTest` on a connected device or emulator, against
 the web build from the last Capacitor sync. `WindowInsetsTest` checks that the
 page asks to draw under the system bars and that the WebView ends at the
 keyboard. On WebView 140 and later, Capacitor leaves the bars and cutouts to
-the page's safe-area padding; older WebViews keep the page clear of them. CI
-has no emulator, so run these after changing how the native shell handles
-insets. Set `ANDROID_SERIAL` when more than one device is attached.
+the page's safe-area padding; older WebViews keep the page clear of them, and
+the test checks that the bars' icons contrast with the window background
+behind them. CI has no emulator, so run these after changing how the native
+shell handles insets. Set `ANDROID_SERIAL` when more than one device is
+attached.
 
 ## Android Google Play release
 

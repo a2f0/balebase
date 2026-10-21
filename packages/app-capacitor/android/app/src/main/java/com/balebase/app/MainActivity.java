@@ -13,6 +13,7 @@ public class MainActivity extends BridgeActivity {
         // system bars and cutouts unless the page draws under them; padding here
         // as well doubles the gaps. The page sets the bars' style (systemBars.ts).
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        // Behind the WebView only; padded bars show the window background.
         findViewById(android.R.id.content).setBackgroundColor(Color.rgb(24, 25, 22));
     }
 }

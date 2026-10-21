@@ -1,13 +1,19 @@
 package com.balebase.app;
 
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeFalse;
 
 import android.graphics.Rect;
+import android.graphics.drawable.ColorDrawable;
 import android.view.View;
 import android.webkit.WebView;
+import androidx.core.graphics.ColorUtils;
 import androidx.core.graphics.Insets;
+import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import java.util.concurrent.CountDownLatch;
@@ -48,6 +54,25 @@ public class WindowInsetsTest {
     public void webViewHandlesTheSystemBarsWithoutTheKeyboard() throws InterruptedException {
         int[] expected = drawsUnderBars() ? new int[] { 0, 0, 0, 0 } : new int[] { CUTOUT, STATUS_BAR, 0, NAVIGATION_BAR };
         assertArrayEquals(expected, webViewMargins(false));
+    }
+
+    /**
+     * Where the page stays clear of the bars, they show the window background,
+     * and their icons must contrast with it in either system theme.
+     */
+    @Test
+    public void barIconsContrastWithTheWindowBackground() throws InterruptedException {
+        assumeFalse(drawsUnderBars());
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            assertTrue(viewportFitsCover(scenario));
+            scenario.onActivity((activity) -> {
+                View decor = activity.getWindow().getDecorView();
+                boolean lightBackground = ColorUtils.calculateLuminance(((ColorDrawable) decor.getBackground()).getColor()) > 0.5;
+                WindowInsetsControllerCompat bars = WindowCompat.getInsetsController(activity.getWindow(), decor);
+                assertEquals(lightBackground, bars.isAppearanceLightStatusBars());
+                assertEquals(lightBackground, bars.isAppearanceLightNavigationBars());
+            });
+        }
     }
 
     private static boolean drawsUnderBars() {
