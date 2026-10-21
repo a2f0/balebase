@@ -1,3 +1,9 @@
+import {
+  type ContractTemplate,
+  type ContractTemplateSummary,
+  contractTemplatesRoutes,
+  type TemplateVersion,
+} from "@balebase/validators/contractTemplates";
 import { type Context, Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
 import { draftStatements } from "./contractDraft";
@@ -9,6 +15,7 @@ import {
   templateInput,
 } from "./contractTemplateDefinition";
 import { normalizeFilename } from "./filenames";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 type TemplateEnv = { Bindings: Bindings; Variables: AuthVariables };
@@ -49,8 +56,10 @@ contractTemplates.get("/", async (context) => {
      ORDER BY family.updated_at DESC, family.id DESC`,
   )
     .bind(context.get("organizationId"))
-    .all();
-  return context.json({ templates: result.results });
+    .all<ContractTemplateSummary>();
+  return respond(context, contractTemplatesRoutes.list, {
+    templates: result.results,
+  });
 });
 
 contractTemplates.post("/", async (context) => {
@@ -101,8 +110,11 @@ contractTemplates.post("/", async (context) => {
     await context.env.STORAGE.delete(objectKey);
     throw cause;
   }
-  return context.json(
-    { template: toDetail(await findVersion(context, id)) },
+  const created = await findVersion(context, id);
+  return respond(
+    context,
+    contractTemplatesRoutes.upload,
+    { template: created && toDetail(created) },
     201,
   );
 });
@@ -117,7 +129,9 @@ contractTemplates.get("/:id", async (context) => {
     selected ? Number(selected) : undefined,
   );
   if (!version) return notFound(context);
-  return context.json({ template: toDetail(version) });
+  return respond(context, contractTemplatesRoutes.get, {
+    template: toDetail(version),
+  });
 });
 
 contractTemplates.get("/:id/versions", async (context) => {
@@ -132,8 +146,10 @@ contractTemplates.get("/:id/versions", async (context) => {
      WHERE family.id = ? AND family.organization_id = ? ORDER BY version.version DESC`,
   )
     .bind(context.req.param("id"), context.get("organizationId"))
-    .all();
-  return context.json({ versions: result.results });
+    .all<TemplateVersion>();
+  return respond(context, contractTemplatesRoutes.versions, {
+    versions: result.results,
+  });
 });
 
 contractTemplates.get("/:id/document", async (context) => {
@@ -227,12 +243,11 @@ contractTemplates.post("/:id/versions", async (context) => {
       },
       409,
     );
-  return context.json(
-    {
-      template: toDetail(
-        await findVersion(context, source.template_id, expected + 1),
-      ),
-    },
+  const created = await findVersion(context, source.template_id, expected + 1);
+  return respond(
+    context,
+    contractTemplatesRoutes.saveVersion,
+    { template: created && toDetail(created) },
     201,
   );
 });
@@ -312,7 +327,12 @@ contractTemplates.post("/:id/contracts", async (context) => {
     await context.env.STORAGE.delete(objectKey);
     throw cause;
   }
-  return context.json({ contractId: id }, 201);
+  return respond(
+    context,
+    contractTemplatesRoutes.createContract,
+    { contractId: id },
+    201,
+  );
 });
 
 contractTemplates.delete("/:id", async (context) => {
@@ -338,8 +358,7 @@ function findVersion(context: TemplateContext, id: string, version?: number) {
     .first<VersionRow>();
 }
 
-function toDetail(row: VersionRow | null) {
-  if (!row) return null;
+function toDetail(row: VersionRow): ContractTemplate {
   return {
     createdAt: row.created_at,
     createdByName: row.created_by_name,

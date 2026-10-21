@@ -1,3 +1,5 @@
+import type { StoredObject } from "@balebase/validators/objects";
+
 export interface Bindings {
   AUTH_EMAIL_FROM: string;
   BETTER_AUTH_SECRET: string;
@@ -22,16 +24,6 @@ export interface Bindings {
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   STORAGE: R2Bucket;
-}
-
-interface StoredObject {
-  folderId: string | null;
-  id: string;
-  objectKey: string;
-  filename: string;
-  contentType: string;
-  size: number;
-  createdAt: string;
 }
 
 export interface StoredObjectRow {

@@ -1,9 +1,7 @@
+import type { FinanceFilters } from "@balebase/api-client";
+import type { FinanceData } from "@balebase/validators/finance";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  type FinanceData,
-  type FinanceFilters,
-  getFinanceData,
-} from "./financeApi";
+import { api } from "./apiClient";
 
 type CategoryRoute = Pick<FinanceFilters, "categorySlug" | "uncategorized">;
 
@@ -141,14 +139,14 @@ async function loadFinancePages(
   minimum: number,
   current: () => boolean,
 ) {
-  const result = await getFinanceData(filters, cursor);
+  const result = await api.finance.data(filters, cursor);
   if (cursor) return result;
   while (
     current() &&
     result.nextCursor &&
     result.transactions.length < minimum
   ) {
-    const next = await getFinanceData(filters, result.nextCursor);
+    const next = await api.finance.data(filters, result.nextCursor);
     result.transactions.push(...next.transactions);
     result.nextCursor = next.nextCursor;
   }

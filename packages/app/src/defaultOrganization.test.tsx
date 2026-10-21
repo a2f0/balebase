@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AccountSettings } from "./AccountSettings";
-import { saveDefaultOrganizationPreference } from "./accountSettingsApi";
+import { saveDefaultOrganizationPreference } from "./defaultOrganization";
 
 const originalFetch = globalThis.fetch;
 

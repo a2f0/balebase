@@ -11,14 +11,11 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
+import type { AuditTemplate } from "@balebase/validators/audits";
 import { useEffect, useState } from "react";
 import { TemplateStats, templateStatusTone } from "./AuditHome";
 import { AuditTemplateBuilder } from "./AuditTemplateBuilder";
-import {
-  type AuditTemplate,
-  createAuditTemplate,
-  listAuditTemplates,
-} from "./auditApi";
+import { api } from "./apiClient";
 import { countLabel, formatLabel } from "./labels";
 import {
   globalAuditsPath,
@@ -60,8 +57,9 @@ function GlobalAuditList({
   const [error, setError] = useState<string>();
 
   useEffect(() => {
-    listAuditTemplates(true)
-      .then(setTemplates)
+    api.adminAuditTemplates
+      .list()
+      .then(({ templates }) => setTemplates(templates))
       .catch((cause: unknown) =>
         setError(messageFrom(cause, "Could not load global forms.")),
       );
@@ -71,7 +69,8 @@ function GlobalAuditList({
     setBusy(true);
     setError(undefined);
     try {
-      const template = await createAuditTemplate("Untitled checklist", true);
+      const { template } =
+        await api.adminAuditTemplates.create("Untitled checklist");
       onNavigate(globalAuditsPath(template.id));
     } catch (cause) {
       setError(messageFrom(cause, "Could not create the global form."));

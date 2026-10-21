@@ -8,13 +8,13 @@ import {
   LoadingState,
   PageSection,
 } from "@balebase/ui/react";
+import type {
+  ExpenseCategoryTotal,
+  ExpenseReport,
+  ExpenseReportCurrency,
+} from "@balebase/validators/finance";
 import { useEffect, useState } from "react";
-import {
-  type ExpenseCategoryTotal,
-  type ExpenseReport,
-  type ExpenseReportCurrency,
-  getExpenseReport,
-} from "./financeApi";
+import { api } from "./apiClient";
 import { formatMoney } from "./financeFormat";
 import {
   categoryShare,
@@ -71,7 +71,8 @@ function useExpenseReport(range: ReportRange, invalid: boolean) {
     let current = true;
     setReport(undefined);
     setError(undefined);
-    getExpenseReport({ from, to })
+    api.finance
+      .expenseReport({ from, to })
       .then((next) => {
         if (current) setReport(next);
       })

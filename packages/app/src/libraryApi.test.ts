@@ -1,18 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import {
-  createLibraryFolder,
-  deleteLibraryFolder,
-  getLibraryFolder,
-  linkInboundEmail,
-  listLibraryFolders,
-  listObjects,
-  moveObject,
-  renameLibraryFolder,
-  unlinkInboundEmail,
-  uploadObject,
-} from "./api";
+import { api } from "./apiClient";
 import { apiUrl } from "./config";
-import { searchFinanceTransactions } from "./financeApi";
 
 interface RecordedRequest {
   body: BodyInit | null | undefined;
@@ -44,22 +32,22 @@ describe("library and link API", () => {
     }) as typeof fetch;
 
     try {
-      await listObjects();
-      await listObjects("folder/1");
-      await uploadObject(new File(["x"], "a.txt"), "folder/1");
-      await moveObject("object/1", null);
-      await listLibraryFolders();
-      await getLibraryFolder("folder/1");
-      await createLibraryFolder("Taxes");
-      await renameLibraryFolder("folder/1", "Receipts");
-      await deleteLibraryFolder("folder/1");
-      await linkInboundEmail("email/1", {
+      await api.objects.list();
+      await api.objects.list("folder/1");
+      await api.objects.upload(new File(["x"], "a.txt"), "folder/1");
+      await api.objects.move("object/1", null);
+      await api.libraryFolders.list();
+      await api.libraryFolders.get("folder/1");
+      await api.libraryFolders.create("Taxes");
+      await api.libraryFolders.rename("folder/1", "Receipts");
+      await api.libraryFolders.delete("folder/1");
+      await api.inbox.link("email/1", {
         targetId: "folder/1",
         targetType: "library_folder",
       });
-      await unlinkInboundEmail("email/1", "link/1");
-      await searchFinanceTransactions("  $42.75 ");
-      await searchFinanceTransactions(" ");
+      await api.inbox.unlink("email/1", "link/1");
+      await api.finance.searchTransactions("  $42.75 ");
+      await api.finance.searchTransactions(" ");
 
       const folder = `${apiUrl}/api/library/folders/folder%2F1`;
       expect(requests.map(({ method, url }) => `${method} ${url}`)).toEqual([

@@ -1,3 +1,7 @@
+import {
+  type OrganizationInvitation,
+  organizationSettingsRoutes,
+} from "@balebase/validators/organizationSettings";
 import { Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
 import {
@@ -10,15 +14,8 @@ import {
   isOrganizationOwner,
   listOrganizationMembers,
 } from "./organizationMembers";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
-
-interface InvitationRow {
-  email: string;
-  expiresAt: string;
-  id: string;
-  role: string;
-  status: string;
-}
 
 interface OrganizationRow {
   id: string;
@@ -43,7 +40,9 @@ organizationSettings.get("/organizations", async (context) => {
   )
     .bind(userId)
     .all<OrganizationRow>();
-  return context.json({ organizations: result.results });
+  return respond(context, organizationSettingsRoutes.organizations, {
+    organizations: result.results,
+  });
 });
 
 organizationSettings.get("/people", async (context) => {
@@ -57,7 +56,7 @@ organizationSettings.get("/people", async (context) => {
       : Promise.resolve([]),
   ]);
   const userId = context.get("authSession").user.id;
-  return context.json({
+  return respond(context, organizationSettingsRoutes.people, {
     currentMemberId: members.find(({ user }) => user.id === userId)?.id ?? null,
     invitations,
     memberRole,
@@ -101,7 +100,11 @@ organizationSettings.patch(
     )
       .bind(body.required, memberId, organizationId)
       .run();
-    return context.json({ memberId, required: body.required });
+    return respond(
+      context,
+      organizationSettingsRoutes.updateMemberTwoFactorRequirement,
+      { memberId, required: body.required },
+    );
   },
 );
 
@@ -163,7 +166,7 @@ organizationSettings.delete("/current", async (context) => {
     );
     return context.json({ error: "Organization was already deleted." }, 409);
   }
-  return context.json(deletion);
+  return respond(context, organizationSettingsRoutes.deleteCurrent, deletion);
 });
 
 async function listPendingInvitations(
@@ -178,7 +181,7 @@ async function listPendingInvitations(
        ORDER BY createdAt DESC`,
     )
     .bind(organizationId)
-    .all<InvitationRow>();
+    .all<OrganizationInvitation>();
   return result.results;
 }
 

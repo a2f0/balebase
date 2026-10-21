@@ -13,19 +13,15 @@ import {
   PageHeader,
   Toast,
 } from "@balebase/ui/react";
+import type {
+  AuditTemplate,
+  AuditTemplateItem,
+  AuditTemplateSection,
+  AuditTemplateVersion,
+} from "@balebase/validators/audits";
 import { type ReactNode, useEffect, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
-import {
-  type AuditTemplate,
-  type AuditTemplateItem,
-  type AuditTemplateSection,
-  type AuditTemplateVersion,
-  copyAuditTemplate,
-  getAuditTemplate,
-  getAuditTemplateVersion,
-  listAuditTemplateVersions,
-  updateAuditTemplate,
-} from "./auditApi";
+import { api } from "./apiClient";
 import { type ErrorNotice, ErrorToast, errorNotice } from "./BillingLink";
 import { GlobalAuditControls } from "./GlobalAuditControls";
 import { countLabel } from "./labels";
@@ -43,6 +39,43 @@ interface BackLink {
   onBack: () => void;
 }
 
+/**
+ * A template, at its current version unless one is given. Root admin's
+ * Global Audits reads global forms; an organization, its own and published
+ * global forms.
+ */
+function loadTemplate(id: string, manageGlobal: boolean, version?: number) {
+  if (manageGlobal) {
+    return version === undefined
+      ? api.adminAuditTemplates.get(id)
+      : api.adminAuditTemplates.getVersion(id, version);
+  }
+  return version === undefined
+    ? api.audits.getTemplate(id)
+    : api.audits.getTemplateVersion(id, version);
+}
+
+function loadVersions(id: string, manageGlobal: boolean) {
+  return manageGlobal
+    ? api.adminAuditTemplates.listVersions(id)
+    : api.audits.listTemplateVersions(id);
+}
+
+/**
+ * Saves the editor's copy as the template's next version. Only Global Audits
+ * publishes; an organization's edits to a global form become a form of its own.
+ */
+function saveTemplate(
+  template: AuditTemplate,
+  manageGlobal: boolean,
+  status?: "published" | "unpublished",
+) {
+  if (manageGlobal) return api.adminAuditTemplates.update(template, status);
+  return template.scope === "global"
+    ? api.audits.copyTemplate(template)
+    : api.audits.updateTemplate(template);
+}
+
 function useTemplateBuilder({
   id,
   manageGlobal = false,
@@ -57,10 +90,10 @@ function useTemplateBuilder({
 
   useEffect(() => {
     Promise.all([
-      getAuditTemplate(id, manageGlobal),
-      listAuditTemplateVersions(id, manageGlobal),
+      loadTemplate(id, manageGlobal),
+      loadVersions(id, manageGlobal),
     ])
-      .then(([nextTemplate, nextVersions]) => {
+      .then(([{ template: nextTemplate }, { versions: nextVersions }]) => {
         setTemplate(nextTemplate);
         setCurrentStatus(nextTemplate.status);
         setVersions(nextVersions);
@@ -76,10 +109,11 @@ function useTemplateBuilder({
     setError(undefined);
     setNotice(undefined);
     try {
-      const selected =
-        version === template.currentVersion
-          ? await getAuditTemplate(id, manageGlobal)
-          : await getAuditTemplateVersion(id, version, manageGlobal);
+      const { template: selected } = await loadTemplate(
+        id,
+        manageGlobal,
+        version === template.currentVersion ? undefined : version,
+      );
       setTemplate(selected);
     } catch (cause) {
       setError(errorNotice(cause, "Could not save checklist."));
@@ -95,9 +129,11 @@ function useTemplateBuilder({
     setNotice(undefined);
     try {
       const copiedGlobal = template.scope === "global" && !manageGlobal;
-      const saved = copiedGlobal
-        ? await copyAuditTemplate(template)
-        : await updateAuditTemplate(template, manageGlobal, status);
+      const { template: saved } = await saveTemplate(
+        template,
+        manageGlobal,
+        status,
+      );
       setTemplate(saved);
       setCurrentStatus(saved.status);
       setNotice(
@@ -110,7 +146,7 @@ function useTemplateBuilder({
       if (saved.id !== id) {
         onNavigate(`/audits/templates/${encodeURIComponent(saved.id)}`);
       }
-      setVersions(await listAuditTemplateVersions(saved.id, manageGlobal));
+      setVersions((await loadVersions(saved.id, manageGlobal)).versions);
     } catch (cause) {
       setError(errorNotice(cause, "Could not save checklist."));
     } finally {

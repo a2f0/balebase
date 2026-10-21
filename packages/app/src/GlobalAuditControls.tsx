@@ -1,6 +1,7 @@
 import { Badge, Button, confirmDialog, Toast } from "@balebase/ui/react";
+import type { AuditTemplate } from "@balebase/validators/audits";
 import { useState } from "react";
-import { type AuditTemplate, discardGlobalAuditTemplate } from "./auditApi";
+import { api } from "./apiClient";
 import { formatLabel } from "./labels";
 
 /** Publication changes save the editor's content, including unsaved edits. */
@@ -33,7 +34,7 @@ export function GlobalAuditControls({
     setDiscarding(true);
     setError(undefined);
     try {
-      await discardGlobalAuditTemplate(template);
+      await api.adminAuditTemplates.discard(template);
       onDiscarded();
     } catch (cause) {
       setError(

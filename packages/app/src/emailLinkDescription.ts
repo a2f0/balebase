@@ -1,5 +1,5 @@
 import type { IconName } from "@balebase/ui/react";
-import type { InboundEmailLink } from "./api";
+import type { InboundEmailLink } from "@balebase/validators/inbox";
 import { equipmentName, equipmentTypeIcon } from "./equipmentLabels";
 import { formatMoney } from "./financeFormat";
 import { equipmentPath, libraryPath } from "./workspacePaths";

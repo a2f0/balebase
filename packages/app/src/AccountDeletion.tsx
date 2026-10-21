@@ -1,35 +1,15 @@
 import { Button, Card, confirmDialog, Toast } from "@balebase/ui/react";
 import { useEffect, useState } from "react";
-import { fetchApi } from "./apiVersion";
-import { apiUrl } from "./config";
-
-async function deletionRequest(method: "GET" | "POST" | "DELETE") {
-  const response = await fetchApi(`${apiUrl}/api/account-settings/deletion`, {
-    method,
-    credentials: "include",
-    ...(method === "POST"
-      ? {
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ confirm: "delete my account" }),
-        }
-      : {}),
-  });
-  const body = (await response.json()) as {
-    requestedAt?: string | null;
-    error?: string;
-  };
-  if (!response.ok)
-    throw new Error(body.error ?? "Could not update the deletion request.");
-  return body;
-}
+import { api } from "./apiClient";
 
 export function AccountDeletion() {
   const [requestedAt, setRequestedAt] = useState<string | null>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   useEffect(() => {
-    void deletionRequest("GET")
-      .then((body) => setRequestedAt(body.requestedAt ?? null))
+    void api.accountSettings
+      .deletion()
+      .then((body) => setRequestedAt(body.requestedAt))
       .catch((cause: unknown) => setError(messageFrom(cause)));
   }, []);
 
@@ -38,9 +18,11 @@ export function AccountDeletion() {
     setBusy(true);
     setError(undefined);
     try {
-      await deletionRequest(requestedAt ? "DELETE" : "POST");
-      const body = await deletionRequest("GET");
-      setRequestedAt(body.requestedAt ?? null);
+      await (requestedAt
+        ? api.accountSettings.cancelDeletion()
+        : api.accountSettings.requestDeletion());
+      const body = await api.accountSettings.deletion();
+      setRequestedAt(body.requestedAt);
     } catch (cause) {
       setError(messageFrom(cause));
     } finally {

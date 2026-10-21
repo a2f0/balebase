@@ -1,14 +1,8 @@
 import { describe, expect, it } from "bun:test";
+import { api } from "./apiClient";
 import { apiUrl } from "./config";
-import {
-  declineContract,
-  getSigning,
-  signContract,
-  signingDocumentUrl,
-  signingFinalUrl,
-} from "./signingApi";
 
-describe("signing API", () => {
+describe("signing requests", () => {
   it("authorizes with the token alone, never cookies", async () => {
     const originalFetch = globalThis.fetch;
     const requests: Array<{
@@ -34,13 +28,15 @@ describe("signing API", () => {
         signature: "data:image/png;base64,AA==",
         values: { f1: "Acme" },
       };
-      await getSigning("tok");
-      await signContract("tok", signature);
-      await declineContract("tok", "Wrong rate");
+      await api.signing.get("tok");
+      await api.signing.sign("tok", signature);
+      await api.signing.decline("tok", "Wrong rate");
+      await api.signing.document("tok");
       expect(requests.map(({ method, url }) => `${method} ${url}`)).toEqual([
         `GET ${apiUrl}/api/signing/tok`,
         `POST ${apiUrl}/api/signing/tok/sign`,
         `POST ${apiUrl}/api/signing/tok/decline`,
+        `GET ${apiUrl}/api/signing/tok/document`,
       ]);
       expect(requests[0]?.headers).toBeUndefined();
       expect(requests[1]?.headers).toEqual({
@@ -48,10 +44,12 @@ describe("signing API", () => {
       });
       expect(requests[1]?.body).toBe(JSON.stringify(signature));
       expect(requests[2]?.body).toBe(JSON.stringify({ reason: "Wrong rate" }));
-      expect(signingDocumentUrl("tok")).toBe(
+      expect(api.signing.documentUrl("tok")).toBe(
         `${apiUrl}/api/signing/tok/document`,
       );
-      expect(signingFinalUrl("tok")).toBe(`${apiUrl}/api/signing/tok/final`);
+      expect(api.signing.finalUrl("tok")).toBe(
+        `${apiUrl}/api/signing/tok/final`,
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -65,7 +63,7 @@ describe("signing API", () => {
         { status: 404 },
       )) as typeof fetch;
     try {
-      await expect(getSigning("tok")).rejects.toThrow(
+      await expect(api.signing.get("tok")).rejects.toThrow(
         "This signing link is no longer valid.",
       );
     } finally {

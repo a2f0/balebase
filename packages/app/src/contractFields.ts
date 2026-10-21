@@ -4,12 +4,21 @@ import {
   type IconName,
 } from "@balebase/ui/react";
 import type {
+  ContractDraft,
   ContractEvent,
   ContractStatus,
   FieldBox,
   FieldType,
   RecipientStatus,
-} from "./contractsApi";
+} from "@balebase/validators/contracts";
+
+/** A placed field as the editors hold it, keyed so it can be selected. */
+export type DraftField = ContractDraft["fields"][number] & { key: string };
+
+/** A draft as the editors hold it; a template's roles are its signers. */
+export type DraftInput = Omit<ContractDraft, "fields"> & {
+  fields: DraftField[];
+};
 
 /** Field kinds in toolbar order, with their default size in PDF points. */
 export const fieldTypes: Array<{

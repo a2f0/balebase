@@ -6,21 +6,13 @@ import {
   Logo,
   promptDialog,
 } from "@balebase/ui/react";
+import type { SigningField, SigningView } from "@balebase/validators/signing";
 import { useEffect, useState } from "react";
 import { ApiDownload } from "./ApiDownload";
-import { fetchApi } from "./apiVersion";
+import { api } from "./apiClient";
 import { boxStyle, ContractPages } from "./ContractDocument";
 import { fieldTypeLabel, initialsFor } from "./contractFields";
 import { SignatureDialog } from "./SignatureDialog";
-import {
-  declineContract,
-  getSigning,
-  type SigningField,
-  type SigningView,
-  signContract,
-  signingDocumentUrl,
-  signingFinalUrl,
-} from "./signingApi";
 
 /** The page a signer opens from their emailed link; needs no account. */
 export function SigningPage({ token }: { token: string }) {
@@ -28,7 +20,8 @@ export function SigningPage({ token }: { token: string }) {
   const [error, setError] = useState<string>();
   useEffect(() => {
     let active = true;
-    getSigning(token)
+    api.signing
+      .get(token)
       .then((result) => {
         if (active) setView(result);
       })
@@ -99,7 +92,7 @@ function useSigningSession(
     setError(undefined);
     try {
       await action();
-      onFinished(await getSigning(token));
+      onFinished(await api.signing.get(token));
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Something went wrong.",
@@ -114,14 +107,14 @@ function useSigningSession(
       const reason = await askDeclineReason();
       if (reason === null) return;
       void run(async () => {
-        await declineContract(token, reason);
+        await api.signing.decline(token, reason);
       });
     },
     dialog,
     error,
     finish: () =>
       run(async () => {
-        await signContract(token, { consent, initials, signature, values });
+        await api.signing.sign(token, { consent, initials, signature, values });
       }),
     initials,
     remaining,
@@ -164,7 +157,7 @@ function SigningSession({
         <div>
           <ApiDownload
             filename="contract.pdf"
-            href={signingDocumentUrl(token)}
+            href={api.signing.documentUrl(token)}
             icon="download"
             size="sm"
           >
@@ -342,7 +335,7 @@ function SigningOutcome({ token, view }: { token: string; view: SigningView }) {
   const download = contract.status === "completed" && (
     <ApiDownload
       filename="signed-contract.pdf"
-      href={signingFinalUrl(token)}
+      href={api.signing.finalUrl(token)}
       icon="download"
       variant="primary"
     >
@@ -391,10 +384,8 @@ function SigningOutcome({ token, view }: { token: string; view: SigningView }) {
 }
 
 async function fetchSigningDocument(token: string) {
-  const response = await fetchApi(signingDocumentUrl(token), {
-    credentials: "omit",
-  });
-  if (!response.ok) throw new Error("The document could not be loaded.");
+  const response = await api.signing.document(token).catch(() => undefined);
+  if (!response) throw new Error("The document could not be loaded.");
   return response.arrayBuffer();
 }
 

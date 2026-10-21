@@ -1,22 +1,8 @@
-type AuditResponseType = "check" | "text";
-
-interface AuditTemplateItem {
-  id: string;
-  prompt: string;
-  required: boolean;
-  responseType: AuditResponseType;
-}
-
-interface AuditTemplateSection {
-  id: string;
-  items: AuditTemplateItem[];
-  title: string;
-}
-
-export interface AuditDefinition {
-  sections: AuditTemplateSection[];
-  version: 1;
-}
+import type {
+  AuditDefinition,
+  AuditTemplateItem,
+  AuditTemplateSection,
+} from "@balebase/validators/audits";
 
 interface UnknownRecord {
   assignedTo?: unknown;

@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
+import type { ContractTemplate } from "@balebase/validators/contractTemplates";
 import { Window } from "happy-dom";
 import { act, useState } from "react";
 import type { Root } from "react-dom/client";
@@ -11,8 +12,7 @@ import {
   useContractFieldEditor,
 } from "./ContractFieldEditor";
 import { Contracts } from "./Contracts";
-import type { DraftInput } from "./contractsApi";
-import type { ContractTemplate } from "./contractTemplatesApi";
+import type { DraftInput } from "./contractFields";
 import { canNavigate, guardWorkspaceChange } from "./navigationGuard";
 
 const dom = new Window({ url: "http://localhost:5173/contracts/templates/t1" });

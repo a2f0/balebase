@@ -1,13 +1,13 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
-import { Window } from "happy-dom";
-import { act } from "react";
-import type { Root } from "react-dom/client";
-import type { EmployeeRequirement } from "./employeeFormsApi";
+import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import type {
   OrganizationMember,
   OrganizationPeopleData,
-} from "./organizationSettingsApi";
+} from "@balebase/validators/organizationSettings";
+import { Window } from "happy-dom";
+import { act } from "react";
+import type { Root } from "react-dom/client";
 
 const dom = new Window({ url: "http://localhost:5173/organization/people" });
 const domGlobals = {

@@ -11,7 +11,10 @@ import {
   LoadingState,
   PageSection,
 } from "@balebase/ui/react";
-import type { FinanceAccount, FinanceConnection } from "./financeApi";
+import type {
+  FinanceAccount,
+  FinanceConnection,
+} from "@balebase/validators/finance";
 import { formatMoney } from "./financeFormat";
 import { financeConnectionPath } from "./financePages";
 import { countLabel, formatLabel } from "./labels";

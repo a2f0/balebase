@@ -1,12 +1,9 @@
 import { Button, Card, Field, Toast } from "@balebase/ui/react";
+import type { ContractTemplate } from "@balebase/validators/contractTemplates";
 import { useEffect, useRef, useState } from "react";
+import { api } from "./apiClient";
 import { boxStyle, ContractPages } from "./ContractDocument";
 import { fieldTypeLabel, localDate, recipientTone } from "./contractFields";
-import {
-  type ContractTemplate,
-  createContractFromTemplate,
-  loadTemplateDocument,
-} from "./contractTemplatesApi";
 
 export function ContractTemplateMapping({
   template,
@@ -34,7 +31,9 @@ export function ContractTemplateMapping({
       </aside>
       <div className="contractEditorDocument">
         <ContractPages
-          load={() => loadTemplateDocument(template.id, template.version)}
+          load={() =>
+            api.contractTemplates.loadDocument(template.id, template.version)
+          }
           renderOverlay={(page) =>
             template.definition.fields
               .filter((field) => field.page === page.number)
@@ -97,7 +96,7 @@ function useRoleMapping(
     setBusy(true);
     setError(undefined);
     try {
-      const id = await createContractFromTemplate(template.id, {
+      const id = await api.contractTemplates.createContract(template.id, {
         dueDate: dueDate || null,
         recipients,
         title,

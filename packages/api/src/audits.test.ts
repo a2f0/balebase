@@ -1,9 +1,9 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
+import type { AuditDefinition } from "@balebase/validators/audits";
 import { Hono } from "hono";
 import { activity } from "./activity";
 import { adminAuditTemplates } from "./adminAuditTemplates";
-import type { AuditDefinition } from "./auditDefinition";
 import {
   ImageUploadReadTimeoutError,
   purgePendingAuditIssueImages,

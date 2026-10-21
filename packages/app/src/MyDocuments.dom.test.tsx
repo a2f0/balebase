@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import type { EmployeeRequirement } from "./employeeFormsApi";
 import { MyDocuments } from "./MyDocuments";
 
 const dom = new Window({ url: "http://localhost:5173/me" });

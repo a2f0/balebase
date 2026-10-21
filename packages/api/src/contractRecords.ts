@@ -1,3 +1,9 @@
+import type {
+  ContractStatus,
+  FieldType,
+  RecipientStatus,
+  SigningOrder,
+} from "@balebase/validators/contracts";
 import {
   type ContractMail,
   contractUrl,
@@ -47,8 +53,8 @@ export interface ContractRow {
   revision: number;
   sent_at: string | null;
   sent_by: string | null;
-  signing_order: "parallel" | "sequential";
-  status: "completed" | "declined" | "draft" | "sent" | "voided";
+  signing_order: SigningOrder;
+  status: ContractStatus;
   template_name: string | null;
   template_version: number | null;
   title: string;
@@ -73,7 +79,7 @@ export interface RecipientRow {
   signed_at: string | null;
   signed_ip: string | null;
   signed_user_agent: string | null;
-  status: "declined" | "pending" | "sent" | "signed" | "viewed";
+  status: RecipientStatus;
   token_hash: string | null;
   token_nonce: string | null;
   viewed_at: string | null;
@@ -87,7 +93,7 @@ export interface FieldRow {
   page: number;
   recipient_id: string;
   required: number;
-  type: "date_signed" | "initials" | "name" | "signature" | "text";
+  type: FieldType;
   value: string | null;
   width: number;
   x: number;

@@ -12,17 +12,14 @@ import {
   PageHeader,
   PageSection,
 } from "@balebase/ui/react";
+import type {
+  AuditRunView,
+  AuditSummary,
+  AuditTemplate,
+  AuditTemplateScope,
+} from "@balebase/validators/audits";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  type AuditRunView,
-  type AuditSummary,
-  type AuditTemplate,
-  type AuditTemplateScope,
-  createAuditTemplate,
-  listAuditRuns,
-  listAuditTemplates,
-  startAudit,
-} from "./auditApi";
+import { api } from "./apiClient";
 import {
   type AuditTemplateView,
   readAuditTemplateView,
@@ -46,7 +43,7 @@ export function AuditHome({
 
   const loadTemplates = useCallback(async () => {
     try {
-      setTemplates(await listAuditTemplates());
+      setTemplates((await api.audits.listTemplates()).templates);
     } catch (cause) {
       setError(errorNotice(cause, "Could not load audits."));
     }
@@ -58,7 +55,8 @@ export function AuditHome({
     setBusy(true);
     setError(undefined);
     try {
-      const template = await createAuditTemplate("Untitled checklist");
+      const { template } =
+        await api.audits.createTemplate("Untitled checklist");
       onNavigate(`/audits/templates/${template.id}`);
     } catch (cause) {
       setError(errorNotice(cause, "Could not load audits."));
@@ -70,7 +68,7 @@ export function AuditHome({
     setBusy(true);
     setError(undefined);
     try {
-      const auditId = await startAudit(templateId);
+      const { auditId } = await api.audits.start(templateId);
       onNavigate(`/audits/runs/${auditId}`);
     } catch (cause) {
       setError(errorNotice(cause, "Could not load audits."));
@@ -140,7 +138,7 @@ function useAuditRunList(setError: (error: ErrorNotice | undefined) => void) {
     setRuns(undefined);
     setNextCursor(null);
     setLoadingMore(false);
-    listAuditRuns(undefined, view).then(
+    api.audits.listRuns(undefined, view).then(
       (page) => {
         if (!current) return;
         setRuns(page.audits);
@@ -161,7 +159,7 @@ function useAuditRunList(setError: (error: ErrorNotice | undefined) => void) {
     setLoadingMore(true);
     setError(undefined);
     try {
-      const page = await listAuditRuns(nextCursor, view);
+      const page = await api.audits.listRuns(nextCursor, view);
       if (generation.current !== started) return;
       setRuns((current) => [...(current ?? []), ...page.audits]);
       setNextCursor(page.nextCursor);

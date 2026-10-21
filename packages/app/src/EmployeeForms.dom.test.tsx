@@ -1,9 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { EmployeeForms } from "./EmployeeForms";
-import type { EmployeeRequirement } from "./employeeFormsApi";
 
 const dom = new Window({ url: "http://localhost:5173/organization/people" });
 const domGlobals = {

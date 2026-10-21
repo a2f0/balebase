@@ -14,7 +14,6 @@ import type { Issue, IssueInput } from "@balebase/validators/issues";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
 import { api } from "./apiClient";
-import { getFinanceTransaction } from "./financeApi";
 import { financeTransactionPath } from "./financePages";
 import { IssueForm } from "./IssueForm";
 import { IssueList } from "./IssueList";
@@ -151,7 +150,8 @@ function NewIssue({
   useEffect(() => {
     if (!transactionId) return;
     let active = true;
-    void getFinanceTransaction(transactionId)
+    void api.finance
+      .transaction(transactionId)
       .then(({ transaction }) => {
         if (active) setLabel(transaction.merchantName ?? transaction.name);
       })

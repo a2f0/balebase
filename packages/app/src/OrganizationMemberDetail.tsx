@@ -9,6 +9,7 @@ import {
   LoadingState,
   Toast,
 } from "@balebase/ui/react";
+import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { EmployeeForms } from "./EmployeeForms";
 import {
   MemberRoleControl,
@@ -20,7 +21,6 @@ import {
   removeOrganizationMember,
   useOrganizationPeopleData,
 } from "./organizationPeopleState";
-import type { OrganizationMember } from "./organizationSettingsApi";
 import {
   canManageOrganization,
   editableOrganizationRoles,

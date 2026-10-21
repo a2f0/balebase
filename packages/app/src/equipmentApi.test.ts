@@ -1,12 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { api } from "./apiClient";
 import { apiUrl } from "./config";
-import {
-  createEquipment,
-  deleteEquipment,
-  getEquipment,
-  listEquipment,
-  updateEquipment,
-} from "./equipmentApi";
 
 describe("equipment API", () => {
   it("addresses the equipment endpoints", async () => {
@@ -32,11 +26,11 @@ describe("equipment API", () => {
         serialNumber: null,
         type: "computer",
       };
-      await listEquipment();
-      await getEquipment("item/1");
-      await createEquipment(input);
-      await updateEquipment("item/1", { assigneeId: "user-1" });
-      await deleteEquipment("item/1");
+      await api.equipment.list();
+      await api.equipment.get("item/1");
+      await api.equipment.create(input);
+      await api.equipment.update("item/1", { assigneeId: "user-1" });
+      await api.equipment.delete("item/1");
       expect(requests.map(({ method, url }) => `${method} ${url}`)).toEqual([
         `GET ${apiUrl}/api/equipment`,
         `GET ${apiUrl}/api/equipment/item%2F1`,
@@ -64,15 +58,15 @@ describe("equipment API errors", () => {
         : new Response("upstream failure", { status });
     }) as typeof fetch;
     try {
-      await expect(updateEquipment("item-1", { make: "" })).rejects.toThrow(
-        "Equipment details are invalid.",
-      );
+      await expect(
+        api.equipment.update("item-1", { make: "" }),
+      ).rejects.toThrow("Equipment details are invalid.");
       expect(headers[0]).toEqual({ "Content-Type": "application/json" });
       status = 502;
-      await expect(listEquipment()).rejects.toThrow(
+      await expect(api.equipment.list()).rejects.toThrow(
         "Request failed with status 502.",
       );
-      await expect(deleteEquipment("item-1")).rejects.toThrow(
+      await expect(api.equipment.delete("item-1")).rejects.toThrow(
         "Request failed with status 502.",
       );
     } finally {

@@ -1,4 +1,10 @@
+import {
+  type FinanceConnectionAccount,
+  type FinanceConnectionDetail,
+  financeRoutes,
+} from "@balebase/validators/finance";
 import type { FinanceContext } from "./financeContext";
+import { respond } from "./respond";
 
 interface ConnectionRow {
   created_at: string;
@@ -82,13 +88,15 @@ export async function connectionDetail(context: FinanceContext) {
   if (!connection) {
     return context.json({ error: "Connection not found." }, 404);
   }
-  return context.json({
+  return respond(context, financeRoutes.connection, {
     accounts: accounts.results.map(toAccount),
     connection: toConnection(connection),
   });
 }
 
-function toConnection(row: ConnectionRow) {
+function toConnection(
+  row: ConnectionRow,
+): FinanceConnectionDetail["connection"] {
   return {
     createdAt: row.created_at,
     createdBy:
@@ -112,7 +120,7 @@ function toConnection(row: ConnectionRow) {
   };
 }
 
-function toAccount(row: AccountRow) {
+function toAccount(row: AccountRow): FinanceConnectionAccount {
   return {
     availableBalance: row.available_balance,
     currencyCode: row.currency_code,

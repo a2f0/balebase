@@ -2,7 +2,7 @@ import type { BadgeTone } from "@balebase/ui/react";
 import type {
   EmployeeRequirement,
   EmployeeRequirementStatus,
-} from "./employeeFormsApi";
+} from "@balebase/validators/employeeForms";
 
 export interface StatusBadge {
   label: string;

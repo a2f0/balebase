@@ -4,6 +4,7 @@ import type {
   RouteOutput,
 } from "@balebase/validators/route";
 import { ApiError } from "./ApiError";
+import type { Endpoint } from "./endpoint";
 
 export interface ApiClientOptions {
   /** The API origin, such as `https://api.balebase.com`. */
@@ -35,7 +36,7 @@ export class Transport {
   }
 
   /** The absolute URL of a route, for links and downloads the browser opens. */
-  url<R extends Route>(route: R, ...[input]: RouteArgs<R>) {
+  url<R extends Route>(route: Endpoint<R>, ...[input]: RouteArgs<R>) {
     const { params = {}, query = {} } = (input ?? {}) as LooseInput;
     const path = route.path.replace(/:(\w+)/g, (_, name: string) => {
       const value = params[name];
@@ -55,11 +56,14 @@ export class Transport {
 
   /** Sends a route's request. A response that isn't OK throws an ApiError. */
   async call<R extends Route>(
-    route: R,
+    route: Endpoint<R>,
     ...args: RouteArgs<R>
   ): Promise<RouteOutput<R>> {
     const { body } = (args[0] ?? {}) as LooseInput;
-    const init: RequestInit = { credentials: "include", method: route.method };
+    const init: RequestInit = {
+      credentials: route.credentials ?? "include",
+      method: route.method,
+    };
     if (route.body === "form") init.body = body as FormData;
     else if (route.body === "file") {
       const file = body as Blob;
@@ -67,7 +71,7 @@ export class Transport {
       init.headers = {
         "Content-Type": file.type || "application/octet-stream",
       };
-    } else if (route.body) {
+    } else if (route.body === "json") {
       init.body = JSON.stringify(body);
       init.headers = { "Content-Type": "application/json" };
     }

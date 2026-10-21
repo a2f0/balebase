@@ -7,10 +7,10 @@ import {
   it,
   mock,
 } from "bun:test";
+import type { BillingStatus } from "@balebase/validators/billing";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import type { BillingStatus } from "./billingApi";
 
 const dom = new Window({ url: "http://localhost:5173/organization/billing" });
 const domGlobals = {

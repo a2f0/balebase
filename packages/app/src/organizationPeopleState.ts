@@ -1,12 +1,11 @@
 import { confirmDialog } from "@balebase/ui/react";
+import type {
+  OrganizationMember,
+  OrganizationPeopleData,
+} from "@balebase/validators/organizationSettings";
 import { useCallback, useEffect, useState } from "react";
+import { api } from "./apiClient";
 import { authClient } from "./authClient";
-import {
-  getOrganizationPeople,
-  type OrganizationMember,
-  type OrganizationPeopleData,
-  updateMemberTwoFactorRequirement,
-} from "./organizationSettingsApi";
 import {
   type OrganizationInvitationRole,
   organizationRoleValue,
@@ -26,7 +25,7 @@ export function useOrganizationPeopleData(organizationId: string) {
     setBusy(true);
     setError(undefined);
     try {
-      setData(await getOrganizationPeople());
+      setData(await api.organizationSettings.people());
     } catch (cause) {
       setError(messageFrom(cause));
     } finally {
@@ -110,7 +109,10 @@ export function organizationPeopleActions(
     if (member.twoFactorRequired === required) return;
     state.startAction();
     try {
-      await updateMemberTwoFactorRequirement(member.id, required);
+      await api.organizationSettings.updateMemberTwoFactorRequirement(
+        member.id,
+        required,
+      );
       state.setNotice(
         required
           ? `${member.user.name} must use two-factor authentication for this organization.`

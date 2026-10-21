@@ -1,3 +1,4 @@
+import { ApiError } from "@balebase/api-client";
 import {
   Badge,
   type BadgeTone,
@@ -13,6 +14,18 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
+import type {
+  AuditDefinition,
+  AuditDetail,
+  AuditIssue,
+  AuditIssueInput,
+  AuditIssuePriority,
+  AuditIssueUpdate,
+  AuditPerson,
+  AuditRun,
+  AuditTemplateItem,
+  AuditTemplateSection,
+} from "@balebase/validators/audits";
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import {
   ActivityFeed,
@@ -27,24 +40,7 @@ import {
   RunLoading,
   RunOverview,
 } from "./AuditRunHeader";
-import {
-  AuditApiError,
-  type AuditDefinition,
-  type AuditDetail,
-  type AuditIssue,
-  type AuditRun,
-  type AuditTemplateItem,
-  type AuditTemplateSection,
-  auditIssueImageUrl,
-  createAuditIssue,
-  deleteAuditIssueImage,
-  discardAuditRun,
-  getAuditRun,
-  type OrganizationMember,
-  saveAuditRun,
-  updateAuditIssue,
-  uploadAuditIssueImage,
-} from "./auditApi";
+import { api } from "./apiClient";
 import { countLabel, formatLabel } from "./labels";
 
 const acceptedImageTypes = [
@@ -141,7 +137,7 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
   const fetchRun = useCallback(
     async (type: "issuesRefreshed" | "loaded") => {
       try {
-        dispatch({ detail: await getAuditRun(id), type });
+        dispatch({ detail: await api.audits.getRun(id), type });
         if (type === "loaded") setError(undefined);
       } catch (cause) {
         setError(messageFrom(cause));
@@ -177,7 +173,7 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
     if (!detail) return;
     const { revision } = detail.audit;
     await perform(
-      () => saveAuditRun(id, responses, status, revision),
+      () => api.audits.saveRun(id, responses, status, revision),
       status === "completed" ? "Audit completed." : "Audit saved.",
     );
   }
@@ -185,7 +181,7 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
   async function discard() {
     if (!detail || !(await confirmDiscard(detail.audit.templateName))) return;
     await perform(async () => {
-      const { deletedAt } = await discardAuditRun(id);
+      const { deletedAt } = await api.audits.discardRun(id);
       dispatch({ deletedAt, type: "discarded" });
     }, "Audit discarded.");
   }
@@ -368,7 +364,7 @@ interface IssueContext {
   audit: AuditRun;
   auditId: string;
   issues: AuditIssue[];
-  members: OrganizationMember[];
+  members: AuditPerson[];
   onCreated: () => Promise<void>;
 }
 
@@ -638,7 +634,7 @@ export function FailedItemIssue({
 }: {
   auditId: string;
   item: AuditTemplateItem;
-  members: OrganizationMember[];
+  members: AuditPerson[];
   onCreated: (offer: number, warning?: string) => Promise<void>;
   onSkipChange: (skip: boolean) => void;
   openIssueCount: number;
@@ -738,7 +734,7 @@ function IssuePanel({
   auditId: string;
   definition: AuditDefinition;
   issues: AuditIssue[];
-  members: OrganizationMember[];
+  members: AuditPerson[];
   onChange: () => Promise<void>;
   responses: Record<string, string>;
 }) {
@@ -795,7 +791,7 @@ function IssueForm({
 }: {
   auditId: string;
   items: AuditTemplateItem[];
-  members: OrganizationMember[];
+  members: AuditPerson[];
   onCreated: (warning?: string) => Promise<void>;
   responses: Record<string, string>;
 }) {
@@ -853,7 +849,7 @@ function useIssueDraft(auditId: string, item: AuditTemplateItem | undefined) {
   const [itemId, setItemId] = useState(item?.id ?? "");
   const [title, setTitle] = useState(item?.prompt ?? "");
   const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState("medium");
+  const [priority, setPriority] = useState<AuditIssuePriority>("medium");
   const [assignedTo, setAssignedTo] = useState("");
   const [images, setImages] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -906,7 +902,7 @@ function IssueDraftFields({
   members,
 }: {
   draft: IssueDraft;
-  members: OrganizationMember[];
+  members: AuditPerson[];
 }) {
   return (
     <>
@@ -1010,17 +1006,19 @@ function IssueAssignmentFields({
   priority,
 }: {
   assignedTo: string;
-  members: OrganizationMember[];
+  members: AuditPerson[];
   onAssignedToChange: (assignedTo: string) => void;
-  onPriorityChange: (priority: string) => void;
-  priority: string;
+  onPriorityChange: (priority: AuditIssuePriority) => void;
+  priority: AuditIssuePriority;
 }) {
   return (
     <div className="formRow">
       <Field label="Priority">
         <select
           className="select"
-          onChange={(event) => onPriorityChange(event.target.value)}
+          onChange={(event) =>
+            onPriorityChange(event.target.value as AuditIssuePriority)
+          }
           value={priority}
         >
           <option value="low">Low</option>
@@ -1054,7 +1052,7 @@ function IssueList({
   onError,
 }: {
   issues: AuditIssue[];
-  members: OrganizationMember[];
+  members: AuditPerson[];
   onChange: () => Promise<void>;
   onError: (error: string | undefined) => void;
 }) {
@@ -1089,7 +1087,7 @@ function IssueCard({
   onError,
 }: {
   issue: AuditIssue;
-  members: OrganizationMember[];
+  members: AuditPerson[];
   onChange: () => Promise<void>;
   onError: (error: string | undefined) => void;
 }) {
@@ -1143,11 +1141,8 @@ function IssueCardActions({
 }: {
   busy: boolean;
   issue: AuditIssue;
-  members: OrganizationMember[];
-  onUpdate: (update: {
-    assignedTo?: string | null;
-    status?: "open" | "resolved";
-  }) => Promise<void>;
+  members: AuditPerson[];
+  onUpdate: (update: AuditIssueUpdate) => Promise<void>;
 }) {
   const assignedMemberIsMissing =
     Boolean(issue.assignedTo) &&
@@ -1238,11 +1233,9 @@ function useIssueCardActions({
     },
     busy,
     removeImage: (imageId: string) =>
-      run(() => deleteAuditIssueImage(issue.id, imageId)),
-    update: (update: {
-      assignedTo?: string | null;
-      status?: "open" | "resolved";
-    }) => run(() => updateAuditIssue(issue.id, update)),
+      run(() => api.audits.deleteIssueImage(issue.id, imageId)),
+    update: (update: AuditIssueUpdate) =>
+      run(() => api.audits.updateIssue(issue.id, update)),
   };
 }
 
@@ -1254,10 +1247,10 @@ type IssueImageUploader = (issueId: string, file: File) => Promise<unknown>;
  */
 export async function createIssueWithImages(
   auditId: string,
-  issue: Parameters<typeof createAuditIssue>[1],
+  issue: AuditIssueInput,
   images: File[],
-  create: typeof createAuditIssue = createAuditIssue,
-  upload: IssueImageUploader = uploadAuditIssueImage,
+  create = api.audits.createIssue,
+  upload: IssueImageUploader = api.audits.uploadIssueImage,
 ) {
   const { issueId } = await create(auditId, issue);
   const failedUploads = (
@@ -1276,7 +1269,7 @@ const maxIssueImageRetryDelay = 10_000;
 export async function uploadIssueImagesSequentially(
   issueId: string,
   files: File[],
-  upload: IssueImageUploader = uploadAuditIssueImage,
+  upload: IssueImageUploader = api.audits.uploadIssueImage,
   wait: WaitForRetry = waitForRetry,
 ) {
   const failures: unknown[] = [];
@@ -1307,7 +1300,7 @@ export async function uploadIssueImagesSequentially(
 }
 
 function issueImageRetryDelay(cause: unknown, retryAttempt: number) {
-  if (!(cause instanceof AuditApiError) || cause.response.status !== 429) {
+  if (!(cause instanceof ApiError) || cause.status !== 429) {
     return undefined;
   }
   const header = cause.response.headers.get("retry-after");
@@ -1351,7 +1344,7 @@ function IssueImages({
                 plain
                 filename={image.filename}
                 className="runThumbLink"
-                href={auditIssueImageUrl(issue.id, image.id)}
+                href={api.audits.issueImageUrl(issue.id, image.id)}
                 rel="noreferrer"
                 target="_blank"
               >
@@ -1360,7 +1353,11 @@ function IssueImages({
                   className="runThumbImage"
                   decoding="async"
                   loading="lazy"
-                  src={auditIssueImageUrl(issue.id, image.id, "thumbnail")}
+                  src={api.audits.issueImageUrl(
+                    issue.id,
+                    image.id,
+                    "thumbnail",
+                  )}
                 />
               </ApiDownload>
               <Button

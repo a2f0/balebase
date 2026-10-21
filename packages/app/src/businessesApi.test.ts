@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { getBusiness, updateBusiness } from "./businessesApi";
+import { api } from "./apiClient";
 import { apiUrl } from "./config";
 
 describe("businesses API", () => {
@@ -12,7 +12,9 @@ describe("businesses API", () => {
       return Response.json({ business: { id: "business/id", name: "Acme" } });
     }) as typeof fetch;
     try {
-      expect((await getBusiness("business/id")).business.name).toBe("Acme");
+      expect((await api.businesses.get("business/id")).business.name).toBe(
+        "Acme",
+      );
       expect(url).toBe(`${apiUrl}/api/businesses/business%2Fid`);
     } finally {
       globalThis.fetch = originalFetch;
@@ -48,7 +50,7 @@ describe("businesses API", () => {
         streetAddress: "123 Main Street",
         zip: "10001",
       };
-      await updateBusiness("business/id", business);
+      await api.businesses.update("business/id", business);
       expect(request).toEqual({
         body: JSON.stringify(business),
         method: "PATCH",

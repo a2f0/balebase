@@ -1,3 +1,4 @@
+import { signingRoutes } from "@balebase/validators/signing";
 import { type Context, Hono } from "hono";
 import { sendDeclined } from "./contractMail";
 import { isEmbeddablePng } from "./contractPdf";
@@ -18,6 +19,7 @@ import {
   signingToken,
   signingTokenHash,
 } from "./contractTokens";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 /** Public routes a signer reaches through their emailed link; no account. */
@@ -63,7 +65,7 @@ signing.get("/:token", async (context) => {
     listFields(context.env.DB, contract.id),
     mailFor(context.env.DB, contract),
   ]);
-  return context.json({
+  return respond(context, signingRoutes.get, {
     canSign,
     contract: {
       completedAt: contract.completed_at,
@@ -193,7 +195,7 @@ signing.post("/:token/sign", async (context) => {
   } catch (cause) {
     console.error("Contract could not advance after a signature.", cause);
   }
-  return context.json({ completed, status: "signed" });
+  return respond(context, signingRoutes.sign, { completed, status: "signed" });
 });
 
 signing.post("/:token/decline", async (context) => {
@@ -257,7 +259,7 @@ signing.post("/:token/decline", async (context) => {
   } catch (cause) {
     console.error("Decline notice could not be sent.", cause);
   }
-  return context.json({ status: "declined" });
+  return respond(context, signingRoutes.decline, { status: "declined" });
 });
 
 /**

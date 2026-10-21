@@ -1,8 +1,10 @@
 import { Button, Toast } from "@balebase/ui/react";
 import { type KeyboardEvent, useId, useState } from "react";
-import { mcpServerUrl } from "./apiKeysApi";
 import { apiUrl } from "./config";
 import { useClipboard } from "./useClipboard";
+
+/** The MCP endpoint that accepts API keys. */
+const mcpServerUrl = `${apiUrl}/mcp`;
 
 const clients = ["Claude Code", "Codex", "Generic"] as const;
 type Client = (typeof clients)[number];

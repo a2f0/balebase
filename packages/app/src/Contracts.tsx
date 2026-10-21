@@ -10,7 +10,12 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
+import type {
+  ContractDetail,
+  ContractSummary as ContractListItem,
+} from "@balebase/validators/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "./apiClient";
 import { ContractEditor } from "./ContractEditor";
 import {
   ContractStatusBadge,
@@ -23,13 +28,6 @@ import {
   contractFilters,
   matchesFilter,
 } from "./contractFields";
-import {
-  type ContractDetail,
-  type ContractSummary as ContractListItem,
-  getContract,
-  listContracts,
-  uploadContract,
-} from "./contractsApi";
 import { countLabel } from "./labels";
 import {
   contractIdForPath,
@@ -65,7 +63,8 @@ function useContractList(onNavigate: (pathname: string) => void) {
   const [uploading, setUploading] = useState(false);
   useEffect(() => {
     let active = true;
-    listContracts()
+    api.contracts
+      .list()
       .then((result) => {
         if (active) setContracts(result);
       })
@@ -81,7 +80,8 @@ function useContractList(onNavigate: (pathname: string) => void) {
     setUploading(true);
     setError(undefined);
     try {
-      const created = await uploadContract(file);
+      const created = await api.contracts.upload(file);
+      if (!created) throw new Error("Contract not found.");
       onNavigate(contractPath(created.id));
     } catch (cause) {
       setError(messageFrom(cause));
@@ -240,11 +240,12 @@ function ContractPage({
   id: string;
   onNavigate: (pathname: string) => void;
 }) {
-  const [contract, setContract] = useState<ContractDetail>();
+  // Null when a change answers that the contract was deleted meanwhile.
+  const [contract, setContract] = useState<ContractDetail | null>();
   const [error, setError] = useState<string>();
   const load = useCallback(async () => {
     try {
-      setContract(await getContract(id));
+      setContract(await api.contracts.get(id));
     } catch (cause) {
       setError(messageFrom(cause));
     }

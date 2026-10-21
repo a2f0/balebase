@@ -1,23 +1,18 @@
 import { Button, cx, Icon, type IconName, Toast } from "@balebase/ui/react";
+import type { EquipmentItem } from "@balebase/validators/equipment";
+import type { FinanceTransactionMatch } from "@balebase/validators/finance";
+import type {
+  InboundEmailLink,
+  InboundEmailLinkTarget,
+} from "@balebase/validators/inbox";
+import type { LibraryFolder } from "@balebase/validators/libraryFolders";
 import { type FormEvent, useEffect, useState } from "react";
-import {
-  type InboundEmailLink,
-  type InboundEmailLinkTarget,
-  type LibraryFolder,
-  linkInboundEmail,
-  listLibraryFolders,
-  unlinkInboundEmail,
-} from "./api";
+import { api } from "./apiClient";
 import {
   describeEmailLink,
   formatTransactionDate,
 } from "./emailLinkDescription";
-import { type EquipmentItem, listEquipment } from "./equipmentApi";
 import { equipmentName, equipmentTypeLabel } from "./equipmentLabels";
-import {
-  type FinanceTransactionMatch,
-  searchFinanceTransactions,
-} from "./financeApi";
 import { formatMoney } from "./financeFormat";
 import { equipmentPath, handleNavigation, libraryPath } from "./workspacePaths";
 
@@ -50,7 +45,7 @@ export function EmailLinks({
   async function link(target: InboundEmailLinkTarget) {
     setError(undefined);
     try {
-      const created = await linkInboundEmail(emailId, target);
+      const created = await api.inbox.link(emailId, target);
       onChange((current) => [
         ...current.filter(({ id }) => id !== created.id),
         created,
@@ -65,7 +60,7 @@ export function EmailLinks({
     setWorkingId(link.id);
     setError(undefined);
     try {
-      await unlinkInboundEmail(emailId, link.id);
+      await api.inbox.unlink(emailId, link.id);
       onChange((current) => current.filter(({ id }) => id !== link.id));
     } catch (cause) {
       setError(messageFrom(cause));
@@ -258,7 +253,8 @@ function EquipmentPicker({
   const [error, setError] = useState<string>();
   useEffect(() => {
     let active = true;
-    listEquipment()
+    api.equipment
+      .list()
       .then((listing) => {
         if (active) setEquipment(listing.equipment);
       })
@@ -347,7 +343,8 @@ function FolderPicker({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   useEffect(() => {
-    listLibraryFolders()
+    api.libraryFolders
+      .list()
       .then(setFolders)
       .catch((cause: unknown) => setError(messageFrom(cause)));
   }, []);
@@ -427,7 +424,8 @@ function TransactionPicker({
   useEffect(() => {
     let active = true;
     const timer = window.setTimeout(() => {
-      searchFinanceTransactions(query)
+      api.finance
+        .searchTransactions(query)
         .then((results) => {
           if (!active) return;
           setError(undefined);

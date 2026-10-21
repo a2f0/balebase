@@ -10,6 +10,7 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
+import type { AdminOrganization } from "@balebase/validators/adminOrganizations";
 import {
   type Dispatch,
   type SetStateAction,
@@ -19,12 +20,7 @@ import {
 } from "react";
 import { AdminOrganizationDetails } from "./AdminOrganizationDetails";
 import { formatDate, Identity } from "./adminDisplay";
-import {
-  type AdminOrganization,
-  listAdminOrganizations,
-  markAdminOrganizationForDeletion,
-  restoreAdminOrganization,
-} from "./adminOrganizationsApi";
+import { api } from "./apiClient";
 import { countLabel } from "./labels";
 import { adminOrganizationIdForPath } from "./organizationState";
 
@@ -77,7 +73,7 @@ function AdminOrganizationList({
     setError(undefined);
     setOrganizations(undefined);
     try {
-      setOrganizations(await listAdminOrganizations());
+      setOrganizations(await api.adminOrganizations.list());
     } catch (cause) {
       setError(messageFrom(cause));
     } finally {
@@ -136,7 +132,9 @@ function useAdminOrganizationLifecycle(
     setError(undefined);
     setNotice(undefined);
     try {
-      const deletion = await markAdminOrganizationForDeletion(organization.id);
+      const deletion = await api.adminOrganizations.markForDeletion(
+        organization.id,
+      );
       setOrganizations((current) =>
         current?.map((item) =>
           item.id === organization.id
@@ -165,7 +163,7 @@ function useAdminOrganizationLifecycle(
     setError(undefined);
     setNotice(undefined);
     try {
-      await restoreAdminOrganization(organization.id);
+      await api.adminOrganizations.restore(organization.id);
       setOrganizations((current) =>
         current?.map((item) =>
           item.id === organization.id

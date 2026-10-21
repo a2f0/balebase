@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import type { BillingStatus } from "@balebase/validators/billing";
 import { Window } from "happy-dom";
 import { act, useState } from "react";
 import type { Root } from "react-dom/client";
-import type { BillingStatus } from "./billingApi";
 
 const dom = new Window({ url: "http://localhost:5173/" });
 const domGlobals = {

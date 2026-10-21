@@ -1,6 +1,11 @@
+import {
+  type Business,
+  businessesRoutes,
+} from "@balebase/validators/businesses";
 import { type Context, Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
 import { canManageOrganization } from "./organizationMembers";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 interface BusinessRow {
@@ -38,7 +43,7 @@ businesses.get("/", async (context) => {
   )
     .bind(context.get("organizationId"))
     .all<BusinessRow>();
-  return context.json({
+  return respond(context, businessesRoutes.list, {
     businesses: result.results.map(businessResponse),
     canManage: canManage(context),
   });
@@ -54,7 +59,7 @@ businesses.get("/:id", async (context) => {
     .bind(context.req.param("id"), context.get("organizationId"))
     .first<BusinessRow>();
   if (!business) return context.json({ error: "Business not found." }, 404);
-  return context.json({
+  return respond(context, businessesRoutes.get, {
     business: businessResponse(business),
     canManage: canManage(context),
   });
@@ -98,7 +103,9 @@ businesses.post("/", async (context) => {
       ein: input.ein ?? null,
     });
   }
-  return context.json(
+  return respond(
+    context,
+    businessesRoutes.create,
     {
       business: businessResponse({
         city: input.city ?? null,
@@ -183,7 +190,7 @@ businesses.patch("/:id", async (context) => {
     .bind(id, context.get("organizationId"))
     .first<BusinessRow>();
   if (!updated) return context.json({ error: "Business not found." }, 404);
-  return context.json({
+  return respond(context, businessesRoutes.update, {
     business: businessResponse(updated),
   });
 });
@@ -311,7 +318,7 @@ export function normalizeZip(value: string) {
   return /^\d{5}(?:-\d{4})?$/.test(trimmed) ? trimmed : null;
 }
 
-function businessResponse(row: BusinessRow) {
+function businessResponse(row: BusinessRow): Business {
   return {
     city: row.city,
     createdAt: row.created_at,

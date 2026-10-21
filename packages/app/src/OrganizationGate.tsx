@@ -14,7 +14,7 @@ import {
 import type {
   OrganizationSeatRequirement,
   OrganizationTwoFactorRequirement,
-} from "./organizationGroupsApi";
+} from "./organizationAccessErrors";
 import { organizationPathRequiresAccess } from "./organizationState";
 
 /**

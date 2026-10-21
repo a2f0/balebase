@@ -1,9 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
+import type { ApiKey } from "@balebase/validators/apiKeys";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import type { ApiKey } from "./apiKeysApi";
 
 const dom = new Window({ url: "http://localhost:5173/organization/api-keys" });
 const domGlobals = {

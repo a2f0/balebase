@@ -15,6 +15,11 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
+import type {
+  Business,
+  BusinessDetail,
+  BusinessInput,
+} from "@balebase/validators/businesses";
 import {
   type ComponentProps,
   type FormEvent,
@@ -25,16 +30,7 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  type Business,
-  type BusinessDetail,
-  type BusinessInput,
-  createBusiness,
-  deleteBusiness,
-  getBusiness,
-  getBusinesses,
-  updateBusiness,
-} from "./businessesApi";
+import { api } from "./apiClient";
 import {
   type BusinessIdentifier,
   type BusinessListState,
@@ -96,7 +92,7 @@ function BusinessListPage({
   const load = useCallback(async () => {
     dispatch({ type: "loadStarted" });
     try {
-      dispatch({ type: "loaded", data: await getBusinesses() });
+      dispatch({ type: "loaded", data: await api.businesses.list() });
     } catch (cause) {
       dispatch({ type: "loadFailed", message: messageFrom(cause) });
     }
@@ -247,7 +243,7 @@ function BusinessCreateForm({
     event.preventDefault();
     setBusy(true);
     try {
-      const result = await createBusiness(businessInput(form));
+      const result = await api.businesses.create(businessInput(form));
       setForm(emptyBusinessForm());
       onCreated(result.business);
     } catch (cause) {
@@ -370,7 +366,7 @@ function BusinessRow({
     if (!(await confirmBusinessDeletion(business))) return;
     setBusy(true);
     try {
-      await deleteBusiness(business.id);
+      await api.businesses.delete(business.id);
       onDeleted(business.id);
     } catch (cause) {
       onError(messageFrom(cause));
@@ -559,7 +555,8 @@ function BusinessDetailPage({
   };
   useEffect(() => {
     let active = true;
-    getBusiness(id)
+    api.businesses
+      .get(id)
       .then((result) => {
         if (active) setDetail(result);
       })
@@ -705,7 +702,10 @@ function BusinessEditCard({
     event.preventDefault();
     setBusy(true);
     try {
-      const result = await updateBusiness(business.id, businessInput(form));
+      const result = await api.businesses.update(
+        business.id,
+        businessInput(form),
+      );
       onSaved(result.business);
     } catch (cause) {
       onError(messageFrom(cause));
@@ -769,7 +769,10 @@ function BusinessEditRow({
     event.preventDefault();
     setBusy(true);
     try {
-      const result = await updateBusiness(business.id, businessInput(form));
+      const result = await api.businesses.update(
+        business.id,
+        businessInput(form),
+      );
       onUpdated(result.business);
     } catch (cause) {
       onError(messageFrom(cause));

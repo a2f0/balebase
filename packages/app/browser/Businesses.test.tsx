@@ -3,10 +3,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { Business } from "@balebase/validators/businesses";
 import { type Browser, launch } from "puppeteer-core";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BusinessListView } from "../src/Businesses";
-import type { Business } from "../src/businessesApi";
 import {
   type BusinessListState,
   businessListReducer,

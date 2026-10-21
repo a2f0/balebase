@@ -38,13 +38,16 @@ when a screen needs to be split.
 Every API call goes through `api`, the `ApiClient` in `src/apiClient.ts`. The
 contract in `@balebase/validators` defines each route once, as zod schemas
 for its query, body, and response. The API sends each JSON response with
-`respond(context, route, body)`, which types the body by the contract. The
-client builds its requests from the same route and throws an `ApiError` with
-the API's message, code, and response. Under `bun test`, `respond` checks each
-response against its schema and fails the test on a mismatch.
-`src/contract.test.ts` checks that the API serves exactly the contract's
-routes. To add a route, define it in the area's validators file, send its
-response with `respond`, and add a method to the area's client.
+`respond(context, route, body)`, which types the body by the contract. Each
+area client in `@balebase/api-client` lists the endpoints it calls: a route's
+method, path, and body kind, typed by the contract, so a disagreement fails to
+compile and zod stays out of the app bundle. A refused request throws an
+`ApiError` with the API's message, code, and response. Under `bun test`,
+`respond` checks each response against its schema and fails the test on a
+mismatch, and `packages/api/src/contract.test.ts` checks that the API serves
+exactly the contract's routes. To add a route, define it in the area's
+validators file, send its response with `respond`, and add an endpoint and
+method to the area's client.
 
 `assets/brand/logo.svg` is the pixel B logo, drawn only with whole-unit
 `<rect>` elements; the app shells and website import this one copy. The `images`

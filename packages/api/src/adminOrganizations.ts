@@ -1,3 +1,8 @@
+import {
+  type AdminOrganization,
+  type AdminOrganizationRequirement,
+  adminOrganizationsRoutes,
+} from "@balebase/validators/adminOrganizations";
 import { Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
 import {
@@ -9,6 +14,7 @@ import {
   restoreOrganization,
 } from "./organizationDeletion";
 import { listOrganizationMembers } from "./organizationMembers";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 const adminOrganizations = new Hono<{
@@ -57,7 +63,7 @@ adminOrganizations.get("/", async (context) => {
      LIMIT 100`,
   ).all<OrganizationRow>();
 
-  return context.json({
+  return respond(context, adminOrganizationsRoutes.list, {
     organizations: result.results.map(toAdminOrganization),
   });
 });
@@ -76,14 +82,14 @@ adminOrganizations.get("/:organizationId", async (context) => {
     listOrganizationMembers(context.env.DB, organizationId),
     listAdminRequirements(context.env, organizationId),
   ]);
-  return context.json({
+  return respond(context, adminOrganizationsRoutes.get, {
     organization: toAdminOrganization(organization),
     members,
     requirements,
   });
 });
 
-function toAdminOrganization(organization: OrganizationRow) {
+function toAdminOrganization(organization: OrganizationRow): AdminOrganization {
   return {
     createdAt: organization.created_at,
     deletedByEmail: organization.deleted_by_email,
@@ -102,10 +108,10 @@ function toAdminOrganization(organization: OrganizationRow) {
 
 interface AdminRequirementRow {
   id: string;
-  kind: "form" | "background_check" | "credit_check";
+  kind: AdminOrganizationRequirement["kind"];
   title: string;
   due_date: string;
-  status: "pending" | "in_progress" | "submitted" | "complete";
+  status: AdminOrganizationRequirement["status"];
   target_name: string | null;
   target_email: string;
   completed_at: string | null;
@@ -115,7 +121,10 @@ interface AdminRequirementRow {
   checkr_report_id: string | null;
 }
 
-async function listAdminRequirements(env: Bindings, organizationId: string) {
+async function listAdminRequirements(
+  env: Bindings,
+  organizationId: string,
+): Promise<AdminOrganizationRequirement[]> {
   const result = await env.DB.prepare(
     `SELECT requirement.id, requirement.kind, requirement.title,
             requirement.due_date, requirement.status, requirement.completed_at,
@@ -221,7 +230,7 @@ adminOrganizations.delete("/:organizationId", async (context) => {
     );
   }
 
-  return context.json({
+  return respond(context, adminOrganizationsRoutes.markForDeletion, {
     ...deletion,
     deletedByEmail: actor.email,
     deletedByName: actor.name,
@@ -246,7 +255,7 @@ adminOrganizations.post("/:organizationId/restore", async (context) => {
       409,
     );
   }
-  return context.json(restoration);
+  return respond(context, adminOrganizationsRoutes.restore, restoration);
 });
 
 export { adminOrganizations };

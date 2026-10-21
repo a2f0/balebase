@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { EmployeeRequirement } from "./employeeFormsApi";
+import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import {
   localDate,
   personalRequirement,

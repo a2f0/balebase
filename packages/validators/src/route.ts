@@ -22,6 +22,11 @@ export interface Route {
   method: Method;
   /** The full path the API serves, with `:name` segments for parameters. */
   path: string;
+  /**
+   * `omit` for a public route that a token in its path authorizes, such as a
+   * signer's link, so the request carries no cookies. Others send them.
+   */
+  credentials?: "omit";
   /** Query parameters, as the client sends them. */
   query?: z.ZodType;
   /**

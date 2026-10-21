@@ -1,25 +1,11 @@
+import type { CheckrTestCandidate } from "@balebase/validators/employeeForms";
+
 /**
  * Checkr's mocked staging candidates, from the data sheet Checkr sends with a
  * staging account. Staging completes a report only when these details are
  * entered exactly; anything else stays pending. Like Stripe's test cards, each
  * one produces a known result. Served only while Checkr is in staging.
  */
-export interface CheckrTestCandidate {
-  dob: string;
-  driverLicenseNumber: string;
-  driverLicenseState: string;
-  expectedResult: "clear" | "consider";
-  findings: string[];
-  firstName: string;
-  id: string;
-  lastName: string;
-  location: string;
-  middleName: string | null;
-  ssn: string;
-  state: string;
-  zipcode: string;
-}
-
 export const checkrTestCandidates: CheckrTestCandidate[] = [
   {
     dob: "1983-02-10",

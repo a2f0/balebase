@@ -1,3 +1,9 @@
+import {
+  type InboundEmailAttachment,
+  type InboundEmailSummary,
+  type InboxFolder,
+  inboxRoutes,
+} from "@balebase/validators/inbox";
 import { type Context, Hono } from "hono";
 import PostalMime from "postal-mime";
 import type { AuthVariables } from "./authMiddleware";
@@ -7,6 +13,7 @@ import {
   deleteEmailLink,
   listEmailLinks,
 } from "./inboundEmailLinks";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 type InboxEnv = {
@@ -32,8 +39,6 @@ interface InboundEmailRow {
   received_at: string;
   subject: string | null;
 }
-
-type InboxFolder = "inbox" | "trash" | "archived";
 
 interface InboundEmailAttachmentRow {
   content_type: string;
@@ -72,7 +77,7 @@ inbox.get("/", async (context) => {
     .bind(organizationId)
     .all<InboundEmailRow>();
 
-  return context.json({
+  return respond(context, inboxRoutes.list, {
     address: organizationInboxAddress(
       organizationId,
       context.env.INBOUND_EMAIL_DOMAIN,
@@ -111,7 +116,7 @@ inbox.get("/:id", async (context) => {
     maxRfc822NestingDepth: 0,
   });
 
-  return context.json({
+  return respond(context, inboxRoutes.get, {
     email: {
       ...toEmailSummary(email),
       attachments: attachments.map(toAttachment),
@@ -199,7 +204,7 @@ inbox.delete("/:id", async (context) => {
     }
     return context.json({ error: "Email not found." }, 404);
   }
-  return context.json({
+  return respond(context, inboxRoutes.delete, {
     deletedAt,
     deletedByUserId,
     emailId: context.req.param("id"),
@@ -221,7 +226,9 @@ inbox.post("/:id/archive", async (context) => {
   if (result.meta.changes !== 1) {
     return context.json({ error: "Inbox email not found." }, 404);
   }
-  return context.json({ emailId: context.req.param("id") });
+  return respond(context, inboxRoutes.archive, {
+    emailId: context.req.param("id"),
+  });
 });
 
 inbox.post("/:id/restore", async (context) => {
@@ -236,7 +243,9 @@ inbox.post("/:id/restore", async (context) => {
   if (result.meta.changes !== 1) {
     return context.json({ error: "Trashed or archived email not found." }, 404);
   }
-  return context.json({ emailId: context.req.param("id") });
+  return respond(context, inboxRoutes.restore, {
+    emailId: context.req.param("id"),
+  });
 });
 
 async function findEmail(
@@ -288,7 +297,7 @@ async function findAttachments(
   return result.results;
 }
 
-function toEmailSummary(row: InboundEmailRow) {
+function toEmailSummary(row: InboundEmailRow): InboundEmailSummary {
   return {
     attachmentCount: row.attachment_count,
     deletedAt: row.deleted_at,
@@ -323,7 +332,7 @@ function invalidFolder(context: Context<InboxEnv>) {
   );
 }
 
-function toAttachment(row: InboundEmailAttachmentRow) {
+function toAttachment(row: InboundEmailAttachmentRow): InboundEmailAttachment {
   return {
     contentType: row.content_type,
     filename: row.filename,

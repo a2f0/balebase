@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import type {
+  FinanceConnection,
+  FinanceData,
+} from "@balebase/validators/finance";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FinanceView } from "./Finance";
-import type { FinanceConnection, FinanceData } from "./financeApi";
 import type { FinancePage } from "./financePages";
 import { initialFilters } from "./useFinanceData";
 

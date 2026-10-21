@@ -1,3 +1,8 @@
+import {
+  type AuditDefinition,
+  type AuditIssue,
+  auditsRoutes,
+} from "@balebase/validators/audits";
 import { Hono } from "hono";
 import {
   type ActivityActor,
@@ -8,7 +13,7 @@ import {
   requestActor,
   toAuditAnswerActivity,
 } from "./activity";
-import { type AuditDefinition, isRecord, validText } from "./auditDefinition";
+import { isRecord, validText } from "./auditDefinition";
 import { auditIssueImageRemoval } from "./auditIssueImageRemoval";
 import {
   type AuditIssueImageRow,
@@ -44,6 +49,7 @@ import {
 } from "./auditTemplates";
 import type { AuthVariables } from "./authMiddleware";
 import { freeFormTemplateLimit, organizationTemplateLimit } from "./billing";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 const audits = new Hono<{
@@ -67,8 +73,8 @@ interface IssueRow {
   description: string;
   id: string;
   item_id: string;
-  priority: string;
-  status: string;
+  priority: AuditIssue["priority"];
+  status: AuditIssue["status"];
   title: string;
   updated_at: string;
 }
@@ -91,7 +97,9 @@ audits.get("/templates", async (context) => {
   )
     .bind(organizationId)
     .all<TemplateRow>();
-  return context.json({ templates: result.results.map(toTemplate) });
+  return respond(context, auditsRoutes.listTemplates, {
+    templates: result.results.map(toTemplate),
+  });
 });
 
 audits.post("/templates", async (context) => {
@@ -125,7 +133,12 @@ audits.post("/templates", async (context) => {
       409,
     );
   }
-  return context.json({ template: toTemplate(template) }, 201);
+  return respond(
+    context,
+    auditsRoutes.createTemplate,
+    { template: toTemplate(template) },
+    201,
+  );
 });
 
 audits.post("/templates/:id/copies", async (context) => {
@@ -167,7 +180,12 @@ audits.post("/templates/:id/copies", async (context) => {
       409,
     );
   }
-  return context.json({ template: toTemplate(saved) }, 201);
+  return respond(
+    context,
+    auditsRoutes.copyTemplate,
+    { template: toTemplate(saved) },
+    201,
+  );
 });
 
 audits.get("/templates/:id/versions", async (context) => {
@@ -177,7 +195,7 @@ audits.get("/templates/:id/versions", async (context) => {
     context.req.param("id"),
   );
   if (!template) return context.json({ error: "Template not found." }, 404);
-  return context.json({
+  return respond(context, auditsRoutes.templateVersions, {
     versions: await listTemplateVersions(
       context.env.DB,
       template.id,
@@ -197,7 +215,9 @@ audits.get("/templates/:id/versions/:version", async (context) => {
     version,
   );
   return template
-    ? context.json({ template: toTemplate(template) })
+    ? respond(context, auditsRoutes.templateVersion, {
+        template: toTemplate(template),
+      })
     : context.json({ error: "Template version not found." }, 404);
 });
 
@@ -208,7 +228,9 @@ audits.get("/templates/:id", async (context) => {
     context.req.param("id"),
   );
   return template
-    ? context.json({ template: toTemplate(template) })
+    ? respond(context, auditsRoutes.getTemplate, {
+        template: toTemplate(template),
+      })
     : context.json({ error: "Template not found." }, 404);
 });
 
@@ -231,7 +253,7 @@ audits.get("/templates/:id/activity", async (context) => {
     },
   );
   return page
-    ? context.json(page)
+    ? respond(context, auditsRoutes.templateActivity, page)
     : context.json({ error: "Invalid activity cursor." }, 400);
 });
 
@@ -260,7 +282,9 @@ audits.put("/templates/:id", async (context) => {
   );
   return saved === "stale"
     ? context.json({ error: staleTemplateError }, 409)
-    : context.json({ template: toTemplate(saved) });
+    : respond(context, auditsRoutes.updateTemplate, {
+        template: toTemplate(saved),
+      });
 });
 
 audits.post("/templates/:id/runs", async (context) => {
@@ -291,7 +315,7 @@ audits.post("/templates/:id/runs", async (context) => {
     now,
   );
   await activityBatch(context.env.DB, context.get("apiKey"), [insert]);
-  return context.json({ auditId: id }, 201);
+  return respond(context, auditsRoutes.start, { auditId: id }, 201);
 });
 
 audits.get("/runs", async (context) => {
@@ -345,7 +369,7 @@ audits.get("/runs", async (context) => {
     result.results.length > auditRunPageSize && last
       ? encodeAuditCursor({ createdAt: last.created_at, id: last.id })
       : null;
-  return context.json({
+  return respond(context, auditsRoutes.listRuns, {
     audits: page.map(toAuditSummary),
     nextCursor,
   });
@@ -371,7 +395,7 @@ audits.get("/runs/:id", async (context) => {
     findAuditIssueImages(context.env.DB, organizationId, audit.id),
   ]);
   const imagesByIssue = groupImagesByIssue(images);
-  return context.json({
+  return respond(context, auditsRoutes.getRun, {
     audit: { ...toAudit(audit), answerActivity },
     issues: issues.map((issue) =>
       toIssue(issue, imagesByIssue.get(issue.id) ?? []),
@@ -398,7 +422,7 @@ audits.get("/runs/:id/activity", async (context) => {
     },
   );
   return page
-    ? context.json(page)
+    ? respond(context, auditsRoutes.runActivity, page)
     : context.json({ error: "Invalid activity cursor." }, 400);
 });
 
@@ -473,7 +497,7 @@ audits.patch("/runs/:id", async (context) => {
       409,
     );
   }
-  return context.json({ status, updatedAt: now });
+  return respond(context, auditsRoutes.saveRun, { status, updatedAt: now });
 });
 
 audits.post("/runs/:id/issues", async (context) => {
@@ -531,7 +555,7 @@ audits.post("/runs/:id/issues", async (context) => {
       ? context.json({ error: discardedAuditError }, 409)
       : context.json({ error: "Audit not found." }, 404);
   }
-  return context.json({ issueId: id }, 201);
+  return respond(context, auditsRoutes.createIssue, { issueId: id }, 201);
 });
 
 audits.patch("/issues/:id", async (context) => {
@@ -565,7 +589,8 @@ audits.patch("/issues/:id", async (context) => {
   const assignedTo = changesAssignee
     ? parseAssignee(body.assignedTo)
     : issue.assigned_to;
-  if (changesAssignee && assignedTo === undefined) {
+  // Only a new assignee can be invalid; the stored one is a user or null.
+  if (assignedTo === undefined) {
     return context.json({ error: "Issue assignee is invalid." }, 400);
   }
   const status =
@@ -604,7 +629,11 @@ audits.patch("/issues/:id", async (context) => {
     update,
   ]);
   if (Number(result?.meta.changes) > 0) {
-    return context.json({ assignedTo, status, updatedAt: now });
+    return respond(context, auditsRoutes.updateIssue, {
+      assignedTo,
+      status,
+      updatedAt: now,
+    });
   }
   const rejected = await rejectedIssueUpdate(
     context.env.DB,
@@ -878,7 +907,7 @@ function parseAuditCursor(value: string): AuditCursor | undefined {
   }
 }
 
-function toIssue(row: IssueRow, images: AuditIssueImageRow[]) {
+function toIssue(row: IssueRow, images: AuditIssueImageRow[]): AuditIssue {
   return {
     assignedTo: row.assigned_to,
     assigneeEmail: row.assignee_email,

@@ -1,6 +1,13 @@
+import {
+  type InboundEmailLink,
+  type InboundEmailLinkTarget,
+  inboxRoutes,
+  type LinkedEmail,
+} from "@balebase/validators/inbox";
 import type { Context } from "hono";
 import type { AuthVariables } from "./authMiddleware";
 import { userHasCapability } from "./organizationGroups";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 type LinkContext = Context<{
@@ -8,15 +15,7 @@ type LinkContext = Context<{
   Variables: AuthVariables;
 }>;
 
-type EmailLinkTargetType =
-  | "equipment"
-  | "finance_transaction"
-  | "library_folder";
-
-interface EmailLinkInput {
-  targetId: string;
-  targetType: EmailLinkTargetType;
-}
+type EmailLinkTargetType = InboundEmailLinkTarget["targetType"];
 
 interface EmailLinkRow {
   equipment_make: string | null;
@@ -127,7 +126,12 @@ export async function createEmailLink(context: LinkContext) {
   );
   const link = row && toEmailLink(row);
   if (!link) return context.json({ error: "Link target not found." }, 404);
-  return context.json({ link }, link.id === id ? 201 : 200);
+  return respond(
+    context,
+    inboxRoutes.link,
+    { link },
+    link.id === id ? 201 : 200,
+  );
 }
 
 export async function deleteEmailLink(context: LinkContext) {
@@ -186,14 +190,14 @@ export async function listLinkedEmails(
   return result.results;
 }
 
-export function toLinkedEmail(row: LinkedEmailRow) {
+export function toLinkedEmail(row: LinkedEmailRow): LinkedEmail {
   return {
     attachmentCount: row.attachment_count,
     from: row.envelope_from,
     id: row.id,
     linkId: row.link_id,
     receivedAt: row.received_at,
-    status: row.archived_at ? ("archived" as const) : ("inbox" as const),
+    status: row.archived_at ? "archived" : "inbox",
     subject: row.subject,
   };
 }
@@ -255,7 +259,7 @@ function canUseFinance(context: LinkContext) {
   );
 }
 
-function toEmailLink(row: EmailLinkRow) {
+function toEmailLink(row: EmailLinkRow): InboundEmailLink | null {
   if (row.target_type === "equipment") {
     if (row.equipment_make === null) return null;
     return {
@@ -294,7 +298,7 @@ function toEmailLink(row: EmailLinkRow) {
   };
 }
 
-function linkInput(input: unknown): EmailLinkInput | null {
+function linkInput(input: unknown): InboundEmailLinkTarget | null {
   if (typeof input !== "object" || input === null) return null;
   const targetType = Reflect.get(input, "targetType");
   const targetId = Reflect.get(input, "targetId");

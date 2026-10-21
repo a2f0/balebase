@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import type { ScreeningForm as ScreeningFormData } from "@balebase/validators/employeeForms";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import type { ScreeningForm as ScreeningFormData } from "./employeeFormsApi";
 import { ScreeningForm } from "./ScreeningForm";
 
 const dom = new Window({

@@ -1,6 +1,11 @@
+import {
+  type LibraryFolder,
+  libraryFoldersRoutes,
+} from "@balebase/validators/libraryFolders";
 import { type Context, Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
 import { listLinkedEmails, toLinkedEmail } from "./inboundEmailLinks";
+import { respond } from "./respond";
 import type { Bindings } from "./types";
 
 type LibraryEnv = {
@@ -43,7 +48,9 @@ libraryFolders.get("/", async (context) => {
   )
     .bind(context.get("organizationId"))
     .all<FolderRow>();
-  return context.json({ folders: result.results.map(toFolder) });
+  return respond(context, libraryFoldersRoutes.list, {
+    folders: result.results.map(toFolder),
+  });
 });
 
 libraryFolders.post("/", async (context) => {
@@ -62,7 +69,9 @@ libraryFolders.post("/", async (context) => {
   )
     .bind(id, organizationId, name, now, now)
     .run();
-  return context.json(
+  return respond(
+    context,
+    libraryFoldersRoutes.create,
     { folder: { createdAt: now, emailCount: 0, fileCount: 0, id, name } },
     201,
   );
@@ -82,7 +91,7 @@ libraryFolders.get("/:id", async (context) => {
     "library_folder",
     folder.id,
   );
-  return context.json({
+  return respond(context, libraryFoldersRoutes.get, {
     emails: emails.map(toLinkedEmail),
     folder: toFolder(folder),
   });
@@ -105,7 +114,9 @@ libraryFolders.patch("/:id", async (context) => {
   )
     .bind(name, new Date().toISOString(), id, organizationId)
     .run();
-  return context.json({ folder: { id, name } });
+  return respond(context, libraryFoldersRoutes.rename, {
+    folder: { id, name },
+  });
 });
 
 libraryFolders.delete("/:id", async (context) => {
@@ -172,7 +183,7 @@ async function folderName(context: LibraryContext) {
   return trimmed && trimmed.length <= maxFolderNameLength ? trimmed : null;
 }
 
-function toFolder(row: FolderRow) {
+function toFolder(row: FolderRow): LibraryFolder {
   return {
     createdAt: row.created_at,
     emailCount: row.email_count,
