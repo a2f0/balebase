@@ -147,3 +147,59 @@ puts JSON.generate(results)
     ),
   });
 });
+
+test("release build numbers default to the PR merged last on the release date", async () => {
+  const result = await runLanes(
+    `
+prs = [
+  { number: 150, mergedAt: "2026-10-20T23:30:00Z", title: "older" },
+  { number: 152, mergedAt: "2026-10-21T09:00:00Z", title: "morning" },
+  { number: 153, mergedAt: "2026-10-21T17:00:00Z", title: "afternoon" },
+  { number: 154, mergedAt: "2026-10-22T08:00:00Z", title: "next day" }
+]
+git_log = "1792569600\\u0000feat: one (#140)\\n1792605600\\u0000chore: no PR\\n1792591200\\u0000fix: two (#141)\\n"
+commands = []
+gh = { ok: true }
+fastfile.define_singleton_method(:release_command_available?) { |_command| true }
+fastfile.define_singleton_method(:release_command_output) do |*command|
+  commands << command.first
+  next [JSON.generate(prs), gh[:ok]] if command.first == "gh"
+
+  # Like git log --since/--until, only the release date's commits come back.
+  [command.include?("--since=2026-10-21 00:00") ? git_log : "", true]
+end
+resolve = lambda do |options, env_prefix = "ANDROID"|
+  fastfile.send(:merged_release_pr_number, options, env_prefix)
+rescue FastlaneCore::Interface::FastlaneError => e
+  "error: #{e.message}"
+end
+results = {
+  github: resolve.call({ merged_date: "2026-10-21" }),
+  explicit: resolve.call({ merged_pr_number: "77", merged_date: "2026-10-21" }),
+  env: (ENV["IOS_RELEASE_PR_NUMBER"] = "88"; resolve.call({}, "IOS")),
+  invalid: resolve.call({ merged_pr_number: "0" }),
+  badDate: resolve.call({ merged_date: "21/10/2026" }),
+  noMatch: resolve.call({ merged_date: "2026-11-01" })
+}
+commands.clear
+gh[:ok] = false
+results[:gitFallback] = resolve.call({ merged_date: "2026-10-21" })
+results[:fallbackCommands] = commands.dup
+puts JSON.generate(results)
+`,
+    { TZ: "UTC" },
+  );
+  expect(result).toEqual({
+    github: 153,
+    explicit: 77,
+    env: 88,
+    invalid: "error: Merged release PR number must be positive.",
+    badDate:
+      "error: ANDROID_RELEASE_MERGED_DATE must be YYYY-MM-DD: 21/10/2026",
+    noMatch:
+      "error: Could not find a PR merged on 2026-11-01. Set ANDROID_RELEASE_PR_NUMBER or pass merged_pr_number:<number>.",
+    // The squash subjects carry the PR number; the latest such commit wins.
+    gitFallback: 141,
+    fallbackCommands: ["gh", "git"],
+  });
+});
