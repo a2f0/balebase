@@ -1,4 +1,4 @@
-import type { ActivityActor } from "./activityApi";
+import type { ActivityActor } from "@balebase/validators/activity";
 import { fetchApi } from "./apiVersion";
 import { apiUrl } from "./config";
 

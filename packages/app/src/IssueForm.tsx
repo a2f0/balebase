@@ -1,10 +1,7 @@
 import { Banner, Button, Field } from "@balebase/ui/react";
+import type { IssueInput, IssueMember } from "@balebase/validators/issues";
 import { type FormEvent, useEffect, useState } from "react";
-import {
-  type IssueInput,
-  type IssueMember,
-  listIssueMembers,
-} from "./issuesApi";
+import { api } from "./apiClient";
 
 const emptyIssue: IssueInput = {
   title: "",
@@ -33,7 +30,8 @@ export function IssueForm({
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     let active = true;
-    void listIssueMembers()
+    void api.issues
+      .members()
       .then((data) => {
         if (active) setMembers(data.members);
       })

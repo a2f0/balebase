@@ -1,0 +1,20 @@
+{
+  "name": "@balebase/validators",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "bunx --bun --no-install tsc --noEmit",
+    "test": "bun test src"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.3"
+  }
+}

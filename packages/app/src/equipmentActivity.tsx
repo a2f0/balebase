@@ -1,4 +1,4 @@
-import type { ActivityEvent } from "./activityApi";
+import type { ActivityEvent } from "@balebase/validators/activity";
 import { assigneeLabel, textValue } from "./activityLabels";
 import { equipmentTypeLabel, formatPurchaseDate } from "./equipmentLabels";
 

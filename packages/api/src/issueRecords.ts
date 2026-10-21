@@ -1,3 +1,4 @@
+import type { Issue, IssueTargetType } from "@balebase/validators/issues";
 import type { Context } from "hono";
 import { isRecord, validText } from "./auditDefinition";
 import { storedDefinition } from "./auditTemplates";
@@ -7,7 +8,6 @@ import type { Bindings } from "./types";
 
 export type IssueEnv = { Bindings: Bindings; Variables: AuthVariables };
 export type IssueContext = Context<IssueEnv>;
-type IssueTargetType = "audit_run" | "finance_transaction" | "workspace";
 export interface IssueTarget {
   type: IssueTargetType;
   id: string | null;
@@ -28,8 +28,8 @@ export interface IssueRow {
   item_id: string | null;
   title: string;
   description: string;
-  priority: string;
-  status: string;
+  priority: Issue["priority"];
+  status: Issue["status"];
   assigned_to: string | null;
   assignee_name: string | null;
   assignee_email: string | null;
@@ -76,7 +76,7 @@ export async function findIssue(context: IssueContext, id: string) {
     .first<IssueRow>();
 }
 
-export function toIssue(row: IssueRow) {
+export function toIssue(row: IssueRow): Issue {
   return {
     id: row.id,
     title: row.title,

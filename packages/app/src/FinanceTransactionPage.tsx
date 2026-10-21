@@ -1,3 +1,4 @@
+import type { IssueFilters } from "@balebase/api-client";
 import {
   Banner,
   Button,
@@ -22,7 +23,7 @@ import {
   updateFinanceTransactionAnnotation,
 } from "./financeApi";
 import { IssueList } from "./IssueList";
-import { type IssueFilters, transactionIssuePath } from "./issuesApi";
+import { transactionIssuePath } from "./issuePaths";
 
 export function FinanceTransactionPage({
   id,

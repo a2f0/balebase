@@ -3,7 +3,7 @@ import {
   appendIssueImageSelection,
   uploadIssueImagesSequentially,
 } from "./AuditRunPage";
-import { listActivity } from "./activityApi";
+import { listActivity } from "./activitySource";
 import {
   AuditApiError,
   type AuditTemplate,

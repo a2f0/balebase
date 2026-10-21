@@ -1,3 +1,4 @@
+import type { IssueFilters } from "@balebase/api-client";
 import {
   Badge,
   Banner,
@@ -6,13 +7,10 @@ import {
   EmptyState,
   LoadingState,
 } from "@balebase/ui/react";
+import type { IssuePage } from "@balebase/validators/issues";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  type IssueFilters,
-  type IssuePage,
-  issuePath,
-  listIssues,
-} from "./issuesApi";
+import { api } from "./apiClient";
+import { issuePath } from "./issuePaths";
 import { formatLabel } from "./labels";
 import { handleNavigation } from "./workspacePaths";
 
@@ -34,7 +32,8 @@ export function IssueList({
     setPage(undefined);
     setError(undefined);
     setBusy(false);
-    void listIssues(request.filters)
+    void api.issues
+      .list(request.filters)
       .then((next) => {
         if (current === generation.current) setPage(next);
       })
@@ -51,7 +50,7 @@ export function IssueList({
     setBusy(true);
     setError(undefined);
     try {
-      const next = await listIssues(filters, page.nextCursor);
+      const next = await api.issues.list(filters, page.nextCursor);
       if (current === generation.current)
         setPage({
           issues: [...page.issues, ...next.issues],

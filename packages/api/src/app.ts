@@ -1,3 +1,4 @@
+import { sessionRoutes } from "@balebase/validators/session";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { version as apiVersion } from "../package.json";
@@ -33,6 +34,7 @@ import { withNativeOrigin } from "./nativeRequest";
 import { objects } from "./objects";
 import { organizationGroups, requireCapability } from "./organizationGroups";
 import { organizationSettings } from "./organizationSettings";
+import { respond } from "./respond";
 import { signing } from "./signing";
 import type { Bindings } from "./types";
 import { userDeletion } from "./userDeletion";
@@ -139,7 +141,7 @@ app.get("/api", (context) =>
 
 app.get("/api/me", requireAuth, (context) => {
   const apiKey = context.get("apiKey");
-  return context.json({
+  return respond(context, sessionRoutes.me, {
     user: context.get("authSession").user,
     ...(apiKey ? { apiKey } : {}),
   });
@@ -171,7 +173,9 @@ app.all(
 );
 
 app.get("/api/admin", requireAuth, requireRole("admin"), (context) =>
-  context.json({ user: context.get("authSession").user }),
+  respond(context, sessionRoutes.admin, {
+    user: context.get("authSession").user,
+  }),
 );
 
 app.use("/api/account-settings/*", requireAuth);

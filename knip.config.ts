@@ -35,6 +35,10 @@ const baseConfig = {
       entry: ["src/**/*.test.ts"],
       project: ["src/**/*.{css,ts}"],
     },
+    "packages/api-client": {
+      entry: ["src/**/*.test.ts"],
+      project: ["src/**/*.{css,ts}"],
+    },
     "packages/app": {
       entry: ["browser/**/*.test.tsx"],
       project: ["src/**/*.{css,ts,tsx}", "browser/**/*.tsx"],
@@ -58,6 +62,10 @@ const baseConfig = {
       entry: ["src/**/*.test.ts"],
       project: ["src/**/*.{css,ts,tsx}"],
     },
+    "packages/validators": {
+      entry: ["src/**/*.test.ts"],
+      project: ["src/**/*.{css,ts}"],
+    },
     "packages/website": {
       entry: ["src/pages/**/*.astro", "browser/**/*.test.ts"],
       project: ["src/**/*.{astro,css,ts}", "browser/**/*.ts"],
@@ -71,6 +79,10 @@ const productionConfig = {
   workspaces: {
     ".": rootToolingWorkspace,
     "packages/api": {
+      entry: ["src/**/*.ts!", "!src/**/*.test.ts", "!src/contractTestSetup.ts"],
+      project: [],
+    },
+    "packages/api-client": {
       entry: ["src/**/*.ts!", "!src/**/*.test.ts"],
       project: [],
     },
@@ -91,6 +103,10 @@ const productionConfig = {
     // that import the font packages are listed as entries themselves.
     "packages/ui": {
       entry: ["src/styles/*.css!"],
+      project: [],
+    },
+    "packages/validators": {
+      entry: ["src/**/*.ts!", "!src/**/*.test.ts"],
       project: [],
     },
     "packages/website": {

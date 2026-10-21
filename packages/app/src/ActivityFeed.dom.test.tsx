@@ -1,10 +1,10 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import type { ActivityEvent } from "@balebase/validators/activity";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { Activity } from "./Activity";
 import { ActivityFeed } from "./ActivityFeed";
-import type { ActivityEvent } from "./activityApi";
 
 const dom = new Window({ url: "http://localhost:5173/activity" });
 const domGlobals = {

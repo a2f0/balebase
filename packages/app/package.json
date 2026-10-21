@@ -16,7 +16,9 @@
     "test:browser": "bun test browser"
   },
   "dependencies": {
+    "@balebase/api-client": "workspace:*",
     "@balebase/ui": "workspace:*",
+    "@balebase/validators": "workspace:*",
     "@stripe/stripe-js": "9.17.0",
     "better-auth": "1.7.2",
     "pdfjs-dist": "6.4.299",

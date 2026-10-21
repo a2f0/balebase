@@ -21,7 +21,7 @@ import type {
 } from "./financeApi";
 import { formatMoney } from "./financeFormat";
 import { financeTransactionPath } from "./financePages";
-import { transactionIssuePath } from "./issuesApi";
+import { transactionIssuePath } from "./issuePaths";
 import { formatLabel } from "./labels";
 import { handleNavigation, inboxEmailPath } from "./workspacePaths";
 

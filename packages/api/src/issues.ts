@@ -1,3 +1,4 @@
+import { issuesRoutes } from "@balebase/validators/issues";
 import { Hono } from "hono";
 import { activityBatch, findActivity } from "./activity";
 import { isRecord } from "./auditDefinition";
@@ -15,11 +16,12 @@ import {
   toIssue,
 } from "./issueRecords";
 import { listMemberDirectory } from "./organizationMembers";
+import { respond } from "./respond";
 
 export const issues = new Hono<IssueEnv>();
 issues.get("/", listIssues);
 issues.get("/members", async (context) =>
-  context.json({
+  respond(context, issuesRoutes.members, {
     members: await listMemberDirectory(
       context.env.DB,
       context.get("organizationId"),
@@ -29,7 +31,7 @@ issues.get("/members", async (context) =>
 issues.get("/:id", async (context) => {
   const issue = await findIssue(context, context.req.param("id"));
   return issue
-    ? context.json({ issue: toIssue(issue) })
+    ? respond(context, issuesRoutes.get, { issue: toIssue(issue) })
     : context.json({ error: "Issue not found." }, 404);
 });
 issues.get("/:id/activity", async (context) => {
@@ -47,7 +49,7 @@ issues.get("/:id/activity", async (context) => {
     issue.target_type === "finance_transaction",
   );
   return page
-    ? context.json(page)
+    ? respond(context, issuesRoutes.activity, page)
     : context.json({ error: "Invalid activity cursor." }, 400);
 });
 issues.post("/", createIssue);
@@ -65,7 +67,7 @@ async function listIssues(context: IssueContext) {
     .all<IssueRow>();
   const page = rows.results.slice(0, 50);
   const last = page.at(-1);
-  return context.json({
+  return respond(context, issuesRoutes.list, {
     issues: page.map(toIssue),
     nextCursor:
       rows.results.length > 50 && last
@@ -193,7 +195,7 @@ async function createIssue(context: IssueContext) {
       );
     throw cause;
   }
-  return context.json({ issueId: id }, 201);
+  return respond(context, issuesRoutes.create, { issueId: id }, 201);
 }
 
 async function updateIssue(context: IssueContext) {
@@ -249,6 +251,6 @@ async function updateIssue(context: IssueContext) {
     );
   const updated = await findIssue(context, issue.id);
   return updated
-    ? context.json({ issue: toIssue(updated) })
+    ? respond(context, issuesRoutes.update, { issue: toIssue(updated) })
     : context.json({ error: "Issue not found." }, 404);
 }
