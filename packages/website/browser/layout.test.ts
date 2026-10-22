@@ -123,7 +123,7 @@ it("shows each store badge with the link and note its listing calls for", async 
       return {
         id: item.getAttribute("data-store"),
         alt: image?.alt,
-        loaded: [image?.naturalWidth, image?.naturalHeight],
+        loaded: image?.complete && image.naturalWidth > 0,
         href: item.querySelector("a")?.getAttribute("href") ?? null,
       };
     }),
@@ -132,7 +132,7 @@ it("shows each store badge with the link and note its listing calls for", async 
     storeListings.map((listing) => ({
       id: listing.id,
       alt: listing.label,
-      loaded: [listing.badge.width, listing.badge.height],
+      loaded: true,
       href: storeBadgeHref(listing),
     })),
   );
@@ -147,10 +147,71 @@ it("shows each store badge with the link and note its listing calls for", async 
 it("draws the store badges as self-contained vector art", () => {
   for (const listing of storeListings) {
     const svg = readFileSync(join(publicRoot, listing.badge.src), "utf8");
-    expect(svg).toStartWith(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${listing.badge.width}" height="${listing.badge.height}"`,
-    );
+    expect(svg).toMatch(/<svg\b[^>]*xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+    const viewBox = svg
+      .match(/\bviewBox="([^"]+)"/)?.[1]
+      ?.split(/\s+/)
+      .map(Number);
+    expect(viewBox).toHaveLength(4);
+    const [, , width = 0, height = 0] = viewBox ?? [];
+    expect(width).toBeGreaterThan(0);
+    expect(height).toBeGreaterThan(0);
+    expect(
+      Math.abs((width / height) * listing.badge.height - listing.badge.width),
+    ).toBeLessThan(1);
     // Text is outlined, so the badge needs no fonts, images, or links.
     expect(svg).not.toMatch(/<text|<image|href=|@font-face|url\((?!#)/);
   }
 });
+
+it("centers both store badges in their own row above the fold", async () => {
+  const page = await openSite();
+  for (const [width, height] of [
+    [320, 568],
+    [375, 667],
+    [390, 844],
+    [768, 1024],
+    [1024, 768],
+    [1081, 768],
+    [1280, 720],
+    [1366, 768],
+    [1440, 900],
+  ] as const) {
+    await page.setViewport({ width, height, deviceScaleFactor: 2 });
+    await page.goto("https://website.test/", { waitUntil: "load" });
+    await page.evaluate(() => document.fonts.ready);
+    const bounds = await page.evaluate(() => {
+      const rect = (selector: string) => {
+        const element = document.querySelector(selector);
+        if (!element) throw new Error(`Missing ${selector}`);
+        return element.getBoundingClientRect().toJSON();
+      };
+      return {
+        header: rect(".siteHeader"),
+        stores: rect(".storeBadges"),
+        list: rect(".storeBadgeList"),
+        apple: rect('[data-store="app-store"] img'),
+        google: rect('[data-store="google-play"] img'),
+        copy: rect(".heroCopy"),
+        preview: rect(".businessPreview"),
+      };
+    });
+    expect(bounds.stores.top).toBeGreaterThanOrEqual(bounds.header.bottom);
+    expect(bounds.stores.bottom).toBeLessThanOrEqual(height);
+    expect(bounds.stores.bottom).toBeLessThan(bounds.copy.top);
+    expect(bounds.stores.bottom).toBeLessThan(bounds.preview.top);
+    expect(
+      Math.abs(bounds.list.x + bounds.list.width / 2 - width / 2),
+    ).toBeLessThan(1);
+    expect(bounds.apple.top).toBe(bounds.google.top);
+    for (const listing of storeListings) {
+      const badge = listing.id === "app-store" ? bounds.apple : bounds.google;
+      expect(badge.height).toBe(listing.badge.height);
+      expect(Math.abs(badge.width - listing.badge.width)).toBeLessThan(1);
+    }
+    expect(bounds.google.left - bounds.apple.right).toBeGreaterThanOrEqual(10);
+    expect(bounds.apple.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.google.right).toBeLessThanOrEqual(width);
+  }
+  await page.close();
+}, 30_000);

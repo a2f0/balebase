@@ -34,17 +34,21 @@
 
 /* Hero. */
 .hero {
-  padding-block: var(--space-16) var(--space-4);
+  padding-block: var(--space-6) var(--space-4);
 }
 
 .heroInner {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas:
+    "stores stores"
+    "copy preview";
   align-items: center;
-  gap: var(--space-16);
+  gap: var(--space-6) var(--space-16);
 }
 
 .heroCopy {
+  grid-area: copy;
   display: grid;
   justify-items: start;
   gap: var(--space-6);
@@ -70,16 +74,19 @@
   font-size: var(--text-base);
 }
 
-/* Store badges keep their artwork's proportions at the stores' 40px height. */
+/* A full-width row keeps the original vector badges visible above the hero. */
 .storeBadges {
+  grid-area: stores;
   display: grid;
-  justify-items: start;
-  gap: var(--space-2);
+  justify-items: center;
+  gap: var(--space-3);
+  text-align: center;
 }
 
 .storeBadgeList {
   --cluster-gap: var(--space-3);
 
+  justify-content: center;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -103,6 +110,7 @@
 
 /* Illustrative business records, not an interactive app screen. */
 .businessPreview {
+  grid-area: preview;
   overflow: hidden;
   border: 1px solid var(--color-lime-border);
   border-radius: var(--radius-2xl);
@@ -429,11 +437,18 @@
 @media (max-width: 1080px) {
   .heroInner {
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-12);
+    grid-template-areas:
+      "stores"
+      "copy"
+      "preview";
   }
 
   .heroCopy {
     max-width: 44rem;
+  }
+
+  .businessPreview {
+    margin-top: var(--space-6);
   }
 
   .previewRecords {
@@ -463,10 +478,6 @@
 @media (max-width: 720px) {
   .band {
     padding-block: var(--space-16);
-  }
-
-  .hero {
-    padding-block: var(--space-10) var(--space-4);
   }
 
   .bandIntro {
