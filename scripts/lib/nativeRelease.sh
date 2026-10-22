@@ -169,8 +169,8 @@ native_release_build_number_chosen() {
 
   for native_arg in "$@"; do
     case "$native_platform:$native_arg" in
-      android:build_number:* | android:next_google_play:* | android:merged_pr_number:* | android:pr_number:* | android:merged_date:* | \
-        ios:build_number:* | ios:next_testflight:* | ios:merged_pr_number:* | ios:pr_number:* | ios:merged_date:*)
+      android:build_number:* | android:next_google_play:* | android:merged_pr_number:* | android:merged_date:* | \
+        ios:build_number:* | ios:next_testflight:* | ios:merged_pr_number:* | ios:merged_date:*)
         return 0
         ;;
     esac

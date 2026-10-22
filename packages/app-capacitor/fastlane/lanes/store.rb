@@ -42,7 +42,6 @@ def google_play_configured?
   File.file?(google_play_json_key_path)
 end
 
-# track: (an upload's track) narrows the lookup to that track.
 def google_play_tracks(options)
   track = lane_option(options, :track, 'GOOGLE_PLAY_TRACK')
   return [track] unless track.nil?
@@ -213,7 +212,7 @@ def app_store_build_numbers_result(options)
   nil
 end
 
-desc 'Prints the latest build numbers in both stores'
+desc 'Print the latest build numbers in Google Play and the App Store'
 lane :store_build_numbers do |options|
   load_store_secrets_env
 

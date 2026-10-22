@@ -4,7 +4,6 @@ require 'date'
 require 'json'
 require 'open3'
 require 'time'
-require 'fastlane_core'
 require_relative 'lane_options'
 
 # Store build numbers default to the PR merged most recently on the release
@@ -57,7 +56,7 @@ end
 
 def configured_merged_release_pr_number(options, env_prefix)
   value = lane_option(options, :merged_pr_number, "#{env_prefix}_RELEASE_MERGED_PR_NUMBER")
-  value ||= lane_option(options, :pr_number, "#{env_prefix}_RELEASE_PR_NUMBER")
+  value ||= env_option("#{env_prefix}_RELEASE_PR_NUMBER")
   return nil if value.nil?
 
   positive_release_integer(value, 'Merged release PR number')

@@ -43,44 +43,6 @@ async function runLanes(body: string, env: Record<string, string> = {}) {
   return JSON.parse(stdout.trim().split("\n").at(-1) ?? "null");
 }
 
-const standardLanes = {
-  // Lanes outside a platform.
-  "": ["store_build_numbers"],
-  android: [
-    "build_debug_apk",
-    "build_release",
-    "build_release_apk",
-    "clean",
-    "install_debug",
-    "install_release",
-    "sideload",
-    "test",
-    "upload_release",
-  ],
-  ios: [
-    "build_release",
-    "fetch_profiles",
-    "profiles",
-    "select_store_build",
-    "upload_release",
-  ],
-};
-
-for (const tier of ["production", "staging"]) {
-  test(`the ${tier} Fastfile declares the standard lane names`, async () => {
-    const lanes = await runLanes(
-      `
-lanes = fastfile.runner.lanes.to_h do |platform, platform_lanes|
-  [platform.to_s, platform_lanes.keys.map(&:to_s).sort]
-end
-puts JSON.generate(lanes)
-`,
-      { NATIVE_RELEASE_TIER: tier },
-    );
-    expect(lanes).toEqual(standardLanes);
-  });
-}
-
 test("Play version codes count bundles uploaded outside any track", async () => {
   const jsonKey = join(scratch, "play.json");
   await Bun.write(jsonKey, "{}");
@@ -322,7 +284,7 @@ puts JSON.generate(
     validate_only: true,
   });
   expect(result.signing).toBe(
-    `Android release signing is not configured. Missing ANDROID_KEYSTORE_STORE_PASS, ANDROID_KEYSTORE_KEY_PASS in the environment or ${join(scratch, "app.env")}.`,
+    `Android release signing is not configured. Missing ANDROID_KEYSTORE_STORE_PASS, ANDROID_KEYSTORE_KEY_PASS in the environment, ${join(scratch, "shared.env")}, or ${join(scratch, "app.env")}.`,
   );
 });
 

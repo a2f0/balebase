@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'fastlane_core'
-
 # Lane option parsing shared by every lane. Each option has one name; its
 # environment fallback lets the repository-root wrappers and CI configure a lane
 # without passing options. Fastlane defines UI inside its own namespace, so plain

@@ -11,8 +11,9 @@ environment_names = %w[
   ANDROID_KEYSTORE_STORE_PASS
   APP_STORE_CONNECT_KEY_ID
   MATCH_PASSWORD
+  NATIVE_TEST_VALUE
   SERVER_SECRET
-  SHARED_SERVER_SECRET
+  TEAM_ID
   VITE_API_URL
   VITE_APP_URL
 ]
@@ -22,9 +23,10 @@ print JSON.generate(
   androidBuildVariantTask: native_release_android_build_variant_task,
   appIdentifier: NATIVE_APP_IDENTIFIER,
   iosArchiveRelativePath: native_release_ios_archive_relative_path,
-  iosConfiguration: NATIVE_RELEASE_TARGET.fetch(:ios_configuration),
-  iosScheme: NATIVE_RELEASE_TARGET.fetch(:ios_scheme),
   releaseAabRelativePath: android_artifact_paths.fetch(:aab),
-  secretsDir: NATIVE_SECRETS_DIR,
-  environment: environment_names.to_h { |name| [name, ENV.fetch(name, nil)] }
+  releaseMappingRelativePath: android_artifact_paths.fetch(:mapping),
+  releaseNativeDebugSymbolsRelativePath: android_artifact_paths.fetch(:native_debug_symbols),
+  environment: environment_names.to_h { |name| [name, ENV.fetch(name, nil)] },
+  iosConfiguration: NATIVE_RELEASE_TARGET.fetch(:ios_configuration),
+  iosScheme: NATIVE_RELEASE_TARGET.fetch(:ios_scheme)
 )
