@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'shellwords'
+require_relative '../lib/lane_options'
+require_relative '../lib/merged_release_pr'
 require_relative '../lib/native_release_target'
 
 ANDROID_DIR = File.expand_path('../../android', __dir__)
@@ -8,8 +10,10 @@ ANDROID_ASSETS_DIR = File.join(ANDROID_DIR, 'app/src/main/assets')
 ANDROID_BUILD_VARIANT = NATIVE_RELEASE_TARGET.fetch(:android_build_variant)
 ANDROID_BUILD_VARIANT_TASK = native_release_android_build_variant_task
 ANDROID_RELEASE_KEYSTORE_PATH = File.join(NATIVE_SECRETS_DIR, 'balebase-upload.keystore')
+# Gradle signs with these (android/app/build.gradle); app.env supplies them.
 ANDROID_RELEASE_SIGNING_ENV_NAMES = %w[
-  BALEBASE_ANDROID_KEYSTORE_PASS
+  ANDROID_KEYSTORE_STORE_PASS
+  ANDROID_KEYSTORE_KEY_PASS
 ].freeze
 DEBUG_APK_PATH = File.join(ANDROID_DIR, 'app/build/outputs/apk/debug/app-debug.apk')
 ANDROID_OUTPUT_DIR = File.join(ANDROID_DIR, 'app/build/outputs')
@@ -108,9 +112,11 @@ def load_android_release_secrets_env
   load_native_release_secrets_env
 end
 
+# build_number: is the version code. ANDROID_VERSION_CODE is the name Gradle
+# reads for builds outside these lanes.
 def explicit_android_release_build_number(options)
   value = lane_option(options, :build_number, 'ANDROID_BUILD_NUMBER')
-  value ||= lane_option(options, :version_code, 'ANDROID_VERSION_CODE')
+  value ||= env_option('ANDROID_VERSION_CODE')
   return nil if value.nil?
 
   positive_release_integer(value, 'Android release build number')
@@ -205,7 +211,7 @@ def next_android_release_build_number(options)
   next_google_play_requested = next_google_play_build_number_requested?(options)
 
   if !explicit_build_number.nil? && next_google_play_requested
-    UI.user_error!('Use either build_number/version_code or next_google_play:true, not both.')
+    UI.user_error!('Use either build_number or next_google_play:true, not both.')
   end
 
   return android_release_build_hash(explicit_build_number, nil, nil) unless explicit_build_number.nil?
@@ -224,7 +230,7 @@ def require_android_release_signing!
 
   UI.user_error!(
     "Android release signing is not configured. Missing #{missing_names.join(', ')} " \
-    "in the environment or #{NATIVE_SHARED_ENV_PATH}."
+    "in the environment or #{NATIVE_APP_ENV_PATH}."
   )
 end
 
@@ -253,24 +259,86 @@ def android_play_release_result(release_build, assets)
   }
 end
 
+def google_play_upload_track(options)
+  lane_option(options, :track, 'GOOGLE_PLAY_TRACK', 'internal')
+end
+
+def google_play_release_status(options)
+  lane_option(options, :release_status, 'GOOGLE_PLAY_RELEASE_STATUS', 'completed')
+end
+
+def google_play_validate_only?(options)
+  lane_boolean_option(options, :validate_only, 'GOOGLE_PLAY_VALIDATE_ONLY', false)
+end
+
+def google_play_release_binary_upload_options(release_result)
+  options = {
+    package_name: NATIVE_APP_IDENTIFIER,
+    json_key: require_existing_file!(google_play_json_key_path, 'Google Play JSON key'),
+    aab: RELEASE_AAB_PATH
+  }
+  mapping_paths = release_result.fetch(:assets) - [RELEASE_AAB_PATH]
+  options[:mapping_paths] = mapping_paths unless mapping_paths.empty?
+  options
+end
+
+def google_play_release_content_skip_options
+  {
+    skip_upload_apk: true,
+    skip_upload_metadata: true,
+    skip_upload_changelogs: true,
+    skip_upload_images: true,
+    skip_upload_screenshots: true
+  }
+end
+
+def upload_android_play_release_options(options, release_result)
+  google_play_release_binary_upload_options(release_result).merge(
+    google_play_release_content_skip_options,
+    track: google_play_upload_track(options),
+    release_status: google_play_release_status(options),
+    validate_only: google_play_validate_only?(options)
+  )
+end
+
+def record_android_release_build_number(build_number)
+  UI.success("Android release build number: #{build_number}")
+  output_path = ENV.fetch('ANDROID_RELEASE_BUILD_NUMBER_FILE', nil)
+  return if output_path.to_s.empty?
+
+  File.write(output_path, "#{build_number}\n")
+end
+
+def upload_android_play_release_result(options, release_result)
+  {
+    build_number: release_result.fetch(:build_number),
+    google_play_latest_build_number: release_result.fetch(:google_play_latest_build_number),
+    merged_pr_number: release_result.fetch(:merged_pr_number),
+    track: google_play_upload_track(options),
+    release_status: google_play_release_status(options),
+    validate_only: google_play_validate_only?(options),
+    assets: release_result.fetch(:assets)
+  }
+end
+
 platform :android do
-  desc 'Build debug APK'
-  lane :build_debug do
+  desc 'Builds a debug APK for sideloading'
+  lane :build_debug_apk do
     sh('bun run build')
     sh('bun run cap:sync:debug android')
     run_android_gradle('assembleDebug')
   end
 
-  desc 'Build release APK'
-  lane :build_release do
+  desc 'Builds a release APK for sideloading'
+  lane :build_release_apk do
     sh('bun run build')
     sh("bun run #{NATIVE_CAPACITOR_SYNC_SCRIPT} android")
     ensure_release_capacitor_sync!
     run_android_gradle("assemble#{ANDROID_BUILD_VARIANT_TASK}")
   end
 
-  desc 'Build signed Android App Bundle and upload companion assets for Google Play'
-  lane :build_google_play_release do |options|
+  desc 'Signed release App Bundle, without uploading'
+  lane :build_release do |options|
     load_android_release_secrets_env
     release_build = next_android_release_build_number(options)
     require_android_release_signing!
@@ -286,19 +354,27 @@ platform :android do
     android_play_release_result(release_build, assets)
   end
 
-  desc 'Install debug APK on a connected Android device'
+  desc 'build_release, then uploads to a Google Play track'
+  lane :upload_release do |options|
+    release_result = build_release(options)
+    upload_to_play_store(upload_android_play_release_options(options, release_result))
+    record_android_release_build_number(release_result.fetch(:build_number))
+    upload_android_play_release_result(options, release_result)
+  end
+
+  desc 'Builds and installs the debug APK on a connected device'
   lane :install_debug do
-    build_debug
+    build_debug_apk
     install_android_apk(DEBUG_APK_PATH)
   end
 
-  desc 'Install release APK on a connected Android device'
+  desc 'Builds and installs the release APK on a connected device'
   lane :install_release do
-    build_release
+    build_release_apk
     install_android_apk(RELEASE_APK_PATH)
   end
 
-  desc 'Build and sideload an Android APK. Use build_type:release or ANDROID_BUILD_TYPE=release for release.'
+  desc 'Builds and installs an APK on a connected device (build_type:release for the release APK)'
   lane :sideload do |options|
     build_type = options[:build_type] || ENV.fetch('ANDROID_BUILD_TYPE', 'debug')
 
@@ -312,12 +388,12 @@ platform :android do
     end
   end
 
-  desc 'Run Android unit tests'
+  desc 'Runs the Android unit tests'
   lane :test do
     run_android_gradle('test')
   end
 
-  desc 'Clean Android build artifacts'
+  desc 'Cleans the Android build outputs'
   lane :clean do
     run_android_gradle('clean')
   end
