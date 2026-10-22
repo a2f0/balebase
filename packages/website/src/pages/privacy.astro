@@ -90,8 +90,9 @@ import LegalLayout from "../layouts/LegalLayout.astro";
 
     <h3>Click tracking with CT</h3>
     <p>
-      Our hosted website and browser app use CT to record eligible clicks in
-      production and staging. Records contain the click time, a random event
+      Our hosted website and browser app send eligible clicks to CT, the click
+      tracking service at ct.a2f0.net hosted on Cloudflare, in production and
+      staging. Records contain the click time, a random event
       identifier, website or app name, deployment environment, a fixed page
       label, and the clicked element's tag. Browser-app clicks use one generic
       page label rather than collecting workspace routes or workflow names.
@@ -106,6 +107,11 @@ import LegalLayout from "../layouts/LegalLayout.astro";
       visitor or session identifiers or use tracking cookies. Clicks in input
       fields and editable content are excluded. The native app does not
       initialize CT click tracking.
+    </p>
+    <p>
+      Authorized administrators must sign in to view CT's read-only dashboard
+      and data API, including click records, full IP addresses, and approximate
+      locations. Public account registration is disabled.
     </p>
   </section>
 
@@ -153,15 +159,8 @@ import LegalLayout from "../layouts/LegalLayout.astro";
 
   <section>
     <h2>5. How we disclose information</h2>
-    <p>We disclose information in the following ways:</p>
+    <p>We may disclose information only as needed:</p>
     <ul>
-      <li>
-        <strong>Internal click analytics.</strong> Authorized administrators
-        must sign in to view CT's read-only dashboard and data API, including
-        click records, full IP addresses, and approximate locations. Public
-        account registration is disabled. These records do not include your
-        account or workspace content.
-      </li>
       <li>
         <strong>Within your organization.</strong> Authorized workspace members
         can access organization information based on their roles and groups.
@@ -211,7 +210,8 @@ import LegalLayout from "../layouts/LegalLayout.astro";
       legal obligations, resolve disputes, and protect the Service. Our
       {" "}<a href="/data-retention">Data Retention Policy</a> explains the
       feature-specific deletion controls and timelines for organizations,
-      inbound email, Plaid-connected financial information, security records,
+      inbound email, Plaid-connected financial information, CT click records,
+      security records,
       and recovery copies.
     </p>
   </section>

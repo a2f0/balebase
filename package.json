@@ -20,6 +20,7 @@
     "deploy:domains": "bash scripts/configureProductionDomains.sh",
     "deploy:email:verify": "bash scripts/verifyInboundEmail.sh",
     "deploy:staging": "bash scripts/deployStaging.sh",
+    "deploy:staging:frontends": "bash scripts/deployStagingFrontends.sh",
     "deploy:verify": "bash scripts/verifyProduction.sh",
     "deploy:website": "bash scripts/deployWebsite.sh",
     "dev": "bunx --bun --no-install turbo run dev",
@@ -68,7 +69,7 @@
     "test:env": "bash scripts/checks/testCloudflareEnv.sh",
     "test:images": "bun test scripts/checks/brandImages.test.ts",
     "test:markdownlint": "bun test scripts/checks/markdownlintConfig.test.ts",
-    "test:staging": "bash scripts/checks/testDeployStaging.sh"
+    "test:staging": "bash scripts/checks/testDeployStaging.sh && bun test scripts/checks/stagingFrontends.test.ts"
   },
   "workspaces": [
     "packages/*"

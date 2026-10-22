@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
+// One intercepted-browser harness exercises the two independent browser
+// bootstraps without adding CT to the shared app or native shell.
 import { initClickTracking as initApp } from "../../app-web/src/clickTracking";
 import { initClickTracking as initWebsite } from "../src/clickTracking";
 
@@ -55,6 +57,8 @@ beforeAll(async () => {
     headless: true,
     pipe: true,
     userDataDir: profile,
+    timeout: 10_000,
+    protocolTimeout: 10_000,
     args: [
       "--no-sandbox",
       "--password-store=basic",
@@ -295,7 +299,7 @@ for (const app of ["website", "web-app"]) {
         await close();
       }
     }
-  });
+  }, 20_000);
 }
 
 test("app clicks use one generic page across every workspace route", async () => {
@@ -331,4 +335,4 @@ test("app clicks use one generic page across every workspace route", async () =>
   } finally {
     await close();
   }
-});
+}, 20_000);

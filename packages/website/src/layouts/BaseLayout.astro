@@ -47,8 +47,7 @@ const { description, title } = Astro.props;
     <script>
       import { initClickTracking } from "../clickTracking";
 
-      const clicks = initClickTracking();
-      import.meta.hot?.dispose(() => clicks?.destroy());
+      initClickTracking();
     </script>
   </body>
 </html>

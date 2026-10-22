@@ -187,49 +187,22 @@ bun run deploy:website
 bun run deploy:verify
 ```
 
-For frontend-only staging changes, use the existing generated staging configs
-from the initial provision/deploy. The following checks their Worker names and
-rejects stale config differences, loads staging credentials, and packages only the
-two frontend Workers. Run in Bash from the repository root. First leave
-`deploy_args=(--dry-run)`; after reviewing both previews, change it to
-`deploy_args=()` and rerun the block to rebuild and deploy the reviewed source:
+For frontend-only staging changes, use the isolated lane after the normal
+repository checks:
 
-```bash
-(
-  set -euo pipefail
-  source scripts/cloudflareEnv.sh
-  unset TF_VAR_cloudflare_api_token TF_VAR_cloudflare_account_id
-  load_tier_env staging
-  validate_cloudflare_env
-  export CLOUDFLARE_API_TOKEN="$TF_VAR_cloudflare_api_token"
-  export CLOUDFLARE_ACCOUNT_ID="$TF_VAR_cloudflare_account_id"
-  bun -e '
-    for (const [pkg, name] of [
-      ["app-web", "balebase-client-staging"],
-      ["website", "balebase-website-staging"],
-    ]) {
-      const config = await Bun.file(`packages/${pkg}/wrangler.staging.jsonc`).json();
-      const prod = await Bun.file(`packages/${pkg}/wrangler.jsonc`).json();
-      if (config.name !== name) throw new Error(`Unexpected staging Worker: ${pkg}`);
-      if (!Bun.deepEquals({ ...config, name: prod.name }, prod)) {
-        throw new Error(`Stale staging config: regenerate ${pkg} before deploying`);
-      }
-    }
-  '
-  VITE_API_URL=https://api-staging.balebase.com \
-    VITE_WEBSITE_URL=https://website-staging.balebase.com \
-    bun --bun run --cwd packages/app-web build
-  PUBLIC_APP_URL=https://app-staging.balebase.com \
-    bun --bun run --cwd packages/website build
-  deploy_args=(--dry-run)
-  bunx --bun --no-install wrangler deploy \
-    --config packages/app-web/wrangler.staging.jsonc "${deploy_args[@]}"
-  bunx --bun --no-install wrangler deploy \
-    --config packages/website/wrangler.staging.jsonc "${deploy_args[@]}"
-)
-# After the deployment:
-bash scripts/verifyStaging.sh
+```sh
+DRY_RUN=1 bun run deploy:staging:frontends
+# After reviewing both previews:
+bun run deploy:staging:frontends
 ```
+
+The lane loads staging credentials with the existing environment helper,
+verifies both existing custom-domain/Worker mappings, and regenerates only the
+two frontend configs from current JSONC. It refuses unexpected Worker names,
+assets paths, or non-frontend configuration, and builds with the staging API,
+website, and app URLs. The normal run deploys only the two staging frontend
+Workers and checks the staging URLs. It does not migrate or deploy the API,
+write Worker secrets, or apply Terraform.
 
 Verify the live bundles and privacy page on both tiers. Ordinary automated
 browser tests must send no CT events. The website browser suite checks both
