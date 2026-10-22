@@ -264,6 +264,27 @@ when it is 8 MB or smaller) and can be downloaded from the contract or the
 signing link. Original and signed PDFs live in R2; deleting a contract or
 organization queues them in `deleted_object_cleanup` for the scheduled purge.
 
+## Audit activity
+
+The workspace **Activity** page (`/activity`) brings together changes to forms,
+audits, issues, equipment, organization roles, API keys, and transaction
+annotations and categories. Filter by resource to follow a particular area;
+audit and transaction filters include their attached issues, while **Workspace
+issues** shows standalone issues. Transactions are available only to people
+with Finance access. Events show the actor, time, resource, and recorded change
+details. API-key actions also identify the key and REST/MCP channel.
+
+The shared `activity_events` model records events atomically with successful
+changes, using database triggers or transactional statements. Workspace and
+record histories use cursor pagination; global form histories respect publication
+permissions. Contract signing has a separate history. Shared coverage is still
+being expanded, so absence from Activity does not mean no changes occurred.
+
+Activity follows its resource's retention and is not an immutable ledger.
+Historical events are labeled **From existing records**; unknown past edits
+cannot be reconstructed. See [audit activity](audit-activity.md) for the model,
+producer and reader requirements, and the coverage review skill.
+
 ## Audits and checklists
 
 Authenticated users can build organization-scoped checklist templates at
@@ -296,20 +317,14 @@ images. Answer history includes the previous and new values; each question also
 shows its last saved editor. Unsaved answers are labeled, and concurrent edits
 require reloading before overwriting another person's saved work.
 
-Apply migration `0049_create_activity_events.sql` before deploying. The reusable
-`activity_events` model records an organization, root resource, subject, action,
-actor identity snapshot, timestamp, and action details. Audit database triggers
-write activity atomically with successful changes; explicit image removals use
-the same transactional batch. `GET /api/activity` lists the active organization's
-activity; `/api/audits/templates/:id/activity` and
-`/api/audits/runs/:id/activity` provide resource histories. All use cursor
-pagination. Shared global form activity is visible through its form history.
+`/api/audits/templates/:id/activity` and `/api/audits/runs/:id/activity`
+provide resource histories. Shared global form activity is visible through
+its form history.
 Saving a run requires `expectedRevision` from its latest detail response; stale
 revisions return 409, and missing or invalid revisions return 400.
-The migration imports known creators and template versions as historical
-records. Earlier answer edits and completion actors were not stored and cannot
-be reconstructed. Activity follows its root resource's retention and is removed
-when a run, form, or organization is purged.
+Migration `0049_create_activity_events.sql` imports known creators and template
+versions as historical records. Earlier answer edits and completion actors
+were not stored and cannot be reconstructed.
 
 Customizing a global template creates a new organization-scoped form instead
 of changing the shared template or its version history. Platform administrators

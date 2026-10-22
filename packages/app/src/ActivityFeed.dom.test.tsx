@@ -148,6 +148,93 @@ function equipmentEvents(): ActivityEvent[] {
 }
 
 describe("activity feed, mounted", () => {
+  it("keeps the resource filter while paging and refreshing, and resets it on change", async () => {
+    const requests: URL[] = [];
+    globalThis.fetch = (async (input) => {
+      const url = new URL(String(input));
+      requests.push(url);
+      return Response.json({
+        events: [event(url.searchParams.has("cursor") ? 50 : 51, "pass")],
+        nextCursor: url.searchParams.has("cursor") ? null : "51",
+      });
+    }) as typeof fetch;
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root?.render(<Activity canAccessFinance onNavigate={() => {}} />),
+    );
+    await settle();
+    const select = container.querySelector("select");
+    expect(select).not.toBeNull();
+    expect(container.textContent).toContain("Transactions");
+    async function choose(value: string) {
+      await act(async () => {
+        if (select) {
+          select.value = value;
+          select.dispatchEvent(
+            new dom.Event("change", { bubbles: true }) as unknown as Event,
+          );
+        }
+      });
+      await settle();
+    }
+    await choose("equipment");
+    expect(requests.at(-1)?.search).toBe("?resourceType=equipment");
+    await click("Load more activity");
+    expect(requests.at(-1)?.searchParams.get("cursor")).toBe("51");
+    expect(requests.at(-1)?.searchParams.get("resourceType")).toBe("equipment");
+    expect(container.querySelectorAll(".activityRow")).toHaveLength(2);
+    await click("Refresh activity");
+    expect(requests.at(-1)?.search).toBe("?resourceType=equipment");
+    expect(container.querySelectorAll(".activityRow")).toHaveLength(1);
+    await choose("finance_transaction");
+    expect(requests.at(-1)?.search).toBe("?resourceType=finance_transaction");
+    await act(async () => root?.render(<Activity onNavigate={() => {}} />));
+    await settle();
+    expect(requests.at(-1)?.search).toBe("");
+    expect(container.textContent).not.toContain("Transactions");
+  });
+
+  it("ignores a response from the previous resource filter", async () => {
+    let resolvePrevious: ((response: Response) => void) | undefined;
+    globalThis.fetch = (async (input) => {
+      if (!String(input).includes("resourceType="))
+        return new Promise<Response>((resolve) => {
+          resolvePrevious = resolve;
+        });
+      return Response.json({
+        events: [event(5, "Current resource")],
+        nextCursor: null,
+      });
+    }) as typeof fetch;
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root?.render(<Activity onNavigate={() => {}} />));
+    const select = container.querySelector("select");
+    await act(async () => {
+      if (select) {
+        select.value = "audit_run";
+        select.dispatchEvent(
+          new dom.Event("change", { bubbles: true }) as unknown as Event,
+        );
+      }
+    });
+    await settle();
+    await act(async () =>
+      resolvePrevious?.(
+        Response.json({
+          events: [event(4, "Stale resource")],
+          nextCursor: null,
+        }),
+      ),
+    );
+    await settle();
+    expect(container.textContent).toContain("Current resource");
+    expect(container.textContent).not.toContain("Stale resource");
+  });
+
   it.each([true, false])(
     "shows role changes and member navigation (compact: %s)",
     async (compact) => {

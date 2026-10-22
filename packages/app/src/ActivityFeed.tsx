@@ -11,6 +11,7 @@ import type {
   ActivityActor,
   ActivityEvent,
   ActivityPage,
+  ActivityResourceType,
 } from "@balebase/validators/activity";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { assigneeLabel, textValue } from "./activityLabels";
@@ -59,16 +60,19 @@ export function ActivityFeed({
   compact = false,
   onNavigate,
   refreshKey,
+  resourceType,
   source,
 }: {
   compact?: boolean;
   onNavigate?: (pathname: string) => void;
   refreshKey?: unknown;
+  resourceType?: ActivityResourceType | undefined;
   source?: ActivitySource;
 }) {
   const { busy, error, loadMore, page, refresh } = useActivityPage(
     source,
     refreshKey,
+    resourceType,
   );
   return (
     <PageSection
@@ -99,7 +103,11 @@ export function ActivityFeed({
   );
 }
 
-function useActivityPage(source: ActivitySource, refreshKey: unknown) {
+function useActivityPage(
+  source: ActivitySource,
+  refreshKey: unknown,
+  resourceType: ActivityResourceType | undefined,
+) {
   const [page, setPage] = useState<ActivityPage>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -111,17 +119,18 @@ function useActivityPage(source: ActivitySource, refreshKey: unknown) {
     () => ({
       refreshKey,
       reload,
+      resourceType,
       source:
         sourceId && sourceType ? { id: sourceId, type: sourceType } : undefined,
     }),
-    [sourceId, sourceType, refreshKey, reload],
+    [sourceId, sourceType, refreshKey, reload, resourceType],
   );
   useEffect(() => {
     const current = ++generation.current;
     setPage(undefined);
     setError(undefined);
     setBusy(false);
-    void listActivity(requestKey.source)
+    void listActivity(requestKey.source, undefined, requestKey.resourceType)
       .then((next) => {
         if (generation.current === current) setPage(next);
       })
@@ -139,7 +148,7 @@ function useActivityPage(source: ActivitySource, refreshKey: unknown) {
     setBusy(true);
     setError(undefined);
     try {
-      const next = await listActivity(source, page.nextCursor);
+      const next = await listActivity(source, page.nextCursor, resourceType);
       if (generation.current === current) {
         setPage((previous) => ({
           events: [...(previous?.events ?? []), ...next.events],

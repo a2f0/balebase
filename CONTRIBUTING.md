@@ -137,6 +137,10 @@ reduce test coverage to save output.
   `check`. Explain necessary lint suppressions at the affected line.
 - Test observable behavior and failure paths. Use the existing tests for
   mechanical moves; add coverage when behavior changes or a gap matters.
+- Treat [audit activity](docs/audit-activity.md) as part of a mutation's
+  behavior: identify its durable history, actor, transaction boundary, reader
+  permissions, and retention. Use the [audit-trails skill](skills/audit-trails/SKILL.md)
+  for a requested coverage review and findings report.
 - Write comments for constraints and surprising choices. Put setup in the
   README, product details in [product.md](docs/product.md), and operational
   procedures in [operations.md](docs/operations.md).
