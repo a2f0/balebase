@@ -34,7 +34,7 @@ export const storeListings: readonly StoreListing[] = [
   {
     id: "app-store",
     label: "Download on the App Store",
-    badge: { src: "/badges/app-store.svg", width: 120, height: 40 },
+    badge: { src: "/badges/app-store.svg", width: 150, height: 50 },
     // The Apple ID App Store Connect assigned to com.balebase.app.
     url: "https://apps.apple.com/app/id6825740983",
     platform: "iPhone",
@@ -43,7 +43,7 @@ export const storeListings: readonly StoreListing[] = [
   {
     id: "google-play",
     label: "Get it on Google Play",
-    badge: { src: "/badges/google-play.svg", width: 135, height: 40 },
+    badge: { src: "/badges/google-play.svg", width: 169, height: 50 },
     url: "https://play.google.com/store/apps/details?id=com.balebase.app",
     platform: "Android",
     listed: false,

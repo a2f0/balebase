@@ -41,8 +41,8 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-areas:
-    "stores stores"
-    "copy preview";
+    "copy preview"
+    "stores stores";
   align-items: center;
   gap: var(--space-6) var(--space-16);
 }
@@ -74,17 +74,17 @@
   font-size: var(--text-base);
 }
 
-/* A full-width row keeps the original vector badges visible above the hero. */
+/* Center the original vector badges in a full-width row below the hero. */
 .storeBadges {
   grid-area: stores;
   display: grid;
   justify-items: center;
-  gap: var(--space-3);
+  gap: var(--space-4);
   text-align: center;
 }
 
 .storeBadgeList {
-  --cluster-gap: var(--space-3);
+  --cluster-gap: var(--space-4);
 
   justify-content: center;
   margin: 0;
@@ -100,7 +100,7 @@
 .storeBadge img {
   display: block;
   width: auto;
-  height: 2.5rem;
+  height: 3.125rem;
 }
 
 .storeBadgeNote {
@@ -438,9 +438,9 @@
   .heroInner {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "stores"
       "copy"
-      "preview";
+      "preview"
+      "stores";
   }
 
   .heroCopy {
