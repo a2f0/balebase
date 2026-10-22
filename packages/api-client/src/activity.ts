@@ -1,4 +1,7 @@
-import type { activityRoutes } from "@balebase/validators/activity";
+import type {
+  ActivityResourceType,
+  activityRoutes,
+} from "@balebase/validators/activity";
 import { endpoint } from "./endpoint";
 import type { Transport } from "./transport";
 
@@ -13,8 +16,10 @@ const endpoints = {
 export function activityApi(transport: Transport) {
   return {
     /** The organization's activity, newest first. */
-    list(cursor?: string) {
-      return transport.call(endpoints.list, { query: { cursor } });
+    list(cursor?: string, resourceType?: ActivityResourceType) {
+      return transport.call(endpoints.list, {
+        query: { cursor, resourceType },
+      });
     },
   };
 }

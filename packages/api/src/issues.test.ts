@@ -1,6 +1,7 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { afterEach, describe, expect, it } from "bun:test";
 import { readdir } from "node:fs/promises";
+import type { ActivityPage } from "@balebase/validators/activity";
 import { Hono } from "hono";
 import { activity } from "./activity";
 import { audits } from "./audits";
@@ -29,6 +30,58 @@ interface Event {
 }
 afterEach(() => {
   for (const db of databases.splice(0)) db.close();
+});
+
+describe("activity feed", () => {
+  it("filters activity before paging and preserves tenant and Finance isolation", async () => {
+    const f = await fixture();
+    const ids: number[] = [];
+    const insert = f.db.query(`INSERT INTO activity_events
+      (organization_id, root_type, root_id, root_label, subject_type, subject_id,
+       action, actor_user_id, actor_name, actor_email, occurred_at, details)
+      VALUES (?, ?, 'resource', 'Resource', 'issue', 'subject', 'issue.created',
+              'user-1', 'User', 'user@example.com', ?, '{}')`);
+    for (let i = 0; i < 52; i++) {
+      ids.push(Number(insert.run("org_user-1", "issue", now).lastInsertRowid));
+      insert.run("org_user-1", "equipment", now);
+      insert.run("org_user-2", "issue", now);
+    }
+    insert.run("org_user-1", "finance_transaction", now);
+    const first = await f.request<ActivityPage>("/activity?resourceType=issue");
+    expect(first.status).toBe(200);
+    expect(first.body.events.map(({ id }) => id)).toEqual(
+      ids.toReversed().slice(0, 50),
+    );
+    const last = await f.request<ActivityPage>(
+      `/activity?resourceType=issue&cursor=${first.body.nextCursor}`,
+    );
+    expect(last.body.events.map(({ id }) => id)).toEqual(
+      ids.toReversed().slice(50),
+    );
+    expect(last.body.nextCursor).toBeNull();
+    expect(
+      (
+        await f.request<ActivityPage>(
+          "/activity?resourceType=finance_transaction",
+        )
+      ).body.events,
+    ).toHaveLength(1);
+    f.user = "user-2";
+    expect(
+      (
+        await f.request<ActivityPage>(
+          "/activity?resourceType=finance_transaction",
+        )
+      ).body.events,
+    ).toEqual([]);
+    expect(
+      (await f.request<ActivityPage>("/activity")).body.events.every(
+        ({ root }) => root.type !== "finance_transaction",
+      ),
+    ).toBe(true);
+    for (const query of ["resourceType=unknown", "resourceType=", "cursor=bad"])
+      expect((await f.request(`/activity?${query}`)).status).toBe(400);
+  });
 });
 
 describe("workspace issues", () => {

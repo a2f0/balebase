@@ -1,3 +1,7 @@
+.activityFilter {
+  max-width: 20rem;
+}
+
 .activityList {
   margin: 0;
   padding: 0;

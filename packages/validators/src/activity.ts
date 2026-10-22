@@ -74,11 +74,24 @@ export type ActivityPage = z.infer<typeof ActivityPageSchema>;
 /** Every activity history pages with the last event's cursor. */
 export const ActivityQuerySchema = z.object({ cursor: z.string().optional() });
 
+export const ActivityResourceTypeSchema = z.enum([
+  "audit_run",
+  "audit_template",
+  "equipment",
+  "organization_member",
+  "api_key",
+  "finance_transaction",
+  "issue",
+]);
+export type ActivityResourceType = z.infer<typeof ActivityResourceTypeSchema>;
+
 export const activityRoutes = {
   list: route({
     method: "GET",
     path: "/api/activity",
-    query: ActivityQuerySchema,
+    query: ActivityQuerySchema.extend({
+      resourceType: ActivityResourceTypeSchema.optional(),
+    }),
     response: ActivityPageSchema,
   }),
 };

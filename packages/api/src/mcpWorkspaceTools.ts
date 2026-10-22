@@ -1,3 +1,4 @@
+import { ActivityResourceTypeSchema } from "@balebase/validators/activity";
 import type { JsonSchemaType } from "@modelcontextprotocol/server";
 import {
   activityCursor,
@@ -80,11 +81,17 @@ export const workspaceTools: McpTool[] = [
   },
   {
     description:
-      "Lists the organization's activity feed, newest first, 50 events per page: audits, forms, issues, transaction annotations, equipment, role changes, and API keys. Finance activity requires Finance access. Pass nextCursor to page.",
+      "Lists the organization's activity feed, newest first, 50 events per page: audits, forms, issues, transaction annotations, equipment, role changes, and API keys. Optionally filter by root resource type. Finance activity requires Finance access. Pass nextCursor to page, retaining the same filter.",
     method: "GET",
     name: "list_activity",
     path: "/api/activity",
-    query: { cursor: activityCursor },
+    query: {
+      cursor: activityCursor,
+      resourceType: oneOf(
+        "Root resource type. Audit and transaction histories include their attached issues; issue means standalone workspace issues.",
+        ActivityResourceTypeSchema.options,
+      ),
+    },
     title: "List organization activity",
   },
   {

@@ -1,5 +1,6 @@
 import {
   type ActivityEvent,
+  type ActivityResourceType,
   activityRoutes,
 } from "@balebase/validators/activity";
 import { type Context, Hono } from "hono";
@@ -48,10 +49,13 @@ const pageSize = 50;
 export const activity = new Hono<ActivityEnv>();
 
 activity.get("/", async (context) => {
+  const query = activityRoutes.list.query.safeParse(context.req.query());
+  if (!query.success)
+    return context.json({ error: "Invalid activity filters." }, 400);
   const page = await findActivity(
     context.env.DB,
     context.get("organizationId"),
-    context.req.query("cursor"),
+    query.data.cursor,
     undefined,
     await userHasCapability(
       context.env.DB,
@@ -59,6 +63,7 @@ activity.get("/", async (context) => {
       context.get("authSession").user.id,
       "finance",
     ),
+    query.data.resourceType,
   );
   return page
     ? respond(context, activityRoutes.list, page)
@@ -76,6 +81,7 @@ export async function findActivity(
   cursor?: string,
   root?: ActivityRoot,
   includeFinance = false,
+  resourceType?: ActivityResourceType,
 ) {
   if (cursor !== undefined && !/^[1-9]\d{0,15}$/.test(cursor)) return null;
   const before = cursor === undefined ? null : Number(cursor);
@@ -86,6 +92,10 @@ export async function findActivity(
   const bindings: (string | number)[] =
     organizationId === null ? [] : [organizationId];
   if (!includeFinance) filters.push("root_type <> 'finance_transaction'");
+  if (resourceType) {
+    filters.push("root_type = ?");
+    bindings.push(resourceType);
+  }
   if (root) {
     filters.push("root_type = ? AND root_id = ?");
     bindings.push(root.type, root.id);

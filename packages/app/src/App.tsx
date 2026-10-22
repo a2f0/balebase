@@ -492,7 +492,13 @@ function contentForPath(
         canAccessFinance={access.can("finance")}
       />
     );
-  if (pathname === "/activity") return <Activity onNavigate={navigate} />;
+  if (pathname === "/activity")
+    return (
+      <Activity
+        onNavigate={navigate}
+        canAccessFinance={access.can("finance")}
+      />
+    );
   if (isWithin(pathname, "/audits")) {
     return <Audits onNavigate={navigate} pathname={pathname} />;
   }

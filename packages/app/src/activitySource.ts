@@ -1,3 +1,4 @@
+import type { ActivityResourceType } from "@balebase/validators/activity";
 import { api } from "./apiClient";
 
 export type ActivitySource =
@@ -17,8 +18,12 @@ export type ActivitySource =
  * One page of a record's history, or the organization's without a source. A
  * global form's history is read through Global Audits, when managing it.
  */
-export function listActivity(source?: ActivitySource, cursor?: string) {
-  if (!source) return api.activity.list(cursor);
+export function listActivity(
+  source?: ActivitySource,
+  cursor?: string,
+  resourceType?: ActivityResourceType,
+) {
+  if (!source) return api.activity.list(cursor, resourceType);
   const { id } = source;
   switch (source.type) {
     case "audit_run":
