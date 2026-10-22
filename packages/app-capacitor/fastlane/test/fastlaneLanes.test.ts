@@ -8,6 +8,18 @@ const packageRoot = resolve(import.meta.dir, "../..");
 const scratch = await mkdtemp(join(tmpdir(), "balebase-fastlane-lanes-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
 
+// Release options the lanes read from the environment, by prefix because some
+// names are built at run time; the caller's values must not change results.
+const releaseOptionPrefixes =
+  /^(ANDROID|APP_STORE|APPLE|GOOGLE_PLAY|IOS|MATCH|SKIP|SUPPLY|TESTFLIGHT|VITE)_/;
+const releaseOptionNames = ["DEVELOPMENT_TEAM", "FASTLANE_TEAM_ID", "TEAM_ID"];
+const callerEnvironment = Object.fromEntries(
+  Object.entries(process.env).filter(
+    ([name]) =>
+      !releaseOptionPrefixes.test(name) && !releaseOptionNames.includes(name),
+  ),
+);
+
 /**
  * Loads the real Fastfile, runs `body` against it as `fastfile`, and returns
  * the JSON the body prints last. Secrets resolve to the scratch folder.
@@ -24,7 +36,7 @@ async function runLanes(body: string, env: Record<string, string> = {}) {
   const child = Bun.spawn(["bundle", "exec", "ruby", "-e", script], {
     cwd: packageRoot,
     env: {
-      ...process.env,
+      ...callerEnvironment,
       FASTLANE_OPT_OUT_USAGE: "1",
       FASTLANE_SKIP_UPDATE_CHECK: "1",
       NATIVE_RELEASE_SECRETS_DIR: scratch,
@@ -374,6 +386,25 @@ puts JSON.generate(
       "keychain",
       { ...profile, force: true },
     ],
+  });
+});
+
+test("release URL guards fail as fastlane user errors", async () => {
+  const result = await runLanes(`
+ENV["VITE_API_URL"] = "https://api-staging.balebase.com"
+ENV["VITE_APP_URL"] = "https://app.balebase.com"
+error = begin
+  fastfile.send(:ensure_native_release_service_urls!)
+  nil
+rescue StandardError => e
+  e
+end
+puts JSON.generate(error && { class: error.class.name, message: error.message })
+`);
+  expect(result).toEqual({
+    class: "FastlaneCore::Interface::FastlaneError",
+    message:
+      "VITE_APP_URL must use app-staging.balebase.com for a staging release.",
   });
 });
 
