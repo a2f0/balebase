@@ -8,6 +8,7 @@ require_relative '../lib/lane_options'
 require_relative '../lib/merged_release_pr'
 require_relative '../lib/native_release_target'
 require_relative '../lib/swift_package_pins'
+require_relative '../lib/testflight_upload_options'
 
 IOS_PACKAGE_DIR = File.expand_path('../..', __dir__)
 IOS_DIR = File.expand_path('../../ios', __dir__)
@@ -77,8 +78,7 @@ def next_testflight_build_number_requested?(options)
 end
 
 def explicit_ios_release_version(options)
-  lane_option(options, :version, 'IOS_VERSION') ||
-    lane_option(options, :apple_version, 'APP_STORE_VERSION')
+  lane_option(options, :version, 'IOS_VERSION') || env_option('APP_STORE_VERSION')
 end
 
 # The marketing version defaults to the app-capacitor package version, which
@@ -195,10 +195,10 @@ end
 # ships.
 def ios_team_id(options)
   lane_option(options, :team_id, 'IOS_TEAM_ID') ||
-    lane_option(options, :apple_team_id, 'APPLE_TEAM_ID') ||
-    lane_option(options, :development_team, 'DEVELOPMENT_TEAM') ||
-    lane_option(options, :fastlane_team_id, 'FASTLANE_TEAM_ID') ||
-    lane_option(options, :root_team_id, 'TEAM_ID')
+    env_option('APPLE_TEAM_ID') ||
+    env_option('DEVELOPMENT_TEAM') ||
+    env_option('FASTLANE_TEAM_ID') ||
+    env_option('TEAM_ID')
 end
 
 def require_ios_team_id!(options)
@@ -254,8 +254,8 @@ end
 
 # Install the App Store distribution certificate and provisioning profile from
 # the match git repo. readonly: true so a build only fetches existing assets and
-# never creates or mutates portal state; the profiles lane makes them.
-# Returns the installed profile name to pin manual signing to.
+# never creates or mutates portal state; the profiles lane makes them. Returns
+# the installed profile name to pin manual signing to.
 def install_ios_appstore_signing_assets!
   match(
     type: 'appstore',
@@ -317,64 +317,6 @@ def ios_testflight_release_result(release_build, ipa_path, assets)
   }
 end
 
-def testflight_changelog(options)
-  lane_option(options, :changelog, 'TESTFLIGHT_CHANGELOG')
-end
-
-# Pilot distributes a build only after processing, so external distribution
-# waits by default.
-def testflight_skip_waiting_for_build_processing?(options)
-  lane_boolean_option(
-    options,
-    :skip_waiting_for_build_processing,
-    'TESTFLIGHT_SKIP_WAITING_FOR_BUILD_PROCESSING',
-    !testflight_distribute_external?(options)
-  )
-end
-
-def testflight_skip_submission?(options)
-  default_value = !testflight_distribute_external?(options)
-  lane_boolean_option(options, :skip_submission, 'TESTFLIGHT_SKIP_SUBMISSION', default_value)
-end
-
-def testflight_distribute_external?(options)
-  lane_boolean_option(options, :distribute_external, 'TESTFLIGHT_DISTRIBUTE_EXTERNAL', false)
-end
-
-def testflight_notify_external_testers(options)
-  value = lane_option(options, :notify_external_testers, 'TESTFLIGHT_NOTIFY_EXTERNAL_TESTERS')
-  return nil if value.nil?
-
-  lane_boolean_option(options, :notify_external_testers, 'TESTFLIGHT_NOTIFY_EXTERNAL_TESTERS', false)
-end
-
-def normalized_testflight_group_values(values)
-  values.map(&:to_s).map(&:strip).reject(&:empty?)
-end
-
-def parsed_testflight_group_values(raw_groups)
-  return normalized_testflight_group_values(raw_groups) if raw_groups.is_a?(Array)
-
-  normalized_testflight_group_values(raw_groups.to_s.split(','))
-end
-
-def nil_if_empty_testflight_groups(groups)
-  groups.empty? ? nil : groups
-end
-
-def testflight_groups(options)
-  raw_groups = lane_option(options, :groups, 'TESTFLIGHT_GROUPS')
-  return nil if raw_groups.nil?
-
-  nil_if_empty_testflight_groups(parsed_testflight_group_values(raw_groups))
-end
-
-def require_testflight_distribution_options!(options)
-  return unless testflight_distribute_external?(options) && testflight_groups(options).nil?
-
-  UI.user_error!('External TestFlight distribution requires TESTFLIGHT_GROUPS or groups:<name,name>.')
-end
-
 def base_upload_ios_testflight_options(options, release_result)
   {
     api_key: app_store_connect_api_key(app_store_connect_api_key_options),
@@ -387,41 +329,14 @@ def base_upload_ios_testflight_options(options, release_result)
   }
 end
 
-def add_optional_testflight_upload_options!(upload_options, options)
-  changelog = testflight_changelog(options)
-  groups = testflight_groups(options)
-  notify_external_testers = testflight_notify_external_testers(options)
-  upload_options[:changelog] = changelog unless changelog.nil?
-  upload_options[:groups] = groups unless groups.nil?
-  upload_options[:notify_external_testers] = notify_external_testers unless notify_external_testers.nil?
-
-  upload_options
-end
-
 def upload_ios_testflight_options(options, release_result)
   require_testflight_distribution_options!(options)
   upload_options = base_upload_ios_testflight_options(options, release_result)
   add_optional_testflight_upload_options!(upload_options, options)
 end
 
-def upload_ios_testflight_release_result(options, release_result)
-  release_result.merge(
-    distribute_external: testflight_distribute_external?(options),
-    skip_submission: testflight_skip_submission?(options),
-    skip_waiting_for_build_processing: testflight_skip_waiting_for_build_processing?(options)
-  )
-end
-
-def record_ios_release_build_number(build_number)
-  UI.success("iOS release build number: #{build_number}")
-  output_path = ENV.fetch('IOS_RELEASE_BUILD_NUMBER_FILE', nil)
-  return if output_path.to_s.empty?
-
-  File.write(output_path, "#{build_number}\n")
-end
-
 platform :ios do
-  desc 'Selects an uploaded build for the App Store draft and its icon, without submitting'
+  desc 'Select an uploaded build for the App Store draft and its icon without submitting (version:, build_number:)'
   lane :select_store_build do |options|
     version = options[:version].to_s.strip
     build_number = options[:build_number].to_s.strip
@@ -438,7 +353,7 @@ platform :ios do
     draft.id
   end
 
-  desc 'Installs the match App Store profiles read-only'
+  desc 'Install the match App Store profiles read-only'
   lane :fetch_profiles do
     load_ios_release_secrets_env
     profile_name = install_ios_appstore_signing_assets!
@@ -450,7 +365,7 @@ platform :ios do
   # Connect API key, reusing the team's distribution certificate there, or
   # renews one that is missing or no longer valid. force:true regenerates it,
   # as after the bundle ID's capabilities or the certificate change.
-  desc 'Creates or renews the match App Store profiles (force:true regenerates them)'
+  desc 'Create or renew the match App Store profiles (force:true regenerates them)'
   lane :profiles do |options|
     load_ios_release_secrets_env
     with_ios_signing_keychain do
@@ -465,7 +380,7 @@ platform :ios do
     end
   end
 
-  desc 'Signed App Store IPA, without uploading'
+  desc 'Build a signed App Store IPA without uploading it (build_number:)'
   lane :build_release do |options|
     load_ios_release_secrets_env
     release_build = next_ios_release_build_number(options)
@@ -506,7 +421,7 @@ platform :ios do
     ios_testflight_release_result(release_build, ipa_path, assets)
   end
 
-  desc 'build_release, then uploads to TestFlight'
+  desc 'Run build_release, then upload to TestFlight (build_number:)'
   lane :upload_release do |options|
     release_result = build_release(options)
     upload_to_testflight(upload_ios_testflight_options(options, release_result))

@@ -34,7 +34,8 @@ NATIVE_RELEASE_TARGETS = {
 
 NATIVE_RELEASE_TIER = ENV.fetch('NATIVE_RELEASE_TIER', 'production').strip.downcase
 NATIVE_RELEASE_TARGET = NATIVE_RELEASE_TARGETS.fetch(NATIVE_RELEASE_TIER) do
-  raise "Unknown NATIVE_RELEASE_TIER=#{NATIVE_RELEASE_TIER.inspect}. Expected production or staging."
+  raise "Unknown NATIVE_RELEASE_TIER=#{NATIVE_RELEASE_TIER.inspect}. " \
+        "Expected #{NATIVE_RELEASE_TARGETS.keys.join(' or ')}."
 end
 NATIVE_APP_IDENTIFIER = NATIVE_RELEASE_TARGET.fetch(:app_identifier)
 NATIVE_CAPACITOR_SYNC_SCRIPT = NATIVE_RELEASE_TARGET.fetch(:capacitor_sync_script)
@@ -58,10 +59,8 @@ NATIVE_SECRETS_DIR =
   end
 NATIVE_SHARED_ENV_PATH = File.join(NATIVE_SECRETS_DIR, 'shared.env')
 NATIVE_APP_ENV_PATH = File.join(NATIVE_SECRETS_DIR, 'app.env')
-# Store credentials and signing passwords, imported from either file; both also
-# hold values a native release never uses (app.env the tier's server secrets).
-# Values copied from root.env stay in shared.env until they are rotated into
-# app.env.
+# Store credentials and signing passwords, imported from either file. Values
+# copied from root.env stay in shared.env until they are rotated into app.env.
 NATIVE_STORE_ENV_NAMES = %w[
   ANDROID_KEYSTORE_KEY_PASS
   ANDROID_KEYSTORE_STORE_PASS
@@ -102,26 +101,24 @@ def parsed_native_release_env(path)
   File.file?(path) ? Dotenv.parse(path) : {}
 end
 
-def warn_ignored_native_vite_names(environment, source)
+def warn_ignored_native_vite_names(environment, file_name)
   ignored_names = environment.keys.select { |name| name.start_with?('VITE_') }
   return if ignored_names.empty?
 
-  warn "Ignoring #{source} Vite settings for a native release: #{ignored_names.sort.join(', ')}"
+  source = "#{NATIVE_RELEASE_TARGET.fetch(:secrets_tier)}/#{file_name}"
+  warn "Ignoring #{source} Vite settings for #{NATIVE_RELEASE_TIER}: #{ignored_names.sort.join(', ')}"
 end
 
-def native_release_shared_environment
-  shared_environment = parsed_native_release_env(NATIVE_SHARED_ENV_PATH)
-  warn_ignored_native_vite_names(shared_environment, "#{NATIVE_RELEASE_TARGET.fetch(:secrets_tier)}/shared.env")
-  shared_environment.slice(*NATIVE_STORE_ENV_NAMES)
+def native_release_env_file(file_name)
+  environment = parsed_native_release_env(File.join(NATIVE_SECRETS_DIR, file_name))
+  warn_ignored_native_vite_names(environment, file_name)
+  environment.slice(*NATIVE_STORE_ENV_NAMES)
 end
 
-def native_release_app_environment
-  parsed_native_release_env(NATIVE_APP_ENV_PATH).slice(*NATIVE_STORE_ENV_NAMES)
-end
-
-# Parsing shared.env first lets app.env override it.
+# Both files also hold server values no lane needs, so each contributes only
+# the allowlisted names; app.env wins over shared.env.
 def native_release_file_environment
-  native_release_shared_environment.merge(native_release_app_environment)
+  native_release_env_file('shared.env').merge(native_release_env_file('app.env'))
 end
 
 # Load release values while preserving every variable explicitly set by the
@@ -166,6 +163,7 @@ def ensure_native_release_service_urls!
     next if problem.nil?
 
     message = "#{env_name} #{problem}."
-    defined?(UI) ? UI.user_error!(message) : raise(message)
+    # Fastlane defines no top-level UI; tests load this file without fastlane.
+    defined?(FastlaneCore::UI) ? FastlaneCore::UI.user_error!(message) : raise(message)
   end
 end
