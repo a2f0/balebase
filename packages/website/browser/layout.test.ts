@@ -164,10 +164,11 @@ it("draws the store badges as self-contained vector art", () => {
   }
 });
 
-it("centers both store badges in their own row above the fold", async () => {
+it("centers larger store badges below the complete hero and wraps on narrow phones", async () => {
   const page = await openSite();
   for (const [width, height] of [
     [320, 568],
+    [360, 800],
     [375, 667],
     [390, 844],
     [768, 1024],
@@ -179,7 +180,9 @@ it("centers both store badges in their own row above the fold", async () => {
   ] as const) {
     await page.setViewport({ width, height, deviceScaleFactor: 2 });
     await page.goto("https://website.test/", { waitUntil: "load" });
-    await page.evaluate(() => document.fonts.ready);
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+    });
     const bounds = await page.evaluate(() => {
       const rect = (selector: string) => {
         const element = document.querySelector(selector);
@@ -197,21 +200,32 @@ it("centers both store badges in their own row above the fold", async () => {
       };
     });
     expect(bounds.stores.top).toBeGreaterThanOrEqual(bounds.header.bottom);
-    expect(bounds.stores.bottom).toBeLessThanOrEqual(height);
-    expect(bounds.stores.bottom).toBeLessThan(bounds.copy.top);
-    expect(bounds.stores.bottom).toBeLessThan(bounds.preview.top);
+    expect(bounds.stores.top).toBeGreaterThan(bounds.copy.bottom);
+    expect(bounds.stores.top).toBeGreaterThan(bounds.preview.bottom);
     expect(
       Math.abs(bounds.list.x + bounds.list.width / 2 - width / 2),
     ).toBeLessThan(1);
-    expect(bounds.apple.top).toBe(bounds.google.top);
+    if (width < 375) {
+      expect(bounds.google.top - bounds.apple.bottom).toBeGreaterThanOrEqual(
+        16,
+      );
+      for (const badge of [bounds.apple, bounds.google]) {
+        expect(Math.abs(badge.x + badge.width / 2 - width / 2)).toBeLessThan(1);
+      }
+    } else {
+      expect(bounds.apple.top).toBe(bounds.google.top);
+      expect(bounds.google.left - bounds.apple.right).toBeGreaterThanOrEqual(
+        16,
+      );
+    }
     for (const listing of storeListings) {
       const badge = listing.id === "app-store" ? bounds.apple : bounds.google;
+      expect(badge.height).toBe(50);
       expect(badge.height).toBe(listing.badge.height);
       expect(Math.abs(badge.width - listing.badge.width)).toBeLessThan(1);
     }
-    expect(bounds.google.left - bounds.apple.right).toBeGreaterThanOrEqual(10);
     expect(bounds.apple.left).toBeGreaterThanOrEqual(0);
     expect(bounds.google.right).toBeLessThanOrEqual(width);
   }
   await page.close();
-}, 30_000);
+}, 60_000);
