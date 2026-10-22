@@ -2250,7 +2250,12 @@ describe("employee forms", () => {
 
       checkrAvailable = true;
       expect(await refreshActiveCheckrScreenings(fixture.bindings)).toEqual({
-        notifications: { sent: 1, failed: 0 },
+        notifications: {
+          sent: 1,
+          failed: 0,
+          abandoned: 0,
+          queueUnavailable: false,
+        },
         refreshed: 1,
         skipped: false,
       });
@@ -2393,16 +2398,28 @@ describe("employee forms", () => {
     fixture.bindings.EMAIL.send = async () => {
       throw new Error("Mail unavailable");
     };
-    await expect(
-      refreshActiveCheckrScreenings(fixture.bindings),
-    ).rejects.toThrow("Could not email 24 screening completion(s)");
+    expect(await refreshActiveCheckrScreenings(fixture.bindings)).toEqual({
+      refreshed: 0,
+      skipped: false,
+      notifications: {
+        sent: 0,
+        failed: 24,
+        abandoned: 0,
+        queueUnavailable: false,
+      },
+    });
     fixture.bindings.EMAIL.send = send;
     expect(
       await refreshActiveCheckrScreenings(withoutCheckrKey(fixture.bindings)),
     ).toEqual({
       refreshed: 0,
-      skipped: false,
-      notifications: { sent: 1, failed: 0 },
+      skipped: true,
+      notifications: {
+        sent: 1,
+        failed: 0,
+        abandoned: 0,
+        queueUnavailable: false,
+      },
     });
     fixture.bindings.EMAIL.send = async () => {
       throw new Error("Mail unavailable");
@@ -2414,6 +2431,8 @@ describe("employee forms", () => {
     expect(await sendPendingScreeningNotifications(fixture.bindings)).toEqual({
       sent: 0,
       failed: 24,
+      abandoned: 0,
+      queueUnavailable: false,
     });
     const retried = fixture.database
       .query(
@@ -2469,6 +2488,54 @@ describe("employee forms", () => {
     }
   });
 
+  it("abandons expired mail and stops after the tenth delivery attempt", async () => {
+    for (const expired of [true, false]) {
+      const fixture = await createFixture();
+      const id = await orderedScreening(fixture);
+      fixture.database
+        .query(
+          "UPDATE employee_requirements SET status = 'complete', checkr_report_status = 'complete' WHERE id = ?",
+        )
+        .run(id);
+      fixture.database.exec(
+        expired
+          ? "UPDATE employee_screening_notifications SET created_at = '2000-01-01'"
+          : "UPDATE employee_screening_notifications SET attempts = 9",
+      );
+      let attempts = 0;
+      fixture.bindings.EMAIL.send = async () => {
+        attempts += 1;
+        throw new Error("Address undeliverable");
+      };
+      const first = await sendPendingScreeningNotifications(fixture.bindings);
+      expect(first.failed).toBe(expired ? 0 : 1);
+      fixture.database.exec(
+        "UPDATE employee_screening_notifications SET next_attempt_at = '2000-01-01'",
+      );
+      await sendPendingScreeningNotifications(fixture.bindings);
+      expect(attempts).toBe(expired ? 0 : 1);
+      expect(
+        fixture.database
+          .query("SELECT abandoned_at FROM employee_screening_notifications")
+          .get(),
+      ).toEqual({ abandoned_at: expect.any(String) });
+    }
+  });
+
+  it("reports queue access failures separately from attempted email failures", async () => {
+    const fixture = await createFixture();
+    fixture.beforeRun((query) => {
+      if (query.includes("SET abandoned_at"))
+        throw new Error("Queue unavailable");
+    });
+    expect(await sendPendingScreeningNotifications(fixture.bindings)).toEqual({
+      sent: 0,
+      failed: 0,
+      abandoned: 0,
+      queueUnavailable: true,
+    });
+  });
+
   it("escapes names and titles in screening email HTML", async () => {
     const fixture = await createFixture();
     fixture.database.exec(
@@ -2510,7 +2577,12 @@ describe("employee forms", () => {
       ).toEqual({
         refreshed: 0,
         skipped: true,
-        notifications: { sent: 0, failed: 0 },
+        notifications: {
+          sent: 0,
+          failed: 0,
+          abandoned: 0,
+          queueUnavailable: false,
+        },
       });
       expect(checkr.calls).toEqual([]);
       await expect(
@@ -2643,7 +2715,12 @@ describe("employee forms", () => {
       expect(kept.checkr_refresh_revision).toBe(1);
       expect(kept.checkr_refresh_requested_at).toEqual(expect.any(String));
       expect(await refreshActiveCheckrScreenings(conflicted.bindings)).toEqual({
-        notifications: { sent: 0, failed: 0 },
+        notifications: {
+          sent: 0,
+          failed: 0,
+          abandoned: 0,
+          queueUnavailable: false,
+        },
         refreshed: 1,
         skipped: false,
       });

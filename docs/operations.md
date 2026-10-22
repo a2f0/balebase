@@ -159,6 +159,12 @@ host for links and the logo, and keep report results out of the email. Migration
 backfilling old ones. Failed deliveries retry in **Refresh Checkr screenings**
 under admin maintenance, or through the production hourly job. This job can
 also be run manually in staging, which has no scheduled jobs.
+Its result includes email counts for `sent`, `failed`, and `abandoned`, and a
+`queueUnavailable` flag for queue access failures. Delivery retries stop after
+ten attempts or seven days. Investigate provider failures before arranging
+any separate follow-up for abandoned messages; the candidate can still view
+their status in My documents. A `skipped` result means Checkr report refreshes
+were disabled because no API key was configured; email outcomes are separate.
 
 Configure Checkr's own communications separately in each account:
 

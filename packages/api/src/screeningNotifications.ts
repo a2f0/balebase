@@ -25,6 +25,7 @@ const eligibleNotification = `
     AND member.userId = notification.user_id
   JOIN user ON user.id = member.userId
   WHERE notification.sent_at IS NULL AND organization.deletedAt IS NULL
+    AND notification.abandoned_at IS NULL
     AND requirement.status = 'complete'
     AND requirement.checkr_refresh_requested_at IS NULL
     AND requirement.checkr_report_status = 'complete'`;
@@ -34,17 +35,41 @@ export async function sendPendingScreeningNotifications(
   env: Bindings,
   requirementId?: string,
 ) {
-  const delivery = { sent: 0, failed: 0 };
+  const delivery = {
+    sent: 0,
+    failed: 0,
+    abandoned: 0,
+    queueUnavailable: false,
+  };
   try {
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60_000).toISOString();
+    const expired = await env.DB.prepare(
+      `UPDATE employee_screening_notifications SET abandoned_at = ?
+       WHERE sent_at IS NULL AND abandoned_at IS NULL AND next_attempt_at <= ?
+         AND (attempts >= 10 OR created_at < ?)
+         AND (? IS NULL OR requirement_id = ?)`,
+    )
+      .bind(
+        now.toISOString(),
+        now.toISOString(),
+        cutoff,
+        requirementId ?? null,
+        requirementId ?? null,
+      )
+      .run();
+    delivery.abandoned = expired.meta.changes;
     const { results } = await env.DB.prepare(
       `SELECT notification.requirement_id, notification.report_id, notification.attempts
        ${eligibleNotification}
          AND notification.next_attempt_at <= ?
+         AND notification.attempts < 10 AND notification.created_at >= ?
          AND (? IS NULL OR notification.requirement_id = ?)
        ORDER BY notification.next_attempt_at LIMIT 24`,
     )
       .bind(
         new Date().toISOString(),
+        cutoff,
         requirementId ?? null,
         requirementId ?? null,
       )
@@ -58,7 +83,7 @@ export async function sendPendingScreeningNotifications(
       }
     }
   } catch (cause) {
-    delivery.failed += 1;
+    delivery.queueUnavailable = true;
     console.error("Could not read pending screening notifications.", cause);
   }
   return delivery;
@@ -97,7 +122,7 @@ async function deliverNotification(
      ${eligibleNotification} AND notification.claim_token = ?`,
   )
     .bind(token)
-    .first<Notification>();
+    .first<Omit<Notification, "attempts">>();
   if (!current) return;
   await sendScreeningComplete(env, {
     organizationId: current.organization_id,

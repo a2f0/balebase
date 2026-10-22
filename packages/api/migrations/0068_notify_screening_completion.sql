@@ -8,11 +8,13 @@ CREATE TABLE employee_screening_notifications (
   attempts INTEGER NOT NULL DEFAULT 0,
   claim_token TEXT,
   sent_at TEXT,
+  abandoned_at TEXT,
   PRIMARY KEY (requirement_id, report_id)
 );
 
 CREATE INDEX employee_screening_notifications_pending_idx
-ON employee_screening_notifications (next_attempt_at) WHERE sent_at IS NULL;
+ON employee_screening_notifications (next_attempt_at)
+WHERE sent_at IS NULL AND abandoned_at IS NULL;
 
 CREATE TRIGGER queue_screening_completion
 AFTER UPDATE OF checkr_report_id, checkr_report_status, status ON employee_requirements

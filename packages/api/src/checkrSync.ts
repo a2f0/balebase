@@ -91,7 +91,7 @@ export async function handleCheckrWebhook(
 export async function refreshActiveCheckrScreenings(env: Bindings) {
   const notifications = await sendPendingScreeningNotifications(env);
   if (!env.CHECKR_API_KEY)
-    return maintenanceResult(0, notifications.sent === 0, notifications);
+    return { refreshed: 0, skipped: true, notifications };
   const recovery = await recoverStaleAttempts(env);
   const { results } = await env.DB.prepare(
     `SELECT id, organization_id, status, checkr_report_id,
@@ -125,6 +125,9 @@ export async function refreshActiveCheckrScreenings(env: Bindings) {
         refreshed += 1;
         notifications.sent += outcome.value.notifications.sent;
         notifications.failed += outcome.value.notifications.failed;
+        notifications.abandoned += outcome.value.notifications.abandoned;
+        notifications.queueUnavailable ||=
+          outcome.value.notifications.queueUnavailable;
       }
     }
   }
@@ -134,19 +137,7 @@ export async function refreshActiveCheckrScreenings(env: Bindings) {
       `Could not refresh ${failures.length} Checkr screening(s).`,
     );
   }
-  return maintenanceResult(refreshed, false, notifications);
-}
-
-function maintenanceResult(
-  refreshed: number,
-  skipped: boolean,
-  notifications: { sent: number; failed: number },
-) {
-  if (notifications.failed)
-    throw new Error(
-      `Could not email ${notifications.failed} screening completion(s); ${notifications.sent} sent. Pending deliveries will retry.`,
-    );
-  return { refreshed, skipped, notifications };
+  return { refreshed, skipped: false, notifications };
 }
 
 // Attempts idle long enough that no report request can still arrive: their
