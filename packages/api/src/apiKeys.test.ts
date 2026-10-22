@@ -898,6 +898,32 @@ describe("MCP endpoint", () => {
     });
   });
 
+  it("filters shared activity through MCP with the REST resource types", async () => {
+    const fixture = await createFixture();
+    const read = await fixture.createKey("read");
+    const write = await fixture.createKey("write");
+    expect(
+      (
+        await fixture.withKey(write.token, "POST", "/api/equipment", {
+          type: "computer",
+          make: "Apple",
+          model: "Audited laptop",
+        })
+      ).status,
+    ).toBe(201);
+    const listed = await fixture.callTool<{
+      content: Array<{ text: string }>;
+      isError?: boolean;
+    }>(read.token, "list_activity", { resourceType: "equipment" });
+    expect(listed.isError).toBeUndefined();
+    const page = JSON.parse(listed.content[0]?.text ?? "");
+    expect(page.events).toHaveLength(1);
+    expect(page.events[0]).toMatchObject({
+      action: "equipment.created",
+      root: { type: "equipment" },
+    });
+  });
+
   it("calls REST routes with the key's permissions", async () => {
     const fixture = await createFixture();
     fixture.addEquipment("laptop", fixture.organizationId, "MacBook Pro");

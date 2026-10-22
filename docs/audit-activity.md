@@ -45,6 +45,8 @@ workspace issues, equipment, people, API keys, and transactions. Audit and
 transaction filters include issues attached to those roots; workspace issues
 are standalone issues. Transaction activity requires Finance capability even
 when a caller supplies the filter directly.
+The MCP `list_activity` tool accepts the same optional `resourceType`; keep
+that filter when passing the next cursor.
 
 Resource history routes authorize the resource before using `findActivity`.
 Shared global form history only exposes published versions to organization

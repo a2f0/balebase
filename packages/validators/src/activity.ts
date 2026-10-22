@@ -74,7 +74,7 @@ export type ActivityPage = z.infer<typeof ActivityPageSchema>;
 /** Every activity history pages with the last event's cursor. */
 export const ActivityQuerySchema = z.object({ cursor: z.string().optional() });
 
-const ActivityResourceTypeSchema = z.enum([
+export const ActivityResourceTypeSchema = z.enum([
   "audit_run",
   "audit_template",
   "equipment",

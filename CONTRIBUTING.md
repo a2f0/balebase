@@ -23,6 +23,7 @@ repository root unless a command specifies `--cwd`.
 | Public website | `packages/website/src` |
 | Deployment and maintenance commands | `scripts`, `terraform` |
 | Agent review and merge policy | `agent-tool.json`, `AGENTS.md` |
+| Repository-owned audit skills | `skills/` (separate from generated `.agents/skills` and `.claude/skills`) |
 
 `packages/app` holds every screen and never imports Capacitor. A shell renders
 it with `renderApp` from `@balebase/app/client`, passing the host services in

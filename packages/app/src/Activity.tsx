@@ -3,6 +3,20 @@ import type { ActivityResourceType } from "@balebase/validators/activity";
 import { useEffect, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
 
+const resourceLabels: Record<ActivityResourceType, string> = {
+  audit_run: "Audits",
+  audit_template: "Forms",
+  issue: "Workspace issues",
+  equipment: "Equipment",
+  organization_member: "People",
+  api_key: "API keys",
+  finance_transaction: "Transactions",
+};
+
+function isResourceType(value: string): value is ActivityResourceType {
+  return Object.hasOwn(resourceLabels, value);
+}
+
 export function Activity({
   onNavigate,
   canAccessFinance = false,
@@ -33,24 +47,22 @@ export function Activity({
           <select
             className="select"
             value={resourceType ?? ""}
-            onChange={(event) =>
-              setSelected(
-                (event.target.value || undefined) as
-                  | ActivityResourceType
-                  | undefined,
-              )
-            }
+            onChange={(event) => {
+              const value = event.target.value;
+              setSelected(isResourceType(value) ? value : undefined);
+            }}
           >
             <option value="">All resources</option>
-            <option value="audit_run">Audits</option>
-            <option value="audit_template">Forms</option>
-            <option value="issue">Workspace issues</option>
-            <option value="equipment">Equipment</option>
-            <option value="organization_member">People</option>
-            <option value="api_key">API keys</option>
-            {canAccessFinance && (
-              <option value="finance_transaction">Transactions</option>
-            )}
+            {Object.entries(resourceLabels)
+              .filter(
+                ([value]) =>
+                  canAccessFinance || value !== "finance_transaction",
+              )
+              .map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
           </select>
         </Field>
         <ActivityFeed
