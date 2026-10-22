@@ -515,8 +515,10 @@ manager's assessment to the person.
 
 Newly completed reports queue one completion email per request and report.
 Delivery checks that the original person still belongs to the active
-organization and the same report remains complete. Concurrent deliveries use a
-five-minute claim; failed sends retry through the hourly Checkr maintenance job
+organization and the same report remains complete, with no newer webhook
+waiting to be reconciled. Concurrent deliveries claim the email before sending;
+failed sends retry with delays starting at five minutes and doubling up to one
+day, through the hourly Checkr maintenance job
 (or its manual admin action in staging, where scheduled jobs are disabled).
 A lost email-provider response can still produce a duplicate on retry. Existing
 completed reports are not emailed on deployment. Checkr continues to deliver

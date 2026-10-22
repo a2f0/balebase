@@ -5,6 +5,7 @@ CREATE TABLE employee_screening_notifications (
   user_id TEXT NOT NULL REFERENCES user (id) ON DELETE CASCADE,
   created_at TEXT NOT NULL,
   next_attempt_at TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
   claim_token TEXT,
   sent_at TEXT,
   PRIMARY KEY (requirement_id, report_id)

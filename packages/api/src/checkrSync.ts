@@ -87,9 +87,11 @@ export async function handleCheckrWebhook(
 // Safety net for missed webhooks and failed refreshes: settles submissions
 // their person left unfinished, then re-reads the least recently checked
 // screenings that Checkr has not finished or that a webhook asked to refresh.
+// Also retries completion emails and reports their delivery outcome to admins.
 export async function refreshActiveCheckrScreenings(env: Bindings) {
-  await sendPendingScreeningNotifications(env);
-  if (!env.CHECKR_API_KEY) return { refreshed: 0, skipped: true };
+  const notifications = await sendPendingScreeningNotifications(env);
+  if (!env.CHECKR_API_KEY)
+    return maintenanceResult(0, notifications.sent === 0, notifications);
   const recovery = await recoverStaleAttempts(env);
   const { results } = await env.DB.prepare(
     `SELECT id, organization_id, status, checkr_report_id,
@@ -119,7 +121,11 @@ export async function refreshActiveCheckrScreenings(env: Bindings) {
     );
     for (const outcome of outcomes) {
       if (outcome.status === "rejected") failures.push(outcome.reason);
-      else if (outcome.value) refreshed += 1;
+      else if (outcome.value) {
+        refreshed += 1;
+        notifications.sent += outcome.value.notifications.sent;
+        notifications.failed += outcome.value.notifications.failed;
+      }
     }
   }
   if (failures.length > 0) {
@@ -128,7 +134,19 @@ export async function refreshActiveCheckrScreenings(env: Bindings) {
       `Could not refresh ${failures.length} Checkr screening(s).`,
     );
   }
-  return { refreshed, skipped: false };
+  return maintenanceResult(refreshed, false, notifications);
+}
+
+function maintenanceResult(
+  refreshed: number,
+  skipped: boolean,
+  notifications: { sent: number; failed: number },
+) {
+  if (notifications.failed)
+    throw new Error(
+      `Could not email ${notifications.failed} screening completion(s); ${notifications.sent} sent. Pending deliveries will retry.`,
+    );
+  return { refreshed, skipped, notifications };
 }
 
 // Attempts idle long enough that no report request can still arrive: their

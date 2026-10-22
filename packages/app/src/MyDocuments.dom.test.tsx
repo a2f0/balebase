@@ -316,6 +316,23 @@ describe("My documents", () => {
     );
   });
 
+  it("shows a canceled check that the organization completed by hand as complete", async () => {
+    stubApi([
+      requirement({
+        id: "check",
+        kind: "background_check",
+        checkrReportStatus: "canceled",
+        status: "complete",
+      }),
+    ]);
+    await render("/me/screening/check");
+    expect(container.textContent).toContain("Acme marked this check complete.");
+    expect(container.textContent).not.toContain(
+      "Contact Acme about next steps",
+    );
+    expect(container.querySelector(".badge")?.textContent).toBe("Complete");
+  });
+
   it("says when nothing has been requested", async () => {
     stubApi([]);
     await render();

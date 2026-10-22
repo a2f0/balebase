@@ -55,7 +55,7 @@ export const maintenanceJobs = [
     id: "refreshCheckrScreenings",
     name: "Refresh Checkr screenings",
     description:
-      "Re-reads unfinished Checkr screenings in case a webhook was missed.",
+      "Re-reads unfinished Checkr screenings and retries pending completion emails.",
   },
 ] as const;
 

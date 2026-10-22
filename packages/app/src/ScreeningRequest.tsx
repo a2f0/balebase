@@ -12,7 +12,11 @@ import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./apiClient";
 import { downloadScreeningConsent } from "./employeeFormDownloads";
-import { formatTimestamp, requirementBadge } from "./requirementStatus";
+import {
+  formatTimestamp,
+  localDate,
+  personalRequirement,
+} from "./requirementStatus";
 import { ScreeningForm } from "./ScreeningForm";
 import { handleNavigation } from "./workspacePaths";
 
@@ -85,7 +89,7 @@ export function ScreeningRequest({
         requirementId={requirementId}
       />
     );
-  const badge = requirementBadge(requirement);
+  const { badge } = personalRequirement(requirement, localDate());
   return (
     <div className="screeningForm">
       <Card
@@ -147,6 +151,8 @@ export function screeningProgress(
   const status = requirement.checkrReportStatus;
   if (status === "complete")
     return `${organizationName} reviews your report and contacts you about next steps. A completed report is not a hiring decision.`;
+  if (requirement.status === "complete")
+    return `${organizationName} marked this check complete.`;
   if (status === "suspended")
     return "Your report is on hold. Check your email for a request from Checkr for additional information.";
   if (status === "dispute")
@@ -155,8 +161,6 @@ export function screeningProgress(
     return `This report ${status === "partially_canceled" ? "was partly canceled" : "was canceled"}. Contact ${organizationName} about next steps.`;
   if (status)
     return "Checkr is preparing your report and contacts you if it needs anything. You can return here to check its status.";
-  if (requirement.status === "complete")
-    return `${organizationName} marked this check complete.`;
   return `${organizationName} sends you this check when it’s ready.`;
 }
 

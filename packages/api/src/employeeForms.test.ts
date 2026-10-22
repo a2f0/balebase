@@ -2250,6 +2250,7 @@ describe("employee forms", () => {
 
       checkrAvailable = true;
       expect(await refreshActiveCheckrScreenings(fixture.bindings)).toEqual({
+        notifications: { sent: 1, failed: 0 },
         refreshed: 1,
         skipped: false,
       });
@@ -2378,10 +2379,58 @@ describe("employee forms", () => {
     expect(fixture.emails).toHaveLength(1);
   });
 
+  it("backs off failed mail, reports failure, and rotates past a full failed batch", async () => {
+    const fixture = await createFixture();
+    for (let index = 0; index < 25; index += 1) {
+      const id = await orderedScreening(fixture, `report-${index}`);
+      fixture.database
+        .query(
+          "UPDATE employee_requirements SET status = 'complete', checkr_report_status = 'complete' WHERE id = ?",
+        )
+        .run(id);
+    }
+    const send = fixture.bindings.EMAIL.send;
+    fixture.bindings.EMAIL.send = async () => {
+      throw new Error("Mail unavailable");
+    };
+    await expect(
+      refreshActiveCheckrScreenings(fixture.bindings),
+    ).rejects.toThrow("Could not email 24 screening completion(s)");
+    fixture.bindings.EMAIL.send = send;
+    expect(
+      await refreshActiveCheckrScreenings(withoutCheckrKey(fixture.bindings)),
+    ).toEqual({
+      refreshed: 0,
+      skipped: false,
+      notifications: { sent: 1, failed: 0 },
+    });
+    fixture.bindings.EMAIL.send = async () => {
+      throw new Error("Mail unavailable");
+    };
+    fixture.database.exec(
+      "UPDATE employee_screening_notifications SET next_attempt_at = '2000-01-01' WHERE sent_at IS NULL",
+    );
+    const before = Date.now();
+    expect(await sendPendingScreeningNotifications(fixture.bindings)).toEqual({
+      sent: 0,
+      failed: 24,
+    });
+    const retried = fixture.database
+      .query(
+        "SELECT attempts, next_attempt_at FROM employee_screening_notifications WHERE sent_at IS NULL LIMIT 1",
+      )
+      .get() as { attempts: number; next_attempt_at: string };
+    expect(retried.attempts).toBe(2);
+    expect(Date.parse(retried.next_attempt_at)).toBeGreaterThanOrEqual(
+      before + 10 * 60_000,
+    );
+  });
+
   it("does not send stale, canceled, reassigned, or deleted organization notifications", async () => {
     for (const change of [
       "UPDATE employee_requirements SET checkr_report_id = 'replacement', checkr_report_status = 'pending', status = 'in_progress'",
       "UPDATE employee_requirements SET checkr_report_status = 'canceled'",
+      "UPDATE employee_requirements SET checkr_refresh_requested_at = '2026-10-22T15:00:00Z'",
       "UPDATE employee_requirements SET member_id = (SELECT id FROM member WHERE userId = 'owner')",
       "UPDATE organization SET deletedAt = '2026-01-01'",
     ]) {
@@ -2458,7 +2507,11 @@ describe("employee forms", () => {
     try {
       expect(
         await refreshActiveCheckrScreenings(withoutCheckrKey(fixture.bindings)),
-      ).toEqual({ refreshed: 0, skipped: true });
+      ).toEqual({
+        refreshed: 0,
+        skipped: true,
+        notifications: { sent: 0, failed: 0 },
+      });
       expect(checkr.calls).toEqual([]);
       await expect(
         refreshActiveCheckrScreenings(fixture.bindings),
@@ -2590,6 +2643,7 @@ describe("employee forms", () => {
       expect(kept.checkr_refresh_revision).toBe(1);
       expect(kept.checkr_refresh_requested_at).toEqual(expect.any(String));
       expect(await refreshActiveCheckrScreenings(conflicted.bindings)).toEqual({
+        notifications: { sent: 0, failed: 0 },
         refreshed: 1,
         skipped: false,
       });

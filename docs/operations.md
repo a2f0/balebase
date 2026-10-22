@@ -166,9 +166,9 @@ Configure Checkr's own communications separately in each account:
    candidate-facing display name. Keep **Tearleads, LLC** as the legal entity.
    The generated `packages/ui/dist/images/web/apple-touch-icon.png` is an
    opaque 180×180 logo (`bun run images`). Checkr's
-   [account-settings guide](https://checkr1680308104.zendesk.com/hc/en-us/articles/14806779704343-Manage-account-settings)
-   describes the account logo and brands assigned to hierarchy nodes; confirm
-   the available controls with Checkr if your dashboard differs.
+   [candidate-experience guide](https://checkr.com/resources/articles/order-your-first-background-check-with-checkr)
+   describes company-name and logo branding; confirm the available controls
+   with Checkr if your dashboard differs.
 2. Account administrators can adjust their own completion and assessment
    emails under **Your profile → Notifications**. These settings do not
    control candidate messages. See

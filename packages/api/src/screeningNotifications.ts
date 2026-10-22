@@ -9,6 +9,7 @@ interface Notification {
   email: string;
   name: string;
   title: string;
+  attempts: number;
 }
 
 // Recheck the report, organization, and original recipient at delivery time.
@@ -25,6 +26,7 @@ const eligibleNotification = `
   JOIN user ON user.id = member.userId
   WHERE notification.sent_at IS NULL AND organization.deletedAt IS NULL
     AND requirement.status = 'complete'
+    AND requirement.checkr_refresh_requested_at IS NULL
     AND requirement.checkr_report_status = 'complete'`;
 
 /** Deliver new completions and retry failed mail without changing report state. */
@@ -32,9 +34,10 @@ export async function sendPendingScreeningNotifications(
   env: Bindings,
   requirementId?: string,
 ) {
+  const delivery = { sent: 0, failed: 0 };
   try {
     const { results } = await env.DB.prepare(
-      `SELECT notification.requirement_id, notification.report_id
+      `SELECT notification.requirement_id, notification.report_id, notification.attempts
        ${eligibleNotification}
          AND notification.next_attempt_at <= ?
          AND (? IS NULL OR notification.requirement_id = ?)
@@ -45,32 +48,42 @@ export async function sendPendingScreeningNotifications(
         requirementId ?? null,
         requirementId ?? null,
       )
-      .all<Pick<Notification, "requirement_id" | "report_id">>();
+      .all<Pick<Notification, "requirement_id" | "report_id" | "attempts">>();
     for (const notification of results) {
-      await deliverNotification(env, notification).catch((cause: unknown) => {
+      try {
+        if (await deliverNotification(env, notification)) delivery.sent += 1;
+      } catch (cause) {
+        delivery.failed += 1;
         console.error("Could not email a screening completion.", cause);
-      });
+      }
     }
   } catch (cause) {
+    delivery.failed += 1;
     console.error("Could not read pending screening notifications.", cause);
   }
+  return delivery;
 }
 
 async function deliverNotification(
   env: Bindings,
-  notification: Pick<Notification, "requirement_id" | "report_id">,
+  notification: Pick<Notification, "requirement_id" | "report_id" | "attempts">,
 ) {
   const token = crypto.randomUUID();
   const now = new Date();
+  // Retry transient failures without letting dead addresses dominate each run.
+  const delay = Math.min(
+    24 * 60 * 60_000,
+    5 * 60_000 * 2 ** Math.min(notification.attempts, 9),
+  );
   const claim = await env.DB.prepare(
     `UPDATE employee_screening_notifications
-     SET claim_token = ?, next_attempt_at = ?
+     SET claim_token = ?, next_attempt_at = ?, attempts = attempts + 1
      WHERE requirement_id = ? AND report_id = ?
        AND sent_at IS NULL AND next_attempt_at <= ?`,
   )
     .bind(
       token,
-      new Date(now.getTime() + 5 * 60_000).toISOString(),
+      new Date(now.getTime() + delay).toISOString(),
       notification.requirement_id,
       notification.report_id,
       now.toISOString(),
@@ -100,4 +113,5 @@ async function deliverNotification(
   )
     .bind(new Date().toISOString(), token)
     .run();
+  return true;
 }

@@ -94,8 +94,8 @@ export async function refreshCheckrScreening(
     )
     .run();
   if (!refreshed.meta.changes) return null;
-  await sendPendingScreeningNotifications(env, row.id);
-  return { reportStatus, result: report.result ?? null };
+  const notifications = await sendPendingScreeningNotifications(env, row.id);
+  return { reportStatus, result: report.result ?? null, notifications };
 }
 
 /** Asks the person to complete a background check at a work location. */
