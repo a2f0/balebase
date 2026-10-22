@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'json'
 require 'shellwords'
 require_relative '../lib/ios_signing_keychain'
 require_relative '../lib/native_release_target'
@@ -9,6 +10,7 @@ IOS_PACKAGE_DIR = File.expand_path('../..', __dir__)
 IOS_DIR = File.expand_path('../../ios', __dir__)
 IOS_APP_DIR = File.join(IOS_DIR, 'App')
 IOS_PROJECT_PATH = File.join(IOS_APP_DIR, 'App.xcodeproj')
+IOS_PACKAGE_JSON_PATH = File.join(IOS_PACKAGE_DIR, 'package.json')
 IOS_PACKAGE_RESOLVED_PATH = File.join(IOS_PROJECT_PATH, 'project.xcworkspace/xcshareddata/swiftpm/Package.resolved')
 IOS_TARGET = 'App'
 IOS_SCHEME = NATIVE_RELEASE_TARGET.fetch(:ios_scheme)
@@ -76,15 +78,10 @@ def explicit_ios_release_version(options)
     lane_option(options, :apple_version, 'APP_STORE_VERSION')
 end
 
+# The marketing version defaults to the app-capacitor package version, which
+# Android also uses as its version name (android/app/build.gradle).
 def ios_release_version(options)
-  explicit_version = explicit_ios_release_version(options)
-  return explicit_version unless explicit_version.nil?
-
-  get_version_number(
-    xcodeproj: IOS_PROJECT_PATH,
-    target: IOS_TARGET,
-    configuration: IOS_CONFIGURATION
-  )
+  explicit_ios_release_version(options) || JSON.parse(File.read(IOS_PACKAGE_JSON_PATH)).fetch('version')
 end
 
 def testflight_version_guard_skipped?(options)
@@ -253,10 +250,9 @@ def configure_ios_manual_signing!(profile_name, team_id)
 end
 
 # Install the App Store distribution certificate and provisioning profile from
-# the match git repo. readonly: true so it only fetches existing assets and
-# never creates or mutates portal state (the App Store Connect API key is a
-# Developer-role key without cloud-signing permission). Returns the installed
-# profile name to pin manual signing to.
+# the match git repo. readonly: true so a build only fetches existing assets and
+# never creates or mutates portal state; create_appstore_profile makes them.
+# Returns the installed profile name to pin manual signing to.
 def install_ios_appstore_signing_assets!
   match(
     type: 'appstore',
@@ -325,6 +321,25 @@ platform :ios do
     profile_name = install_ios_appstore_signing_assets!
     UI.success("Installed App Store provisioning profile: #{profile_name}")
     profile_name
+  end
+
+  # Creates the tier's App Store profile in the match repo with the App Store
+  # Connect API key, reusing the team's distribution certificate there, or
+  # renews one that is missing or no longer valid. force:true regenerates it,
+  # as after the bundle ID's capabilities or the certificate change.
+  desc 'Create or renew the App Store provisioning profile in match (force:true regenerates it)'
+  lane :create_appstore_profile do |options|
+    load_ios_release_secrets_env
+    with_ios_signing_keychain do
+      # readonly: false overrides the MATCH_READONLY the signing keychain sets.
+      match(
+        type: 'appstore',
+        app_identifier: NATIVE_APP_IDENTIFIER,
+        api_key: app_store_connect_api_key(app_store_connect_api_key_options),
+        readonly: false,
+        force: lane_boolean_option(options, :force, 'MATCH_FORCE', false)
+      )
+    end
   end
 
   desc 'Build signed iOS IPA for TestFlight'

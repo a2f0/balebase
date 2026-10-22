@@ -318,3 +318,41 @@ puts JSON.generate(
     submission: [true, false],
   });
 });
+
+test("iOS release lanes take the package version and create profiles with the API key", async () => {
+  const { version } = await Bun.file(join(packageRoot, "package.json")).json();
+  const result = await runLanes(`
+calls = []
+fastfile.define_singleton_method(:load_ios_release_secrets_env) {}
+fastfile.define_singleton_method(:with_ios_signing_keychain) do |&block|
+  calls << "keychain"
+  block.call
+end
+fastfile.define_singleton_method(:app_store_connect_api_key_options) { { key_id: "KEY" } }
+fastfile.define_singleton_method(:app_store_connect_api_key) { |options| "api-key:#{options[:key_id]}" }
+fastfile.define_singleton_method(:match) { |options| calls << options }
+fastfile.runner.execute(:create_appstore_profile, :ios, {})
+fastfile.runner.execute(:create_appstore_profile, :ios, { force: true })
+puts JSON.generate(
+  version: fastfile.send(:ios_release_version, {}),
+  explicitVersion: fastfile.send(:ios_release_version, { version: "2.0.0" }),
+  calls: calls
+)
+`);
+  const profile = {
+    type: "appstore",
+    app_identifier: "com.balebase.staging.app",
+    api_key: "api-key:KEY",
+    readonly: false,
+  };
+  expect(result).toEqual({
+    version,
+    explicitVersion: "2.0.0",
+    calls: [
+      "keychain",
+      { ...profile, force: false },
+      "keychain",
+      { ...profile, force: true },
+    ],
+  });
+});

@@ -145,14 +145,28 @@ certificate and profile with read-only `match`, and builds
 `TEAM_ID`, or `team_id:<id>`, and the `MATCH_*` repository settings. The archive
 resolves Swift packages only from the committed `Package.resolved`.
 
-The build number follows the Android convention, checked against TestFlight
+The marketing version is this package's version, as Android's version name
+is. The build number follows the Android convention, checked against TestFlight
 when App Store Connect credentials are available: `APP_STORE_CONNECT_KEY_ID`,
 `APP_STORE_CONNECT_ISSUER_ID`, and `.secrets/<tier>/AuthKey_<key-id>.p8`. The
 upload lane only uploads by default; see `fastlane/lanes/testflight_upload.rb`
-for submission and external distribution options.
+for submission and external distribution options. `Info.plist` declares that
+the app uses no non-exempt encryption, so builds skip the export compliance
+question.
 
-No App Store Connect app, signing identity, or `match` repository is set up for
-Balebase yet, so the iOS lanes cannot sign or upload until those exist.
+Each tier's `shared.env` holds `TEAM_ID`, the App Store Connect key ID and
+issuer ID, and the `MATCH_*` settings of the shared `match` repository. That
+repository keeps the team's Apple Distribution certificate and a
+`match AppStore <app ID>` profile for each app. Create a missing profile, or
+renew an invalid one, with the API key:
+
+```sh
+bun run ios:create:appstore-profile
+bun run ios:create:appstore-profile:staging
+```
+
+Pass `force:true` to regenerate it, as after the bundle ID's capabilities
+change. Release builds only read it.
 
 ## Store build numbers
 
