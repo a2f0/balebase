@@ -1,0 +1,39 @@
+---
+/*
+ * The App Store and Google Play badges. Each links to its listing once the
+ * store has approved the app (`listed` in site.ts).
+ */
+import { storeBadgeHref, storeComingSoonNote, storeListings } from "../site";
+
+const note = storeComingSoonNote(storeListings);
+---
+
+<div class="storeBadges">
+  <ul class="cluster storeBadgeList">
+    {
+      storeListings.map((listing) => {
+        const href = storeBadgeHref(listing);
+        const image = (
+          <img
+            alt={listing.label}
+            height={listing.badge.height}
+            src={listing.badge.src}
+            width={listing.badge.width}
+          />
+        );
+        return (
+          <li data-store={listing.id}>
+            {href === null ? (
+              <span class="storeBadge">{image}</span>
+            ) : (
+              <a class="storeBadge" href={href}>
+                {image}
+              </a>
+            )}
+          </li>
+        );
+      })
+    }
+  </ul>
+  {note && <p class="storeBadgeNote">{note}</p>}
+</div>
