@@ -32,7 +32,7 @@ afterEach(() => {
   for (const db of databases.splice(0)) db.close();
 });
 
-describe("workspace issues", () => {
+describe("activity feed", () => {
   it("filters activity before paging and preserves tenant and Finance isolation", async () => {
     const f = await fixture();
     const ids: number[] = [];
@@ -82,7 +82,9 @@ describe("workspace issues", () => {
     for (const query of ["resourceType=unknown", "resourceType=", "cursor=bad"])
       expect((await f.request(`/activity?${query}`)).status).toBe(400);
   });
+});
 
+describe("workspace issues", () => {
   it("creates, assigns, edits, resolves, and reopens transaction and workspace issues with history", async () => {
     const f = await fixture();
     const created = await f.request<{ issueId: string }>("/issues", "POST", {

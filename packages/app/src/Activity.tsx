@@ -1,6 +1,6 @@
 import { Field, Page, PageBody, PageHeader } from "@balebase/ui/react";
 import type { ActivityResourceType } from "@balebase/validators/activity";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
 
 export function Activity({
@@ -11,6 +11,12 @@ export function Activity({
   canAccessFinance?: boolean;
 }) {
   const [selected, setSelected] = useState<ActivityResourceType>();
+  useEffect(() => {
+    if (!canAccessFinance)
+      setSelected((previous) =>
+        previous === "finance_transaction" ? undefined : previous,
+      );
+  }, [canAccessFinance]);
   const resourceType =
     selected === "finance_transaction" && !canAccessFinance
       ? undefined
@@ -49,7 +55,6 @@ export function Activity({
         </Field>
         <ActivityFeed
           compact
-          key={resourceType ?? "all"}
           onNavigate={onNavigate}
           resourceType={resourceType}
         />

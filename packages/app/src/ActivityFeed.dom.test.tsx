@@ -194,6 +194,12 @@ describe("activity feed, mounted", () => {
     await settle();
     expect(requests.at(-1)?.search).toBe("");
     expect(container.textContent).not.toContain("Transactions");
+    await act(async () =>
+      root?.render(<Activity canAccessFinance onNavigate={() => {}} />),
+    );
+    await settle();
+    expect(container.querySelector("select")?.value).toBe("");
+    expect(requests.at(-1)?.search).toBe("");
   });
 
   it("ignores a response from the previous resource filter", async () => {
