@@ -11,6 +11,7 @@
     "src/**/*.tsx",
     "tests/**/*.ts",
     "tests/**/*.tsx",
+    "fastlane/**/*.ts",
     "scripts/**/*.ts",
     "browser/**/*.ts",
     "browser/**/*.tsx",

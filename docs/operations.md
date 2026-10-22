@@ -194,8 +194,9 @@ bun run mobile:upload:android           # or mobile:upload:android:staging
 Fastlane reads the following from `.secrets/<prod|staging>/`:
 
 - `balebase-upload.keystore`, a PKCS12 upload key with alias `upload`
-- `BALEBASE_ANDROID_KEYSTORE_PASS` from `app.env`, which is both the store and
-  the key password; it is the only value a native release reads from `app.env`
+- `ANDROID_KEYSTORE_STORE_PASS` and `ANDROID_KEYSTORE_KEY_PASS` from `app.env`,
+  the store and key passwords; they are the only values a native release reads
+  from `app.env`
 - `google-play-service-account-admin.json`, the `tearleads-admin` Play
   service account
 
@@ -225,9 +226,8 @@ Fastlane reads the following from `.secrets/<prod|staging>/`:
 The build signs with the team's Apple Distribution certificate and the tier's
 `match AppStore <app ID>` profile, installed read-only from `match` into a
 temporary keychain. If a profile expires or the bundle ID's capabilities
-change, renew it with `bun run --cwd packages/app-capacitor
-ios:create:appstore-profile` (`:staging` for staging; add `force:true` to
-regenerate it).
+change, renew it with `bun run --cwd packages/app-capacitor ios:profiles`
+(`ios:profiles:staging` for staging; add `force:true` to regenerate it).
 
 The upload uses the next TestFlight build number and the `app-capacitor`
 package version as the marketing version. It returns once App Store Connect
