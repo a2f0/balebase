@@ -2,6 +2,7 @@
 
 require 'json'
 require 'shellwords'
+require_relative '../lib/app_store_build'
 require_relative '../lib/ios_signing_keychain'
 require_relative '../lib/lane_options'
 require_relative '../lib/merged_release_pr'
@@ -420,6 +421,23 @@ def record_ios_release_build_number(build_number)
 end
 
 platform :ios do
+  desc 'Selects an uploaded build for the App Store draft and its icon, without submitting'
+  lane :select_store_build do |options|
+    version = options[:version].to_s.strip
+    build_number = options[:build_number].to_s.strip
+    if version.empty? || build_number.empty?
+      UI.user_error!('Pass version:<marketing-version> and build_number:<uploaded-build>.')
+    end
+
+    load_store_secrets_env
+    app_store_connect_api_key(app_store_connect_api_key_options)
+    app = Spaceship::ConnectAPI::App.find(NATIVE_APP_IDENTIFIER)
+    UI.user_error!("App Store Connect app not found: #{NATIVE_APP_IDENTIFIER}") unless app
+    draft = AppStoreBuild.select(app, version: version, build_number: build_number)
+    UI.success("Selected #{NATIVE_APP_IDENTIFIER} #{draft.version_string} (#{build_number}) for the App Store draft.")
+    draft.id
+  end
+
   desc 'Installs the match App Store profiles read-only'
   lane :fetch_profiles do
     load_ios_release_secrets_env

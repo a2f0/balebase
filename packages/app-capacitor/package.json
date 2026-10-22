@@ -30,6 +30,8 @@
     "ios:build-release:staging": "NATIVE_RELEASE_TIER=staging bundle exec fastlane ios build_release",
     "ios:upload-release": "NATIVE_RELEASE_TIER=production bundle exec fastlane ios upload_release",
     "ios:upload-release:staging": "NATIVE_RELEASE_TIER=staging bundle exec fastlane ios upload_release",
+    "ios:select-store-build": "NATIVE_RELEASE_TIER=production bundle exec fastlane ios select_store_build",
+    "ios:select-store-build:staging": "NATIVE_RELEASE_TIER=staging bundle exec fastlane ios select_store_build",
     "ios:fetch-profiles": "NATIVE_RELEASE_TIER=production bundle exec fastlane ios fetch_profiles",
     "ios:fetch-profiles:staging": "NATIVE_RELEASE_TIER=staging bundle exec fastlane ios fetch_profiles",
     "ios:profiles": "NATIVE_RELEASE_TIER=production bundle exec fastlane ios profiles",

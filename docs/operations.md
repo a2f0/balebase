@@ -235,6 +235,23 @@ accepts the build. Processing takes several more minutes, and then testers in
 an internal TestFlight group with automatic distribution get it. External
 testing and App Store submission happen in App Store Connect.
 
+The App Store draft's icon comes from its selected build. Uploading to
+TestFlight alone does not select a build for that draft. After Apple finishes
+processing the upload, select its exact marketing version and build number:
+
+```sh
+bun run --cwd packages/app-capacitor ios:select-store-build version:0.1.63 build_number:1
+# For the staging app, use ios:select-store-build:staging with its uploaded version/build.
+```
+
+This updates only a version in Prepare for Submission. It aligns an empty
+draft's version with the uploaded build, then selects that build; it refuses
+to rename a draft that already has a build. It does not submit for review or
+release the app. See Apple's [build selection guide](https://developer.apple.com/help/app-store-connect/manage-builds/choose-a-build-to-submit).
+Before selecting a replacement for a blank icon, rebuild and upload through
+the tier's upload wrapper, which regenerates and copies the brand artwork into
+the Xcode asset catalog. Check the processed build's icon in TestFlight.
+
 Before wider TestFlight or Play distribution:
 
 1. Deploy the native request adapter in the API before using a remote backend.
