@@ -99,6 +99,7 @@
       "name": "@balebase/app-web",
       "version": "0.1.58",
       "dependencies": {
+        "@a2f0/ct-client": "0.1.4",
         "@balebase/app": "workspace:*",
       },
       "devDependencies": {
@@ -142,6 +143,7 @@
       "name": "@balebase/website",
       "version": "0.1.0",
       "dependencies": {
+        "@a2f0/ct-client": "0.1.4",
         "@balebase/ui": "workspace:*",
         "astro": "7.4.0",
       },
@@ -165,6 +167,8 @@
   },
   "packages": {
     "@a2f0/agent-tool": ["@a2f0/agent-tool@0.1.15", "", { "dependencies": { "@resvg/resvg-wasm": "2.6.2" }, "bin": { "agent-tool": "src/index.ts" } }, "sha512-7i7usmCNd/d1QCTb6jEbWYzcuBcDTUSTUWJCTi0sNyUDodro2Gc6HBWvhg7Q8sWJ4IGtAjOIsQoS26Rm04phmw=="],
+
+    "@a2f0/ct-client": ["@a2f0/ct-client@0.1.4", "", {}, "sha512-b6JYVDpKMEbkPgMdd55D6JM+S45sqxTJj9wx687wjrGZEN2DBSE7M7v02Xxyh33QwUpv+kzG7NTBqQtR6tDgXg=="],
 
     "@astrojs/check": ["@astrojs/check@0.9.10", "", { "dependencies": { "@astrojs/language-server": "^2.16.7", "chokidar": "^4.0.3", "kleur": "^4.1.5", "yargs": "^18.0.0" }, "peerDependencies": { "typescript": "^5.0.0 || ^6.0.0" }, "bin": { "astro-check": "./bin/astro-check.js" } }, "sha512-zgx/UQMozdjOa3bOxjgeCFdtpE3c9rRX6xHwa+2QXvy8z8Akifu2AtubHyv/zzC2znO8dl8fFWL4K+Ba9kS8HQ=="],
 

@@ -6,7 +6,7 @@ import LegalLayout from "../layouts/LegalLayout.astro";
   description="How Tearleads retains and deletes account, workspace, inbox, and connected financial information."
   eyebrow="Retention / 03"
   title="Data Retention Policy"
-  updated="August 26, 2026"
+  updated="October 22, 2026"
 >
   <section class="legalPromise" aria-label="Our retention approach">
     <p class="eyebrow eyebrowDot">Our approach</p>
@@ -117,6 +117,18 @@ import LegalLayout from "../layouts/LegalLayout.astro";
 
   <section>
     <h2>7. Security records and recovery copies</h2>
+    <h3>CT click records</h3>
+    <p>
+      CT deletes click records and their IP addresses older than 90 days in a
+      daily cleanup job. The same job removes location records no longer used
+      by retained clicks. Queued clicks stay only in browser memory and are
+      discarded on opt-out. CT attempts delivery when a page is hidden or closed;
+      any undelivered queue disappears when the page closes. Cloudflare recovery copies
+      may retain previous records until their recovery window expires. Deletion
+      from CT cannot remove copies other people made of its public dashboard
+      or data API.
+    </p>
+    <h3>Other security records and recovery copies</h3>
     <p>
       We may retain limited authentication, request, diagnostic, audit, and
       security records for as long as reasonably necessary to operate and secure

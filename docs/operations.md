@@ -150,6 +150,82 @@ For later infrastructure changes, use `bun run terraform:staging:plan` and
 `bun run terraform:staging:apply`. Cloudflare Email Routing subaddressing must
 be enabled once for the zone, as described in the inbound email setup above.
 
+## Click tracking deployments
+
+CT is initialized only by the production browser bundles at these exact origins:
+
+| Environment | Marketing (`website`) | Browser app (`web-app`) |
+| --- | --- | --- |
+| production | `https://balebase.com` | `https://app.balebase.com` |
+| staging | `https://website-staging.balebase.com` | `https://app-staging.balebase.com` |
+
+Both use site `balebase` and CT's default DNT/GPC behavior. The API checks the
+environment against its registered Origin. Update the CT registry before
+adding a hostname. The SDK is pinned in `app-web` and `website`; the shared
+React package and Capacitor bootstrap do not initialize tracking. Add only
+fixed page names or route templates in each `clickTracking.ts`, never record
+IDs, query parameters, user-derived labels, or dynamic `data-ct-app` values.
+
+For a frontend-only production change, run the two independent lanes after
+the normal repository checks. These commands do not migrate or deploy the API,
+update Worker secrets, or apply Terraform:
+
+```sh
+DRY_RUN=1 bun run deploy:app
+DRY_RUN=1 bun run deploy:website
+# After reviewing both previews:
+bun run deploy:app
+bun run deploy:website
+bun run deploy:verify
+```
+
+For frontend-only staging changes, use the existing generated staging configs
+from the initial provision/deploy. The following checks their Worker names,
+loads staging credentials through the existing helper, and packages only the
+two frontend Workers. Run in Bash from the repository root. First leave
+`deploy_args=(--dry-run)`; after reviewing both previews, change it to
+`deploy_args=()` and rerun the block to deploy the same builds:
+
+```bash
+(
+  set -euo pipefail
+  source scripts/cloudflareEnv.sh
+  unset TF_VAR_cloudflare_api_token TF_VAR_cloudflare_account_id
+  load_tier_env staging
+  validate_cloudflare_env
+  export CLOUDFLARE_API_TOKEN="$TF_VAR_cloudflare_api_token"
+  export CLOUDFLARE_ACCOUNT_ID="$TF_VAR_cloudflare_account_id"
+  bun -e '
+    for (const [pkg, name] of [
+      ["app-web", "balebase-client-staging"],
+      ["website", "balebase-website-staging"],
+    ]) {
+      const config = await Bun.file(`packages/${pkg}/wrangler.staging.jsonc`).json();
+      if (config.name !== name) throw new Error(`Unexpected staging Worker: ${pkg}`);
+    }
+  '
+  VITE_API_URL=https://api-staging.balebase.com \
+    VITE_WEBSITE_URL=https://website-staging.balebase.com \
+    bun --bun run --cwd packages/app-web build
+  PUBLIC_APP_URL=https://app-staging.balebase.com \
+    bun --bun run --cwd packages/website build
+  deploy_args=(--dry-run)
+  bunx --bun --no-install wrangler deploy \
+    --config packages/app-web/wrangler.staging.jsonc "${deploy_args[@]}"
+  bunx --bun --no-install wrangler deploy \
+    --config packages/website/wrangler.staging.jsonc "${deploy_args[@]}"
+)
+# After the deployment:
+bash scripts/verifyStaging.sh
+```
+
+Verify the live bundles and privacy page on both tiers. Ordinary automated
+browser tests must send no CT events. The website browser suite checks both
+integrations with intercepted requests, so its privacy tests never write
+synthetic data to CT. In the dashboard choose site `balebase`, then the desired
+app and environment; the dashboard defaults to production. See
+[click tracking](product.md#click-tracking) for data and retention details.
+
 ## Checkr communications
 
 Balebase sends branded screening invitations and completion emails. They link

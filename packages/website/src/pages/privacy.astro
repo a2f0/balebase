@@ -6,7 +6,7 @@ import LegalLayout from "../layouts/LegalLayout.astro";
   description="How Tearleads collects, uses, protects, and deletes customer information."
   eyebrow="Privacy / 01"
   title="Privacy Policy"
-  updated="August 23, 2026"
+  updated="October 22, 2026"
 >
   <section class="legalPromise" aria-label="Our privacy promise">
     <p class="eyebrow eyebrowDot">Our promise</p>
@@ -87,6 +87,24 @@ import LegalLayout from "../layouts/LegalLayout.astro";
       for authentication, account switching, preferences, and Plaid connection
       flows.
     </p>
+
+    <h3>Click tracking with CT</h3>
+    <p>
+      Our hosted website and browser app use CT to record eligible clicks in
+      production and staging. Records contain the click time, a random event
+      identifier, website or app name, deployment environment, a fixed page
+      label, and the clicked element's tag. CT also records the request's full
+      IP address and approximate country, continent, region, city, and timezone
+      provided by Cloudflare. IP addresses can identify or link activity; this
+      information is not anonymous.
+    </p>
+    <p>
+      CT does not read page text, link destinations, form values, query strings,
+      URL fragments, account identifiers, or record IDs. It does not create
+      visitor or session identifiers or use tracking cookies. Clicks in input
+      fields and editable content are excluded. The native app does not
+      initialize CT click tracking.
+    </p>
   </section>
 
   <section>
@@ -103,6 +121,7 @@ import LegalLayout from "../layouts/LegalLayout.astro";
         abuse, and protect the Service;
       </li>
       <li>respond to requests, troubleshoot problems, and improve reliability;</li>
+      <li>understand which website and browser-app areas receive clicks;</li>
       <li>comply with law and enforce our agreements.</li>
     </ul>
     <p>
@@ -132,8 +151,15 @@ import LegalLayout from "../layouts/LegalLayout.astro";
 
   <section>
     <h2>5. How we disclose information</h2>
-    <p>We may disclose information only as needed:</p>
+    <p>We disclose information in the following ways:</p>
     <ul>
+      <li>
+        <strong>Public click analytics.</strong> CT's read-only dashboard and
+        data API are currently publicly accessible, including click records,
+        full IP addresses, and approximate locations. These records do not
+        include your account or workspace content. Other people can view and
+        copy the public records.
+      </li>
       <li>
         <strong>Within your organization.</strong> Authorized workspace members
         can access organization information based on their roles and groups.
@@ -190,6 +216,14 @@ import LegalLayout from "../layouts/LegalLayout.astro";
 
   <section>
     <h2>8. Your choices and rights</h2>
+    <p>
+      We honor Do Not Track and Global Privacy Control browser settings for
+      CT click tracking. When your browser sends either supported signal, CT
+      does not capture or send clicks. We also honor the CT browser extension's
+      opt-out and CT's per-site browser-storage preference. An opt-out clears
+      queued clicks and attempts to stop pending delivery; it does not erase
+      information already received or copied from the public dashboard.
+    </p>
     <p>
       Depending on where you live, you may have rights to request access,
       correction, deletion, portability, or restriction of certain personal

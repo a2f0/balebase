@@ -2,6 +2,40 @@
 
 [Local setup](../README.md) · [Deployment and maintenance](operations.md)
 
+## Click tracking
+
+The hosted marketing website and browser app use
+[`@a2f0/ct-client`](https://github.com/a2f0/ct) to queue eligible clicks in
+memory and flush them to `https://ct.a2f0.net/v1/clicks`. CT records the
+`balebase` site, `website` or `web-app`, production or staging, a fixed page
+label, element tag, event ID, and click time. Record pages use templates such
+as `/finance/accounts/:record`; unknown pages use `/other`. The client does
+not send page text, link destinations, form values, query strings, fragments,
+record IDs, account identifiers, cookies, or visitor/session IDs. Inputs,
+textareas, selects, editable content, and `data-ct-ignore` subtrees are excluded.
+
+The CT service adds the delivery request's full IP address and approximate
+country, continent, region, city, and timezone from Cloudflare. IPs can identify
+or link activity; these records are not anonymous. The read-only dashboard at
+<https://ct-admin.a2f0.net> and its data API are currently public, including
+IP and location fields. Events older than 90 days and unreferenced locations
+are deleted by a daily job; Cloudflare recovery copies have their own window.
+
+Do Not Track (`navigator.doNotTrack === "1"`) and Global Privacy Control
+(`navigator.globalPrivacyControl === true`) prevent capture and delivery.
+Balebase leaves CT's GPC override disabled. The CT browser extension and the
+site's `ct:opt-out` local-storage preference are also honored. Changing an
+opt-out clears queued clicks and attempts to cancel delivery; it does not
+erase events already received. Storage restrictions fail closed. There are no
+tracking cookies.
+
+Initialization is explicit and limited to the four deployed HTTPS origins
+listed in [operations](operations.md#click-tracking-deployments). Local and
+development builds, server rendering, automated browsers, synthetic clicks,
+and the native Capacitor shell do not collect clicks. Browser tests intercept
+CT requests locally, including tests that deliberately emulate a normal
+browser to check DNT, GPC, origin guards, and route redaction.
+
 ## Authentication
 
 The API uses Better Auth with D1-backed email/password accounts and cookie

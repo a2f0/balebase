@@ -44,5 +44,11 @@ const { description, title } = Astro.props;
       <slot />
     </main>
     <SiteFooter />
+    <script>
+      import { initClickTracking } from "../clickTracking";
+
+      const clicks = initClickTracking();
+      import.meta.hot?.dispose(() => clicks?.destroy());
+    </script>
   </body>
 </html>
