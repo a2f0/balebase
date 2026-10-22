@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
-import { storeListings } from "../src/site";
+import {
+  storeBadgeHref,
+  storeComingSoonNote,
+  storeListings,
+} from "../src/site";
 
 const { CHROME_PATH } = process.env;
 const chrome =
@@ -110,7 +114,7 @@ it("keeps the space before an inline heading accent", () => {
   expect(html).toContain("From the bank statement <span");
 });
 
-it("shows each store badge, linked only once the store lists the app", async () => {
+it("shows each store badge with the link and note its listing calls for", async () => {
   const page = await openSite();
   await page.goto("https://website.test/", { waitUntil: "load" });
   const badges = await page.$$eval(".storeBadgeList li", (items) =>
@@ -129,11 +133,15 @@ it("shows each store badge, linked only once the store lists the app", async () 
       id: listing.id,
       alt: listing.label,
       loaded: [listing.badge.width, listing.badge.height],
-      href: listing.listed ? listing.url : null,
+      href: storeBadgeHref(listing),
     })),
   );
-  const note = await page.$(".storeBadgeNote");
-  expect(note !== null).toBe(storeListings.some((listing) => !listing.listed));
+  const note = await page.$eval(
+    ".storeBadges",
+    (badges) =>
+      badges.querySelector(".storeBadgeNote")?.textContent?.trim() ?? null,
+  );
+  expect(note).toBe(storeComingSoonNote(storeListings));
 });
 
 it("draws the store badges as self-contained vector art", () => {

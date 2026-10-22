@@ -10,6 +10,7 @@
     "deploy": "bun --bun run build && bunx --bun --no-install wrangler deploy",
     "dev": "bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/website/public && bunx --bun --no-install astro dev",
     "preview": "bunx --bun --no-install astro preview",
+    "test": "bun test src",
     "test:browser": "bun test browser"
   },
   "dependencies": {
