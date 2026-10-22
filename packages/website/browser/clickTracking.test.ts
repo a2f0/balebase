@@ -63,8 +63,9 @@ beforeAll(async () => {
       "--no-sandbox",
       "--password-store=basic",
       "--use-mock-keychain",
-      // Keep HTTP-origin rejection tests on HTTP instead of Chrome's upgrade.
-      "--disable-features=HttpsUpgrades",
+      // Isolated contexts are incognito. Disable both automatic and incognito
+      // HTTPS-first upgrades so HTTP rejection fixtures retain their origin.
+      "--disable-features=HttpsUpgrades,HttpsFirstModeIncognito,HttpsFirstBalancedModeAutoEnable",
     ],
   });
 }, 30_000);
