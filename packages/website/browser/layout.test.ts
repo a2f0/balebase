@@ -148,6 +148,17 @@ it("draws the store badges as self-contained vector art", () => {
   for (const listing of storeListings) {
     const svg = readFileSync(join(publicRoot, listing.badge.src), "utf8");
     expect(svg).toMatch(/<svg\b[^>]*xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+    const viewBox = svg
+      .match(/\bviewBox="([^"]+)"/)?.[1]
+      ?.split(/\s+/)
+      .map(Number);
+    expect(viewBox).toHaveLength(4);
+    const [, , width = 0, height = 0] = viewBox ?? [];
+    expect(width).toBeGreaterThan(0);
+    expect(height).toBeGreaterThan(0);
+    expect(
+      Math.abs((width / height) * listing.badge.height - listing.badge.width),
+    ).toBeLessThan(1);
     // Text is outlined, so the badge needs no fonts, images, or links.
     expect(svg).not.toMatch(/<text|<image|href=|@font-face|url\((?!#)/);
   }
@@ -193,10 +204,11 @@ it("centers both store badges in their own row above the fold", async () => {
       Math.abs(bounds.list.x + bounds.list.width / 2 - width / 2),
     ).toBeLessThan(1);
     expect(bounds.apple.top).toBe(bounds.google.top);
-    expect(bounds.apple.height).toBe(40);
-    expect(bounds.google.height).toBe(40);
-    expect(bounds.apple.width).toBeCloseTo(119.66407, 1);
-    expect(bounds.google.width).toBeCloseTo((238.96 / 70.87) * 40, 1);
+    for (const listing of storeListings) {
+      const badge = listing.id === "app-store" ? bounds.apple : bounds.google;
+      expect(badge.height).toBe(listing.badge.height);
+      expect(Math.abs(badge.width - listing.badge.width)).toBeLessThan(1);
+    }
     expect(bounds.google.left - bounds.apple.right).toBeGreaterThanOrEqual(10);
     expect(bounds.apple.left).toBeGreaterThanOrEqual(0);
     expect(bounds.google.right).toBeLessThanOrEqual(width);
