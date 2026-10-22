@@ -7,9 +7,7 @@
  * https://partnermarketinghub.withgoogle.com/brands/google-play/google-play/lockups-icons-badges/?folder=86718
  * Google asset: GetItOnGooglePlay_Badge_Web_color_English.svg
  */
-import { storeBadgeHref, storeComingSoonNote, storeListings } from "../site";
-
-const note = storeComingSoonNote(storeListings);
+import { storeBadgeHref, storeListings } from "../site";
 ---
 
 <div class="storeBadges">
@@ -39,5 +37,4 @@ const note = storeComingSoonNote(storeListings);
       })
     }
   </ul>
-  {note && <p class="storeBadgeNote">{note}</p>}
 </div>

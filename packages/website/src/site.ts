@@ -2,8 +2,6 @@
  * Site-wide constants for the marketing pages. Product facts that the client
  * also shows (name, plans, legal links) live in @balebase/ui/brand.
  */
-import { productName } from "@balebase/ui/brand";
-
 export const appUrl: string =
   import.meta.env.PUBLIC_APP_URL ?? "http://localhost:5173";
 
@@ -21,8 +19,6 @@ export type StoreListing = {
   label: string;
   /** Whether the store has approved the app; unlisted badges show no link. */
   listed: boolean;
-  /** The devices the store serves, as the coming-soon note names them. */
-  platform: "Android" | "iPhone";
   url: string;
 };
 
@@ -37,7 +33,6 @@ export const storeListings: readonly StoreListing[] = [
     badge: { src: "/badges/app-store.svg", width: 150, height: 50 },
     // The Apple ID App Store Connect assigned to com.balebase.app.
     url: "https://apps.apple.com/app/id6825740983",
-    platform: "iPhone",
     listed: false,
   },
   {
@@ -45,7 +40,6 @@ export const storeListings: readonly StoreListing[] = [
     label: "Get it on Google Play",
     badge: { src: "/badges/google-play.svg", width: 169, height: 50 },
     url: "https://play.google.com/store/apps/details?id=com.balebase.app",
-    platform: "Android",
     listed: false,
   },
 ];
@@ -53,18 +47,4 @@ export const storeListings: readonly StoreListing[] = [
 /** The badge's link: its listing once the store lists the app, else none. */
 export function storeBadgeHref(listing: StoreListing): string | null {
   return listing.listed ? listing.url : null;
-}
-
-/** Names the platforms whose apps aren't listed yet, or null once all are. */
-export function storeComingSoonNote(
-  listings: readonly StoreListing[],
-): string | null {
-  const upcoming = listings
-    .filter((listing) => !listing.listed)
-    .map((listing) => listing.platform);
-  if (upcoming.length === 0) return null;
-  const platforms = upcoming.join(" and ");
-  return upcoming.length === 1
-    ? `The ${productName} app for ${platforms} is coming soon.`
-    : `The ${productName} apps for ${platforms} are coming soon.`;
 }

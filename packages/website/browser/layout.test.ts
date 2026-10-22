@@ -5,11 +5,7 @@ import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
-import {
-  storeBadgeHref,
-  storeComingSoonNote,
-  storeListings,
-} from "../src/site";
+import { storeBadgeHref, storeListings } from "../src/site";
 
 const { CHROME_PATH } = process.env;
 const chrome =
@@ -114,7 +110,7 @@ it("keeps the space before an inline heading accent", () => {
   expect(html).toContain("From the bank statement <span");
 });
 
-it("shows each store badge with the link and note its listing calls for", async () => {
+it("shows each store badge with its listing link and no tagline", async () => {
   const page = await openSite();
   await page.goto("https://website.test/", { waitUntil: "load" });
   const badges = await page.$$eval(".storeBadgeList li", (items) =>
@@ -136,12 +132,10 @@ it("shows each store badge with the link and note its listing calls for", async 
       href: storeBadgeHref(listing),
     })),
   );
-  const note = await page.$eval(
-    ".storeBadges",
-    (badges) =>
-      badges.querySelector(".storeBadgeNote")?.textContent?.trim() ?? null,
+  const text = await page.$eval(".storeBadges", (badges) =>
+    badges.textContent?.trim(),
   );
-  expect(note).toBe(storeComingSoonNote(storeListings));
+  expect(text).toBe("");
 });
 
 it("draws the store badges as self-contained vector art", () => {
@@ -164,7 +158,7 @@ it("draws the store badges as self-contained vector art", () => {
   }
 });
 
-it("centers larger store badges below the complete hero and wraps on narrow phones", async () => {
+it("centers store badges with equal space above and below, wrapping on narrow phones", async () => {
   const page = await openSite();
   for (const [width, height] of [
     [320, 568],
@@ -191,17 +185,20 @@ it("centers larger store badges below the complete hero and wraps on narrow phon
       };
       return {
         header: rect(".siteHeader"),
-        stores: rect(".storeBadges"),
         list: rect(".storeBadgeList"),
         apple: rect('[data-store="app-store"] img'),
         google: rect('[data-store="google-play"] img'),
         copy: rect(".heroCopy"),
         preview: rect(".businessPreview"),
+        features: rect("#product .bandIntro"),
       };
     });
-    expect(bounds.stores.top).toBeGreaterThanOrEqual(bounds.header.bottom);
-    expect(bounds.stores.top).toBeGreaterThan(bounds.copy.bottom);
-    expect(bounds.stores.top).toBeGreaterThan(bounds.preview.bottom);
+    expect(bounds.list.top).toBeGreaterThanOrEqual(bounds.header.bottom);
+    const spaceAbove =
+      bounds.list.top - Math.max(bounds.copy.bottom, bounds.preview.bottom);
+    const spaceBelow = bounds.features.top - bounds.list.bottom;
+    expect(spaceAbove).toBeGreaterThan(24);
+    expect(Math.abs(spaceAbove - spaceBelow)).toBeLessThan(1);
     expect(
       Math.abs(bounds.list.x + bounds.list.width / 2 - width / 2),
     ).toBeLessThan(1);
