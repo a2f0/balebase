@@ -206,27 +206,49 @@ Promote a build to closed, open, or production tracks in Play Console. If an
 upload key is lost or leaked, request an upload key reset in Play Console under
 App integrity.
 
+### TestFlight
+
+The App Store Connect apps `com.balebase.app` and `com.balebase.staging.app`
+take builds from:
+
+```sh
+bun run mobile:upload:ios               # or mobile:upload:ios:staging
+```
+
+Fastlane reads the following from `.secrets/<prod|staging>/`:
+
+- `shared.env`, with `TEAM_ID`, `APP_STORE_CONNECT_KEY_ID`,
+  `APP_STORE_CONNECT_ISSUER_ID`, and the `MATCH_*` settings of the shared
+  `match` repository, copied from the account-level secrets
+- `AuthKey_<key-id>.p8`, the App Store Connect API key
+
+The build signs with the team's Apple Distribution certificate and the tier's
+`match AppStore <app ID>` profile, installed read-only from `match` into a
+temporary keychain. If a profile expires or the bundle ID's capabilities
+change, renew it with `bun run --cwd packages/app-capacitor
+ios:create:appstore-profile` (`:staging` for staging; add `force:true` to
+regenerate it).
+
+The upload uses the next TestFlight build number and the `app-capacitor`
+package version as the marketing version. It returns once App Store Connect
+accepts the build. Processing takes several more minutes, and then testers in
+an internal TestFlight group with automatic distribution get it. External
+testing and App Store submission happen in App Store Connect.
+
 Before wider TestFlight or Play distribution:
 
-1. Create the Apple bundle identifiers and App Store Connect apps for
-   `com.balebase.app` and `com.balebase.staging.app`, a `match` repository
-   with their App Store profiles, and an App Store Connect API key. Put the
-   Apple values in each tier's `shared.env` and the key in
-   `.secrets/<tier>/AuthKey_<key-id>.p8`; the TestFlight lanes read them there.
-2. Set the iOS marketing version in Xcode. The TestFlight lanes set the build
-   number, which is separate from web/API patch versions.
-3. Deploy the native request adapter in the API before using a remote backend.
+1. Deploy the native request adapter in the API before using a remote backend.
    The native HTTP transport sends cookies and an origin marker. When no
    browser Origin is present, the API applies its configured web origin. The
    marker is excluded from allowed CORS headers; existing browser origins and
    authentication callback allowlists remain unchanged.
-4. Exercise login, MFA, account switching, logout/relaunch, camera and file
+2. Exercise login, MFA, account switching, logout/relaunch, camera and file
    uploads, PDF viewing/downloads, invitations, and keyboard/back navigation on
    real devices. Email verification and password-reset links currently open
    the hosted web app, which has a separate session and may require signing
    in again. Universal/app links are not configured. Native downloads use the
    system save/share sheet; authenticated images load through native HTTP.
-5. Complete store metadata, privacy declarations, and device screenshots.
+3. Complete store metadata, privacy declarations, and device screenshots.
    Validate the existing Stripe billing and Plaid flows for the intended store
    distribution before submission; this shell does not add native purchases or
    native Plaid SDK integration.
