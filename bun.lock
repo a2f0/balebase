@@ -24,6 +24,7 @@
       "name": "@balebase/api",
       "version": "0.1.45",
       "dependencies": {
+        "@balebase/ui": "workspace:*",
         "@balebase/validators": "workspace:*",
         "@better-auth/core": "1.7.2",
         "@modelcontextprotocol/server": "2.3.1",

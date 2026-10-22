@@ -39,7 +39,7 @@ import {
   personalRequirement,
   type StatusBadge,
 } from "./requirementStatus";
-import { ScreeningForm } from "./ScreeningForm";
+import { ScreeningRequest, screeningProgress } from "./ScreeningRequest";
 import {
   handleNavigation,
   myDocumentsPath,
@@ -78,13 +78,14 @@ export function MyDocuments({
         <PageHeader
           back={<BackToMyDocuments onNavigate={onNavigate} />}
           eyebrow="My documents"
-          title="Complete your background check"
+          title="Your background check"
         />
         <PageBody>
-          <ScreeningForm
+          <ScreeningRequest
             back={myDocumentsPath()}
             key={screeningId}
             onNavigate={onNavigate}
+            organizationName={organization?.name ?? "Your organization"}
             requirementId={screeningId}
           />
         </PageBody>
@@ -335,6 +336,9 @@ function Hint({
 }
 
 function hintFor(requirement: EmployeeRequirement, organizationName: string) {
+  if (requirement.checkrReportStatus && !requirement.canSubmitCheckr) {
+    return screeningProgress(requirement, organizationName);
+  }
   if (requirement.status === "complete") return undefined;
   if (requirement.kind === "form") {
     return requirement.status === "pending"
@@ -352,9 +356,6 @@ function hintFor(requirement: EmployeeRequirement, organizationName: string) {
       .filter(Boolean)
       .join(", ");
     return `Read the disclosures, enter your details, and sign. Balebase sends them to Checkr for work in ${location}.`;
-  }
-  if (requirement.checkrReportStatus === "pending") {
-    return "Checkr is preparing your report and contacts you if it needs anything.";
   }
   if (!requirement.checkrReportStatus && requirement.status === "pending") {
     return `${organizationName} sends you this check when it’s ready.`;
@@ -374,7 +375,7 @@ function Actions({
   requirement: EmployeeRequirement;
 }) {
   const controls: ReactNode[] = [];
-  if (requirement.canSubmitCheckr) {
+  if (requirement.canSubmitCheckr || requirement.checkrReportStatus) {
     const path = myDocumentsPath(requirement.id);
     controls.push(
       <ButtonLink
@@ -384,9 +385,11 @@ function Actions({
         size="sm"
         variant="primary"
       >
-        {requirement.checkrSubmitting
-          ? "Finish background check"
-          : "Start background check"}
+        {!requirement.canSubmitCheckr
+          ? "View screening status"
+          : requirement.checkrSubmitting
+            ? "Finish background check"
+            : "Start background check"}
       </ButtonLink>,
     );
   }

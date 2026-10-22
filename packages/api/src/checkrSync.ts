@@ -7,6 +7,7 @@ import {
   refreshCheckrScreening,
   reportSettleMs,
 } from "./checkrScreening";
+import { sendPendingScreeningNotifications } from "./screeningNotifications";
 import type { Bindings } from "./types";
 import { readWebhookPayload } from "./webhookPayload";
 
@@ -87,6 +88,7 @@ export async function handleCheckrWebhook(
 // their person left unfinished, then re-reads the least recently checked
 // screenings that Checkr has not finished or that a webhook asked to refresh.
 export async function refreshActiveCheckrScreenings(env: Bindings) {
+  await sendPendingScreeningNotifications(env);
   if (!env.CHECKR_API_KEY) return { refreshed: 0, skipped: true };
   const recovery = await recoverStaleAttempts(env);
   const { results } = await env.DB.prepare(

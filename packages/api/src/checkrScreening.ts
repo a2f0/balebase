@@ -8,6 +8,7 @@ import {
 } from "./checkr";
 import { buildScreeningConsentPdf } from "./screeningConsentPdf";
 import type { ScreeningDisclosures } from "./screeningDisclosures";
+import { sendPendingScreeningNotifications } from "./screeningNotifications";
 import type { ScreeningSubmission } from "./screeningSubmission";
 import type { Bindings } from "./types";
 
@@ -93,6 +94,7 @@ export async function refreshCheckrScreening(
     )
     .run();
   if (!refreshed.meta.changes) return null;
+  await sendPendingScreeningNotifications(env, row.id);
   return { reportStatus, result: report.result ?? null };
 }
 

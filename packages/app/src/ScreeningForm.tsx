@@ -589,7 +589,9 @@ function Submitted({
       {error && <Toast tone="danger">{error}</Toast>}
       <p>
         Checkr is preparing your report. {form.organizationName} sees the result
-        when it’s ready, and Checkr contacts you if it needs anything else.
+        when it’s ready, and Checkr contacts you if it needs anything else. You
+        can return to My documents to check its progress. We’ll also email you
+        when the report is ready for your organization to review.
       </p>
     </Card>
   );

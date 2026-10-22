@@ -21,6 +21,7 @@ import {
   screeningDisclosureVersion,
   summaryOfRightsUrl,
 } from "./screeningDisclosures";
+import { sendPendingScreeningNotifications } from "./screeningNotifications";
 import type { Bindings } from "./types";
 
 const orgId = "org_owner";
@@ -2267,6 +2268,171 @@ describe("employee forms", () => {
     }
   });
 
+  it("emails a branded completion once across repeated and concurrent refreshes", async () => {
+    const fixture = await createFixture();
+    const id = await orderedScreening(fixture);
+    const checkr = mockCheckr(() =>
+      Response.json({ id: "report-1", result: "consider", status: "complete" }),
+    );
+    try {
+      const event = {
+        data: { object: { id: "report-1" } },
+        type: "report.completed",
+      };
+      await checkrWebhook(fixture.bindings, event);
+      await Promise.all([
+        checkrWebhook(fixture.bindings, event),
+        sendPendingScreeningNotifications(fixture.bindings),
+        fixture
+          .app("owner", "owner")
+          .request(`/${id}/checkr/refresh`, { method: "POST" }),
+      ]);
+      expect(fixture.emails).toHaveLength(1);
+      const mail = fixture.emails[0];
+      expect(mail?.from.name).toBe("Acme via Balebase");
+      expect(mail?.to.email).toBe("employee@example.com");
+      expect(mail?.subject).toBe("Acme: your background report is ready");
+      expect(mail?.text).toContain(
+        `https://app.balebase.test/me/screening/${id}?organization=${orgId}`,
+      );
+      expect(mail?.text).toContain(
+        "A completed report is not a hiring decision.",
+      );
+      expect(mail?.text).not.toContain("consider");
+      expect(mail?.html).toContain(
+        'src="https://app.balebase.test/apple-touch-icon.png"',
+      );
+      expect(mail?.html).toContain("View screening status");
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("retries failed completion mail on maintenance without losing completed status", async () => {
+    const fixture = await createFixture();
+    const id = await orderedScreening(fixture);
+    const send = fixture.bindings.EMAIL.send;
+    fixture.bindings.EMAIL.send = async () => {
+      throw new Error("Mail unavailable");
+    };
+    const checkr = mockCheckr(() =>
+      Response.json({ id: "report-1", result: "clear", status: "complete" }),
+    );
+    try {
+      expect(
+        (
+          await fixture
+            .app("owner", "owner")
+            .request(`/${id}/checkr/refresh`, { method: "POST" })
+        ).status,
+      ).toBe(200);
+      expect(
+        fixture.database
+          .query("SELECT status FROM employee_requirements WHERE id = ?")
+          .get(id),
+      ).toEqual({ status: "complete" });
+      expect(fixture.emails).toHaveLength(0);
+      fixture.bindings.EMAIL.send = send;
+      // A failure retains a five-minute retry delay, avoiding a webhook storm.
+      await sendPendingScreeningNotifications(fixture.bindings);
+      expect(fixture.emails).toHaveLength(0);
+      fixture.database.exec(
+        "UPDATE employee_screening_notifications SET next_attempt_at = '2000-01-01'",
+      );
+      await refreshActiveCheckrScreenings(fixture.bindings);
+      expect(fixture.emails).toHaveLength(1);
+      await refreshActiveCheckrScreenings(fixture.bindings);
+      expect(fixture.emails).toHaveLength(1);
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("claims delivery once and rechecks recipients after claiming", async () => {
+    const fixture = await createFixture();
+    const id = await orderedScreening(fixture);
+    fixture.database
+      .query(
+        "UPDATE employee_requirements SET status = 'complete', checkr_report_status = 'complete' WHERE id = ?",
+      )
+      .run(id);
+    await Promise.all([
+      sendPendingScreeningNotifications(fixture.bindings),
+      sendPendingScreeningNotifications(fixture.bindings),
+    ]);
+    expect(fixture.emails).toHaveLength(1);
+    const second = await orderedScreening(fixture, "report-2");
+    fixture.database
+      .query(
+        "UPDATE employee_requirements SET status = 'complete', checkr_report_status = 'complete' WHERE id = ?",
+      )
+      .run(second);
+    fixture.beforeFirst((query) => {
+      if (query.includes("notification.claim_token")) {
+        fixture.database.exec(
+          "DELETE FROM member WHERE id = 'employee-member'",
+        );
+      }
+    });
+    await sendPendingScreeningNotifications(fixture.bindings);
+    expect(fixture.emails).toHaveLength(1);
+  });
+
+  it("does not send stale, canceled, reassigned, or deleted organization notifications", async () => {
+    for (const change of [
+      "UPDATE employee_requirements SET checkr_report_id = 'replacement', checkr_report_status = 'pending', status = 'in_progress'",
+      "UPDATE employee_requirements SET checkr_report_status = 'canceled'",
+      "UPDATE employee_requirements SET member_id = (SELECT id FROM member WHERE userId = 'owner')",
+      "UPDATE organization SET deletedAt = '2026-01-01'",
+    ]) {
+      const fixture = await createFixture();
+      const id = await orderedScreening(fixture);
+      fixture.database
+        .query(
+          "UPDATE employee_requirements SET status = 'complete', checkr_report_status = 'complete' WHERE id = ?",
+        )
+        .run(id);
+      fixture.database.exec(change);
+      await sendPendingScreeningNotifications(fixture.bindings);
+      expect(fixture.emails).toHaveLength(0);
+    }
+  });
+
+  it("does not backfill notifications for reports completed before deployment", async () => {
+    const fixture = await createFixture(false);
+    const id = await orderedScreening(fixture);
+    fixture.database
+      .query(
+        "UPDATE employee_requirements SET status = 'complete', checkr_report_status = 'complete' WHERE id = ?",
+      )
+      .run(id);
+    await migration(fixture.database, "0068_notify_screening_completion.sql");
+    const checkr = mockCheckr(() =>
+      Response.json({ id: "report-1", result: "clear", status: "complete" }),
+    );
+    try {
+      await fixture
+        .app("owner", "owner")
+        .request(`/${id}/checkr/refresh`, { method: "POST" });
+      expect(fixture.emails).toHaveLength(0);
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("escapes names and titles in screening email HTML", async () => {
+    const fixture = await createFixture();
+    fixture.database.exec(
+      `UPDATE organization SET name = '<Acme & Co>' WHERE id = 'org_owner'`,
+    );
+    const id = await requestedScreening(fixture);
+    const mail = fixture.emails[0];
+    expect(mail?.html).toContain("&lt;Acme &amp; Co&gt;");
+    expect(mail?.html).not.toContain("<Acme & Co>");
+    expect(mail?.text).toContain("<Acme & Co>");
+    expect(mail?.html).toContain(`/me/screening/${id}?organization=${orgId}`);
+  });
+
   it("refreshes unfinished Checkr screenings on schedule", async () => {
     const fixture = await createFixture();
     const active = await orderedScreening(fixture);
@@ -2811,7 +2977,7 @@ function jsonPost(body: unknown): RequestInit {
   };
 }
 
-async function createFixture() {
+async function createFixture(withNotifications = true) {
   const database = new Database(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
   await migration(database, "0003_create_auth.sql");
@@ -2823,6 +2989,7 @@ async function createFixture() {
       .run(id, id, `${id}@example.com`, now(), now());
   }
   await migration(database, "0004_create_organizations.sql");
+  await migration(database, "0011_soft_delete_organizations.sql");
   database
     .query("UPDATE organization SET name = 'Acme' WHERE id = ?")
     .run(orgId);
@@ -2851,8 +3018,12 @@ async function createFixture() {
   await migration(database, "0047_bind_employee_screening_attempt.sql");
   await migration(database, "0052_track_checkr_refreshes.sql");
   await migration(database, "0067_self_host_checkr_screenings.sql");
+  if (withNotifications)
+    await migration(database, "0068_notify_screening_completion.sql");
   const files = new Map<string, File>();
   const emails: Array<{
+    html: string;
+    from: { name: string; email: string };
     subject: string;
     text: string;
     to: { email: string; name: string };
