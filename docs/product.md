@@ -8,9 +8,10 @@ The hosted marketing website and browser app use
 [`@a2f0/ct-client`](https://github.com/a2f0/ct) to queue eligible clicks in
 memory and flush them to `https://ct.a2f0.net/v1/clicks`. CT records the
 `balebase` site, `website` or `web-app`, production or staging, a fixed page
-label, element tag, event ID, and click time. Record pages use templates such
-as `/finance/accounts/:record`; unknown pages use `/other`. The client does
-not send page text, link destinations, form values, query strings, fragments,
+label, element tag, event ID, and click time. Every browser-app click uses the
+generic page `/`, without collecting routes or workflow names. The marketing
+site uses fixed public page names and `/other` for unknown pages. The client
+does not send page text, link destinations, form values, query strings, fragments,
 record IDs, account identifiers, cookies, or visitor/session IDs. Inputs,
 textareas, selects, editable content, and `data-ct-ignore` subtrees are excluded.
 

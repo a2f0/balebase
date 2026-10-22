@@ -33,10 +33,10 @@ beforeAll(async () => {
   for (const [app, module] of [
     ["website", "../src/clickTracking.ts"],
     ["web-app", "../../app-web/src/clickTracking.ts"],
-  ]) {
+  ] as const) {
     for (const production of [true, false]) {
       const build = await Bun.build({
-        entrypoints: [fileURLToPath(new URL(module ?? "", import.meta.url))],
+        entrypoints: [fileURLToPath(new URL(module, import.meta.url))],
         target: "browser",
         define: { "import.meta.env.PROD": String(production) },
       });
@@ -203,15 +203,13 @@ for (const target of targets) {
       ).toEqual([
         {
           app: target.app,
-          page:
-            target.app === "website" ? "/privacy" : "/finance/accounts/:record",
+          page: target.app === "website" ? "/privacy" : "/",
           target: "button",
           label: null,
         },
         {
           app: target.app,
-          page:
-            target.app === "website" ? "/privacy" : "/finance/accounts/:record",
+          page: target.app === "website" ? "/privacy" : "/",
           target: "p",
           label: null,
         },
@@ -300,7 +298,7 @@ for (const app of ["website", "web-app"]) {
   });
 }
 
-test("app route labels never include record identifiers or unknown paths", async () => {
+test("app clicks use one generic page across every workspace route", async () => {
   const { page, batches, flush, close } = await fixture(
     "web-app",
     "https://app.balebase.com",
@@ -310,6 +308,9 @@ test("app route labels never include record identifiers or unknown paths", async
       "/organization/people/private-person",
       "/contracts/templates/private-template",
       "/sign/private-token",
+      "/me/screening/private-screening",
+      "/root/users",
+      "/finance/accounts/private-account",
       "/unknown/private-user",
       "/account/security",
     ];
@@ -325,13 +326,7 @@ test("app route labels never include record identifiers or unknown paths", async
       JSON.parse(batches[0] ?? "").events.map(
         (event: { page: string }) => event.page,
       ),
-    ).toEqual([
-      "/organization/people/:record",
-      "/contracts/templates/:record",
-      "/sign/:record",
-      "/other",
-      "/account/security",
-    ]);
+    ).toEqual(routes.map(() => "/"));
     expect(batches.join("")).not.toContain("private");
   } finally {
     await close();

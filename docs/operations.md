@@ -162,9 +162,11 @@ CT is initialized only by the production browser bundles at these exact origins:
 Both use site `balebase` and CT's default DNT/GPC behavior. The API checks the
 environment against its registered Origin. Update the CT registry before
 adding a hostname. The SDK is pinned in `app-web` and `website`; the shared
-React package and Capacitor bootstrap do not initialize tracking. Add only
-fixed page names or route templates in each `clickTracking.ts`, never record
-IDs, query parameters, user-derived labels, or dynamic `data-ct-app` values.
+React package and Capacitor bootstrap do not initialize tracking. The browser
+app deliberately keeps CT's generic `/` page so public events do not reveal
+workspace routes or workflows. Only the marketing tracker uses fixed public
+page names. Never pass record IDs, query parameters, user-derived labels, or
+dynamic `data-ct-app` values.
 
 For a frontend-only production change, run the two independent lanes after
 the normal repository checks. These commands do not migrate or deploy the API,
@@ -180,11 +182,11 @@ bun run deploy:verify
 ```
 
 For frontend-only staging changes, use the existing generated staging configs
-from the initial provision/deploy. The following checks their Worker names,
-loads staging credentials through the existing helper, and packages only the
+from the initial provision/deploy. The following checks their Worker names and
+rejects stale config differences, loads staging credentials, and packages only the
 two frontend Workers. Run in Bash from the repository root. First leave
 `deploy_args=(--dry-run)`; after reviewing both previews, change it to
-`deploy_args=()` and rerun the block to deploy the same builds:
+`deploy_args=()` and rerun the block to rebuild and deploy the reviewed source:
 
 ```bash
 (
@@ -201,7 +203,11 @@ two frontend Workers. Run in Bash from the repository root. First leave
       ["website", "balebase-website-staging"],
     ]) {
       const config = await Bun.file(`packages/${pkg}/wrangler.staging.jsonc`).json();
+      const prod = await Bun.file(`packages/${pkg}/wrangler.jsonc`).json();
       if (config.name !== name) throw new Error(`Unexpected staging Worker: ${pkg}`);
+      if (!Bun.deepEquals({ ...config, name: prod.name }, prod)) {
+        throw new Error(`Stale staging config: regenerate ${pkg} before deploying`);
+      }
     }
   '
   VITE_API_URL=https://api-staging.balebase.com \

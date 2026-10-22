@@ -16,7 +16,7 @@ under `packages/`:
 Infrastructure lives outside the workspaces in `terraform` (D1, R2, and
 `balebase.com` Worker-domain infrastructure).
 
-The hosted website and browser app use CT to track clicks in production and
+The hosted website and browser app use the CT click tracker in production and
 staging. Tracking honors Do Not Track and Global Privacy Control browser
 settings. See [click tracking](docs/product.md#click-tracking) for collected
 fields, public visibility, and opt-outs.
