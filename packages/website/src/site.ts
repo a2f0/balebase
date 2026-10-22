@@ -14,7 +14,7 @@ export const siteSections = [
 ] as const;
 
 export type StoreListing = {
-  /** Badge artwork in public/badges, drawn at the store's 40px height. */
+  /** Display dimensions for the original vector artwork in public/badges. */
   badge: { height: number; src: string; width: number };
   id: "app-store" | "google-play";
   /** The badge's own wording, used as its alternative text. */
