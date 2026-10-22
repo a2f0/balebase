@@ -22,10 +22,13 @@ VITE_API_URL=https://api-staging.balebase.com \
 PUBLIC_APP_URL=https://app-staging.balebase.com \
   bun --bun run --cwd packages/website build
 
-deploy_args=()
-if [[ "${DRY_RUN:-0}" == "1" ]]; then deploy_args=(--dry-run); fi
 for package in app-web website; do
-  bunx --bun --no-install wrangler deploy \
-    --config "$REPO_ROOT/packages/$package/wrangler.staging.jsonc" "${deploy_args[@]}"
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    bunx --bun --no-install wrangler deploy \
+      --config "$REPO_ROOT/packages/$package/wrangler.staging.jsonc" --dry-run
+  else
+    bunx --bun --no-install wrangler deploy \
+      --config "$REPO_ROOT/packages/$package/wrangler.staging.jsonc"
+  fi
 done
 if [[ "${DRY_RUN:-0}" != "1" ]]; then bash "$SCRIPT_DIR/verifyStaging.sh"; fi

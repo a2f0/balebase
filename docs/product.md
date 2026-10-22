@@ -26,8 +26,8 @@ recovery copies have their own window.
 
 Do Not Track (`navigator.doNotTrack === "1"`) and Global Privacy Control
 (`navigator.globalPrivacyControl === true`) prevent capture and delivery.
-Balebase leaves CT's GPC override disabled. The CT browser extension and the
-site's `ct:opt-out` local-storage preference are also honored. Changing an
+Balebase leaves CT's GPC override disabled. The CT browser extension's opt-out
+is also honored. Changing an
 opt-out clears queued clicks and attempts to cancel delivery; it does not
 erase events already received. Storage restrictions fail closed. There are no
 tracking cookies.

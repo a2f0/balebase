@@ -141,7 +141,7 @@ async function runLane(root: string, dryRun: boolean, failPrepare = false) {
   const log = join(root, "commands.log");
   await writeFile(log, "");
   const child = Bun.spawn(
-    ["bash", join(root, "scripts/deployStagingFrontends.sh")],
+    ["/bin/bash", join(root, "scripts/deployStagingFrontends.sh")],
     {
       env: {
         ...process.env,
