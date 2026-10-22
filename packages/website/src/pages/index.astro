@@ -3,6 +3,7 @@ import { plans, productName } from "@balebase/ui/brand";
 import type { IconName } from "@balebase/ui/icons";
 import BusinessPreview from "../components/BusinessPreview.astro";
 import Icon from "../components/Icon.astro";
+import StoreBadges from "../components/StoreBadges.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { appUrl } from "../site";
 import "../styles/home.css";
@@ -119,6 +120,7 @@ const essentials: { icon: IconName; text: string; title: string }[] = [
           No credit card required. {free.name} for {free.features[0]}.
           {" "}{pro.name} is {pro.price} {pro.cadence}.
         </p>
+        <StoreBadges />
       </div>
       <BusinessPreview />
     </div>

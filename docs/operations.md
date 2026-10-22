@@ -252,6 +252,9 @@ Before wider TestFlight or Play distribution:
    Validate the existing Stripe billing and Plaid flows for the intended store
    distribution before submission; this shell does not add native purchases or
    native Plaid SDK integration.
+4. When a store approves the production app, set `listed: true` on its entry
+   in `storeListings` (`packages/website/src/site.ts`) and deploy the website,
+   so the home page's badge links to the listing.
 
 No automatic mobile deployment is configured.
 See [Capacitor's environment setup](https://capacitorjs.com/docs/getting-started/environment-setup)

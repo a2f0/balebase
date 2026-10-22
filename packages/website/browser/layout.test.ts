@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
+import { storeListings } from "../src/site";
 
 const { CHROME_PATH } = process.env;
 const chrome =
@@ -14,6 +15,7 @@ const chrome =
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const siteRoot = fileURLToPath(new URL("..", import.meta.url));
 const pages = ["/", "/terms/", "/privacy/", "/data-retention/"];
+const publicRoot = join(siteRoot, "public");
 const types: Record<string, string> = {
   ".css": "text/css",
   ".html": "text/html",
@@ -54,7 +56,7 @@ afterAll(async () => {
   rmSync(work, { recursive: true, force: true });
 });
 
-it("every page fits phone and tablet widths without sideways scrolling", async () => {
+async function openSite() {
   const page = await browser?.newPage();
   if (!page) throw new Error("Chrome did not start.");
   await page.setRequestInterception(true);
@@ -73,6 +75,11 @@ it("every page fits phone and tablet widths without sideways scrolling", async (
       body: readFileSync(file),
     });
   });
+  return page;
+}
+
+it("every page fits phone and tablet widths without sideways scrolling", async () => {
+  const page = await openSite();
   const results = [];
   for (const path of pages) {
     for (const width of [320, 375, 768]) {
@@ -101,4 +108,41 @@ it("keeps the space before an inline heading accent", () => {
   const html = readFileSync(join(dist, "index.html"), "utf8");
   // HTML compression drops a bare line break before an inline element.
   expect(html).toContain("From the bank statement <span");
+});
+
+it("shows each store badge, linked only once the store lists the app", async () => {
+  const page = await openSite();
+  await page.goto("https://website.test/", { waitUntil: "load" });
+  const badges = await page.$$eval(".storeBadgeList li", (items) =>
+    items.map((item) => {
+      const image = item.querySelector("img");
+      return {
+        id: item.getAttribute("data-store"),
+        alt: image?.alt,
+        loaded: [image?.naturalWidth, image?.naturalHeight],
+        href: item.querySelector("a")?.getAttribute("href") ?? null,
+      };
+    }),
+  );
+  expect(badges).toEqual(
+    storeListings.map((listing) => ({
+      id: listing.id,
+      alt: listing.label,
+      loaded: [listing.badge.width, listing.badge.height],
+      href: listing.listed ? listing.url : null,
+    })),
+  );
+  const note = await page.$(".storeBadgeNote");
+  expect(note !== null).toBe(storeListings.some((listing) => !listing.listed));
+});
+
+it("draws the store badges as self-contained vector art", () => {
+  for (const listing of storeListings) {
+    const svg = readFileSync(join(publicRoot, listing.badge.src), "utf8");
+    expect(svg).toStartWith(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${listing.badge.width}" height="${listing.badge.height}"`,
+    );
+    // Text is outlined, so the badge needs no fonts, images, or links.
+    expect(svg).not.toMatch(/<text|<image|href=|@font-face|url\((?!#)/);
+  }
 });

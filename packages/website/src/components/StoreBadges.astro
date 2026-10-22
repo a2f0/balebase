@@ -1,0 +1,45 @@
+---
+/*
+ * The App Store and Google Play badges. Each links to its listing once the
+ * store has approved the app (`listed` in site.ts).
+ */
+import { productName } from "@balebase/ui/brand";
+import { storeListings } from "../site";
+
+const comingSoon = storeListings.some((listing) => !listing.listed);
+---
+
+<div class="storeBadges">
+  <ul class="cluster storeBadgeList">
+    {
+      storeListings.map((listing) => {
+        const image = (
+          <img
+            alt={listing.label}
+            height={listing.badge.height}
+            src={listing.badge.src}
+            width={listing.badge.width}
+          />
+        );
+        return (
+          <li data-store={listing.id}>
+            {listing.listed ? (
+              <a class="storeBadge" href={listing.url}>
+                {image}
+              </a>
+            ) : (
+              <span class="storeBadge">{image}</span>
+            )}
+          </li>
+        );
+      })
+    }
+  </ul>
+  {
+    comingSoon && (
+      <p class="storeBadgeNote">
+        The {productName} apps for iPhone and Android are coming soon.
+      </p>
+    )
+  }
+</div>
