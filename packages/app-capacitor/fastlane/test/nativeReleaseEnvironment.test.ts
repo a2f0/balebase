@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { requireRubyBundle } from "./support/requireRubyBundle";
 
 const packageRoot = resolve(import.meta.dir, "../..");
@@ -50,11 +50,13 @@ const releaseNames = [
 
 // Both secrets files also carry values a native release must never import:
 // the tier's server secrets in app.env and account-level values in shared.env.
+// A store value rotated into app.env overrides its shared.env copy.
 const appEnv = (tier: string) =>
   [
     `SERVER_SECRET=${tier}-server`,
     `ANDROID_KEYSTORE_STORE_PASS=${tier}-store`,
     `ANDROID_KEYSTORE_KEY_PASS=${tier}-key`,
+    `MATCH_PASSWORD=${tier}-app-match`,
     "VITE_API_URL=https://app-env.example",
     "",
   ].join("\n");
@@ -65,14 +67,14 @@ type Snapshot = {
 } & Record<string, unknown>;
 
 /**
- * Loads native_release_target.rb with NATIVE_RELEASE_SECRETS_DIR pointing at
- * a fixture folder, or at `secretsDirOverride` when given.
+ * Loads native_release_target.rb with NATIVE_RELEASE_SECRETS_DIR naming a
+ * fixture folder, given relative to this package when `relativeOverride` is set.
  */
 async function loadRelease(
   tier: "production" | "staging",
   sharedEnv: string,
   processEnvironment: Record<string, string> = {},
-  secretsDirOverride?: string,
+  relativeOverride = false,
 ) {
   await requireRubyBundle();
   const root = await mkdtemp(join(tmpdir(), "balebase-native-release-"));
@@ -84,7 +86,9 @@ async function loadRelease(
   const environment = { ...process.env };
   for (const name of releaseNames) Reflect.deleteProperty(environment, name);
   Object.assign(environment, processEnvironment, {
-    NATIVE_RELEASE_SECRETS_DIR: secretsDirOverride ?? secretsDir,
+    NATIVE_RELEASE_SECRETS_DIR: relativeOverride
+      ? relative(packageRoot, secretsDir)
+      : secretsDir,
     NATIVE_RELEASE_TIER: tier,
   });
   try {
@@ -131,7 +135,7 @@ describe("native release environments", () => {
           ANDROID_KEYSTORE_KEY_PASS: `${tier}-key`,
           ANDROID_KEYSTORE_STORE_PASS: `${tier}-store`,
           APP_STORE_CONNECT_KEY_ID: "shared-key",
-          MATCH_PASSWORD: "shared-match",
+          MATCH_PASSWORD: `${tier}-app-match`,
           SERVER_SECRET: null,
           SHARED_SERVER_SECRET: null,
           VITE_API_URL: `https://${apiHost}`,
@@ -163,17 +167,18 @@ describe("native release environments", () => {
     });
   });
 
-  test("NATIVE_RELEASE_SECRETS_DIR must be absolute", async () => {
-    const { exitCode, stderr } = await loadRelease(
+  test("a relative NATIVE_RELEASE_SECRETS_DIR resolves against the package", async () => {
+    const { exitCode, secretsDir, stderr, snapshot } = await loadRelease(
       "staging",
       "",
       {},
-      "relative/secrets",
+      true,
     );
-    expect(exitCode).not.toBe(0);
-    expect(stderr).toContain(
-      "NATIVE_RELEASE_SECRETS_DIR must be an absolute path: relative/secrets",
-    );
+    expect(exitCode, stderr).toBe(0);
+    expect(snapshot?.secretsDir).toBe(secretsDir);
+    expect(snapshot?.environment).toMatchObject({
+      ANDROID_KEYSTORE_STORE_PASS: "staging-store",
+    });
   });
 
   for (const [name, url, problem] of [

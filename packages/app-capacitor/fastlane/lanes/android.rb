@@ -115,7 +115,8 @@ end
 # build_number: is the version code. ANDROID_VERSION_CODE is the name Gradle
 # reads for builds outside these lanes.
 def explicit_android_release_build_number(options)
-  value = lane_option(options, :build_number, %w[ANDROID_BUILD_NUMBER ANDROID_VERSION_CODE])
+  value = lane_option(options, :build_number, 'ANDROID_BUILD_NUMBER')
+  value ||= env_option('ANDROID_VERSION_CODE')
   return nil if value.nil?
 
   positive_release_integer(value, 'Android release build number')

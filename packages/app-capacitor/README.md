@@ -101,11 +101,13 @@ number (see below) and print the number they used.
 ### Secrets
 
 Production lanes read `.secrets/prod/` and staging lanes `.secrets/staging/`,
-unless `NATIVE_RELEASE_SECRETS_DIR` names another absolute folder, as the tests
-do; Gradle reads the upload key from the same folder. The lanes load
-`shared.env` and then `app.env`, import only the names below (both files also
-hold unrelated server values), and never override a variable already in the
-environment. Neither file may set the bundle's `VITE_*` hosts.
+unless `NATIVE_RELEASE_SECRETS_DIR` names another folder (relative to this
+package), as the tests do; Gradle reads the upload key from the same folder.
+The lanes load `shared.env` and then `app.env`, import only the store names
+below from either file (both also hold unrelated server values), and never
+override a variable already in the environment. A value copied from the
+account-level secrets stays in `shared.env` until it is rotated into `app.env`,
+which then wins. Neither file may set the bundle's `VITE_*` hosts.
 
 | File | Contents |
 | --- | --- |

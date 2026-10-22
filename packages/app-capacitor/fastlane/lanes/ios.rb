@@ -64,7 +64,8 @@ def ios_signing_keychain_exists?(keychain_name)
 end
 
 def explicit_ios_release_build_number(options)
-  value = lane_option(options, :build_number, %w[IOS_BUILD_NUMBER APPLE_BUILD_NUMBER])
+  value = lane_option(options, :build_number, 'IOS_BUILD_NUMBER')
+  value ||= env_option('APPLE_BUILD_NUMBER')
   return nil if value.nil?
 
   positive_release_integer(value, 'iOS release build number')

@@ -35,9 +35,9 @@ Environment:
                 Defaults to $(native_release_default_url "$native_tier" VITE_APP_URL).
 
 Fastlane loads store credentials and signing values from the tier's secrets
-folder (.secrets/prod or .secrets/staging, or NATIVE_RELEASE_SECRETS_DIR): the
-App Store Connect, match, and team values from its shared.env, then
-ANDROID_KEYSTORE_STORE_PASS and ANDROID_KEYSTORE_KEY_PASS from its app.env.
+folder (.secrets/prod or .secrets/staging, or NATIVE_RELEASE_SECRETS_DIR):
+only the App Store Connect, match, team, and ANDROID_KEYSTORE_STORE_PASS and
+ANDROID_KEYSTORE_KEY_PASS values, from its shared.env and then its app.env.
 Explicitly exported environment variables take precedence.
 EOF
 

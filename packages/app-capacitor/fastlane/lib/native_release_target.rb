@@ -38,37 +38,39 @@ NATIVE_RELEASE_TARGET = NATIVE_RELEASE_TARGETS.fetch(NATIVE_RELEASE_TIER) do
 end
 NATIVE_APP_IDENTIFIER = NATIVE_RELEASE_TARGET.fetch(:app_identifier)
 NATIVE_CAPACITOR_SYNC_SCRIPT = NATIVE_RELEASE_TARGET.fetch(:capacitor_sync_script)
-NATIVE_REPO_ROOT = File.expand_path('../../../..', __dir__)
+NATIVE_PACKAGE_DIR = File.expand_path('../..', __dir__)
+NATIVE_REPO_ROOT = File.expand_path('../..', NATIVE_PACKAGE_DIR)
 
-# Each tier reads only its own `.secrets/<tier>/` folder (signing keys, store
-# credentials, shared.env, and app.env) unless NATIVE_RELEASE_SECRETS_DIR names
-# another folder, as the tests do. Gradle reads the same variable for the upload
-# key, so it must be absolute.
-def native_release_secrets_dir
-  override = ENV.fetch('NATIVE_RELEASE_SECRETS_DIR', '').strip
-  return File.join(NATIVE_REPO_ROOT, '.secrets', NATIVE_RELEASE_TARGET.fetch(:secrets_tier)) if override.empty?
-  raise "NATIVE_RELEASE_SECRETS_DIR must be an absolute path: #{override}" unless File.absolute_path?(override)
-
-  override
+def native_release_tier_secrets_dir(tier)
+  File.join(NATIVE_REPO_ROOT, '.secrets', NATIVE_RELEASE_TARGETS.fetch(tier).fetch(:secrets_tier))
 end
 
-NATIVE_SECRETS_DIR = native_release_secrets_dir
+# Each tier reads only its own `.secrets/<secrets tier>/` folder: signing keys,
+# store credentials, `shared.env` (the values shared with other projects), and
+# `app.env` (this project's). NATIVE_RELEASE_SECRETS_DIR names another folder
+# instead; a relative path resolves against this package, as Gradle resolves it.
+NATIVE_RELEASE_SECRETS_DIR_OVERRIDE = ENV.fetch('NATIVE_RELEASE_SECRETS_DIR', '').strip
+NATIVE_SECRETS_DIR =
+  if NATIVE_RELEASE_SECRETS_DIR_OVERRIDE.empty?
+    native_release_tier_secrets_dir(NATIVE_RELEASE_TIER)
+  else
+    File.expand_path(NATIVE_RELEASE_SECRETS_DIR_OVERRIDE, NATIVE_PACKAGE_DIR)
+  end
 NATIVE_SHARED_ENV_PATH = File.join(NATIVE_SECRETS_DIR, 'shared.env')
 NATIVE_APP_ENV_PATH = File.join(NATIVE_SECRETS_DIR, 'app.env')
-# Both files also hold values the native release never uses (shared.env copies
-# account-level values; app.env holds the tier's server secrets), so a release
-# imports only these names from each.
-NATIVE_SHARED_ENV_NAMES = %w[
+# Store credentials and signing passwords, imported from either file; both also
+# hold values a native release never uses (app.env the tier's server secrets).
+# Values copied from root.env stay in shared.env until they are rotated into
+# app.env.
+NATIVE_STORE_ENV_NAMES = %w[
+  ANDROID_KEYSTORE_KEY_PASS
+  ANDROID_KEYSTORE_STORE_PASS
   APP_STORE_CONNECT_ISSUER_ID
   APP_STORE_CONNECT_KEY_ID
   MATCH_GIT_BASIC_AUTHORIZATION
   MATCH_GIT_URL
   MATCH_PASSWORD
   TEAM_ID
-].freeze
-NATIVE_APP_ENV_NAMES = %w[
-  ANDROID_KEYSTORE_KEY_PASS
-  ANDROID_KEYSTORE_STORE_PASS
 ].freeze
 # The release lanes choose the bundle's hosts; secrets files never set them.
 NATIVE_RELEASE_SERVICE_URLS = {
@@ -110,15 +112,14 @@ end
 def native_release_shared_environment
   shared_environment = parsed_native_release_env(NATIVE_SHARED_ENV_PATH)
   warn_ignored_native_vite_names(shared_environment, "#{NATIVE_RELEASE_TARGET.fetch(:secrets_tier)}/shared.env")
-  shared_environment.slice(*NATIVE_SHARED_ENV_NAMES)
+  shared_environment.slice(*NATIVE_STORE_ENV_NAMES)
 end
 
 def native_release_app_environment
-  parsed_native_release_env(NATIVE_APP_ENV_PATH).slice(*NATIVE_APP_ENV_NAMES)
+  parsed_native_release_env(NATIVE_APP_ENV_PATH).slice(*NATIVE_STORE_ENV_NAMES)
 end
 
-# Store credentials come from the tier's shared.env and the upload key's
-# passwords from its app.env; app.env is read last.
+# Parsing shared.env first lets app.env override it.
 def native_release_file_environment
   native_release_shared_environment.merge(native_release_app_environment)
 end
