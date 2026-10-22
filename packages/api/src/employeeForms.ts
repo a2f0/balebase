@@ -629,7 +629,10 @@ employeeForms.post("/:id/checkr/refresh", async (context) => {
   if (!refreshed) {
     return context.json({ error: "Screening changed. Please refresh." }, 409);
   }
-  return respond(context, employeeFormsRoutes.refreshScreening, refreshed);
+  return respond(context, employeeFormsRoutes.refreshScreening, {
+    reportStatus: refreshed.reportStatus,
+    result: refreshed.result,
+  });
 });
 
 // The signed authorization behind the ordered report, for the person and

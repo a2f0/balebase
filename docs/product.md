@@ -505,6 +505,30 @@ corrects them and submits a new attempt. The deployment migration stops if a
 hosted Checkr invitation could still produce a report; finish or cancel it in
 Checkr first.
 
+Screening request and completion emails carry Balebase branding, the requesting
+organization's name, and a link to My documents. A screening link opens the
+form while details are needed and its status after submission, with the signed
+authorization available to download. Completed reports say the organization
+will review the report; completion does not imply a hiring decision. Suspended,
+disputed, and canceled reports explain the next step without showing the
+manager's assessment to the person.
+
+Newly completed reports queue one completion email per request and report.
+Delivery checks that the original person still belongs to the active
+organization and the same report remains complete, with no newer webhook
+waiting to be reconciled. Concurrent deliveries claim the email before sending;
+failed sends retry with delays starting at five minutes and doubling up to one
+day, through the hourly Checkr maintenance job
+(or its manual admin action in staging, where scheduled jobs are disabled).
+Retries stop after ten attempts or seven days. Maintenance reports delivery
+failures and abandoned messages separately from report refreshes; a mail
+failure does not mark otherwise successful report maintenance as failed.
+A lost email-provider response can still produce a duplicate on retry. Existing
+completed reports are not emailed on deployment. Checkr continues to deliver
+its own report copies, requests for information, and other notices; the
+Balebase email does not replace those workflows. See
+[Checkr communications setup](operations.md#checkr-communications).
+
 Set these optional values in `.secrets/prod/app.env` for production deployment
 or `.secrets/staging/app.env` for staging and local development:
 

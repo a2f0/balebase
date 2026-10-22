@@ -248,6 +248,91 @@ describe("My documents", () => {
     expect(container.textContent).toContain("W-4 sent.");
   });
 
+  it("opens a completed screening from its email and refreshes its status without exposing results", async () => {
+    const screening = requirement({
+      id: "check",
+      kind: "background_check",
+      title: "Background check",
+      checkrReportStatus: "complete",
+      status: "complete",
+      completedAt: "2026-10-20T12:00:00Z",
+      hasCheckrConsent: true,
+      checkrResult: "consider",
+    });
+    const calls = stubApi([screening]);
+    await render("/me/screening/check");
+    expect(container.textContent).toContain("Report ready");
+    expect(container.textContent).toContain(
+      "A completed report is not a hiring decision.",
+    );
+    expect(container.textContent).not.toContain("consider");
+    expect(container.textContent).toContain(
+      "Download your signed authorization",
+    );
+    expect(
+      calls.every((call) => call.url.endsWith("/api/employee-forms?for=me")),
+    ).toBe(true);
+    screening.checkrReportStatus = "dispute";
+    screening.status = "in_progress";
+    screening.completedAt = null;
+    const refresh = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Refresh status",
+    );
+    await act(async () => refresh?.click());
+    expect(container.textContent).toContain("Checkr is reviewing a dispute");
+    expect(container.textContent).not.toContain("Report ready");
+  });
+
+  it("keeps completed screening links and explains suspended reports", async () => {
+    stubApi([
+      requirement({
+        id: "done",
+        kind: "background_check",
+        checkrReportStatus: "complete",
+        status: "complete",
+      }),
+      requirement({
+        id: "paused",
+        kind: "background_check",
+        checkrReportStatus: "suspended",
+        status: "in_progress",
+      }),
+    ]);
+    await render();
+    expect(section("Done").querySelector("a")?.getAttribute("href")).toBe(
+      "/me/screening/done",
+    );
+    expect(section("With Acme").textContent).toContain(
+      "Check your email for a request from Checkr",
+    );
+  });
+
+  it("does not show another person's screening from a guessed email link", async () => {
+    stubApi([]);
+    await render("/me/screening/another-person");
+    expect(container.textContent).toContain("Background check not found.");
+    expect(container.textContent).not.toContain(
+      "Download your signed authorization",
+    );
+  });
+
+  it("shows a canceled check that the organization completed by hand as complete", async () => {
+    stubApi([
+      requirement({
+        id: "check",
+        kind: "background_check",
+        checkrReportStatus: "canceled",
+        status: "complete",
+      }),
+    ]);
+    await render("/me/screening/check");
+    expect(container.textContent).toContain("Acme marked this check complete.");
+    expect(container.textContent).not.toContain(
+      "Contact Acme about next steps",
+    );
+    expect(container.querySelector(".badge")?.textContent).toBe("Complete");
+  });
+
   it("says when nothing has been requested", async () => {
     stubApi([]);
     await render();
@@ -264,7 +349,7 @@ describe("My documents", () => {
     await render("/me/screening/check");
 
     expect(container.querySelector("h1")?.textContent).toBe(
-      "Complete your background check",
+      "Your background check",
     );
     const backLinks = [...container.querySelectorAll("a")].filter(
       (element) => element.getAttribute("href") === "/me",

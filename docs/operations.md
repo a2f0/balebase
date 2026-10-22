@@ -150,6 +150,47 @@ For later infrastructure changes, use `bun run terraform:staging:plan` and
 `bun run terraform:staging:apply`. Cloudflare Email Routing subaddressing must
 be enabled once for the zone, as described in the inbound email setup above.
 
+## Checkr communications
+
+Balebase sends branded screening invitations and completion emails. They link
+to the person's screening under My documents, use the configured application
+host for links and the logo, and keep report results out of the email. Migration
+`0068_notify_screening_completion.sql` queues future completions without
+backfilling old ones. Failed deliveries retry in **Refresh Checkr screenings**
+under admin maintenance, or through the production hourly job. This job can
+also be run manually in staging, which has no scheduled jobs.
+Its result includes email counts for `sent`, `failed`, and `abandoned`, and a
+`queueUnavailable` flag for queue access failures. Delivery retries stop after
+ten attempts or seven days. Investigate provider failures before arranging
+any separate follow-up for abandoned messages; the candidate can still view
+their status in My documents. A `skipped` result means Checkr report refreshes
+were disabled because no API key was configured; email outcomes are separate.
+
+Configure Checkr's own communications separately in each account:
+
+1. In Checkr's account settings, add the Balebase logo and verify the
+   candidate-facing display name. Keep **Tearleads, LLC** as the legal entity.
+   The generated `packages/ui/dist/images/web/apple-touch-icon.png` is an
+   opaque 180×180 logo (`bun run images`). Checkr's
+   [candidate-experience guide](https://checkr.com/resources/articles/order-your-first-background-check-with-checkr)
+   describes company-name and logo branding; confirm the available controls
+   with Checkr if your dashboard differs.
+2. Account administrators can adjust their own completion and assessment
+   emails under **Your profile → Notifications**. These settings do not
+   control candidate messages. See
+   [account notifications](https://help.checkr.com/s/article/360010450474-Set-account-notifications).
+3. Keep candidate notices enabled until Checkr confirms which notices our
+   self-hosted Reports integration can replace. Specifically ask about the
+   `background_check_copy_notice` completion email, requested report copies,
+   missing-information requests, disputes, and adverse-action notices. Also
+   confirm whether a custom sender domain is supported. Checkr's
+   [candidate-notification guide](https://help.checkr.com/s/article/17124987125655-Disable-candidate-notifications)
+   directs customers to support for email suppression.
+
+The code does not suppress Checkr email, change its account branding, or alter
+the person's request for a report copy. Sending our completion email does not
+replace Checkr's report delivery or dispute process.
+
 ## Mobile builds and release setup
 
 The Capacitor shell, `packages/app-capacitor`, holds the iOS and Android
