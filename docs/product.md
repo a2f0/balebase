@@ -18,9 +18,11 @@ textareas, selects, editable content, and `data-ct-ignore` subtrees are excluded
 The CT service adds the delivery request's full IP address and approximate
 country, continent, region, city, and timezone from Cloudflare. IPs can identify
 or link activity; these records are not anonymous. The read-only dashboard at
-<https://ct-admin.a2f0.net> and its data API are currently public, including
-IP and location fields. Events older than 90 days and unreferenced locations
-are deleted by a daily job; Cloudflare recovery copies have their own window.
+<https://ct-admin.a2f0.net> and its data API require a signed-in CT administrator
+account to view click records, IP addresses, and location fields. CT accounts
+are provisioned through its CLI; public registration is disabled. Events older
+than 90 days and unreferenced locations are deleted by a daily job; Cloudflare
+recovery copies have their own window.
 
 Do Not Track (`navigator.doNotTrack === "1"`) and Global Privacy Control
 (`navigator.globalPrivacyControl === true`) prevent capture and delivery.
@@ -35,7 +37,7 @@ listed in [operations](operations.md#click-tracking-deployments). Local and
 development builds, server rendering, automated browsers, synthetic clicks,
 and the native Capacitor shell do not collect clicks. Browser tests intercept
 CT requests locally, including tests that deliberately emulate a normal
-browser to check DNT, GPC, origin guards, and route redaction.
+browser to check DNT, GPC, origin guards, and the absence of workspace routes.
 
 ## Authentication
 

@@ -19,7 +19,7 @@ Infrastructure lives outside the workspaces in `terraform` (D1, R2, and
 The hosted website and browser app use the CT click tracker in production and
 staging. Tracking honors Do Not Track and Global Privacy Control browser
 settings. See [click tracking](docs/product.md#click-tracking) for collected
-fields, public visibility, and opt-outs.
+fields, administrator access, and opt-outs.
 
 ## Start locally
 

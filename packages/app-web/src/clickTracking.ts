@@ -14,7 +14,7 @@ export function initClickTracking() {
     app: "web-app",
     environment,
     capture: "all",
-    // Keep the default page "/". Public clicks must not reveal workspace
+    // Keep the default page "/". Click records must not reveal workspace
     // workflows, including screening, signing, finance, or admin activity.
   });
   tracker.init();
