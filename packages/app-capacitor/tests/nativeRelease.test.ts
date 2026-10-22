@@ -77,18 +77,18 @@ describe("native release wrappers", () => {
       [
         "buildAndroidRelease.sh",
         "android build production",
-        "android:build:google-play",
+        "android:build-release",
       ],
       [
         "buildAndroidStagingRelease.sh",
         "android build staging",
-        "android:build:google-play:staging",
+        "android:build-release:staging",
       ],
-      ["buildIosRelease.sh", "ios build production", "ios:build:testflight"],
+      ["buildIosRelease.sh", "ios build production", "ios:build-release"],
       [
         "buildIosStagingRelease.sh",
         "ios build staging",
-        "ios:build:testflight:staging",
+        "ios:build-release:staging",
       ],
     ];
     for (const [wrapper, target, command] of wrappers) {
@@ -116,7 +116,7 @@ describe("native release wrappers", () => {
     );
     expect(exitCode, stderr).toBe(0);
     expect(calls).toEqual([
-      "bun:staging:https://api-staging.balebase.com:https://app-staging.balebase.com:run android:upload:google-play:staging next_google_play:true",
+      "bun:staging:https://api-staging.balebase.com:https://app-staging.balebase.com:run android:upload-release:staging next_google_play:true",
     ]);
     expect(stdout).toContain("Build number: 7");
   });
@@ -128,7 +128,7 @@ describe("native release wrappers", () => {
       { ANDROID_VERSION_CODE: "12" },
     );
     expect(calls).toEqual([
-      "bun:production:https://api.balebase.com:https://app.balebase.com:run android:upload:google-play",
+      "bun:production:https://api.balebase.com:https://app.balebase.com:run android:upload-release",
     ]);
   });
 

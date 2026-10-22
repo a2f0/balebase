@@ -2,15 +2,15 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { requireRubyBundle } from "./requireRubyBundle";
+import { requireRubyBundle } from "./support/requireRubyBundle";
 
-const packageRoot = resolve(import.meta.dir, "..");
+const packageRoot = resolve(import.meta.dir, "../..");
 const scratch = await mkdtemp(join(tmpdir(), "balebase-fastlane-lanes-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
 
 /**
  * Loads the real Fastfile, runs `body` against it as `fastfile`, and returns
- * the JSON the body prints last.
+ * the JSON the body prints last. Secrets resolve to the scratch folder.
  */
 async function runLanes(body: string, env: Record<string, string> = {}) {
   await requireRubyBundle();
@@ -27,6 +27,7 @@ async function runLanes(body: string, env: Record<string, string> = {}) {
       ...process.env,
       FASTLANE_OPT_OUT_USAGE: "1",
       FASTLANE_SKIP_UPDATE_CHECK: "1",
+      NATIVE_RELEASE_SECRETS_DIR: scratch,
       NATIVE_RELEASE_TIER: "staging",
       ...env,
     },
@@ -40,6 +41,38 @@ async function runLanes(body: string, env: Record<string, string> = {}) {
   ]);
   expect(exitCode, stderr).toBe(0);
   return JSON.parse(stdout.trim().split("\n").at(-1) ?? "null");
+}
+
+const standardLanes = {
+  // Lanes outside a platform.
+  "": ["store_build_numbers"],
+  android: [
+    "build_debug_apk",
+    "build_release",
+    "build_release_apk",
+    "clean",
+    "install_debug",
+    "install_release",
+    "sideload",
+    "test",
+    "upload_release",
+  ],
+  ios: ["build_release", "fetch_profiles", "profiles", "upload_release"],
+};
+
+for (const tier of ["production", "staging"]) {
+  test(`the ${tier} Fastfile declares the standard lane names`, async () => {
+    const lanes = await runLanes(
+      `
+lanes = fastfile.runner.lanes.to_h do |platform, platform_lanes|
+  [platform.to_s, platform_lanes.keys.map(&:to_s).sort]
+end
+puts JSON.generate(lanes)
+`,
+      { NATIVE_RELEASE_TIER: tier },
+    );
+    expect(lanes).toEqual(standardLanes);
+  });
 }
 
 test("Play version codes count bundles uploaded outside any track", async () => {
@@ -211,6 +244,7 @@ puts JSON.generate(results)
 test("Android release lanes choose build numbers and Play upload options", async () => {
   const jsonKey = join(scratch, "play-upload.json");
   await Bun.write(jsonKey, "{}");
+  await Bun.write(join(scratch, "balebase-upload.keystore"), "");
   const result = await runLanes(
     `
 fastfile.define_singleton_method(:merged_release_pr_number) { |_options, _prefix| 153 }
@@ -225,15 +259,16 @@ numbers = {
   merged: number.call({}),
   next: number.call({ next_google_play: true }),
   explicit: number.call({ build_number: "9" }),
+  gradleEnvironment: (ENV["ANDROID_VERSION_CODE"] = "11"; number.call({})),
   conflict: number.call({ build_number: "9", next_google_play: true }),
-  aheadOfMerged: (play[:latest] = 300; number.call({}))
+  aheadOfMerged: (ENV.delete("ANDROID_VERSION_CODE"); play[:latest] = 300; number.call({}))
 }
 aab = Fastlane::FastFile.const_get(:RELEASE_AAB_PATH)
 assets = { assets: [aab, "/tmp/mapping.txt"] }
 upload = fastfile.send(:upload_android_play_release_options, {}, assets)
 override = fastfile.send(
   :upload_android_play_release_options,
-  { google_track: "alpha", release_status: "draft", validate_only: true },
+  { track: "alpha", release_status: "draft", validate_only: true },
   { assets: [aab] }
 )
 signing = begin
@@ -252,15 +287,17 @@ puts JSON.generate(
 `,
     {
       GOOGLE_PLAY_JSON_KEY_FILE: jsonKey,
-      BALEBASE_ANDROID_KEYSTORE_PASS: "",
+      ANDROID_KEYSTORE_STORE_PASS: "",
+      ANDROID_KEYSTORE_KEY_PASS: "",
     },
   );
   expect(result.numbers).toEqual({
     merged: 153,
     next: 5,
     explicit: 9,
+    gradleEnvironment: 11,
     conflict:
-      "error: Use either build_number/version_code or next_google_play:true, not both.",
+      "error: Use either build_number or next_google_play:true, not both.",
     aheadOfMerged: 301,
   });
   expect(result.upload).toEqual({
@@ -278,8 +315,8 @@ puts JSON.generate(
     release_status: "draft",
     validate_only: true,
   });
-  expect(result.signing).toMatch(
-    /Android release keystore does not exist|Missing BALEBASE_ANDROID_KEYSTORE_PASS/,
+  expect(result.signing).toBe(
+    `Android release signing is not configured. Missing ANDROID_KEYSTORE_STORE_PASS, ANDROID_KEYSTORE_KEY_PASS in the environment or ${join(scratch, "app.env")}.`,
   );
 });
 
@@ -291,7 +328,17 @@ attempt = lambda do |&block|
 rescue FastlaneCore::Interface::FastlaneError => e
   "error: #{e.message}"
 end
+build_number = lambda do |options|
+  fastfile.send(:next_ios_release_build_number, options)[:build_number]
+rescue FastlaneCore::Interface::FastlaneError => e
+  "error: #{e.message}"
+end
 puts JSON.generate(
+  buildNumbers: [
+    build_number.call({ build_number: "5" }),
+    (ENV["APPLE_BUILD_NUMBER"] = "6"; build_number.call({})),
+    build_number.call({ build_number: "5", next_testflight: true })
+  ],
   teamFromIosName: fastfile.send(:ios_team_id, {}),
   teamOption: fastfile.send(:ios_team_id, { team_id: "OPTION" }),
   missingTeam: attempt.call { ENV.delete("IOS_TEAM_ID"); ENV.delete("TEAM_ID"); fastfile.send(:require_ios_team_id!, {}) },
@@ -307,6 +354,11 @@ puts JSON.generate(
     { IOS_TEAM_ID: "IOSTEAM", TEAM_ID: "SHARED" },
   );
   expect(result).toEqual({
+    buildNumbers: [
+      5,
+      6,
+      "error: Use either build_number or next_testflight:true, not both.",
+    ],
     teamFromIosName: "IOSTEAM",
     teamOption: "OPTION",
     missingTeam:
@@ -331,8 +383,8 @@ end
 fastfile.define_singleton_method(:app_store_connect_api_key_options) { { key_id: "KEY" } }
 fastfile.define_singleton_method(:app_store_connect_api_key) { |options| "api-key:#{options[:key_id]}" }
 fastfile.define_singleton_method(:match) { |options| calls << options }
-fastfile.runner.execute(:create_appstore_profile, :ios, {})
-fastfile.runner.execute(:create_appstore_profile, :ios, { force: true })
+fastfile.runner.execute(:profiles, :ios, {})
+fastfile.runner.execute(:profiles, :ios, { force: true })
 puts JSON.generate(
   version: fastfile.send(:ios_release_version, {}),
   explicitVersion: fastfile.send(:ios_release_version, { version: "2.0.0" }),

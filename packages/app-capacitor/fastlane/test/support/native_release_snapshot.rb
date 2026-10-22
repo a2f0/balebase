@@ -7,9 +7,12 @@ require File.realpath(ARGV.fetch(0))
 load_native_release_secrets_env
 android_artifact_paths = native_release_android_artifact_relative_paths
 environment_names = %w[
+  ANDROID_KEYSTORE_KEY_PASS
+  ANDROID_KEYSTORE_STORE_PASS
   APP_STORE_CONNECT_KEY_ID
-  BALEBASE_ANDROID_KEYSTORE_PASS
+  MATCH_PASSWORD
   SERVER_SECRET
+  SHARED_SERVER_SECRET
   VITE_API_URL
   VITE_APP_URL
 ]
@@ -22,5 +25,6 @@ print JSON.generate(
   iosConfiguration: NATIVE_RELEASE_TARGET.fetch(:ios_configuration),
   iosScheme: NATIVE_RELEASE_TARGET.fetch(:ios_scheme),
   releaseAabRelativePath: android_artifact_paths.fetch(:aab),
+  secretsDir: NATIVE_SECRETS_DIR,
   environment: environment_names.to_h { |name| [name, ENV.fetch(name, nil)] }
 )

@@ -49,6 +49,7 @@ const baseConfig = {
         "src/**/*.{css,ts,tsx}",
         "browser/**/*.{ts,tsx}",
         "tests/**/*.ts",
+        "fastlane/**/*.ts",
         "scripts/**/*.ts",
       ],
       // cap sync registers this native plugin; its default Android back handler

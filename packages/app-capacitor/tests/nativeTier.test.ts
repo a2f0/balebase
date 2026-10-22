@@ -60,13 +60,35 @@ test("local build, sync, open, and run commands follow the caller's tier", () =>
   }
 });
 
+const fastlaneScripts = Object.entries(scripts).filter(([, command]) =>
+  command.includes("bundle exec fastlane "),
+);
+
 test("release commands pin the tier their name selects", () => {
-  for (const [name, command] of Object.entries(scripts)) {
-    const lane =
-      /^(android|ios|store|cap):(build|upload|fetch|sync|build-numbers)/;
-    if (!lane.test(name)) continue;
-    if (name === "cap:sync" || name === "cap:sync:debug") continue;
+  const tierScripts = Object.entries(scripts).filter(
+    ([name, command]) =>
+      command.includes("bundle exec fastlane ") ||
+      name === "cap:sync:release" ||
+      name === "cap:sync:staging",
+  );
+  expect(tierScripts.length).toBeGreaterThan(2);
+  for (const [name, command] of tierScripts) {
     const tier = name.endsWith(":staging") ? "staging" : "production";
     expect(command, name).toContain(`NATIVE_RELEASE_TIER=${tier} `);
+  }
+});
+
+test("each lane script is named <platform>:<lane in kebab case>", () => {
+  expect(fastlaneScripts.length).toBeGreaterThan(0);
+  for (const [name, command] of fastlaneScripts) {
+    const match = /bundle exec fastlane (?:(android|ios) )?([a-z_]+)$/.exec(
+      command,
+    );
+    expect(match, name).not.toBeNull();
+    const [, platform, lane = ""] = match ?? [];
+    const expected = platform
+      ? `${platform}:${lane.replaceAll("_", "-")}`
+      : lane.replace(/^store_/, "store:").replaceAll("_", "-");
+    expect(name.replace(/:staging$/, ""), command).toBe(expected);
   }
 });

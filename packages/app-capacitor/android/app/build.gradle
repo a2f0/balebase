@@ -26,9 +26,9 @@ android {
         release {
             if (hasReleaseKeystore()) {
                 storeFile = releaseKeystoreFile()
-                storePassword = System.getenv("BALEBASE_ANDROID_KEYSTORE_PASS")
+                storePassword = System.getenv("ANDROID_KEYSTORE_STORE_PASS")
                 keyAlias = "upload"
-                keyPassword = System.getenv("BALEBASE_ANDROID_KEYSTORE_PASS")
+                keyPassword = System.getenv("ANDROID_KEYSTORE_KEY_PASS")
             }
         }
     }
@@ -52,19 +52,29 @@ android {
 
 // The upload key comes from the secrets folder of the tier the native release
 // wrappers select with NATIVE_RELEASE_TIER; without one, production. Each tier
-// has its own key, registered with its Play app.
+// has its own key, registered with its Play app. NATIVE_RELEASE_SECRETS_DIR
+// replaces that folder, as it does for the Fastlane lanes.
 def releaseKeystoreFile() {
     def tier = (System.getenv("NATIVE_RELEASE_TIER") ?: "production").trim().toLowerCase()
     def secretsTier = [production: "prod", staging: "staging"][tier]
     if (secretsTier == null) {
         throw new GradleException("Unknown NATIVE_RELEASE_TIER '${tier}'. Expected production or staging.")
     }
+    def secretsDirOverride = (System.getenv("NATIVE_RELEASE_SECRETS_DIR") ?: "").trim()
+    if (secretsDirOverride) {
+        def secretsDir = new File(secretsDirOverride)
+        if (!secretsDir.isAbsolute()) {
+            throw new GradleException("NATIVE_RELEASE_SECRETS_DIR must be an absolute path: ${secretsDirOverride}")
+        }
+        return new File(secretsDir, "balebase-upload.keystore")
+    }
     return rootProject.file("../../../.secrets/${secretsTier}/balebase-upload.keystore")
 }
 
 def hasReleaseKeystore() {
     return releaseKeystoreFile().exists() &&
-        System.getenv("BALEBASE_ANDROID_KEYSTORE_PASS") != null
+        System.getenv("ANDROID_KEYSTORE_STORE_PASS") != null &&
+        System.getenv("ANDROID_KEYSTORE_KEY_PASS") != null
 }
 
 def configuredVersionCode() {

@@ -39,16 +39,36 @@ end
 NATIVE_APP_IDENTIFIER = NATIVE_RELEASE_TARGET.fetch(:app_identifier)
 NATIVE_CAPACITOR_SYNC_SCRIPT = NATIVE_RELEASE_TARGET.fetch(:capacitor_sync_script)
 NATIVE_REPO_ROOT = File.expand_path('../../../..', __dir__)
-# Each tier reads only its own `.secrets/<tier>/` folder: signing keys, store
-# credentials, `shared.env` (the values shared with other projects), and the
-# allowlisted native settings in `app.env`.
-NATIVE_SECRETS_DIR = File.join(NATIVE_REPO_ROOT, '.secrets', NATIVE_RELEASE_TARGET.fetch(:secrets_tier))
+
+# Each tier reads only its own `.secrets/<tier>/` folder (signing keys, store
+# credentials, shared.env, and app.env) unless NATIVE_RELEASE_SECRETS_DIR names
+# another folder, as the tests do. Gradle reads the same variable for the upload
+# key, so it must be absolute.
+def native_release_secrets_dir
+  override = ENV.fetch('NATIVE_RELEASE_SECRETS_DIR', '').strip
+  return File.join(NATIVE_REPO_ROOT, '.secrets', NATIVE_RELEASE_TARGET.fetch(:secrets_tier)) if override.empty?
+  raise "NATIVE_RELEASE_SECRETS_DIR must be an absolute path: #{override}" unless File.absolute_path?(override)
+
+  override
+end
+
+NATIVE_SECRETS_DIR = native_release_secrets_dir
 NATIVE_SHARED_ENV_PATH = File.join(NATIVE_SECRETS_DIR, 'shared.env')
 NATIVE_APP_ENV_PATH = File.join(NATIVE_SECRETS_DIR, 'app.env')
-# app.env also holds the tier's server secrets (Cloudflare, Stripe, Plaid, ...),
-# so a native release imports only these names from it.
+# Both files also hold values the native release never uses (shared.env copies
+# account-level values; app.env holds the tier's server secrets), so a release
+# imports only these names from each.
+NATIVE_SHARED_ENV_NAMES = %w[
+  APP_STORE_CONNECT_ISSUER_ID
+  APP_STORE_CONNECT_KEY_ID
+  MATCH_GIT_BASIC_AUTHORIZATION
+  MATCH_GIT_URL
+  MATCH_PASSWORD
+  TEAM_ID
+].freeze
 NATIVE_APP_ENV_NAMES = %w[
-  BALEBASE_ANDROID_KEYSTORE_PASS
+  ANDROID_KEYSTORE_KEY_PASS
+  ANDROID_KEYSTORE_STORE_PASS
 ].freeze
 # The release lanes choose the bundle's hosts; secrets files never set them.
 NATIVE_RELEASE_SERVICE_URLS = {
@@ -90,15 +110,15 @@ end
 def native_release_shared_environment
   shared_environment = parsed_native_release_env(NATIVE_SHARED_ENV_PATH)
   warn_ignored_native_vite_names(shared_environment, "#{NATIVE_RELEASE_TARGET.fetch(:secrets_tier)}/shared.env")
-  shared_environment.reject { |name, _value| name.start_with?('VITE_') }
+  shared_environment.slice(*NATIVE_SHARED_ENV_NAMES)
 end
 
 def native_release_app_environment
   parsed_native_release_env(NATIVE_APP_ENV_PATH).slice(*NATIVE_APP_ENV_NAMES)
 end
 
-# Store credentials come from the tier's shared.env and only the allowlisted
-# native names from its server-oriented app.env.
+# Store credentials come from the tier's shared.env and the upload key's
+# passwords from its app.env; app.env is read last.
 def native_release_file_environment
   native_release_shared_environment.merge(native_release_app_environment)
 end

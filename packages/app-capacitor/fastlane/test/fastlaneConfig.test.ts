@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
-import { requireRubyBundle } from "./requireRubyBundle";
+import { requireRubyBundle } from "./support/requireRubyBundle";
 
-const packageRoot = resolve(import.meta.dir, "..");
+const packageRoot = resolve(import.meta.dir, "../..");
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -139,6 +139,8 @@ for (const [tier, secretsTier] of [
           ...process.env,
           FASTLANE_OPT_OUT_USAGE: "1",
           FASTLANE_SKIP_UPDATE_CHECK: "1",
+          // Empty selects the tier's own folder under .secrets.
+          NATIVE_RELEASE_SECRETS_DIR: "",
           NATIVE_RELEASE_TIER: tier,
         },
         stderr: "pipe",

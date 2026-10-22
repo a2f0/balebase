@@ -1,17 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { requireRubyBundle } from "./requireRubyBundle";
+import { requireRubyBundle } from "./support/requireRubyBundle";
 
-const packageRoot = resolve(import.meta.dir, "..");
+const packageRoot = resolve(import.meta.dir, "../..");
 const nativeReleaseTargetPath = resolve(
   packageRoot,
   "fastlane/lib/native_release_target.rb",
 );
 const snapshotScriptPath = resolve(
   import.meta.dir,
-  "native_release_snapshot.rb",
+  "support/native_release_snapshot.rb",
 );
 
 const targets = {
@@ -36,45 +36,60 @@ const targets = {
 };
 
 const releaseNames = [
+  "ANDROID_KEYSTORE_KEY_PASS",
+  "ANDROID_KEYSTORE_STORE_PASS",
   "APP_STORE_CONNECT_KEY_ID",
-  "BALEBASE_ANDROID_KEYSTORE_PASS",
+  "MATCH_PASSWORD",
+  "NATIVE_RELEASE_SECRETS_DIR",
   "NATIVE_RELEASE_TIER",
   "SERVER_SECRET",
+  "SHARED_SERVER_SECRET",
   "VITE_API_URL",
   "VITE_APP_URL",
 ];
 
-// app.env also carries the tier's server secrets, which a native release
-// must never import.
+// Both secrets files also carry values a native release must never import:
+// the tier's server secrets in app.env and account-level values in shared.env.
 const appEnv = (tier: string) =>
-  `SERVER_SECRET=${tier}-server\nBALEBASE_ANDROID_KEYSTORE_PASS=${tier}-keystore\nVITE_API_URL=https://app-env.example\n`;
+  [
+    `SERVER_SECRET=${tier}-server`,
+    `ANDROID_KEYSTORE_STORE_PASS=${tier}-store`,
+    `ANDROID_KEYSTORE_KEY_PASS=${tier}-key`,
+    "VITE_API_URL=https://app-env.example",
+    "",
+  ].join("\n");
 
-/** Runs native_release_target.rb from a copy whose .secrets are fixtures. */
+type Snapshot = {
+  secretsDir: string;
+  environment: Record<string, string | null>;
+} & Record<string, unknown>;
+
+/**
+ * Loads native_release_target.rb with NATIVE_RELEASE_SECRETS_DIR pointing at
+ * a fixture folder, or at `secretsDirOverride` when given.
+ */
 async function loadRelease(
   tier: "production" | "staging",
   sharedEnv: string,
   processEnvironment: Record<string, string> = {},
+  secretsDirOverride?: string,
 ) {
   await requireRubyBundle();
   const root = await mkdtemp(join(tmpdir(), "balebase-native-release-"));
-  const copiedTarget = join(
-    root,
-    "packages/app-capacitor/fastlane/lib/native_release_target.rb",
-  );
-  await mkdir(resolve(copiedTarget, ".."), { recursive: true });
+  const secretsDir = join(root, tier === "staging" ? "staging" : "prod");
   await Promise.all([
-    Bun.write(copiedTarget, Bun.file(nativeReleaseTargetPath)),
-    ...["prod", "staging"].flatMap((secrets) => [
-      Bun.write(join(root, ".secrets", secrets, "app.env"), appEnv(secrets)),
-      Bun.write(join(root, ".secrets", secrets, "shared.env"), sharedEnv),
-    ]),
+    Bun.write(join(secretsDir, "app.env"), appEnv(tier)),
+    Bun.write(join(secretsDir, "shared.env"), sharedEnv),
   ]);
   const environment = { ...process.env };
   for (const name of releaseNames) Reflect.deleteProperty(environment, name);
-  Object.assign(environment, processEnvironment, { NATIVE_RELEASE_TIER: tier });
+  Object.assign(environment, processEnvironment, {
+    NATIVE_RELEASE_SECRETS_DIR: secretsDirOverride ?? secretsDir,
+    NATIVE_RELEASE_TIER: tier,
+  });
   try {
     const child = Bun.spawn(
-      ["bundle", "exec", "ruby", snapshotScriptPath, copiedTarget],
+      ["bundle", "exec", "ruby", snapshotScriptPath, nativeReleaseTargetPath],
       { cwd: packageRoot, env: environment, stderr: "pipe", stdout: "pipe" },
     );
     const [exitCode, stderr, stdout] = await Promise.all([
@@ -84,8 +99,9 @@ async function loadRelease(
     ]);
     return {
       exitCode,
+      secretsDir,
       stderr,
-      snapshot: exitCode === 0 ? JSON.parse(stdout) : null,
+      snapshot: exitCode === 0 ? (JSON.parse(stdout) as Snapshot) : null,
     };
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -102,18 +118,22 @@ describe("native release environments", () => {
       "app-staging.balebase.com",
     ],
   ] as const) {
-    test(`${tier} reads its own store values and only the keystore password from app.env`, async () => {
-      const { exitCode, stderr, snapshot } = await loadRelease(
+    test(`${tier} imports only the release names from shared.env and app.env`, async () => {
+      const { exitCode, secretsDir, stderr, snapshot } = await loadRelease(
         tier,
-        "APP_STORE_CONNECT_KEY_ID=shared-key\nVITE_APP_URL=https://shared.example\n",
+        "APP_STORE_CONNECT_KEY_ID=shared-key\nMATCH_PASSWORD=shared-match\nSHARED_SERVER_SECRET=shared-server\nVITE_APP_URL=https://shared.example\n",
       );
       expect(exitCode, stderr).toBe(0);
       expect(snapshot).toEqual({
         ...targets[tier],
+        secretsDir,
         environment: {
+          ANDROID_KEYSTORE_KEY_PASS: `${tier}-key`,
+          ANDROID_KEYSTORE_STORE_PASS: `${tier}-store`,
           APP_STORE_CONNECT_KEY_ID: "shared-key",
-          BALEBASE_ANDROID_KEYSTORE_PASS: `${secrets}-keystore`,
+          MATCH_PASSWORD: "shared-match",
           SERVER_SECRET: null,
+          SHARED_SERVER_SECRET: null,
           VITE_API_URL: `https://${apiHost}`,
           VITE_APP_URL: `https://${appHost}`,
         },
@@ -130,16 +150,30 @@ describe("native release environments", () => {
       "APP_STORE_CONNECT_KEY_ID=shared-key\n",
       {
         APP_STORE_CONNECT_KEY_ID: "process-key",
-        BALEBASE_ANDROID_KEYSTORE_PASS: "process-keystore",
+        ANDROID_KEYSTORE_STORE_PASS: "process-store",
         VITE_API_URL: "https://api-staging.balebase.com/",
       },
     );
     expect(exitCode, stderr).toBe(0);
     expect(snapshot?.environment).toMatchObject({
       APP_STORE_CONNECT_KEY_ID: "process-key",
-      BALEBASE_ANDROID_KEYSTORE_PASS: "process-keystore",
+      ANDROID_KEYSTORE_STORE_PASS: "process-store",
+      ANDROID_KEYSTORE_KEY_PASS: "staging-key",
       VITE_API_URL: "https://api-staging.balebase.com/",
     });
+  });
+
+  test("NATIVE_RELEASE_SECRETS_DIR must be absolute", async () => {
+    const { exitCode, stderr } = await loadRelease(
+      "staging",
+      "",
+      {},
+      "relative/secrets",
+    );
+    expect(exitCode).not.toBe(0);
+    expect(stderr).toContain(
+      "NATIVE_RELEASE_SECRETS_DIR must be an absolute path: relative/secrets",
+    );
   });
 
   for (const [name, url, problem] of [

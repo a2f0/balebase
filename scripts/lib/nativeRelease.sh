@@ -34,10 +34,11 @@ Environment:
   VITE_APP_URL  Hosted app that emailed links open.
                 Defaults to $(native_release_default_url "$native_tier" VITE_APP_URL).
 
-Store credentials and signing values are loaded by Fastlane from the tier's
-secrets folder (.secrets/prod or .secrets/staging): its shared.env, plus only
-BALEBASE_ANDROID_KEYSTORE_PASS from its app.env. Explicitly exported
-environment variables take precedence.
+Fastlane loads store credentials and signing values from the tier's secrets
+folder (.secrets/prod or .secrets/staging, or NATIVE_RELEASE_SECRETS_DIR): the
+App Store Connect, match, and team values from its shared.env, then
+ANDROID_KEYSTORE_STORE_PASS and ANDROID_KEYSTORE_KEY_PASS from its app.env.
+Explicitly exported environment variables take precedence.
 EOF
 
   if [ "$native_action" = upload ]; then
@@ -58,9 +59,8 @@ EOF
     cat <<'EOF'
 
 Android options:
-  version_code:<number>       Alias for an explicit build number.
   next_google_play:true       Use the latest Play version code plus one.
-  google_track:<track>        Upload track; defaults to internal.
+  track:<track>               Upload track; defaults to internal.
   release_status:<status>     Upload release status; defaults to completed.
   validate_only:true          Validate the upload without publishing.
 
@@ -71,7 +71,6 @@ EOF
     cat <<'EOF'
 
 iOS options:
-  apple_build_number:<number> Alias for an explicit build number.
   next_testflight:true        Use the latest TestFlight build number plus one.
   changelog:<text>            Set the TestFlight What to Test notes.
   distribute_external:true    Distribute to external testers.
@@ -170,8 +169,8 @@ native_release_build_number_chosen() {
 
   for native_arg in "$@"; do
     case "$native_platform:$native_arg" in
-      android:build_number:* | android:version_code:* | android:next_google_play:* | android:merged_pr_number:* | android:pr_number:* | android:merged_date:* | \
-        ios:build_number:* | ios:apple_build_number:* | ios:next_testflight:* | ios:merged_pr_number:* | ios:pr_number:* | ios:merged_date:*)
+      android:build_number:* | android:next_google_play:* | android:merged_pr_number:* | android:pr_number:* | android:merged_date:* | \
+        ios:build_number:* | ios:next_testflight:* | ios:merged_pr_number:* | ios:pr_number:* | ios:merged_date:*)
         return 0
         ;;
     esac
@@ -189,19 +188,8 @@ native_release_bun_command() {
     native_command_suffix=":staging"
   fi
 
-  if [ "$native_platform" = android ]; then
-    if [ "$native_action" = upload ]; then
-      printf '%s%s\n' android:upload:google-play "$native_command_suffix"
-    else
-      printf '%s%s\n' android:build:google-play "$native_command_suffix"
-    fi
-  else
-    if [ "$native_action" = upload ]; then
-      printf '%s%s\n' ios:upload:testflight "$native_command_suffix"
-    else
-      printf '%s%s\n' ios:build:testflight "$native_command_suffix"
-    fi
-  fi
+  # Each wrapper runs the package script <platform>:<action>-release.
+  printf '%s:%s-release%s\n' "$native_platform" "$native_action" "$native_command_suffix"
 }
 
 native_release_run_upload() {

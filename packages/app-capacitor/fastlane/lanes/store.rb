@@ -4,6 +4,7 @@ require 'json'
 require 'shellwords'
 require 'supply'
 require_relative '../lib/capacitor_release_config'
+require_relative '../lib/lane_options'
 require_relative '../lib/native_release_target'
 
 GOOGLE_PLAY_DEFAULT_JSON_KEY_PATH = File.join(
@@ -41,9 +42,10 @@ def google_play_configured?
   File.file?(google_play_json_key_path)
 end
 
+# track: (an upload's track) narrows the lookup to that track.
 def google_play_tracks(options)
-  google_track = lane_option(options, :google_track, 'GOOGLE_PLAY_TRACK')
-  return [google_track] unless google_track.nil?
+  track = lane_option(options, :track, 'GOOGLE_PLAY_TRACK')
+  return [track] unless track.nil?
 
   google_tracks = lane_option(options, :google_tracks, 'GOOGLE_PLAY_TRACKS')
   return GOOGLE_PLAY_DEFAULT_TRACKS if google_tracks.nil?
@@ -211,7 +213,7 @@ def app_store_build_numbers_result(options)
   nil
 end
 
-desc 'Fetch latest remote build numbers from Google Play and Apple App Store'
+desc 'Prints the latest build numbers in both stores'
 lane :store_build_numbers do |options|
   load_store_secrets_env
 
