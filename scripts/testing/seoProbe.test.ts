@@ -45,8 +45,9 @@ function redirect(location: string, status = 301, headers = {}) {
   return new Response(null, { status, headers: { location, ...headers } });
 }
 
-function siteResponse(path: string): Response {
+function siteResponse(url: URL): Response {
   const origin = `http://${siteHost}`;
+  const path = url.pathname;
   switch (path) {
     case "/":
       return page(
@@ -68,6 +69,21 @@ function siteResponse(path: string): Response {
     case "/docs":
     case "/guide/child":
       return page("Docs - Example", `${origin}${path}`);
+    case "/reference/docs":
+      // A query-only link resolves against this page, not its directory.
+      return page(
+        "Reference - Example",
+        `${origin}${path}`,
+        "",
+        '<a href="?page=2">Next</a>',
+      );
+    case "/search": {
+      const params = url.searchParams;
+      if (params.get("q") !== "a" || params.get("page") !== "2") {
+        return new Response("Not found", { status: 404 });
+      }
+      return page("Search - Example", `${origin}/search?q=a&amp;page=2`);
+    }
     case "/old":
       return redirect("/about/");
     case "/guide":
@@ -90,7 +106,13 @@ function siteResponse(path: string): Response {
       );
     case "/sitemap.xml":
       return new Response(
-        `<?xml version="1.0"?><urlset>${["/", "/about/", "/dup/", "/gone/"]
+        `<?xml version="1.0"?><urlset>${[
+          "/",
+          "/about/",
+          "/dup/",
+          "/gone/",
+          "/search?q=a&amp;page=2",
+        ]
           .map((entry) => `<url><loc>${origin}${entry}</loc></url>`)
           .join("")}</urlset>`,
         { headers: { "content-type": "application/xml" } },
@@ -131,7 +153,7 @@ beforeAll(() => {
   site = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch: (request) => siteResponse(new URL(request.url).pathname),
+    fetch: (request) => siteResponse(new URL(request.url)),
   });
   siteHost = `127.0.0.1:${site.port}`;
   // A single-page fallback: every path answers the same HTML shell.
@@ -188,7 +210,7 @@ test("reports a page's metadata and the site files", async () => {
   );
   expect(stdout).toContain("robots.txt: 200 text/plain");
   expect(stdout).toContain(`| Sitemap: ${origin}/sitemap.xml`);
-  expect(stdout).toContain("sitemap.xml: 200 application/xml  urls: 4");
+  expect(stdout).toContain("sitemap.xml: 200 application/xml  urls: 5");
   expect(stdout).toMatch(/missing path: 404 text\/html .*title: Not found/);
   expect(stdout).toContain("/404: 200 text/html  robots meta: noindex");
   expect(stdout).toContain("http:// root: 200   (does not redirect to HTTPS)");
@@ -219,6 +241,19 @@ test("resolves relative links against the final document URL", async () => {
   expect(exitCode).toBe(0);
   expect(stdout).toContain(
     "internal links in the static HTML: 2, not a direct 200: 0",
+  );
+});
+
+test("resolves a query-only link against the page itself", async () => {
+  const { stdout, exitCode } = await run(
+    "--links",
+    siteHost,
+    "/reference/docs",
+  );
+
+  expect(exitCode).toBe(0);
+  expect(stdout).toContain(
+    "internal links in the static HTML: 1, not a direct 200: 0",
   );
 });
 
@@ -258,7 +293,13 @@ test("checks every sitemap URL and reports duplicates", async () => {
   expect(stdout).toContain(`${origin}/dup/: canonical ${origin}/about/;`);
   expect(stdout).toContain(`${origin}/gone/: status 404; canonical missing;`);
   expect(stdout).toContain("duplicate titles (count, text): 2 About - Example");
-  expect(stdout).toContain("sitemap URLs: 4, with problems: 2");
+  expect(stdout).toContain(
+    "duplicate descriptions (count, text): 4 A fixture page for the probe.",
+  );
+  // The &amp; in the sitemap and the canonical decode to the same URL.
+  expect(stdout).not.toContain("/search?q=a");
+  // Two broken entries plus one duplicate title and one duplicate description.
+  expect(stdout).toContain("sitemap URLs: 5, with problems: 4");
 });
 
 test("flags HTML answers from a single-page fallback", async () => {

@@ -112,10 +112,15 @@ content_of() {
     sed -E 's/^content="(.*)"$/\1/'
 }
 load_body() { body=$(tr '\n\r\t' '   ' <"$tmp/$1.body" 2>/dev/null); }
+# Decode the predefined XML entities in URLs from markup; &amp; goes last.
+unescape() {
+  sed -e 's/&lt;/</g' -e 's/&gt;/>/g' -e 's/&quot;/"/g' -e "s/&apos;/'/g" \
+    -e 's/&#39;/'"'"'/g' -e 's/&amp;/\&/g'
+}
 title_of() { first '<title[^>]*>[^<]*</title>' | sed -E 's/<[^>]*>//g'; }
 canonical_of() {
   first '<link[^>]+rel="canonical"[^>]*>' | grep -oE 'href="[^"]*"' |
-    sed -E 's/^href="(.*)"$/\1/'
+    sed -E 's/^href="(.*)"$/\1/' | unescape
 }
 
 if ! curl -sS -m 15 -A "$ua" -o /dev/null "$origin/" 2>"$tmp/err"; then
@@ -151,14 +156,18 @@ if [ "$mode" = links ]; then
   final_path=$(sed -E "s#^[a-z]+://[^/]+##; s/[?#].*//" "$tmp/page.url")
   base=${final_path%/*}/
   printf '%s\n' "$body" | grep -oiE '<a[^>]+href="[^"]*"' |
-    grep -oE 'href="[^"]*"' | sed -E 's/^href="(.*)"$/\1/' |
+    grep -oE 'href="[^"]*"' | sed -E 's/^href="(.*)"$/\1/' | unescape |
     sed -E "s#^https?://$host##" | sed 's/#.*//' | grep -v '^$' |
     grep -vE '^[a-zA-Z][a-zA-Z0-9+.-]*:|^//' |
-    awk -v base="$base" '
-      # Resolve a relative reference against the page directory.
+    awk -v base="$base" -v page="$final_path" '
+      # Resolve a relative reference against the final document URL.
       {
         ref = $0
-        if (substr(ref, 1, 1) != "/") ref = base ref
+        if (substr(ref, 1, 1) == "?") ref = page ref
+        else if (substr(ref, 1, 1) != "/") ref = base ref
+        query = ""
+        q = index(ref, "?")
+        if (q > 0) { query = substr(ref, q); ref = substr(ref, 1, q - 1) }
         n = split(ref, parts, "/")
         out = ""
         depth = 0
@@ -170,7 +179,7 @@ if [ "$mode" = links ]; then
         for (i = 1; i <= depth; i++) out = out "/" stack[i]
         if (out == "") out = "/"
         if (ref ~ /\/$/ && out != "/") out = out "/"
-        print out
+        print out query
       }' | sort -u >"$tmp/links"
   total=0
   bad=0
@@ -199,15 +208,15 @@ if [ "$mode" = sitemap ]; then
     exit 1
   fi
   grep -oE '<loc>[^<]+</loc>' "$tmp/sitemap.body" 2>/dev/null |
-    sed -E 's#</?loc>##g' >"$tmp/urls"
+    sed -E 's#</?loc>##g' | unescape >"$tmp/urls"
   problems=0
   if grep -q '<sitemapindex' "$tmp/sitemap.body" 2>/dev/null; then
     : >"$tmp/children"
     while IFS= read -r child; do
       child_result=$(fetch "$(with_bust "$child")" child)
       if ok_sitemap "$child_result" child && grep -q '<urlset' "$tmp/child.body"; then
-        grep -oE '<loc>[^<]+</loc>' "$tmp/child.body" | sed -E 's#</?loc>##g' \
-          >>"$tmp/children"
+        grep -oE '<loc>[^<]+</loc>' "$tmp/child.body" | sed -E 's#</?loc>##g' |
+          unescape >>"$tmp/children"
       else
         problems=$((problems + 1))
         echo "  $child: child sitemap ${child_result:-no response}, not a urlset;"
@@ -237,8 +246,10 @@ if [ "$mode" = sitemap ]; then
     printf '%s\t%s\n' "$(content_of description)" "$url" >>"$tmp/descriptions"
   done <"$tmp/urls"
   for kind in titles descriptions; do
-    cut -f1 "$tmp/$kind" | sort | uniq -c | awk '$1 > 1' | sort -rn |
-      head -n 5 | sed "s/^ */  duplicate $kind (count, text): /"
+    cut -f1 "$tmp/$kind" | grep -v '^$' | sort | uniq -c | awk '$1 > 1' |
+      sort -rn >"$tmp/$kind.dup"
+    problems=$((problems + $(wc -l <"$tmp/$kind.dup")))
+    head -n 5 "$tmp/$kind.dup" | sed "s/^ */  duplicate $kind (count, text): /"
   done
   echo "### $host  sitemap URLs: $total, with problems: $problems"
   [ "$problems" -eq 0 ] || exit 1
