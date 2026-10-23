@@ -1,4 +1,5 @@
 import { pdfjsAssets } from "@balebase/app/vite";
+import { sentryAssets } from "@balebase/diagnostics/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
 
@@ -39,7 +40,7 @@ export default defineConfig(({ mode }) => {
     }
   }
   return {
-    plugins: [react(), pdfjsAssets()],
+    plugins: [react(), pdfjsAssets(), sentryAssets()],
     define: Object.fromEntries(
       Object.entries(urls).map(([name, url]) => [
         `import.meta.env.${name}`,

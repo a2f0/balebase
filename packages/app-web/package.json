@@ -1,18 +1,20 @@
 {
   "name": "@balebase/app-web",
-  "version": "0.1.59",
+  "version": "0.1.60",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "build": "bunx --bun --no-install tsc --noEmit && bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/app-web/public && bunx --bun --no-install vite build",
+    "build:release": "bun ../../scripts/deploy/buildSentryApp.ts web",
     "check": "bunx --bun --no-install tsc --noEmit",
-    "deploy": "bun --bun run build && bunx --bun --no-install wrangler deploy",
+    "deploy": "bun --bun run build:release && bunx --bun --no-install wrangler deploy",
     "dev": "bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/app-web/public && bunx --bun --no-install vite"
   },
   "dependencies": {
     "@a2f0/ct-client": "0.1.4",
-    "@balebase/app": "workspace:*"
+    "@balebase/app": "workspace:*",
+    "@balebase/diagnostics": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "1.4.3",

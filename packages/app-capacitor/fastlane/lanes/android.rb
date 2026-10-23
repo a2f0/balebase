@@ -364,7 +364,7 @@ platform :android do
     load_android_release_secrets_env
     release_build = next_android_release_build_number(options)
     require_android_release_signing!
-    sh('bun run build')
+    sh('bun run build:release android')
     sh("bun run #{NATIVE_CAPACITOR_SYNC_SCRIPT} android")
     ensure_release_capacitor_sync!
     run_android_gradle(

@@ -73,19 +73,33 @@ fi
 EOF
 chmod +x "$FIXTURE/bin/terraform" "$FIXTURE/bin/bun" "$FIXTURE/bin/bunx"
 
+assert_release_preflight_order() {
+  "$REAL_BUN_BIN" -e '
+const lines = (await Bun.file(process.env.MOCK_LOG).text()).trim().split("\n");
+const release = lines.findIndex((line) => /migrations apply|secret put|packages\/api deploy staging VITE/.test(line));
+for (const command of ["packages/api deploy staging --check", "packages/app-web build:release staging --check"]) {
+  const preflight = lines.findIndex((line) => line.includes(command));
+  if (preflight < 0 || release < 0 || preflight >= release) throw new Error("Missing pre-deployment Sentry check: " + command);
+}
+'
+}
+
 export MOCK_LOG="$FIXTURE/commands.log"
 PATH="$FIXTURE/bin:$PATH" DRY_RUN=1 bash "$FIXTURE/scripts/deploy/deployStaging.sh" > "$FIXTURE/output.log"
+assert_release_preflight_order
 
-[[ "$(grep -c '^bunx wrangler deploy ' "$MOCK_LOG" || true)" -eq 3 ]] || {
-  echo 'Expected three staging dry-run deployments' >&2
+[[ "$(grep -c '^bunx wrangler deploy ' "$MOCK_LOG" || true)" -eq 2 ]] || {
+  echo 'Expected two frontend staging dry-run deployments' >&2
   exit 1
 }
-for target in api app-web website; do
+for target in app-web website; do
   [[ "$(grep -cF "wrangler deploy --config $FIXTURE/packages/$target/wrangler.staging.jsonc --dry-run" "$MOCK_LOG" || true)" == 1 ]] || {
     echo "Missing $target staging dry-run deployment" >&2
     exit 1
   }
 done
+[[ "$(grep -cF "packages/api deploy staging VITE" "$MOCK_LOG" || true)" -eq 1 ]]
+[[ "$(grep -cF "packages/app-web build:release staging VITE" "$MOCK_LOG" || true)" -eq 1 ]]
 [[ "$(cat "$MOCK_LOG")" == *'VITE_API_URL=https://api-staging.balebase.com'* ]]
 [[ "$(cat "$MOCK_LOG")" == *'VITE_WEBSITE_URL=https://website-staging.balebase.com'* ]]
 [[ "$(cat "$MOCK_LOG")" == *'PUBLIC_APP_URL=https://app-staging.balebase.com'* ]]
@@ -122,16 +136,18 @@ EOF
 sed -i.bak '/^TF_VAR_cloudflare_account_id=/d' "$STAGING_APP_ENV"
 : > "$MOCK_LOG"
 PATH="$FIXTURE/bin:$PATH" DRY_RUN=0 AUTO_APPROVE=1 bash "$FIXTURE/scripts/deploy/deployStaging.sh" > "$FIXTURE/output.log"
+assert_release_preflight_order
 if grep -q 'shared-token' "$MOCK_LOG"; then
   echo 'Staging shared.env overrode the app.env Cloudflare token' >&2
   exit 1
 fi
-for target in api app-web website; do
+for target in app-web website; do
   [[ "$(grep -cF "wrangler deploy --config $FIXTURE/packages/$target/wrangler.staging.jsonc token=test-token account=test-account" "$MOCK_LOG" || true)" -eq 1 ]] || {
     echo "Normal deployment did not target the $target staging Worker with staging credentials" >&2
     exit 1
   }
 done
+[[ "$(grep -cF "packages/api deploy staging VITE" "$MOCK_LOG" || true)" -eq 1 ]]
 [[ "$(grep -cF "wrangler d1 migrations apply DB --remote --config $FIXTURE/packages/api/wrangler.staging.jsonc token=test-token account=test-account" "$MOCK_LOG" || true)" -eq 1 ]]
 for secret_name in BETTER_AUTH_SECRET PLAID_CLIENT_ID PLAID_SECRET PLAID_TOKEN_ENCRYPTION_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET; do
   [[ "$(grep -cF "wrangler secret put $secret_name --config $FIXTURE/packages/api/wrangler.staging.jsonc token=test-token account=test-account" "$MOCK_LOG" || true)" -eq 1 ]] || {

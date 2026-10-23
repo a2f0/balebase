@@ -16,6 +16,87 @@ and Plaid Sandbox client ID and secret from the staging tier when one exists.
 The `ci/` folder holds GitHub Actions values that the matrix repository
 deploys; repository code never reads it.
 
+## Error diagnostics
+
+Sentry projects live in the `tearleads` organization, under the `tearleads`
+team. Each platform and environment has its own project:
+
+| Target | Staging | Production |
+| --- | --- | --- |
+| Web | `balebase-web-staging` | `balebase-web-production` |
+| API | `balebase-api-staging` | `balebase-api-production` |
+| Android WebView | `balebase-android-staging` | `balebase-android-production` |
+| iOS WebView | `balebase-ios-staging` | `balebase-ios-production` |
+
+The website and ordinary local/debug builds do not report. Mobile coverage is
+JavaScript errors in the WebView; native crash collection is not enabled.
+
+Keep `SENTRY_ORG=tearleads` and `SENTRY_AUTH_TOKEN` in each tier's ignored
+`shared.env`. The token needs release and source-map upload access and must
+never have a `VITE_` prefix. The release builder removes it from the frontend
+build environment. Keep these public values in staging's `app.env`, using
+`PRODUCTION` instead of `STAGING` in production:
+
+```sh
+SENTRY_STAGING_PROJECT=balebase-web-staging
+SENTRY_STAGING_DSN=https://PUBLIC_KEY@oORG.ingest.us.sentry.io/PROJECT_ID
+SENTRY_API_STAGING_PROJECT=balebase-api-staging
+SENTRY_API_STAGING_DSN=https://PUBLIC_KEY@oORG.ingest.us.sentry.io/PROJECT_ID
+SENTRY_ANDROID_STAGING_PROJECT=balebase-android-staging
+SENTRY_ANDROID_STAGING_DSN=https://PUBLIC_KEY@oORG.ingest.us.sentry.io/PROJECT_ID
+SENTRY_IOS_STAGING_PROJECT=balebase-ios-staging
+SENTRY_IOS_STAGING_DSN=https://PUBLIC_KEY@oORG.ingest.us.sentry.io/PROJECT_ID
+```
+
+Copy real DSNs from Sentry's project Client Keys page. A missing DSN disables
+reporting for that target; an invalid DSN or mismatched project stops a release.
+Enable **Prevent Storing of IP Addresses**, default data scrubbing, and data
+scrubbing in every project. Disable JavaScript source fetching: uploaded maps
+supply code context without fetching application URLs.
+
+The normal production, staging, and staging-frontend deploy commands build and
+upload maps before publishing. API deploys build once, upload the resulting
+`index.js` map, then publish that same module with Wrangler's `--no-bundle`.
+Reports name it `app:///index.js`, matching Sentry's uploaded artifact.
+Cloudflare's separate source-map upload remains disabled. React and global
+browser failures use an exact generated asset allowlist. The API reports Hono
+unhandled request errors, inbound email failures, and failed scheduled runs;
+errors caught and handled inside individual workflows are not automatically
+collected.
+
+Google Play and TestFlight release lanes call `build:release android` or
+`build:release ios` before Capacitor sync. Existing installations need a new
+release to report. The iOS privacy manifest and readiness expectations
+declare crash and diagnostic data for app functionality, without identity
+linkage or tracking. Keep App Store privacy answers and Google Play Data
+safety disclosures aligned before the next store submission. Release names
+are `balebase-<target>@<git SHA>`; the dist is `staging` or `production`.
+Configured uploads require a clean Git checkout and valid credentials.
+Failed uploads stop deployment or packaging. Source maps are removed from
+web and mobile assets even when uploading fails. `DRY_RUN=1` builds and
+verifies configuration without uploading maps or publishing Workers. The
+package release commands expect the tier's environment to be loaded, as the
+deploy wrappers and Fastlane lanes already do.
+
+The private Sentry clients install no automatic integrations. They disable
+Sentry's collection categories, tracing, replay, sessions, logs, and client
+reports, then reconstruct errors at both the event and transport boundaries.
+Only a generic error type/message, approved bundle filename and position,
+release, environment, platform, and error source are sent. Raw messages, URLs,
+request/response data, account identifiers, form values, console text, and
+breadcrumbs are excluded. Reports deduplicate by sanitized location and are
+limited to five per minute and twenty per page load (twenty per Worker isolate
+hour for the API). Network requests omit credentials and referrers where the
+platform supports it. Sentry still receives connection metadata; project IP
+scrubbing prevents storing the sender's IP on events.
+
+After deployment, reproduce a known test failure in staging and confirm its
+project, environment, release, and resolved source location in Sentry before
+releasing to production. Use `bun run test:sentry` for release selection and
+asset cleanup tests; `bun run test` also exercises event sanitization and an
+actual compiled Worker. The app browser suite exercises React and global errors
+with all Sentry traffic intercepted locally.
+
 ## Provision Cloudflare resources
 
 Put the Cloudflare credentials in `.secrets/prod/app.env`, then review the

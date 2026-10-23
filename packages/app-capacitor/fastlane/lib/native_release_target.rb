@@ -59,7 +59,7 @@ NATIVE_SECRETS_DIR =
   end
 NATIVE_SHARED_ENV_PATH = File.join(NATIVE_SECRETS_DIR, 'shared.env')
 NATIVE_APP_ENV_PATH = File.join(NATIVE_SECRETS_DIR, 'app.env')
-# Store credentials and signing passwords, imported from either file. Values
+# Store credentials, signing passwords, and diagnostics release settings. Values
 # copied from root.env stay in shared.env until they are rotated into app.env.
 NATIVE_STORE_ENV_NAMES = %w[
   ANDROID_KEYSTORE_KEY_PASS
@@ -70,6 +70,16 @@ NATIVE_STORE_ENV_NAMES = %w[
   MATCH_GIT_URL
   MATCH_PASSWORD
   TEAM_ID
+  SENTRY_ORG
+  SENTRY_AUTH_TOKEN
+  SENTRY_ANDROID_PRODUCTION_DSN
+  SENTRY_ANDROID_PRODUCTION_PROJECT
+  SENTRY_ANDROID_STAGING_DSN
+  SENTRY_ANDROID_STAGING_PROJECT
+  SENTRY_IOS_PRODUCTION_DSN
+  SENTRY_IOS_PRODUCTION_PROJECT
+  SENTRY_IOS_STAGING_DSN
+  SENTRY_IOS_STAGING_PROJECT
 ].freeze
 # The release lanes choose the bundle's hosts; secrets files never set them.
 NATIVE_RELEASE_SERVICE_URLS = {

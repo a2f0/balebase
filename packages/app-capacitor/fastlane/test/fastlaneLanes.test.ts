@@ -632,10 +632,12 @@ puts JSON.generate(
               "OtherUserContent",
               "OtherUsageData",
               "OtherDataTypes",
+              "CrashData",
+              "OtherDiagnosticData",
             ].map((type) => [
               `NSPrivacyCollectedDataType${type}`,
               {
-                linked: true,
+                linked: type !== "CrashData" && type !== "OtherDiagnosticData",
                 tracking: false,
                 purposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],
               },

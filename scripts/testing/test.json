@@ -24,6 +24,10 @@
     {
       "label": "test:hooks",
       "command": ["bun", "--bun", "run", "test:hooks"]
+    },
+    {
+      "label": "test:sentry",
+      "command": ["bun", "--bun", "run", "test:sentry"]
     }
   ]
 }

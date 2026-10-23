@@ -15,6 +15,8 @@ const androidBeforeSync = existsSync(
 const rootToolingWorkspace = {
   project: ["*.{css,ts,mts}"],
   ignoreBinaries: ["shellcheck"],
+  // The release uploader invokes this binary through runBun.
+  ignoreDependencies: ["@sentry/cli"],
 };
 
 // Knip does not read CSS by default; surfacing @import lets it see font
@@ -31,6 +33,10 @@ const baseConfig = {
   treatConfigHintsAsErrors: true,
   workspaces: {
     ".": rootToolingWorkspace,
+    "packages/diagnostics": {
+      entry: ["src/**/*.test.ts"],
+      project: ["src/**/*.{css,ts}"],
+    },
     "packages/api": {
       entry: ["src/**/*.test.ts"],
       project: ["src/**/*.{css,ts}"],
@@ -52,7 +58,8 @@ const baseConfig = {
         "fastlane/**/*.ts",
         "scripts/**/*.ts",
       ],
-      ignoreDependencies: [...androidBeforeSync],
+      // The generated Gradle settings expose the Android platform after sync.
+      ignoreDependencies: androidBeforeSync,
     },
     "packages/app-web": {
       project: ["src/**/*.{css,ts,tsx}"],
@@ -77,6 +84,10 @@ const productionConfig = {
   treatConfigHintsAsErrors: true,
   workspaces: {
     ".": rootToolingWorkspace,
+    "packages/diagnostics": {
+      entry: ["src/**/*.ts!", "!src/**/*.test.ts"],
+      project: [],
+    },
     "packages/api": {
       entry: ["src/**/*.ts!", "!src/**/*.test.ts", "!src/contractTestSetup.ts"],
       project: [],

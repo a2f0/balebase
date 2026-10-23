@@ -61,12 +61,15 @@ bun --bun run check
 bun --bun run test
 bun scripts/deploy/createStagingConfigs.ts
 
+bun --bun run --cwd "$REPO_ROOT/packages/api" deploy staging --check
+bun --bun run --cwd "$REPO_ROOT/packages/app-web" build:release staging --check
+
 api_config="$REPO_ROOT/packages/api/wrangler.staging.jsonc"
 client_config="$REPO_ROOT/packages/app-web/wrangler.staging.jsonc"
 website_config="$REPO_ROOT/packages/website/wrangler.staging.jsonc"
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
-  bunx --bun wrangler deploy --config "$api_config" --dry-run
+  bun --bun run --cwd "$REPO_ROOT/packages/api" deploy staging
 else
   bunx --bun wrangler d1 migrations apply DB --remote --config "$api_config"
   for secret_name in \
@@ -82,12 +85,12 @@ else
         "$secret_name" --config "$api_config" >/dev/null
     fi
   done
-  bunx --bun wrangler deploy --config "$api_config"
+  bun --bun run --cwd "$REPO_ROOT/packages/api" deploy staging
 fi
 
 VITE_API_URL="https://api-staging.balebase.com" \
   VITE_WEBSITE_URL="https://website-staging.balebase.com" \
-  bun --bun run --cwd "$REPO_ROOT/packages/app-web" build
+  bun --bun run --cwd "$REPO_ROOT/packages/app-web" build:release staging
 PUBLIC_APP_URL="https://app-staging.balebase.com" \
   bun --bun run --cwd "$REPO_ROOT/packages/website" build
 

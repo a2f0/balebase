@@ -18,6 +18,8 @@ environment_names = %w[
   VITE_APP_URL
 ]
 
+environment_names += NATIVE_STORE_ENV_NAMES.grep(/^SENTRY_/).select { |name| ENV.key?(name) }
+
 print JSON.generate(
   androidBuildVariant: NATIVE_RELEASE_TARGET.fetch(:android_build_variant),
   androidBuildVariantTask: native_release_android_build_variant_task,

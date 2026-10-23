@@ -12,12 +12,11 @@ load_cloudflare_env
 validate_auth_env
 validate_plaid_env
 validate_stripe_env live
+bun --bun run --cwd "$REPO_ROOT/packages/api" deploy --check
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
   echo "Dry-running API Worker deployment..."
-  bunx --bun wrangler deploy \
-    --config "$REPO_ROOT/packages/api/wrangler.jsonc" \
-    --dry-run
+  bun --bun run --cwd "$REPO_ROOT/packages/api" deploy
   exit 0
 fi
 
