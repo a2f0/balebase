@@ -23,12 +23,16 @@ registers the plugin itself, since it lives in the app rather than a package.
 - Android: `PasswordManagerPlugin.java`, registered in `MainActivity`, asks
   Credential Manager to save the password for the app. Play services provides
   Credential Manager before Android 14.
-- iOS: `PasswordManagerPlugin.swift`, registered in `MainViewController`, saves
-  it as a shared web credential for the domain that `App.entitlements` names
+- iOS: `PasswordManagerPlugin.swift`, registered in `MainViewController`, asks
+  the system to save it for the domain that `App.entitlements` names
   (`webcredentials:$(WEB_CREDENTIALS_DOMAIN)`: `app.balebase.com`, or
-  `app-staging.balebase.com` for `Release-Staging`). iOS 26.2 and later ask
-  first. Earlier versions save without asking unless they replace a different
-  saved password. Each App ID has the Associated Domains capability, and
+  `app-staging.balebase.com` for `Release-Staging`). The plugin shows a native
+  **Save password?** offer before calling the system API. **Not now** continues
+  without saving. On iOS 26.2 and later, `ASCredentialDataManager` forwards the
+  request to the preferred password manager but does not guarantee its own
+  prompt or confirm storage. Earlier versions use shared web credentials.
+  A rejected save shows an alert without interrupting the signed-in session.
+  Each App ID has the Associated Domains capability, and
   `packages/app-web` serves `/.well-known/apple-app-site-association`, which
   lists both apps.
 
