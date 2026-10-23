@@ -71,7 +71,7 @@ import {
 
 export function App() {
   const { data: session, error, isPending, refetch } = authClient.useSession();
-  const sessionLoaded = useSessionLoaded(isPending, error);
+  const sessionRefetch = useSessionRefetch(session, isPending, error, refetch);
   const [pathname, setPathname] = useState(initialPathname);
   const isAddAccountPage = pathname === "/add-account";
   const isResetPage = pathname === "/reset-password";
@@ -101,14 +101,13 @@ export function App() {
   const signingToken = signingTokenForPath(pathname);
   if (signingToken) return <SigningPage token={signingToken} />;
 
-  // Once loaded, a refetch that has no session yet, or fails, keeps the sign-in
-  // page; see useSessionLoaded.
-  const signingIn = sessionLoaded && !session;
-  if (isPending && !signingIn) {
+  // The sign-in page stays through background refetches; see useSessionRefetch.
+  const background = sessionRefetch.background && !session;
+  if (isPending && !background) {
     return <LoadingScreen />;
   }
 
-  if (error && !isResetPage && !signingIn) {
+  if (error && !isResetPage && !background) {
     return <SessionError onRetry={() => void refetch()} />;
   }
 
@@ -124,7 +123,7 @@ export function App() {
         }}
         navigate={navigate}
         pathname={pathname}
-        refetchSession={() => refetch()}
+        refetchSession={sessionRefetch.request}
         resettingPassword={isResetPage}
         sessionPresent={Boolean(session)}
         verification={verification}
@@ -147,19 +146,37 @@ export function App() {
 }
 
 /**
- * Whether the session has loaded once. Better Auth marks every refetch without
- * a session as pending, and returning to the app refetches it. Swapping the
- * sign-in page for a loading screen then would drop a pending two-factor
- * challenge while the person fetches the code from another app. A failed
- * refetch keeps its last session, so a signed-in page still reports the error.
+ * Tells a background session refetch from one the sign-in page asks for.
+ * Better Auth marks every refetch without a session as pending, and returning
+ * to the app refetches it. Swapping the sign-in page for a loading screen then
+ * would drop a pending two-factor challenge while the person fetches the code
+ * from another app. So once the session has loaded, the sign-in page stays
+ * through refetches it didn't ask for, and ignores their failures. After
+ * signing in, it requests the new session, which still loads and reports a
+ * failure as before, until an answer arrives.
  */
-function useSessionLoaded(isPending: boolean, error: unknown) {
+function useSessionRefetch(
+  session: unknown,
+  isPending: boolean,
+  error: unknown,
+  refetch: () => Promise<unknown>,
+) {
   const answered = !isPending && !error;
   const [loaded, setLoaded] = useState(answered);
+  const [requested, setRequested] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a changed session answers a request too.
   useEffect(() => {
-    if (answered) setLoaded(true);
-  }, [answered]);
-  return loaded || answered;
+    if (!answered) return;
+    setLoaded(true);
+    setRequested(false);
+  }, [answered, session]);
+  return {
+    background: (loaded || answered) && !requested,
+    request: () => {
+      setRequested(true);
+      return refetch();
+    },
+  };
 }
 
 function AuthenticationRoute({

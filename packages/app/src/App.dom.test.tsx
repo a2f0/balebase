@@ -82,13 +82,14 @@ type Person = (typeof people)[keyof typeof people];
 
 /**
  * Answers the auth endpoints for one browser. Like the server, resetting a
- * password revokes only that account's sessions. With `offlineAfterReset`, the
- * session can no longer be fetched once the reset lands, until `reconnect()`.
+ * password revokes only that account's sessions. With `offlineAfterReset` or
+ * `offlineAfterSignIn`, the session can no longer be fetched once the reset or
+ * sign-in lands, until `reconnect()`.
  */
 function stubAuth(
   signedIn: Person | null,
   resetFor: Person,
-  { offlineAfterReset = false } = {},
+  { offlineAfterReset = false, offlineAfterSignIn = false } = {},
 ) {
   let active = signedIn;
   let offline = false;
@@ -118,6 +119,7 @@ function stubAuth(
       const { email } = JSON.parse(String(init?.body));
       active =
         Object.values(people).find((person) => person.email === email) ?? null;
+      offline = offlineAfterSignIn;
       return Response.json({ redirect: false, token: "token", user: active });
     }
     return Response.json([]);
@@ -274,6 +276,22 @@ describe("password reset", () => {
     network.reconnect();
     await press("Try again");
     expect(heading()).toBe("Enter your workspace");
+  });
+});
+
+describe("signing in", () => {
+  it("reports a session that fails to load once signed in", async () => {
+    const network = stubAuth(null, people.owner, { offlineAfterSignIn: true });
+    await open("/");
+
+    await fill("email", people.owner.email);
+    await fill("password", "correct horse battery");
+    await press("Sign in");
+    expect(container.textContent).toContain("We couldn’t load your session.");
+
+    network.reconnect();
+    await press("Try again");
+    expect(container.querySelector(".authShell")).toBeNull();
   });
 });
 
