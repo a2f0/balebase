@@ -169,22 +169,6 @@
       }
     },
     {
-      "includes": ["packages/app/src/AuthPage.tsx"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noExcessiveLinesPerFile": {
-              "level": "error",
-              "options": {
-                "maxLines": 842,
-                "skipBlankLines": true
-              }
-            }
-          }
-        }
-      }
-    },
-    {
       "includes": ["packages/app/src/Businesses.tsx"],
       "linter": {
         "rules": {
