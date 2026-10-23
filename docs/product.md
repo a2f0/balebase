@@ -6,7 +6,8 @@
 
 The hosted marketing website and browser app use
 [`@a2f0/ct-client`](https://github.com/a2f0/ct) to queue eligible clicks in
-memory and flush them to `https://ct.a2f0.net/v1/clicks`. CT records the
+memory and flush them to `https://ct.a2f0.net/v1/clicks`. Tearleads, LLC operates
+CT, which is hosted on Cloudflare. CT records the
 `balebase` site, `website` or `web-app`, production or staging, a fixed page
 label, element tag, event ID, and click time. Every browser-app click uses the
 generic page `/`, without collecting routes or workflow names. The marketing

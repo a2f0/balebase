@@ -1,4 +1,5 @@
 ---
+import { legalEntityName } from "@balebase/ui/brand";
 import LegalLayout from "../layouts/LegalLayout.astro";
 ---
 
@@ -91,8 +92,8 @@ import LegalLayout from "../layouts/LegalLayout.astro";
     <h3>Click tracking with CT</h3>
     <p>
       Our hosted website and browser app send eligible clicks to CT, the click
-      tracking service at ct.a2f0.net hosted on Cloudflare, in production and
-      staging. Records contain the click time, a random event
+      tracking service at ct.a2f0.net operated by {legalEntityName} and hosted
+      on Cloudflare, in production and staging. Records contain the click time, a random event
       identifier, website or app name, deployment environment, a fixed page
       label, and the clicked element's tag. Browser-app clicks use one generic
       page label rather than collecting workspace routes or workflow names.
