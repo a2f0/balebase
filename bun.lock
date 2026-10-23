@@ -100,7 +100,7 @@
     },
     "packages/app-web": {
       "name": "@balebase/app-web",
-      "version": "0.1.61",
+      "version": "0.1.62",
       "dependencies": {
         "@a2f0/ct-client": "0.1.4",
         "@balebase/app": "workspace:*",
