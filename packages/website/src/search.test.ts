@@ -129,6 +129,19 @@ describe("built tiers", () => {
     expect(JSON.parse(json ?? "")["@graph"]).toHaveLength(3);
   });
 
+  test("internal page links use the trailing-slash form, so they never redirect", () => {
+    const linking = [...pages, "terms/index.html", "data-retention/index.html"];
+    for (const page of linking)
+      for (const [, path = ""] of read("production", page).matchAll(
+        /href="(\/[^"#?]*)/g,
+      ))
+        if (!/\.\w+$/.test(path)) expect(path).toEndWith("/");
+    // The policy tabs still mark the page they link to.
+    expect(read("production", "privacy/index.html")).toMatch(
+      /aria-current="page"[^>]*href="\/privacy\/"/,
+    );
+  });
+
   test("staging pages and responses are noindex, with no canonical or sitemap", () => {
     for (const page of pages) {
       const html = read("staging", page);

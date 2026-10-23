@@ -372,11 +372,11 @@ function TermsAgreement({
       />
       <span>
         I agree to the{" "}
-        <a href={`${websiteUrl}/terms`} rel="noreferrer" target="_blank">
+        <a href={`${websiteUrl}/terms/`} rel="noreferrer" target="_blank">
           Terms of Service
         </a>{" "}
         and acknowledge the{" "}
-        <a href={`${websiteUrl}/privacy`} rel="noreferrer" target="_blank">
+        <a href={`${websiteUrl}/privacy/`} rel="noreferrer" target="_blank">
           Privacy Policy
         </a>
         .

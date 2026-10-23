@@ -464,7 +464,7 @@ function FinanceDataNotice() {
         your bank credentials, never sell customer information, and let you
         disconnect later.{" "}
         <ButtonLink
-          href={`${websiteUrl}/privacy`}
+          href={`${websiteUrl}/privacy/`}
           iconEnd="external"
           variant="link"
         >

@@ -123,6 +123,6 @@ verify_auth_cors OPTIONS
 verify_edge_error_cors
 verify_url "app" "https://app.balebase.com"
 verify_url "website" "https://balebase.com"
-verify_url "privacy policy" "https://balebase.com/privacy"
-verify_url "terms of service" "https://balebase.com/terms"
-verify_url "data retention policy" "https://balebase.com/data-retention"
+verify_url "privacy policy" "https://balebase.com/privacy/"
+verify_url "terms of service" "https://balebase.com/terms/"
+verify_url "data retention policy" "https://balebase.com/data-retention/"

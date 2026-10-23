@@ -11,7 +11,8 @@ interface Props {
 }
 
 const { description, eyebrow, title, updated } = Astro.props;
-const currentPath = Astro.url.pathname.replace(/\/+$/, "");
+// Legal links use the trailing-slash form the Worker serves.
+const currentPath = Astro.url.pathname.replace(/\/*$/, "/");
 ---
 
 <BaseLayout description={description} title={`${title} — ${productName}`}>

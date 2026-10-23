@@ -2,6 +2,10 @@
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "balebase-website",
   "compatibility_date": "2026-08-17",
+  // Serve only the custom domains: workers.dev and preview URLs would copy
+  // the site to duplicate hosts.
+  "workers_dev": false,
+  "preview_urls": false,
   "assets": {
     "directory": "./dist",
     "not_found_handling": "404-page"

@@ -8,10 +8,11 @@ export const productName = "Balebase";
 // such as copyright notices; there is no "Balebase, LLC".
 export const legalEntityName = "Tearleads, LLC";
 
+// The website serves each page at a trailing slash; this form avoids a redirect.
 export const legalLinks = [
-  { href: "/privacy", label: "Privacy" },
-  { href: "/terms", label: "Terms" },
-  { href: "/data-retention", label: "Data retention" },
+  { href: "/privacy/", label: "Privacy" },
+  { href: "/terms/", label: "Terms" },
+  { href: "/data-retention/", label: "Data retention" },
 ] as const;
 
 export interface Plan {
