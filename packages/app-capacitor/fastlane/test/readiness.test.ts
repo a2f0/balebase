@@ -138,10 +138,12 @@ privacy_manifest = lambda do |scenario|
            'NSPrivacyCollectedDataTypeTracking' => scenario == :tracked_type,
            'NSPrivacyCollectedDataTypePurposes' => ['NSPrivacyCollectedDataTypePurposeAppFunctionality'] }
   type['NSPrivacyCollectedDataTypePurposes'] = [] if scenario == :missing_purposes
+  type['NSPrivacyCollectedDataTypePurposes'] = ['NSPrivacyCollectedDataTypePurposeAnalytics'] if scenario == :other_purpose
+  type['NSPrivacyCollectedDataTypeLinked'] = false if scenario == :unlinked
   type.delete('NSPrivacyCollectedDataTypeLinked') if scenario == :undeclared_linked
   manifest = {
     'NSPrivacyTracking' => scenario == :tracking,
-    'NSPrivacyCollectedDataTypes' => [type],
+    'NSPrivacyCollectedDataTypes' => scenario == :duplicate_type ? [type, type] : [type],
     'NSPrivacyAccessedAPITypes' => [{ 'NSPrivacyAccessedAPIType' => USER_DEFAULTS,
                                       'NSPrivacyAccessedAPITypeReasons' => reasons }]
   }
@@ -167,13 +169,15 @@ build_ipa = lambda do |path, scenario, widget: true|
   end
 end
 
-privacy = { tracking: false, collected_data_types: [EMAIL], accessed_api_reasons: { USER_DEFAULTS => ['CA92.1'] } }
+email_use = { linked: true, tracking: false, purposes: ['NSPrivacyCollectedDataTypePurposeAppFunctionality'] }
+privacy = { tracking: false, collected_data_types: { EMAIL => email_use },
+            accessed_api_reasons: { USER_DEFAULTS => ['CA92.1'] } }
 with_widget = { targets: { APP => [GROUP], WIDGET => [GROUP] }, privacy: privacy }
 app_only = { targets: { APP => [] }, privacy: privacy }
 Dir.mktmpdir do |dir|
   %i[good development ad_hoc enterprise expired debuggable missing_group tracking undeclared_tracking
-     undeclared_collection other_collection missing_purposes undeclared_linked tracked_type missing_reason
-     missing_codesign bad_signature missing_profile missing_privacy].each do |scenario|
+     undeclared_collection other_collection missing_purposes other_purpose unlinked undeclared_linked tracked_type
+     duplicate_type missing_reason missing_codesign bad_signature missing_profile missing_privacy].each do |scenario|
     mode = scenario
     artifact = File.join(dir, "#{scenario}.ipa")
     build_ipa.call(artifact, scenario)
@@ -303,6 +307,7 @@ Dir.mktmpdir do |dir|
   Readiness.define_singleton_method(:command) do |*args|
     if args.include?('manifest')
       raise Errno::ENOENT if mode == :missing_tool
+      next manifest.sub('<application', '<uses-permission-sdk-23 android:name="android.permission.CAMERA"/><application') if mode == :sdk23_permission
       next manifest unless mode == :bad_manifest
 
       manifest.sub('debuggable="false"', 'debuggable="true"')
@@ -323,7 +328,7 @@ Dir.mktmpdir do |dir|
     Readiness.android_artifact(report, path, expectation)
     report.data
   end
-  %i[good bad_manifest invalid_bundle bad_signature unsigned missing_tool].each do |scenario|
+  %i[good bad_manifest sdk23_permission invalid_bundle bad_signature unsigned missing_tool].each do |scenario|
     mode = scenario
     results["android_#{scenario}"] = inspect.call(artifact, expected)
   end
@@ -506,8 +511,11 @@ describe("iOS artifact verdicts", () => {
       "undeclared_collection",
       "other_collection",
       "missing_purposes",
+      "other_purpose",
+      "unlinked",
       "undeclared_linked",
       "tracked_type",
+      "duplicate_type",
       "missing_reason",
       "missing_privacy",
     ]) {
@@ -613,6 +621,13 @@ describe("Android artifact verdicts", () => {
     expect(status(result.android_bad_manifest, "artifact.permissions")).toBe(
       "failed",
     );
+    expect(
+      status(result.android_sdk23_permission, "artifact.permissions"),
+    ).toBe("failed");
+    expect(result.android_sdk23_permission.artifact.permissions).toEqual([
+      "android.permission.INTERNET",
+      "android.permission.CAMERA",
+    ]);
     expect(
       status(result.android_missing_permission, "artifact.permissions"),
     ).toBe("failed");

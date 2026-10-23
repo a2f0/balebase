@@ -618,19 +618,28 @@ puts JSON.generate(
         targets: { [app]: [] },
         privacy: {
           tracking: false,
-          collected_data_types: [
-            "Name",
-            "EmailAddress",
-            "PhoneNumber",
-            "PhysicalAddress",
-            "UserID",
-            "OtherFinancialInfo",
-            "PhotosorVideos",
-            "EmailsOrTextMessages",
-            "OtherUserContent",
-            "OtherUsageData",
-            "OtherDataTypes",
-          ].map((type) => `NSPrivacyCollectedDataType${type}`),
+          collected_data_types: Object.fromEntries(
+            [
+              "Name",
+              "EmailAddress",
+              "PhoneNumber",
+              "PhysicalAddress",
+              "UserID",
+              "OtherFinancialInfo",
+              "PhotosorVideos",
+              "EmailsOrTextMessages",
+              "OtherUserContent",
+              "OtherUsageData",
+              "OtherDataTypes",
+            ].map((type) => [
+              `NSPrivacyCollectedDataType${type}`,
+              {
+                linked: true,
+                tracking: false,
+                purposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],
+              },
+            ]),
+          ),
           accessed_api_reasons: {
             NSPrivacyAccessedAPICategoryFileTimestamp: ["C617.1"],
           },

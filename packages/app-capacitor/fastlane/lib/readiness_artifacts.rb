@@ -26,8 +26,9 @@ module Readiness
 
   # expected[:targets] maps each packaged bundle identifier, the app's first, to the
   # app groups it must be entitled to. expected[:privacy] is what every packaged
-  # privacy manifest must declare: tracking:, collected_data_types: (the
-  # NSPrivacyCollectedDataType values), and accessed_api_reasons: (category => reasons).
+  # privacy manifest must declare: tracking:, collected_data_types: (each
+  # NSPrivacyCollectedDataType value => { linked:, tracking:, purposes: }), and
+  # accessed_api_reasons: (category => reasons).
   def self.ios_artifact(report, artifact, expected)
     return unless File.file?(artifact)
 
@@ -166,26 +167,21 @@ module Readiness
 
     private
 
-    # The collected types must be declared, match exactly, and each be fully described.
+    # The collected types must be declared once each, with exactly the expected
+    # linked, tracking, and purpose declarations.
     def declared_collection?(types)
       return false unless types.is_a?(Array)
 
-      types.map { |type| type['NSPrivacyCollectedDataType'] }.sort == @privacy.fetch(:collected_data_types).sort &&
-        types.all? { |type| described_collected_type?(type) }
+      declared = types.to_h { |type| [type['NSPrivacyCollectedDataType'], description(type)] }
+      expected = @privacy.fetch(:collected_data_types).transform_values do |use|
+        { linked: use.fetch(:linked), tracking: use.fetch(:tracking), purposes: use.fetch(:purposes).sort }
+      end
+      declared.length == types.length && declared == expected
     end
 
-    # A collected type says whether it is linked to the user and used for
-    # tracking, never tracks when the app declares no tracking, and gives at
-    # least one of Apple's purposes.
-    def described_collected_type?(type)
-      tracking = type['NSPrivacyCollectedDataTypeTracking']
-      [true, false].include?(type['NSPrivacyCollectedDataTypeLinked']) && [true, false].include?(tracking) &&
-        (tracking == false || @privacy.fetch(:tracking)) && apple_purposes?(type['NSPrivacyCollectedDataTypePurposes'])
-    end
-
-    def apple_purposes?(purposes)
-      purposes.is_a?(Array) && !purposes.empty? &&
-        purposes.all? { |purpose| purpose.to_s.start_with?('NSPrivacyCollectedDataTypePurpose') }
+    def description(type)
+      { linked: type['NSPrivacyCollectedDataTypeLinked'], tracking: type['NSPrivacyCollectedDataTypeTracking'],
+        purposes: Array(type['NSPrivacyCollectedDataTypePurposes']).sort }
     end
 
     # Each expected API category must give at least its expected reasons.
@@ -282,8 +278,11 @@ module Readiness
       check_permissions(manifest)
     end
 
+    # uses-permission-sdk-23 grants on Android 6 and later, so it counts too.
     def check_permissions(manifest)
-      permissions = manifest.get_elements('uses-permission').map { |permission| permission.attributes['android:name'] }
+      permissions = %w[uses-permission uses-permission-sdk-23].flat_map do |tag|
+        manifest.get_elements(tag).map { |permission| permission.attributes['android:name'] }
+      end
       @report.data[:artifact][:permissions] = permissions
       @report.check('artifact.permissions', permissions.sort == @permissions.sort,
                     'Merged manifest permissions must match the reviewed list; review the Play declarations ' \
