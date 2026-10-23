@@ -38,6 +38,8 @@ describe("Capacitor host", () => {
       expect(host?.appUrl).toBe("https://app.test");
       expect(host?.saveFile).toBe(saveNativeFile);
       expect(host?.savePassword).toBeFunction();
+      if (os === "ios") expect(host?.chooseSavedSignIn).toBeFunction();
+      else expect(host?.chooseSavedSignIn).toBeUndefined();
       return host?.origin;
     });
     expect(origins).toEqual(["capacitor://localhost", "https://localhost"]);

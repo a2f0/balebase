@@ -16,7 +16,9 @@ WebViews keep the page clear of the bars.
 
 The WebView's own autofill never offers to save a password here: sign-in
 requests go through native HTTP, and the page never navigates. Once a password
-and any second factor pass, the shared app calls the native `PasswordManager`
+and any second factor pass, new or edited credentials are offered for saving.
+Using saved credentials skips that offer, including through two-factor
+authentication. The shared app calls the native `PasswordManager`
 plugin (`src/savePassword.ts`) with the hosted app's domain. Each platform
 registers the plugin itself, since it lives in the app rather than a package.
 
@@ -32,6 +34,10 @@ registers the plugin itself, since it lives in the app rather than a package.
   request to the preferred password manager but does not guarantee its own
   prompt or confirm storage. Earlier versions use shared web credentials.
   A rejected save shows an alert without interrupting the signed-in session.
+  **Use saved sign-in** opens the system password picker and fills both the
+  email and password. Credentials stay paired in the password manager; the app
+  does not keep a separate list of email addresses or passwords. Keyboard
+  AutoFill remains available.
   Each App ID has the Associated Domains capability, and
   `packages/app-web` serves `/.well-known/apple-app-site-association`, which
   lists both apps.

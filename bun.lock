@@ -78,7 +78,7 @@
     },
     "packages/app-capacitor": {
       "name": "@balebase/app-capacitor",
-      "version": "0.1.70",
+      "version": "0.1.71",
       "dependencies": {
         "@balebase/app": "workspace:*",
         "@balebase/diagnostics": "workspace:*",
