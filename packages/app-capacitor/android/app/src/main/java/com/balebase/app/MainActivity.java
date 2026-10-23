@@ -8,6 +8,7 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(PasswordManagerPlugin.class);
         super.onCreate(savedInstanceState);
         // Capacitor's SystemBars plugin pads the window for the keyboard, and for
         // system bars and cutouts unless the page draws under them; padding here

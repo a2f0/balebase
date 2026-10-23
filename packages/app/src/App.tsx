@@ -71,6 +71,7 @@ import {
 
 export function App() {
   const { data: session, error, isPending, refetch } = authClient.useSession();
+  const sessionLoaded = useSessionLoaded(isPending, error);
   const [pathname, setPathname] = useState(initialPathname);
   const isAddAccountPage = pathname === "/add-account";
   const isResetPage = pathname === "/reset-password";
@@ -100,11 +101,14 @@ export function App() {
   const signingToken = signingTokenForPath(pathname);
   if (signingToken) return <SigningPage token={signingToken} />;
 
-  if (isPending) {
+  // Once loaded, a refetch that has no session yet, or fails, keeps the sign-in
+  // page; see useSessionLoaded.
+  const signingIn = sessionLoaded && !session;
+  if (isPending && !signingIn) {
     return <LoadingScreen />;
   }
 
-  if (error && !isResetPage) {
+  if (error && !isResetPage && !signingIn) {
     return <SessionError onRetry={() => void refetch()} />;
   }
 
@@ -140,6 +144,22 @@ export function App() {
       workspace={workspace}
     />
   );
+}
+
+/**
+ * Whether the session has loaded once. Better Auth marks every refetch without
+ * a session as pending, and returning to the app refetches it. Swapping the
+ * sign-in page for a loading screen then would drop a pending two-factor
+ * challenge while the person fetches the code from another app. A failed
+ * refetch keeps its last session, so a signed-in page still reports the error.
+ */
+function useSessionLoaded(isPending: boolean, error: unknown) {
+  const answered = !isPending && !error;
+  const [loaded, setLoaded] = useState(answered);
+  useEffect(() => {
+    if (answered) setLoaded(true);
+  }, [answered]);
+  return loaded || answered;
 }
 
 function AuthenticationRoute({

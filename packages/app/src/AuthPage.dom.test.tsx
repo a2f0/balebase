@@ -3,6 +3,7 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { AuthPage } from "./AuthPage";
+import { configureHost } from "./host";
 
 const dom = new Window({ url: "http://localhost:5173/" });
 const domGlobals = {
@@ -170,5 +171,136 @@ describe("registration", () => {
     expect(
       container.querySelector(".passwordToggle")?.getAttribute("aria-pressed"),
     ).toBe("false");
+  });
+});
+
+describe("saving passwords in the native app", () => {
+  const credentials = {
+    email: "owner@example.com",
+    password: "correct horse battery",
+  };
+  let offered: Array<[string, string]>;
+  let authenticated: number;
+
+  afterEach(() => configureHost({}));
+
+  /** Renders sign-in in a native shell whose sign-in endpoints answer as given. */
+  async function renderNativeSignIn(
+    answer: (path: string) => Response,
+    savePassword = async (username: string, password: string) => {
+      offered.push([username, password]);
+    },
+  ) {
+    offered = [];
+    authenticated = 0;
+    configureHost({
+      native: {
+        appUrl: "https://app.test",
+        origin: "https://localhost",
+        saveFile: async () => true,
+        savePassword,
+      },
+    });
+    globalThis.fetch = (async (input: RequestInfo | URL) =>
+      answer(new URL(String(input)).pathname)) as typeof fetch;
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root?.render(
+        <AuthPage
+          initialMode="sign-in"
+          onAuthenticated={async () => {
+            authenticated += 1;
+          }}
+          onLeaveReset={async () => {}}
+        />,
+      ),
+    );
+  }
+
+  async function submit(fields: Record<string, string>) {
+    const setValue = Object.getOwnPropertyDescriptor(
+      dom.HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    for (const [selector, value] of Object.entries(fields)) {
+      const input = container.querySelector<HTMLInputElement>(selector);
+      if (!input) throw new Error(`No ${selector} input`);
+      await act(async () => {
+        setValue?.call(input, value);
+        input.dispatchEvent(new dom.Event("input", { bubbles: true }) as never);
+      });
+    }
+    const form = container.querySelector("form");
+    if (!form) throw new Error("No form");
+    await act(async () => {
+      form.dispatchEvent(
+        new dom.Event("submit", { bubbles: true, cancelable: true }) as never,
+      );
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  const signIn = () =>
+    submit({
+      'input[name="email"]': credentials.email,
+      'input[name="password"]': credentials.password,
+    });
+
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("offers the password once it signs in", async () => {
+    await renderNativeSignIn(() =>
+      Response.json({ redirect: false, token: "token", user: {} }),
+    );
+    await signIn();
+    expect(offered).toEqual([[credentials.email, credentials.password]]);
+    expect(authenticated).toBe(1);
+  });
+
+  it("waits for the second factor before offering the password", async () => {
+    await renderNativeSignIn((path) =>
+      path.endsWith("/sign-in/email")
+        ? Response.json({ twoFactorRedirect: true })
+        : Response.json({ token: "token", user: {} }),
+    );
+    await signIn();
+    expect(container.querySelector("h1")?.textContent).toBe("Confirm it’s you");
+    expect(offered).toEqual([]);
+
+    await submit({ "#two-factor-code": "123456" });
+    expect(offered).toEqual([[credentials.email, credentials.password]]);
+    expect(authenticated).toBe(1);
+  });
+
+  it("never offers a password that failed to sign in", async () => {
+    await renderNativeSignIn(() =>
+      Response.json(
+        { code: "INVALID_EMAIL_OR_PASSWORD", message: "Invalid password" },
+        { status: 401 },
+      ),
+    );
+    await signIn();
+    expect(container.textContent).toContain("Invalid password");
+    expect(offered).toEqual([]);
+    expect(authenticated).toBe(0);
+  });
+
+  it("signs in when saving the password fails", async () => {
+    await renderNativeSignIn(
+      () => Response.json({ redirect: false, token: "token", user: {} }),
+      async () => {
+        throw new Error("No password manager");
+      },
+    );
+    await signIn();
+    expect(authenticated).toBe(1);
+    expect(container.textContent).not.toContain("No password manager");
   });
 });

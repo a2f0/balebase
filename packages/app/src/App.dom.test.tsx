@@ -1,4 +1,12 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  setSystemTime,
+} from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
@@ -129,9 +137,9 @@ async function settle() {
   }
 }
 
-/** Opens the reset link in a fresh mount of the app. */
-async function openResetLink() {
-  window.history.replaceState(null, "", resetLink);
+/** Opens a path in a fresh mount of the app. */
+async function open(path: string) {
+  window.history.replaceState(null, "", path);
   // The session store outlives a mount; fetch this browser's session afresh.
   authClient.$store.notify("$sessionSignal");
   container = document.createElement("div");
@@ -139,6 +147,11 @@ async function openResetLink() {
   root = createRoot(container);
   await act(async () => root?.render(<App />));
   await settle();
+}
+
+/** Opens the reset link in a fresh mount of the app. */
+async function openResetLink() {
+  await open(resetLink);
   expect(heading()).toBe("Choose a new password");
 }
 
@@ -261,5 +274,60 @@ describe("password reset", () => {
     network.reconnect();
     await press("Try again");
     expect(heading()).toBe("Enter your workspace");
+  });
+});
+
+describe("two-factor sign-in", () => {
+  it("keeps the code prompt when returning to the app refetches the session", async () => {
+    let sessionRequests = 0;
+    let sessionAvailable = true;
+    globalThis.fetch = (async (input) => {
+      const path = new URL(String(input instanceof Request ? input.url : input))
+        .pathname;
+      if (path === "/api/auth/get-session") {
+        sessionRequests += 1;
+        if (!sessionAvailable) throw new TypeError("Failed to fetch");
+        return Response.json(null);
+      }
+      if (path === "/api/auth/sign-in/email") {
+        return Response.json({ twoFactorRedirect: true });
+      }
+      return Response.json([]);
+    }) as typeof fetch;
+    await open("/");
+    expect(heading()).toBe("Enter your workspace");
+
+    await fill("email", people.owner.email);
+    await fill("password", "correct horse battery");
+    await press("Sign in");
+    expect(heading()).toBe("Confirm it’s you");
+
+    // Coming back from the authenticator app makes the page visible again,
+    // and Better Auth refetches the session, still empty until the code.
+    const before = sessionRequests;
+    await act(async () => {
+      document.dispatchEvent(new dom.Event("visibilitychange") as never);
+    });
+    await settle();
+    expect(sessionRequests).toBe(before + 1);
+    expect(heading()).toBe("Confirm it’s you");
+
+    // So does a later return whose refetch fails as the network wakes up;
+    // Better Auth refetches on focus at most every five seconds.
+    sessionAvailable = false;
+    setSystemTime(new Date(Date.now() + 6_000));
+    try {
+      await act(async () => {
+        document.dispatchEvent(new dom.Event("visibilitychange") as never);
+      });
+      await settle();
+    } finally {
+      setSystemTime();
+    }
+    expect(sessionRequests).toBe(before + 2);
+    expect(heading()).toBe("Confirm it’s you");
+    expect(container.textContent).not.toContain(
+      "We couldn’t load your session.",
+    );
   });
 });

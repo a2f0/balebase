@@ -1,0 +1,3 @@
+# iOS reads this without a file extension, so name its type.
+/.well-known/apple-app-site-association
+  Content-Type: application/json

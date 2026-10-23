@@ -436,6 +436,19 @@ Before selecting a replacement for a blank icon, rebuild and upload through
 the tier's upload wrapper, which regenerates and copies the brand artwork into
 the Xcode asset catalog. Check the processed build's icon in TestFlight.
 
+### Saved passwords
+
+Native sign-ins offer to save the password; the
+[shell README](../packages/app-capacitor/README.md#saved-passwords) explains how.
+On iOS, this works only if the domain confirms the app. Each App ID
+(`com.balebase.app` and `com.balebase.staging.app`) needs the Associated Domains
+capability, and its `match AppStore` profile must be regenerated after that
+capability changes (`ios:profiles force:true`). The tier's app frontend must
+also serve `/.well-known/apple-app-site-association` as `application/json`.
+Deploy the frontend that adds or changes that file before relying on iOS builds
+to save passwords. Devices fetch it through Apple's CDN, which can take a day
+to pick up a change.
+
 Before wider TestFlight or Play distribution:
 
 1. Deploy the native request adapter in the API before using a remote backend.

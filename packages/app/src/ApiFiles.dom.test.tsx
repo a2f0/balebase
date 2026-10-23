@@ -73,6 +73,7 @@ beforeEach(() => {
       appUrl: "https://app.test",
       origin: "https://localhost",
       saveFile: async () => true,
+      savePassword: async () => {},
     },
   });
   fetchMock = spyOn(globalThis, "fetch").mockResolvedValue(

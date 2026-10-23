@@ -22,6 +22,12 @@ export interface NativeHost {
   appUrl: string;
   /** Saves or shares downloaded bytes; resolves false when the user cancels. */
   saveFile(blob: Blob, filename: string): Promise<boolean>;
+  /**
+   * Offers to save a password the person just signed in with to the system's
+   * password manager. The WebView's own autofill never sees a sign-in succeed:
+   * the form submits through native HTTP and the page never navigates.
+   */
+  savePassword(username: string, password: string): Promise<void>;
 }
 
 let host: AppHost = {};

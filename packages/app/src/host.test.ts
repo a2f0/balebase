@@ -10,6 +10,7 @@ const nativeHost = (origin: string) => ({
     appUrl: "https://mobile-app.example",
     origin,
     saveFile: async () => true,
+    savePassword: async () => {},
   },
 });
 
