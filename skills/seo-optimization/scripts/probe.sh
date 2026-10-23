@@ -7,7 +7,8 @@
 #                                        followed: status, X-Robots-Tag,
 #                                        type, Location
 #   probe.sh --links <host> [path]       internal links on the page that do
-#                                        not answer 200 directly
+#                                        not answer 200 directly; resolved
+#                                        against the final URL, not <base>
 #   probe.sh --sitemap <host>            every sitemap URL: status, canonical,
 #                                        robots, duplicate titles/descriptions;
 #                                        follows one level of sitemap index
@@ -25,7 +26,7 @@
 set -u
 
 usage() {
-  sed -n '4,17p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '4,18p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 mode=full
@@ -55,9 +56,11 @@ with_bust() {
 ua=${SEO_PROBE_USER_AGENT:-seo-probe}
 
 # Every request goes through web(). URLs come from remote markup (og:image,
-# sitemap entries, links, redirects), so only HTTP and HTTPS are allowed.
+# sitemap entries, links, redirects), so only HTTP and HTTPS are allowed, and
+# --globoff keeps brackets and braces in a URL from expanding into ranges.
 web() {
-  curl --proto '=http,https' --proto-redir '=http,https' -sS -m 20 -A "$ua" "$@"
+  curl --proto '=http,https' --proto-redir '=http,https' --globoff -sS -m 20 \
+    -A "$ua" "$@"
 }
 scheme=${SEO_PROBE_SCHEME:-https}
 origin="$scheme://$host"

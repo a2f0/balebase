@@ -12,7 +12,7 @@ let site: Server;
 let shell: Server;
 let indexed: Server;
 let hostile: Server;
-let listener: ReturnType<typeof Bun.listen>;
+let listener: Bun.TCPSocketListener<undefined>;
 let siteHost = "";
 let shellHost = "";
 let indexedHost = "";
@@ -66,7 +66,8 @@ function siteResponse(url: URL): Response {
         `<h1>Example</h1><a href="/about/">About</a><a href="docs">Docs</a>
 <a href="https://external.example/">External</a><a href="/old">Old</a>
 <a href="https://${siteHost}/docs">Absolute</a>
-<a href="//${siteHost}/gone/">Protocol-relative</a>`,
+<a href="//${siteHost}/gone/">Protocol-relative</a>
+<a href="/docs?filter[status]=open">Brackets</a>`,
       );
     case "/about/":
       return page("About - Example", `${origin}/about/`);
@@ -338,10 +339,12 @@ test("reports internal links that redirect and ignores external ones", async () 
   expect(stdout).toContain(`/old  301 -> http://${siteHost}/about/`);
   // An absolute same-host link is requested exactly as written.
   expect(stdout).toContain(`https://${siteHost}/docs  000`);
-  // A protocol-relative link to this host is audited too.
+  // A protocol-relative link to this host is audited too, and brackets in a
+  // query are sent as written rather than expanded as a curl range.
   expect(stdout).toContain("/gone/  404");
+  expect(stdout).not.toContain("filter[status]");
   expect(stdout).toContain(
-    "internal links in the static HTML: 5, not a direct 200: 3",
+    "internal links in the static HTML: 6, not a direct 200: 3",
   );
 });
 
