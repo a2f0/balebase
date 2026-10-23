@@ -66,16 +66,23 @@ function siteResponse(url: URL): Response {
       return page("About - Example", `${origin}/about/`);
     case "/dup/":
       return page("About - Example", `${origin}/about/`);
+    case "/hidden/":
+      return page(
+        "Hidden - Example",
+        `${origin}/hidden/`,
+        '<meta name="robots" content="NONE">',
+      );
     case "/docs":
     case "/guide/child":
       return page("Docs - Example", `${origin}${path}`);
     case "/reference/docs":
-      // A query-only link resolves against this page, not its directory.
+      // A query-only link resolves against this page, not its directory, and
+      // attribute names are case-insensitive.
       return page(
         "Reference - Example",
         `${origin}${path}`,
         "",
-        '<a href="?page=2">Next</a>',
+        '<A HREF="?page=2">Next</A>',
       );
     case "/search": {
       const params = url.searchParams;
@@ -93,7 +100,7 @@ function siteResponse(url: URL): Response {
         "Guide - Example",
         `${origin}/guide/`,
         "",
-        '<a href="child">Child</a><a href="../about/">About</a>',
+        '<a href="child">Child</a><a href="../about/">About</a><a href=".">Here</a>',
       );
     case "/og-image.png":
       return new Response(png(1200, 630), {
@@ -111,6 +118,7 @@ function siteResponse(url: URL): Response {
           "/about/",
           "/dup/",
           "/gone/",
+          "/hidden/",
           "/search?q=a&amp;page=2",
         ]
           .map((entry) => `<url><loc>${origin}${entry}</loc></url>`)
@@ -143,7 +151,10 @@ function indexedResponse(path: string): Response {
           `<sitemap><loc>${origin}/missing.xml</loc></sitemap></sitemapindex>`,
       );
     case "/pages.xml":
-      return xml(`<urlset><url><loc>${origin}/</loc></url></urlset>`);
+      // XML allows whitespace around the URL inside <loc>.
+      return xml(
+        `<urlset><url>\n  <loc>\n    ${origin}/\n  </loc>\n</url></urlset>`,
+      );
     default:
       return new Response("Not found", { status: 404 });
   }
@@ -210,7 +221,7 @@ test("reports a page's metadata and the site files", async () => {
   );
   expect(stdout).toContain("robots.txt: 200 text/plain");
   expect(stdout).toContain(`| Sitemap: ${origin}/sitemap.xml`);
-  expect(stdout).toContain("sitemap.xml: 200 application/xml  urls: 5");
+  expect(stdout).toContain("sitemap.xml: 200 application/xml  urls: 6");
   expect(stdout).toMatch(/missing path: 404 text\/html .*title: Not found/);
   expect(stdout).toContain("/404: 200 text/html  robots meta: noindex");
   expect(stdout).toContain("http:// root: 200   (does not redirect to HTTPS)");
@@ -240,7 +251,7 @@ test("resolves relative links against the final document URL", async () => {
 
   expect(exitCode).toBe(0);
   expect(stdout).toContain(
-    "internal links in the static HTML: 2, not a direct 200: 0",
+    "internal links in the static HTML: 3, not a direct 200: 0",
   );
 });
 
@@ -293,13 +304,14 @@ test("checks every sitemap URL and reports duplicates", async () => {
   expect(stdout).toContain(`${origin}/dup/: canonical ${origin}/about/;`);
   expect(stdout).toContain(`${origin}/gone/: status 404; canonical missing;`);
   expect(stdout).toContain("duplicate titles (count, text): 2 About - Example");
+  expect(stdout).toContain(`${origin}/hidden/: noindex;`);
   expect(stdout).toContain(
-    "duplicate descriptions (count, text): 4 A fixture page for the probe.",
+    "duplicate descriptions (count, text): 5 A fixture page for the probe.",
   );
   // The &amp; in the sitemap and the canonical decode to the same URL.
   expect(stdout).not.toContain("/search?q=a");
-  // Two broken entries plus one duplicate title and one duplicate description.
-  expect(stdout).toContain("sitemap URLs: 5, with problems: 4");
+  // Three broken entries plus one duplicate title and one duplicate description.
+  expect(stdout).toContain("sitemap URLs: 6, with problems: 5");
 });
 
 test("flags HTML answers from a single-page fallback", async () => {
