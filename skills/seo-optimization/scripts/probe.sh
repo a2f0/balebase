@@ -118,6 +118,11 @@ attr() { grep -oiE "$1=\"[^\"]*\"" | sed -E 's/^[^"]*"(.*)"$/\1/'; }
 content_of() {
   first "<meta[^>]+(property|name)=\"$1\"[^>]*>" | attr content
 }
+# Every robots directive in the page's meta tags, lowercase and joined.
+robots_meta() {
+  printf '%s\n' "$body" | grep -oiE '<meta[^>]+name="(robots|googlebot)"[^>]*>' |
+    attr content | tr '[:upper:]' '[:lower:]' | tr '\n' ' ' | sed 's/ $//'
+}
 load_body() { body=$(tr '\n\r\t' '   ' <"$tmp/$1.body" 2>/dev/null); }
 # locs <name>: the <loc> values in <name>.body, whitespace-tolerant.
 locs() {
@@ -172,7 +177,11 @@ if [ "$mode" = links ]; then
   printf '%s\n' "$body" | grep -oiE '<a[^>]+href="[^"]*"' |
     attr href | unescape | sed 's/#.*//' | grep -v '^$' >"$tmp/hrefs"
   host_pattern=$(printf '%s' "$final_host" | sed 's/[.[\*^$]/\\&/g')
-  grep -iE "^https?://$host_pattern([/?]|$)" "$tmp/hrefs" >"$tmp/links.absolute"
+  {
+    grep -iE "^https?://$host_pattern([/?]|$)" "$tmp/hrefs"
+    # Protocol-relative links to this host take the page's scheme.
+    grep -iE "^//$host_pattern([/?]|$)" "$tmp/hrefs" | sed "s#^#${final_origin%%://*}:#"
+  } >"$tmp/links.absolute"
   grep -vE '^[a-zA-Z][a-zA-Z0-9+.-]*:|^//' "$tmp/hrefs" |
     awk -v base="$base" -v page="$final_path" '
       # Resolve a relative reference against the final document URL.
@@ -249,7 +258,7 @@ if [ "$mode" = sitemap ]; then
     status=${result%%|*}
     load_body entry
     canonical=$(canonical_of)
-    robots=$(printf '%s %s' "$(robots_tag entry)" "$(content_of robots)" |
+    robots=$(printf '%s %s' "$(robots_tag entry)" "$(robots_meta)" |
       tr '[:upper:]' '[:lower:]')
     note=""
     [ "$status" = 200 ] || note="$note status $status;"
@@ -291,7 +300,7 @@ echo "  x-robots-tag: ${page_tag:-(absent)}"
 echo "  title (${#title} chars): $title"
 echo "  description (${#description} chars): $(printf '%s' "$description" | cut -c1-220)"
 echo "  canonical: $(canonical_of)"
-echo "  robots meta: $(content_of robots)"
+echo "  robots meta: $(robots_meta)"
 echo "  lang: $(first '<html[^>]*lang="[^"]*"' | attr lang)"
 echo "  theme-color: $(printf '%s\n' "$body" | grep -oiE '<meta[^>]+name="theme-color"[^>]*>' | attr content | tr '\n' ' ')"
 echo "  og: $(names 'property="og:[a-z_:]+"' | sed 's/property=//g')"
@@ -354,7 +363,7 @@ echo "  nested missing path: $nested_result  body: $(wc -c <"$tmp/nested.body" |
 error_result=$(fetch "$(with_bust "$origin/404")" error)
 load_body error
 error_tag=$(robots_tag error)
-echo "  /404: $error_result  robots meta: $(content_of robots)  x-robots-tag: ${error_tag:-(absent)}"
+echo "  /404: $error_result  robots meta: $(robots_meta)  x-robots-tag: ${error_tag:-(absent)}"
 http_result=$(web -m 15 -o /dev/null -D "$tmp/http.headers" \
   -w '%{http_code} %{redirect_url}' "$(with_bust "http://$host/")" 2>/dev/null |
   sed -E "s/[?&]$bust//")

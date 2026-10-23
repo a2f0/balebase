@@ -65,12 +65,20 @@ function siteResponse(url: URL): Response {
 <script type="application/ld+json">{"@type": "WebSite"}</script>`,
         `<h1>Example</h1><a href="/about/">About</a><a href="docs">Docs</a>
 <a href="https://external.example/">External</a><a href="/old">Old</a>
-<a href="https://${siteHost}/docs">Absolute</a>`,
+<a href="https://${siteHost}/docs">Absolute</a>
+<a href="//${siteHost}/gone/">Protocol-relative</a>`,
       );
     case "/about/":
       return page("About - Example", `${origin}/about/`);
     case "/dup/":
       return page("About - Example", `${origin}/about/`);
+    case "/late/":
+      // A later robots tag still applies.
+      return page(
+        "Late - Example",
+        `${origin}/late/`,
+        '<meta name="robots" content="index"><meta name="robots" content="noindex">',
+      );
     case "/hidden/":
       return page(
         "Hidden - Example",
@@ -126,6 +134,7 @@ function siteResponse(url: URL): Response {
           "/dup/",
           "/gone/",
           "/hidden/",
+          "/late/",
           "/search?q=a&amp;page=2",
         ]
           .map((entry) => `<url><loc>${origin}${entry}</loc></url>`)
@@ -275,7 +284,7 @@ test("reports a page's metadata and the site files", async () => {
   );
   expect(stdout).toContain("robots.txt: 200 text/plain");
   expect(stdout).toContain(`| Sitemap: ${origin}/sitemap.xml`);
-  expect(stdout).toContain("sitemap.xml: 200 application/xml  urls: 6");
+  expect(stdout).toContain("sitemap.xml: 200 application/xml  urls: 7");
   expect(stdout).toMatch(/missing path: 404 text\/html .*title: Not found/);
   expect(stdout).toContain("/404: 200 text/html  robots meta: noindex");
   expect(stdout).toContain("http:// root: 200   (does not redirect to HTTPS)");
@@ -329,8 +338,10 @@ test("reports internal links that redirect and ignores external ones", async () 
   expect(stdout).toContain(`/old  301 -> http://${siteHost}/about/`);
   // An absolute same-host link is requested exactly as written.
   expect(stdout).toContain(`https://${siteHost}/docs  000`);
+  // A protocol-relative link to this host is audited too.
+  expect(stdout).toContain("/gone/  404");
   expect(stdout).toContain(
-    "internal links in the static HTML: 4, not a direct 200: 2",
+    "internal links in the static HTML: 5, not a direct 200: 3",
   );
 });
 
@@ -373,13 +384,14 @@ test("checks every sitemap URL and reports duplicates", async () => {
   expect(stdout).toContain(`${origin}/gone/: status 404; canonical missing;`);
   expect(stdout).toContain("duplicate titles (count, text): 2 About - Example");
   expect(stdout).toContain(`${origin}/hidden/: noindex;`);
+  expect(stdout).toContain(`${origin}/late/: noindex;`);
   expect(stdout).toContain(
-    "duplicate descriptions (count, text): 5 A fixture page for the probe.",
+    "duplicate descriptions (count, text): 6 A fixture page for the probe.",
   );
   // The &amp; in the sitemap and the canonical decode to the same URL.
   expect(stdout).not.toContain("/search?q=a");
-  // Three broken entries plus one duplicate title and one duplicate description.
-  expect(stdout).toContain("sitemap URLs: 6, with problems: 5");
+  // Four broken entries plus one duplicate title and one duplicate description.
+  expect(stdout).toContain("sitemap URLs: 7, with problems: 6");
 });
 
 test("flags HTML answers from a single-page fallback", async () => {
