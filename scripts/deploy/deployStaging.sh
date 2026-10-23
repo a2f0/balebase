@@ -18,7 +18,7 @@ load_tier_env staging "$REPO_ROOT"
 validate_cloudflare_env
 validate_auth_env
 validate_plaid_env
-validate_stripe_env
+validate_stripe_env any
 
 if [[ "$STRIPE_SECRET_KEY" != sk_test_* && "$STRIPE_SECRET_KEY" != rk_test_* ]]; then
   echo "ERROR: Staging requires a Stripe test-mode secret key." >&2

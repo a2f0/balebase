@@ -16,7 +16,7 @@ if [[ -n "${STRIPE_SECRET_KEY:-}" ||
   -n "${STRIPE_PORTAL_CONFIGURATION_ID:-}" ||
   -n "${STRIPE_PRO_LEGACY_PRICE_IDS:-}" ||
   -n "${STRIPE_PUBLISHABLE_KEY:-}" ]]; then
-  validate_stripe_env
+  validate_stripe_env any
   if [[ -z "${STRIPE_PRO_PRICE_ID:-}" ]]; then
     echo "ERROR: Missing STRIPE_PRO_PRICE_ID for local billing." >&2
     exit 1
