@@ -93,6 +93,8 @@ function siteResponse(url: URL): Response {
     }
     case "/old":
       return redirect("/about/");
+    case "/elsewhere":
+      return redirect(`http://${indexedHost}/`, 302);
     case "/guide":
       return redirect("/guide/", 307, { "x-robots-tag": "noindex" });
     case "/guide/":
@@ -144,16 +146,22 @@ function indexedResponse(path: string): Response {
     });
   switch (path) {
     case "/":
-      return page("Indexed - Example", `${origin}/`);
+      return page(
+        "Indexed - Example",
+        `${origin}/`,
+        "",
+        '<a href="/pages.xml">Pages</a>',
+      );
     case "/sitemap.xml":
       return xml(
-        `<sitemapindex><sitemap><loc>${origin}/pages.xml</loc></sitemap>` +
+        `<sitemapindex\n  xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` +
+          `<sitemap><loc>${origin}/pages.xml</loc></sitemap>` +
           `<sitemap><loc>${origin}/missing.xml</loc></sitemap></sitemapindex>`,
       );
     case "/pages.xml":
       // XML allows whitespace around the URL inside <loc>.
       return xml(
-        `<urlset><url>\n  <loc>\n    ${origin}/\n  </loc>\n</url></urlset>`,
+        `<urlset\n><url>\n  <loc>\n    ${origin}/\n  </loc>\n</url></urlset>`,
       );
     default:
       return new Response("Not found", { status: 404 });
@@ -275,6 +283,18 @@ test("reports internal links that redirect and ignores external ones", async () 
   expect(stdout).toContain(`/old  301 -> http://${siteHost}/about/`);
   expect(stdout).toContain(
     "internal links in the static HTML: 3, not a direct 200: 1",
+  );
+});
+
+test("checks links against the host a redirect lands on", async () => {
+  const { stdout, exitCode } = await run("--links", siteHost, "/elsewhere");
+
+  expect(exitCode).toBe(0);
+  expect(stdout).toContain(
+    `(links resolved against http://${indexedHost} after a redirect)`,
+  );
+  expect(stdout).toContain(
+    "internal links in the static HTML: 1, not a direct 200: 0",
   );
 });
 

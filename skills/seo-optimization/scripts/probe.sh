@@ -75,7 +75,7 @@ ok_sitemap() {
     200\ * | *"=> 200 "*) ;;
     *) return 1 ;;
   esac
-  grep -qE '<(urlset|sitemapindex)[ >]' "$tmp/$2.body" 2>/dev/null
+  grep -qE '<(urlset|sitemapindex)([[:space:]>]|$)' "$tmp/$2.body" 2>/dev/null
 }
 
 # fetch <url> <name>: follows redirects, keeps the final response's headers
@@ -156,12 +156,15 @@ if [ "$mode" = links ]; then
     exit 1
   fi
   load_body page
-  # Resolve relative links against the document's final URL, after redirects.
+  # Resolve relative links against the document's final URL, after redirects,
+  # which may be on another host.
+  final_origin=$(sed -E 's#^([a-z]+://[^/]+).*#\1#' "$tmp/page.url")
+  final_host=${final_origin#*://}
   final_path=$(sed -E "s#^[a-z]+://[^/]+##; s/[?#].*//" "$tmp/page.url")
   base=${final_path%/*}/
   printf '%s\n' "$body" | grep -oiE '<a[^>]+href="[^"]*"' |
     attr href | unescape |
-    sed -E "s#^https?://$host##" | sed 's/#.*//' | grep -v '^$' |
+    sed -E "s#^https?://$final_host##" | sed 's/#.*//' | grep -v '^$' |
     grep -vE '^[a-zA-Z][a-zA-Z0-9+.-]*:|^//' |
     awk -v base="$base" -v page="$final_path" '
       # Resolve a relative reference against the final document URL.
@@ -190,7 +193,7 @@ if [ "$mode" = links ]; then
   bad=0
   while IFS= read -r link; do
     total=$((total + 1))
-    result=$(request "$(with_bust "$origin$link")" link)
+    result=$(request "$(with_bust "$final_origin$link")" link)
     status=${result%%|*}
     rest=${result#*|}
     location=${rest%%|*}
@@ -199,6 +202,7 @@ if [ "$mode" = links ]; then
       echo "  $link  $status${location:+ -> $location}"
     fi
   done <"$tmp/links"
+  [ "$final_host" = "$host" ] || echo "  (links resolved against $final_origin after a redirect)"
   echo "### $host$path  internal links in the static HTML: $total, not a direct 200: $bad"
   [ "$total" -gt 0 ] ||
     echo "  (no links in the static HTML; a client-rendered page needs a browser check)"
