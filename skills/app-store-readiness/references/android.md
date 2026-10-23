@@ -40,8 +40,8 @@ meaningful labels and roles, mutually exclusive selections, slider adjustment,
 TalkBack traversal, focus return, headings, and non-color indicators. Check
 48dp effective touch targets, large font/display settings, contrast in
 light/dark, compact/large windows, edge-to-edge insets, rotation, and back
-behavior. Default components can still be wrong when custom palettes or
-semantics override them.
+behavior, including that Back at the root leaves the app. Default components
+can still be wrong when custom palettes or semantics override them.
 
 Exercise cold launch, upgrade/persistence, process recreation, offline/error
 behavior, permission denial, background limits, and the system integrations

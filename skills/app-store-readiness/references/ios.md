@@ -37,7 +37,10 @@ and [accessibility guidance](https://developer.apple.com/design/human-interface-
 Exercise iPhone and iPad when both are supported, including compact/landscape
 layouts, safe areas, keyboard, sheet scrolling/dismissal, Dynamic Type through
 accessibility sizes, and light/dark contrast. Check effective touch targets,
-not icon dimensions alone.
+not icon dimensions alone. In a WebView shell, confirm that web content follows
+Dynamic Type, scrolled content stays clear of the status bar, and the keyboard
+leaves focused fields and dialog actions visible on the smallest supported
+iPhone.
 
 Inspect the accessibility tree and test VoiceOver names, roles, values,
 selected states, reading order, adjustable controls, focus after dismissal,
