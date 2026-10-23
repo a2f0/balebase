@@ -110,11 +110,9 @@ module Readiness
 
     def check_app_groups(values, id)
       expected = @targets.fetch(id, [])
-      return if expected.empty?
-
       groups = values.fetch('com.apple.security.application-groups', [])
-      @report.check("app_group.#{id}", (expected - groups).empty?,
-                    "Expected app group entitlements: #{expected.join(', ')}.")
+      @report.check("app_group.#{id}", groups.sort == expected.sort,
+                    "Expected app group entitlements: #{expected.empty? ? 'none' : expected.join(', ')}.")
     end
 
     def inspect_distribution(target, id)

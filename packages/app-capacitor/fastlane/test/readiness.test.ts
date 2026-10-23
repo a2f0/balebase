@@ -120,7 +120,7 @@ Readiness.define_singleton_method(:command) do |*args|
 
     id = args.last.end_with?('.appex') ? WIDGET : APP
     xml('get-task-allow' => mode == :debuggable, 'application-identifier' => "TEAM.#{id}",
-        'com.apple.security.application-groups' => mode == :missing_group ? [] : [GROUP])
+        'com.apple.security.application-groups' => %i[missing_group no_groups].include?(mode) ? [] : [GROUP])
   when 'security'
     profile = { 'ExpirationDate' => mode == :expired ? Time.now - 3600 : Time.now + 3600 }
     profile['ProvisionedDevices'] = ['device'] if %i[development ad_hoc].include?(mode)
@@ -185,12 +185,13 @@ Dir.mktmpdir do |dir|
     Readiness.ios_artifact(report, artifact, with_widget)
     results["ios_#{scenario}"] = report.data
   end
-  mode = :good
+  mode = :no_groups
   artifact = File.join(dir, 'app-only.ipa')
   build_ipa.call(artifact, :good, widget: false)
   report = Readiness::Report.new('ios', artifact, dir)
   Readiness.ios_artifact(report, artifact, app_only)
   results[:ios_app_only] = report.data
+  mode = :good
   report = Readiness::Report.new('ios', File.join(dir, 'good.ipa'), dir)
   Readiness.ios_artifact(report, File.join(dir, 'good.ipa'), app_only)
   results[:ios_unexpected_target] = report.data
@@ -527,15 +528,19 @@ describe("iOS artifact verdicts", () => {
 
   test("checks app groups only where expected and rejects unexpected targets", () => {
     expect(status(result.ios_app_only, "artifact.targets")).toBe("verified");
-    expect(
-      status(result.ios_app_only, "app_group.com.example.app"),
-    ).toBeUndefined();
+    expect(status(result.ios_app_only, "app_group.com.example.app")).toBe(
+      "verified",
+    );
     expect(status(result.ios_app_only, "privacy.com.example.app")).toBe(
       "verified",
     );
     expect(status(result.ios_unexpected_target, "artifact.targets")).toBe(
       "failed",
     );
+    // An app expected to have no app groups must not gain one.
+    expect(
+      status(result.ios_unexpected_target, "app_group.com.example.app"),
+    ).toBe("failed");
   });
 });
 
