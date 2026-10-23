@@ -7,7 +7,6 @@ import {
   Icon,
   type IconName,
   Logo,
-  PasswordField,
   Toast,
 } from "@balebase/ui/react";
 import {
@@ -17,11 +16,12 @@ import {
   useRef,
   useState,
 } from "react";
+import { AuthFields, type AuthMode } from "./AuthFields";
 import { authClient } from "./authClient";
 import { authCallbackUrl, websiteUrl } from "./config";
 import { nativeHost } from "./host";
+import { useSavedSignIn } from "./useSavedSignIn";
 
-type AuthMode = "forgot" | "reset" | "sign-in" | "sign-up";
 export type AuthenticationAction = "sign-in" | "sign-up";
 type AuthVariant = "add-account" | "default";
 // This flow explicitly refreshes the session only after every required factor.
@@ -109,7 +109,9 @@ export function AuthPage({
               }
         }
         onVerified={async () => {
-          offerToSavePassword(auth.email, auth.password);
+          if (auth.passwordNeedsSaving) {
+            offerToSavePassword(auth.email, auth.password);
+          }
           await onAuthenticated("sign-in");
         }}
         variant={variant}
@@ -154,15 +156,17 @@ function useAuthPageState({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const savedSignIn = useSavedSignIn(setEmail, setPassword);
+  const [passwordNeedsSaving, setPasswordNeedsSaving] = useState(true);
   const [confirmation, setConfirmation] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | undefined>(initialError);
+  const { busy, error, setError, runWhileBusy } = useAuthAction(initialError);
   const [notice, setNotice] = useState<string | undefined>(initialNotice);
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
   const resetToken = new URLSearchParams(window.location.search).get("token");
 
   function chooseMode(nextMode: AuthMode) {
+    savedSignIn.clear();
     setMode(nextMode);
     setError(undefined);
     setNotice(undefined);
@@ -171,21 +175,13 @@ function useAuthPageState({
     setTermsAccepted(false);
   }
 
-  async function runWhileBusy(action: () => Promise<void> | void) {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await action();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setNotice(undefined);
+    const needsSave =
+      mode !== "sign-in" ||
+      !savedSignIn.isSaved(event.currentTarget, email, password);
+    setPasswordNeedsSaving(needsSave);
     await runWhileBusy(async () => {
       const result = await performAuthAction({
         confirmation,
@@ -195,6 +191,7 @@ function useAuthPageState({
         onAuthenticated,
         onLeaveReset,
         password,
+        passwordNeedsSaving: needsSave,
         resetToken,
         termsAccepted,
       });
@@ -213,13 +210,14 @@ function useAuthPageState({
       chooseMode("sign-in");
     });
 
-  const cancel = async () => {
-    if (onCancel) await runWhileBusy(onCancel);
-  };
-
   return {
     busy,
-    cancel,
+    chooseSavedSignIn: savedSignIn.choose
+      ? () => runWhileBusy(() => savedSignIn.choose?.())
+      : undefined,
+    onInput: savedSignIn.onInput,
+    passwordNeedsSaving,
+    cancel: () => runWhileBusy(() => onCancel?.()),
     chooseMode,
     confirmation,
     email,
@@ -242,7 +240,27 @@ function useAuthPageState({
   };
 }
 
+function useAuthAction(initialError: string | undefined) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(initialError);
+  async function runWhileBusy(action: () => Promise<void> | void) {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await action();
+    } catch (cause) {
+      setError(messageFrom(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return { busy, error, setError, runWhileBusy };
+}
+
 interface CredentialAuthPageProps {
+  chooseSavedSignIn: (() => Promise<void>) | undefined;
+  onInput: (event: FormEvent<HTMLFormElement>) => void;
   busy: boolean;
   confirmation: string;
   copy: { button: string; eyebrow: string; title: string };
@@ -268,6 +286,8 @@ interface CredentialAuthPageProps {
 
 function CredentialAuthPage({
   busy,
+  chooseSavedSignIn,
+  onInput,
   confirmation,
   copy,
   email,
@@ -302,9 +322,15 @@ function CredentialAuthPage({
         autoComplete="on"
         className="formGrid"
         method="post"
+        onInput={onInput}
         onSubmit={(event) => void onSubmit(event)}
       >
         {notice && noticeTone === "info" && <Banner>{notice}</Banner>}
+        {mode === "sign-in" && chooseSavedSignIn && (
+          <Button disabled={busy} onClick={() => void chooseSavedSignIn()}>
+            Use saved sign-in
+          </Button>
+        )}
         <AuthFields
           confirmation={confirmation}
           email={email}
@@ -436,6 +462,7 @@ interface AuthActionInput {
   onAuthenticated: (action: AuthenticationAction) => Promise<void>;
   onLeaveReset: () => Promise<void>;
   password: string;
+  passwordNeedsSaving: boolean;
   resetToken: string | null;
   termsAccepted: boolean;
 }
@@ -470,7 +497,9 @@ async function performAuthAction(
     if (requiresTwoFactor(result.data)) {
       return { twoFactorRequired: true };
     }
-    offerToSavePassword(input.email, input.password);
+    if (input.passwordNeedsSaving) {
+      offerToSavePassword(input.email, input.password);
+    }
     await input.onAuthenticated("sign-in");
     return {};
   }
@@ -800,131 +829,6 @@ function AuthAside() {
         </ul>
       </div>
     </aside>
-  );
-}
-
-interface AuthFieldsProps {
-  confirmation: string;
-  email: string;
-  mode: AuthMode;
-  name: string;
-  onConfirmation: (value: string) => void;
-  onEmail: (value: string) => void;
-  onName: (value: string) => void;
-  onPassword: (value: string) => void;
-  password: string;
-}
-
-function AuthFields(props: AuthFieldsProps) {
-  const { mode } = props;
-  const needsPassword =
-    mode === "reset" || mode === "sign-in" || mode === "sign-up";
-  const needsConfirmation = mode === "reset" || mode === "sign-up";
-
-  return (
-    <>
-      {mode === "sign-up" && (
-        <AuthInput
-          autoComplete="name"
-          label="Name"
-          maxLength={100}
-          name="name"
-          onValue={props.onName}
-          value={props.name}
-        />
-      )}
-      {mode !== "reset" && (
-        <AuthInput
-          autoCapitalize="none"
-          autoComplete={mode === "forgot" ? "email" : "username"}
-          inputMode="email"
-          label="Email"
-          name="email"
-          onValue={props.onEmail}
-          spellCheck={false}
-          type="email"
-          value={props.email}
-        />
-      )}
-      {/* Keyed by mode, so a revealed password is hidden on the next form. */}
-      {needsPassword && (
-        <AuthInput
-          key={`${mode}-password`}
-          autoComplete={
-            mode === "sign-in" ? "current-password" : "new-password"
-          }
-          help={needsConfirmation ? "Use at least 12 characters." : undefined}
-          label={mode === "sign-in" ? "Password" : "New password"}
-          maxLength={128}
-          minLength={12}
-          name="password"
-          onValue={props.onPassword}
-          type="password"
-          value={props.password}
-        />
-      )}
-      {needsConfirmation && (
-        <AuthInput
-          key={`${mode}-confirmation`}
-          autoComplete="new-password"
-          label="Confirm password"
-          maxLength={128}
-          minLength={12}
-          name="password-confirmation"
-          onValue={props.onConfirmation}
-          type="password"
-          value={props.confirmation}
-        />
-      )}
-    </>
-  );
-}
-
-interface AuthInputProps {
-  autoCapitalize?: "none";
-  autoComplete: string;
-  help?: string | undefined;
-  inputMode?: "email";
-  label: string;
-  maxLength?: number;
-  minLength?: number;
-  name: string;
-  onValue: (value: string) => void;
-  spellCheck?: boolean;
-  type?: "email" | "password";
-  value: string;
-}
-
-function AuthInput({
-  help,
-  label,
-  onValue,
-  type = undefined,
-  ...props
-}: AuthInputProps) {
-  if (type === "password") {
-    return (
-      <PasswordField
-        {...props}
-        hint={help}
-        id={props.name}
-        label={label}
-        onChange={(event) => onValue(event.target.value)}
-        required
-      />
-    );
-  }
-  return (
-    <Field hint={help} label={label}>
-      <input
-        {...props}
-        className="input"
-        id={props.name}
-        onChange={(event) => onValue(event.target.value)}
-        required
-        type={type}
-      />
-    </Field>
   );
 }
 

@@ -18,7 +18,9 @@ const config: CapacitorConfig = {
   appName: isStagingRelease ? "Balebase Staging" : "Balebase",
   webDir: "dist",
   backgroundColor: "#181916",
-  ios: { contentInset: "always" },
+  // The saved-sign-in picker returns credentials through the bridge. Capacitor
+  // logs plugin responses in debug builds unless logging is disabled here too.
+  ios: { contentInset: "always", loggingBehavior: "none" },
   // PackageDescription 6 knows the iOS 18 deployment target used by pdf.js.
   experimental: { ios: { spm: { swiftToolsVersion: "6.0" } } },
   server: {

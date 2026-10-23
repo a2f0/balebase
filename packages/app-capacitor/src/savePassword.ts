@@ -1,6 +1,8 @@
+import type { SavedSignIn } from "@balebase/app/host";
 import { registerPlugin } from "@capacitor/core";
 
 interface PasswordManagerPlugin {
+  choose(): Promise<{ credential?: SavedSignIn }>;
   save(options: {
     domain: string;
     password: string;
@@ -22,9 +24,19 @@ const passwordManager =
  */
 export function nativePasswordSaver(
   appUrl: string,
-  plugin: PasswordManagerPlugin = passwordManager,
+  plugin: Pick<PasswordManagerPlugin, "save"> = passwordManager,
 ) {
   const domain = new URL(appUrl).hostname;
   return (username: string, password: string) =>
     plugin.save({ domain, password, username });
+}
+
+export async function chooseNativeSavedSignIn() {
+  try {
+    return (await passwordManager.choose()).credential;
+  } catch {
+    throw new Error(
+      "Couldn’t open saved sign-ins. You can still enter your email and password.",
+    );
+  }
 }

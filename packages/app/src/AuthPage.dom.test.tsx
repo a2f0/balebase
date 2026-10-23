@@ -3,7 +3,7 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { AuthPage } from "./AuthPage";
-import { configureHost } from "./host";
+import { configureHost, type NativeHost } from "./host";
 
 const dom = new Window({ url: "http://localhost:5173/" });
 const domGlobals = {
@@ -190,6 +190,7 @@ describe("saving passwords in the native app", () => {
     savePassword = async (username: string, password: string) => {
       offered.push([username, password]);
     },
+    chooseSavedSignIn?: NativeHost["chooseSavedSignIn"],
   ) {
     offered = [];
     authenticated = 0;
@@ -199,6 +200,7 @@ describe("saving passwords in the native app", () => {
         origin: "https://localhost",
         saveFile: async () => true,
         savePassword,
+        chooseSavedSignIn,
       },
     });
     globalThis.fetch = (async (input: RequestInfo | URL) =>
@@ -219,7 +221,10 @@ describe("saving passwords in the native app", () => {
     );
   }
 
-  async function submit(fields: Record<string, string>) {
+  async function fill(
+    fields: Record<string, string>,
+    source: "script" | "autofill" | "typing" | "paste" = "script",
+  ) {
     const setValue = Object.getOwnPropertyDescriptor(
       dom.HTMLInputElement.prototype,
       "value",
@@ -229,9 +234,26 @@ describe("saving passwords in the native app", () => {
       if (!input) throw new Error(`No ${selector} input`);
       await act(async () => {
         setValue?.call(input, value);
-        input.dispatchEvent(new dom.Event("input", { bubbles: true }) as never);
+        const event =
+          source === "typing" || source === "paste"
+            ? new dom.InputEvent("input", {
+                bubbles: true,
+                inputType:
+                  source === "paste" ? "insertFromPaste" : "insertText",
+              })
+            : new dom.Event("input", { bubbles: true });
+        // Model the native events sent by WebKit. Happy DOM cannot invoke an
+        // OS password manager; the simulator check covers that boundary.
+        Object.defineProperty(event, "isTrusted", {
+          value: source !== "script",
+        });
+        input.dispatchEvent(event as never);
       });
     }
+  }
+
+  async function submit(fields: Record<string, string> = {}) {
+    await fill(fields);
     const form = container.querySelector("form");
     if (!form) throw new Error("No form");
     await act(async () => {
@@ -262,6 +284,138 @@ describe("saving passwords in the native app", () => {
     await signIn();
     expect(offered).toEqual([[credentials.email, credentials.password]]);
     expect(authenticated).toBe(1);
+  });
+
+  const fillSaved = () =>
+    fill(
+      {
+        'input[name="email"]': credentials.email,
+        'input[name="password"]': credentials.password,
+      },
+      "autofill",
+    );
+
+  it("does not offer credentials filled by the iOS keyboard again", async () => {
+    await renderNativeSignIn(() => Response.json({ token: "token", user: {} }));
+    await fillSaved();
+    await submit();
+    expect(authenticated).toBe(1);
+    expect(offered).toEqual([]);
+  });
+
+  it("keeps autofill provenance through a second-factor retry", async () => {
+    let attempts = 0;
+    await renderNativeSignIn((path) =>
+      path.endsWith("/sign-in/email")
+        ? Response.json({ twoFactorRedirect: true })
+        : ++attempts === 1
+          ? Response.json({ message: "Invalid code" }, { status: 401 })
+          : Response.json({ token: "token", user: {} }),
+    );
+    await fillSaved();
+    await submit();
+    await submit({ "#two-factor-code": "000000" });
+    expect(authenticated).toBe(0);
+    await submit({ "#two-factor-code": "123456" });
+    expect(authenticated).toBe(1);
+    expect(offered).toEqual([]);
+  });
+
+  for (const [field, value] of [
+    ["email", "other@example.com"],
+    ["password", "a changed password"],
+  ] as const) {
+    it(`offers to save an autofilled login after its ${field} changes`, async () => {
+      await renderNativeSignIn(() =>
+        Response.json({ token: "token", user: {} }),
+      );
+      await fillSaved();
+      await submit({ [`input[name="${field}"]`]: value ?? "" });
+      expect(offered).toEqual([
+        [
+          field === "email" ? value : credentials.email,
+          field === "password" ? value : credentials.password,
+        ],
+      ]);
+    });
+  }
+
+  for (const source of ["typing", "paste"] as const) {
+    it(`still offers a password supplied by ${source}`, async () => {
+      await renderNativeSignIn(() =>
+        Response.json({ token: "token", user: {} }),
+      );
+      await fill(
+        {
+          'input[name="email"]': credentials.email,
+          'input[name="password"]': credentials.password,
+        },
+        source,
+      );
+      await submit();
+      expect(offered).toEqual([[credentials.email, credentials.password]]);
+    });
+  }
+
+  async function chooseSaved() {
+    const button = [...container.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent === "Use saved sign-in",
+    );
+    if (!button) throw new Error("No saved sign-in action");
+    await act(async () => button.click());
+  }
+
+  it("fills the saved email and password together without another save offer", async () => {
+    await renderNativeSignIn(
+      () => Response.json({ token: "token", user: {} }),
+      undefined,
+      async () => ({
+        username: credentials.email,
+        password: credentials.password,
+      }),
+    );
+    await chooseSaved();
+    expect(
+      container.querySelector<HTMLInputElement>('[name="email"]')?.value,
+    ).toBe(credentials.email);
+    expect(
+      container.querySelector<HTMLInputElement>('[name="password"]')?.value,
+    ).toBe(credentials.password);
+    expect(authenticated).toBe(0);
+    await submit();
+    expect(authenticated).toBe(1);
+    expect(offered).toEqual([]);
+  });
+
+  it("leaves manual sign-in available after cancelling the password picker", async () => {
+    await renderNativeSignIn(
+      () => Response.json({ token: "token", user: {} }),
+      undefined,
+      async () => undefined,
+    );
+    await fill({ 'input[name="email"]': credentials.email });
+    await chooseSaved();
+    expect(
+      container.querySelector<HTMLInputElement>('[name="email"]')?.value,
+    ).toBe(credentials.email);
+    await signIn();
+    expect(authenticated).toBe(1);
+    expect(offered).toEqual([[credentials.email, credentials.password]]);
+  });
+
+  it("leaves manual sign-in available when the password picker fails", async () => {
+    await renderNativeSignIn(
+      () => Response.json({ token: "token", user: {} }),
+      undefined,
+      async () => {
+        throw new Error("Saved sign-ins unavailable");
+      },
+    );
+    await chooseSaved();
+    expect(container.textContent).toContain("Saved sign-ins unavailable");
+    await signIn();
+    expect(authenticated).toBe(1);
+    expect(offered).toEqual([[credentials.email, credentials.password]]);
   });
 
   it("waits for the second factor before offering the password", async () => {
