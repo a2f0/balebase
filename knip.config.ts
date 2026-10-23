@@ -52,9 +52,7 @@ const baseConfig = {
         "fastlane/**/*.ts",
         "scripts/**/*.ts",
       ],
-      // cap sync registers this native plugin; its default Android back handler
-      // needs no JavaScript listener and preserves our popstate navigation guard.
-      ignoreDependencies: ["@capacitor/app", ...androidBeforeSync],
+      ignoreDependencies: [...androidBeforeSync],
     },
     "packages/app-web": {
       project: ["src/**/*.{css,ts,tsx}"],
@@ -94,7 +92,6 @@ const productionConfig = {
     "packages/app-capacitor": {
       entry: ["src/**/*.{ts,tsx}!"],
       project: [],
-      ignoreDependencies: ["@capacitor/app"],
     },
     "packages/app-web": {
       entry: ["src/**/*.{ts,tsx}!"],

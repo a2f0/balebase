@@ -10,7 +10,13 @@ import {
   PasswordField,
   Toast,
 } from "@balebase/ui/react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { authClient } from "./authClient";
 import { authCallbackUrl, websiteUrl } from "./config";
 
@@ -82,10 +88,17 @@ export function AuthPage({
     onCancel,
     onLeaveReset,
   });
+  // A form shown after the first one takes focus; see AuthHeading.
+  const firstFormShown = useRef(false);
+  useEffect(() => {
+    firstFormShown.current = true;
+  }, []);
+  const focusHeading = firstFormShown.current;
 
   if (auth.twoFactorRequired) {
     return (
       <TwoFactorChallenge
+        focusHeading={focusHeading}
         onCancel={
           onCancel
             ? auth.cancel
@@ -104,6 +117,7 @@ export function AuthPage({
     <CredentialAuthPage
       {...auth}
       copy={contentFor(auth.mode, variant)}
+      focusHeading={focusHeading}
       // Action results confirm; a notice that arrived with the page keeps its tone.
       noticeTone={auth.notice === initialNotice ? initialNoticeTone : "success"}
       onCancel={onCancel ? auth.cancel : undefined}
@@ -230,6 +244,7 @@ interface CredentialAuthPageProps {
   copy: { button: string; eyebrow: string; title: string };
   email: string;
   error: string | undefined;
+  focusHeading: boolean;
   mode: AuthMode;
   name: string;
   notice: string | undefined;
@@ -253,6 +268,7 @@ function CredentialAuthPage({
   copy,
   email,
   error,
+  focusHeading,
   mode,
   name,
   notice,
@@ -274,6 +290,7 @@ function CredentialAuthPage({
       <AuthHeading
         description={descriptionFor(mode, variant)}
         eyebrow={copy.eyebrow}
+        focusOnMount={focusHeading}
         title={copy.title}
       />
 
@@ -500,10 +517,12 @@ async function performAuthAction(
 }
 
 function TwoFactorChallenge({
+  focusHeading,
   onCancel,
   onVerified,
   variant,
 }: {
+  focusHeading: boolean;
   onCancel: () => Promise<void> | void;
   onVerified: () => Promise<void>;
   variant: AuthVariant;
@@ -552,6 +571,7 @@ function TwoFactorChallenge({
             : "Enter the six-digit code from your authenticator app."
         }
         eyebrow="Two-step verification"
+        focusOnMount={focusHeading}
         title="Confirm it’s you"
       />
       <TwoFactorForm
@@ -666,16 +686,31 @@ function AuthLayout({ children }: { children: ReactNode }) {
 function AuthHeading({
   description,
   eyebrow,
+  focusOnMount = false,
   title,
 }: {
   description: string;
   eyebrow: string;
+  focusOnMount?: boolean;
   title: string;
 }) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  const shownTitle = useRef(focusOnMount ? undefined : title);
+  // Switching forms removes the control that had focus. Move focus to the new
+  // form's heading, whether the form replaced its title or was mounted in place
+  // of another, so keyboard and screen-reader users start there rather than at
+  // the top of the page; the first form keeps the page's initial focus.
+  useEffect(() => {
+    if (shownTitle.current === title) return;
+    shownTitle.current = title;
+    heading.current?.focus();
+  }, [title]);
   return (
     <header className="authHeading">
       <p className="eyebrow">{eyebrow}</p>
-      <h1 className="authTitle">{title}</h1>
+      <h1 className="authTitle" ref={heading} tabIndex={-1}>
+        {title}
+      </h1>
       <p className="authIntro">{description}</p>
     </header>
   );

@@ -57,6 +57,7 @@ The Fastlane lanes live in `fastlane/`: `lanes/ios.rb`, `lanes/android.rb`,
 | `ios fetch_profiles` | Installs the match App Store profiles read-only | |
 | `android build_release` | Signed release App Bundle, without uploading | `build_number:` |
 | `android upload_release` | `build_release`, then uploads to a Google Play track | `build_number:`, `track:` (`internal`), `release_status:` (`completed`) |
+| `ios readiness`, `android readiness` | Inspects a candidate and its store state, read-only | See [readiness lanes](../../docs/readiness.md) |
 | `store_build_numbers` | Prints the latest build numbers in both stores | |
 | `android build_debug_apk`, `android build_release_apk` | Builds an APK for sideloading | |
 | `android install_debug`, `android install_release`, `android sideload` | Builds and installs an APK on a connected device | `build_type:release` (`sideload`) |
@@ -68,8 +69,8 @@ it, a lane picks the next number as described under
 
 Every lane but `android test` and `android clean` has a package script named
 `<platform>:<lane in kebab case>`; `store_build_numbers` is
-`store:build-numbers`. The iOS, App Bundle, and store build number scripts have
-a `:staging` variant for the staging app. Every script sets
+`store:build-numbers`. The iOS, App Bundle, Android readiness, and store build
+number scripts have a `:staging` variant for the staging app. Every script sets
 `NATIVE_RELEASE_TIER` itself, and arguments pass through to Fastlane:
 
 ```sh
@@ -139,7 +140,9 @@ is chosen.
 `android build_release` requires the tier's upload key and passwords, runs a
 release Capacitor sync, and builds
 `android/app/build/outputs/bundle/<variant>/app-<variant>.aab`. The version
-name is this package's version.
+name is this package's version. Like `ios build_release`, it writes a
+source/hash receipt (`<artifact>.build.json`) beside the bundle for the
+[readiness lanes](../../docs/readiness.md).
 
 `android upload_release` uploads that bundle with the tier's service account.
 It skips Play metadata, changelogs, images, and screenshots. `track:` defaults

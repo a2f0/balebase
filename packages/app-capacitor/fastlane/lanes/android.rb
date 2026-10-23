@@ -4,6 +4,8 @@ require 'shellwords'
 require_relative '../lib/lane_options'
 require_relative '../lib/merged_release_pr'
 require_relative '../lib/native_release_target'
+require_relative '../lib/readiness_artifacts'
+require_relative '../lib/readiness_stores'
 
 ANDROID_DIR = File.expand_path('../../android', __dir__)
 ANDROID_ASSETS_DIR = File.join(ANDROID_DIR, 'app/src/main/assets')
@@ -30,6 +32,14 @@ RELEASE_PLAY_ASSET_PATHS = [
   RELEASE_NATIVE_DEBUG_SYMBOLS_PATH
 ].freeze
 ANDROID_RELEASE_VERSION_CODE_PROPERTY = 'balebaseVersionCode'
+# What the readiness lane expects the App Bundle to hold. The merged manifest
+# asks only for INTERNET, which the WebView needs, and AndroidX's permission for
+# its own unexported receivers. Release builds are not minified.
+ANDROID_READINESS_EXPECTATIONS = {
+  identifier: NATIVE_APP_IDENTIFIER,
+  permissions: %W[android.permission.INTERNET #{NATIVE_APP_IDENTIFIER}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION],
+  minified: false
+}.freeze
 
 def connected_android_device_serials
   adb_output = `adb devices`
@@ -306,6 +316,18 @@ def record_android_release_build_number(build_number)
   File.write(output_path, "#{build_number}\n")
 end
 
+def google_play_readiness_track(options)
+  track = google_play_upload_track(options).to_s
+  return track if GOOGLE_PLAY_DEFAULT_TRACKS.include?(track)
+
+  UI.user_error!("Unsupported Play track #{track.inspect}; use one of #{GOOGLE_PLAY_DEFAULT_TRACKS.join(', ')}")
+end
+
+def bundletool_path(options)
+  tool = lane_option(options, :bundletool, 'BUNDLETOOL_JAR')
+  tool && File.expand_path(tool, NATIVE_REPO_ROOT)
+end
+
 def upload_android_play_release_result(options, release_result)
   {
     build_number: release_result.fetch(:build_number),
@@ -334,8 +356,11 @@ platform :android do
     run_android_gradle("assemble#{ANDROID_BUILD_VARIANT_TASK}")
   end
 
+  # Writes a source/hash receipt (<aab>.build.json) beside the bundle, which the
+  # readiness lane checks.
   desc 'Build a signed release App Bundle without uploading it (build_number:)'
   lane :build_release do |options|
+    source = release_source
     load_android_release_secrets_env
     release_build = next_android_release_build_number(options)
     require_android_release_signing!
@@ -347,6 +372,7 @@ platform :android do
       "-P#{ANDROID_RELEASE_VERSION_CODE_PROPERTY}=#{release_build.fetch(:build_number)}"
     )
     assets = require_android_play_release_assets!
+    Readiness.record_build(RELEASE_AAB_PATH, source, root: NATIVE_REPO_ROOT)
     print_android_play_release_assets(assets)
     android_play_release_result(release_build, assets)
   end
@@ -357,6 +383,25 @@ platform :android do
     upload_to_play_store(upload_android_play_release_options(options, release_result))
     record_android_release_build_number(release_result.fetch(:build_number))
     upload_android_play_release_result(options, release_result)
+  end
+
+  # docs/readiness.md describes the options.
+  desc 'Inspect an existing AAB and its Play state and write a redacted readiness report, without uploading or ' \
+       'committing edits (artifact:, output:, track:internal, bundletool:, store:false, strict:true)'
+  lane :readiness do |options|
+    artifact, output = readiness_options(options, 'android', RELEASE_AAB_PATH)
+    track = google_play_readiness_track(options)
+    store = readiness_store?(options)
+    strict = readiness_strict?(options)
+    report = Readiness::Report.new('android', artifact, NATIVE_REPO_ROOT)
+    Readiness.android_artifact(report, artifact, ANDROID_READINESS_EXPECTATIONS, bundletool: bundletool_path(options))
+    if store
+      Readiness.android_store(report, package: NATIVE_APP_IDENTIFIER, key_path: google_play_json_key_path,
+                                      listing: STORE_LISTING, track: track)
+    else
+      report.add('store.android', 'unverified', 'Store inspection explicitly skipped.')
+    end
+    finish_readiness(report, output, strict)
   end
 
   desc 'Build and install the debug APK on a connected device'

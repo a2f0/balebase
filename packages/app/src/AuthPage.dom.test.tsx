@@ -46,6 +46,69 @@ afterAll(async () => {
 });
 
 describe("registration", () => {
+  it("moves focus to each new form's heading", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root?.render(
+        <AuthPage
+          initialMode="sign-in"
+          onAuthenticated={async () => {}}
+          onLeaveReset={async () => {}}
+        />,
+      ),
+    );
+    const button = (label: string) => {
+      const match = [...container.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent?.trim() === label,
+      );
+      if (!match) throw new Error(`No ${label} button`);
+      return match;
+    };
+    const focusedHeading = () =>
+      document.activeElement?.matches("h1")
+        ? document.activeElement.textContent
+        : document.activeElement?.tagName;
+    expect(focusedHeading()).toBe("BODY");
+
+    await act(async () => button("Create an account").click());
+    expect(focusedHeading()).toBe("Create your workspace");
+    await act(async () => button("Back to sign in").click());
+    expect(focusedHeading()).toBe("Enter your workspace");
+    await act(async () => button("Forgot password?").click());
+    expect(focusedHeading()).not.toBe("Enter your workspace");
+    expect(document.activeElement?.matches("h1")).toBe(true);
+    await act(async () => button("Back to sign in").click());
+
+    // Two-step verification replaces the sign-in form, and cancelling it
+    // brings the sign-in form back.
+    const signIns: string[] = [];
+    const savedFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      signIns.push(String(input));
+      return Response.json({ twoFactorRedirect: true });
+    }) as typeof fetch;
+    try {
+      const form = container.querySelector("form");
+      if (!form) throw new Error("No sign-in form");
+      await act(async () =>
+        form.dispatchEvent(
+          new dom.Event("submit", {
+            bubbles: true,
+            cancelable: true,
+          }) as unknown as Event,
+        ),
+      );
+      expect(signIns.some((url) => url.endsWith("/sign-in/email"))).toBe(true);
+      expect(focusedHeading()).toBe("Confirm it’s you");
+      await act(async () => button("Back to sign in").click());
+      expect(focusedHeading()).toBe("Enter your workspace");
+    } finally {
+      globalThis.fetch = savedFetch;
+    }
+  });
+
   it("shows and hides each password on request", async () => {
     container = document.createElement("div");
     document.body.append(container);
