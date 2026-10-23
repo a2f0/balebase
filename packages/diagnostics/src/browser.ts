@@ -7,7 +7,7 @@ import {
   type SentryBuild,
   type SentryConfig,
 } from "./config";
-import { fetchWithTimeout } from "./fetch";
+import { fetchJsonWithTimeout } from "./fetch";
 import { sanitizeSentryEvent } from "./privacy";
 import { createPrivateTransport } from "./transport";
 
@@ -69,25 +69,58 @@ export function createBrowserDiagnostics(config: SentryConfig) {
   };
 }
 
-export async function configureBrowserDiagnostics(
+async function configureBrowserDiagnostics(
   build: SentryBuild | undefined,
   target: string,
 ) {
   if (!isSentryBuild(build) || build.target !== target) return undefined;
   try {
-    const response = await fetchWithTimeout(
+    const manifest = await fetchJsonWithTimeout(
       new URL("/sentry-assets.json", window.location.href),
-      {},
-      2000,
     );
-    if (!response.ok) return undefined;
-    const config = browserConfig(
-      build,
-      await response.json(),
-      window.location.origin,
-    );
+    const config = browserConfig(build, manifest, window.location.origin);
     return config ? createBrowserDiagnostics(config) : undefined;
   } catch {
     return undefined;
   }
+}
+
+/** Start rendering immediately while a bounded manifest request configures reporting. */
+export function startBrowserDiagnostics(
+  build: SentryBuild | undefined,
+  target: string,
+) {
+  if (!isSentryBuild(build) || build.target !== target) return undefined;
+  let client: ReturnType<typeof createBrowserDiagnostics> | undefined;
+  let waiting = true;
+  const pending: Array<[unknown, DiagnosticSource]> = [];
+  const captureError = (
+    error: unknown,
+    source: DiagnosticSource = "boundary",
+  ) => {
+    if (client) client.captureError(error, source);
+    else if (waiting && pending.length < 20) pending.push([error, source]);
+  };
+  const onError = (event: ErrorEvent) =>
+    captureError(event.error, "unhandled-error");
+  const onRejection = (event: PromiseRejectionEvent) =>
+    captureError(event.reason, "unhandled-rejection");
+  window.addEventListener("error", onError);
+  window.addEventListener("unhandledrejection", onRejection);
+  const ready = configureBrowserDiagnostics(build, target).then(
+    (configured) => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+      waiting = false;
+      client = configured;
+      for (const [error, source] of pending)
+        client?.captureError(error, source);
+      pending.length = 0;
+      return client;
+    },
+  );
+  return {
+    captureError,
+    flush: () => ready.then((configured) => configured?.flush() ?? false),
+  };
 }

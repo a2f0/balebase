@@ -6,10 +6,12 @@ import {
   repositoryRoot,
   requireUploadEnvironment,
   runBun,
+  sourceMapArtifacts,
   uploadSourceMaps,
 } from "../lib/sentryRelease";
 
-const environment = process.argv[2] ?? "production";
+const environment =
+  process.argv.slice(2).find((value) => value !== "--check") ?? "production";
 const workerConfig = resolve(
   repositoryRoot,
   "packages/api",
@@ -24,6 +26,7 @@ const config = releaseConfiguration(
 const { DRY_RUN } = process.env;
 const dryRun = DRY_RUN === "1";
 if (config && !dryRun) requireUploadEnvironment();
+if (process.argv.includes("--check")) process.exit(0);
 const parent = resolve(repositoryRoot, "packages/api/.wrangler");
 await mkdir(parent, { recursive: true });
 const directory = await mkdtemp(resolve(parent, "sentry-"));
@@ -42,11 +45,13 @@ try {
   runBun([
     ...wrangler,
     "--dry-run",
+    "--upload-source-maps",
     "--outdir",
     directory,
     "--define",
     `API_SENTRY_BUILD:${JSON.stringify(config?.build) ?? "undefined"}`,
   ]);
+  if (config) sourceMapArtifacts(directory, config.build);
   if (!dryRun && config) uploadSourceMaps(directory, config);
   runBun([
     ...wrangler,

@@ -149,3 +149,32 @@ test("requires a hosted DSN, commit, environment, and matching asset manifest", 
     ).toBeUndefined();
   }
 });
+
+test("iOS custom-scheme stack frames retain approved asset positions", () => {
+  const native = {
+    ...config,
+    target: "ios" as const,
+    origin: new URL("capacitor://localhost").origin,
+  };
+  const event: Event = {
+    tags: { diagnostic_source: "unhandled-error" },
+    exception: {
+      values: [
+        {
+          stacktrace: {
+            frames: [
+              {
+                filename: "capacitor://localhost/assets/index-123.js",
+                lineno: 2,
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+  expect(
+    sanitizeSentryEvent(event, native)?.exception?.values?.[0]?.stacktrace
+      ?.frames?.[0]?.filename,
+  ).toBe("app:///assets/index-123.js");
+});

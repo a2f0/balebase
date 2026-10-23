@@ -96,3 +96,30 @@ describe("native release secrets", () => {
     });
   });
 });
+
+test("Fastlane forwards tier Sentry settings and upload credentials to store builds", async () => {
+  const shared = "SENTRY_ORG=tearleads\nSENTRY_AUTH_TOKEN=fixture-token\n";
+  for (const tier of ["staging", "production"] as const) {
+    const names = ["ANDROID", "IOS"].flatMap((target) =>
+      ["DSN", "PROJECT"].map(
+        (kind) => `SENTRY_${target}_${tier.toUpperCase()}_${kind}`,
+      ),
+    );
+    const app = names.map((name) => `${name}=fixture-${name}`).join("\n");
+    const snapshot = await readNativeReleaseEnvironment(
+      shared,
+      app,
+      {},
+      tier,
+      shared,
+      {
+        ".secrets/prod/app.env": tier === "production" ? app : "",
+      },
+    );
+    expect(snapshot.environment).toMatchObject({
+      SENTRY_ORG: "tearleads",
+      SENTRY_AUTH_TOKEN: "fixture-token",
+      ...Object.fromEntries(names.map((name) => [name, `fixture-${name}`])),
+    });
+  }
+});

@@ -166,7 +166,10 @@ export async function readNativeReleaseEnvironmentResult(
   );
 
   const environment = { ...process.env };
-  for (const name of snapshotEnvironmentNames) {
+  for (const name of [
+    ...snapshotEnvironmentNames,
+    ...Object.keys(environment).filter((key) => key.startsWith("SENTRY_")),
+  ]) {
     Reflect.deleteProperty(environment, name);
   }
   Object.assign(environment, processEnvironment);

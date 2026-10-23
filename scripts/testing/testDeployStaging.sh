@@ -86,7 +86,7 @@ for target in app-web website; do
     exit 1
   }
 done
-[[ "$(grep -cF "packages/api deploy staging" "$MOCK_LOG" || true)" -eq 1 ]]
+[[ "$(grep -cF "packages/api deploy staging VITE" "$MOCK_LOG" || true)" -eq 1 ]]
 [[ "$(grep -cF "packages/app-web build:release staging" "$MOCK_LOG" || true)" -eq 1 ]]
 [[ "$(cat "$MOCK_LOG")" == *'VITE_API_URL=https://api-staging.balebase.com'* ]]
 [[ "$(cat "$MOCK_LOG")" == *'VITE_WEBSITE_URL=https://website-staging.balebase.com'* ]]
@@ -134,7 +134,7 @@ for target in app-web website; do
     exit 1
   }
 done
-[[ "$(grep -cF "packages/api deploy staging" "$MOCK_LOG" || true)" -eq 1 ]]
+[[ "$(grep -cF "packages/api deploy staging VITE" "$MOCK_LOG" || true)" -eq 1 ]]
 [[ "$(grep -cF "wrangler d1 migrations apply DB --remote --config $FIXTURE/packages/api/wrangler.staging.jsonc token=test-token account=test-account" "$MOCK_LOG" || true)" -eq 1 ]]
 for secret_name in BETTER_AUTH_SECRET PLAID_CLIENT_ID PLAID_SECRET PLAID_TOKEN_ENCRYPTION_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET; do
   [[ "$(grep -cF "wrangler secret put $secret_name --config $FIXTURE/packages/api/wrangler.staging.jsonc token=test-token account=test-account" "$MOCK_LOG" || true)" -eq 1 ]] || {
