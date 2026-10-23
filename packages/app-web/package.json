@@ -1,6 +1,6 @@
 {
   "name": "@balebase/app-web",
-  "version": "0.1.58",
+  "version": "0.1.59",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
@@ -11,6 +11,7 @@
     "dev": "bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/app-web/public && bunx --bun --no-install vite"
   },
   "dependencies": {
+    "@a2f0/ct-client": "0.1.4",
     "@balebase/app": "workspace:*"
   },
   "devDependencies": {

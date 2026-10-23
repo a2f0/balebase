@@ -6,7 +6,7 @@ import LegalLayout from "../layouts/LegalLayout.astro";
   description="How Tearleads retains and deletes account, workspace, inbox, and connected financial information."
   eyebrow="Retention / 03"
   title="Data Retention Policy"
-  updated="August 26, 2026"
+  updated="October 22, 2026"
 >
   <section class="legalPromise" aria-label="Our retention approach">
     <p class="eyebrow eyebrowDot">Our approach</p>
@@ -116,7 +116,21 @@ import LegalLayout from "../layouts/LegalLayout.astro";
   </section>
 
   <section>
-    <h2>7. Security records and recovery copies</h2>
+    <h2>7. CT click records</h2>
+    <p>
+      CT deletes click records and their IP addresses older than 90 days in a
+      daily cleanup job. The same job removes location records no longer used
+      by retained clicks. Queued clicks stay only in browser memory and are
+      discarded on opt-out. CT attempts delivery when a page is hidden or closed;
+      any undelivered queue disappears when the page closes. Cloudflare recovery
+      copies may retain previous records until their recovery window expires.
+      Access to CT's dashboard and data API requires an authorized administrator
+      account.
+    </p>
+  </section>
+
+  <section>
+    <h2>8. Security records and recovery copies</h2>
     <p>
       We may retain limited authentication, request, diagnostic, audit, and
       security records for as long as reasonably necessary to operate and secure
@@ -131,7 +145,7 @@ import LegalLayout from "../layouts/LegalLayout.astro";
   </section>
 
   <section>
-    <h2>8. Exceptions</h2>
+    <h2>9. Exceptions</h2>
     <p>
       We may retain information longer when required by law or lawful process,
       needed to establish or defend legal claims, necessary to investigate fraud
@@ -142,7 +156,7 @@ import LegalLayout from "../layouts/LegalLayout.astro";
   </section>
 
   <section>
-    <h2>9. Questions and requests</h2>
+    <h2>10. Questions and requests</h2>
     <p>
       Use the organization, inbox, and Finance controls in the Service where
       available. For other retention or deletion requests, email

@@ -14,6 +14,7 @@ const chrome =
   Bun.which("chromium") ||
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const siteRoot = fileURLToPath(new URL("..", import.meta.url));
+const appRoot = fileURLToPath(new URL("../../app-web", import.meta.url));
 const pages = ["/", "/terms/", "/privacy/", "/data-retention/"];
 const publicRoot = join(siteRoot, "public");
 const types: Record<string, string> = {
@@ -26,18 +27,46 @@ const types: Record<string, string> = {
 
 const work = mkdtempSync(join(tmpdir(), "website-layout-"));
 const dist = join(work, "dist");
+const appDist = join(work, "app-dist");
 let browser: Browser | undefined;
 
 beforeAll(async () => {
   const build = Bun.spawn(
     ["bunx", "--bun", "--no-install", "astro", "build", "--outDir", dist],
-    { cwd: siteRoot, stderr: "pipe", stdout: "pipe" },
+    {
+      cwd: siteRoot,
+      env: { ...process.env, NODE_ENV: "production" },
+      stderr: "pipe",
+      stdout: "pipe",
+    },
   );
   const [exitCode, stderr] = await Promise.all([
     build.exited,
     new Response(build.stderr).text(),
   ]);
   if (exitCode !== 0) throw new Error(`Website build failed: ${stderr}`);
+  // Verify both real bundler entrypoints with the same intercepted network.
+  // The SDK itself remains a dependency only of the two browser shells.
+  const appBuild = Bun.spawn(
+    ["bunx", "--bun", "--no-install", "vite", "build", "--outDir", appDist],
+    {
+      cwd: appRoot,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        VITE_API_URL: "https://api.balebase.com",
+      },
+      stderr: "pipe",
+      stdout: "pipe",
+    },
+  );
+  const [appExit, appOut, appError] = await Promise.all([
+    appBuild.exited,
+    new Response(appBuild.stdout).text(),
+    new Response(appBuild.stderr).text(),
+  ]);
+  if (appExit !== 0)
+    throw new Error(`App build failed: ${appOut}\n${appError}`);
   if (!existsSync(chrome))
     throw new Error("Chrome is required for the website layout check.");
   browser = await launch({
@@ -56,17 +85,37 @@ afterAll(async () => {
   rmSync(work, { recursive: true, force: true });
 });
 
-async function openSite() {
+async function openSite(root = dist, batches: string[] = []) {
   const page = await browser?.newPage();
   if (!page) throw new Error("Chrome did not start.");
   await page.setRequestInterception(true);
-  page.on("request", (request) => {
-    const { pathname } = new URL(request.url());
+  page.on("request", async (request) => {
+    const { hostname, pathname } = new URL(request.url());
+    if (hostname === "ct.a2f0.net") {
+      batches.push((await request.fetchPostData()) ?? "");
+      await request.respond({
+        status: 202,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+      return;
+    }
+    if (hostname === "api.balebase.com") {
+      await request.respond({
+        contentType: "application/json",
+        body: "null",
+        headers: {
+          "Access-Control-Allow-Origin":
+            request.headers().origin ?? "https://app.balebase.com",
+          "Access-Control-Allow-Credentials": "true",
+        },
+      });
+      return;
+    }
     const file = join(
-      dist,
+      root,
       pathname.endsWith("/") ? `${pathname}index.html` : pathname,
     );
-    if (!file.startsWith(dist) || !existsSync(file)) {
+    if (!file.startsWith(root) || !existsSync(file)) {
       void request.respond({ status: 404, body: "" });
       return;
     }
@@ -77,6 +126,66 @@ async function openSite() {
   });
   return page;
 }
+
+it("real Astro and Vite bundles initialize only at their deployed origins", async () => {
+  for (const [origin, app, environment] of [
+    ["https://balebase.com", "website", "production"],
+    ["https://website-staging.balebase.com", "website", "staging"],
+    ["https://website.test", "website", null],
+    ["https://app.balebase.com", "web-app", "production"],
+    ["https://app-staging.balebase.com", "web-app", "staging"],
+    ["https://app.test", "web-app", null],
+  ] as const) {
+    const batches: string[] = [];
+    const page = await openSite(app === "website" ? dist : appDist, batches);
+    try {
+      await page.evaluateOnNewDocument(() =>
+        Object.defineProperty(navigator, "webdriver", { get: () => false }),
+      );
+      await page.goto(origin, { waitUntil: "networkidle0" });
+      await page.evaluate((kind) => {
+        history.replaceState(
+          null,
+          "",
+          kind === "website"
+            ? "/privacy?private=1"
+            : "/me/screening/private-record",
+        );
+        const button = document.createElement("button");
+        button.id = "tracking-smoke";
+        button.textContent = "Local smoke test";
+        Object.assign(button.style, {
+          position: "fixed",
+          top: "5px",
+          left: "5px",
+          zIndex: "2147483647",
+        });
+        document.body.append(button);
+      }, app);
+      await page.click("#tracking-smoke");
+      await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+      await page.waitForNetworkIdle({ idleTime: 100, timeout: 5_000 });
+      expect({ origin, batches: batches.length }).toEqual({
+        origin,
+        batches: environment ? 1 : 0,
+      });
+      if (environment) {
+        const batch = JSON.parse(batches[0] ?? "");
+        expect(batch.site).toBe("balebase");
+        expect(batch.environment).toBe(environment);
+        expect(batch.events).toHaveLength(1);
+        expect(batch.events[0]).toMatchObject({
+          app,
+          page: app === "website" ? "/privacy" : "/",
+          target: "button",
+        });
+        expect(batches.join("")).not.toContain("private");
+      }
+    } finally {
+      await page.close();
+    }
+  }
+}, 30_000);
 
 it("every page fits phone and tablet widths without sideways scrolling", async () => {
   const page = await openSite();
