@@ -10,8 +10,10 @@ const probe = fileURLToPath(
 type Server = ReturnType<typeof Bun.serve>;
 let site: Server;
 let shell: Server;
+let indexed: Server;
 let siteHost = "";
 let shellHost = "";
+let indexedHost = "";
 
 function png(width: number, height: number) {
   const bytes = new Uint8Array(24);
@@ -103,6 +105,28 @@ function siteResponse(path: string): Response {
   }
 }
 
+// A sitemap index with one valid child sitemap and one that is missing.
+function indexedResponse(path: string): Response {
+  const origin = `http://${indexedHost}`;
+  const xml = (body: string) =>
+    new Response(`<?xml version="1.0"?>${body}`, {
+      headers: { "content-type": "application/xml" },
+    });
+  switch (path) {
+    case "/":
+      return page("Indexed - Example", `${origin}/`);
+    case "/sitemap.xml":
+      return xml(
+        `<sitemapindex><sitemap><loc>${origin}/pages.xml</loc></sitemap>` +
+          `<sitemap><loc>${origin}/missing.xml</loc></sitemap></sitemapindex>`,
+      );
+    case "/pages.xml":
+      return xml(`<urlset><url><loc>${origin}/</loc></url></urlset>`);
+    default:
+      return new Response("Not found", { status: 404 });
+  }
+}
+
 beforeAll(() => {
   site = Bun.serve({
     hostname: "127.0.0.1",
@@ -120,11 +144,18 @@ beforeAll(() => {
       }),
   });
   shellHost = `127.0.0.1:${shell.port}`;
+  indexed = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: (request) => indexedResponse(new URL(request.url).pathname),
+  });
+  indexedHost = `127.0.0.1:${indexed.port}`;
 });
 
 afterAll(() => {
   site.stop(true);
   shell.stop(true);
+  indexed.stop(true);
 });
 
 async function run(...args: string[]) {
@@ -199,6 +230,24 @@ test("reports internal links that redirect and ignores external ones", async () 
   expect(stdout).toContain(
     "internal links in the static HTML: 3, not a direct 200: 1",
   );
+});
+
+test("fails a link audit when the page itself does not load", async () => {
+  const { stdout, exitCode } = await run("--links", siteHost, "/missing");
+
+  expect(exitCode).toBe(1);
+  expect(stdout).toContain(
+    `### ${siteHost}/missing  page: 404 text/html  (cannot audit its links)`,
+  );
+});
+
+test("follows a sitemap index and reports a missing child sitemap", async () => {
+  const { stdout, exitCode } = await run("--sitemap", indexedHost);
+  const origin = `http://${indexedHost}`;
+
+  expect(exitCode).toBe(1);
+  expect(stdout).toContain(`${origin}/missing.xml: child sitemap 404`);
+  expect(stdout).toContain("sitemap URLs: 1, with problems: 1");
 });
 
 test("checks every sitemap URL and reports duplicates", async () => {

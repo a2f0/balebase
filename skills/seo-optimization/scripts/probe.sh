@@ -9,7 +9,8 @@
 #   probe.sh --links <host> [path]       internal links on the page that do
 #                                        not answer 200 directly
 #   probe.sh --sitemap <host>            every sitemap URL: status, canonical,
-#                                        robots, duplicate titles/descriptions
+#                                        robots, duplicate titles/descriptions;
+#                                        follows one level of sitemap index
 #
 # --links and --sitemap exit 1 when they find a problem. An unreachable host
 # exits 1 and a usage error exits 2.
@@ -23,7 +24,7 @@
 set -u
 
 usage() {
-  sed -n '4,16p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '4,17p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 mode=full
@@ -57,6 +58,24 @@ origin="$scheme://$host"
 request() {
   curl -sS -m 20 -A "$ua" -o "$tmp/$2.body" -D "$tmp/$2.headers" \
     -w '%{http_code}|%{redirect_url}|%{content_type}' "$1" 2>/dev/null
+}
+
+# ok_html <fetch result>: true when the final response is a 200 HTML page.
+ok_html() {
+  case "$1" in
+    200\ text/html* | *"=> 200 text/html"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# ok_sitemap <fetch result> <name>: true when the final response is a 200
+# sitemap or sitemap index document.
+ok_sitemap() {
+  case "$1" in
+    200\ * | *"=> 200 "*) ;;
+    *) return 1 ;;
+  esac
+  grep -qE '<(urlset|sitemapindex)[ >]' "$tmp/$2.body" 2>/dev/null
 }
 
 # fetch <url> <name>: follows redirects, keeps the final response's headers
@@ -122,7 +141,11 @@ fi
 
 if [ "$mode" = links ]; then
   path=${1:-/}
-  fetch "$(with_bust "$origin$path")" page >/dev/null
+  page_result=$(fetch "$(with_bust "$origin$path")" page)
+  if ! ok_html "$page_result"; then
+    echo "### $host$path  page: ${page_result:-no response}  (cannot audit its links)"
+    exit 1
+  fi
   load_body page
   # Resolve relative links against the document's final URL, after redirects.
   final_path=$(sed -E "s#^[a-z]+://[^/]+##; s/[?#].*//" "$tmp/page.url")
@@ -171,29 +194,30 @@ fi
 
 if [ "$mode" = sitemap ]; then
   sitemap_result=$(fetch "$(with_bust "$origin/sitemap.xml")" sitemap)
-  case "$sitemap_result" in
-    *"=> 200 "* | 200\ *) ;;
-    *) echo "### $host  sitemap.xml: $sitemap_result  (no sitemap to audit)"; exit 1 ;;
-  esac
-  if ! grep -qE '<(urlset|sitemapindex)[ >]' "$tmp/sitemap.body"; then
-    echo "### $host  sitemap.xml: $sitemap_result  (not a sitemap document)"
+  if ! ok_sitemap "$sitemap_result" sitemap; then
+    echo "### $host  sitemap.xml: ${sitemap_result:-no response}  (not a sitemap document)"
     exit 1
   fi
   grep -oE '<loc>[^<]+</loc>' "$tmp/sitemap.body" 2>/dev/null |
     sed -E 's#</?loc>##g' >"$tmp/urls"
+  problems=0
   if grep -q '<sitemapindex' "$tmp/sitemap.body" 2>/dev/null; then
     : >"$tmp/children"
     while IFS= read -r child; do
-      fetch "$(with_bust "$child")" child >/dev/null
-      grep -oE '<loc>[^<]+</loc>' "$tmp/child.body" | sed -E 's#</?loc>##g' \
-        >>"$tmp/children"
+      child_result=$(fetch "$(with_bust "$child")" child)
+      if ok_sitemap "$child_result" child && grep -q '<urlset' "$tmp/child.body"; then
+        grep -oE '<loc>[^<]+</loc>' "$tmp/child.body" | sed -E 's#</?loc>##g' \
+          >>"$tmp/children"
+      else
+        problems=$((problems + 1))
+        echo "  $child: child sitemap ${child_result:-no response}, not a urlset;"
+      fi
     done <"$tmp/urls"
     mv "$tmp/children" "$tmp/urls"
   fi
   : >"$tmp/titles"
   : >"$tmp/descriptions"
   total=0
-  problems=0
   while IFS= read -r url; do
     total=$((total + 1))
     result=$(request "$(with_bust "$url")" entry)
