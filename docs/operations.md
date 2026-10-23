@@ -66,13 +66,17 @@ collected.
 
 Google Play and TestFlight release lanes call `build:release android` or
 `build:release ios` before Capacitor sync. Existing installations need a new
-release to report. Release names are `balebase-<target>@<git SHA>`; the dist is
-`staging` or `production`. Configured uploads require a clean Git checkout and
-valid credentials. Failed uploads stop deployment or packaging. Source maps
-are removed from web and mobile assets even when uploading fails. `DRY_RUN=1`
-builds and verifies configuration without uploading maps or publishing Workers.
-The package release commands expect the tier's environment to be loaded, as
-the deploy wrappers and Fastlane lanes already do.
+release to report. The iOS privacy manifest and readiness expectations
+declare crash and diagnostic data for app functionality, without identity
+linkage or tracking. Keep App Store privacy answers and Google Play Data
+safety disclosures aligned before the next store submission. Release names
+are `balebase-<target>@<git SHA>`; the dist is `staging` or `production`.
+Configured uploads require a clean Git checkout and valid credentials.
+Failed uploads stop deployment or packaging. Source maps are removed from
+web and mobile assets even when uploading fails. `DRY_RUN=1` builds and
+verifies configuration without uploading maps or publishing Workers. The
+package release commands expect the tier's environment to be loaded, as the
+deploy wrappers and Fastlane lanes already do.
 
 The private Sentry clients install no automatic integrations. They disable
 Sentry's collection categories, tracing, replay, sessions, logs, and client

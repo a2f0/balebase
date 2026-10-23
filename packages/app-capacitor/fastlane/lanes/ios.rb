@@ -40,8 +40,8 @@ IOS_SIGNING_KEYCHAIN_OPTIONS = {
 }.freeze
 # What the readiness lane expects the IPA to hold: the app alone, with no
 # extensions or app groups, and the declarations of App/PrivacyInfo.xcprivacy.
-# Every collected type is linked to the user, used only for app functionality,
-# and never for tracking; App Store Connect's App Privacy answers must agree.
+# Account data is linked; filtered Sentry diagnostics are not. All collection
+# supports app functionality without tracking; App Privacy answers must agree.
 IOS_COLLECTED_DATA_USE = {
   linked: true, tracking: false, purposes: %w[NSPrivacyCollectedDataTypePurposeAppFunctionality]
 }.freeze
@@ -52,7 +52,11 @@ IOS_READINESS_EXPECTATIONS = {
     collected_data_types: %w[
       Name EmailAddress PhoneNumber PhysicalAddress UserID OtherFinancialInfo PurchaseHistory
       PhotosorVideos EmailsOrTextMessages OtherUserContent OtherUsageData OtherDataTypes
-    ].to_h { |type| ["NSPrivacyCollectedDataType#{type}", IOS_COLLECTED_DATA_USE] },
+    ].to_h { |type| ["NSPrivacyCollectedDataType#{type}", IOS_COLLECTED_DATA_USE] }.merge(
+      %w[CrashData OtherDiagnosticData].to_h do |type|
+        ["NSPrivacyCollectedDataType#{type}", IOS_COLLECTED_DATA_USE.merge(linked: false)]
+      end
+    ),
     accessed_api_reasons: { 'NSPrivacyAccessedAPICategoryFileTimestamp' => %w[C617.1] }
   }
 }.freeze
