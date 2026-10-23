@@ -50,8 +50,8 @@ IOS_READINESS_EXPECTATIONS = {
   privacy: {
     tracking: false,
     collected_data_types: %w[
-      Name EmailAddress PhoneNumber PhysicalAddress UserID OtherFinancialInfo PhotosorVideos
-      EmailsOrTextMessages OtherUserContent OtherUsageData OtherDataTypes
+      Name EmailAddress PhoneNumber PhysicalAddress UserID OtherFinancialInfo PurchaseHistory
+      PhotosorVideos EmailsOrTextMessages OtherUserContent OtherUsageData OtherDataTypes
     ].to_h { |type| ["NSPrivacyCollectedDataType#{type}", IOS_COLLECTED_DATA_USE] },
     accessed_api_reasons: { 'NSPrivacyAccessedAPICategoryFileTimestamp' => %w[C617.1] }
   }

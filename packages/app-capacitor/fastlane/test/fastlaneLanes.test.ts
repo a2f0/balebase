@@ -626,6 +626,7 @@ puts JSON.generate(
               "PhysicalAddress",
               "UserID",
               "OtherFinancialInfo",
+              "PurchaseHistory",
               "PhotosorVideos",
               "EmailsOrTextMessages",
               "OtherUserContent",
