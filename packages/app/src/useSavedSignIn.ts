@@ -22,11 +22,13 @@ export function useSavedSignIn(
         }
       : undefined,
     onInput(event: FormEvent<HTMLFormElement>) {
-      const input = event.target as HTMLInputElement;
+      const input = event.target;
       // WKWebView's login AutoFill uses setValueForUser, which dispatches a
       // trusted plain Event. Typing and paste dispatch InputEvent instead.
       // Unlike Safari's own fill, this path need not set the :autofill state.
       if (
+        !nativeHost() ||
+        !(input instanceof HTMLInputElement) ||
         input.name !== "password" ||
         !event.nativeEvent.isTrusted ||
         "inputType" in event.nativeEvent
@@ -39,6 +41,7 @@ export function useSavedSignIn(
       }
     },
     isSaved(form: HTMLFormElement, username: string, password: string) {
+      if (!nativeHost()) return false;
       if (
         saved.current?.username === username &&
         saved.current.password === password
@@ -46,10 +49,18 @@ export function useSavedSignIn(
         return true;
       // Other engines mark autofilled fields until the person edits them.
       // Require both fields so changing the account still offers to save it.
-      return ["email", "password"].every((name) => {
-        const input = form.querySelector<HTMLInputElement>(`[name="${name}"]`);
-        return input?.matches(":autofill") ?? false;
-      });
+      try {
+        return ["email", "password"].every((name) => {
+          const input = form.querySelector<HTMLInputElement>(
+            `[name="${name}"]`,
+          );
+          return input?.matches(":autofill") ?? false;
+        });
+      } catch {
+        // An older WebView may not support this selector. Detection must never
+        // prevent signing in; offer to save normally when provenance is unknown.
+        return false;
+      }
     },
   };
 }

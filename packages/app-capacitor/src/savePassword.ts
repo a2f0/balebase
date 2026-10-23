@@ -31,9 +31,11 @@ export function nativePasswordSaver(
     plugin.save({ domain, password, username });
 }
 
-export async function chooseNativeSavedSignIn() {
+export async function chooseNativeSavedSignIn(
+  plugin: Pick<PasswordManagerPlugin, "choose"> = passwordManager,
+) {
   try {
-    return (await passwordManager.choose()).credential;
+    return (await plugin.choose()).credential;
   } catch {
     throw new Error(
       "Couldn’t open saved sign-ins. You can still enter your email and password.",

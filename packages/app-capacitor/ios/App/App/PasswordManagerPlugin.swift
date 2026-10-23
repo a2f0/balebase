@@ -21,8 +21,11 @@ public class PasswordManagerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func choose(_ call: CAPPluginCall) {
         Task { @MainActor in
-            guard self.signInRequest == nil, !self.saveInProgress,
-                  let presenter = self.bridge?.viewController,
+            guard self.signInRequest == nil, !self.saveInProgress else {
+                call.reject("A password manager request is already in progress.")
+                return
+            }
+            guard let presenter = self.bridge?.viewController,
                   let window = presenter.view.window,
                   presenter.presentedViewController == nil else {
                 call.reject("The app has no available window to ask from.")
@@ -46,7 +49,7 @@ public class PasswordManagerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         Task { @MainActor in
             guard !self.saveInProgress, self.signInRequest == nil else {
-                call.reject("A password save is already in progress.")
+                call.reject("A password manager request is already in progress.")
                 return
             }
             guard let presenter = self.bridge?.viewController,
