@@ -88,6 +88,7 @@ module Readiness
   # Checks the App Store Connect records for the artifact's exact version and build.
   class IosStore
     REVIEW_CONTACT = %i[contact_first_name contact_last_name contact_phone contact_email].freeze
+    BUILD_STATES = 'PROCESSING,FAILED,INVALID,VALID'
 
     def initialize(report, app, version, number)
       @report = report
@@ -132,9 +133,11 @@ module Readiness
       build
     end
 
+    # Every processing state, so a rejected candidate fails rather than looking absent.
     def candidate_build
       Spaceship::ConnectAPI::Build.all(
-        app_id: @app.id, version: @version, build_number: @number, platform: Spaceship::ConnectAPI::Platform::IOS
+        app_id: @app.id, version: @version, build_number: @number, platform: Spaceship::ConnectAPI::Platform::IOS,
+        processing_states: BUILD_STATES
       ).find { |build| build.version == @number && build.app_version == @version }
     end
 

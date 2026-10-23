@@ -216,9 +216,12 @@ module Spaceship
 
     class Build
       class << self
-        attr_accessor :current
+        attr_accessor :current, :query
 
-        def all(**) = current
+        def all(**query)
+          self.query = query
+          current
+        end
       end
     end
   end
@@ -229,9 +232,12 @@ stale = OpenStruct.new(version: '99', app_version: '0.9', processing_state: 'VAL
 Dir.mktmpdir do |dir|
   artifact = File.join(dir, 'fixture.ipa')
   File.write(artifact, 'fixture')
-  %i[good wrong_selected reserved_phone missing_ipad no_review blank_contact stale_build no_version].each do |scenario|
+  %i[good wrong_selected reserved_phone missing_ipad no_review blank_contact stale_build no_version
+     rejected].each do |scenario|
     # The candidate must be found by its exact version and build, never replaced by another build.
-    Spaceship::ConnectAPI::Build.current = scenario == :stale_build ? [stale] : [stale, candidate]
+    rejected = OpenStruct.new(candidate.to_h.merge(processing_state: 'INVALID'))
+    Spaceship::ConnectAPI::Build.current = { stale_build: [stale], rejected: [stale, rejected] }
+                                           .fetch(scenario, [stale, candidate])
     shot = ->(state) { OpenStruct.new(asset_delivery_state: { 'state' => state }) }
     phone = shot.call(scenario == :reserved_phone ? 'AWAITING_UPLOAD' : 'COMPLETE')
     sets = [OpenStruct.new(screenshot_display_type: 'APP_IPHONE_67', app_screenshots: [phone])]
@@ -263,6 +269,7 @@ Dir.mktmpdir do |dir|
     results["store_#{scenario}"] = report.data
   end
   results[:store_app] = Spaceship::ConnectAPI::App.requested
+  results[:build_states] = Spaceship::ConnectAPI::Build.query[:processing_states]
   report = Readiness::Report.new('ios', artifact, dir)
   Readiness.ios_store(report, app_identifier: APP, listing: LISTING)
   results[:store_unknown_candidate] = report.data
@@ -549,6 +556,11 @@ describe("App Store Connect verdicts", () => {
     expect(result.store_app).toBe("com.example.app");
     // The selected-build check reads the version's build relationship.
     expect(result.store_includes).toBe("build");
+    // A rejected candidate is found and fails instead of looking absent.
+    expect(result.build_states).toBe("PROCESSING,FAILED,INVALID,VALID");
+    expect(status(result.store_rejected, "store.processed_build")).toBe(
+      "failed",
+    );
     for (const id of [
       "store.processed_build",
       "store.selected_build",
