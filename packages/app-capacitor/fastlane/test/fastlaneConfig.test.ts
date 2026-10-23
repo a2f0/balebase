@@ -206,7 +206,7 @@ test("NATIVE_RELEASE_SECRETS_DIR replaces the tier's secrets folder", async () =
 });
 
 // The lanes docs/fastlane.md in a2f0/matrix requires, plus the Android
-// development lanes and ios select_store_build this repository keeps.
+// development, readiness, and ios select_store_build lanes this repository keeps.
 const expectedLanes = {
   general: ["store_build_numbers"],
   android: [
@@ -216,6 +216,7 @@ const expectedLanes = {
     "clean",
     "install_debug",
     "install_release",
+    "readiness",
     "sideload",
     "test",
     "upload_release",
@@ -224,6 +225,7 @@ const expectedLanes = {
     "build_release",
     "fetch_profiles",
     "profiles",
+    "readiness",
     "select_store_build",
     "upload_release",
   ],

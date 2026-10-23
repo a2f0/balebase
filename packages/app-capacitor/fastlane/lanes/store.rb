@@ -6,12 +6,54 @@ require 'supply'
 require_relative '../lib/capacitor_release_config'
 require_relative '../lib/lane_options'
 require_relative '../lib/native_release_target'
+require_relative '../lib/readiness'
 
 GOOGLE_PLAY_DEFAULT_JSON_KEY_PATH = File.join(
   NATIVE_SECRETS_DIR,
   'google-play-service-account-admin.json'
 )
 GOOGLE_PLAY_DEFAULT_TRACKS = %w[production beta alpha internal].freeze
+# Both stores' listings are edited in their consoles, not in fastlane/metadata.
+# Readiness expects a listing in each locale, and screenshots in en-US.
+STORE_LISTING = { locales: %w[en-US], screenshot_locale: 'en-US' }.freeze
+
+def release_source
+  Readiness.source(NATIVE_REPO_ROOT)
+rescue Readiness::CommandError, Errno::ENOENT
+  UI.user_error!('Could not read build source with git; install git and run from the repository checkout.')
+end
+
+# Relative paths resolve from the repository root. Reports default to the
+# gitignored .readiness/<tier>/<platform>.json.
+def readiness_options(options, platform, default_artifact)
+  artifact = File.expand_path(options.fetch(:artifact, default_artifact), NATIVE_REPO_ROOT)
+  default_output = File.join('.readiness', NATIVE_RELEASE_TIER, "#{platform}.json")
+  output = File.expand_path(options.fetch(:output, default_output), NATIVE_REPO_ROOT)
+  if [artifact, "#{artifact}.build.json"].include?(output)
+    UI.user_error!('Report output must not overwrite its artifact or build receipt')
+  end
+  [artifact, output]
+end
+
+def readiness_strict?(options)
+  lane_boolean_option(options, :strict, 'READINESS_STRICT', false)
+end
+
+def readiness_store?(options)
+  lane_boolean_option(options, :store, 'READINESS_STORE', true)
+end
+
+# strict: fails the lane after writing the report unless every check passed.
+def finish_readiness(report, output, strict)
+  Readiness.manual_checks(report)
+  report.write(output)
+  UI.message("Readiness: #{report.result}; report: #{output}")
+  report.data[:checks].each { |check| UI.message("#{check[:status]} #{check[:id]}: #{check[:detail]}") }
+  if strict && report.result != 'ready_within_tested_scope'
+    UI.user_error!("Readiness is #{report.result}; see #{output}")
+  end
+  report.data
+end
 
 def load_store_secrets_env
   # store_build_numbers performs credential-only reads and never builds an app.

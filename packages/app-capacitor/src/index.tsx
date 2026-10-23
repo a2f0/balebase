@@ -3,11 +3,13 @@ import { configureBrowserDiagnostics } from "@balebase/diagnostics/browser";
 import type { SentryBuild } from "@balebase/diagnostics/config";
 import { App } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
+import { handleBackButton } from "./backButton";
 import { capacitorHost } from "./host";
 import { syncSystemBars } from "./systemBars";
 
 declare const __SENTRY_BUILD__: SentryBuild | undefined;
 
+handleBackButton();
 syncSystemBars();
 void configureBrowserDiagnostics(
   __SENTRY_BUILD__,

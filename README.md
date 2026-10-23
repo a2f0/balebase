@@ -131,6 +131,8 @@ Agents can capture noisy finite commands with
   employee forms, and billing.
 - [Deployment and maintenance](docs/operations.md): local secrets, Cloudflare
   provisioning, production and staging deploys, and data retention commands.
+- [Release readiness](docs/readiness.md): store candidate audits and the
+  readiness lanes.
 - [Infrastructure](terraform/README.md): Terraform state and domains.
 - [Dependency upgrades](docs/dependency-upgrades.md): compatibility constraints
   and the upgrade workflow.

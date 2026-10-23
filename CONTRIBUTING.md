@@ -29,7 +29,7 @@ directories under `~/.local/share/mise/installs` to PATH without running
 | Repository checks and test harnesses | `scripts/checks`, `scripts/testing` |
 | Shared script helpers | `scripts/lib` |
 | Agent review and merge policy | `agent-tool.json`, `AGENTS.md` |
-| Repository-owned audit skills | `skills/` (separate from generated `.agents/skills` and `.claude/skills`) |
+| Repository-owned audit and readiness skills | `skills/` (separate from generated `.agents/skills` and `.claude/skills`) |
 
 Package scripts remain the supported entrypoints for CI, hooks, and people.
 Group repository scripts by purpose as shown above; keep infrastructure scripts
@@ -155,6 +155,10 @@ reduce test coverage to save output.
   behavior: identify its durable history, actor, transaction boundary, reader
   permissions, and retention. Use the [audit-trails skill](skills/audit-trails/SKILL.md)
   for a requested coverage review and findings report.
+- Before a store submission, use the
+  [app-store-readiness skill](skills/app-store-readiness/SKILL.md) with the
+  [readiness lanes](docs/readiness.md), and record the candidate's findings
+  in its PR.
 - Write comments for constraints and surprising choices. Put setup in the
   README, product details in [product.md](docs/product.md), and operational
   procedures in [operations.md](docs/operations.md).
