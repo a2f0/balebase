@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
+  browserConfig,
   type DiagnosticTarget,
   isHostedSentryDsn,
   type SentryBuild,
@@ -74,6 +76,7 @@ export function uploadSourceMaps(
   directory: string,
   config: NonNullable<ReturnType<typeof releaseConfiguration>>,
 ) {
+  const artifacts = sourceMapArtifacts(directory, config.build);
   const { SENTRY_ORG } = process.env;
   runBun([
     "x",
@@ -91,12 +94,43 @@ export function uploadSourceMaps(
     "--dist",
     config.build.environment,
     "--url-prefix",
-    "app:///",
+    artifacts.urlPrefix,
+    "--ext",
+    "js",
+    "--ext",
+    "map",
     "--validate",
     "--strict",
     "--wait",
-    directory,
+    artifacts.directory,
   ]);
+}
+
+export function sourceMapArtifacts(directory: string, build: SentryBuild) {
+  const isApi = build.target === "api";
+  const config = isApi
+    ? undefined
+    : browserConfig(
+        build,
+        JSON.parse(
+          readFileSync(resolve(directory, "sentry-assets.json"), "utf8"),
+        ),
+        "",
+      );
+  if (!isApi && !config)
+    throw new Error("Source-map manifest does not match this release.");
+  const paths = isApi ? ["/index.js"] : [...(config?.paths ?? [])];
+  for (const path of paths) {
+    const bundle = resolve(directory, path.slice(1));
+    if (!existsSync(bundle) || !existsSync(`${bundle}.map`))
+      throw new Error(`Missing source map for ${path}.`);
+  }
+  // Static PDF worker/wasm assets are outside the diagnostic allowlist and
+  // ship without maps. Upload generated JS chunks and their maps only.
+  return {
+    directory: isApi ? directory : resolve(directory, "assets"),
+    urlPrefix: isApi ? "app:///" : "app:///assets",
+  };
 }
 
 export async function removeSourceMaps(directory: string) {

@@ -2,7 +2,11 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { releaseConfiguration, removeSourceMaps } from "../lib/sentryRelease";
+import {
+  releaseConfiguration,
+  removeSourceMaps,
+  sourceMapArtifacts,
+} from "../lib/sentryRelease";
 
 test("release selection isolates platform and tier and fails closed on configuration mistakes", () => {
   const dsn = `https://${"a".repeat(32)}@o1.ingest.us.sentry.io/1`;
@@ -54,6 +58,40 @@ test("source maps are removed recursively without changing bundles", async () =>
     expect(
       await Bun.file(join(directory, "assets/index.js.map")).exists(),
     ).toBe(false);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("uploads only mapped application assets and rejects missing or stale maps", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "balebase-map-artifacts-"));
+  const build = {
+    dsn: `https://${"a".repeat(32)}@o1.ingest.us.sentry.io/1`,
+    target: "web" as const,
+    environment: "staging" as const,
+    release: `balebase-web@${"b".repeat(40)}`,
+  };
+  try {
+    await mkdir(join(directory, "assets"));
+    await writeFile(
+      join(directory, "sentry-assets.json"),
+      JSON.stringify({ ...build, paths: ["/assets/index-hash.js"] }),
+    );
+    await writeFile(join(directory, "assets/index-hash.js"), "bundle");
+    expect(() => sourceMapArtifacts(directory, build)).toThrow(
+      "Missing source map",
+    );
+    await writeFile(join(directory, "assets/index-hash.js.map"), "{}");
+    expect(sourceMapArtifacts(directory, build)).toEqual({
+      directory: join(directory, "assets"),
+      urlPrefix: "app:///assets",
+    });
+    expect(() =>
+      sourceMapArtifacts(directory, { ...build, environment: "production" }),
+    ).toThrow("does not match");
+    expect(() =>
+      sourceMapArtifacts(directory, { ...build, target: "api" }),
+    ).toThrow("Missing source map for /index.js");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
