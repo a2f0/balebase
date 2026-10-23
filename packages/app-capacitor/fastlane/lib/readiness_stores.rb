@@ -98,8 +98,9 @@ module Readiness
 
     def inspect_candidate(listing:, timeout:)
       build = processed_build(timeout)
+      # The selected-build check needs the build relationship.
       store_version = @app.get_app_store_versions(
-        filter: { versionString: @version, platform: Spaceship::ConnectAPI::Platform::IOS }
+        filter: { versionString: @version, platform: Spaceship::ConnectAPI::Platform::IOS }, includes: 'build'
       ).first
       unless store_version
         return @report.check('store.version', false, 'No App Store version matches the artifact version.')

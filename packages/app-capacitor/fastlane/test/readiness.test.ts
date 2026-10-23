@@ -134,10 +134,14 @@ end
 privacy_manifest = lambda do |scenario|
   collected = scenario == :other_collection ? 'NSPrivacyCollectedDataTypeName' : EMAIL
   reasons = scenario == :missing_reason ? [] : ['CA92.1']
+  type = { 'NSPrivacyCollectedDataType' => collected, 'NSPrivacyCollectedDataTypeLinked' => true,
+           'NSPrivacyCollectedDataTypeTracking' => scenario == :tracked_type,
+           'NSPrivacyCollectedDataTypePurposes' => ['NSPrivacyCollectedDataTypePurposeAppFunctionality'] }
+  type['NSPrivacyCollectedDataTypePurposes'] = [] if scenario == :missing_purposes
+  type.delete('NSPrivacyCollectedDataTypeLinked') if scenario == :undeclared_linked
   manifest = {
     'NSPrivacyTracking' => scenario == :tracking,
-    'NSPrivacyCollectedDataTypes' => [{ 'NSPrivacyCollectedDataType' => collected,
-                                        'NSPrivacyCollectedDataTypeLinked' => true }],
+    'NSPrivacyCollectedDataTypes' => [type],
     'NSPrivacyAccessedAPITypes' => [{ 'NSPrivacyAccessedAPIType' => USER_DEFAULTS,
                                       'NSPrivacyAccessedAPITypeReasons' => reasons }]
   }
@@ -168,8 +172,8 @@ with_widget = { targets: { APP => [GROUP], WIDGET => [GROUP] }, privacy: privacy
 app_only = { targets: { APP => [] }, privacy: privacy }
 Dir.mktmpdir do |dir|
   %i[good development ad_hoc enterprise expired debuggable missing_group tracking undeclared_tracking
-     undeclared_collection other_collection missing_reason missing_codesign bad_signature missing_profile
-     missing_privacy].each do |scenario|
+     undeclared_collection other_collection missing_purposes undeclared_linked tracked_type missing_reason
+     missing_codesign bad_signature missing_profile missing_privacy].each do |scenario|
     mode = scenario
     artifact = File.join(dir, "#{scenario}.ipa")
     build_ipa.call(artifact, scenario)
@@ -243,7 +247,10 @@ Dir.mktmpdir do |dir|
       review
     end
     app = OpenStruct.new(id: 'app')
-    app.define_singleton_method(:get_app_store_versions) { |**| scenario == :no_version ? [] : [version] }
+    app.define_singleton_method(:get_app_store_versions) do |**options|
+      results[:store_includes] = options[:includes]
+      scenario == :no_version ? [] : [version]
+    end
     Spaceship::ConnectAPI::App.current = app
     report = Readiness::Report.new('ios', artifact, dir)
     report.data[:artifact].merge!(version: '1.0', build_number: '12')
@@ -498,6 +505,9 @@ describe("iOS artifact verdicts", () => {
       "undeclared_tracking",
       "undeclared_collection",
       "other_collection",
+      "missing_purposes",
+      "undeclared_linked",
+      "tracked_type",
       "missing_reason",
       "missing_privacy",
     ]) {
@@ -524,6 +534,8 @@ describe("iOS artifact verdicts", () => {
 describe("App Store Connect verdicts", () => {
   test("requires the selected exact build and completed iPhone and iPad screenshots", () => {
     expect(result.store_app).toBe("com.example.app");
+    // The selected-build check reads the version's build relationship.
+    expect(result.store_includes).toBe("build");
     for (const id of [
       "store.processed_build",
       "store.selected_build",

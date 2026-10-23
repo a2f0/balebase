@@ -61,7 +61,7 @@ module Readiness
       @report = report
       @dir = dir
       @targets = expected.fetch(:targets)
-      @privacy = expected.fetch(:privacy)
+      @privacy = PrivacyDeclarations.new(expected.fetch(:privacy))
     end
 
     def inspect_app(app)
@@ -138,26 +138,9 @@ module Readiness
         return @report.check("privacy.#{id}", false, 'Packaged target is missing its privacy manifest.')
       end
 
-      @report.check("privacy.#{id}", declared_privacy?(Readiness.plist(path)),
+      @report.check("privacy.#{id}", @privacy.match?(Readiness.plist(path)),
                     'Packaged privacy manifest must make the reviewed tracking, collected data type, and ' \
                     'required-reason API declarations.')
-    end
-
-    # Tracking and the collected data types must be declared and match exactly;
-    # each expected API category must give at least its expected reasons.
-    def declared_privacy?(privacy)
-      collected = privacy['NSPrivacyCollectedDataTypes']&.map { |type| type['NSPrivacyCollectedDataType'] }
-      privacy['NSPrivacyTracking'] == @privacy.fetch(:tracking) &&
-        collected&.sort == @privacy.fetch(:collected_data_types).sort &&
-        @privacy.fetch(:accessed_api_reasons).all? do |category, reasons|
-          (reasons - accessed_api_reasons(privacy, category)).empty?
-        end
-    end
-
-    def accessed_api_reasons(privacy, category)
-      privacy.fetch('NSPrivacyAccessedAPITypes', [])
-             .select { |api| api['NSPrivacyAccessedAPIType'] == category }
-             .flat_map { |api| api.fetch('NSPrivacyAccessedAPITypeReasons', []) }
     end
 
     # Saves a tool's plist output in the unpacked folder and parses it.
@@ -165,6 +148,57 @@ module Readiness
       path = File.join(@dir, name)
       File.write(path, contents)
       Readiness.plist(path)
+    end
+  end
+
+  # Whether a packaged privacy manifest makes the expected declarations.
+  class PrivacyDeclarations
+    def initialize(expected)
+      @privacy = expected
+    end
+
+    # Tracking must match, and the collected types and API reasons must make the
+    # expected declarations.
+    def match?(privacy)
+      privacy['NSPrivacyTracking'] == @privacy.fetch(:tracking) &&
+        declared_collection?(privacy['NSPrivacyCollectedDataTypes']) && declared_api_reasons?(privacy)
+    end
+
+    private
+
+    # The collected types must be declared, match exactly, and each be fully described.
+    def declared_collection?(types)
+      return false unless types.is_a?(Array)
+
+      types.map { |type| type['NSPrivacyCollectedDataType'] }.sort == @privacy.fetch(:collected_data_types).sort &&
+        types.all? { |type| described_collected_type?(type) }
+    end
+
+    # A collected type says whether it is linked to the user and used for
+    # tracking, never tracks when the app declares no tracking, and gives at
+    # least one of Apple's purposes.
+    def described_collected_type?(type)
+      tracking = type['NSPrivacyCollectedDataTypeTracking']
+      [true, false].include?(type['NSPrivacyCollectedDataTypeLinked']) && [true, false].include?(tracking) &&
+        (tracking == false || @privacy.fetch(:tracking)) && apple_purposes?(type['NSPrivacyCollectedDataTypePurposes'])
+    end
+
+    def apple_purposes?(purposes)
+      purposes.is_a?(Array) && !purposes.empty? &&
+        purposes.all? { |purpose| purpose.to_s.start_with?('NSPrivacyCollectedDataTypePurpose') }
+    end
+
+    # Each expected API category must give at least its expected reasons.
+    def declared_api_reasons?(privacy)
+      @privacy.fetch(:accessed_api_reasons).all? do |category, reasons|
+        (reasons - accessed_api_reasons(privacy, category)).empty?
+      end
+    end
+
+    def accessed_api_reasons(privacy, category)
+      privacy.fetch('NSPrivacyAccessedAPITypes', [])
+             .select { |api| api['NSPrivacyAccessedAPIType'] == category }
+             .flat_map { |api| api.fetch('NSPrivacyAccessedAPITypeReasons', []) }
     end
   end
 
