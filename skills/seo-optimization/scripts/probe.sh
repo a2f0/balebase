@@ -18,7 +18,8 @@
 # Matching uses regular expressions over whitespace-collapsed HTML, with
 # double-quoted attributes, so confirm surprising results in the raw
 # response. Headers come from the final response after redirects; the first
-# hop is shown separately. Every request adds a cache-busting query. Set
+# hop is shown separately. Every request adds a cache-busting query, and only
+# HTTP and HTTPS URLs are fetched, including after redirects. Set
 # SEO_PROBE_USER_AGENT to send a browser user agent; a CDN may inject scripts
 # only for browsers. SEO_PROBE_SCHEME (default https) exists for tests.
 set -u
@@ -52,11 +53,17 @@ with_bust() {
 # One request without following redirects. Writes <name>.body and
 # <name>.headers and prints "status|location|content-type".
 ua=${SEO_PROBE_USER_AGENT:-seo-probe}
+
+# Every request goes through web(). URLs come from remote markup (og:image,
+# sitemap entries, links, redirects), so only HTTP and HTTPS are allowed.
+web() {
+  curl --proto '=http,https' --proto-redir '=http,https' -sS -m 20 -A "$ua" "$@"
+}
 scheme=${SEO_PROBE_SCHEME:-https}
 origin="$scheme://$host"
 
 request() {
-  curl -sS -m 20 -A "$ua" -o "$tmp/$2.body" -D "$tmp/$2.headers" \
+  web -o "$tmp/$2.body" -D "$tmp/$2.headers" \
     -w '%{http_code}|%{redirect_url}|%{content_type}' "$1" 2>/dev/null
 }
 
@@ -82,8 +89,8 @@ ok_sitemap() {
 # in <name>.headers, its body in <name>.body, and its URL in <name>.url, and
 # prints "first-status [-> location] => final-status content-type".
 fetch() {
-  first=$(curl -sS -m 20 -A "$ua" -o /dev/null -w '%{http_code} %{redirect_url}' "$1" 2>/dev/null)
-  final_url=$(curl -sS -m 20 -A "$ua" -L -o "$tmp/$2.body" -D "$tmp/$2.all" \
+  first=$(web -o /dev/null -w '%{http_code} %{redirect_url}' "$1" 2>/dev/null)
+  final_url=$(web -L -o "$tmp/$2.body" -D "$tmp/$2.all" \
     -w '%{http_code} %{content_type}|%{url_effective}' "$1" 2>/dev/null)
   final=${final_url%%|*}
   printf '%s' "${final_url#*|}" >"$tmp/$2.url"
@@ -127,7 +134,7 @@ canonical_of() {
   first '<link[^>]+rel="canonical"[^>]*>' | attr href | unescape
 }
 
-if ! curl -sS -m 15 -A "$ua" -o /dev/null "$origin/" 2>"$tmp/err"; then
+if ! web -m 15 -o /dev/null "$origin/" 2>"$tmp/err"; then
   echo "### $host  does not respond: $(tr -d '\n' <"$tmp/err")"
   exit 1
 fi
@@ -163,9 +170,10 @@ if [ "$mode" = links ]; then
   final_path=$(sed -E "s#^[a-z]+://[^/]+##; s/[?#].*//" "$tmp/page.url")
   base=${final_path%/*}/
   printf '%s\n' "$body" | grep -oiE '<a[^>]+href="[^"]*"' |
-    attr href | unescape |
-    sed -E "s#^https?://$final_host##" | sed 's/#.*//' | grep -v '^$' |
-    grep -vE '^[a-zA-Z][a-zA-Z0-9+.-]*:|^//' |
+    attr href | unescape | sed 's/#.*//' | grep -v '^$' >"$tmp/hrefs"
+  host_pattern=$(printf '%s' "$final_host" | sed 's/[.[\*^$]/\\&/g')
+  grep -iE "^https?://$host_pattern([/?]|$)" "$tmp/hrefs" >"$tmp/links.absolute"
+  grep -vE '^[a-zA-Z][a-zA-Z0-9+.-]*:|^//' "$tmp/hrefs" |
     awk -v base="$base" -v page="$final_path" '
       # Resolve a relative reference against the final document URL.
       {
@@ -188,18 +196,19 @@ if [ "$mode" = links ]; then
         last = parts[n]
         if ((ref ~ /\/$/ || last == "." || last == "..") && out != "/") out = out "/"
         print out query
-      }' | sort -u >"$tmp/links"
+      }' | sed "s#^#$final_origin#" >"$tmp/links.relative"
+  cat "$tmp/links.absolute" "$tmp/links.relative" | sort -u >"$tmp/links"
   total=0
   bad=0
   while IFS= read -r link; do
     total=$((total + 1))
-    result=$(request "$(with_bust "$final_origin$link")" link)
+    result=$(request "$(with_bust "$link")" link)
     status=${result%%|*}
     rest=${result#*|}
     location=${rest%%|*}
     if [ "$status" != 200 ]; then
       bad=$((bad + 1))
-      echo "  $link  $status${location:+ -> $location}"
+      echo "  ${link#"$final_origin"}  $status${location:+ -> $location}"
     fi
   done <"$tmp/links"
   [ "$final_host" = "$host" ] || echo "  (links resolved against $final_origin after a redirect)"
@@ -346,7 +355,7 @@ error_result=$(fetch "$(with_bust "$origin/404")" error)
 load_body error
 error_tag=$(robots_tag error)
 echo "  /404: $error_result  robots meta: $(content_of robots)  x-robots-tag: ${error_tag:-(absent)}"
-http_result=$(curl -sS -m 15 -o /dev/null -D "$tmp/http.headers" \
+http_result=$(web -m 15 -o /dev/null -D "$tmp/http.headers" \
   -w '%{http_code} %{redirect_url}' "$(with_bust "http://$host/")" 2>/dev/null |
   sed -E "s/[?&]$bust//")
 case "$http_result" in

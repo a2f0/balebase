@@ -11,9 +11,13 @@ type Server = ReturnType<typeof Bun.serve>;
 let site: Server;
 let shell: Server;
 let indexed: Server;
+let hostile: Server;
+let listener: ReturnType<typeof Bun.listen>;
 let siteHost = "";
 let shellHost = "";
 let indexedHost = "";
+let hostileHost = "";
+let listenerConnections = 0;
 
 function png(width: number, height: number) {
   const bytes = new Uint8Array(24);
@@ -60,7 +64,8 @@ function siteResponse(url: URL): Response {
 <meta name="theme-color" content="#000000">
 <script type="application/ld+json">{"@type": "WebSite"}</script>`,
         `<h1>Example</h1><a href="/about/">About</a><a href="docs">Docs</a>
-<a href="https://external.example/">External</a><a href="/old">Old</a>`,
+<a href="https://external.example/">External</a><a href="/old">Old</a>
+<a href="https://${siteHost}/docs">Absolute</a>`,
       );
     case "/about/":
       return page("About - Example", `${origin}/about/`);
@@ -168,7 +173,46 @@ function indexedResponse(path: string): Response {
   }
 }
 
+// Markup that points the probe at a non-HTTP service, which it must refuse.
+function hostileResponse(path: string): Response {
+  const origin = `http://${hostileHost}`;
+  const target = `dict://${listener.hostname}:${listener.port}/info`;
+  switch (path) {
+    case "/":
+      return page(
+        "Hostile - Example",
+        `${origin}/`,
+        `<meta property="og:image" content="${origin}/to-dict">`,
+      );
+    case "/to-dict":
+      return redirect(target, 302);
+    case "/sitemap.xml":
+      return new Response(
+        `<?xml version="1.0"?><urlset><url><loc>${target}</loc></url></urlset>`,
+        { headers: { "content-type": "application/xml" } },
+      );
+    default:
+      return new Response("Not found", { status: 404 });
+  }
+}
+
 beforeAll(() => {
+  listener = Bun.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: {
+      open: () => {
+        listenerConnections += 1;
+      },
+      data: () => {},
+    },
+  });
+  hostile = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: (request) => hostileResponse(new URL(request.url).pathname),
+  });
+  hostileHost = `127.0.0.1:${hostile.port}`;
   site = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -197,6 +241,8 @@ afterAll(() => {
   site.stop(true);
   shell.stop(true);
   indexed.stop(true);
+  hostile.stop(true);
+  listener.stop(true);
 });
 
 async function run(...args: string[]) {
@@ -281,8 +327,10 @@ test("reports internal links that redirect and ignores external ones", async () 
 
   expect(exitCode).toBe(1);
   expect(stdout).toContain(`/old  301 -> http://${siteHost}/about/`);
+  // An absolute same-host link is requested exactly as written.
+  expect(stdout).toContain(`https://${siteHost}/docs  000`);
   expect(stdout).toContain(
-    "internal links in the static HTML: 3, not a direct 200: 1",
+    "internal links in the static HTML: 4, not a direct 200: 2",
   );
 });
 
@@ -345,6 +393,16 @@ test("flags HTML answers from a single-page fallback", async () => {
 
   const links = await run("--links", shellHost, "/");
   expect(links.stdout).toContain("(no links in the static HTML;");
+});
+
+test("refuses non-HTTP URLs from page markup and sitemaps", async () => {
+  const full = await run(hostileHost);
+  const sitemap = await run("--sitemap", hostileHost);
+
+  expect(listenerConnections).toBe(0);
+  expect(full.stdout).toContain(`og:image: http://${hostileHost}/to-dict [302`);
+  expect(sitemap.exitCode).toBe(1);
+  expect(sitemap.stdout).toContain("status 000;");
 });
 
 test("stops when the host does not respond", async () => {
