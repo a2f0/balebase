@@ -5,7 +5,9 @@ repository root unless a command specifies `--cwd`.
 
 `.mise.toml` pins Bun to the CI version. With mise installed, run
 `mise install` and activate mise in your shell. For one command, use
-`mise exec -- bun run check:fast`.
+`mise exec -- bun run check:fast`. Agent shells prepend the pinned binary
+directories under `~/.local/share/mise/installs` to PATH without running
+`mise trust`.
 
 ## Find the code
 
@@ -17,13 +19,24 @@ repository root unless a command specifies `--cwd`.
 | Database schema | `packages/api/migrations` |
 | Application screens | `packages/app/src` |
 | Web shell and its Worker | `packages/app-web` |
-| Native shell, mobile projects, and Fastlane lanes | `packages/app-capacitor`, `scripts/*Release.sh`, `scripts/run*.sh`, `scripts/lib/nativeRelease.sh` |
+| Native shell, mobile projects, and Fastlane lanes | `packages/app-capacitor`, `scripts/release/*Release.sh`, `scripts/dev/run*.sh`, `scripts/lib/nativeRelease.sh` |
 | Shared components, icons, styles | `packages/ui/src` |
 | Logo and generated images | `assets/brand`, `images` in `agent-tool.json` |
 | Public website | `packages/website/src` |
-| Deployment and maintenance commands | `scripts`, `terraform` |
+| Deployment and live verification | `scripts/deploy`, `terraform` |
+| Account and data administration | `scripts/admin` |
+| Development launchers | `scripts/dev` |
+| Repository checks and test harnesses | `scripts/checks`, `scripts/testing` |
+| Shared script helpers | `scripts/lib` |
 | Agent review and merge policy | `agent-tool.json`, `AGENTS.md` |
 | Repository-owned audit skills | `skills/` (separate from generated `.agents/skills` and `.claude/skills`) |
+
+Package scripts remain the supported entrypoints for CI, hooks, and people.
+Group repository scripts by purpose as shown above; keep infrastructure scripts
+with their Terraform stacks and Fastlane lanes in the native package. Move every
+caller and fixture together when relocating a script. Reusable Git, GitHub,
+hook, and validation-report mechanics belong in the pinned agent-tool, with
+repository policy in `agent-tool.json`.
 
 `packages/app` holds every screen and never imports Capacitor. A shell renders
 it with `renderApp` from `@balebase/app/client`, passing the host services in
@@ -184,3 +197,25 @@ Put each upgrade's version inventory, migrations, audit/test/preview results,
 and skipped groups in its PR, not README or an accumulating documentation
 journal. Attribute historical findings to their PR and recheck them before
 claiming current status; update or remove guidance as constraints change.
+
+## Shared workflow commands
+
+Branch naming, commit trust, binary-file checks, copied-hook installation, and
+validation receipts use the exact agent-tool pin and `agent-tool.json`. Full
+commitlint and repository-specific lint, Terraform, browser, native, and release
+checks retain their local implementation. Branch names use the configured commit
+types with `main` exempt and no length cap; pre-commit permits detached HEAD for
+rebases, while pre-push validates destination branches from Git's ref tuples.
+
+`hooks:install` preserves unknown hook files. Existing clones using the previous
+installer should inspect the three installed hook bodies before running
+`bun run hooks:install --adopt` once; replacements are backed up. Subsequent
+installs omit `--adopt`, and `bun run hooks:check` detects drift. Commit checks
+require a present, non-bad signature and reject coauthor trailers. They inspect
+new-to-remote commits across all pushed refs, excluding published tracking refs.
+
+The plans in `scripts/testing/` keep `check`, `check:fast`, `lint`, and `test`
+sequential and produce source-bound timing receipts. `bun run verify` runs the
+complete CI-equivalent local sequence, including every browser suite, builds,
+and mobile sync. Run these groups directly to retain their structured reports;
+use `agent-tool runs list --head <commit>` to find stored evidence.

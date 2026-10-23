@@ -20,7 +20,7 @@ deploys; repository code never reads it.
 
 Put the Cloudflare credentials in `.secrets/prod/app.env`, then review the
 Terraform plan. Both tokens must be scoped to the `balebase.com` zone;
-`scripts/cloudflareEnv.sh` lists every variable the scripts read:
+`scripts/lib/cloudflareEnv.sh` lists every variable the scripts read:
 
 ```sh
 export TF_VAR_cloudflare_api_token=your-account-token
@@ -269,16 +269,16 @@ live-reload server in a release bundle.
 Run on a simulator, emulator, or device with:
 
 ```sh
-./scripts/runIos.sh --target <simulator-or-device-id>
-./scripts/runAndroid.sh --target <emulator-or-device-id>
+bun run mobile:run:ios --target <simulator-or-device-id>
+bun run mobile:run:android --target <emulator-or-device-id>
 ```
 
 Store builds go through the root wrappers, which hold the bundle to the tier's
 own HTTPS hosts and hand off to Fastlane:
 
 ```sh
-./scripts/uploadAndroidRelease.sh          # or uploadAndroidStagingRelease.sh
-./scripts/buildIosRelease.sh               # or buildIosStagingRelease.sh
+bun run mobile:upload:android # or mobile:upload:android:staging
+bun run mobile:build:ios      # or mobile:build:ios:staging
 ```
 
 Root `mobile:build:*`, `mobile:upload:*`, and `mobile:run:*` Bun scripts invoke

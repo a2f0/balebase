@@ -6,6 +6,12 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 cd "$REPO_ROOT"
 
+branch=$(git symbolic-ref --quiet --short HEAD || true)
+if [ -n "$branch" ]; then
+  bun run lint:branch-name "$branch"
+fi
+bun run lint:binary-files --staged
+
 echo "Checking file names..."
 bun --bun run lint:files
 

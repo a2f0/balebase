@@ -84,14 +84,14 @@ The release lanes also have repository-root wrappers, which hold the bundle's
 running the matching package script:
 
 ```sh
-./scripts/buildIosRelease.sh            # ios:build-release
-./scripts/buildIosStagingRelease.sh     # ios:build-release:staging
-./scripts/uploadIosRelease.sh           # ios:upload-release
-./scripts/uploadIosStagingRelease.sh    # ios:upload-release:staging
-./scripts/buildAndroidRelease.sh        # android:build-release
-./scripts/buildAndroidStagingRelease.sh # android:build-release:staging
-./scripts/uploadAndroidRelease.sh       # android:upload-release
-./scripts/uploadAndroidStagingRelease.sh # android:upload-release:staging
+./scripts/release/buildIosRelease.sh            # ios:build-release
+./scripts/release/buildIosStagingRelease.sh     # ios:build-release:staging
+./scripts/release/uploadIosRelease.sh           # ios:upload-release
+./scripts/release/uploadIosStagingRelease.sh    # ios:upload-release:staging
+./scripts/release/buildAndroidRelease.sh        # android:build-release
+./scripts/release/buildAndroidStagingRelease.sh # android:build-release:staging
+./scripts/release/uploadAndroidRelease.sh       # android:upload-release
+./scripts/release/uploadAndroidStagingRelease.sh # android:upload-release:staging
 ```
 
 All wrappers delegate to `scripts/lib/nativeRelease.sh`. Pass `--help` to any

@@ -1,0 +1,29 @@
+{
+  "label": "checkFast",
+  "steps": [
+    {
+      "label": "lint:biome",
+      "command": ["bun", "--bun", "run", "lint:biome"]
+    },
+    {
+      "label": "lint:markdown",
+      "command": ["bun", "--bun", "run", "lint:markdown"]
+    },
+    {
+      "label": "lint:files",
+      "command": ["bun", "--bun", "run", "lint:files"]
+    },
+    {
+      "label": "workspace-types",
+      "command": ["bunx", "--bun", "--no-install", "turbo", "run", "check"]
+    },
+    {
+      "label": "check:scripts",
+      "command": ["bun", "--bun", "run", "check:scripts"]
+    },
+    {
+      "label": "agents:check",
+      "command": ["bun", "--bun", "run", "agents:check"]
+    }
+  ]
+}

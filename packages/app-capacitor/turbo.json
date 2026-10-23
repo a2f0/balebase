@@ -10,7 +10,7 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/.ruby-version",
-        "$TURBO_ROOT$/scripts/*Release.sh",
+        "$TURBO_ROOT$/scripts/release/*Release.sh",
         "$TURBO_ROOT$/scripts/lib/**"
       ]
     }

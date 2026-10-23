@@ -1,0 +1,39 @@
+{
+  "label": "verify",
+  "steps": [
+    {
+      "label": "check",
+      "command": ["bun", "--bun", "run", "check"]
+    },
+    {
+      "label": "test",
+      "command": ["bun", "--bun", "run", "test"]
+    },
+    {
+      "label": "app-browser",
+      "command": ["bun", "run", "--cwd", "packages/app", "test:browser"]
+    },
+    {
+      "label": "app-capacitor-browser",
+      "command": [
+        "bun",
+        "run",
+        "--cwd",
+        "packages/app-capacitor",
+        "test:browser"
+      ]
+    },
+    {
+      "label": "website-browser",
+      "command": ["bun", "run", "--cwd", "packages/website", "test:browser"]
+    },
+    {
+      "label": "build",
+      "command": ["bun", "--bun", "run", "build"]
+    },
+    {
+      "label": "mobile:sync",
+      "command": ["bun", "--bun", "run", "mobile:sync"]
+    }
+  ]
+}
