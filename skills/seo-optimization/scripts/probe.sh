@@ -11,16 +11,19 @@
 #   probe.sh --sitemap <host>            every sitemap URL: status, canonical,
 #                                        robots, duplicate titles/descriptions
 #
+# --links and --sitemap exit 1 when they find a problem. An unreachable host
+# exits 1 and a usage error exits 2.
+#
 # Matching uses regular expressions over whitespace-collapsed HTML, with
 # double-quoted attributes, so confirm surprising results in the raw
 # response. Headers come from the final response after redirects; the first
 # hop is shown separately. Every request adds a cache-busting query. Set
 # SEO_PROBE_USER_AGENT to send a browser user agent; a CDN may inject scripts
-# only for browsers.
+# only for browsers. SEO_PROBE_SCHEME (default https) exists for tests.
 set -u
 
 usage() {
-  sed -n '4,13p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '4,16p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 mode=full
@@ -48,6 +51,8 @@ with_bust() {
 # One request without following redirects. Writes <name>.body and
 # <name>.headers and prints "status|location|content-type".
 ua=${SEO_PROBE_USER_AGENT:-seo-probe}
+scheme=${SEO_PROBE_SCHEME:-https}
+origin="$scheme://$host"
 
 request() {
   curl -sS -m 20 -A "$ua" -o "$tmp/$2.body" -D "$tmp/$2.headers" \
@@ -55,12 +60,14 @@ request() {
 }
 
 # fetch <url> <name>: follows redirects, keeps the final response's headers
-# in <name>.headers and its body in <name>.body, and prints
-# "first-status [-> location] => final-status content-type".
+# in <name>.headers, its body in <name>.body, and its URL in <name>.url, and
+# prints "first-status [-> location] => final-status content-type".
 fetch() {
   first=$(curl -sS -m 20 -A "$ua" -o /dev/null -w '%{http_code} %{redirect_url}' "$1" 2>/dev/null)
-  final=$(curl -sS -m 20 -A "$ua" -L -o "$tmp/$2.body" -D "$tmp/$2.all" \
-    -w '%{http_code} %{content_type}' "$1" 2>/dev/null)
+  final_url=$(curl -sS -m 20 -A "$ua" -L -o "$tmp/$2.body" -D "$tmp/$2.all" \
+    -w '%{http_code} %{content_type}|%{url_effective}' "$1" 2>/dev/null)
+  final=${final_url%%|*}
+  printf '%s' "${final_url#*|}" >"$tmp/$2.url"
   awk '/^HTTP\//{block=""; next} {block=block $0 "\n"} END{printf "%s", block}' \
     "$tmp/$2.all" >"$tmp/$2.headers" 2>/dev/null
   first_code=${first%% *}
@@ -92,7 +99,7 @@ canonical_of() {
     sed -E 's/^href="(.*)"$/\1/'
 }
 
-if ! curl -sS -m 15 -o /dev/null "https://$host/" 2>"$tmp/err"; then
+if ! curl -sS -m 15 -A "$ua" -o /dev/null "$origin/" 2>"$tmp/err"; then
   echo "### $host  does not respond: $(tr -d '\n' <"$tmp/err")"
   exit 1
 fi
@@ -100,7 +107,7 @@ fi
 if [ "$mode" = headers ]; then
   [ $# -ge 1 ] || usage
   for path in "$@"; do
-    result=$(request "$(with_bust "https://$host$path")" h)
+    result=$(request "$(with_bust "$origin$path")" h)
     status=${result%%|*}
     rest=${result#*|}
     location=$(printf '%s' "${rest%%|*}" | sed -E "s/[?&]$bust//")
@@ -115,9 +122,11 @@ fi
 
 if [ "$mode" = links ]; then
   path=${1:-/}
-  fetch "$(with_bust "https://$host$path")" page >/dev/null
+  fetch "$(with_bust "$origin$path")" page >/dev/null
   load_body page
-  base=${path%/*}/
+  # Resolve relative links against the document's final URL, after redirects.
+  final_path=$(sed -E "s#^[a-z]+://[^/]+##; s/[?#].*//" "$tmp/page.url")
+  base=${final_path%/*}/
   printf '%s\n' "$body" | grep -oiE '<a[^>]+href="[^"]*"' |
     grep -oE 'href="[^"]*"' | sed -E 's/^href="(.*)"$/\1/' |
     sed -E "s#^https?://$host##" | sed 's/#.*//' | grep -v '^$' |
@@ -144,7 +153,7 @@ if [ "$mode" = links ]; then
   bad=0
   while IFS= read -r link; do
     total=$((total + 1))
-    result=$(request "$(with_bust "https://$host$link")" link)
+    result=$(request "$(with_bust "$origin$link")" link)
     status=${result%%|*}
     rest=${result#*|}
     location=${rest%%|*}
@@ -156,11 +165,20 @@ if [ "$mode" = links ]; then
   echo "### $host$path  internal links in the static HTML: $total, not a direct 200: $bad"
   [ "$total" -gt 0 ] ||
     echo "  (no links in the static HTML; a client-rendered page needs a browser check)"
+  [ "$bad" -eq 0 ] || exit 1
   exit 0
 fi
 
 if [ "$mode" = sitemap ]; then
-  fetch "$(with_bust "https://$host/sitemap.xml")" sitemap >/dev/null
+  sitemap_result=$(fetch "$(with_bust "$origin/sitemap.xml")" sitemap)
+  case "$sitemap_result" in
+    *"=> 200 "* | 200\ *) ;;
+    *) echo "### $host  sitemap.xml: $sitemap_result  (no sitemap to audit)"; exit 1 ;;
+  esac
+  if ! grep -qE '<(urlset|sitemapindex)[ >]' "$tmp/sitemap.body"; then
+    echo "### $host  sitemap.xml: $sitemap_result  (not a sitemap document)"
+    exit 1
+  fi
   grep -oE '<loc>[^<]+</loc>' "$tmp/sitemap.body" 2>/dev/null |
     sed -E 's#</?loc>##g' >"$tmp/urls"
   if grep -q '<sitemapindex' "$tmp/sitemap.body" 2>/dev/null; then
@@ -199,11 +217,12 @@ if [ "$mode" = sitemap ]; then
       head -n 5 | sed "s/^ */  duplicate $kind (count, text): /"
   done
   echo "### $host  sitemap URLs: $total, with problems: $problems"
+  [ "$problems" -eq 0 ] || exit 1
   exit 0
 fi
 
 path=${1:-/}
-page_result=$(fetch "$(with_bust "https://$host$path")" page)
+page_result=$(fetch "$(with_bust "$origin$path")" page)
 load_body page
 title=$(title_of)
 description=$(content_of description)
@@ -240,7 +259,7 @@ fi
 
 [ "$mode" = page ] && exit 0
 
-robots_result=$(fetch "$(with_bust "https://$host/robots.txt")" robots)
+robots_result=$(fetch "$(with_bust "$origin/robots.txt")" robots)
 case "$robots_result" in *text/html*) robots_result="$robots_result  (HTML, not a robots file)" ;; esac
 if grep -q 'BEGIN Cloudflare Managed' "$tmp/robots.body" 2>/dev/null; then
   robots_result="$robots_result  (includes Cloudflare managed content)"
@@ -266,15 +285,15 @@ case "$robots_result" in
     fi
     ;;
 esac
-sitemap_result=$(fetch "$(with_bust "https://$host/sitemap.xml")" sitemap)
+sitemap_result=$(fetch "$(with_bust "$origin/sitemap.xml")" sitemap)
 case "$sitemap_result" in *text/html*) sitemap_result="$sitemap_result  (HTML, not a sitemap)" ;; esac
 echo "  sitemap.xml: $sitemap_result  urls: $(grep -o '<loc>' "$tmp/sitemap.body" 2>/dev/null | wc -l | tr -d ' ')"
-missing_result=$(fetch "$(with_bust "https://$host/seo-probe-missing-page")" missing)
+missing_result=$(fetch "$(with_bust "$origin/seo-probe-missing-page")" missing)
 load_body missing
 echo "  missing path: $missing_result  body: $(wc -c <"$tmp/missing.body" | tr -d ' ') bytes  title: $(title_of)"
-nested_result=$(fetch "$(with_bust "https://$host/seo-probe/missing/page")" nested)
+nested_result=$(fetch "$(with_bust "$origin/seo-probe/missing/page")" nested)
 echo "  nested missing path: $nested_result  body: $(wc -c <"$tmp/nested.body" | tr -d ' ') bytes"
-error_result=$(fetch "$(with_bust "https://$host/404")" error)
+error_result=$(fetch "$(with_bust "$origin/404")" error)
 load_body error
 error_tag=$(robots_tag error)
 echo "  /404: $error_result  robots meta: $(content_of robots)  x-robots-tag: ${error_tag:-(absent)}"
