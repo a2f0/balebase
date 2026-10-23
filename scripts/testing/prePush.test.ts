@@ -136,6 +136,18 @@ test("pre-push checks the pushed commits even when HEAD is different", async () 
       rejectedAfterMerge.stdout.toString() +
         rejectedAfterMerge.stderr.toString(),
     ).toContain("Co-authored-by");
+    const policyFile = resolve(directory, "agent-tool.json");
+    const policy = JSON.parse(await readFile(policyFile, "utf8"));
+    policy.commits.signatures = "present";
+    await writeFile(policyFile, JSON.stringify(policy));
+    const unsigned = command(
+      ["sh", hook, "origin"],
+      `refs/heads/main ${integrated} refs/heads/feat/valid ${previous}\n`,
+    );
+    expect(unsigned.exitCode).not.toBe(0);
+    expect(unsigned.stdout.toString() + unsigned.stderr.toString()).toContain(
+      "Signature does not meet 'present' policy (N)",
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

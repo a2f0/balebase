@@ -24,13 +24,13 @@ if [ ! -t 0 ]; then
   pushed_refs=$(cat)
 fi
 
+printf '%s\n' "$pushed_refs" | bun run lint:branch-name --pre-push
+
 # Cheapest gate first: every pushed commit must be signed and carry no
 # Co-authored-by trailer. Deletions push no commits and are skipped. Checking
 # everything the remote's refs do not already reach, rather than everything
 # after local main, keeps unsigned work committed on local main from riding
 # along on a new branch.
-printf '%s\n' "$pushed_refs" | bun run lint:branch-name --pre-push
-
 echo "Checking commit signatures and co-authors..."
 while read -r _ local_sha _ remote_sha; do
   if [ -z "$local_sha" ] || [ "$local_sha" = "$zero_sha" ]; then

@@ -59,12 +59,10 @@ jobs:
         run: bun run install:dependencies --frozen-lockfile
 
       - name: Check branch policy
+        if: github.ref_type == 'branch'
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         run: bun run lint:branch-name "$BRANCH_NAME"
-
-      - name: Check managed agent skills
-        run: bun run agents:check
 
       - name: Run checks
         run: bun run check

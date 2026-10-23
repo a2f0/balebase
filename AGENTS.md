@@ -10,7 +10,8 @@ any other mention of the legal party use `legalEntityName` (both in
 `packages/ui/src/brand.ts`). There is no "Balebase, LLC".
 
 Resolve the GitHub repository with `gh repo view --json nameWithOwner`. Work on
-a feature branch created with `agent-tool branch create <type>/<topic>`, use
+a feature branch created with
+`agent-tool branch create <type>/<topic> --base main --remote origin`, use
 signed Conventional Commits without co-author trailers, and preserve unrelated
 edits. Do not force-push or add attribution footers.
 
