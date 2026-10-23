@@ -135,7 +135,7 @@ async function shellFixture() {
   const stub = `#!/usr/bin/env bash
 set -euo pipefail
 if [[ "$1" == "scripts/deploy/prepareStagingFrontends.ts" && "\${MOCK_PREPARE_FAIL:-0}" == "1" ]]; then exit 1; fi
-printf '%s %s token=%s api=%s website=%s app=%s\\n' "\${0##*/}" "$*" "$CLOUDFLARE_API_TOKEN" "\${VITE_API_URL:-}" "\${VITE_WEBSITE_URL:-}" "\${PUBLIC_APP_URL:-}" >> "$MOCK_LOG"
+printf '%s %s token=%s api=%s website=%s app=%s tier=%s\\n' "\${0##*/}" "$*" "$CLOUDFLARE_API_TOKEN" "\${VITE_API_URL:-}" "\${VITE_WEBSITE_URL:-}" "\${PUBLIC_APP_URL:-}" "\${PUBLIC_RELEASE_TIER:-}" >> "$MOCK_LOG"
 `;
   for (const executable of ["bun", "bunx"]) {
     await writeFile(join(root, "bin", executable), stub);
@@ -185,7 +185,9 @@ test("preview and deploy touch only the two staging frontends with staging setti
     expect(log).toContain(
       "api=https://api-staging.balebase.com website=https://website-staging.balebase.com",
     );
-    expect(log).toContain("app=https://app-staging.balebase.com");
+    expect(log).toContain(
+      "--cwd packages/website build token=staging-fixture api= website= app=https://app-staging.balebase.com tier=staging",
+    );
     expect(log).not.toMatch(
       /production-fixture|migrations|secret put|terraform|packages\/api\//,
     );

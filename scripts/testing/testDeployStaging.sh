@@ -57,8 +57,8 @@ cat > "$FIXTURE/bin/bun" <<'EOF'
 if [[ "$1" == "scripts/deploy/createStagingConfigs.ts" ]]; then
   exec "$REAL_BUN_BIN" "$@"
 fi
-printf 'bun %s VITE_API_URL=%s VITE_WEBSITE_URL=%s PUBLIC_APP_URL=%s\n' \
-  "$*" "${VITE_API_URL:-}" "${VITE_WEBSITE_URL:-}" "${PUBLIC_APP_URL:-}" >> "$MOCK_LOG"
+printf 'bun %s VITE_API_URL=%s VITE_WEBSITE_URL=%s PUBLIC_APP_URL=%s PUBLIC_RELEASE_TIER=%s\n' \
+  "$*" "${VITE_API_URL:-}" "${VITE_WEBSITE_URL:-}" "${PUBLIC_APP_URL:-}" "${PUBLIC_RELEASE_TIER:-}" >> "$MOCK_LOG"
 EOF
 cat > "$FIXTURE/bin/bunx" <<'EOF'
 #!/usr/bin/env bash
@@ -103,6 +103,10 @@ done
 [[ "$(cat "$MOCK_LOG")" == *'VITE_API_URL=https://api-staging.balebase.com'* ]]
 [[ "$(cat "$MOCK_LOG")" == *'VITE_WEBSITE_URL=https://website-staging.balebase.com'* ]]
 [[ "$(cat "$MOCK_LOG")" == *'PUBLIC_APP_URL=https://app-staging.balebase.com'* ]]
+[[ "$(grep -cF 'packages/website build VITE_API_URL= VITE_WEBSITE_URL= PUBLIC_APP_URL=https://app-staging.balebase.com PUBLIC_RELEASE_TIER=staging' "$MOCK_LOG" || true)" -eq 1 ]] || {
+  echo 'Staging website build is not marked as the staging tier' >&2
+  exit 1
+}
 if grep -Eq 'migrations apply|secret put|terraform .* apply|wrangler deploy .*wrangler\.jsonc' "$MOCK_LOG"; then
   echo 'Dry run attempted a remote mutation or production deployment' >&2
   exit 1

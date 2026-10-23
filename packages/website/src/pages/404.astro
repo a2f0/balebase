@@ -1,0 +1,24 @@
+---
+/*
+ * Cloudflare serves this page, with status 404, for any path the site does
+ * not have (not_found_handling in wrangler.jsonc).
+ */
+import { productName } from "@balebase/ui/brand";
+import Icon from "../components/Icon.astro";
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout
+  canonical={false}
+  description={`This page is not on the ${productName} website.`}
+  title={`Page not found — ${productName}`}
+>
+  <section aria-labelledby="not-found-title" class="container notFound">
+    <p class="eyebrow eyebrowDot">404</p>
+    <h1 class="title" id="not-found-title">Page not found</h1>
+    <p class="lead">This page doesn’t exist or has moved.</p>
+    <a class="button buttonPrimary buttonLg" href="/">
+      Go to the home page <Icon name="arrowRight" />
+    </a>
+  </section>
+</BaseLayout>

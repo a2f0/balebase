@@ -11,6 +11,8 @@ source "$SCRIPT_DIR/../lib/cloudflareEnv.sh"
 load_cloudflare_env
 
 export PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app.balebase.com}"
+# Production is the only indexable tier; never inherit staging's noindex.
+export PUBLIC_RELEASE_TIER=production
 
 echo "Building website with app URL $PUBLIC_APP_URL..."
 if [[ "${DRY_RUN:-0}" == "1" ]]; then

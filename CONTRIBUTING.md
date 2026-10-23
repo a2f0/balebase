@@ -69,7 +69,9 @@ method to the area's client.
 section of `agent-tool.json` declares every image generated from it, and the
 pinned `agent-tool images build` renders them, with `pixelSnap` scaling the logo
 by whole numbers. Website and client dev and build write the `favicons` target
-to their `public/`. `bun run images` writes the `native` target to
+to their `public/`; the website also writes the `social` target, the 1200×630
+Open Graph image that both its pages and the app shell name. `bun run images`
+writes the `native` target to
 `packages/ui/dist/images` (iOS and Android icons and splash screens in
 Capacitor's project layout, and the 1024×1024 Plaid icon at
 `plaid/icon-1024.png`) and the favicons to its `web/`. The lime and ink fills

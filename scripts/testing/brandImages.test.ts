@@ -48,6 +48,30 @@ test("favicons are exactly the icons the app shells and website link", () => {
   }
 });
 
+test("the social image is the 1200x630 Open Graph image", () => {
+  expect(filesOf("social")).toEqual(["og-image.png"]);
+  const out = mkdtempSync(join(tmpdir(), "balebase-social-"));
+  try {
+    agentTool("images", "build", "social", "--out", out);
+    const png = readFileSync(join(out, "og-image.png"));
+    const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+    // Width, height, and color type (2, opaque RGB) from the IHDR chunk.
+    expect([view.getUint32(16), view.getUint32(20), view.getUint8(25)]).toEqual(
+      [1200, 630, 2],
+    );
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
+  // The app shell shares the website's copy (socialImage in search.ts).
+  const app = read("packages/app-web/index.html");
+  for (const tag of [
+    '<meta property="og:image" content="https://balebase.com/og-image.png" />',
+    '<meta property="og:image:width" content="1200" />',
+    '<meta property="og:image:height" content="630" />',
+  ])
+    expect(app).toContain(tag);
+});
+
 test("colors are the lime and ink design tokens", () => {
   const { images } = JSON.parse(read("agent-tool.json")) as {
     images: { targets: Record<string, { outputs: Output[] }> };

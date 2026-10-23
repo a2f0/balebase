@@ -15,7 +15,7 @@ const chrome =
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const siteRoot = fileURLToPath(new URL("..", import.meta.url));
 const appRoot = fileURLToPath(new URL("../../app-web", import.meta.url));
-const pages = ["/", "/terms/", "/privacy/", "/data-retention/"];
+const pages = ["/", "/terms/", "/privacy/", "/data-retention/", "/404.html"];
 const publicRoot = join(siteRoot, "public");
 const types: Record<string, string> = {
   ".css": "text/css",

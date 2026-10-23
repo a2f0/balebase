@@ -8,13 +8,27 @@ import "../styles/global.css";
 import { productName } from "@balebase/ui/brand";
 import SiteFooter from "../components/SiteFooter.astro";
 import SiteHeader from "../components/SiteHeader.astro";
+import {
+  canonicalUrl,
+  noindex,
+  releaseTier,
+  scriptJson,
+  socialImage,
+} from "../search";
 
 interface Props {
+  /** False for a page with no URL of its own, such as the 404 page. */
+  canonical?: boolean;
   description: string;
+  /** JSON-LD for the page, rendered as one application/ld+json script. */
+  structuredData?: unknown;
   title: string;
 }
 
-const { description, title } = Astro.props;
+const { canonical = true, description, structuredData, title } = Astro.props;
+const indexable =
+  releaseTier(import.meta.env.PUBLIC_RELEASE_TIER) === "production";
+const url = indexable && canonical ? canonicalUrl(Astro.url.pathname) : null;
 ---
 
 <!doctype html>
@@ -24,6 +38,8 @@ const { description, title } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    {url && <link rel="canonical" href={url} />}
+    {!indexable && <meta name="robots" content={noindex} />}
     <meta name="theme-color" content="#f5f4ef" />
     <meta name="color-scheme" content="light" />
     <link rel="icon" href="/favicon.ico" sizes="any" />
@@ -33,9 +49,23 @@ const { description, title } = Astro.props;
     <meta property="og:site_name" content={productName} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta name="twitter:card" content="summary" />
+    {url && <meta property="og:url" content={url} />}
+    <meta property="og:image" content={socialImage.url} />
+    <meta property="og:image:width" content={String(socialImage.width)} />
+    <meta property="og:image:height" content={String(socialImage.height)} />
+    <meta property="og:image:alt" content={`${productName} logo`} />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
+    {
+      structuredData !== undefined && (
+        <script
+          is:inline
+          type="application/ld+json"
+          set:html={scriptJson(structuredData)}
+        />
+      )
+    }
   </head>
   <body>
     <a class="button buttonPrimary skipLink" href="#main">Skip to content</a>
