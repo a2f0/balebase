@@ -45,7 +45,7 @@
     "lint:markdown": "bun --bun x markdownlint-cli2 '**/*.md'",
     "lint:markdown:fix": "bun --bun x markdownlint-cli2 --fix '**/*.md'",
     "lint:rubocop": "bun run --cwd packages/app-capacitor lint:rubocop",
-    "lint:scripts": "shellcheck scripts/admin/*.sh scripts/checks/*.sh scripts/deploy/*.sh scripts/dev/*.sh scripts/git/hooks/* scripts/lib/*.sh scripts/release/*.sh scripts/testing/*.sh terraform/scripts/*.sh",
+    "lint:scripts": "shellcheck scripts/admin/*.sh scripts/checks/*.sh scripts/deploy/*.sh scripts/dev/*.sh scripts/git/hooks/* scripts/lib/*.sh scripts/release/*.sh scripts/testing/*.sh skills/*/scripts/*.sh terraform/scripts/*.sh",
     "lint:staged": "bunx --bun --no-install lint-staged",
     "lint:terraform": "bash scripts/checks/checkTerraform.sh",
     "mobile:android": "bun run mobile:sync && bun run --cwd packages/app-capacitor cap:open:android",
@@ -74,6 +74,7 @@
     "test:images": "bun test scripts/testing/brandImages.test.ts",
     "test:markdownlint": "bun test scripts/testing/markdownlintConfig.test.ts",
     "test:sentry": "bun test scripts/testing/sentryRelease.test.ts scripts/testing/sentryOrchestration.test.ts",
+    "test:seo-probe": "bun test scripts/testing/seoProbe.test.ts",
     "test:staging": "bash scripts/testing/testDeployStaging.sh && bun test scripts/testing/stagingFrontends.test.ts",
     "verify": "OPENSSL_CONF=/dev/null agent-tool run-group scripts/testing/verify.json"
   },

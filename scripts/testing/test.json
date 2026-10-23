@@ -28,6 +28,10 @@
     {
       "label": "test:sentry",
       "command": ["bun", "--bun", "run", "test:sentry"]
+    },
+    {
+      "label": "test:seo-probe",
+      "command": ["bun", "--bun", "run", "test:seo-probe"]
     }
   ]
 }
