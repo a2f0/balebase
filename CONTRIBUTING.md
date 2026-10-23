@@ -5,7 +5,7 @@ repository root unless a command specifies `--cwd`.
 
 `.mise.toml` pins Bun to the CI version. With mise installed, run
 `mise install` and activate mise in your shell. For one command, use
-`mise exec -- bun run check:fast`. Agent shells prepend the pinned binary
+`mise exec -- bun run check:fast`. In agent shells, prepend the pinned binary
 directories under `~/.local/share/mise/installs` to PATH without running
 `mise trust`.
 

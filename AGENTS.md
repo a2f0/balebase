@@ -16,8 +16,9 @@ signed Conventional Commits without co-author trailers, and preserve unrelated
 edits. Do not force-push or add attribution footers.
 
 Validate with `bun run check` and `bun run test`; CI also runs the client
-browser tests and `bun run build`. The pre-push hook runs the commit-trust
-check, `check`, and `test`. `bun run verify` additionally runs all browser
+browser tests and `bun run build`. The pre-push hook checks installed hooks,
+destination branch names, and commit trust before running `check` and `test`.
+`bun run verify` additionally runs all browser
 suites, builds, and mobile sync. Capture noisy finite commands with
 `bun run agent:run --label <check> -- <command>`.
 

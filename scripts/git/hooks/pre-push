@@ -26,7 +26,7 @@ fi
 
 printf '%s\n' "$pushed_refs" | bun run lint:branch-name --pre-push
 
-# Cheapest gate first: every pushed commit must be signed and carry no
+# Before validation suites, every pushed commit must be signed and carry no
 # Co-authored-by trailer. Deletions push no commits and are skipped. Checking
 # everything the remote's refs do not already reach, rather than everything
 # after local main, keeps unsigned work committed on local main from riding
