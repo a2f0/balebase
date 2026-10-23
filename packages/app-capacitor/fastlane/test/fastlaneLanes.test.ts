@@ -618,7 +618,19 @@ puts JSON.generate(
         targets: { [app]: [] },
         privacy: {
           tracking: false,
-          collected_data_types: [],
+          collected_data_types: [
+            "Name",
+            "EmailAddress",
+            "PhoneNumber",
+            "PhysicalAddress",
+            "UserID",
+            "OtherFinancialInfo",
+            "PhotosorVideos",
+            "EmailsOrTextMessages",
+            "OtherUserContent",
+            "OtherUsageData",
+            "OtherDataTypes",
+          ].map((type) => `NSPrivacyCollectedDataType${type}`),
           accessed_api_reasons: {
             NSPrivacyAccessedAPICategoryFileTimestamp: ["C617.1"],
           },

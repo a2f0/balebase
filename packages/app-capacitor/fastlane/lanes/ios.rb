@@ -40,11 +40,16 @@ IOS_SIGNING_KEYCHAIN_OPTIONS = {
 }.freeze
 # What the readiness lane expects the IPA to hold: the app alone, with no
 # extensions or app groups, and the declarations of App/PrivacyInfo.xcprivacy.
+# Every collected type is linked to the user, used only for app functionality,
+# and never for tracking; App Store Connect's App Privacy answers must agree.
 IOS_READINESS_EXPECTATIONS = {
   targets: { NATIVE_APP_IDENTIFIER => [] },
   privacy: {
     tracking: false,
-    collected_data_types: [],
+    collected_data_types: %w[
+      Name EmailAddress PhoneNumber PhysicalAddress UserID OtherFinancialInfo PhotosorVideos
+      EmailsOrTextMessages OtherUserContent OtherUsageData OtherDataTypes
+    ].map { |type| "NSPrivacyCollectedDataType#{type}" },
     accessed_api_reasons: { 'NSPrivacyAccessedAPICategoryFileTimestamp' => %w[C617.1] }
   }
 }.freeze
