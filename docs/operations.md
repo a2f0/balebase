@@ -271,6 +271,10 @@ curl -s https://balebase.com/robots.txt | grep Sitemap
 curl -sI https://app.balebase.com/sign/x | grep -i x-robots-tag  # noindex
 ```
 
+For a fuller audit, or before changing these rules, use the
+[seo-optimization skill](../skills/seo-optimization/SKILL.md); its probe
+script checks every host's metadata, headers, sitemap, and links.
+
 ## Click tracking deployments
 
 CT is initialized only by the production browser bundles at these exact origins:

@@ -162,6 +162,9 @@ reduce test coverage to save output.
   [app-store-readiness skill](skills/app-store-readiness/SKILL.md) with the
   [readiness lanes](docs/readiness.md), and record the candidate's findings
   in its PR.
+- When changing page metadata, robots rules, sitemaps, or a tier's indexing,
+  use the [seo-optimization skill](skills/seo-optimization/SKILL.md) and keep
+  [search indexing](docs/operations.md#search-indexing) current.
 - Write comments for constraints and surprising choices. Put setup in the
   README, product details in [product.md](docs/product.md), and operational
   procedures in [operations.md](docs/operations.md).
