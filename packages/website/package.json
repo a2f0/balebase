@@ -5,10 +5,11 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "build": "bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/website/public && bunx --bun --no-install astro build",
+    "build": "bun --bun run images && bunx --bun --no-install astro build",
     "check": "bunx --bun --no-install astro check",
     "deploy": "bun --bun run build && bunx --bun --no-install wrangler deploy",
-    "dev": "bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/website/public && bunx --bun --no-install astro dev",
+    "dev": "bun --bun run images && bunx --bun --no-install astro dev",
+    "images": "bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/website/public && bunx --bun --no-install agent-tool --repo ../.. images build social --out packages/website/public",
     "preview": "bunx --bun --no-install astro preview",
     "test": "bun test src",
     "test:browser": "bun test browser"

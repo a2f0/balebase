@@ -9,9 +9,26 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta
       name="description"
-      content="A focused workspace for the things worth keeping."
+      content="Sign in to Balebase, the small business management workspace for expenses, contracts, employee paperwork, equipment, documents, and audits."
     />
-    <title>Balebase — Workspace</title>
+    <title>Balebase — Small business management workspace</title>
+    <!-- vite.config.ts adds the canonical link, or staging's noindex. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Balebase" />
+    <meta
+      property="og:title"
+      content="Balebase — Small business management workspace"
+    />
+    <meta
+      property="og:description"
+      content="Sign in to Balebase, the small business management workspace for expenses, contracts, employee paperwork, equipment, documents, and audits."
+    />
+    <!-- The website publishes this image (packages/website/src/search.ts). -->
+    <meta property="og:image" content="https://balebase.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Balebase logo" />
+    <meta name="twitter:card" content="summary_large_image" />
     <script>
       // Applies the saved theme before first paint; mirrors packages/app/src/theme.ts.
       (() => {

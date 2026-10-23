@@ -231,6 +231,34 @@ For later infrastructure changes, use `bun run terraform:staging:plan` and
 `bun run terraform:staging:apply`. Cloudflare Email Routing subaddressing must
 be enabled once for the zone, as described in the inbound email setup above.
 
+## Search indexing
+
+Only production is indexable. The website and app builds take their tier from
+the deploy scripts: `deploy:website` builds the website with
+`PUBLIC_RELEASE_TIER=production` and the staging lanes with `staging`, and the
+app's `build:release <environment>` sets `VITE_RELEASE_TIER` to match. Other
+builds, including `bun run build`, are production.
+
+- Production pages have canonical links, Open Graph and Twitter tags, and the
+  home page's JSON-LD. The website publishes `robots.txt` with its sitemap and
+  `sitemap.xml`; the app publishes `robots.txt` and names its root canonical.
+- Staging builds add `<meta name="robots" content="noindex, nofollow">` to each
+  page and an `X-Robots-Tag: noindex, nofollow` rule for every path to
+  `_headers`, and omit canonical links and the sitemap. `robots.txt` still
+  allows crawling, because a crawler that may not fetch a page never reads its
+  noindex.
+
+The rules live in `packages/website/src/search.ts` and
+`packages/app-web/vite.config.ts`. Cloudflare's managed `robots.txt`
+setting for the zone prepends its content signals to each file. After a
+deploy, confirm that production sends no noindex and staging does:
+
+```sh
+curl -sI https://balebase.com/ | grep -i x-robots-tag      # no output
+curl -sI https://website-staging.balebase.com/ | grep -i x-robots-tag
+curl -s https://balebase.com/robots.txt | grep Sitemap
+```
+
 ## Click tracking deployments
 
 CT is initialized only by the production browser bundles at these exact origins:
@@ -468,8 +496,9 @@ Before wider TestFlight or Play distribution:
    native Plaid SDK integration. Audit the candidate with the
    [readiness lanes and skill](readiness.md) and record the result in its PR.
 4. When a store approves the production app, set `listed: true` on its entry
-   in `storeListings` (`packages/website/src/site.ts`) and deploy the website,
-   so the home page's badge links to the listing.
+   in `storeListings` (`packages/website/src/site.ts`), add the platform to
+   `operatingSystem` in `homeStructuredData` (`packages/website/src/search.ts`),
+   and deploy the website, so the home page's badge links to the listing.
 
 No automatic mobile deployment is configured.
 See [Capacitor's environment setup](https://capacitorjs.com/docs/getting-started/environment-setup)

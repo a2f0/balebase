@@ -36,9 +36,13 @@ const cwd = resolve(
 const env: NodeJS.ProcessEnv & {
   SENTRY_BUILD_CONFIG?: string;
   SENTRY_AUTH_TOKEN?: string;
+  VITE_RELEASE_TIER?: string;
 } = { ...process.env };
 delete env.SENTRY_BUILD_CONFIG;
 if (config) env.SENTRY_BUILD_CONFIG = JSON.stringify(config.build);
+// The web shell's search indexing (packages/app-web/vite.config.ts)
+// follows the same environment: only production may be indexed.
+if (target === "web") env.VITE_RELEASE_TIER = environment;
 // No upload credentials are inherited by Vite or substituted into application code.
 delete env.SENTRY_AUTH_TOKEN;
 runBun(["run", "build"], cwd, env);

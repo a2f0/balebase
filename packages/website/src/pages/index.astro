@@ -1,10 +1,11 @@
 ---
-import { plans, productName } from "@balebase/ui/brand";
+import { legalEntityName, plans, productName } from "@balebase/ui/brand";
 import type { IconName } from "@balebase/ui/icons";
 import BusinessPreview from "../components/BusinessPreview.astro";
 import Icon from "../components/Icon.astro";
 import StoreBadges from "../components/StoreBadges.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
+import { homeStructuredData } from "../search";
 import { appUrl } from "../site";
 import "../styles/home.css";
 
@@ -92,10 +93,19 @@ const essentials: { icon: IconName; text: string; title: string }[] = [
     text: "Build reusable checklists and track answers, issues, and changes. Each audit keeps the template version it started with.",
   },
 ];
+
+const description = `${productName} is small business management software for expenses, contracts, employee forms, documents, equipment, and audits. Start free and add your team as you grow.`;
 ---
 
 <BaseLayout
-  description={`${productName} is small business management software for expenses, contracts, employee forms, documents, equipment, and audits. Start free and add your team as you grow.`}
+  description={description}
+  structuredData={homeStructuredData({
+    appUrl,
+    description,
+    legalEntityName,
+    plans,
+    productName,
+  })}
   title={`${productName} — Small business management software`}
 >
   <section aria-labelledby="hero-title" class="hero">

@@ -1,6 +1,6 @@
 {
   "name": "@balebase/app-web",
-  "version": "0.1.61",
+  "version": "0.1.62",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
@@ -9,7 +9,8 @@
     "build:release": "bun ../../scripts/deploy/buildSentryApp.ts web",
     "check": "bunx --bun --no-install tsc --noEmit",
     "deploy": "bun --bun run build:release && bunx --bun --no-install wrangler deploy",
-    "dev": "bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/app-web/public && bunx --bun --no-install vite"
+    "dev": "bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/app-web/public && bunx --bun --no-install vite",
+    "test": "bun test ./searchIndexing.test.ts"
   },
   "dependencies": {
     "@a2f0/ct-client": "0.1.4",

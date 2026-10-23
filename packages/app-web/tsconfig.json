@@ -9,6 +9,7 @@
     "../app/src/env.d.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
+    "searchIndexing.test.ts",
     "vite.config.ts"
   ]
 }

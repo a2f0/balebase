@@ -54,7 +54,7 @@ async function releaseFixture() {
   await writeFile(
     join(root, "build.ts"),
     `${record}
-    log({ tool: "build", token: process.env.SENTRY_AUTH_TOKEN ?? null });
+    log({ tool: "build", token: process.env.SENTRY_AUTH_TOKEN ?? null, tier: process.env.VITE_RELEASE_TIER ?? null });
     const build = JSON.parse(process.env.SENTRY_BUILD_CONFIG);
     mkdirSync("dist/assets", { recursive: true });
     writeFileSync("dist/assets/index-hash.js", "exact application bundle");
@@ -101,6 +101,7 @@ interface Command {
   tool: string;
   args?: string[];
   token?: string | null;
+  tier?: string | null;
   contents?: string;
 }
 async function runRelease(
@@ -161,6 +162,8 @@ for (const fail of [false, true])
         "sentry-cli",
       ]);
       expect(result.commands[0]?.token).toBeNull();
+      // Search indexing follows the release environment, here staging.
+      expect(result.commands[0]?.tier).toBe("staging");
       expect(
         await Bun.file(
           join(root, "packages/app-web/dist/assets/index-hash.js.map"),
