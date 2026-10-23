@@ -46,6 +46,41 @@ afterAll(async () => {
 });
 
 describe("registration", () => {
+  it("moves focus to each new form's heading", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root?.render(
+        <AuthPage
+          initialMode="sign-in"
+          onAuthenticated={async () => {}}
+          onLeaveReset={async () => {}}
+        />,
+      ),
+    );
+    const button = (label: string) => {
+      const match = [...container.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent?.trim() === label,
+      );
+      if (!match) throw new Error(`No ${label} button`);
+      return match;
+    };
+    const focusedHeading = () =>
+      document.activeElement?.matches("h1")
+        ? document.activeElement.textContent
+        : document.activeElement?.tagName;
+    expect(focusedHeading()).toBe("BODY");
+
+    await act(async () => button("Create an account").click());
+    expect(focusedHeading()).toBe("Create your workspace");
+    await act(async () => button("Back to sign in").click());
+    expect(focusedHeading()).toBe("Enter your workspace");
+    await act(async () => button("Forgot password?").click());
+    expect(focusedHeading()).not.toBe("Enter your workspace");
+    expect(document.activeElement?.matches("h1")).toBe(true);
+  });
+
   it("shows and hides each password on request", async () => {
     container = document.createElement("div");
     document.body.append(container);

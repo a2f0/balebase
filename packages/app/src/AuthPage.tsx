@@ -10,7 +10,13 @@ import {
   PasswordField,
   Toast,
 } from "@balebase/ui/react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { authClient } from "./authClient";
 import { authCallbackUrl, websiteUrl } from "./config";
 
@@ -672,10 +678,22 @@ function AuthHeading({
   eyebrow: string;
   title: string;
 }) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  const shownTitle = useRef(title);
+  // Switching forms removes the control that had focus. Move focus to the new
+  // form's heading so keyboard and screen-reader users start there, not at
+  // the top of the page; the first form keeps the page's initial focus.
+  useEffect(() => {
+    if (shownTitle.current === title) return;
+    shownTitle.current = title;
+    heading.current?.focus();
+  }, [title]);
   return (
     <header className="authHeading">
       <p className="eyebrow">{eyebrow}</p>
-      <h1 className="authTitle">{title}</h1>
+      <h1 className="authTitle" ref={heading} tabIndex={-1}>
+        {title}
+      </h1>
       <p className="authIntro">{description}</p>
     </header>
   );
