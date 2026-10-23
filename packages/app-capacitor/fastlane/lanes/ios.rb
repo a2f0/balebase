@@ -7,6 +7,8 @@ require_relative '../lib/ios_signing_keychain'
 require_relative '../lib/lane_options'
 require_relative '../lib/merged_release_pr'
 require_relative '../lib/native_release_target'
+require_relative '../lib/readiness_artifacts'
+require_relative '../lib/readiness_stores'
 require_relative '../lib/swift_package_pins'
 require_relative '../lib/testflight_upload_options'
 
@@ -36,6 +38,19 @@ IOS_SIGNING_KEYCHAIN_OPTIONS = {
   timeout: 0,
   unlock: true
 }.freeze
+# What the readiness lane expects the IPA to hold: the app alone, with no
+# extensions or app groups, and the declarations of App/PrivacyInfo.xcprivacy.
+IOS_READINESS_EXPECTATIONS = {
+  targets: { NATIVE_APP_IDENTIFIER => [] },
+  privacy: {
+    tracking: false,
+    collected_data_types: [],
+    accessed_api_reasons: { 'NSPrivacyAccessedAPICategoryFileTimestamp' => %w[C617.1] }
+  }
+}.freeze
+IOS_WAIT_TIMEOUT_ERROR = 'wait_timeout must be between 0 and 1800 seconds'
+IOS_PRECHECK_REJECTION = 'found one or more potential problems that must be addressed'
+
 def load_ios_release_secrets_env
   load_native_release_secrets_env
 end
@@ -335,6 +350,40 @@ def upload_ios_testflight_options(options, release_result)
   add_optional_testflight_upload_options!(upload_options, options)
 end
 
+def ios_readiness_timeout(options)
+  timeout = Integer(options.fetch(:wait_timeout, 0).to_s, 10)
+  UI.user_error!(IOS_WAIT_TIMEOUT_ERROR) unless (0..1800).cover?(timeout)
+  timeout
+rescue ArgumentError
+  UI.user_error!(IOS_WAIT_TIMEOUT_ERROR)
+end
+
+def ios_readiness_store(report, precheck, timeout)
+  report.attempt('store.authentication') do
+    load_store_secrets_env
+    api_key = app_store_connect_api_key(app_store_connect_api_key_options)
+    Readiness.ios_store(report, app_identifier: NATIVE_APP_IDENTIFIER, listing: STORE_LISTING, timeout: timeout)
+    if precheck
+      ios_readiness_precheck(report, api_key)
+    else
+      report.add('store.precheck', 'unverified', 'Metadata precheck explicitly skipped.')
+    end
+  end
+end
+
+def ios_readiness_precheck(report, api_key)
+  report.attempt('store.precheck') do
+    passed = precheck(api_key: api_key, app_identifier: NATIVE_APP_IDENTIFIER, include_in_app_purchases: false)
+    report.check('store.precheck', passed == true,
+                 'Fastlane rules for the editable listing; exact candidate fields are checked separately. ' \
+                 'Not a full policy/accessibility audit.')
+  rescue FastlaneCore::Interface::FastlaneError => e
+    raise unless e.message.include?(IOS_PRECHECK_REJECTION)
+
+    report.check('store.precheck', false, 'Precheck rejected listing metadata; see its rule findings above.')
+  end
+end
+
 platform :ios do
   desc 'Select an uploaded build for the App Store draft and its icon without submitting (version:, build_number:)'
   lane :select_store_build do |options|
@@ -380,8 +429,11 @@ platform :ios do
     end
   end
 
+  # Writes a source/hash receipt (<ipa>.build.json) beside the IPA, which the
+  # readiness lane checks.
   desc 'Build a signed App Store IPA without uploading it (build_number:)'
   lane :build_release do |options|
+    source = release_source
     load_ios_release_secrets_env
     release_build = next_ios_release_build_number(options)
     team_id = require_ios_team_id!(options)
@@ -417,6 +469,7 @@ platform :ios do
       end
     end
     assets = require_ios_testflight_assets!(ipa_path)
+    Readiness.record_build(ipa_path, source, root: NATIVE_REPO_ROOT)
     print_ios_testflight_assets(assets)
     ios_testflight_release_result(release_build, ipa_path, assets)
   end
@@ -427,5 +480,24 @@ platform :ios do
     upload_to_testflight(upload_ios_testflight_options(options, release_result))
     record_ios_release_build_number(release_result.fetch(:build_number))
     upload_ios_testflight_release_result(options, release_result)
+  end
+
+  # docs/readiness.md describes the options.
+  desc 'Inspect an existing IPA and its store state and write a redacted readiness report, without uploading or ' \
+       'submitting (artifact:, output:, wait_timeout:0, store:false, precheck:false, strict:true)'
+  lane :readiness do |options|
+    artifact, output = readiness_options(options, 'ios', File.join(IOS_OUTPUT_DIR, IOS_IPA_NAME))
+    timeout = ios_readiness_timeout(options)
+    store = readiness_store?(options)
+    precheck = lane_boolean_option(options, :precheck, 'READINESS_PRECHECK', true)
+    strict = readiness_strict?(options)
+    report = Readiness::Report.new('ios', artifact, NATIVE_REPO_ROOT)
+    Readiness.ios_artifact(report, artifact, IOS_READINESS_EXPECTATIONS)
+    if store
+      ios_readiness_store(report, precheck, timeout)
+    else
+      report.add('store.ios', 'unverified', 'Store inspection explicitly skipped.')
+    end
+    finish_readiness(report, output, strict)
   end
 end

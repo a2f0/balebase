@@ -371,7 +371,8 @@ Before wider TestFlight or Play distribution:
 3. Complete store metadata, privacy declarations, and device screenshots.
    Validate the existing Stripe billing and Plaid flows for the intended store
    distribution before submission; this shell does not add native purchases or
-   native Plaid SDK integration.
+   native Plaid SDK integration. Audit the candidate with the
+   [readiness lanes and skill](readiness.md) and record the result in its PR.
 4. When a store approves the production app, set `listed: true` on its entry
    in `storeListings` (`packages/website/src/site.ts`) and deploy the website,
    so the home page's badge links to the listing.

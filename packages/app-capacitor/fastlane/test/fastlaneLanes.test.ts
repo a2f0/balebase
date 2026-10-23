@@ -535,3 +535,256 @@ puts JSON.generate(missing: missing, before: before, selected: selected, calls: 
     ],
   });
 });
+
+test("readiness lanes report offline, honor strict mode, and protect their artifact", async () => {
+  const ipa = join(scratch, "readiness.ipa");
+  const aab = join(scratch, "readiness.aab");
+  await Bun.write(ipa, "ipa fixture");
+  await Bun.write(aab, "aab fixture");
+  const result = await runLanes(`
+inspected = []
+stores = []
+Readiness.define_singleton_method(:ios_artifact) do |report, path, expected|
+  inspected << ["ios", path, expected]
+  report.add("fixture.ios", "verified", "Artifact inspection called.")
+end
+Readiness.define_singleton_method(:android_artifact) do |report, path, expected, bundletool:|
+  inspected << ["android", path, expected, bundletool]
+  report.add("fixture.android", "verified", "Artifact inspection called.")
+end
+Readiness.define_singleton_method(:android_store) do |report, **options|
+  stores << options
+  report.add("fixture.store", "verified", "Store inspection called.")
+end
+error = lambda do |lane, platform, options|
+  fastfile.runner.execute(lane, platform, options)
+  nil
+rescue FastlaneCore::Interface::FastlaneError => e
+  e.message
+end
+output = File.join("${scratch}", "reports", "ios.json")
+fastfile.runner.execute(:readiness, :ios, { artifact: "${ipa}", output: output, store: false })
+offline = JSON.parse(File.read(output))
+File.delete(output)
+strict = error.call(:readiness, :ios, { artifact: "${ipa}", output: output, store: false, strict: true })
+strict_report = JSON.parse(File.read(output))["result"]
+android_output = File.join("${scratch}", "reports", "android.json")
+ENV["BUNDLETOOL_JAR"] = "tools/from-env.jar"
+fastfile.runner.execute(:readiness, :android, { artifact: "${aab}", output: android_output, track: "beta" })
+android = JSON.parse(File.read(android_output))
+fastfile.runner.execute(:readiness, :android, { artifact: "${aab}", output: android_output, store: false, bundletool: "tools/explicit.jar" })
+android_offline = JSON.parse(File.read(android_output))
+puts JSON.generate(
+  offline: offline,
+  strict: strict,
+  strictReport: strict_report,
+  android: android,
+  androidOffline: android_offline,
+  inspected: inspected,
+  stores: stores.map { |options| options.merge(key_path: File.basename(options[:key_path])) },
+  defaults: fastfile.send(:readiness_options, {}, "ios", "/fixture/candidate.ipa"),
+  errors: {
+    overwrite: error.call(:readiness, :ios, { artifact: "${ipa}", output: "${ipa}", store: false }),
+    receipt: error.call(:readiness, :ios, { artifact: "${ipa}", output: "${ipa}.build.json", store: false }),
+    timeout: error.call(:readiness, :ios, { wait_timeout: "abc" }),
+    longTimeout: error.call(:readiness, :ios, { wait_timeout: "1801" }),
+    track: error.call(:readiness, :android, { track: "qa" }),
+    store: error.call(:readiness, :ios, { store: "maybe" })
+  }
+)
+`);
+  const status = (
+    report: { checks: { id: string; status: string }[] },
+    id: string,
+  ) => report.checks.find((check) => check.id === id)?.status;
+  const repoRoot = resolve(packageRoot, "../..");
+  const app = "com.balebase.staging.app";
+
+  expect(status(result.offline, "fixture.ios")).toBe("verified");
+  expect(status(result.offline, "store.ios")).toBe("unverified");
+  expect(status(result.offline, "manual.accessibility_devices")).toBe(
+    "unverified",
+  );
+  expect(result.offline.result).toBe("incomplete");
+  expect(result.strict).toStartWith("Readiness is incomplete");
+  expect(result.strictReport).toBe("incomplete");
+  expect(status(result.android, "fixture.store")).toBe("verified");
+  expect(status(result.androidOffline, "store.android")).toBe("unverified");
+  expect(result.inspected).toEqual([
+    [
+      "ios",
+      ipa,
+      {
+        targets: { [app]: [] },
+        privacy: {
+          tracking: false,
+          collected_data_types: [],
+          accessed_api_reasons: {
+            NSPrivacyAccessedAPICategoryFileTimestamp: ["C617.1"],
+          },
+        },
+      },
+    ],
+    ["ios", ipa, expect.objectContaining({ targets: { [app]: [] } })],
+    [
+      "android",
+      aab,
+      {
+        identifier: app,
+        permissions: [
+          "android.permission.INTERNET",
+          `${app}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`,
+        ],
+        minified: false,
+      },
+      resolve(repoRoot, "tools/from-env.jar"),
+    ],
+    [
+      "android",
+      aab,
+      expect.objectContaining({ identifier: app }),
+      resolve(repoRoot, "tools/explicit.jar"),
+    ],
+  ]);
+  expect(result.stores).toEqual([
+    {
+      package: app,
+      key_path: "google-play-service-account-admin.json",
+      listing: { locales: ["en-US"], screenshot_locale: "en-US" },
+      track: "beta",
+    },
+  ]);
+  expect(result.defaults).toEqual([
+    "/fixture/candidate.ipa",
+    resolve(repoRoot, ".readiness/staging/ios.json"),
+  ]);
+  expect(result.errors).toEqual({
+    overwrite: "Report output must not overwrite its artifact or build receipt",
+    receipt: "Report output must not overwrite its artifact or build receipt",
+    timeout: "wait_timeout must be between 0 and 1800 seconds",
+    longTimeout: "wait_timeout must be between 0 and 1800 seconds",
+    track:
+      'Unsupported Play track "qa"; use one of production, beta, alpha, internal',
+    store: "Invalid boolean for store: maybe. Expected true or false.",
+  });
+});
+
+test("iOS readiness separates precheck rejection, setup errors, and a skipped precheck", async () => {
+  const ipa = join(scratch, "precheck.ipa");
+  await Bun.write(ipa, "ipa fixture");
+  const result = await runLanes(`
+calls = []
+Readiness.define_singleton_method(:ios_artifact) { |_report, _path, _expected| nil }
+Readiness.define_singleton_method(:ios_store) do |report, app_identifier:, listing:, timeout:|
+  calls << { app: app_identifier, listing: listing, timeout: timeout }
+  report.add("fixture.store", "verified", "Store inspection called.")
+end
+fastfile.define_singleton_method(:load_store_secrets_env) {}
+fastfile.define_singleton_method(:app_store_connect_api_key_options) { { key_id: "KEY" } }
+fastfile.define_singleton_method(:app_store_connect_api_key) { |_options| "api-key" }
+mode = nil
+fastfile.define_singleton_method(:precheck) do |api_key:, app_identifier:, include_in_app_purchases:|
+  calls << { precheck: app_identifier, api_key: api_key, purchases: include_in_app_purchases }
+  # Precheck reports rejected metadata, and fastlane setup problems, as user errors.
+  FastlaneCore::UI.user_error!("precheck found one or more potential problems that must be addressed") if mode == "rejected"
+  FastlaneCore::UI.user_error!("private authentication diagnostic") if mode == "error"
+
+  true
+end
+reports = %w[pass rejected error skipped].to_h do |name|
+  mode = name
+  output = File.join("${scratch}", "precheck", "#{name}.json")
+  fastfile.runner.execute(:readiness, :ios, { artifact: "${ipa}", output: output, precheck: name != "skipped", wait_timeout: "30" })
+  [name, JSON.parse(File.read(output))]
+end
+puts JSON.generate(reports: reports, calls: calls)
+`);
+  const status = (
+    report: { checks: { id: string; status: string }[] },
+    id: string,
+  ) => report.checks.find((check) => check.id === id)?.status;
+  const app = "com.balebase.staging.app";
+
+  expect(status(result.reports.pass, "store.precheck")).toBe("verified");
+  expect(status(result.reports.pass, "fixture.store")).toBe("verified");
+  expect(status(result.reports.rejected, "store.precheck")).toBe("failed");
+  expect(status(result.reports.error, "store.precheck")).toBe("unverified");
+  expect(JSON.stringify(result.reports.error)).not.toContain(
+    "private authentication diagnostic",
+  );
+  expect(status(result.reports.skipped, "store.precheck")).toBe("unverified");
+  const store = {
+    app,
+    listing: { locales: ["en-US"], screenshot_locale: "en-US" },
+    timeout: 30,
+  };
+  const precheck = { precheck: app, api_key: "api-key", purchases: false };
+  expect(result.calls).toEqual([
+    store,
+    precheck,
+    store,
+    precheck,
+    store,
+    precheck,
+    store,
+  ]);
+});
+
+test("release builds record their source before building and a receipt after", async () => {
+  const ipa = join(scratch, "receipt.ipa");
+  await Bun.write(ipa, "ipa fixture");
+  const result = await runLanes(`
+events = []
+source = { "commit" => "a" * 40, "dirty" => false }
+Readiness.define_singleton_method(:source) do |root|
+  events << ["source", root]
+  source
+end
+Readiness.define_singleton_method(:record_build) do |artifact, recorded, root:|
+  events << ["receipt", artifact, recorded, root]
+end
+fastfile.define_singleton_method(:sh) { |command| events << ["sh", command] }
+fastfile.define_singleton_method(:load_ios_release_secrets_env) {}
+fastfile.define_singleton_method(:load_android_release_secrets_env) {}
+fastfile.define_singleton_method(:next_ios_release_build_number) do |_options|
+  { build_number: 7, version: "1.0", merged_pr_number: nil, testflight_latest_build_number: nil }
+end
+fastfile.define_singleton_method(:next_android_release_build_number) do |_options|
+  { build_number: 7, merged_pr_number: nil, google_play_latest_build_number: nil }
+end
+fastfile.define_singleton_method(:require_ios_team_id!) { |_options| "TEAM" }
+fastfile.define_singleton_method(:require_android_release_signing!) {}
+fastfile.define_singleton_method(:ensure_release_ios_capacitor_sync!) {}
+fastfile.define_singleton_method(:ensure_release_capacitor_sync!) {}
+SwiftPackagePins.define_singleton_method(:verify_around) { |_path, &block| block.call }
+fastfile.define_singleton_method(:with_ios_signing_keychain) { |&block| block.call }
+fastfile.define_singleton_method(:install_ios_appstore_signing_assets!) { "profile" }
+fastfile.define_singleton_method(:configure_ios_manual_signing!) { |_profile, _team| }
+fastfile.define_singleton_method(:build_app) do |**|
+  events << ["build_app"]
+  "${ipa}"
+end
+fastfile.define_singleton_method(:require_ios_testflight_assets!) { |path| [path] }
+fastfile.define_singleton_method(:run_android_gradle) { |*arguments| events << ["gradle", arguments.first] }
+aab = Fastlane::FastFile.const_get(:RELEASE_AAB_PATH)
+fastfile.define_singleton_method(:require_android_play_release_assets!) { [aab] }
+fastfile.runner.execute(:build_release, :ios, {})
+ios = events.dup
+events.clear
+fastfile.runner.execute(:build_release, :android, {})
+puts JSON.generate(ios: ios, android: events, aab: aab)
+`);
+  const repoRoot = resolve(packageRoot, "../..");
+  const source = { commit: "a".repeat(40), dirty: false };
+
+  expect(result.ios.at(0)).toEqual(["source", repoRoot]);
+  expect(result.ios.slice(-2)).toEqual([
+    ["build_app"],
+    ["receipt", ipa, source, repoRoot],
+  ]);
+  expect(result.android.at(0)).toEqual(["source", repoRoot]);
+  expect(result.android.slice(-2)).toEqual([
+    ["gradle", "bundleStaging"],
+    ["receipt", result.aab, source, repoRoot],
+  ]);
+});
