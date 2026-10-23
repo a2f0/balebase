@@ -25,7 +25,7 @@ public class PasswordManagerPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         Task { @MainActor in
-            guard !saveInProgress else {
+            guard !self.saveInProgress else {
                 call.reject("A password save is already in progress.")
                 return
             }
@@ -35,50 +35,45 @@ public class PasswordManagerPlugin: CAPPlugin, CAPBridgedPlugin {
                 call.reject("The app has no available window to ask from.")
                 return
             }
-            saveInProgress = true
-            defer { saveInProgress = false }
-            guard await confirmSave(for: domain, from: presenter) else {
-                call.resolve()
-                return
-            }
-            do {
-                try await storePassword(domain: domain, username: username, password: password, window: window)
-                // The modern API acknowledges the request, not whether the
-                // password manager stored it. Never show a "saved" confirmation.
-                call.resolve()
-            } catch {
-                showSaveFailure(from: presenter)
-                call.reject("The password manager could not accept the save request.")
-            }
+            self.offerSave(domain: domain, username: username, password: password, from: presenter, window: window)
+            // Acknowledge the offer, not storage. Its actions own the save and
+            // error UI; dismissing the offer can never strand a bridge call.
+            call.resolve()
         }
     }
 
     @MainActor
-    private func confirmSave(for domain: String, from presenter: UIViewController) async -> Bool {
+    private func offerSave(domain: String, username: String, password: String,
+                           from presenter: UIViewController, window: UIWindow) {
         // ASCredentialDataManager does not guarantee a visible system prompt.
         // Ask explicitly, including on older iOS where the legacy API can save silently.
         presenter.view.endEditing(true)
-        return await withCheckedContinuation { continuation in
-            let alert = UIAlertController(
-                title: "Save password?",
-                message: "Save your sign-in for \(domain) to your password manager?",
-                preferredStyle: .alert
-            )
-            alert.addAction(UIAlertAction(title: "Not now", style: .cancel) { _ in
-                continuation.resume(returning: false)
-            })
-            alert.addAction(UIAlertAction(title: "Save password", style: .default) { [weak alert] _ in
-                // Finish dismissing our offer before the password manager presents its UI.
-                guard let alert else {
-                    continuation.resume(returning: false)
+        let alert = UIAlertController(
+            title: "Save password?",
+            message: "Save your sign-in for \(domain) to your password manager?",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Not now", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Save password", style: .default) { [weak self, weak presenter] _ in
+            Task { @MainActor in
+                guard let self, let presenter else { return }
+                self.saveInProgress = true
+                defer { self.saveInProgress = false }
+                do {
+                    try await self.storePassword(domain: domain, username: username, password: password, window: window)
+                    // The system acknowledges a request, not whether it stored
+                    // the password. Never show a "saved" confirmation.
+                } catch let error as ASAuthorizationError where error.code == .canceled {
                     return
+                } catch {
+                    let failure = error as NSError
+                    // Keep credentials and the possibly sensitive error description out of logs.
+                    NSLog("Password save failed (%@, %ld).", failure.domain, failure.code)
+                    self.showSaveFailure(from: presenter)
                 }
-                alert.dismiss(animated: true) {
-                    continuation.resume(returning: true)
-                }
-            })
-            presenter.present(alert, animated: true)
-        }
+            }
+        })
+        presenter.present(alert, animated: true)
     }
 
     @MainActor
