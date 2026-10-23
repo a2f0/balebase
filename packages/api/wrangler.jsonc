@@ -5,6 +5,10 @@
   // Preserve the pre-4.150 upload policy; staging inherits this setting.
   "upload_source_maps": false,
   "compatibility_date": "2026-08-17",
+  // Serve only the custom domain; staging's generated config inherits this.
+  // workers.dev and preview URLs would be duplicate hosts outside the zone.
+  "workers_dev": false,
+  "preview_urls": false,
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true,

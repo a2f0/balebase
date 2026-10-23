@@ -130,6 +130,10 @@ if (api.r2_buckets.length !== 1 || api.r2_buckets[0].bucket_name !== "fixture-ob
 if ("triggers" in api) throw new Error("Staging has production cron triggers");
 if (read("app-web").name !== "balebase-client-staging") throw new Error("Client Worker name is not staging");
 if (read("website").name !== "balebase-website-staging") throw new Error("Website Worker name is not staging");
+for (const app of ["api", "app-web", "website"]) {
+  const config = read(app);
+  if (config.workers_dev !== false || config.preview_urls !== false) throw new Error("Staging " + app + " must serve only its custom domain");
+}
 ' "$FIXTURE"
 
 # The tier's optional shared.env loads first, and app.env overrides it.

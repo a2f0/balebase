@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import ts from "typescript";
 import { prepareStagingFrontends } from "../deploy/prepareStagingFrontends";
 
 const roots: string[] = [];
@@ -41,6 +42,7 @@ async function fixture() {
       `{
       // JSONC comments and trailing commas are valid Wrangler configuration.
       "name": "${name}", "compatibility_date": "2026-08-17",
+      "workers_dev": false, "preview_urls": false,
       "assets": { "directory": "./dist" },
     }`,
     );
@@ -64,9 +66,23 @@ test("frontend configs are refreshed from current JSONC for verified domains", a
   expect(app.name).toBe("balebase-client-staging");
   expect(site.name).toBe("balebase-website-staging");
   expect(app.assets).toEqual({ directory: "./dist" });
+  // Staging serves only its custom domains, like production.
+  for (const config of [app, site])
+    expect(config).toMatchObject({ workers_dev: false, preview_urls: false });
   expect(
     await Bun.file(join(root, "packages/api/wrangler.staging.jsonc")).exists(),
   ).toBe(false);
+});
+
+test("every Worker serves only its custom domain", async () => {
+  for (const pkg of ["api", "app-web", "website"]) {
+    const file = join(repo, "packages", pkg, "wrangler.jsonc");
+    const { config } = ts.parseConfigFileTextToJson(
+      file,
+      await readFile(file, "utf8"),
+    );
+    expect(config).toMatchObject({ workers_dev: false, preview_urls: false });
+  }
 });
 
 test("unexpected or missing domains and non-frontend bindings fail before writing", async () => {

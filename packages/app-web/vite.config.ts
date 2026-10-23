@@ -13,6 +13,10 @@ import { defineConfig, type HtmlTagDescriptor, type Plugin } from "vite";
  * names production as its canonical sends conflicting signals. robots.txt
  * allows crawling on both tiers, since a crawler that may not fetch a page
  * never sees its noindex.
+ *
+ * Signing links (/sign/<token>) open a contract without an account, so
+ * production sends noindex for them too: sharing a link is not consent to a
+ * search listing.
  */
 export const appUrl = "https://app.balebase.com/";
 export const noindex = "noindex, nofollow";
@@ -50,10 +54,11 @@ export function searchIndexing(override?: ReleaseTier): Plugin {
     transformIndexHtml: () => tags.map((tag) => ({ ...tag, injectTo: "head" })),
     // Vite copies public/_headers before writing the bundle.
     async writeBundle({ dir }) {
-      if (tier !== "staging" || !dir) return;
+      if (!dir) return;
+      const paths = tier === "staging" ? "/*" : "/sign/*";
       await appendFile(
         join(dir, "_headers"),
-        `\n/*\n  X-Robots-Tag: ${noindex}\n`,
+        `\n${paths}\n  X-Robots-Tag: ${noindex}\n`,
       );
     },
   };

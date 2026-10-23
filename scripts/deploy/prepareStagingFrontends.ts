@@ -51,6 +51,8 @@ export async function prepareStagingFrontends(root: string, domains: Domain[]) {
         "$schema",
         "name",
         "compatibility_date",
+        "workers_dev",
+        "preview_urls",
         "assets",
       ]);
       if (

@@ -39,12 +39,12 @@ async function buildShell(tier: ReleaseTier) {
   return { html: await read("index.html"), headers: await read("_headers") };
 }
 
-test("production names the app root canonical and never says noindex", async () => {
+test("production names the app root canonical and noindexes only signing links", async () => {
   const { html, headers } = await buildShell("production");
   expect(html).toContain(`<link rel="canonical" href="${appUrl}">`);
   expect(html).toContain(`<meta property="og:url" content="${appUrl}">`);
   expect(html).not.toContain("noindex");
-  expect(headers).toBe(aasa);
+  expect(headers).toBe(`${aasa}\n/sign/*\n  X-Robots-Tag: ${noindex}\n`);
 });
 
 test("staging marks the shell and every response noindex, with no canonical", async () => {

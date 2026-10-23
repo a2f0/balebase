@@ -242,21 +242,33 @@ builds, including `bun run build`, are production.
 - Production pages have canonical links, Open Graph and Twitter tags, and the
   home page's JSON-LD. The website publishes `robots.txt` with its sitemap and
   `sitemap.xml`; the app publishes `robots.txt` and names its root canonical.
+  Website pages are served at a trailing slash (`/privacy/`), and links to
+  them, including `legalLinks` in `packages/ui/src/brand.ts`, use that form so
+  they do not redirect.
+- Production app signing links (`/sign/<token>`) open a contract without an
+  account, so the app's `_headers` adds `X-Robots-Tag: noindex, nofollow` to
+  every `/sign/*` response.
 - Staging builds add `<meta name="robots" content="noindex, nofollow">` to each
   page and an `X-Robots-Tag: noindex, nofollow` rule for every path to
   `_headers`, and omit canonical links and the sitemap. `robots.txt` still
   allows crawling, because a crawler that may not fetch a page never reads its
   noindex.
+- The API, app, and website Workers, and the staging configs generated from
+  them, set `workers_dev` and `preview_urls` to false. Each answers only on
+  its custom domain, not on duplicate `workers.dev` or version preview hosts.
 
 The rules live in `packages/website/src/search.ts` and
-`packages/app-web/vite.config.ts`. Cloudflare's managed `robots.txt`
-setting for the zone prepends its content signals to each file. After a
-deploy, confirm that production sends no noindex and staging does:
+`packages/app-web/vite.config.ts`. The zone's Cloudflare-managed
+`robots.txt` is a comment-only content-signals notice. It appears only where
+a Worker has no `robots.txt` of its own, such as the API; the website and
+app files replace it. After a deploy, confirm that production sends noindex
+only on signing links and that staging sends it everywhere:
 
 ```sh
 curl -sI https://balebase.com/ | grep -i x-robots-tag      # no output
 curl -sI https://website-staging.balebase.com/ | grep -i x-robots-tag
 curl -s https://balebase.com/robots.txt | grep Sitemap
+curl -sI https://app.balebase.com/sign/x | grep -i x-robots-tag  # noindex
 ```
 
 ## Click tracking deployments
