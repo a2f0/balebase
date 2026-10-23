@@ -10,7 +10,13 @@
         "$TURBO_ROOT$/agent-tool.json",
         "$TURBO_ROOT$/assets/brand/**"
       ],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**"],
+      "env": [
+        "VITE_*",
+        "PUBLIC_*",
+        "NATIVE_RELEASE_TIER",
+        "SENTRY_BUILD_CONFIG"
+      ]
     },
     "check": {
       "dependsOn": ["^check"],

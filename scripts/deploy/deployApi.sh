@@ -15,9 +15,7 @@ validate_stripe_env live
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
   echo "Dry-running API Worker deployment..."
-  bunx --bun wrangler deploy \
-    --config "$REPO_ROOT/packages/api/wrangler.jsonc" \
-    --dry-run
+  bun --bun run --cwd "$REPO_ROOT/packages/api" deploy
   exit 0
 fi
 

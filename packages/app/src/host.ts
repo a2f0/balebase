@@ -6,6 +6,7 @@
  */
 export interface AppHost {
   native?: NativeHost | undefined;
+  captureError?: ((error: unknown) => void) | undefined;
 }
 
 export interface NativeHost {

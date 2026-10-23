@@ -18,7 +18,7 @@ cd "$REPO_ROOT"
 bun scripts/deploy/prepareStagingFrontends.ts
 VITE_API_URL=https://api-staging.balebase.com \
   VITE_WEBSITE_URL=https://website-staging.balebase.com \
-  bun --bun run --cwd packages/app-web build
+  bun --bun run --cwd packages/app-web build:release staging
 PUBLIC_APP_URL=https://app-staging.balebase.com \
   bun --bun run --cwd packages/website build
 

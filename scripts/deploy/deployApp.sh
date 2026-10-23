@@ -15,7 +15,7 @@ export VITE_WEBSITE_URL="${VITE_WEBSITE_URL:-https://balebase.com}"
 
 echo "Building app with API URL $VITE_API_URL and website URL $VITE_WEBSITE_URL..."
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
-  bun --bun run --cwd "$REPO_ROOT/packages/app-web" build
+  bun --bun run --cwd "$REPO_ROOT/packages/app-web" build:release
   bunx --bun wrangler deploy \
     --config "$REPO_ROOT/packages/app-web/wrangler.jsonc" \
     --dry-run

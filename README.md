@@ -16,6 +16,11 @@ under `packages/`:
 Infrastructure lives outside the workspaces in `terraform` (D1, R2, and
 `balebase.com` Worker-domain infrastructure).
 
+Release builds report filtered errors to Sentry, with separate projects for
+web, API, Android, and iOS in staging and production. Development builds stay
+local. See [error diagnostics](docs/operations.md#error-diagnostics) for setup,
+collection limits, and source-map uploads.
+
 The hosted website and browser app use the CT click tracker in production and
 staging. Tracking honors Do Not Track and Global Privacy Control browser
 settings. See [click tracking](docs/product.md#click-tracking) for collected
