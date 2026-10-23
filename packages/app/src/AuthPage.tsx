@@ -19,6 +19,7 @@ import {
 } from "react";
 import { authClient } from "./authClient";
 import { authCallbackUrl, websiteUrl } from "./config";
+import { nativeHost } from "./host";
 
 type AuthMode = "forgot" | "reset" | "sign-in" | "sign-up";
 export type AuthenticationAction = "sign-in" | "sign-up";
@@ -107,7 +108,10 @@ export function AuthPage({
                 auth.setPassword("");
               }
         }
-        onVerified={() => onAuthenticated("sign-in")}
+        onVerified={async () => {
+          offerToSavePassword(auth.email, auth.password);
+          await onAuthenticated("sign-in");
+        }}
         variant={variant}
       />
     );
@@ -466,6 +470,7 @@ async function performAuthAction(
     if (requiresTwoFactor(result.data)) {
       return { twoFactorRequired: true };
     }
+    offerToSavePassword(input.email, input.password);
     await input.onAuthenticated("sign-in");
     return {};
   }
@@ -484,6 +489,7 @@ async function performAuthAction(
       passwordSignInInput(input.email, input.password),
     );
     throwForAuthError(signInResult.error);
+    offerToSavePassword(input.email, input.password);
     await input.onAuthenticated("sign-up");
     return {
       notice:
@@ -514,6 +520,17 @@ async function performAuthAction(
     nextMode: "sign-in" as const,
     notice: "Password updated. Sign in with your new password.",
   };
+}
+
+/**
+ * Once the password and any second factor pass, a native shell offers to save
+ * the password (see NativeHost.savePassword). Declining or failing to save it
+ * never holds up signing in.
+ */
+function offerToSavePassword(email: string, password: string) {
+  void nativeHost()
+    ?.savePassword(email, password)
+    .catch(() => undefined);
 }
 
 function TwoFactorChallenge({

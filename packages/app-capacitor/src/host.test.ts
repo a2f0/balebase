@@ -37,6 +37,7 @@ describe("Capacitor host", () => {
       const host = capacitorHost("https://app.test").native;
       expect(host?.appUrl).toBe("https://app.test");
       expect(host?.saveFile).toBe(saveNativeFile);
+      expect(host?.savePassword).toBeFunction();
       return host?.origin;
     });
     expect(origins).toEqual(["capacitor://localhost", "https://localhost"]);

@@ -2,15 +2,35 @@
 
 The native iOS and Android shell for Balebase. It renders the shared
 application from `packages/app` with a native host: requests carry the
-WebView's origin marker, emailed links open the hosted app, and downloads go
-to the system share sheet. Native releases require iOS 18 or later and
-Android 12 (API 31) or later.
+WebView's origin marker, emailed links open the hosted app, downloads go to
+the system share sheet, and sign-ins offer to save the password. Native
+releases require iOS 18 or later and Android 12 (API 31) or later.
 
 On Android, the page draws under the system bars when the WebView reports
 safe-area insets (WebView 140 and later). Layouts pad themselves with the
 insets, and the status bar sits on an ink band with light icons. The
 navigation bar's icons follow the app's theme (`src/systemBars.ts`). Older
 WebViews keep the page clear of the bars.
+
+## Saved passwords
+
+The WebView's own autofill never offers to save a password here: sign-in
+requests go through native HTTP, and the page never navigates. Once a password
+and any second factor pass, the shared app calls the native `PasswordManager`
+plugin (`src/savePassword.ts`) with the hosted app's domain. Each platform
+registers the plugin itself, since it lives in the app rather than a package.
+
+- Android: `PasswordManagerPlugin.java`, registered in `MainActivity`, asks
+  Credential Manager to save the password for the app. Play services provides
+  Credential Manager before Android 14.
+- iOS: `PasswordManagerPlugin.swift`, registered in `MainViewController`, saves
+  it as a shared web credential for the domain that `App.entitlements` names
+  (`webcredentials:$(WEB_CREDENTIALS_DOMAIN)`: `app.balebase.com`, or
+  `app-staging.balebase.com` for `Release-Staging`). iOS 26.2 and later ask
+  first. Earlier versions save without asking unless they replace a different
+  saved password. Each App ID has the Associated Domains capability, and
+  `packages/app-web` serves `/.well-known/apple-app-site-association`, which
+  lists both apps.
 
 ## Production and staging store apps
 
