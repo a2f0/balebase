@@ -195,6 +195,11 @@ Dir.mktmpdir do |dir|
   report = Readiness::Report.new('ios', File.join(dir, 'good.ipa'), dir)
   Readiness.ios_artifact(report, File.join(dir, 'good.ipa'), app_only)
   results[:ios_unexpected_target] = report.data
+  no_app = File.join(dir, 'no-app.ipa')
+  Zip::File.open(no_app, create: true) { |zip| zip.get_output_stream('Payload/readme.txt') { |io| io.write('none') } }
+  report = Readiness::Report.new('ios', no_app, dir)
+  Readiness.ios_artifact(report, no_app, app_only)
+  results[:ios_no_app] = report.data
 end
 
 module Spaceship
@@ -544,6 +549,7 @@ describe("iOS artifact verdicts", () => {
     expect(status(result.ios_unexpected_target, "artifact.targets")).toBe(
       "failed",
     );
+    expect(status(result.ios_no_app, "artifact.ios")).toBe("failed");
     // An app expected to have no app groups must not gain one.
     expect(
       status(result.ios_unexpected_target, "app_group.com.example.app"),

@@ -35,10 +35,7 @@ module Readiness
     report.attempt('artifact.ios') do
       Dir.mktmpdir('readiness-') do |dir|
         unpack(artifact, dir)
-        apps = Dir.glob(File.join(dir, 'Payload', '*.app'))
-        raise 'Expected one application' unless apps.length == 1
-
-        IosArtifact.new(report, dir, expected).inspect_app(apps.first)
+        IosArtifact.new(report, dir, expected).inspect_payload
       end
     end
   end
@@ -63,6 +60,13 @@ module Readiness
       @dir = dir
       @targets = expected.fetch(:targets)
       @privacy = PrivacyDeclarations.new(expected.fetch(:privacy))
+    end
+
+    def inspect_payload
+      apps = Dir.glob(File.join(@dir, 'Payload', '*.app'))
+      return inspect_app(apps.first) if apps.length == 1
+
+      @report.check('artifact.ios', false, 'The IPA must contain exactly one application in Payload/.')
     end
 
     def inspect_app(app)
