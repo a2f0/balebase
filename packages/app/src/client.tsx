@@ -17,14 +17,17 @@ export function renderApp(host: AppHost = {}) {
   configureHost(host);
   startThemeSync();
 
-  const reportError = (error: unknown) => {
+  const reportError = (
+    error: unknown,
+    source: "boundary" | "uncaught-react",
+  ) => {
     console.error(error);
-    host.captureError?.(error);
+    host.captureError?.(error, source);
   };
   createRoot(root, {
-    onCaughtError: reportError,
-    onUncaughtError: reportError,
-    onRecoverableError: reportError,
+    onCaughtError: (error) => reportError(error, "boundary"),
+    onUncaughtError: (error) => reportError(error, "uncaught-react"),
+    onRecoverableError: (error) => reportError(error, "boundary"),
   }).render(
     <StrictMode>
       <ToastProvider>

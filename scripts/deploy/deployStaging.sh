@@ -62,6 +62,7 @@ bun --bun run test
 bun scripts/deploy/createStagingConfigs.ts
 
 bun --bun run --cwd "$REPO_ROOT/packages/api" deploy staging --check
+bun --bun run --cwd "$REPO_ROOT/packages/app-web" build:release staging --check
 
 api_config="$REPO_ROOT/packages/api/wrangler.staging.jsonc"
 client_config="$REPO_ROOT/packages/app-web/wrangler.staging.jsonc"

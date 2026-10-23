@@ -73,7 +73,7 @@
     "test:hooks": "bun test scripts/testing/prePush.test.ts",
     "test:images": "bun test scripts/testing/brandImages.test.ts",
     "test:markdownlint": "bun test scripts/testing/markdownlintConfig.test.ts",
-    "test:sentry": "bun test scripts/testing/sentryRelease.test.ts",
+    "test:sentry": "bun test scripts/testing/sentryRelease.test.ts scripts/testing/sentryOrchestration.test.ts",
     "test:staging": "bash scripts/testing/testDeployStaging.sh && bun test scripts/testing/stagingFrontends.test.ts",
     "verify": "OPENSSL_CONF=/dev/null agent-tool run-group scripts/testing/verify.json"
   },

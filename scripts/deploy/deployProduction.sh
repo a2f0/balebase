@@ -11,6 +11,7 @@ echo "Running repository checks..."
 bun --bun run check
 bun --bun run test
 
+"$SCRIPT_DIR/deployApp.sh" --check
 "$SCRIPT_DIR/deployApi.sh"
 "$SCRIPT_DIR/deployApp.sh"
 "$SCRIPT_DIR/deployWebsite.sh"

@@ -6,17 +6,19 @@ import {
   repositoryRoot,
   requireUploadEnvironment,
   runBun,
+  sourceMapArtifacts,
   uploadSourceMaps,
 } from "../lib/sentryRelease";
 
-const target = process.argv[2];
+const args = process.argv.slice(2).filter((argument) => argument !== "--check");
+const target = args[0];
 if (target !== "web" && target !== "android" && target !== "ios")
   throw new Error("Expected web, android, or ios.");
 const { NATIVE_RELEASE_TIER, DRY_RUN } = process.env;
 const environment =
   target === "web"
-    ? (process.argv[3] ?? "production")
-    : (NATIVE_RELEASE_TIER ?? "production");
+    ? (args[1] ?? "production")
+    : (NATIVE_RELEASE_TIER ?? "production").trim().toLowerCase();
 const config = releaseConfiguration(
   target,
   environment,
@@ -25,6 +27,7 @@ const config = releaseConfiguration(
 );
 const upload = config && DRY_RUN !== "1";
 if (upload) requireUploadEnvironment();
+if (process.argv.includes("--check")) process.exit(0);
 const cwd = resolve(
   repositoryRoot,
   "packages",
@@ -41,6 +44,7 @@ delete env.SENTRY_AUTH_TOKEN;
 runBun(["run", "build"], cwd, env);
 const directory = resolve(cwd, "dist");
 try {
+  if (config) sourceMapArtifacts(directory, config.build);
   if (upload) uploadSourceMaps(directory, config);
 } finally {
   await removeSourceMaps(directory);

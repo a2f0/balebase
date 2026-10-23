@@ -37,7 +37,7 @@ export function createBrowserDiagnostics(config: SentryConfig) {
         scope.captureException(error, {
           captureContext: { tags: { diagnostic_source: source } },
         });
-      else if (source === "boundary")
+      else if (source === "boundary" || source === "uncaught-react")
         scope.captureEvent({
           tags: { diagnostic_source: source },
           exception: { values: [{ type: "Error" }] },
@@ -78,7 +78,11 @@ async function configureBrowserDiagnostics(
     const manifest = await fetchJsonWithTimeout(
       new URL("/sentry-assets.json", window.location.href),
     );
-    const config = browserConfig(build, manifest, window.location.origin);
+    const config = browserConfig(
+      build,
+      manifest,
+      `${window.location.protocol}//${window.location.host}`,
+    );
     return config ? createBrowserDiagnostics(config) : undefined;
   } catch {
     return undefined;

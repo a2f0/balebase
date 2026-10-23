@@ -6,7 +6,9 @@
  */
 export interface AppHost {
   native?: NativeHost | undefined;
-  captureError?: ((error: unknown) => void) | undefined;
+  captureError?:
+    | ((error: unknown, source?: "boundary" | "uncaught-react") => void)
+    | undefined;
 }
 
 export interface NativeHost {

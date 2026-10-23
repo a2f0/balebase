@@ -13,6 +13,7 @@ const errorTypes = new Set([
 ]);
 const clientSources = new Set([
   "boundary",
+  "uncaught-react",
   "unhandled-error",
   "unhandled-rejection",
 ]);
@@ -28,8 +29,8 @@ function safeFrame(frame: StackFrame, config: SentryConfig): StackFrame | null {
   try {
     const url = new URL(frame.filename);
     path =
-      url.protocol === "app:" ||
-      url.origin === config.origin ||
+      (url.protocol === "app:" && !url.host) ||
+      `${url.protocol}//${url.host}` === config.origin ||
       (config.target === "api" && url.href === "file:///index.js")
         ? url.pathname
         : "";
@@ -71,7 +72,12 @@ export function sanitizeSentryEvent(
     .map((frame) => safeFrame(frame, config))
     .filter((frame): frame is StackFrame => frame !== null)
     .slice(-40);
-  if (!frames.length && source !== "boundary" && config.target !== "api")
+  if (
+    !frames.length &&
+    source !== "boundary" &&
+    source !== "uncaught-react" &&
+    config.target !== "api"
+  )
     return null;
   const type = event.exception?.values?.[0]?.type ?? "Error";
   return {
@@ -103,7 +109,8 @@ export function sanitizeSentryEvent(
           ...(frames.length ? { stacktrace: { frames } } : {}),
           mechanism: {
             type: "generic",
-            handled: !source.startsWith("unhandled-"),
+            handled:
+              source !== "uncaught-react" && !source.startsWith("unhandled-"),
           },
         },
       ],

@@ -154,7 +154,7 @@ test("iOS custom-scheme stack frames retain approved asset positions", () => {
   const native = {
     ...config,
     target: "ios" as const,
-    origin: new URL("capacitor://localhost").origin,
+    origin: "capacitor://localhost",
   };
   const event: Event = {
     tags: { diagnostic_source: "unhandled-error" },
@@ -163,6 +163,10 @@ test("iOS custom-scheme stack frames retain approved asset positions", () => {
         {
           stacktrace: {
             frames: [
+              {
+                filename: "capacitor://foreign/assets/index-123.js",
+                lineno: 1,
+              },
               {
                 filename: "capacitor://localhost/assets/index-123.js",
                 lineno: 2,
@@ -175,6 +179,21 @@ test("iOS custom-scheme stack frames retain approved asset positions", () => {
   };
   expect(
     sanitizeSentryEvent(event, native)?.exception?.values?.[0]?.stacktrace
-      ?.frames?.[0]?.filename,
-  ).toBe("app:///assets/index-123.js");
+      ?.frames,
+  ).toEqual([
+    { filename: "app:///assets/index-123.js", lineno: 2, in_app: true },
+  ]);
 });
+
+for (const [source, handled] of [
+  ["boundary", true],
+  ["uncaught-react", false],
+] as const) {
+  test(`React ${source} errors retain their handled classification`, () => {
+    const sanitized = sanitizeSentryEvent(
+      { tags: { diagnostic_source: source } },
+      config,
+    );
+    expect(sanitized?.exception?.values?.[0]?.mechanism?.handled).toBe(handled);
+  });
+}

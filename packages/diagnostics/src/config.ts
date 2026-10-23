@@ -1,6 +1,7 @@
 export type DiagnosticTarget = "web" | "android" | "ios" | "api";
 export type DiagnosticSource =
   | "boundary"
+  | "uncaught-react"
   | "unhandled-error"
   | "unhandled-rejection"
   | "request-error"

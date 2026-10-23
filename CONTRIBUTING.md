@@ -20,6 +20,7 @@ directories under `~/.local/share/mise/installs` to PATH without running
 | Application screens | `packages/app/src` |
 | Web shell and its Worker | `packages/app-web` |
 | Native shell, mobile projects, and Fastlane lanes | `packages/app-capacitor`, `scripts/release/*Release.sh`, `scripts/dev/run*.sh`, `scripts/lib/nativeRelease.sh` |
+| Error diagnostics and release maps | `packages/diagnostics`, `scripts/deploy/*Sentry*.ts`, `scripts/lib/sentryRelease.ts` |
 | Shared components, icons, styles | `packages/ui/src` |
 | Logo and generated images | `assets/brand`, `images` in `agent-tool.json` |
 | Public website | `packages/website/src` |
