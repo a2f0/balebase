@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# shellcheck source=scripts/lib/cloudflareEnv.sh
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/cloudflareEnv.sh"
+load_tier_env prod "$REPO_ROOT"
+validate_auth_env
+if [[ -n "${STRIPE_SECRET_KEY:-}" ||
+  -n "${STRIPE_WEBHOOK_SECRET:-}" ||
+  -n "${STRIPE_PRO_PRICE_ID:-}" ||
+  -n "${STRIPE_PORTAL_CONFIGURATION_ID:-}" ||
+  -n "${STRIPE_PRO_LEGACY_PRICE_IDS:-}" ||
+  -n "${STRIPE_PUBLISHABLE_KEY:-}" ]]; then
+  validate_stripe_env any
+  if [[ -z "${STRIPE_PRO_PRICE_ID:-}" ]]; then
+    echo "ERROR: Missing STRIPE_PRO_PRICE_ID for local billing." >&2
+    exit 1
+  fi
+fi
+
+auth_env_file="$(mktemp)"
+trap 'rm -f "$auth_env_file"' EXIT
+chmod 600 "$auth_env_file"
+printf '%s\n' \
+  "BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET" \
+  "BETTER_AUTH_URL=http://localhost:8787" \
+  "CORS_ORIGIN=http://localhost:5173" \
+  >"$auth_env_file"
+
+for secret_name in \
+  PLAID_TOKEN_ENCRYPTION_KEY \
+  STRIPE_SECRET_KEY \
+  STRIPE_WEBHOOK_SECRET; do
+  if [[ -n "${!secret_name:-}" ]]; then
+    printf '%s=%s\n' "$secret_name" "${!secret_name}" >>"$auth_env_file"
+  fi
+done
+
+# Local development uses Checkr staging and Plaid Sandbox, so their
+# credentials come from the staging tier when this checkout has one. The
+# production tier's Plaid key still encrypts local access tokens.
+if [[ -f "$REPO_ROOT/.secrets/staging/app.env" ]]; then
+  (
+    unset CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE \
+      PLAID_CLIENT_ID PLAID_SECRET
+    load_tier_env staging "$REPO_ROOT"
+    for secret_name in \
+      CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE \
+      PLAID_CLIENT_ID PLAID_SECRET; do
+      if [[ -n "${!secret_name:-}" ]]; then
+        printf '%s=%s\n' "$secret_name" "${!secret_name}" >>"$auth_env_file"
+      fi
+    done
+  )
+fi
+
+cd "$REPO_ROOT/packages/api"
+bunx --bun wrangler dev \
+  --env-file "$auth_env_file" \
+  --var "CHECKR_ENV:staging" \
+  --var "PLAID_ENV:sandbox" \
+  --var "STRIPE_PRO_LEGACY_PRICE_IDS:${STRIPE_PRO_LEGACY_PRICE_IDS:-}" \
+  --var "STRIPE_PRO_PRICE_ID:${STRIPE_PRO_PRICE_ID:-}" \
+  --var "STRIPE_PORTAL_CONFIGURATION_ID:${STRIPE_PORTAL_CONFIGURATION_ID:-}" \
+  --var "STRIPE_PUBLISHABLE_KEY:${STRIPE_PUBLISHABLE_KEY:-}"

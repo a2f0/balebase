@@ -18,7 +18,12 @@
     ]
   },
   "merge": {
-    "requiredChecks": [{ "name": "Check, test, and build", "workflow": "CI" }],
+    "requiredChecks": [
+      {
+        "name": "Check, test, and build",
+        "workflow": "CI"
+      }
+    ],
     "requireStrictBaseFreshness": true
   },
   "versions": {
@@ -29,24 +34,44 @@
       "packages/app-web"
     ]
   },
-  "pr": { "rejectClaudeBranding": true },
+  "pr": {
+    "rejectClaudeBranding": true
+  },
   "images": {
     "targets": {
       "favicons": {
         "outputs": [
-          { "path": "favicon.svg", "layers": [{ "source": "logo" }] },
+          {
+            "path": "favicon.svg",
+            "layers": [
+              {
+                "source": "logo"
+              }
+            ]
+          },
           {
             "path": "favicon.ico",
             "sizes": [16, 32, 48],
-            "layers": [{ "source": "logo", "pixelSnap": true }]
+            "layers": [
+              {
+                "source": "logo",
+                "pixelSnap": true
+              }
+            ]
           },
           {
             "path": "apple-touch-icon.png",
             "size": 180,
             "opaque": true,
             "layers": [
-              { "fill": "#b7ff5b" },
-              { "source": "logo", "scale": 0.8, "pixelSnap": true }
+              {
+                "fill": "#b7ff5b"
+              },
+              {
+                "source": "logo",
+                "scale": 0.8,
+                "pixelSnap": true
+              }
             ]
           }
         ]
@@ -59,23 +84,41 @@
             "size": 1024,
             "opaque": true,
             "layers": [
-              { "fill": "#b7ff5b" },
-              { "source": "logo", "scale": 0.75, "pixelSnap": true }
+              {
+                "fill": "#b7ff5b"
+              },
+              {
+                "source": "logo",
+                "scale": 0.75,
+                "pixelSnap": true
+              }
             ]
           },
           {
             "path": "ios/App/App/Assets.xcassets/Splash.imageset/splash{variant}.png",
             "size": 2732,
-            "variants": { "": 1, "@2x": 1, "@3x": 1 },
+            "variants": {
+              "": 1,
+              "@2x": 1,
+              "@3x": 1
+            },
             "opaque": true,
             "layers": [
-              { "fill": "#181916" },
-              { "source": "logo", "scale": 0.2, "pixelSnap": true }
+              {
+                "fill": "#181916"
+              },
+              {
+                "source": "logo",
+                "scale": 0.2,
+                "pixelSnap": true
+              }
             ]
           },
           {
             "path": "android/app/src/main/res/values/ic_launcher_background.xml",
-            "colors": { "ic_launcher_background": "#b7ff5b" }
+            "colors": {
+              "ic_launcher_background": "#b7ff5b"
+            }
           },
           {
             "path": "android/app/src/main/res/mipmap-{variant}/ic_launcher.png",
@@ -83,8 +126,14 @@
             "variants": "android",
             "opaque": true,
             "layers": [
-              { "fill": "#b7ff5b" },
-              { "source": "logo", "scale": 0.7, "pixelSnap": true }
+              {
+                "fill": "#b7ff5b"
+              },
+              {
+                "source": "logo",
+                "scale": 0.7,
+                "pixelSnap": true
+              }
             ]
           },
           {
@@ -93,15 +142,27 @@
             "variants": "android",
             "opaque": true,
             "layers": [
-              { "fill": "#b7ff5b" },
-              { "source": "logo", "scale": 0.5, "pixelSnap": true }
+              {
+                "fill": "#b7ff5b"
+              },
+              {
+                "source": "logo",
+                "scale": 0.5,
+                "pixelSnap": true
+              }
             ]
           },
           {
             "path": "android/app/src/main/res/mipmap-{variant}/ic_launcher_foreground.png",
             "size": 108,
             "variants": "android",
-            "layers": [{ "source": "logo", "scale": 0.6, "pixelSnap": true }]
+            "layers": [
+              {
+                "source": "logo",
+                "scale": 0.6,
+                "pixelSnap": true
+              }
+            ]
           },
           {
             "path": "android/app/src/main/res/drawable-{variant}/splash.png",
@@ -120,8 +181,14 @@
             },
             "opaque": true,
             "layers": [
-              { "fill": "#181916" },
-              { "source": "logo", "scale": 0.3, "pixelSnap": true }
+              {
+                "fill": "#181916"
+              },
+              {
+                "source": "logo",
+                "scale": 0.3,
+                "pixelSnap": true
+              }
             ]
           },
           {
@@ -129,12 +196,61 @@
             "size": 1024,
             "opaque": true,
             "layers": [
-              { "fill": "#b7ff5b" },
-              { "source": "logo", "scale": 0.75, "pixelSnap": true }
+              {
+                "fill": "#b7ff5b"
+              },
+              {
+                "source": "logo",
+                "scale": 0.75,
+                "pixelSnap": true
+              }
             ]
           }
         ]
       }
     }
+  },
+  "branch": {
+    "types": [
+      "build",
+      "chore",
+      "ci",
+      "cleanup",
+      "docs",
+      "feat",
+      "fix",
+      "perf",
+      "refactor",
+      "revert",
+      "style",
+      "test"
+    ],
+    "exempt": ["main"],
+    "maxLength": null
+  },
+  "commits": {
+    "signatures": "present",
+    "signatureHeaderFallback": false,
+    "rejectCoauthors": true,
+    "subjects": false
+  },
+  "hooks": {
+    "files": [
+      {
+        "source": "scripts/git/hooks/commit-msg",
+        "target": "commit-msg",
+        "executable": true
+      },
+      {
+        "source": "scripts/git/hooks/pre-commit",
+        "target": "pre-commit",
+        "executable": true
+      },
+      {
+        "source": "scripts/git/hooks/pre-push",
+        "target": "pre-push",
+        "executable": true
+      }
+    ]
   }
 }

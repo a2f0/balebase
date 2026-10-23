@@ -1,0 +1,41 @@
+{
+  "label": "lint",
+  "steps": [
+    {
+      "label": "lint:biome",
+      "command": ["bun", "--bun", "run", "lint:biome"]
+    },
+    {
+      "label": "lint:markdown",
+      "command": ["bun", "--bun", "run", "lint:markdown"]
+    },
+    {
+      "label": "lint:files",
+      "command": ["bun", "--bun", "run", "lint:files"]
+    },
+    {
+      "label": "lint:binary-files",
+      "command": ["bun", "--bun", "run", "lint:binary-files", "--all"]
+    },
+    {
+      "label": "lint:knip:all",
+      "command": ["bun", "--bun", "run", "lint:knip:all"]
+    },
+    {
+      "label": "lint:knip:production",
+      "command": ["bun", "--bun", "run", "lint:knip:production"]
+    },
+    {
+      "label": "lint:scripts",
+      "command": ["bun", "--bun", "run", "lint:scripts"]
+    },
+    {
+      "label": "lint:rubocop",
+      "command": ["bun", "--bun", "run", "lint:rubocop"]
+    },
+    {
+      "label": "lint:terraform",
+      "command": ["bun", "--bun", "run", "lint:terraform"]
+    }
+  ]
+}

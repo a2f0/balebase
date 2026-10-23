@@ -246,7 +246,7 @@ native_release_main() {
   esac
 
   native_script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)"
-  native_package_dir="$native_script_dir/../packages/app-capacitor"
+  native_package_dir="$native_script_dir/../../packages/app-capacitor"
   cd "$native_package_dir" || return 1
 
   export NATIVE_RELEASE_TIER="$native_tier"

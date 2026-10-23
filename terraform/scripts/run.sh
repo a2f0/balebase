@@ -14,9 +14,9 @@ else
 fi
 STACK_DIR="$REPO_ROOT/terraform/stacks/$TIER"
 
-# shellcheck source=../../scripts/cloudflareEnv.sh
+# shellcheck source=../../scripts/lib/cloudflareEnv.sh
 # shellcheck disable=SC1091
-source "$REPO_ROOT/scripts/cloudflareEnv.sh"
+source "$REPO_ROOT/scripts/lib/cloudflareEnv.sh"
 
 if [[ "$TIER" == "staging" ]]; then
   unset TF_VAR_cloudflare_api_token TF_VAR_cloudflare_account_id

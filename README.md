@@ -72,8 +72,8 @@ viewer's browser APIs.
 bun run mobile:ios      # build, sync both native projects, and open Xcode
 bun run mobile:android  # build, sync both native projects, and open Android Studio
 bun run mobile:sync     # rebuild web assets, icons, and native dependencies
-./scripts/runIos.sh     # build and run on a selected simulator/device
-./scripts/runAndroid.sh # build and run on a selected emulator/device
+bun run mobile:run:ios      # build and run on a selected simulator/device
+bun run mobile:run:android  # build and run on a selected emulator/device
 ```
 
 Choose a simulator or connected device and run the app from the IDE. These

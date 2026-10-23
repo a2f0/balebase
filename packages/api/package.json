@@ -1,6 +1,6 @@
 {
   "name": "@balebase/api",
-  "version": "0.1.47",
+  "version": "0.1.48",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
@@ -9,7 +9,7 @@
     "db:migrate:local": "bunx --bun --no-install wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "bunx --bun --no-install wrangler d1 migrations apply DB --remote",
     "deploy": "bunx --bun --no-install wrangler deploy",
-    "dev": "bash ../../scripts/devApi.sh",
+    "dev": "bash ../../scripts/dev/devApi.sh",
     "test": "bun test"
   },
   "dependencies": {

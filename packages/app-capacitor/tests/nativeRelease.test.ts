@@ -26,7 +26,7 @@ async function runShell(
 
 /**
  * Runs a wrapper with `bun` stubbed to log its tier, URLs, and arguments, and
- * with the Gradle wrapper check stubbed out.
+ * with an existing Gradle wrapper in a temporary native project.
  */
 async function runWrapper(
   wrapper: string,
@@ -35,6 +35,22 @@ async function runWrapper(
 ) {
   const directory = await mkdtemp(resolve(tmpdir(), "balebase-native-"));
   const log = resolve(directory, "release.log");
+  const wrapperPath = resolve(directory, "scripts/release", wrapper);
+  await Bun.write(
+    wrapperPath,
+    Bun.file(resolve(scriptsRoot, "release", wrapper)),
+  );
+  await Bun.write(
+    resolve(directory, "scripts/lib/nativeRelease.sh"),
+    Bun.file(nativeReleaseScript),
+  );
+  await Bun.write(
+    resolve(
+      directory,
+      "packages/app-capacitor/android/gradle/wrapper/gradle-wrapper.jar",
+    ),
+    "fixture",
+  );
   await Bun.write(
     resolve(directory, "bun"),
     [
@@ -49,12 +65,8 @@ async function runWrapper(
     Reflect.deleteProperty(environment, name);
   try {
     const result = await runShell(
-      `set -eu
-. "$1"
-native_release_ensure_android_wrapper() { :; }
-shift
-native_release_main "$@"`,
-      [resolve(scriptsRoot, wrapper), nativeReleaseScript, ...args],
+      'wrapper="$1"; shift; exec sh "$wrapper" "$@"',
+      ["sh", wrapperPath, ...args.slice(3)],
       {
         ...environment,
         ...env,
@@ -92,7 +104,9 @@ describe("native release wrappers", () => {
       ],
     ];
     for (const [wrapper, target, command] of wrappers) {
-      const source = await Bun.file(resolve(scriptsRoot, wrapper ?? "")).text();
+      const source = await Bun.file(
+        resolve(scriptsRoot, "release", wrapper ?? ""),
+      ).text();
       expect(source).toContain(`native_release_main ${target} "$@"`);
       const [platform, action, tier] = (target ?? "").split(" ");
       const { exitCode, stderr, calls } = await runWrapper(wrapper ?? "", [

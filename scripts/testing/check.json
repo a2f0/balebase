@@ -1,0 +1,21 @@
+{
+  "label": "check",
+  "steps": [
+    {
+      "label": "lint",
+      "command": ["bun", "--bun", "run", "lint"]
+    },
+    {
+      "label": "workspace-types",
+      "command": ["bunx", "--bun", "--no-install", "turbo", "run", "check"]
+    },
+    {
+      "label": "check:scripts",
+      "command": ["bun", "--bun", "run", "check:scripts"]
+    },
+    {
+      "label": "agents:check",
+      "command": ["bun", "--bun", "run", "agents:check"]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "label": "test",
+  "steps": [
+    {
+      "label": "workspace-tests",
+      "command": ["bunx", "--bun", "--no-install", "turbo", "run", "test"]
+    },
+    {
+      "label": "test:staging",
+      "command": ["bun", "--bun", "run", "test:staging"]
+    },
+    {
+      "label": "test:env",
+      "command": ["bun", "--bun", "run", "test:env"]
+    },
+    {
+      "label": "test:markdownlint",
+      "command": ["bun", "--bun", "run", "test:markdownlint"]
+    },
+    {
+      "label": "test:images",
+      "command": ["bun", "--bun", "run", "test:images"]
+    },
+    {
+      "label": "test:hooks",
+      "command": ["bun", "--bun", "run", "test:hooks"]
+    }
+  ]
+}

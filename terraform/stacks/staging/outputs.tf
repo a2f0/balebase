@@ -4,7 +4,7 @@ output "zone_id" {
 }
 
 output "d1_database_id" {
-  description = "D1 database ID read by scripts/deployStaging.sh."
+  description = "D1 database ID read by scripts/deploy/deployStaging.sh."
   value       = cloudflare_d1_database.main.id
 }
 
