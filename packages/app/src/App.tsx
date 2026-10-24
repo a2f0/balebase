@@ -47,6 +47,7 @@ import {
 import { OrganizationGate } from "./OrganizationGate";
 import { OrganizationInvitation } from "./OrganizationInvitation";
 import { OrganizationSettings } from "./OrganizationSettings";
+import { lockOfflineWorkspace } from "./offlineStore";
 import {
   createOrganizationSlug,
   isGlobalAuditsPath,
@@ -57,6 +58,7 @@ import {
   type WorkspaceOrganization,
 } from "./organizationState";
 import { SigningPage } from "./SigningPage";
+import { useOfflineRoute } from "./useOfflineRoute";
 import { useOrganizationAccess } from "./useOrganizationAccess";
 import { hasRole, WorkspaceShell, type WorkspaceUser } from "./WorkspaceShell";
 import {
@@ -85,6 +87,14 @@ export function App() {
   const accounts = useAccountSessions(session, () => refetch());
 
   const navigate = useWorkspaceNavigation(setPathname);
+  const offlineRoute = useOfflineRoute(
+    session,
+    workspace,
+    access,
+    pathname,
+    navigate,
+    error,
+  );
   useDismissDialogsOnWorkspaceChange(session, workspace.activeOrganizationId);
 
   useEffect(() => {
@@ -100,6 +110,8 @@ export function App() {
   // Signers open these from emailed links, signed in or not.
   const signingToken = signingTokenForPath(pathname);
   if (signingToken) return <SigningPage token={signingToken} />;
+
+  if (offlineRoute) return offlineRoute;
 
   // The sign-in page stays through background refetches; see useSessionRefetch.
   const background = sessionRefetch.background && !session;
@@ -488,12 +500,14 @@ function useWorkspaceOrganizations(
     await refetchSession();
   };
   const switchOrganization = async (organizationId: string) => {
+    lockOfflineWorkspace();
     const result = await authClient.organization.setActive({ organizationId });
     if (result.error) {
       throw new Error(
         result.error.message ?? "Could not switch organizations.",
       );
     }
+    lockOfflineWorkspace();
     await refetchSession();
   };
   const refresh = async () => {

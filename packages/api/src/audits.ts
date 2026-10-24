@@ -13,14 +13,19 @@ import {
   requestActor,
   toAuditAnswerActivity,
 } from "./activity";
-import { isRecord, validText } from "./auditDefinition";
-import { auditIssueImageRemoval } from "./auditIssueImageRemoval";
+import {
+  allRequiredAnswered,
+  isRecord,
+  parseResponses,
+  validText,
+} from "./auditDefinition";
 import {
   type AuditIssueImageRow,
-  auditIssueImages,
   findAuditIssueImages,
   toAuditIssueImage,
-} from "./auditIssueImages";
+} from "./auditIssueImageRecords";
+import { auditIssueImageRemoval } from "./auditIssueImageRemoval";
+import { auditIssueImages } from "./auditIssueImages";
 import { auditRunDiscard } from "./auditRunDiscard";
 import {
   type AuditRow,
@@ -805,41 +810,6 @@ async function isMember(
       .prepare(`SELECT id FROM member WHERE organizationId = ? AND userId = ?`)
       .bind(organizationId, userId)
       .first(),
-  );
-}
-
-function parseResponses(value: unknown, definition: AuditDefinition) {
-  if (!isRecord(value) || Object.keys(value).length > 5_000) return null;
-  const items = new Map(
-    definition.sections.flatMap((section) =>
-      section.items.map((item) => [item.id, item] as const),
-    ),
-  );
-  const responses: Record<string, string> = {};
-  for (const [itemId, response] of Object.entries(value)) {
-    const item = items.get(itemId);
-    if (!item || typeof response !== "string" || response.length > 2_000) {
-      return null;
-    }
-    if (
-      item.responseType === "check" &&
-      !["pass", "fail", "na"].includes(response)
-    ) {
-      return null;
-    }
-    responses[itemId] = response;
-  }
-  return responses;
-}
-
-function allRequiredAnswered(
-  definition: AuditDefinition,
-  responses: Record<string, string>,
-) {
-  return definition.sections.every((section) =>
-    section.items.every(
-      (item) => !item.required || Boolean(responses[item.id]?.trim()),
-    ),
   );
 }
 

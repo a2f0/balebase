@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": ["@types/bun", "vite/client"]
@@ -10,6 +11,7 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "searchIndexing.test.ts",
-    "vite.config.ts"
+    "vite.config.ts",
+    "offlineShell.ts"
   ]
 }

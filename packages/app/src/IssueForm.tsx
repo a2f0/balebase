@@ -16,35 +16,24 @@ export function IssueForm({
   onError,
   label = "Raise issue",
   disabled = false,
+  offlineMembers,
+  onDirtyChange,
 }: {
   initial?: IssueInput;
   onSave: (input: IssueInput) => Promise<void>;
   onError?: (message: string) => void;
   label?: string;
   disabled?: boolean;
+  offlineMembers?: IssueMember[];
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [input, setInput] = useState(initial);
-  const [members, setMembers] = useState<IssueMember[]>([]);
-  const [memberError, setMemberError] = useState<string>();
+  const { members, memberError } = useIssueMembers(offlineMembers);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    let active = true;
-    void api.issues
-      .members()
-      .then((data) => {
-        if (active) setMembers(data.members);
-      })
-      .catch(() => {
-        if (active)
-          setMemberError(
-            "Could not load assignees. You can save now and assign this issue later.",
-          );
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+    onDirtyChange?.(JSON.stringify(input) !== JSON.stringify(initial));
+  }, [initial, input, onDirtyChange]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(undefined);
@@ -144,4 +133,31 @@ export function IssueForm({
       </fieldset>
     </form>
   );
+}
+
+function useIssueMembers(offlineMembers: IssueMember[] | undefined) {
+  const [members, setMembers] = useState<IssueMember[]>([]);
+  const [memberError, setMemberError] = useState<string>();
+  useEffect(() => {
+    if (offlineMembers) {
+      setMembers(offlineMembers);
+      return;
+    }
+    let active = true;
+    void api.issues
+      .members()
+      .then((data) => {
+        if (active) setMembers(data.members);
+      })
+      .catch(() => {
+        if (active)
+          setMemberError(
+            "Could not load assignees. You can save now and assign this issue later.",
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, [offlineMembers]);
+  return { members, memberError };
 }

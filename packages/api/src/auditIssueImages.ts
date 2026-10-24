@@ -1,10 +1,12 @@
-import {
-  type AuditIssueImage,
-  auditsRoutes,
-} from "@balebase/validators/audits";
+import { auditsRoutes } from "@balebase/validators/audits";
+import { offlineRoutes } from "@balebase/validators/offline";
 import { type Context, Hono } from "hono";
 import { activityBatch } from "./activity";
 import type { ApiKeyPrincipal } from "./apiKeys";
+import {
+  findAuditIssueImage,
+  toAuditIssueImage,
+} from "./auditIssueImageRecords";
 import {
   discardedAuditError,
   issueAuditDiscarded,
@@ -13,6 +15,7 @@ import {
 import type { AuthVariables } from "./authMiddleware";
 import { maxFilenameBytes, normalizeFilename } from "./filenames";
 import { auditIssueImageUploadGraceMilliseconds } from "./objectLifecycle";
+import { replayOfflineImage } from "./offlineImages";
 import { respond } from "./respond";
 import type { Bindings } from "./types";
 
@@ -62,33 +65,35 @@ function acquireImageUploadCapacity(organizationId: string) {
   };
 }
 
-export interface AuditIssueImageRow {
-  audit_deleted_at: string | null;
-  audit_id: string;
-  content_type: string;
-  created_at: string;
-  deletion_pending: number;
-  filename: string;
-  id: string;
-  issue_id: string;
-  object_id: string;
-  object_key: string;
-  size: number;
-  template_name: string;
-  title: string;
-  uploaded_by_email: string;
-  uploaded_by_id: string;
-  uploaded_by_name: string;
-}
+auditIssueImages.post("/:issueId/images", (context) =>
+  uploadAuditIssueImage(context),
+);
 
-auditIssueImages.post("/:issueId/images", async (context) => {
+export async function uploadAuditIssueImage(
+  context: AuditIssueImageContext,
+  imageId?: string,
+) {
   const organizationId = context.get("organizationId");
-  const issueId = context.req.param("issueId");
+  const issueId = context.req.param("issueId") ?? "";
+  if (
+    imageId &&
+    !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(imageId)
+  )
+    return context.json({ error: "Invalid image ID." }, 400);
+  if (imageId) {
+    const replay = await replayOfflineImage(
+      context,
+      organizationId,
+      issueId,
+      imageId,
+    );
+    if (replay) return replay;
+  }
   const issue = await context.env.DB.prepare(
     `SELECT issue.id, audit.deleted_at AS audit_deleted_at
      FROM issues AS issue
-     JOIN audits AS audit ON audit.id = issue.target_id AND issue.target_type = 'audit_run'
-     WHERE issue.id = ? AND issue.organization_id = ?`,
+     LEFT JOIN audits AS audit ON audit.id = issue.target_id AND issue.target_type = 'audit_run'
+     WHERE issue.id = ? AND issue.organization_id = ? AND issue.target_type IN ('audit_run', 'workspace')`,
   )
     .bind(issueId, organizationId)
     .first<{ audit_deleted_at: string | null; id: string }>();
@@ -112,6 +117,7 @@ auditIssueImages.post("/:issueId/images", async (context) => {
       issue.id,
       context.get("authSession").user.id,
       context.req.query("filename"),
+      imageId,
     );
     if (reservation === null) {
       const discarded = await issueAuditDiscarded(
@@ -137,7 +143,7 @@ auditIssueImages.post("/:issueId/images", async (context) => {
   } finally {
     releaseCapacity();
   }
-});
+}
 
 async function uploadReservedAuditIssueImage(
   context: AuditIssueImageContext,
@@ -215,7 +221,9 @@ async function uploadReservedAuditIssueImage(
   if (!image) throw new Error("Uploaded issue image could not be loaded.");
   return respond(
     context,
-    auditsRoutes.uploadIssueImage,
+    context.req.method === "PUT"
+      ? offlineRoutes.uploadImage
+      : auditsRoutes.uploadIssueImage,
     { image: toAuditIssueImage(image) },
     201,
   );
@@ -244,9 +252,10 @@ async function reserveAuditIssueImage(
   issueId: string,
   userId: string,
   requestedFilename: string | undefined,
+  requestedImageId?: string,
 ): Promise<AuditIssueImageReservation | null> {
   const createdAt = new Date().toISOString();
-  const imageId = crypto.randomUUID();
+  const imageId = requestedImageId ?? crypto.randomUUID();
   const objectId = crypto.randomUUID();
   const uploadToken = crypto.randomUUID();
   const uploadLeaseExpiresAt = new Date(
@@ -933,71 +942,6 @@ export async function purgePendingAuditIssueImages(
   }
   if (firstFailure !== undefined) throw firstFailure;
   return purged;
-}
-
-export async function findAuditIssueImages(
-  database: D1Database,
-  organizationId: string,
-  auditId: string,
-) {
-  const result = await database
-    .prepare(
-      `${imageSelect}
-       WHERE issue.organization_id = ? AND issue.target_id = ?
-         AND object.kind = 'audit_issue_image'
-         AND object.deletion_pending = 0
-       ORDER BY image.created_at ASC`,
-    )
-    .bind(organizationId, auditId)
-    .all<AuditIssueImageRow>();
-  return result.results;
-}
-
-export async function findAuditIssueImage(
-  database: D1Database,
-  organizationId: string,
-  issueId: string,
-  imageId: string,
-  includePending = false,
-) {
-  return database
-    .prepare(
-      `${imageSelect}
-       WHERE issue.organization_id = ? AND issue.id = ? AND image.id = ?
-         AND object.kind = 'audit_issue_image'
-         ${includePending ? "" : "AND object.deletion_pending = 0"}`,
-    )
-    .bind(organizationId, issueId, imageId)
-    .first<AuditIssueImageRow>();
-}
-
-const imageSelect = `
-  SELECT image.id, image.issue_id, image.object_id, image.created_at,
-         issue.target_id AS audit_id, issue.title, audit.template_name,
-         audit.deleted_at AS audit_deleted_at,
-         object.deletion_pending,
-         object.object_key, object.filename, object.content_type, object.size,
-         uploader.id AS uploaded_by_id, uploader.name AS uploaded_by_name,
-         uploader.email AS uploaded_by_email
-  FROM audit_issue_images AS image
-  JOIN issues AS issue ON issue.id = image.issue_id
-  JOIN audits AS audit ON audit.id = issue.target_id AND issue.target_type = 'audit_run'
-  JOIN objects AS object ON object.id = image.object_id
-  JOIN user AS uploader ON uploader.id = image.uploaded_by`;
-
-export function toAuditIssueImage(row: AuditIssueImageRow): AuditIssueImage {
-  return {
-    contentType: row.content_type,
-    createdAt: row.created_at,
-    filename: row.filename,
-    id: row.id,
-    size: row.size,
-    uploadedBy: {
-      email: row.uploaded_by_email,
-      id: row.uploaded_by_id,
-      name: row.uploaded_by_name,
-    },
-  };
 }
 
 function supportedImageType(format: string) {

@@ -385,6 +385,50 @@ baseline rather than a code-compliance certification; see the
 [residential audit library](residential-audit-library.md) for its source,
 licensing, validation, and jurisdiction-overlay rules.
 
+## Offline work
+
+Open **Offline work** in the sidebar while connected to prepare the device and
+download checklists. Downloads include the form's exact version and the current
+assignee directory. Updating a download affects future audits; audits already
+started on the device keep their original form. The web shell must finish
+downloading before the device is ready. Native apps already bundle that shell.
+
+Start an offline audit from a downloaded checklist. Answers save to the device
+as they are entered, and drafts survive reopening the app. **Complete and queue
+audit** validates required answers and seals that audit for upload. Raise
+item-specific issues from an audit or standalone issues from the offline home.
+Each issue supports up to ten JPEG, PNG, GIF, or WebP photos of at most 10 MB.
+Saving an issue stores its details, photos, and queued operations together.
+
+Sync runs when the app is open and connectivity returns, on focus, and on a
+30-second timer. It creates the audit first, its issues next, and each issue's
+photos last. Standalone issues can sync independently. The status card shows
+waiting operations and failures, with **Retry sync** for recovery. Temporary
+failures back off to five minutes. Repeated requests carry the same IDs; the
+server commits a receipt with each mutation, including image activation, so a
+lost response does not duplicate records or activity. Audit history records the
+sync time and separately labels the device-reported start and completion times.
+
+Offline data belongs to the original account, organization, and API environment.
+Sign-out or account/organization switching locks the local view without deleting
+pending work. Return to that account's **Offline work** page while connected to
+unlock it. The API rechecks authentication, organization access, form visibility,
+and assignees before accepting writes; an expired session or rejected operation
+keeps local data and stops its dependents. Sign in again or restore access, then
+retry. Opening cached data is local device access and does not grant API access.
+Session expiry keeps the local editor open, including unsaved issue details and
+selected photos. Explicit sign-out and account or organization changes still
+lock the local view.
+
+This first release supports new audits from downloaded forms and new audit or
+standalone issues. Existing server audits, template editing, transaction issues,
+and edits to queued work require connectivity. Open a synced record to make
+further changes. Sync does not run while the app is closed. Local copies use the
+browser/WebView's IndexedDB storage, including photo bytes, and remain on the
+device after sync. Browser storage can be evicted; persistent storage is
+requested where available. Clearing site data or uninstalling the app removes
+local copies, including unsynced work.
+
 ## Issues and transaction activity
 
 The sidebar's **Issues** page (`/issues`) brings audit issues, transaction issues,

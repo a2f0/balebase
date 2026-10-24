@@ -1,10 +1,8 @@
 import { auditsRoutes } from "@balebase/validators/audits";
 import { Hono } from "hono";
 import { activityBatch, activityStatement } from "./activity";
-import {
-  deletePendingAuditIssueObject,
-  findAuditIssueImage,
-} from "./auditIssueImages";
+import { findAuditIssueImage } from "./auditIssueImageRecords";
+import { deletePendingAuditIssueObject } from "./auditIssueImages";
 import { discardedAuditError, imageAuditNotDiscarded } from "./auditRunRecords";
 import type { AuthVariables } from "./authMiddleware";
 import { respond } from "./respond";
@@ -50,7 +48,7 @@ auditIssueImageRemoval.delete("/:issueId/images/:imageId", async (context) => {
           root: {
             id: row.audit_id,
             label: row.template_name,
-            type: "audit_run",
+            type: row.target_type === "workspace" ? "issue" : "audit_run",
           },
           subject: { id: row.id, type: "audit_issue_image" },
         },

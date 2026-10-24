@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { authClient } from "./authClient";
+import { lockOfflineWorkspace } from "./offlineStore";
 
 export interface AccountSession {
   token: string;
@@ -69,15 +70,18 @@ export function useAccountSessions(
 
   async function switchAccount(token: string) {
     if (token === sessionToken) return;
+    lockOfflineWorkspace();
     const result = await authClient.multiSession.setActive({
       sessionToken: token,
     });
     throwForAccountError(result.error, "Could not switch accounts.");
+    lockOfflineWorkspace();
     await refetchSession();
   }
 
   async function signOutActiveAccount() {
     if (!sessionToken) return;
+    lockOfflineWorkspace();
     const result = await authClient.multiSession.revoke({
       sessionToken,
     });
@@ -87,6 +91,8 @@ export function useAccountSessions(
     } else {
       throwForAccountError(result.error, "Could not sign out.");
     }
+    // Invalidate preparations started while revocation was still in flight.
+    lockOfflineWorkspace();
     await refetchSession();
   }
 
