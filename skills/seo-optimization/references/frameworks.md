@@ -31,6 +31,9 @@
   `next.config` `env` so the browser hydrates with the same tags; otherwise
   `next/head` can add or drop them on the client.
 - Do not import relative TypeScript into `next.config.ts`.
+- Add an explicit `pages/404.tsx` so the error page's head (noindex, no
+  canonical, no `og:url`) is under the app's control, and pair it with
+  `not_found_handling: "404-page"` when missing paths should get it.
 - When two `next/head` instances emit the same tag, whichever re-rendered
   last wins, even with matching `key`s. Keep one owner for a dynamic tag such
   as `theme-color`. When the theme provider renders on the client below

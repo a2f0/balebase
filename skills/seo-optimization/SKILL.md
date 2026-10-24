@@ -141,8 +141,10 @@ the final summary:
 - questions that only the user can answer, such as whether user-generated
   public pages should be indexable, or which URL form legal pages should use.
 
-Out-of-scope items belong in recommendations: search console and Bing
-Webmaster verification and sitemap submission, `www` redirects that need DNS,
-CDN robots and AI-crawler settings, store links and smart app banners before
+Out-of-scope items belong in recommendations unless the user authorizes
+them: search console and Bing Webmaster verification and sitemap submission,
+infrastructure changes such as `www` redirects and zone settings (see
+[references/cloudflare-workers.md](references/cloudflare-workers.md)), CDN
+robots and AI-crawler settings, store links and smart app banners before
 store IDs exist, app association files, and content or performance work.
 Keep reusable procedure in this skill and dated findings in the report.
