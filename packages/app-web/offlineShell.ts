@@ -41,7 +41,8 @@ self.addEventListener("fetch", event => {
   const url = new URL(request.url);
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).then(async response => response.status >= 400 ? (await cachedShell()) || response : response).catch(cachedShell));
+    // Keep HTML and assets on the active worker's version until all its tabs close.
+    event.respondWith(cachedShell().then(cached => cached || fetch(request)));
   } else if (assets.includes(url.pathname) && !url.search) {
     event.respondWith(caches.open(cacheName).then(async cache => (await cache.match(request)) || fetch(request)));
   }

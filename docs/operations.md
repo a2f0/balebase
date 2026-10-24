@@ -549,7 +549,9 @@ recreate deleted work; organization purges remove them through foreign keys.
 The web build emits `offline-worker.js`, which precaches the public app shell
 and bundled assets. It does not cache authenticated API responses. New workers
 activate after existing tabs close, keeping the running bundle and its cache
-together. Native builds use their bundled shell and the same IndexedDB queue.
+together. Navigation uses the active worker's cached HTML even while online;
+close all app tabs to allow a waiting update to activate. Native builds use
+their bundled shell and the same IndexedDB queue.
 Do not clear browser storage as a sync troubleshooting step: pending work and
 photos live there. Inspect the device's sync status, restore its original
 account/organization access, and retry with the app open. Permanently rejected
