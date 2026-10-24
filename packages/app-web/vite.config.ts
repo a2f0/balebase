@@ -4,6 +4,7 @@ import { pdfjsAssets } from "@balebase/app/vite";
 import { sentryAssets } from "@balebase/diagnostics/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from "vite";
+import { offlineShell } from "./offlineShell";
 
 /*
  * Search engines may index only the production app. Its shell names the app
@@ -65,5 +66,11 @@ export function searchIndexing(override?: ReleaseTier): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), pdfjsAssets(), sentryAssets(), searchIndexing()],
+  plugins: [
+    react(),
+    pdfjsAssets(),
+    sentryAssets(),
+    searchIndexing(),
+    offlineShell(),
+  ],
 });

@@ -34,6 +34,8 @@ const ActivityDetailsSchema = z
     beforeEmail: detail,
     beforeName: detail,
     changes: detail,
+    clientStartedAt: detail,
+    clientCompletedAt: detail,
     description: detail,
     filename: detail,
     make: detail,

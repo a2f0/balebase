@@ -10,6 +10,7 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "searchIndexing.test.ts",
-    "vite.config.ts"
+    "vite.config.ts",
+    "offlineShell.ts"
   ]
 }

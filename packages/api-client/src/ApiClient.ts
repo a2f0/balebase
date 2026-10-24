@@ -16,6 +16,7 @@ import { inboxApi } from "./inbox";
 import { issuesApi } from "./issues";
 import { libraryFoldersApi } from "./libraryFolders";
 import { objectsApi } from "./objects";
+import { offlineApi } from "./offline";
 import { organizationGroupsApi } from "./organizationGroups";
 import { organizationSettingsApi } from "./organizationSettings";
 import { sessionApi } from "./session";
@@ -45,6 +46,7 @@ export class ApiClient extends Transport {
   readonly issues = issuesApi(this);
   readonly libraryFolders = libraryFoldersApi(this);
   readonly objects = objectsApi(this);
+  readonly offline = offlineApi(this);
   readonly organizationGroups = organizationGroupsApi(this);
   readonly organizationSettings = organizationSettingsApi(this);
   readonly session = sessionApi(this);

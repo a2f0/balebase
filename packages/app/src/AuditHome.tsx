@@ -86,6 +86,9 @@ export function AuditHome({
       <AuditHomeHeader busy={busy} onCreate={createTemplate} />
       <PageBody>
         <ErrorToast error={error} onNavigate={onNavigate} />
+        <Button icon="download" onClick={() => onNavigate("/offline")}>
+          Download forms for offline work
+        </Button>
         <TemplateLibrary
           busy={busy}
           onBegin={beginAudit}

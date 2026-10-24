@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { authClient } from "./authClient";
+import { lockOfflineWorkspace } from "./offlineStore";
 
 export interface AccountSession {
   token: string;
@@ -69,6 +70,7 @@ export function useAccountSessions(
 
   async function switchAccount(token: string) {
     if (token === sessionToken) return;
+    lockOfflineWorkspace();
     const result = await authClient.multiSession.setActive({
       sessionToken: token,
     });
@@ -78,6 +80,7 @@ export function useAccountSessions(
 
   async function signOutActiveAccount() {
     if (!sessionToken) return;
+    lockOfflineWorkspace();
     const result = await authClient.multiSession.revoke({
       sessionToken,
     });

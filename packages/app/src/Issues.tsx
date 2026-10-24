@@ -16,6 +16,7 @@ import { ActivityFeed } from "./ActivityFeed";
 import { api } from "./apiClient";
 import { financeTransactionPath } from "./financePages";
 import { IssueForm } from "./IssueForm";
+import { IssueImages } from "./IssueImages";
 import { IssueList } from "./IssueList";
 import { issuePath } from "./issuePaths";
 import { decodeRecordId } from "./workspacePaths";
@@ -83,6 +84,9 @@ function IssuesIndex({
         }
       />
       <PageBody>
+        <Button icon="download" onClick={() => onNavigate("/offline")}>
+          Create issues offline with photos
+        </Button>
         <fieldset className="issueToolbar" aria-label="Issue filters">
           <Field label="Status">
             <select
@@ -311,6 +315,9 @@ function IssueDetail({
                 />
               </Card>
             </PageSection>
+            {issue.target.type !== "finance_transaction" && (
+              <IssueImages issueId={id} />
+            )}
             <ActivityFeed
               source={{ type: "issue", id }}
               refreshKey={issue.revision}

@@ -13,6 +13,7 @@ import { audits } from "./audits";
 import type { AuthSession } from "./auth";
 import type { AuthVariables } from "./authMiddleware";
 import { purgeDeletedObjects } from "./deletedObjectCleanup";
+import { offline } from "./offline";
 import type { Bindings } from "./types";
 
 interface TemplateResponse {
@@ -3523,7 +3524,10 @@ async function createFixture(
   await applyMigration(database, "0056_discard_audits.sql");
   if (includePublication)
     await applyMigration(database, "0058_publish_legacy_global_audits.sql");
-  if (includeActivity) await applyMigration(database, "0062_create_issues.sql");
+  if (includeActivity) {
+    await applyMigration(database, "0062_create_issues.sql");
+    await applyMigration(database, "0070_offline_operations.sql");
+  }
   const stored = new Map<string, Uint8Array>();
   const databaseControl: DatabaseControl = {
     activateBeforeCleanupClaim: false,
@@ -3602,6 +3606,7 @@ function testApp() {
     } as unknown as AuthSession);
     await next();
   });
+  app.route("/offline", offline);
   app.route("/activity", activity);
   app.route("/admin/audit-templates", adminAuditTemplates);
   app.route("/", audits);
@@ -4028,3 +4033,68 @@ async function applyMigration(database: Database, filename: string) {
     ).text(),
   );
 }
+
+it("replays offline image uploads after lost responses and removal without duplicate storage or history", async () => {
+  const f = await createFixture();
+  const issueId = crypto.randomUUID();
+  const scope = { userId: "user-1", organizationId: "org_user-1" };
+  const created = await jsonRequest(f, "/offline/operations", "POST", {
+    ...scope,
+    operation: {
+      id: issueId,
+      type: "issue",
+      title: "Offline gate",
+      description: "",
+      priority: "medium",
+      assignedTo: null,
+    },
+  });
+  expect(created.response.status).toBe(201);
+  const imageId = crypto.randomUUID();
+  const path = `/offline/issues/${issueId}/images/${imageId}?userId=user-1&organizationId=org_user-1&filename=gate.png`;
+  const upload = () =>
+    f.app.request(
+      path,
+      { ...imageUpload(pngBytes()), method: "PUT" },
+      f.bindings,
+    );
+  f.databaseControl.commitThenThrowImageActivation = true;
+  const first = await upload();
+  expect(first.status).toBe(201);
+  const body = await first.json();
+  const second = await upload();
+  expect(second.status).toBe(200);
+  expect(await second.json()).toEqual(body);
+  expect(f.stored.size).toBe(1);
+  expect(
+    f.database
+      .query(
+        "SELECT action FROM activity_events WHERE action = 'audit.image_uploaded'",
+      )
+      .all(),
+  ).toHaveLength(1);
+  const list = await f.app.request(
+    `/offline/issues/${issueId}/images`,
+    {},
+    f.bindings,
+  );
+  expect(((await list.json()) as { images: unknown[] }).images).toHaveLength(1);
+  const wrongScope = await f.app.request(
+    path.replace("userId=user-1", "userId=user-2"),
+    { ...imageUpload(pngBytes()), method: "PUT" },
+    f.bindings,
+  );
+  expect(wrongScope.status).toBe(403);
+  const removed = await f.app.request(
+    `/issues/${issueId}/images/${imageId}`,
+    { method: "DELETE" },
+    f.bindings,
+  );
+  expect(removed.status).toBe(204);
+  expect((await upload()).status).toBe(200);
+  expect(f.database.query("SELECT id FROM audit_issue_images").all()).toEqual(
+    [],
+  );
+  expect(f.stored.size).toBe(0);
+  f.database.close();
+});

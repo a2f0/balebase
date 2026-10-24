@@ -33,6 +33,7 @@ import { issues } from "./issues";
 import { libraryFolders } from "./libraryFolders";
 import { withNativeOrigin } from "./nativeRequest";
 import { objects } from "./objects";
+import { offline } from "./offline";
 import { organizationGroups, requireCapability } from "./organizationGroups";
 import { organizationSettings } from "./organizationSettings";
 import { respond } from "./respond";
@@ -206,6 +207,9 @@ app.route("/api/activity", activity);
 app.use("/api/issues", requireAuth, requireOrganization);
 app.use("/api/issues/*", requireAuth, requireOrganization);
 app.route("/api/issues", issues);
+
+app.use("/api/offline/*", requireAuth, requireOrganization);
+app.route("/api/offline", offline);
 
 app.use("/api/businesses", requireAuth, requireOrganization);
 app.use("/api/businesses/*", requireAuth, requireOrganization);

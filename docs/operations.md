@@ -538,6 +538,23 @@ No automatic mobile deployment is configured.
 See [Capacitor's environment setup](https://capacitorjs.com/docs/getting-started/environment-setup)
 for SDK installation details.
 
+## Offline synchronization
+
+Apply migration `0070_offline_operations.sql` before deploying the API or clients
+with offline support. It adds operation and image receipts and extends image
+activity to standalone issues. Receipts and their domain writes commit in the
+same D1 transaction. Receipts survive source deletion so an old device cannot
+recreate deleted work; organization purges remove them through foreign keys.
+
+The web build emits `offline-worker.js`, which precaches the public app shell
+and bundled assets. It does not cache authenticated API responses. New workers
+activate after existing tabs close, keeping the running bundle and its cache
+together. Native builds use their bundled shell and the same IndexedDB queue.
+Do not clear browser storage as a sync troubleshooting step: pending work and
+photos live there. Inspect the device's sync status, restore its original
+account/organization access, and retry with the app open. Permanently rejected
+work remains local for inspection; retries do not overwrite server records.
+
 ## Retain and purge data
 
 Organization owners can soft-delete an organization from its general settings.

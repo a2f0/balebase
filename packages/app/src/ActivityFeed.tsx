@@ -38,6 +38,7 @@ const actionLabels: Record<string, string> = {
   "api_key.revoked": "revoked an API key",
   "audit.answer_changed": "changed an answer",
   "audit.completed": "completed the audit",
+  "audit.offline_synced": "synced an offline audit",
   "audit.discarded": "discarded the audit",
   "audit.image_removed": "removed an image",
   "audit.image_uploaded": "attached an image",
@@ -339,6 +340,14 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
   )
     return <RecordActivityDetails event={event} />;
   switch (event.action) {
+    case "audit.offline_synced":
+      return (
+        <p className="activityDetails">
+          Device-reported times: started {textValue(details.clientStartedAt)},
+          completed {textValue(details.clientCompletedAt)}. Synced at{" "}
+          {formatActivityTime(event.occurredAt)}.
+        </p>
+      );
     case "organization.member_role_changed":
       return <MemberRoleDetails event={event} />;
     case "finance.transaction_categorized":

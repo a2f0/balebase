@@ -16,6 +16,7 @@ import { inboxRoutes } from "./inbox";
 import { issuesRoutes } from "./issues";
 import { libraryFoldersRoutes } from "./libraryFolders";
 import { objectsRoutes } from "./objects";
+import { offlineRoutes } from "./offline";
 import { organizationGroupsRoutes } from "./organizationGroups";
 import { organizationSettingsRoutes } from "./organizationSettings";
 import type { Route } from "./route";
@@ -42,6 +43,7 @@ export const routes: Record<string, Record<string, Route>> = {
   issues: issuesRoutes,
   libraryFolders: libraryFoldersRoutes,
   objects: objectsRoutes,
+  offline: offlineRoutes,
   organizationGroups: organizationGroupsRoutes,
   organizationSettings: organizationSettingsRoutes,
   session: sessionRoutes,
