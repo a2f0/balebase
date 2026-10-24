@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { IssueForm } from "./IssueForm";
 import { type OfflineWorkspace, offlineImage } from "./offlineStore";
 import { createOfflineIssue } from "./offlineWork";
+import { useUnsavedChanges } from "./unsavedChanges";
 
 export function OfflineIssueCreator({
   workspace,
@@ -14,6 +15,12 @@ export function OfflineIssueCreator({
   onSaved: () => void;
 }) {
   const [files, setFiles] = useState<File[]>([]);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  useUnsavedChanges(
+    dirty || files.length > 0,
+    "This issue and its selected photos have not been saved on this device.",
+  );
   return (
     <Card title="New offline issue">
       <Field label="Photos (up to 10, 10 MB each)">
@@ -21,16 +28,23 @@ export function OfflineIssueCreator({
           type="file"
           accept="image/jpeg,image/png,image/webp,image/gif"
           multiple
+          disabled={saving}
           onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
         />
       </Field>
       <p>{files.map((file) => file.name).join(", ")}</p>
       <IssueForm
         offlineMembers={workspace.members}
+        onDirtyChange={setDirty}
         label="Save issue on device"
         onSave={async (input) => {
-          await createOfflineIssue(workspace.key, input, files, target);
-          onSaved();
+          setSaving(true);
+          try {
+            await createOfflineIssue(workspace.key, input, files, target);
+            onSaved();
+          } finally {
+            setSaving(false);
+          }
         }}
       />
     </Card>

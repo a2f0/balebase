@@ -4098,3 +4098,41 @@ it("replays offline image uploads after lost responses and removal without dupli
   expect(f.stored.size).toBe(0);
   f.database.close();
 });
+
+it("acknowledges an uploaded offline image after its audit and issue are purged", async () => {
+  const fixture = await createFixture();
+  const { auditId } = await createActivityAudit(fixture);
+  const issue = await jsonRequest<IssueResponse>(
+    fixture,
+    `/runs/${auditId}/issues`,
+    "POST",
+    { title: "Rail", itemId: "check" },
+  );
+  expect(issue.response.status).toBe(201);
+  const imageId = crypto.randomUUID();
+  const path = `/offline/issues/${issue.body.issueId}/images/${imageId}?userId=user-1&organizationId=org_user-1&filename=rail.png`;
+  const upload = () =>
+    fixture.app.request(
+      path,
+      { ...imageUpload(pngBytes()), method: "PUT" },
+      fixture.bindings,
+    );
+  const first = await upload();
+  expect(first.status).toBe(201);
+  const image = await first.json();
+  fixture.database.exec("PRAGMA foreign_keys = ON");
+  fixture.database.query("DELETE FROM audits WHERE id = ?").run(auditId);
+  expect(
+    fixture.database
+      .query("SELECT id FROM issues WHERE id = ?")
+      .get(issue.body.issueId),
+  ).toBeNull();
+  const replay = await upload();
+  expect(replay.status).toBe(200);
+  expect(await replay.json()).toEqual(image);
+  expect(
+    fixture.database.query("SELECT id FROM audit_issue_images").all(),
+  ).toEqual([]);
+  expect(fixture.stored.size).toBe(1); // The existing tombstone cleanup owns deletion; no new upload occurred.
+  fixture.database.close();
+});

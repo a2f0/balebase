@@ -80,6 +80,15 @@ export async function uploadAuditIssueImage(
     !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(imageId)
   )
     return context.json({ error: "Invalid image ID." }, 400);
+  if (imageId) {
+    const replay = await replayOfflineImage(
+      context,
+      organizationId,
+      issueId,
+      imageId,
+    );
+    if (replay) return replay;
+  }
   const issue = await context.env.DB.prepare(
     `SELECT issue.id, audit.deleted_at AS audit_deleted_at
      FROM issues AS issue
@@ -91,16 +100,6 @@ export async function uploadAuditIssueImage(
   if (!issue) return context.json({ error: "Issue not found." }, 404);
   if (issue.audit_deleted_at) {
     return context.json({ error: discardedAuditError }, 409);
-  }
-
-  if (imageId) {
-    const replay = await replayOfflineImage(
-      context,
-      organizationId,
-      issue.id,
-      imageId,
-    );
-    if (replay) return replay;
   }
 
   const releaseCapacity = acquireImageUploadCapacity(organizationId);

@@ -248,3 +248,142 @@ for (const path of ["/offline", "/"]) {
     ).finally(() => releaseAccess?.());
   }, 30_000);
 }
+
+it("guards unsaved offline issue details and photos when toggling or leaving their form", async () => {
+  await withOfflineBrowser(async (page, _browser, directory) => {
+    await page.evaluate(async () => {
+      await window.offlineTest.seed();
+      window.offlineTest.mount();
+    });
+    await openDraft(page);
+    await press(page, "Raise issue");
+    const title = 'form[aria-label="Issue details"] input';
+    await page.type(title, "Keep this issue");
+    const photo = join(directory, "unsaved.png");
+    await Bun.write(photo, new Uint8Array([1, 2, 3, 4]));
+    await (await page.$('input[type="file"]'))?.uploadFile(photo);
+    await press(page, "Raise issue");
+    await press(page, "Keep editing");
+    expect(await page.$eval(title, (field) => field.value)).toBe(
+      "Keep this issue",
+    );
+    await press(page, "Back to offline work");
+    await press(page, "Keep editing");
+    expect(
+      await page.$eval(
+        'input[type="file"]',
+        (field) => (field as HTMLInputElement).files?.[0]?.name,
+      ),
+    ).toBe("unsaved.png");
+    await press(page, "Back to offline work");
+    await press(page, "Discard changes");
+    await press(page, "New offline issue");
+    await (await page.$('input[type="file"]'))?.uploadFile(photo);
+    await press(page, "Start offline audit");
+    await press(page, "Keep editing");
+    expect(
+      (await page.evaluate(() => window.offlineTest.read()))?.audits,
+    ).toHaveLength(1);
+    expect(
+      await page.$eval(
+        'input[type="file"]',
+        (field) => (field as HTMLInputElement).files?.[0]?.name,
+      ),
+    ).toBe("unsaved.png");
+    await press(page, "New offline issue");
+    await press(page, "Discard changes");
+    await page.waitForFunction(
+      () => !document.querySelector('input[type="file"]'),
+    );
+  });
+}, 30_000);
+
+for (const { path, kind } of [
+  { path: "/add-account", kind: "account" },
+  { path: "/reset-password", kind: "account" },
+  { path: "/reset-password", kind: "organization" },
+]) {
+  it(`locks the original offline workspace when the confirmed ${kind} changes on ${path}`, async () => {
+    let organizationId = "org-1";
+    let user = {
+      id: "user-1",
+      name: "Inspector",
+      email: "inspector@example.com",
+      emailVerified: true,
+    };
+    await withOfflineBrowser(
+      async (page) => {
+        await page.evaluate(async (pathname) => {
+          await window.offlineTest.seed();
+          await window.offlineTest.issue();
+          history.replaceState(null, "", pathname);
+          window.offlineAppTest.mount();
+        }, path);
+        await page.waitForSelector('input[type="password"]');
+        if (kind === "organization") organizationId = "org-2";
+        else
+          user = {
+            ...user,
+            id: "user-2",
+            name: "Other",
+            email: "other@example.com",
+          };
+        const refreshed = page.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname === "/api/auth/get-session",
+        );
+        await page.evaluate(() => window.offlineAppTest.refreshSession());
+        await refreshed;
+        await page.waitForFunction(
+          () => window.offlineTest.activeKey() === null,
+          { polling: 100 },
+        );
+        expect(
+          (await page.evaluate(() => window.offlineTest.read()))?.issues,
+        ).toHaveLength(1);
+        await page.reload();
+        await page.waitForFunction(() => Boolean(window.offlineAppTest));
+        await page.setOfflineMode(true);
+        await page.evaluate(() => {
+          history.replaceState(null, "", "/");
+          window.offlineAppTest.mount();
+        });
+        await page.waitForFunction(
+          () => document.body.textContent?.includes("load your session"),
+          { polling: 100 },
+        );
+        const body = await page.$eval("body", (element) => element.textContent);
+        expect(body).not.toContain("Offline work");
+        expect(body).not.toContain("Broken rail");
+        expect(body).not.toContain("inspector@example.com");
+      },
+      (request) => {
+        const pathname = new URL(request.url).pathname;
+        if (pathname === "/api/auth/get-session")
+          return Response.json({
+            user,
+            session: {
+              id: `session-${user.id}`,
+              token: `fixture-${user.id}`,
+              userId: user.id,
+              activeOrganizationId: organizationId,
+              expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+            },
+          });
+        if (pathname === "/api/organization-settings/organizations")
+          return Response.json({
+            organizations: [{ id: "org-1", name: "Test team" }],
+          });
+        if (pathname === "/api/organization-groups/access")
+          return Response.json({
+            capabilities: [],
+            memberRole: "owner",
+            ownerCount: 1,
+          });
+        if (pathname.startsWith("/api/offline/"))
+          return Response.json({ error: "Offline fixture" }, { status: 503 });
+        return Response.json([]);
+      },
+    );
+  }, 30_000);
+}

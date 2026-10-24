@@ -17,6 +17,7 @@ export function IssueForm({
   label = "Raise issue",
   disabled = false,
   offlineMembers,
+  onDirtyChange,
 }: {
   initial?: IssueInput;
   onSave: (input: IssueInput) => Promise<void>;
@@ -24,11 +25,15 @@ export function IssueForm({
   label?: string;
   disabled?: boolean;
   offlineMembers?: IssueMember[];
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [input, setInput] = useState(initial);
   const { members, memberError } = useIssueMembers(offlineMembers);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    onDirtyChange?.(JSON.stringify(input) !== JSON.stringify(initial));
+  }, [initial, input, onDirtyChange]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(undefined);

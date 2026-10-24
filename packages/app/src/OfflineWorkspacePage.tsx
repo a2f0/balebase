@@ -13,6 +13,7 @@ import type { IssueMember } from "@balebase/validators/issues";
 import type { OfflineScope } from "@balebase/validators/offline";
 import { useEffect, useState } from "react";
 import { api } from "./apiClient";
+import { guardWorkspaceChange } from "./navigationGuard";
 import { OfflineAuditEditor } from "./OfflineAuditEditor";
 import { OfflineIssueCreator, OfflineIssueList } from "./OfflineIssues";
 import { prepareOfflineDevice } from "./offlinePreparation";
@@ -40,24 +41,14 @@ export function OfflineWorkspacePage({
 }: {
   storageError: string | undefined;
   workspace: OfflineWorkspace | undefined;
-  identity?: OfflineIdentity;
+  identity?: OfflineIdentity | undefined;
   online: boolean;
   onNavigate: (path: string) => void;
 }) {
   const [auditId, setAuditId] = useState<string>();
   const [creatingIssue, setCreatingIssue] = useState(false);
-  const [error, setError] = useState<string>();
+  const { error, setError, run } = useOfflineActions();
   const audit = workspace?.audits.find((entry) => entry.id === auditId);
-  const run = async (action: () => Promise<unknown>) => {
-    setError(undefined);
-    try {
-      await action();
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Could not save offline work.",
-      );
-    }
-  };
   return (
     <Page>
       <PageHeader
@@ -112,33 +103,23 @@ export function OfflineWorkspacePage({
                 onError={setError}
               />
             )}
-            <PageSection title="Downloaded checklists">
-              {!workspace?.templates.length && (
-                <p>No checklists downloaded yet. Connect to download a form.</p>
-              )}
-              {workspace?.templates.map((template) => (
-                <Card key={template.id} title={template.name}>
-                  <p>
-                    {template.description} · Version {template.version}
-                  </p>
-                  <Button
-                    onClick={() =>
-                      void run(async () =>
-                        setAuditId(
-                          await startOfflineAudit(workspace.key, template),
-                        ),
-                      )
-                    }
-                  >
-                    Start offline audit
-                  </Button>
-                </Card>
-              ))}
-            </PageSection>
+            <DownloadedChecklists
+              workspace={workspace}
+              onStart={guardWorkspaceChange(async (key, template) => {
+                await run(async () =>
+                  setAuditId(await startOfflineAudit(key, template)),
+                );
+              })}
+            />
             {workspace && (
               <PageSection title="Audits on this device">
                 {workspace.audits.map((entry) => (
-                  <Button key={entry.id} onClick={() => setAuditId(entry.id)}>
+                  <Button
+                    key={entry.id}
+                    onClick={guardWorkspaceChange(async () =>
+                      setAuditId(entry.id),
+                    )}
+                  >
                     {entry.template.name} ·{" "}
                     {new Date(entry.startedAt).toLocaleString()} ·{" "}
                     {entry.queued ? "Completed" : "Draft"}
@@ -150,7 +131,11 @@ export function OfflineWorkspacePage({
               <PageSection
                 title="Issues on this device"
                 actions={
-                  <Button onClick={() => setCreatingIssue(!creatingIssue)}>
+                  <Button
+                    onClick={guardWorkspaceChange(async () =>
+                      setCreatingIssue(!creatingIssue),
+                    )}
+                  >
                     New offline issue
                   </Button>
                 }
@@ -168,6 +153,47 @@ export function OfflineWorkspacePage({
         )}
       </PageBody>
     </Page>
+  );
+}
+
+function useOfflineActions() {
+  const [error, setError] = useState<string>();
+  const run = async (action: () => Promise<unknown>) => {
+    setError(undefined);
+    try {
+      await action();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Could not save offline work.",
+      );
+    }
+  };
+  return { error, setError, run };
+}
+
+function DownloadedChecklists({
+  workspace,
+  onStart,
+}: {
+  workspace: OfflineWorkspace | undefined;
+  onStart: (key: string, template: AuditTemplate) => Promise<void>;
+}) {
+  return (
+    <PageSection title="Downloaded checklists">
+      {!workspace?.templates.length && (
+        <p>No checklists downloaded yet. Connect to download a form.</p>
+      )}
+      {workspace?.templates.map((template) => (
+        <Card key={template.id} title={template.name}>
+          <p>
+            {template.description} · Version {template.version}
+          </p>
+          <Button onClick={() => void onStart(workspace.key, template)}>
+            Start offline audit
+          </Button>
+        </Card>
+      ))}
+    </PageSection>
   );
 }
 

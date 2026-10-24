@@ -3,6 +3,7 @@ import { OfflineWorkspacePage } from "./OfflineWorkspacePage";
 import {
   activeOfflineKey,
   lockOfflineWorkspace,
+  lockOtherOfflineWorkspace,
   type OfflineWorkspace,
   offlineScopeKey,
 } from "./offlineStore";
@@ -11,6 +12,7 @@ import { signingTokenForPath } from "./workspacePaths";
 
 interface OfflineSession {
   user: { id: string; name: string; email: string };
+  session?: { activeOrganizationId?: string | null | undefined };
 }
 interface Workspace {
   activeOrganizationId: string | undefined;
@@ -29,6 +31,8 @@ export function useOfflineRoute(
   const offline = useOfflineWorkspace();
   const user = session?.user;
   const organizationId = workspace.activeOrganizationId;
+  const confirmedOrganizationId =
+    session?.session?.activeOrganizationId ?? organizationId;
   const organizationName =
     workspace.organizations.find((entry) => entry.id === organizationId)
       ?.name ?? "Organization";
@@ -50,13 +54,20 @@ export function useOfflineRoute(
     ],
   );
   useEffect(() => {
-    if (!isPending && !sessionError && !session && navigator.onLine)
+    if (pathname === "/add-account") lockOfflineWorkspace();
+    else if (session)
+      lockOtherOfflineWorkspace(session.user.id, confirmedOrganizationId);
+    else if (!isPending && !sessionError && navigator.onLine)
       lockOfflineWorkspace();
-  }, [isPending, sessionError, session]);
+  }, [isPending, sessionError, session, confirmedOrganizationId, pathname]);
   const excluded =
     ["/add-account", "/reset-password"].includes(pathname) ||
     Boolean(signingTokenForPath(pathname));
-  const local = matchingWorkspace(offline.workspace, user, organizationId);
+  const local = matchingWorkspace(
+    offline.workspace,
+    user,
+    confirmedOrganizationId,
+  );
   const fallback = Boolean(
     !excluded &&
       (!offline.online || sessionError) &&
@@ -74,7 +85,7 @@ export function useOfflineRoute(
       <OfflineWorkspacePage
         key={local.key}
         workspace={local}
-        {...(identity ? { identity } : {})}
+        identity={identity}
         online={offline.online}
         onNavigate={navigate}
         storageError={offline.error}

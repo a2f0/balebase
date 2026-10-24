@@ -91,7 +91,9 @@ export function OfflineAuditEditor({
               </Field>
               <Button
                 onClick={() =>
-                  setIssueItem(issueItem === item.id ? undefined : item.id)
+                  void guardWorkspaceChange(async () =>
+                    setIssueItem(issueItem === item.id ? undefined : item.id),
+                  )()
                 }
               >
                 Raise issue

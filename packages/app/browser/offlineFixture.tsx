@@ -1,8 +1,10 @@
+import { DialogHost } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
 import { createRoot } from "react-dom/client";
 import { OfflineWorkspacePage } from "../src/OfflineWorkspacePage";
 import {
   activateOfflineWorkspace,
+  activeOfflineKey,
   changeOfflineWorkspace,
   lockOfflineWorkspace,
   offlineImage,
@@ -71,6 +73,7 @@ function App() {
 
 const testApi = {
   key,
+  activeKey: activeOfflineKey,
   async seed() {
     await changeOfflineWorkspace(
       key,
@@ -128,7 +131,13 @@ const testApi = {
     }),
   mount: () => {
     const root = document.getElementById("root");
-    if (root) createRoot(root).render(<App />);
+    if (root)
+      createRoot(root).render(
+        <>
+          <App />
+          <DialogHost />
+        </>,
+      );
   },
 };
 declare global {

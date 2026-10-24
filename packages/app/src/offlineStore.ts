@@ -61,7 +61,7 @@ function database() {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
     request.onblocked = () =>
-      reject(new Error("Close other Balebase tabs to enable offline storage."));
+      reject(new Error("Close other app tabs to enable offline storage."));
   });
 }
 
@@ -174,6 +174,28 @@ export function activateOfflineWorkspace(
     );
   localStorage.setItem(activeKey, key);
   window.dispatchEvent(new window.Event(offlineChanged));
+}
+
+/** Session changes can also arrive through sign-in or another tab. */
+export function lockOtherOfflineWorkspace(
+  userId: string,
+  organizationId: string | undefined,
+) {
+  const key = activeOfflineKey();
+  if (!key) return;
+  try {
+    const scope: unknown = JSON.parse(key);
+    if (
+      Array.isArray(scope) &&
+      scope[0] === apiUrl &&
+      scope[1] === userId &&
+      (!organizationId || scope[2] === organizationId)
+    )
+      return;
+  } catch {
+    // An unreadable pointer must not unlock another account's data.
+  }
+  lockOfflineWorkspace();
 }
 
 /** Hides downloaded data on sign-out/account changes without deleting unsynced work. */
