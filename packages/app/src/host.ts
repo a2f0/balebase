@@ -28,13 +28,6 @@ export interface NativeHost {
    * the form submits through native HTTP and the page never navigates.
    */
   savePassword(username: string, password: string): Promise<void>;
-  /** Asks the system for a saved email and password; undefined on cancellation. */
-  chooseSavedSignIn?: (() => Promise<SavedSignIn | undefined>) | undefined;
-}
-
-export interface SavedSignIn {
-  username: string;
-  password: string;
 }
 
 let host: AppHost = {};

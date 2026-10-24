@@ -156,7 +156,7 @@ function useAuthPageState({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const savedSignIn = useSavedSignIn(setEmail, setPassword);
+  const savedSignIn = useSavedSignIn();
   const [passwordNeedsSaving, setPasswordNeedsSaving] = useState(true);
   const [confirmation, setConfirmation] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -212,9 +212,6 @@ function useAuthPageState({
 
   return {
     busy,
-    chooseSavedSignIn: savedSignIn.choose
-      ? () => runWhileBusy(() => savedSignIn.choose?.())
-      : undefined,
     onInput: savedSignIn.onInput,
     passwordNeedsSaving,
     cancel: () => runWhileBusy(() => onCancel?.()),
@@ -259,7 +256,6 @@ function useAuthAction(initialError: string | undefined) {
 }
 
 interface CredentialAuthPageProps {
-  chooseSavedSignIn: (() => Promise<void>) | undefined;
   onInput: (event: FormEvent<HTMLFormElement>) => void;
   busy: boolean;
   confirmation: string;
@@ -286,7 +282,6 @@ interface CredentialAuthPageProps {
 
 function CredentialAuthPage({
   busy,
-  chooseSavedSignIn,
   onInput,
   confirmation,
   copy,
@@ -326,11 +321,6 @@ function CredentialAuthPage({
         onSubmit={(event) => void onSubmit(event)}
       >
         {notice && noticeTone === "info" && <Banner>{notice}</Banner>}
-        {mode === "sign-in" && chooseSavedSignIn && (
-          <Button disabled={busy} onClick={() => void chooseSavedSignIn()}>
-            Use saved sign-in
-          </Button>
-        )}
         <AuthFields
           confirmation={confirmation}
           email={email}

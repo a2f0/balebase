@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { chooseNativeSavedSignIn, nativePasswordSaver } from "./savePassword";
+import { nativePasswordSaver } from "./savePassword";
 
 describe("native password saving", () => {
   it("saves the credentials for the hosted app's domain", async () => {
@@ -17,35 +17,5 @@ describe("native password saving", () => {
         username: "owner@example.com",
       },
     ]);
-  });
-});
-
-describe("choosing a saved sign-in", () => {
-  it("returns the selected email and password together", async () => {
-    const credential = {
-      username: "owner@example.com",
-      password: "a saved password",
-    };
-    expect(
-      await chooseNativeSavedSignIn({ choose: async () => ({ credential }) }),
-    ).toEqual(credential);
-  });
-
-  it("returns no credential on cancellation", async () => {
-    expect(
-      await chooseNativeSavedSignIn({ choose: async () => ({}) }),
-    ).toBeUndefined();
-  });
-
-  it("replaces native failures with safe, actionable guidance", async () => {
-    await expect(
-      chooseNativeSavedSignIn({
-        choose: async () => {
-          throw new Error("private native details");
-        },
-      }),
-    ).rejects.toThrow(
-      "Couldn’t open saved sign-ins. You can still enter your email and password.",
-    );
   });
 });
