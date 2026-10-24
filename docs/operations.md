@@ -253,6 +253,10 @@ builds, including `bun run build`, are production.
   `http://` on every `balebase.com` host answers 301 to `https://`. Cloudflare
   sends that redirect before any Worker runs, so it carries no `X-Robots-Tag`;
   the HTTPS response it points to does.
+- The website's 404 page is its only noindexed production page. The Worker
+  serves it with status 404 for every missing path, but answers its own URL,
+  `/404`, with a 200, so it carries `<meta name="robots" content="noindex">`
+  and no canonical link, `og:url`, or sitemap entry.
 - Production app signing links (`/sign/<token>`) open a contract without an
   account, so the app's `_headers` adds `X-Robots-Tag: noindex, nofollow` to
   every `/sign/*` response.
@@ -270,10 +274,12 @@ The rules live in `packages/website/src/search.ts` and
 `robots.txt` is a comment-only content-signals notice. It appears only where
 a Worker has no `robots.txt` of its own, such as the API; the website and
 app files replace it. After a deploy, confirm that production sends noindex
-only on signing links and that staging sends it everywhere:
+only on signing links and the 404 page, and that staging sends it everywhere:
 
 ```sh
 curl -sI https://balebase.com/ | grep -i x-robots-tag      # no output
+curl -s https://balebase.com/ | grep -c 'name="robots"'    # 0
+curl -s https://balebase.com/missing/ | grep -o '<meta name="robots"[^>]*>'
 curl -sI https://website-staging.balebase.com/ | grep -i x-robots-tag
 curl -s https://balebase.com/robots.txt | grep Sitemap
 curl -sI https://app.balebase.com/sign/x | grep -i x-robots-tag  # noindex

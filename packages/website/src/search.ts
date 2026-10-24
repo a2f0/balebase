@@ -1,10 +1,10 @@
 /*
  * Search-engine metadata for the marketing site. Only the production build is
- * indexable: a staging build marks every page and response noindex, omits
- * canonical links (a noindex page naming production as its canonical would
- * send crawlers conflicting signals), and publishes no sitemap. Staging still
- * allows crawling, because a crawler that may not fetch a page never sees its
- * noindex.
+ * indexable, apart from its 404 page: a staging build marks every page and
+ * response noindex, omits canonical links (a noindex page naming production
+ * as its canonical would send crawlers conflicting signals), and publishes no
+ * sitemap. Staging still allows crawling, because a crawler that may not fetch
+ * a page never sees its noindex.
  */
 import type { Plan } from "@balebase/ui/brand";
 
@@ -23,7 +23,18 @@ export function releaseTier(value: string | undefined): ReleaseTier {
   return tier;
 }
 
-export const noindex = "noindex, nofollow";
+const noindex = "noindex, nofollow";
+
+/**
+ * A page's robots meta, or null for a page that is indexed and canonical.
+ * Staging marks every page noindex, nofollow. In production only pages kept
+ * out of search carry noindex, such as the 404 page: the Worker also answers
+ * its own URL, /404, with a 200. Crawlers may still follow its links.
+ */
+export function robotsMeta(tier: ReleaseTier, indexed: boolean): string | null {
+  if (tier === "staging") return noindex;
+  return indexed ? null : "noindex";
+}
 
 /** Matches the directory pages the Worker serves at a trailing slash. */
 export function canonicalUrl(pathname: string): string {

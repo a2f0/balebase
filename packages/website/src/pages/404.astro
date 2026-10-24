@@ -1,7 +1,9 @@
 ---
 /*
  * Cloudflare serves this page, with status 404, for any path the site does
- * not have (not_found_handling in wrangler.jsonc).
+ * not have (not_found_handling in wrangler.jsonc). It also answers its own
+ * URL, /404, with a 200, so it is noindex on every tier and never listed in
+ * the sitemap.
  */
 import { productName } from "@balebase/ui/brand";
 import Icon from "../components/Icon.astro";
@@ -9,8 +11,8 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 ---
 
 <BaseLayout
-  canonical={false}
   description={`This page is not on the ${productName} website.`}
+  indexed={false}
   title={`Page not found — ${productName}`}
 >
   <section aria-labelledby="not-found-title" class="container notFound">

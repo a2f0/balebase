@@ -10,6 +10,7 @@ import {
   homeStructuredData,
   type ReleaseTier,
   releaseTier,
+  robotsMeta,
   scriptJson,
   searchFiles,
 } from "./search";
@@ -18,6 +19,13 @@ test("the tier defaults to production and rejects unknown names", () => {
   expect(releaseTier(undefined)).toBe("production");
   expect(releaseTier(" Staging ")).toBe("staging");
   expect(() => releaseTier("prod")).toThrow("Unknown PUBLIC_RELEASE_TIER");
+});
+
+test("production noindexes only pages kept out of search; staging noindexes all", () => {
+  expect(robotsMeta("production", true)).toBeNull();
+  expect(robotsMeta("production", false)).toBe("noindex");
+  expect(robotsMeta("staging", true)).toBe("noindex, nofollow");
+  expect(robotsMeta("staging", false)).toBe("noindex, nofollow");
 });
 
 test("canonical URLs use the trailing slash the Worker serves pages at", () => {
@@ -134,15 +142,24 @@ describe("built tiers", () => {
   }, 120_000);
   afterAll(() => rmSync(work, { recursive: true, force: true }));
 
-  test("production pages are canonical and never noindex", () => {
+  test("production pages are canonical and only the 404 page is noindex", () => {
     expect(read("production", "index.html")).toContain(
       '<link rel="canonical" href="https://balebase.com/">',
     );
     expect(read("production", "privacy/index.html")).toContain(
       '<meta property="og:url" content="https://balebase.com/privacy/">',
     );
-    expect(read("production", "404.html")).not.toContain("canonical");
-    for (const page of pages)
+    // The Worker answers /404 itself with a 200, so the page is noindex.
+    const notFound = read("production", "404.html");
+    expect(notFound).toContain('<meta name="robots" content="noindex">');
+    expect(notFound).not.toContain("canonical");
+    expect(notFound).not.toContain("og:url");
+    // Every other built page, including any added later, stays indexable.
+    const built = [
+      ...new Bun.Glob("**/*.html").scanSync({ cwd: out("production") }),
+    ];
+    expect(built).toContain("terms/index.html");
+    for (const page of built.filter((file) => file !== "404.html"))
       expect(read("production", page)).not.toContain("noindex");
     expect(read("production", "sitemap.xml")).not.toContain("404");
     expect(read("production", "robots.txt")).toContain("Sitemap:");
