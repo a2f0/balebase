@@ -86,6 +86,20 @@ function offer(plan: Plan) {
   };
 }
 
+/**
+ * The company that provides Balebase, as tearleads.com describes it in its own
+ * JSON-LD. Repeating that Organization's `@id`, short name, URL, and logo here
+ * lets search engines treat both sites as one company rather than two; keep
+ * them in step with that site. The legal party, `legalName`, comes from
+ * legalEntityName like every other mention of it.
+ */
+const provider = {
+  id: "https://tearleads.com/#organization",
+  name: "Tearleads",
+  url: "https://tearleads.com/",
+  logo: "https://tearleads.com/apple-touch-icon.png",
+};
+
 interface HomeFacts {
   appUrl: string;
   description: string;
@@ -95,19 +109,22 @@ interface HomeFacts {
 }
 
 /**
- * The home page's JSON-LD: the provider, the site, and the web app with the
- * prices the page lists. The native apps join operatingSystem once a store
- * lists them.
+ * The home page's JSON-LD: the providing company, the site, and the web app
+ * with the prices the page lists. The native apps join operatingSystem once a
+ * store lists them.
  */
 export function homeStructuredData(facts: HomeFacts) {
-  const organization = { "@id": `${siteUrl}/#organization` };
+  const organization = { "@id": provider.id };
   return {
     "@context": "https://schema.org",
     "@graph": [
       {
-        ...organization,
         "@type": "Organization",
-        name: facts.legalEntityName,
+        ...organization,
+        name: provider.name,
+        legalName: facts.legalEntityName,
+        url: provider.url,
+        logo: provider.logo,
       },
       {
         "@type": "WebSite",

@@ -11,10 +11,14 @@ desired Worker custom domains:
 - Website: `balebase.com`
 - Client: `app.balebase.com`
 - API: `api.balebase.com`, with CORS headers on Cloudflare-generated responses
+- Always Use HTTPS on the `balebase.com` zone, which answers every `http://`
+  request with a 301 to `https://`
 
 The separate `stacks/staging` stack provisions `balebase-db-staging`,
 `balebase-objects-staging`, staging email routing, and first-level staging
-hostnames. See the [staging deployment steps](../docs/operations.md#deploy-staging).
+hostnames. Zone-wide settings such as Always Use HTTPS also cover the staging
+hostnames, so only the production stack manages them. See the
+[staging deployment steps](../docs/operations.md#deploy-staging).
 
 ## Secrets
 
@@ -36,6 +40,7 @@ backed up from the matrix repository; see
 [local secrets](../docs/operations.md#local-secrets). The Terraform token needs
 Zone Read, DNS Write, D1 Edit, R2 Edit, Workers Scripts Edit, and Email Routing
 Rules Write and Zone Transform Rules Write on the `balebase.com` zone. The
+production token also needs Zone Settings Edit for Always Use HTTPS. The
 separate Email API token needs Zone Read and Zone Settings Edit on the same
 zone so deploys can enable subaddressing and verify the subdomain's Email
 Routing DNS records. The `TF_STATE_*` pair is the R2 S3 key of the

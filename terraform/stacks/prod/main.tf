@@ -7,6 +7,15 @@ data "cloudflare_zone" "main" {
   }
 }
 
+# Redirect every http:// request on the zone to https:// with a 301. The
+# setting is zone-wide, covering the staging hostnames too, so only this stack
+# manages it.
+resource "cloudflare_zone_setting" "always_use_https" {
+  zone_id    = data.cloudflare_zone.main.id
+  setting_id = "always_use_https"
+  value      = "on"
+}
+
 resource "cloudflare_d1_database" "main" {
   account_id = var.cloudflare_account_id
   name       = var.d1_database_name

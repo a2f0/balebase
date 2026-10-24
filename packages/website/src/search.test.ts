@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { plans } from "@balebase/ui/brand";
+import { legalEntityName, plans, productName } from "@balebase/ui/brand";
 import {
   canonicalUrl,
   homeStructuredData,
@@ -26,14 +26,38 @@ test("canonical URLs use the trailing slash the Worker serves pages at", () => {
   expect(canonicalUrl("privacy/")).toBe("https://balebase.com/privacy/");
 });
 
+const facts = {
+  appUrl: "https://app.balebase.com",
+  description: "Description",
+  legalEntityName,
+  plans,
+  productName,
+};
+
+// The Organization tearleads.com publishes for the company.
+const tearleads = {
+  "@type": "Organization",
+  "@id": "https://tearleads.com/#organization",
+  name: "Tearleads",
+  legalName: "Tearleads, LLC",
+  url: "https://tearleads.com/",
+  logo: "https://tearleads.com/apple-touch-icon.png",
+};
+
+test("the provider is the company tearleads.com describes, not a new one", () => {
+  const [organization, site, app] = homeStructuredData(facts)["@graph"];
+  expect(organization).toEqual(tearleads);
+  expect(site).toMatchObject({
+    name: "Balebase",
+    publisher: { "@id": tearleads["@id"] },
+  });
+  expect(app).toMatchObject({
+    name: "Balebase",
+    provider: { "@id": tearleads["@id"] },
+  });
+});
+
 test("offers repeat the listed prices and reject one that is not a dollar amount", () => {
-  const facts = {
-    appUrl: "https://app.balebase.com",
-    description: "Description",
-    legalEntityName: "Tearleads, LLC",
-    plans,
-    productName: "Balebase",
-  };
   const [, , app] = homeStructuredData(facts)["@graph"];
   expect(app).toMatchObject({
     url: "https://app.balebase.com/",
@@ -126,7 +150,10 @@ describe("built tiers", () => {
     const json = read("production", "index.html").match(
       /<script type="application\/ld\+json">([^<]+)<\/script>/,
     )?.[1];
-    expect(JSON.parse(json ?? "")["@graph"]).toHaveLength(3);
+    const graph = JSON.parse(json ?? "")["@graph"];
+    expect(graph).toHaveLength(3);
+    expect(graph[0]).toEqual(tearleads);
+    expect(json).not.toContain("balebase.com/#organization");
   });
 
   test("internal page links use the trailing-slash form, so they never redirect", () => {
