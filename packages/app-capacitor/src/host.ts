@@ -1,7 +1,7 @@
 import type { AppHost } from "@balebase/app/host";
 import { Capacitor } from "@capacitor/core";
 import { saveNativeFile } from "./saveFile";
-import { chooseNativeSavedSignIn, nativePasswordSaver } from "./savePassword";
+import { nativePasswordSaver } from "./savePassword";
 
 /**
  * On a device, the WebView's origin marks API requests, emailed links open the
@@ -20,8 +20,6 @@ export function capacitorHost(appUrl: string): AppHost {
           : "https://localhost",
       saveFile: saveNativeFile,
       savePassword: nativePasswordSaver(appUrl),
-      chooseSavedSignIn:
-        Capacitor.getPlatform() === "ios" ? chooseNativeSavedSignIn : undefined,
     },
   };
 }

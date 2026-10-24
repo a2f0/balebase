@@ -13,32 +13,9 @@ public class PasswordManagerPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "PasswordManagerPlugin"
     public let jsName = "PasswordManager"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "save", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "choose", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "save", returnType: CAPPluginReturnPromise)
     ]
     @MainActor private var saveInProgress = false
-    @MainActor private var signInRequest: SavedSignInRequest?
-
-    @objc func choose(_ call: CAPPluginCall) {
-        Task { @MainActor in
-            guard self.signInRequest == nil, !self.saveInProgress else {
-                call.reject("A password manager request is already in progress.")
-                return
-            }
-            guard let presenter = self.bridge?.viewController,
-                  let window = presenter.view.window,
-                  presenter.presentedViewController == nil else {
-                call.reject("The app has no available window to ask from.")
-                return
-            }
-            presenter.view.endEditing(true)
-            let request = SavedSignInRequest(window: window, call: call) { [weak self] in
-                self?.signInRequest = nil
-            }
-            self.signInRequest = request
-            request.start()
-        }
-    }
 
     @objc func save(_ call: CAPPluginCall) {
         guard let domain = call.getString("domain"), !domain.isEmpty,
@@ -48,8 +25,8 @@ public class PasswordManagerPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         Task { @MainActor in
-            guard !self.saveInProgress, self.signInRequest == nil else {
-                call.reject("A password manager request is already in progress.")
+            guard !self.saveInProgress else {
+                call.reject("A password save is already in progress.")
                 return
             }
             guard let presenter = self.bridge?.viewController,
@@ -137,50 +114,3 @@ public class PasswordManagerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 }
 
-/// The system scopes this request to the app's associated webcredentials
-/// domain. It returns the selected account's username and password together.
-@MainActor
-private final class SavedSignInRequest: NSObject, ASAuthorizationControllerDelegate,
-                                        ASAuthorizationControllerPresentationContextProviding {
-    private let window: UIWindow
-    private let call: CAPPluginCall
-    private let onFinish: () -> Void
-
-    init(window: UIWindow, call: CAPPluginCall, onFinish: @escaping () -> Void) {
-        self.window = window
-        self.call = call
-        self.onFinish = onFinish
-    }
-
-    func start() {
-        let controller = ASAuthorizationController(authorizationRequests: [ASAuthorizationPasswordProvider().createRequest()])
-        controller.delegate = self
-        controller.presentationContextProvider = self
-        // The controller retains itself until it calls its delegate. The plugin
-        // retains this request (the controller's delegate references are weak).
-        controller.performRequests()
-    }
-
-    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        window
-    }
-
-    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
-        defer { onFinish() }
-        guard let credential = authorization.credential as? ASPasswordCredential else {
-            call.reject("No saved password was selected.")
-            return
-        }
-        call.resolve(["credential": ["username": credential.user, "password": credential.password]])
-    }
-
-    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
-        defer { onFinish() }
-        if let error = error as? ASAuthorizationError, error.code == .canceled {
-            call.resolve()
-        } else {
-            // Never put the credential or the system error's description in logs.
-            call.reject("Saved sign-ins are unavailable.")
-        }
-    }
-}

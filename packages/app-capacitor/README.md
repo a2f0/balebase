@@ -34,10 +34,8 @@ registers the plugin itself, since it lives in the app rather than a package.
   request to the preferred password manager but does not guarantee its own
   prompt or confirm storage. Earlier versions use shared web credentials.
   A rejected save shows an alert without interrupting the signed-in session.
-  **Use saved sign-in** opens the system password picker and fills both the
-  email and password. Credentials stay paired in the password manager; the app
-  does not keep a separate list of email addresses or passwords. Keyboard
-  AutoFill remains available.
+  Saved passwords appear in the keyboard's AutoFill bar, which fills the email
+  and password together.
   Each App ID has the Associated Domains capability, and
   `packages/app-web` serves `/.well-known/apple-app-site-association`, which
   lists both apps.

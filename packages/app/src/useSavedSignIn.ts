@@ -1,26 +1,15 @@
 import { type FormEvent, useRef } from "react";
-import { nativeHost, type SavedSignIn } from "./host";
+import { nativeHost } from "./host";
 
 /** Keeps autofill provenance only for this form's lifetime, never in storage. */
-export function useSavedSignIn(
-  onEmail: (value: string) => void,
-  onPassword: (value: string) => void,
-) {
-  const saved = useRef<SavedSignIn | undefined>(undefined);
-  const choose = nativeHost()?.chooseSavedSignIn;
+export function useSavedSignIn() {
+  const saved = useRef<{ username: string; password: string } | undefined>(
+    undefined,
+  );
   return {
     clear: () => {
       saved.current = undefined;
     },
-    choose: choose
-      ? async () => {
-          const credential = await choose();
-          if (!credential) return;
-          saved.current = credential;
-          onEmail(credential.username);
-          onPassword(credential.password);
-        }
-      : undefined,
     onInput(event: FormEvent<HTMLFormElement>) {
       const input = event.target;
       // WKWebView's login AutoFill uses setValueForUser, which dispatches a

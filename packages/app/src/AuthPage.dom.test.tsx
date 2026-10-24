@@ -3,7 +3,7 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { AuthPage } from "./AuthPage";
-import { configureHost, type NativeHost } from "./host";
+import { configureHost } from "./host";
 
 const dom = new Window({ url: "http://localhost:5173/" });
 const domGlobals = {
@@ -73,7 +73,6 @@ describe("registration", () => {
         ? document.activeElement.textContent
         : document.activeElement?.tagName;
     expect(focusedHeading()).toBe("BODY");
-    expect(container.textContent).not.toContain("Use saved sign-in");
 
     await act(async () => button("Create an account").click());
     expect(focusedHeading()).toBe("Create your workspace");
@@ -192,7 +191,6 @@ describe("saving passwords in the native app", () => {
     savePassword = async (username: string, password: string) => {
       offered.push([username, password]);
     },
-    chooseSavedSignIn?: NativeHost["chooseSavedSignIn"],
   ) {
     offered = [];
     authenticated = 0;
@@ -202,7 +200,6 @@ describe("saving passwords in the native app", () => {
         origin: "https://localhost",
         saveFile: async () => true,
         savePassword,
-        chooseSavedSignIn,
       },
     });
     globalThis.fetch = (async (input: RequestInfo | URL) =>
@@ -359,46 +356,9 @@ describe("saving passwords in the native app", () => {
     });
   }
 
-  async function chooseSaved() {
-    const button = [...container.querySelectorAll("button")].find(
-      (candidate) => candidate.textContent === "Use saved sign-in",
-    );
-    if (!button) throw new Error("No saved sign-in action");
-    await act(async () => button.click());
-  }
-
-  it("fills the saved email and password together without another save offer", async () => {
-    await renderNativeSignIn(
-      () => Response.json({ token: "token", user: {} }),
-      undefined,
-      async () => ({
-        username: credentials.email,
-        password: credentials.password,
-      }),
-    );
-    await chooseSaved();
-    expect(
-      container.querySelector<HTMLInputElement>('[name="email"]')?.value,
-    ).toBe(credentials.email);
-    expect(
-      container.querySelector<HTMLInputElement>('[name="password"]')?.value,
-    ).toBe(credentials.password);
-    expect(authenticated).toBe(0);
-    await submit();
-    expect(authenticated).toBe(1);
-    expect(offered).toEqual([]);
-  });
-
-  it("clears saved credentials when leaving sign-in and hides the picker on other forms", async () => {
-    await renderNativeSignIn(
-      () => Response.json({ token: "token", user: {} }),
-      undefined,
-      async () => ({
-        username: credentials.email,
-        password: credentials.password,
-      }),
-    );
-    await chooseSaved();
+  it("forgets autofill provenance when leaving sign-in", async () => {
+    await renderNativeSignIn(() => Response.json({ token: "token", user: {} }));
+    await fillSaved();
     const click = async (label: string) =>
       act(async () => {
         [...container.querySelectorAll("button")]
@@ -406,18 +366,13 @@ describe("saving passwords in the native app", () => {
           ?.click();
       });
     await click("Forgot password?");
-    expect(container.textContent).not.toContain("Use saved sign-in");
     await click("Back to sign in");
-    expect(container.textContent).toContain("Use saved sign-in");
     await signIn();
     expect(offered).toEqual([[credentials.email, credentials.password]]);
-    await click("Create an account");
-    expect(container.textContent).not.toContain("Use saved sign-in");
   });
 
   it("keeps sign-in working when the WebView does not recognize :autofill", async () => {
     await renderNativeSignIn(() => Response.json({ token: "token", user: {} }));
-    expect(container.textContent).not.toContain("Use saved sign-in");
     const email = container.querySelector<HTMLInputElement>('[name="email"]');
     if (!email) throw new Error("No email input");
     const matches = email.matches.bind(email);
@@ -428,37 +383,6 @@ describe("saving passwords in the native app", () => {
         return matches(selector);
       },
     });
-    await signIn();
-    expect(authenticated).toBe(1);
-    expect(offered).toEqual([[credentials.email, credentials.password]]);
-  });
-
-  it("leaves manual sign-in available after cancelling the password picker", async () => {
-    await renderNativeSignIn(
-      () => Response.json({ token: "token", user: {} }),
-      undefined,
-      async () => undefined,
-    );
-    await fill({ 'input[name="email"]': credentials.email });
-    await chooseSaved();
-    expect(
-      container.querySelector<HTMLInputElement>('[name="email"]')?.value,
-    ).toBe(credentials.email);
-    await signIn();
-    expect(authenticated).toBe(1);
-    expect(offered).toEqual([[credentials.email, credentials.password]]);
-  });
-
-  it("leaves manual sign-in available when the password picker fails", async () => {
-    await renderNativeSignIn(
-      () => Response.json({ token: "token", user: {} }),
-      undefined,
-      async () => {
-        throw new Error("Saved sign-ins unavailable");
-      },
-    );
-    await chooseSaved();
-    expect(container.textContent).toContain("Saved sign-ins unavailable");
     await signIn();
     expect(authenticated).toBe(1);
     expect(offered).toEqual([[credentials.email, credentials.password]]);
