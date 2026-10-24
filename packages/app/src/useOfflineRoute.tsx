@@ -3,9 +3,11 @@ import { OfflineWorkspacePage } from "./OfflineWorkspacePage";
 import {
   activeOfflineKey,
   lockOfflineWorkspace,
+  type OfflineWorkspace,
   offlineScopeKey,
 } from "./offlineStore";
 import { useOfflineWorkspace } from "./useOfflineWorkspace";
+import { signingTokenForPath } from "./workspacePaths";
 
 interface OfflineSession {
   user: { id: string; name: string; email: string };
@@ -51,25 +53,28 @@ export function useOfflineRoute(
     if (!isPending && !sessionError && !session && navigator.onLine)
       lockOfflineWorkspace();
   }, [isPending, sessionError, session]);
-  if (["/add-account", "/reset-password"].includes(pathname)) return undefined;
-  const saved = offline.workspace;
-  const local =
-    saved &&
-    saved.key === activeOfflineKey() &&
-    (!user ||
-      (saved.scope.userId === user.id &&
-        saved.scope.organizationId === organizationId))
-      ? saved
-      : undefined;
-  if (
-    (!offline.online || sessionError) &&
-    local &&
-    (pathname === "/offline" || !session || sessionError)
-  ) {
+  const excluded =
+    ["/add-account", "/reset-password"].includes(pathname) ||
+    Boolean(signingTokenForPath(pathname));
+  const local = matchingWorkspace(offline.workspace, user, organizationId);
+  const fallback = Boolean(
+    !excluded &&
+      (!offline.online || sessionError) &&
+      local &&
+      (pathname === "/offline" || !session || sessionError),
+  );
+  useEffect(() => {
+    // Give a cold offline reopen its own route before account revalidation
+    // begins, so reconnecting never replaces an in-progress local editor.
+    if (fallback && pathname !== "/offline") navigate("/offline");
+  }, [fallback, pathname, navigate]);
+  if (excluded) return undefined;
+  if (local && (pathname === "/offline" || fallback)) {
     return (
       <OfflineWorkspacePage
         key={local.key}
         workspace={local}
+        {...(identity ? { identity } : {})}
         online={offline.online}
         onNavigate={navigate}
         storageError={offline.error}
@@ -91,4 +96,19 @@ export function useOfflineRoute(
     );
   }
   return undefined;
+}
+
+function matchingWorkspace(
+  saved: OfflineWorkspace | undefined,
+  user: OfflineSession["user"] | undefined,
+  organizationId: string | undefined,
+) {
+  if (!saved || saved.key !== activeOfflineKey()) return undefined;
+  if (
+    user &&
+    (saved.scope.userId !== user.id ||
+      (organizationId && saved.scope.organizationId !== organizationId))
+  )
+    return undefined;
+  return saved;
 }

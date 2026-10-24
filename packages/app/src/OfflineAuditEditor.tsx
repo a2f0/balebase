@@ -1,5 +1,5 @@
 import { Banner, Button, Card, Field, PageSection } from "@balebase/ui/react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { guardWorkspaceChange } from "./navigationGuard";
 import { OfflineIssueCreator, OfflineIssueList } from "./OfflineIssues";
 import type { OfflineAudit, OfflineWorkspace } from "./offlineStore";
@@ -124,6 +124,8 @@ export function OfflineAuditEditor({
 
 function useOfflineAnswers(audit: OfflineAudit, key: string) {
   const [responses, setResponses] = useState(audit.responses);
+  const dirty = useRef<Record<string, { value: string }>>({});
+  const writes = useRef(Promise.resolve());
   const [pending, setPending] = useState(0);
   const [error, setError] = useState<string>();
   const [sealing, setSealing] = useState(false);
@@ -131,11 +133,30 @@ function useOfflineAnswers(audit: OfflineAudit, key: string) {
     pending > 0 || Boolean(error),
     "Some audit answers have not been saved on this device.",
   );
+  useEffect(() => {
+    setResponses({
+      ...audit.responses,
+      ...Object.fromEntries(
+        Object.entries(dirty.current).map(([id, edit]) => [id, edit.value]),
+      ),
+    });
+  }, [audit.responses]);
+  function write(itemId: string, edit: { value: string }) {
+    const result = writes.current.then(async () => {
+      await saveOfflineAnswer(key, audit.id, itemId, edit.value);
+      if (dirty.current[itemId] === edit) delete dirty.current[itemId];
+    });
+    // Preserve typing order within this tab, including after a failed write.
+    writes.current = result.catch(() => undefined);
+    return result;
+  }
   async function answer(itemId: string, value: string) {
+    const edit = { value };
+    dirty.current[itemId] = edit;
     setResponses((current) => ({ ...current, [itemId]: value }));
     setPending((count) => count + 1);
     try {
-      await saveOfflineAnswer(key, audit.id, itemId, value);
+      await write(itemId, edit);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -150,9 +171,10 @@ function useOfflineAnswers(audit: OfflineAudit, key: string) {
     setSealing(true);
     setPending((count) => count + 1);
     try {
-      // Retry any previously failed local saves before sealing the snapshot.
-      for (const [id, value] of Object.entries(responses))
-        await saveOfflineAnswer(key, audit.id, id, value);
+      // Retry only unsaved edits. Already-saved answers may have been updated
+      // by another tab; completion seals the latest durable snapshot.
+      for (const [id, edit] of Object.entries(dirty.current))
+        await write(id, edit);
       if (complete) await queueOfflineAudit(key, audit.id);
       setError(undefined);
     } catch (cause) {
