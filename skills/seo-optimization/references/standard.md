@@ -165,10 +165,13 @@ node, with the same `@id`, name, legal name, URL, and logo, and point
   search listing.
 - A host that serves a duplicate of another host's app, such as a demo build,
   canonicalizes to the primary app root.
-- When public user-content routes cannot be told apart from app routes by
-  URL pattern (for example `/:user` and `/admin`), send the header on every
-  path below the root, detach it on built files, and keep the root
-  indexable. Add the robots meta in the view as well, never twice.
+- Once the product owner decides that public user-content routes stay out
+  of search, noindex them with a path rule. If those routes cannot be told
+  apart from app routes by URL pattern (for example `/:user` and `/admin`),
+  send the header on every path below the root, detach it on built files,
+  and keep the root indexable; say so in the report, because it also covers
+  app routes. Add the robots meta in the view as well, never twice. Without
+  that decision, record the question instead of noindexing anything.
 - Private links that work without an account, such as signing or sharing
   URLs with a token, get `X-Robots-Tag: noindex, nofollow` through a path
   rule, while the rest of the app keeps its canonical. Files those pages link
