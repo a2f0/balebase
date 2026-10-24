@@ -31,6 +31,11 @@ observed on live Workers in 2026 with wrangler 4.
   any deploy check that lists the built files, and out of published packages.
 - An authentication gate redirects robots.txt to the sign-in page unless the
   file is on the gate's public allowlist.
+- `:name` placeholders match exactly one path segment and `*` matches the
+  rest. A `! Header-Name` line detaches a header that an earlier matching rule
+  set; it only works when it comes after that rule. A file has a limit of 100
+  rules, so a build that generates rules per file should fail before reaching
+  it.
 
 ## URLs and status codes
 
@@ -110,6 +115,34 @@ Both serve full copies of the site.
   `previews_enabled`; never read an OAuth token out of wrangler's
   configuration to call it.
 
+## Zone settings and redirects
+
+- Zone-wide settings, such as `always_use_https`, belong to exactly one
+  Terraform stack, usually production, never a module that both tiers use.
+  The Cloudflare provider cannot destroy a `cloudflare_zone_setting`:
+  removing it from Terraform leaves the setting as it is.
+- Before turning on Always Use HTTPS, check that nothing depends on plain
+  HTTP: API base URLs in web, desktop, and native clients, webhook endpoints
+  registered with providers such as Stripe (list them read-only), and OAuth
+  or payment return URLs. Providers rarely follow a redirect on a webhook
+  POST.
+- A `www` to apex redirect needs no origin: a proxied `AAAA` record for `www`
+  with content `100::`, and a `cloudflare_ruleset` in phase
+  `http_request_dynamic_redirect` whose rule matches
+  `http.host eq "www.<zone>"` and answers 301 with
+  `concat("https://<zone>", http.request.uri.path)`, preserving the query
+  string. Universal SSL already covers `www`. Single redirects run before
+  Workers, so the rule works even while `www` is still a Worker custom
+  domain.
+- A zone has one ruleset per phase: extend or import an existing one.
+- The redirect needs the token permission Zone → Single Redirect → Edit
+  ("Dynamic URL Redirects Write"). A token without it gets
+  `403 request is not authorized` even when reading the phase entrypoint, so
+  read it first and stop before writing Terraform the token cannot apply.
+  Never widen a token's permissions yourself.
+- Repositories whose apply step refuses plans that delete resources need an
+  explicit decision before a change that removes a custom domain.
+
 ## Cloudflare's managed robots.txt
 
 A zone can serve a Cloudflare-managed robots.txt. Observed behavior:
@@ -150,6 +183,10 @@ directives. Do not change the zone setting without explicit authorization.
   uploaded)" counts assets; "Read N files" also counts directories. Passing
   `--message <commit>` to `wrangler deploy` makes later comparisons easy;
   suggest it rather than adding it unasked.
+- A hostname that does not resolve may belong to a Terraform stack that a
+  teardown destroyed and no deploy re-applies. Check that stack's state with
+  a read-only plan before assuming a DNS fault, and check that the content
+  behind it, such as uploaded release files, exists too.
 - A manual deploy can build from gitignored local inputs, such as captured
   screenshots or generated data. Compare them with what is live before
   deploying, so a stale local copy does not regress production.

@@ -116,8 +116,11 @@ checks the platform's duplicate hosts, such as `*.workers.dev`.
    path, such as an active-page marker. Shared link constants in other
    packages count too, and changing them can require those packages' version
    bumps.
-9. **Hygiene on touched pages.** One `<h1>`, meaningful `alt` text on content
-   images, and descriptive link text.
+9. **Hygiene on touched pages.** One `<h1>` that names the page (not one
+   shared by a whole gallery), meaningful `alt` text on content images, and
+   descriptive link text. On image-heavy pages, keep only the likely Largest
+   Contentful Paint image eager, with `fetchpriority="high"`, and lazy-load
+   the rest with explicit `width` and `height`.
 10. **Manifest.** Where a web app manifest exists, make the name, short name,
     description, icons, colors, `start_url`, and `display` accurate. Add
     `related_applications` only after the store listings exist.
@@ -135,7 +138,13 @@ checks the platform's duplicate hosts, such as `*.workers.dev`.
 
 Paths on a content host that are not meant for search, such as review or
 preview pages, get the internal-host treatment: the header, the robots meta,
-and no sitemap entry.
+and no sitemap entry. Placeholder pages without real copy do too, through a
+flag on the page, so a page becomes indexable and joins the sitemap as soon
+as it gets content.
+
+When several sites belong to one company, give them the same `Organization`
+node, with the same `@id`, name, legal name, URL, and logo, and point
+`publisher` or `provider` at that `@id`.
 
 ## App hosts
 
@@ -156,6 +165,13 @@ and no sitemap entry.
   search listing.
 - A host that serves a duplicate of another host's app, such as a demo build,
   canonicalizes to the primary app root.
+- Once the product owner decides that public user-content routes stay out
+  of search, noindex them with a path rule. If those routes cannot be told
+  apart from app routes by URL pattern (for example `/:user` and `/admin`),
+  send the header on every path below the root, detach it on built files,
+  and keep the root indexable; say so in the report, because it also covers
+  app routes. Add the robots meta in the view as well, never twice. Without
+  that decision, record the question instead of noindexing anything.
 - Private links that work without an account, such as signing or sharing
   URLs with a token, get `X-Robots-Tag: noindex, nofollow` through a path
   rule, while the rest of the app keeps its canonical. Files those pages link
