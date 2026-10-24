@@ -93,7 +93,6 @@ export function App() {
     access,
     pathname,
     navigate,
-    isPending,
     error,
   );
   useDismissDialogsOnWorkspaceChange(session, workspace.activeOrganizationId);

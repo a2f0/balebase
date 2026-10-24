@@ -25,7 +25,6 @@ export function useOfflineRoute(
   access: { memberRole: string | undefined; loadError: string | undefined },
   pathname: string,
   navigate: (path: string) => void,
-  isPending: boolean,
   sessionError: unknown,
 ) {
   const offline = useOfflineWorkspace();
@@ -54,12 +53,12 @@ export function useOfflineRoute(
     ],
   );
   useEffect(() => {
+    // An expired cookie pauses API access, not local editing. Explicit sign-out
+    // locks in accountSessions; changing identities also locks cached work here.
     if (pathname === "/add-account") lockOfflineWorkspace();
     else if (session)
       lockOtherOfflineWorkspace(session.user.id, confirmedOrganizationId);
-    else if (!isPending && !sessionError && navigator.onLine)
-      lockOfflineWorkspace();
-  }, [isPending, sessionError, session, confirmedOrganizationId, pathname]);
+  }, [session, confirmedOrganizationId, pathname]);
   const excluded =
     ["/add-account", "/reset-password"].includes(pathname) ||
     Boolean(signingTokenForPath(pathname));

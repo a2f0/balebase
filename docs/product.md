@@ -416,6 +416,9 @@ unlock it. The API rechecks authentication, organization access, form visibility
 and assignees before accepting writes; an expired session or rejected operation
 keeps local data and stops its dependents. Sign in again or restore access, then
 retry. Opening cached data is local device access and does not grant API access.
+Session expiry keeps the local editor open, including unsaved issue details and
+selected photos. Explicit sign-out and account or organization changes still
+lock the local view.
 
 This first release supports new audits from downloaded forms and new audit or
 standalone issues. Existing server audits, template editing, transaction issues,

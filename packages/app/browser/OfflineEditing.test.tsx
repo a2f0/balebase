@@ -387,3 +387,80 @@ for (const { path, kind } of [
     );
   }, 30_000);
 }
+
+it("keeps unsaved issue details and photos when reconnecting with an expired session", async () => {
+  const requests: string[] = [];
+  await withOfflineBrowser(
+    async (page, _browser, directory) => {
+      await page.evaluate(() => window.offlineTest.seed());
+      await page.setOfflineMode(true);
+      await page.evaluate(() => {
+        history.replaceState(null, "", "/offline");
+        window.offlineAppTest.mount();
+      });
+      await openDraft(page);
+      await press(page, "Raise issue");
+      const title = 'form[aria-label="Issue details"] input';
+      const description = 'form[aria-label="Issue details"] textarea';
+      await page.type(title, "Expired session draft");
+      await page.type(description, "Keep this note and selected photo.");
+      const photo = join(directory, "expired.png");
+      await Bun.write(photo, new Uint8Array([1, 2, 3, 4]));
+      await (await page.$('input[type="file"]'))?.uploadFile(photo);
+      await page.setOfflineMode(false);
+      await page.evaluate(() => window.offlineAppTest.refreshSession());
+      await page.waitForFunction(
+        () =>
+          document.getElementById("session-state")?.textContent ===
+          "signed-out",
+        { polling: 100 },
+      );
+      expect(await page.$eval(title, (field) => field.value)).toBe(
+        "Expired session draft",
+      );
+      expect(await page.$eval(description, (field) => field.value)).toBe(
+        "Keep this note and selected photo.",
+      );
+      expect(
+        await page.$eval(
+          'input[type="file"]',
+          (field) => (field as HTMLInputElement).files?.[0]?.name,
+        ),
+      ).toBe("expired.png");
+      await press(page, "Save issue on device");
+      await page.waitForFunction(
+        async () => (await window.offlineTest.read())?.issues.length === 1,
+        { polling: 100 },
+      );
+      await page.select("select", "fail");
+      await press(page, "Complete and queue audit");
+      await page.waitForFunction(
+        async () =>
+          (await window.offlineTest.read())?.jobs.some(
+            (job) => job.status === "blocked",
+          ),
+        { polling: 100 },
+      );
+      const saved = await page.evaluate(() => window.offlineTest.read());
+      expect(saved?.audits[0]?.queued).toBe(true);
+      expect(saved?.issues[0]?.operation.title).toBe("Expired session draft");
+      const image = saved?.issues[0]?.images[0];
+      if (!image) throw new Error("Unsaved photo was lost on expiry");
+      expect(
+        await page.evaluate((id) => window.offlineTest.photo(id), image.id),
+      ).toEqual({ type: "image/png", bytes: [1, 2, 3, 4] });
+      expect(requests).toEqual(["audit"]);
+    },
+    async (request) => {
+      const path = new URL(request.url).pathname;
+      if (path === "/api/auth/get-session") return Response.json(null);
+      if (path === "/api/offline/operations") {
+        const { operation } = (await request.json()) as {
+          operation: { type: string };
+        };
+        requests.push(operation.type);
+      }
+      return Response.json({ error: "Sign in to sync" }, { status: 401 });
+    },
+  );
+}, 30_000);

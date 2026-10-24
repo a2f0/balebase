@@ -12,6 +12,7 @@ const testApi = {
         <>
           <App />
           <DialogHost />
+          <SessionState />
         </>,
       );
   },
@@ -23,3 +24,16 @@ declare global {
   }
 }
 window.offlineAppTest = testApi;
+
+function SessionState() {
+  const { data, isPending, error } = authClient.useSession();
+  return (
+    <output id="session-state">
+      {isPending
+        ? "pending"
+        : error
+          ? "error"
+          : (data?.user.id ?? "signed-out")}
+    </output>
+  );
+}
