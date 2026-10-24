@@ -4,7 +4,7 @@ import { pdfjsAssets } from "@balebase/app/vite";
 import { sentryAssets } from "@balebase/diagnostics/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from "vite";
-import { offlineShell } from "./offlineShell";
+import { offlineShell } from "./offlineShell.ts";
 
 /*
  * Search engines may index only the production app. Its shell names the app
