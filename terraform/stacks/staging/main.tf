@@ -7,6 +7,9 @@ data "cloudflare_zone" "main" {
   }
 }
 
+# Zone-wide settings, such as Always Use HTTPS, also cover the staging
+# hostnames; the prod stack alone manages them.
+
 resource "cloudflare_d1_database" "main" {
   account_id = var.cloudflare_account_id
   name       = var.d1_database_name

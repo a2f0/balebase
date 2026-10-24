@@ -245,6 +245,14 @@ builds, including `bun run build`, are production.
   Website pages are served at a trailing slash (`/privacy/`), and links to
   them, including `legalLinks` in `packages/ui/src/brand.ts`, use that form so
   they do not redirect.
+- The JSON-LD names Tearleads, LLC as the provider with the Organization that
+  tearleads.com publishes, under its `@id`
+  (`https://tearleads.com/#organization`), name, URL, and logo. Keep those
+  in step with that site, so search engines see one company, not two.
+- The production Terraform stack turns on the zone's Always Use HTTPS, so
+  `http://` on every `balebase.com` host answers 301 to `https://`. Cloudflare
+  sends that redirect before any Worker runs, so it carries no `X-Robots-Tag`;
+  the HTTPS response it points to does.
 - Production app signing links (`/sign/<token>`) open a contract without an
   account, so the app's `_headers` adds `X-Robots-Tag: noindex, nofollow` to
   every `/sign/*` response.
@@ -269,6 +277,7 @@ curl -sI https://balebase.com/ | grep -i x-robots-tag      # no output
 curl -sI https://website-staging.balebase.com/ | grep -i x-robots-tag
 curl -s https://balebase.com/robots.txt | grep Sitemap
 curl -sI https://app.balebase.com/sign/x | grep -i x-robots-tag  # noindex
+curl -sI http://balebase.com/ | grep -i -E '^(HTTP|location)'  # 301 to https
 ```
 
 For a fuller audit, or before changing these rules, use the
