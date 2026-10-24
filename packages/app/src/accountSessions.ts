@@ -75,6 +75,7 @@ export function useAccountSessions(
       sessionToken: token,
     });
     throwForAccountError(result.error, "Could not switch accounts.");
+    lockOfflineWorkspace();
     await refetchSession();
   }
 
@@ -90,6 +91,8 @@ export function useAccountSessions(
     } else {
       throwForAccountError(result.error, "Could not sign out.");
     }
+    // Invalidate preparations started while revocation was still in flight.
+    lockOfflineWorkspace();
     await refetchSession();
   }
 

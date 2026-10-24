@@ -507,6 +507,7 @@ function useWorkspaceOrganizations(
         result.error.message ?? "Could not switch organizations.",
       );
     }
+    lockOfflineWorkspace();
     await refetchSession();
   };
   const refresh = async () => {

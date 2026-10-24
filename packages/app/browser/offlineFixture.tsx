@@ -1,6 +1,8 @@
 import { DialogHost } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
+import { useState } from "react";
 import { createRoot } from "react-dom/client";
+import { useWorkspaceNavigation } from "../src/navigationGuard";
 import { OfflineWorkspacePage } from "../src/OfflineWorkspacePage";
 import {
   activateOfflineWorkspace,
@@ -61,12 +63,15 @@ const template: AuditTemplate = {
 
 function App() {
   const offline = useOfflineWorkspace();
+  const [path, setPath] = useState(location.pathname);
+  const navigate = useWorkspaceNavigation(setPath);
+  if (path.startsWith("/issues/")) return <p>Synced issue</p>;
   return (
     <OfflineWorkspacePage
       workspace={offline.workspace}
       online={offline.online}
       storageError={offline.error}
-      onNavigate={() => {}}
+      onNavigate={navigate}
     />
   );
 }

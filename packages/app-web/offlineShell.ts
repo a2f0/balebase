@@ -29,6 +29,7 @@ export function offlineShell(): Plugin {
 function workerSource(version: string, assets: string[]) {
   return `const cacheName = ${JSON.stringify(`balebase-shell-${version}`)};
 const assets = ${JSON.stringify(assets)};
+const cachedShell = () => caches.open(cacheName).then(cache => cache.match("/index.html"));
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(assets)));
 });
@@ -40,7 +41,7 @@ self.addEventListener("fetch", event => {
   const url = new URL(request.url);
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).catch(() => caches.open(cacheName).then(cache => cache.match("/index.html"))));
+    event.respondWith(fetch(request).then(async response => response.status >= 400 ? (await cachedShell()) || response : response).catch(cachedShell));
   } else if (assets.includes(url.pathname) && !url.search) {
     event.respondWith(caches.open(cacheName).then(async cache => (await cache.match(request)) || fetch(request)));
   }

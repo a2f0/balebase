@@ -47,6 +47,7 @@ export function OfflineWorkspacePage({
 }) {
   const [auditId, setAuditId] = useState<string>();
   const [creatingIssue, setCreatingIssue] = useState(false);
+  const [epoch] = useState(offlineAccessEpoch);
   const { error, setError, run } = useOfflineActions();
   const audit = workspace?.audits.find((entry) => entry.id === auditId);
   return (
@@ -92,6 +93,7 @@ export function OfflineWorkspacePage({
             audit={audit}
             workspace={workspace}
             onBack={() => setAuditId(undefined)}
+            onNavigate={onNavigate}
           />
         ) : (
           <>
@@ -100,6 +102,7 @@ export function OfflineWorkspacePage({
                 key={offlineScopeKey(identity.scope)}
                 identity={identity}
                 workspace={workspace}
+                epoch={epoch}
                 onError={setError}
               />
             )}
@@ -112,20 +115,7 @@ export function OfflineWorkspacePage({
               })}
             />
             {workspace && (
-              <PageSection title="Audits on this device">
-                {workspace.audits.map((entry) => (
-                  <Button
-                    key={entry.id}
-                    onClick={guardWorkspaceChange(async () =>
-                      setAuditId(entry.id),
-                    )}
-                  >
-                    {entry.template.name} ·{" "}
-                    {new Date(entry.startedAt).toLocaleString()} ·{" "}
-                    {entry.queued ? "Completed" : "Draft"}
-                  </Button>
-                ))}
-              </PageSection>
+              <OfflineAuditList workspace={workspace} onSelect={setAuditId} />
             )}
             {workspace && (
               <PageSection
@@ -146,13 +136,38 @@ export function OfflineWorkspacePage({
                     onSaved={() => setCreatingIssue(false)}
                   />
                 )}
-                <OfflineIssueList workspace={workspace} />
+                <OfflineIssueList
+                  workspace={workspace}
+                  onNavigate={onNavigate}
+                />
               </PageSection>
             )}
           </>
         )}
       </PageBody>
     </Page>
+  );
+}
+
+function OfflineAuditList({
+  workspace,
+  onSelect,
+}: {
+  workspace: OfflineWorkspace;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <PageSection title="Audits on this device">
+      {workspace.audits.map((entry) => (
+        <Button
+          key={entry.id}
+          onClick={guardWorkspaceChange(async () => onSelect(entry.id))}
+        >
+          {entry.template.name} · {new Date(entry.startedAt).toLocaleString()} ·{" "}
+          {entry.queued ? "Completed" : "Draft"}
+        </Button>
+      ))}
+    </PageSection>
   );
 }
 
@@ -243,14 +258,15 @@ function OfflineSyncStatus({
 function OfflineDownloads({
   identity,
   workspace,
+  epoch,
   onError,
 }: {
   identity: OfflineIdentity;
   workspace: OfflineWorkspace | undefined;
+  // Retain the parent page's epoch when these controls remount during sign-out.
+  epoch: string;
   onError: (error: string | undefined) => void;
 }) {
-  // Capture before requests start; sign-out invalidates late preparations too.
-  const [epoch] = useState(offlineAccessEpoch);
   const [templates, setTemplates] = useState<AuditTemplate[]>();
   const [busy, setBusy] = useState(false);
   useEffect(() => {

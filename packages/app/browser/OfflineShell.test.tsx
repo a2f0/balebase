@@ -31,11 +31,16 @@ it("reopens the precached web shell offline without caching private API response
     plugins: [offlineShell()],
     logLevel: "error",
   });
+  let unavailableStatus: number | undefined;
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const path = new URL(request.url).pathname;
+      if (unavailableStatus && path === "/offline")
+        return new Response("Hosting unavailable", {
+          status: unavailableStatus,
+        });
       if (path === "/api/private")
         return Response.json({ secret: "Never cache this" });
       const file = Bun.file(
@@ -83,6 +88,15 @@ it("reopens the precached web shell offline without caching private API response
     expect(cached).toContain("/index.html");
     expect(cached.some((path) => path.endsWith(".js"))).toBe(true);
     expect(cached).not.toContain("/api/private");
+    for (const status of [502, 503]) {
+      unavailableStatus = status;
+      const response = await page.goto(new URL("/offline", server.url).href);
+      expect(response?.status()).toBe(200);
+      expect(
+        await page.$eval("#status", (element) => element.textContent),
+      ).toBe("Offline shell ready");
+    }
+    unavailableStatus = undefined;
     await page.setOfflineMode(true);
     await page.goto(new URL("/offline", server.url).href);
     expect(await page.$eval("#status", (element) => element.textContent)).toBe(

@@ -464,3 +464,131 @@ it("keeps unsaved issue details and photos when reconnecting with an expired ses
     },
   );
 }, 30_000);
+
+it("does not unlock cached work when downloads remount during a pending sign-out", async () => {
+  const user = {
+    id: "user-1",
+    name: "Inspector",
+    email: "inspector@example.com",
+    emailVerified: true,
+  };
+  await withOfflineBrowser(
+    async (page) => {
+      await page.evaluate(async () => {
+        await window.offlineTest.seed();
+        history.replaceState(null, "", "/offline");
+        window.offlineAppTest.mount();
+      });
+      await page.waitForFunction(
+        () =>
+          document.getElementById("session-state")?.textContent === "user-1" &&
+          document.body.textContent?.includes("Download forms") &&
+          !document.body.textContent?.includes("Loading available forms"),
+        { polling: 100 },
+      );
+      await openDraft(page);
+      const forms = page.waitForResponse(
+        (response) => new URL(response.url()).pathname === "/api/offline/forms",
+      );
+      // The account action locks immediately, while its revocation request is
+      // still pending and the current session can still fetch forms.
+      await page.evaluate(() => window.offlineTest.lock());
+      await forms;
+      await page.waitForFunction(
+        () =>
+          !document.body.textContent?.includes("Loading available forms") ||
+          document.body.textContent?.includes("active account changed"),
+        { polling: 100 },
+      );
+      expect(
+        await page.evaluate(() => window.offlineTest.activeKey()),
+      ).toBeNull();
+    },
+    (request) => {
+      const path = new URL(request.url).pathname;
+      if (path === "/api/auth/get-session")
+        return Response.json({
+          user,
+          session: {
+            id: "session",
+            token: "fixture",
+            userId: user.id,
+            activeOrganizationId: "org-1",
+            expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+          },
+        });
+      if (path === "/api/organization-settings/organizations")
+        return Response.json({
+          organizations: [{ id: "org-1", name: "Test team" }],
+        });
+      if (path === "/api/organization-groups/access")
+        return Response.json({
+          capabilities: [],
+          memberRole: "owner",
+          ownerCount: 1,
+        });
+      if (path === "/api/offline/forms")
+        return Response.json({ templates: [], members: [user] });
+      return Response.json([]);
+    },
+  );
+}, 30_000);
+
+it("guards opening a synced issue without relying on browser beforeunload protection", async () => {
+  await withOfflineBrowser(
+    async (page, _browser, directory) => {
+      // iOS WebViews cannot rely on beforeunload. Do not let Chromium's native
+      // dialog mask a missing in-app navigation guard in this regression.
+      page.on("dialog", (dialog) => void dialog.accept());
+      await page.evaluate(async () => {
+        await window.offlineTest.seed();
+        await window.offlineTest.issue();
+        await window.offlineTest.sync();
+        window.offlineTest.mount();
+      });
+      await press(page, "New offline issue");
+      const title = 'form[aria-label="Issue details"] input';
+      await page.type(title, "Do not lose this issue");
+      const photo = join(directory, "keep.png");
+      await Bun.write(photo, new Uint8Array([1, 2, 3, 4]));
+      await (await page.$('input[type="file"]'))?.uploadFile(photo);
+      await press(page, "Open synced issue");
+      await page.waitForFunction(
+        () =>
+          location.pathname !== "/" ||
+          [...document.querySelectorAll("button")].some(
+            (button) => button.textContent === "Keep editing",
+          ),
+        { polling: 100 },
+      );
+      expect(new URL(page.url()).pathname).toBe("/");
+      await press(page, "Keep editing");
+      expect(await page.$eval(title, (field) => field.value)).toBe(
+        "Do not lose this issue",
+      );
+      expect(
+        await page.$eval(
+          'input[type="file"]',
+          (field) => (field as HTMLInputElement).files?.[0]?.name,
+        ),
+      ).toBe("keep.png");
+      await press(page, "Open synced issue");
+      await press(page, "Discard changes");
+      await page.waitForFunction(
+        () =>
+          location.pathname.startsWith("/issues/") &&
+          document.body.textContent === "Synced issue",
+      );
+    },
+    async (request) => {
+      const path = new URL(request.url).pathname;
+      if (path === "/api/offline/operations") {
+        const { operation } = (await request.json()) as {
+          operation: { id: string };
+        };
+        return Response.json({ resourceId: operation.id });
+      }
+      return Response.json({ image: { id: "image" } });
+    },
+  );
+}, 30_000);

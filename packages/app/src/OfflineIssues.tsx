@@ -54,9 +54,11 @@ export function OfflineIssueCreator({
 export function OfflineIssueList({
   workspace,
   auditId,
+  onNavigate,
 }: {
   workspace: OfflineWorkspace;
   auditId?: string;
+  onNavigate: (path: string) => void;
 }) {
   return (
     <div className="stack">
@@ -85,9 +87,7 @@ export function OfflineIssueList({
             {workspace.jobs.find((job) => job.id === issue.operation.id)
               ?.status === "synced" && (
               <Button
-                onClick={() => {
-                  window.location.href = `/issues/${issue.operation.id}`;
-                }}
+                onClick={() => onNavigate(`/issues/${issue.operation.id}`)}
               >
                 Open synced issue
               </Button>

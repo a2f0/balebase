@@ -10,10 +10,12 @@ export function OfflineAuditEditor({
   audit,
   workspace,
   onBack,
+  onNavigate,
 }: {
   audit: OfflineAudit;
   workspace: OfflineWorkspace;
   onBack: () => void;
+  onNavigate: (path: string) => void;
 }) {
   const [issueItem, setIssueItem] = useState<string>();
   const { responses, pending, sealing, error, answer, save } =
@@ -119,7 +121,11 @@ export function OfflineAuditEditor({
           Complete and queue audit
         </Button>
       )}
-      <OfflineIssueList workspace={workspace} auditId={audit.id} />
+      <OfflineIssueList
+        workspace={workspace}
+        auditId={audit.id}
+        onNavigate={onNavigate}
+      />
     </PageSection>
   );
 }
