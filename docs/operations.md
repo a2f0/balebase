@@ -253,6 +253,9 @@ builds, including `bun run build`, are production.
   `http://` on every `balebase.com` host answers 301 to `https://`. Cloudflare
   sends that redirect before any Worker runs, so it carries no `X-Robots-Tag`;
   the HTTPS response it points to does.
+- `www.balebase.com` answers 301 to the apex with the path and query kept. It
+  is a single redirect rule managed outside Terraform; see
+  [www redirect](../terraform/README.md#www-redirect-outside-terraform).
 - The website's 404 page is its only noindexed production page. The Worker
   serves it with status 404 for every missing path, but answers its own URL,
   `/404`, with a 200, so it carries `<meta name="robots" content="noindex">`

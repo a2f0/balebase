@@ -140,6 +140,12 @@ Both serve full copies of the site.
   `403 request is not authorized` even when reading the phase entrypoint, so
   read it first and stop before writing Terraform the token cannot apply.
   Never widen a token's permissions yourself.
+- When the user authorizes it, the `cf` CLI, signed in as the account owner,
+  can create the rule (`cf rulesets entrypoint update
+  http_request_dynamic_redirect -z <zone> --name Redirects --rules
+  @rules.json`, with `--validate-only` first) and the record
+  (`cf dns records create`). Document such configuration in the repository:
+  what exists, how to recreate it, and that Terraform must import it later.
 - Repositories whose apply step refuses plans that delete resources need an
   explicit decision before a change that removes a custom domain.
 

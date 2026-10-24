@@ -14,6 +14,34 @@ desired Worker custom domains:
 - Always Use HTTPS on the `balebase.com` zone, which answers every `http://`
   request with a 301 to `https://`
 
+## www redirect (outside Terraform)
+
+`www.balebase.com` answers 301 to `https://balebase.com` with the path and
+query kept. Terraform does not manage it, because its token lacks Zone →
+Single Redirect → Edit ("Dynamic URL Redirects Write"). It was created on
+2026-10-24 with the `cf` CLI, signed in as the account owner:
+
+- the zone's `http_request_dynamic_redirect` entry point ruleset, `Redirects`,
+  with one rule, ref `www_to_apex`: expression
+  `(http.host eq "www.balebase.com")`, a 301 with `preserve_query_string`,
+  and target expression `concat("https://balebase.com", http.request.uri.path)`;
+- a proxied `AAAA` record, `www.balebase.com` → `100::`.
+
+To recreate it, write that rule to `rules.json` as a one-element JSON array
+and run:
+
+```sh
+cf rulesets entrypoint update http_request_dynamic_redirect -z balebase.com \
+  --name Redirects --rules @rules.json
+cf dns records create -z balebase.com --body \
+  '{"type":"AAAA","name":"www.balebase.com","content":"100::","proxied":true,"ttl":1}'
+curl -sI https://www.balebase.com/ | grep -i '^location'  # https://balebase.com/
+```
+
+A zone has one ruleset per phase. To bring the redirect into Terraform, give
+the token that permission, then import this ruleset and the record rather than
+create new ones.
+
 The separate `stacks/staging` stack provisions `balebase-db-staging`,
 `balebase-objects-staging`, staging email routing, and first-level staging
 hostnames. Zone-wide settings such as Always Use HTTPS also cover the staging
