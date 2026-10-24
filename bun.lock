@@ -55,7 +55,7 @@
     },
     "packages/app": {
       "name": "@balebase/app",
-      "version": "0.1.68",
+      "version": "0.1.69",
       "dependencies": {
         "@balebase/api-client": "workspace:*",
         "@balebase/ui": "workspace:*",
@@ -78,7 +78,7 @@
     },
     "packages/app-capacitor": {
       "name": "@balebase/app-capacitor",
-      "version": "0.1.71",
+      "version": "0.1.72",
       "dependencies": {
         "@balebase/app": "workspace:*",
         "@balebase/diagnostics": "workspace:*",
