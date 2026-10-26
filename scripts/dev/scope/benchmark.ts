@@ -121,14 +121,20 @@ export async function benchmark(
   );
 }
 
-async function waitForRun(
+export async function waitForRun(
   entry: { id: string; url: string; task: string },
   file: string,
+  {
+    request = apiRequest,
+    now = Date.now,
+    sleep = (ms: number) => Bun.sleep(ms),
+    timeoutMs = 15 * 60 * 1000,
+  } = {},
 ) {
-  const deadline = Date.now() + 15 * 60 * 1000;
+  const deadline = now() + timeoutMs;
   let lastStatus = "";
   while (true) {
-    const raw = await apiRequest(`/requests/${entry.id}`);
+    const raw = await request(`/requests/${entry.id}`);
     const run = runSchema.parse(raw);
     await writeFile(file, JSON.stringify(raw, null, 2));
     if (run.run.status !== lastStatus) {
@@ -138,10 +144,10 @@ async function waitForRun(
     if (isCompleted(run.run.status, run.run.outcome)) {
       return run;
     }
-    if (Date.now() >= deadline)
+    if (now() >= deadline)
       throw new Error(
         `Timed out; run is still active at ${entry.url}. Inspect before resubmitting.`,
       );
-    await Bun.sleep(5000);
+    await sleep(5000);
   }
 }

@@ -13,48 +13,60 @@ const entity = z.object({
 });
 
 export function git(...args: string[]): string {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+  return gitAt(root, ...args);
+}
+
+function gitAt(directory: string, ...args: string[]): string {
+  return execFileSync("git", args, { cwd: directory, encoding: "utf8" }).trim();
 }
 
 /** Upload committed source only; ignored credentials and local state never enter the archive. */
-export async function register(ref: string): Promise<void> {
-  const commit = git(
+export async function register(
+  ref: string,
+  { request = apiRequest, repository = root, directory = stateDir } = {},
+): Promise<void> {
+  const commit = gitAt(
+    repository,
     "rev-parse",
     "--verify",
     "--end-of-options",
     `${ref}^{commit}`,
   );
-  const projects = z.array(entity).parse(await apiRequest("/projects"));
+  const projects = z.array(entity).parse(await request("/projects"));
   const matches = projects.filter((project) => project.name === "Balebase");
   if (matches.length > 1) throw new Error("Multiple Balebase projects found");
   const project =
     matches[0] ??
     entity.parse(
-      await apiRequest("/projects", {
+      await request("/projects", {
         name: "Balebase",
         description:
           "Local repository discoverability probes: Claude Code with a calibrated Codex Judge.",
       }),
     );
   const query = `?projectId=${encodeURIComponent(project._id)}`;
-  const codebases = z
-    .array(entity)
-    .parse(await apiRequest(`/codebases${query}`));
+  const codebases = z.array(entity).parse(await request(`/codebases${query}`));
   const existing = codebases.filter((codebase) => codebase.name === "balebase");
   if (existing.length > 1) throw new Error("Multiple balebase codebases found");
   const codebase = existing[0];
   if (codebase && codebase.sourceType !== "archive")
     throw new Error("Expected archive codebase");
-  await mkdir(stateDir, { recursive: true, mode: 0o700 });
-  const archive = join(stateDir, "balebase.tar.gz");
-  git("archive", "--format=tar.gz", `--output=${archive}`, commit);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const archive = join(directory, "balebase.tar.gz");
+  gitAt(
+    repository,
+    "archive",
+    "--format=tar.gz",
+    `--output=${archive}`,
+    commit,
+  );
   const form = new FormData();
   form.set("archive", Bun.file(archive), "balebase.tar.gz");
   let codebaseId: string;
   let revisionId: string | undefined;
   if (codebase) {
     const revision = entity.parse(
-      await apiRequest(
+      await request(
         `/codebases/${encodeURIComponent(codebase._id)}/upload`,
         form,
       ),
@@ -68,9 +80,13 @@ export async function register(ref: string): Promise<void> {
       "description",
       "Committed source snapshots from the local checkout.",
     );
-    const created = entity.parse(await apiRequest(`/codebases${query}`, form));
+    const created = entity.parse(await request(`/codebases${query}`, form));
     codebaseId = created._id;
     revisionId = created.latestRevisionId;
+    if (!revisionId)
+      throw new Error(
+        "Scope created the codebase without a revision ID; inspect it before retrying registration",
+      );
   }
   const config = configSchema.parse({
     apiUrl: settings.apiUrl,
@@ -80,7 +96,7 @@ export async function register(ref: string): Promise<void> {
     commit,
   });
   await writeFile(
-    join(stateDir, "config.json"),
+    join(directory, "config.json"),
     `${JSON.stringify(config, null, 2)}\n`,
     { mode: 0o600 },
   );

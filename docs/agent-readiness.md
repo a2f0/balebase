@@ -105,6 +105,11 @@ tests.
 
 ## Evidence and reproducibility
 
+These IDs and receipt paths identify local evidence. Pre-merge snapshot commits
+are retained by the local checkout and archives; they are not necessarily
+ancestors of the squashed `main` commit. Other contributors can rerun the
+versioned suite, but the ignored receipts and local dashboard are not published.
+
 Baseline runs:
 
 - Setup: `2fb00017-1798-40a3-a986-60cc2be38468`
@@ -152,15 +157,16 @@ comparison archive, so this is not a hidden-test evaluation.
 
 Repository validation includes `bun run check`, `bun run test`, all three
 browser suites, and `bun run build`. The browser suites passed 23, 1, and 36
-tests respectively. Local reruns encountered the offline-browser test's
-30-second timeout and a website browser-cleanup hook's 5-second timeout.
+tests respectively. Local reruns encountered offline-browser and browser-protocol
+timeouts, plus a website browser-cleanup hook's 5-second timeout.
 Both suites passed unchanged on retry; no timeout was increased and no test
 scope was reduced. Builds retained existing Vite large-chunk warnings.
 These coordinator-run checks verify the shipped changes; the assessment agents
-did not run them. The offline Scope regression suite passed 47 tests, including
+did not run them. The offline Scope regression suite passed 54 tests, including
 configuration recovery, credential filtering, criterion dependencies/gates,
 verdict completeness, real archive extraction, actual judge invocation flags,
-local HTTP request restrictions, and stock macOS Bash compatibility.
+local HTTP request restrictions, stock macOS Bash compatibility, real Git archive
+registration, criterion drift detection, run polling/timeouts, and CLI arguments.
 
 One calibration attempt and local validation were interrupted by host disk
 exhaustion. Unused Scope VM images were reclaimed and free VM space was trimmed;

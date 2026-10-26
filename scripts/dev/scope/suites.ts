@@ -43,11 +43,14 @@ export function validateSuite(input: unknown): Suite {
   return suite;
 }
 
-export async function seedCriteria(suite: Suite): Promise<void> {
-  const query = `?projectId=${encodeURIComponent(projectConfig().projectId)}`;
+export async function seedCriteria(
+  suite: Suite,
+  { request = apiRequest, projectId = projectConfig().projectId } = {},
+): Promise<void> {
+  const query = `?projectId=${encodeURIComponent(projectId)}`;
   const existing = z
     .array(criterionSchema)
-    .parse(await apiRequest(`/criteria${query}`));
+    .parse(await request(`/criteria${query}`));
   for (const criterion of suite.criteria) {
     const found = existing.find((c) => c.id === criterion.id);
     if (found)
@@ -56,6 +59,6 @@ export async function seedCriteria(suite: Suite): Promise<void> {
         criterion,
         `Criterion ${criterion.id} changed; use a new versioned ID`,
       );
-    else await apiRequest(`/criteria${query}`, criterion);
+    else await request(`/criteria${query}`, criterion);
   }
 }
