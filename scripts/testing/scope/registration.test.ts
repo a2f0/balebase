@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -46,6 +47,7 @@ async function fixture() {
   await writeFile(join(repository, "untracked.txt"), "untracked\n");
   await mkdir(directory);
   await writeFile(join(directory, "config.json"), "previous configuration\n");
+  await chmod(join(directory, "config.json"), 0o644);
   return { repository, directory, commit };
 }
 

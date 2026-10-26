@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { apiRequest, root, settings, stateDir } from "./settings";
@@ -100,6 +100,7 @@ export async function register(
     `${JSON.stringify(config, null, 2)}\n`,
     { mode: 0o600 },
   );
+  await chmod(join(directory, "config.json"), 0o600);
   console.log(
     `Registered ${commit} at ${settings.apiUrl}; revision ${config.revisionId}`,
   );
