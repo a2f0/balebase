@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { DialogHost } from "@balebase/ui/react";
 import type { AdminOrganizationDetail } from "@balebase/validators/adminOrganizations";
 import { Window } from "happy-dom";
 import { act } from "react";
@@ -8,6 +9,7 @@ import { AdminOrganizations } from "./AdminOrganizations";
 const dom = new Window({ url: "http://localhost:5173/root/organizations" });
 const domGlobals = {
   document: dom.document,
+  Element: dom.Element,
   HTMLElement: dom.HTMLElement,
   IS_REACT_ACT_ENVIRONMENT: true,
   navigator: dom.navigator,
@@ -104,13 +106,16 @@ async function render(
   const navigate = onNavigate ?? (() => {});
   await act(async () =>
     root?.render(
-      <AdminOrganizations onNavigate={navigate} pathname={pathname} />,
+      <>
+        <AdminOrganizations onNavigate={navigate} pathname={pathname} />
+        <DialogHost />
+      </>,
     ),
   );
 }
 
 function button(text: string) {
-  const found = [...container.querySelectorAll("button")].find((element) =>
+  const found = [...document.querySelectorAll("button")].find((element) =>
     element.textContent?.includes(text),
   );
   if (!found) throw new Error(`No button labeled ${text}`);
@@ -274,4 +279,87 @@ describe("root organization details", () => {
     );
     expect(container.textContent).not.toContain("Organization first");
   });
+});
+
+async function openOrganizationAction(label: string) {
+  const trigger = container.querySelector<HTMLButtonElement>(
+    '[aria-haspopup="menu"]',
+  );
+  expect(trigger).toBeTruthy();
+  await act(async () => trigger?.click());
+  const item = [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+  ].find((item) => item.textContent === label);
+  expect(item).toBeTruthy();
+  await act(async () => item?.click());
+}
+
+async function typeOrganizationName(value: string) {
+  const input = document.querySelector<HTMLInputElement>("dialog input");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      dom.HTMLInputElement.prototype,
+      "value",
+    )?.set?.call(input, value);
+    input?.dispatchEvent(new dom.Event("input", { bubbles: true }) as never);
+  });
+}
+
+it("confirms organization deletion from a menu and offers confirmed restoration", async () => {
+  const organization = detail().organization;
+  const mutations: string[] = [];
+  globalThis.fetch = (async (_input, init) => {
+    if (init?.method === "DELETE") {
+      mutations.push("DELETE");
+      return Response.json({
+        deletedAt: "2026-10-26",
+        deletedByName: "Admin",
+        deletedByEmail: "admin@example.com",
+        deletedByUserId: "admin",
+        organizationId: organization.id,
+      });
+    }
+    if (init?.method === "POST") {
+      mutations.push("POST");
+      return Response.json({ organizationId: organization.id });
+    }
+    return Response.json({ organizations: [organization] });
+  }) as typeof fetch;
+  await render();
+  expect(container.textContent).not.toContain("Mark for deletion");
+  await openOrganizationAction("Mark for deletion");
+  expect(document.querySelector("dialog[open]")?.textContent).toContain(
+    `Mark ${organization.name} for deletion?`,
+  );
+  expect(button("Mark for deletion").disabled).toBeTrue();
+  expect(mutations).toEqual([]);
+  await act(async () => button("Cancel").click());
+  expect(mutations).toEqual([]);
+  await openOrganizationAction("Mark for deletion");
+  await typeOrganizationName(organization.name);
+  await act(async () => button("Mark for deletion").click());
+  expect(mutations).toEqual(["DELETE"]);
+  expect(container.textContent).toContain("Pending deletion");
+  await openOrganizationAction("Restore");
+  expect(mutations).toEqual(["DELETE"]);
+  await act(async () => button("Restore").click());
+  expect(mutations).toEqual(["DELETE", "POST"]);
+  expect(container.textContent).not.toContain("Pending deletion");
+});
+
+it("keeps an organization active and displays a failed deletion", async () => {
+  const organization = detail().organization;
+  globalThis.fetch = (async (_input, init) =>
+    init?.method === "DELETE"
+      ? Response.json(
+          { error: "Could not mark organization." },
+          { status: 500 },
+        )
+      : Response.json({ organizations: [organization] })) as typeof fetch;
+  await render();
+  await openOrganizationAction("Mark for deletion");
+  await typeOrganizationName(organization.name);
+  await act(async () => button("Mark for deletion").click());
+  expect(container.textContent).toContain("Could not mark organization.");
+  expect(container.textContent).not.toContain("Pending deletion");
 });

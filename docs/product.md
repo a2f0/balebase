@@ -103,6 +103,27 @@ result. Keep the page open while a manual run executes; if the connection drops,
 check logs before retrying. This is a synchronous Worker invocation, not a durable
 queue. Staging supports manual runs but has no cron schedule.
 
+Root admins manage organization deletion from the actions menu in each row of
+`/root/organizations`. Marking requires typing the organization name in a
+confirmation modal; restoring also requires confirmation.
+
+Root admins can mark users for deletion or cancel a pending request from the
+row actions menu at `/root/users`. Marking requires typing the user's email.
+The list shows pending requests, their dates, and who initiated them. Admin and
+system accounts cannot be marked from this page. The action uses the same
+30-day queue and retention rules as self-service requests below; it does not
+ban the user or delete their organizations.
+
+Apply migration `0071_record_user_deletion_activity.sql` before deploying the
+admin user actions. New requests retain the initiating user's ID, name, and
+email; older requests show no recorded actor. Requests and cancellations,
+including self-service actions, record actor snapshots and the request date in
+`user_deletion_events` in the same database transaction. Duplicate requests
+preserve the original date and actor and do not create another event. Pending
+attribution is visible only to root admins; historical events are available to
+D1 database operators. History remains after cancellation and is removed when
+the target account is purged.
+
 Users can request or cancel account deletion under **Account settings → General**.
 Apply migration `0048_create_user_deletion_requests.sql` before deploying this
 feature. The `purgeRequestedUsers` job processes up to 25 requests per run after

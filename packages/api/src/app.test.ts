@@ -67,6 +67,9 @@ describe("api", () => {
   it("requires authentication for maintenance and account deletion routes", async () => {
     for (const [path, method] of [
       ["/api/admin/jobs", "GET"],
+      ["/api/admin/users", "GET"],
+      ["/api/admin/users/user-id/deletion", "POST"],
+      ["/api/admin/users/user-id/deletion", "DELETE"],
       ["/api/admin/audit-templates", "GET"],
       ["/api/admin/audit-templates", "POST"],
       ["/api/admin/audit-templates/template-id", "PUT"],
@@ -225,6 +228,9 @@ describe("api", () => {
     const fixture = await protectedOrganizationFixture();
     for (const [path, method] of [
       [`/api/admin/organizations/${fixture.organizationId}`, "GET"],
+      ["/api/admin/users", "GET"],
+      ["/api/admin/users/user-id/deletion", "POST"],
+      ["/api/admin/users/user-id/deletion", "DELETE"],
       ["/api/admin/audit-templates", "GET"],
       ["/api/admin/audit-templates", "POST"],
       ["/api/admin/audit-templates/nfpa70e_global", "PUT"],
@@ -460,6 +466,7 @@ async function protectedOrganizationFixture() {
     "0031_require_member_two_factor.sql",
     "0040_pin_default_organization.sql",
     "0048_create_user_deletion_requests.sql",
+    "0071_record_user_deletion_activity.sql",
     "0055_track_user_last_active.sql",
   ]) {
     database.exec(
