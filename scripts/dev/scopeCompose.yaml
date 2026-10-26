@@ -9,12 +9,15 @@ services:
   lowkey-vault:
     ports: !reset []
   judge:
+    image: localhost/balebase-scope-judge:latest
     ports: !reset []
   token-manager:
+    image: localhost/balebase-scope-token-manager:latest
     ports: !reset []
   devproxy-claude-code:
     ports: !reset []
   api:
+    image: localhost/balebase-scope-api:latest
     ports: !override
       - "127.0.0.1:3100:80"
     environment:
@@ -28,12 +31,19 @@ services:
       AUTH_BOOTSTRAP_ADMINS: ""
       AUTH_BOOTSTRAP_TENANTS: ""
       NODE_EXTRA_CA_CERTS: ""
+  db-migrate:
+    image: localhost/balebase-scope-db-migrate:latest
+  scheduler:
+    image: localhost/balebase-scope-scheduler:latest
   register-agents:
     environment:
       SCOPE_REGISTER_CLAUDE_CODE_AGENT: "true"
   model-scanner-anthropic:
+    image: localhost/balebase-scope-model-scanner-anthropic:latest
     # Model discovery requires an API key; subscription OAuth can run the worker.
     profiles: !override [anthropic-model-scanner]
   coder-acp-claude-code:
+    # Qualify local image names so Podman uses the newly built image on rebuilds.
+    image: localhost/balebase-scope-coder-acp-claude-code:latest
     environment:
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
