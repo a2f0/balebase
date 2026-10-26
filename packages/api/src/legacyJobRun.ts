@@ -5,9 +5,9 @@ export async function waitForLegacyJob(
   database: D1Database,
   id: string,
   pause: () => Promise<void> = () =>
-    new Promise((resolve) => setTimeout(resolve, 250)),
+    new Promise((resolve) => setTimeout(resolve, 1000)),
 ) {
-  for (let poll = 0; poll < 100; poll++) {
+  for (let poll = 0; poll < 25; poll++) {
     const row = await database
       .prepare("SELECT * FROM job_runs WHERE id = ?")
       .bind(id)

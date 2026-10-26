@@ -59,3 +59,32 @@ it("routes the finance cron independently from hourly maintenance and exposes th
     queue.mockRestore();
   }
 });
+
+it("attempts both queue recovery and daily scheduling when either fails", async () => {
+  const { spyOn } = await import("bun:test");
+  const jobs = await import("./jobRuns");
+  const finance = await import("./financeSyncJobs");
+  const { scheduleJobs } = await import("./jobScheduler");
+  const recover = spyOn(jobs, "recoverJobs").mockResolvedValue(1);
+  const daily = spyOn(finance, "scheduleFinanceSync").mockResolvedValue(2);
+  const environment = {} as import("./types").Bindings;
+  try {
+    recover.mockRejectedValueOnce(new Error("recovery unavailable"));
+    await expect(scheduleJobs(environment)).rejects.toThrow(
+      "Background scheduling failed.",
+    );
+    expect(daily).toHaveBeenCalledTimes(1);
+    daily.mockRejectedValueOnce(new Error("daily scheduling unavailable"));
+    await expect(scheduleJobs(environment)).rejects.toThrow(
+      "Background scheduling failed.",
+    );
+    expect(recover).toHaveBeenCalledTimes(2);
+    expect(await scheduleJobs(environment)).toEqual({
+      scheduled: 2,
+      dispatched: 1,
+    });
+  } finally {
+    recover.mockRestore();
+    daily.mockRestore();
+  }
+});

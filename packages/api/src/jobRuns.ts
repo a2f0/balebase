@@ -1,4 +1,5 @@
 import { JobOutputSchema, type JobRun } from "@balebase/validators/adminJobs";
+import { captureApiError } from "./diagnostics";
 import type { Bindings } from "./types";
 
 export interface JobRow {
@@ -48,9 +49,10 @@ export function toJobRun(row: JobRow): JobRun {
         : null,
     errorCode: row.error_code,
     // Provider responses and thrown exceptions never become administrative log text.
-    error: row.error_code
-      ? "Job encountered an error; some work may have completed. Review the saved logs before retrying."
-      : null,
+    error:
+      row.status !== "cancelled" && row.error_code
+        ? "Job encountered an error; some work may have completed. Review the saved logs before retrying."
+        : null,
     output: row.output_json
       ? JobOutputSchema.parse(JSON.parse(row.output_json) as unknown)
       : null,
@@ -88,11 +90,17 @@ export function claimJob(database: D1Database, id: string) {
 export async function recoverJobs(env: Bindings, timestamp = Date.now()) {
   const now = new Date(timestamp).toISOString();
   // Maintenance may have sent mail before interruption. Never replay it blindly.
-  await env.DB.prepare(`UPDATE job_runs SET status = 'failed', finished_at = ?, lease_until = NULL,
+  const interrupted =
+    await env.DB.prepare(`UPDATE job_runs SET status = 'failed', finished_at = ?, lease_until = NULL,
     error_code = 'INTERRUPTED', error_message = 'Execution interrupted; review before retrying.'
     WHERE job_id <> 'syncFinanceConnection' AND status = 'running' AND lease_until <= ?`)
-    .bind(now, now)
-    .run();
+      .bind(now, now)
+      .run();
+  if (interrupted.meta.changes > 0)
+    await captureApiError(
+      new Error("Maintenance execution interrupted."),
+      "job-error",
+    );
   const pending = await env.DB.prepare(`SELECT id FROM job_runs
     WHERE ((status = 'queued' AND available_at <= ?)
       OR (job_id = 'syncFinanceConnection' AND status = 'running' AND lease_until <= ?))

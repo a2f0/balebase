@@ -80,13 +80,14 @@ BEGIN
   INSERT INTO job_logs (run_id, occurred_at, level, message, details_json)
   VALUES (NEW.id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
     CASE WHEN NEW.status = 'failed' THEN 'error'
+      WHEN NEW.status = 'running' THEN 'info'
       WHEN NEW.error_code IS NOT NULL THEN 'warn' ELSE 'info' END,
     CASE WHEN NEW.status = 'succeeded' THEN 'Job completed.'
       WHEN NEW.status = 'failed' THEN 'Job failed; some work may have completed.'
       WHEN NEW.status = 'cancelled' THEN 'Job cancelled.'
       WHEN NEW.restarts > OLD.restarts THEN 'Bank pagination restarted.'
       WHEN NEW.pages > OLD.pages THEN 'Bank page saved.'
-      WHEN NEW.status = 'running' THEN 'Attempt started.'
+      WHEN NEW.status = 'running' THEN 'Processing attempt started.'
       ELSE 'Job waiting for another attempt.' END,
     json_object('status', NEW.status, 'attempt', NEW.attempts, 'errorCode', NEW.error_code,
       'availableAt', NEW.available_at, 'output', json(NEW.output_json)));

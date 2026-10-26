@@ -96,7 +96,8 @@ independently enforces the platform `admin` role for administrative data.
 Root admins use `/root/jobs` to run platform maintenance and inspect maintenance
 and bank sync history. Every run uses the shared background queue and D1 run
 record, with a stable ID, source, requesting user when available, timestamps,
-attempt count, status, structured output, and chronological logs. The page
+processing attempt count, status, structured output, and chronological logs.
+Each bank page counts as a processing attempt, including retries. The page
 refreshes automatically, filters by job and status, and pages through older
 runs and logs. It is restricted to root admins, including the history endpoints
 `GET /api/admin/jobs/runs` and `GET /api/admin/jobs/runs/:runId`.

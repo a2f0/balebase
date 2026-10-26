@@ -17,7 +17,9 @@ export async function consumeJobs(
         await runSyncPage(env, job, requestPlaid);
       } else if (job) {
         const tasks = maintenanceTasks(env);
-        const task = tasks[job.job_id as keyof typeof tasks];
+        const task = Object.entries(tasks).find(
+          ([id]) => id === job.job_id,
+        )?.[1];
         await runMaintenanceJob(env.DB, job, task);
       }
       message.ack();

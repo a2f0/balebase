@@ -139,7 +139,8 @@ Migration `0073_unify_job_runs.sql` moves existing finance runs into `job_runs`
 without changing IDs, statuses, checkpoints, leases, retry budgets, or counts.
 It preserves pending queue messages, which still contain only the run ID.
 Imported runs have an explicit import log; historical start times, attempt totals,
-and earlier logs cannot be reconstructed. Attempts count executions after migration.
+and earlier logs cannot be reconstructed. Processing attempts count claims after
+migration: each bank page is an attempt, and retries add further attempts.
 The existing `FINANCE_SYNC_QUEUE` binding and per-tier queue names now carry both
 maintenance and finance jobs. No additional queue or Terraform resource is needed.
 

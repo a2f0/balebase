@@ -61,8 +61,8 @@ export function AdminJobRun({ runId }: { runId: string }) {
       {run && (
         <div className="stack stackMd">
           <p>
-            <strong>{run.status}</strong> · {run.attempts} attempt(s) ·{" "}
-            {run.source}
+            <strong>{run.status}</strong> · {run.attempts} processing attempt(s)
+            · {run.source}
           </p>
           <p className="textSm">Run ID: {run.runId}</p>
           <p className="textSm">

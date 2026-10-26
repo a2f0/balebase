@@ -1817,7 +1817,7 @@ describe("durable finance sync", () => {
     });
     expect(saved?.logs.map((log) => log.message)).toEqual([
       "Job queued.",
-      "Attempt started.",
+      "Processing attempt started.",
       "Job completed.",
     ]);
     expect(JSON.stringify(saved)).not.toContain("cursor-test");

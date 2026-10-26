@@ -532,7 +532,7 @@ it("requires root admin access, trusted origin, a known job, and explicit confir
     },
     logs: [
       { message: "Job queued." },
-      { message: "Attempt started." },
+      { message: "Processing attempt started." },
       { message: "Job completed." },
     ],
   });
@@ -1032,5 +1032,49 @@ it("tells older clients that queued work continues without claiming completion",
     });
   } finally {
     wait.mockRestore();
+  }
+});
+
+it("reports caught and interrupted maintenance failures and treats cancellation neutrally", async () => {
+  const f = await fixture();
+  const diagnostics = await import("./diagnostics");
+  const report = spyOn(diagnostics, "captureApiError").mockResolvedValue(
+    undefined,
+  );
+  try {
+    const first = await enqueueMaintenance(f.bindings, "purgeRequestedUsers", {
+      trigger: "manual",
+      actorUserId: "actor",
+    });
+    const claimed = await claimJob(f.bindings.DB, first.id);
+    if (!claimed) throw new Error("Missing claim");
+    const failure = new Error("task failed");
+    await runMaintenanceJob(f.bindings.DB, claimed, async () => {
+      throw failure;
+    });
+    expect(report).toHaveBeenCalledWith(failure, "job-error");
+    const next = await enqueueMaintenance(f.bindings, "purgeRequestedUsers", {
+      trigger: "manual",
+      actorUserId: "actor",
+    });
+    await claimJob(f.bindings.DB, next.id);
+    f.database
+      .query("UPDATE job_runs SET lease_until = '2000-01-01' WHERE id = ?")
+      .run(next.id);
+    await recoverJobs(f.bindings);
+    expect(report).toHaveBeenCalledTimes(2);
+    await recoverJobs(f.bindings);
+    expect(report).toHaveBeenCalledTimes(2);
+    f.database
+      .query(
+        "UPDATE job_runs SET status = 'cancelled', error_code = 'SYNC_CANCELLED' WHERE id = ?",
+      )
+      .run(first.id);
+    const response = await f.request(`/jobs/runs/${first.id}`);
+    expect(await response.json()).toMatchObject({
+      run: { status: "cancelled", error: null },
+    });
+  } finally {
+    report.mockRestore();
   }
 });

@@ -82,7 +82,7 @@ export async function jobRunDetail(
   return {
     run: toJobRun(row),
     nextBefore: results.length > 200 ? String(page.at(-1)?.id) : null,
-    logs: page.reverse().map((log) => ({
+    logs: page.toReversed().map((log) => ({
       id: log.id,
       occurredAt: log.occurred_at,
       level: log.level,
