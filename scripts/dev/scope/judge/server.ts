@@ -16,7 +16,7 @@ Bun.serve({
   port: settings.judgePort,
   idleTimeout: 255,
   maxRequestBodySize: 10 * 1024 * 1024,
-  async fetch(request) {
+  async fetch(request, server) {
     const path = new URL(request.url).pathname;
     if (path === "/health" && request.method === "GET") {
       return Response.json({
@@ -46,6 +46,8 @@ Bun.serve({
         { status: 503 },
       );
     active = true;
+    // Archive I/O and grading can together exceed Bun's connection idle limit.
+    server.timeout(request, 0);
     try {
       return Response.json(await evaluate(parsed.data));
     } catch (error) {

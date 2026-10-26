@@ -1,7 +1,8 @@
 # Local Scope assessments
 
 [Microsoft Scope](https://microsoft.github.io/scope/) runs agents against fixed
-repository snapshots. This setup adapts the assessment tools in Tearleads
+repository snapshots. This setup adapts the assessment tools in the
+`~/github/tearleads2` checkout
 (`2cda350734f39c5566045d59b116014db09258d6`) to Balebase, retaining this
 repository's container worker. It measures whether an agent can discover the
 setup, feature boundaries, and public client API it needs to work here.
@@ -17,12 +18,14 @@ The upstream source is pinned in `scripts/dev/scope.sh` and lives at
 Install Node 22+, pnpm, Bun, and Docker Compose 2.24.4+ with a running engine.
 Podman on macOS can supply the Docker API; use Docker Compose for its override
 syntax. `scope:install` builds the CLI and installs it into `~/.local/bin`,
-or `SCOPE_INSTALL_DIR`. It refuses a dirty or mismatched startup checkout.
+or `SCOPE_INSTALL_DIR`. Installation refuses dirty source and checks out the pin
+when needed; stack startup refuses a dirty or mismatched checkout.
 
 Sign in to Claude Code and Codex on the host. This custom judge uses Codex's
 saved ChatGPT login; it does not require Copilot or an OpenAI API key. The
 upstream Copilot judge is disabled by default. The model and local ports are
-pinned in `scripts/dev/scope/pins.json`; `CODEX_JUDGE_MODEL` can override the
+pinned in `scripts/dev/scope/pins.json`; the shell defaults and Compose port
+mappings must match those ports. `CODEX_JUDGE_MODEL` can override the
 judge model for a separate experiment.
 
 ```sh
@@ -34,10 +37,11 @@ bun run scope judge
 The judge runs in the foreground; leave it running in a separate terminal.
 The API listens on `127.0.0.1:3100`, the judge on `127.0.0.1:3202`, and the
 local artifact emulator on `127.0.0.1:10102`. The container reaches the host
-judge through `host.docker.internal`, supported by Docker Desktop and the
-local macOS Podman machine. Set `SCOPE_JUDGE_URL` for another container-to-host
-route; verify connectivity before submitting a scored task. The judge stays
-bound to loopback. This host/container arrangement was exercised on macOS arm64.
+judge through `host.docker.internal` on macOS Docker Desktop or the local
+Podman machine. This host/container arrangement is supported here on macOS
+arm64; a Linux Docker Engine host needs a different networking arrangement to
+reach a loopback-only judge. `SCOPE_JUDGE_URL` changes the worker destination,
+not the judge bind address. Verify connectivity before submitting scored work.
 
 Put local settings in ignored `.scope/local.env`, using shell syntax:
 
@@ -100,9 +104,10 @@ in snapshots that contain them. This is an onboarding probe, not a hidden test.
 `bun run scope benchmark 3` repeats each case three times. One trial per case
 is a pilot; record the actual coder model from captured session evidence before
 comparing runs. The judge model, CLI version, exact prompts, criteria, source
-commit, tooling commit, run URLs, timings and verdicts are saved beneath
+commit, tooling commit and dirty state, run URLs, timings and verdicts are saved
+beneath
 `.scope/benchmarks/`. Changing a criterion requires a new versioned ID;
-registration refuses to silently overwrite definitions.
+criteria seeding refuses to silently overwrite definitions.
 
 The optional portal runs in the foreground at `http://127.0.0.1:5102`. Logs,
 full reports, archive snapshots and judge evidence remain in ignored `.scope/`.
@@ -112,12 +117,17 @@ execution succeeds, even though no judge evaluated them.
 
 ## Evidence and other commands
 
-The Codex judge runs in a read-only sandbox. It accepts artifact URLs only from
+The Codex judge runs in a read-only sandbox. That prevents writes; it does not
+confine reads to the job directory. The judge uses the host login and can read
+host files, so use this setup only with trusted repositories and tasks. The
+prompt instructs it to inspect only the job directory, but this is not a
+filesystem isolation boundary. It accepts artifact URLs only from
 the configured local emulator, rejects archive links and escaping paths, and
 requires one complete verdict for every criterion. Tool evidence is resolved
 from the exact worker session named in Scope's run log. Reasoning content,
 unrelated sessions and old judge verdicts are excluded. Missing evidence cannot
-establish an execution claim.
+establish an execution claim. Artifact download, session-read, or malformed-log
+errors stop grading as infrastructure failures rather than assigning an agent score.
 
 ```sh
 bun run scope smoke

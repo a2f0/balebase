@@ -27,7 +27,14 @@ export function blobName(value: string): string {
       "Artifact must belong to the configured local snapshots container",
     );
   }
-  return decodeURIComponent(url.pathname.slice(prefix.length));
+  const name = decodeURIComponent(url.pathname.slice(prefix.length));
+  if (
+    !name ||
+    name.includes("\\") ||
+    name.split("/").some((part) => !part || part === "." || part === "..")
+  )
+    throw new Error("Invalid artifact path");
+  return name;
 }
 
 /** Reject paths and links that could escape the extracted evidence directory. */

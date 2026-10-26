@@ -10,7 +10,7 @@ export const model = settings.judgeModel;
 const timeoutMs = 240000;
 
 /** Keep provider keys and service credentials out of the grading process. */
-function childEnvironment(): NodeJS.ProcessEnv {
+export function childEnvironment(source = process.env): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const name of [
     "HOME",
@@ -21,7 +21,7 @@ function childEnvironment(): NodeJS.ProcessEnv {
     "LC_ALL",
     "CODEX_HOME",
   ]) {
-    if (process.env[name]) env[name] = process.env[name];
+    if (source[name]) env[name] = source[name];
   }
   return env;
 }

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { judgeHealth, root, settings, stateDir } from "./settings";
 import { uploadFixture } from "./storage";
 import { projectConfig, readSuite, seedCriteria } from "./suites";
+import { evaluationResultSchema } from "./types";
 
 const correctReport = `The package manager is Bun (package.json, packageManager).
 The API uses Hono on Cloudflare Workers with D1 and R2 (README.md; packages/api/package.json).
@@ -72,10 +73,7 @@ export async function calibrate(): Promise<void> {
       snapshotUrl,
       suite.criteria.map((c) => c.id),
     );
-    const verdict = (await response.json()) as {
-      passed: boolean;
-      criteriaResults: Array<{ passed: boolean }>;
-    };
+    const verdict = evaluationResultSchema.parse(await response.json());
     await writeFile(
       join(directory, `${label}.json`),
       JSON.stringify(
@@ -87,6 +85,17 @@ export async function calibrate(): Promise<void> {
     assert.equal(response.status, 200, JSON.stringify(verdict));
     assert.equal(verdict.passed, expectedPassed);
     assert.equal(verdict.criteriaResults.length, 4);
+    assert.deepEqual(
+      verdict.criteriaResults.map((c) => c.criterionId).sort(),
+      suite.criteria.map((c) => c.id).sort(),
+    );
+    for (const result of verdict.criteriaResults) {
+      assert.equal(result.evaluated, true);
+      assert.equal(
+        result.passed,
+        expectedPassed || result.criterionId === "balebase_smoke_report",
+      );
+    }
     const criteriaPassed = verdict.criteriaResults.filter(
       (c) => c.passed,
     ).length;
@@ -108,6 +117,9 @@ export async function calibrate(): Promise<void> {
     500,
     "Unknown criteria must never create a vacuous pass",
   );
+  assert.deepEqual(await invalid.json(), {
+    error: "Unknown criterion: missing_calibration_criterion",
+  });
   await writeFile(
     join(directory, "receipt.json"),
     JSON.stringify(

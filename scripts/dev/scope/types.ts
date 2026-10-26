@@ -8,12 +8,20 @@ export const criterionSchema = z.object({
 });
 export type Criterion = z.infer<typeof criterionSchema>;
 
-export interface CriterionResult {
-  criterionId: string;
-  passed: boolean;
-  evaluated: boolean;
-  feedback: string;
-}
+export const evaluationResultSchema = z.object({
+  passed: z.boolean(),
+  criteriaResults: z.array(
+    z.object({
+      criterionId: z.string(),
+      passed: z.boolean(),
+      evaluated: z.boolean(),
+      feedback: z.string().min(1),
+    }),
+  ),
+});
+export type CriterionResult = z.infer<
+  typeof evaluationResultSchema
+>["criteriaResults"][number];
 
 export const configSchema = z.object({
   apiUrl: z.string().url(),

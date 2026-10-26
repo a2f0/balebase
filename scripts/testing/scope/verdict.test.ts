@@ -1,11 +1,11 @@
 import { test } from "bun:test";
 import assert from "node:assert/strict";
-import { normalizeVerdict } from "./verdict";
+import { normalizeVerdict } from "../../dev/scope/judge/verdict";
 
 const criteria = [
   { id: "build", prompt: "Build succeeds.", dependsOn: [], gates: [] },
   { id: "tests", prompt: "Tests pass.", dependsOn: ["build"], gates: [] },
-] satisfies import("../types").Criterion[];
+] satisfies import("../../dev/scope/types").Criterion[];
 const result = (criterionId: string, passed = true) => ({
   criterionId,
   passed,

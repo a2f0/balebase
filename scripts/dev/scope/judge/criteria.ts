@@ -28,15 +28,17 @@ export function orderCriteria(criteria: Criterion[]): Criterion[] {
 export async function loadCriteria(
   ids: string[],
   projectId: string,
+  request = apiRequest,
 ): Promise<Criterion[]> {
   if (!ids.length || new Set(ids).size !== ids.length)
     throw new Error("Empty or duplicate criteria");
   const all = z
     .array(criterionSchema)
     .parse(
-      await apiRequest(`/criteria?projectId=${encodeURIComponent(projectId)}`),
+      await request(`/criteria?projectId=${encodeURIComponent(projectId)}`),
     );
   const index = new Map(all.map((c) => [c.id, c]));
+  if (index.size !== all.length) throw new Error("Duplicate criterion IDs");
   const selected = new Map<string, Criterion>();
   const queue = [...ids];
   for (let id = queue.pop(); id !== undefined; id = queue.pop()) {
@@ -47,4 +49,12 @@ export async function loadCriteria(
     queue.push(...criterion.dependsOn);
   }
   return orderCriteria([...selected.values()]);
+}
+
+export function checkGate(criteria: Criterion[], gate: string) {
+  for (const criterion of criteria) {
+    if (criterion.gates.length && !criterion.gates.includes(gate)) {
+      throw new Error(`Criterion ${criterion.id} is incompatible with ${gate}`);
+    }
+  }
 }

@@ -1,6 +1,6 @@
 import { test } from "bun:test";
 import assert from "node:assert/strict";
-import { isCompleted } from "./runState";
+import { isCompleted } from "../../dev/scope/runState";
 
 test("exhausted grading is a completed measurement, not an infrastructure failure", () => {
   assert.equal(isCompleted("done", "finished"), true);

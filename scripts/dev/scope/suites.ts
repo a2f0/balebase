@@ -3,10 +3,11 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { orderCriteria } from "./judge/criteria";
-import { apiRequest, savedConfig, settings } from "./settings";
+import { apiRequest, readSavedConfig, settings } from "./settings";
 import { criterionSchema, type Suite, suiteSchema } from "./types";
 
 export function projectConfig() {
+  const savedConfig = readSavedConfig();
   if (!savedConfig || savedConfig.apiUrl !== settings.apiUrl)
     throw new Error("Run bun run scope:register first");
   return savedConfig;
@@ -15,7 +16,7 @@ export function projectConfig() {
 export async function readSuite(
   name: "smoke" | "agent-friendliness",
 ): Promise<Suite> {
-  const suite = suiteSchema.parse(
+  return validateSuite(
     JSON.parse(
       await readFile(
         join(import.meta.dir, "benchmarks", `${name}.json`),
@@ -23,6 +24,10 @@ export async function readSuite(
       ),
     ),
   );
+}
+
+export function validateSuite(input: unknown): Suite {
+  const suite = suiteSchema.parse(input);
   orderCriteria(suite.criteria);
   const known = new Set(suite.criteria.map((c) => c.id));
   if (new Set(suite.tasks.map((task) => task.id)).size !== suite.tasks.length)

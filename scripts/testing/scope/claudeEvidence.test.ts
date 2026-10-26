@@ -1,6 +1,9 @@
 import { test } from "bun:test";
 import assert from "node:assert/strict";
-import { toolRecords, transcriptIdentity } from "./claudeEvidence";
+import {
+  toolRecords,
+  transcriptIdentity,
+} from "../../dev/scope/judge/claudeEvidence";
 
 const session = "e4bf2c38-2720-4d90-9f4a-fe9bb300c105";
 const events = [

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { git } from "./register";
 import { apiRequest, settings, stateDir } from "./settings";
-import { configSchema } from "./types";
+import { configSchema, evaluationResultSchema } from "./types";
 
 const receiptSchema = z.object({
   snapshot: configSchema,
@@ -31,17 +31,6 @@ const runSchema = z.object({
       )
       .length(1),
   }),
-});
-const resultSchema = z.object({
-  passed: z.boolean(),
-  criteriaResults: z.array(
-    z.object({
-      criterionId: z.string(),
-      passed: z.boolean(),
-      evaluated: z.boolean(),
-      feedback: z.string(),
-    }),
-  ),
 });
 
 /** Reuse completed one-turn outputs; original dashboard runs and grades remain intact. */
@@ -88,7 +77,7 @@ export async function regrade(path: string): Promise<void> {
     );
     if (!response.ok)
       throw new Error(`Judge HTTP ${response.status}; inspect ${directory}`);
-    const result = resultSchema.parse(raw);
+    const result = evaluationResultSchema.parse(raw);
     cases.push({ ...entry, snapshotUrl: turn.snapshotUrl, result });
     await writeFile(
       join(directory, "receipt.json"),

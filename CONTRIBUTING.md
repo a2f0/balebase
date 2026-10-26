@@ -26,7 +26,7 @@ directories under `~/.local/share/mise/installs` to PATH without running
 | Public website | `packages/website/src` |
 | Deployment and live verification | `scripts/deploy`, `terraform` |
 | Account and data administration | `scripts/admin` |
-| Development launchers | `scripts/dev` |
+| Development launchers and local Scope assessments | `scripts/dev`, `scripts/dev/scope` |
 | Repository checks and test harnesses | `scripts/checks`, `scripts/testing` |
 | Shared script helpers | `scripts/lib` |
 | Agent review and merge policy | `agent-tool.json`, `AGENTS.md` |
@@ -63,6 +63,16 @@ mismatch, and `packages/api/src/contract.test.ts` checks that the API serves
 exactly the contract's routes. To add a route, define it in the area's
 validators file, send its response with `respond`, and add an endpoint and
 method to the area's client.
+
+See [API client onboarding](docs/api-client.md) for a public-import example,
+browser credentials and CORS, the shared wrapper, and native host assumptions.
+
+For issue changes, start with the [issue behavior](docs/product.md#issues-and-transaction-activity)
+and [offline behavior](docs/product.md#offline-work). Online
+creation lives in `packages/api/src/issues.ts` (general issues) and
+`audits.ts` (audit-specific routes); offline replay uses
+`offlineRecords.ts`. They share the `issues` table and its activity triggers.
+Check both route families and the offline operation schema when changing a field.
 
 `assets/brand/logo.svg` is the pixel B logo, drawn only with whole-unit
 `<rect>` elements; the app shells and website import this one copy. The `images`
@@ -101,6 +111,12 @@ bun run --cwd packages/app test src/Finance.test.tsx
 bun run --cwd packages/api test src/app.test.ts
 ```
 
+Run API tests through the package command: its working directory loads
+`packages/api/bunfig.toml`, whose `contractTestSetup.ts` preload checks response
+schemas after each test. API tests use in-memory database fixtures and test
+bindings; they do not need `.secrets`, Wrangler login, local migrations, or a
+running API. Installing dependencies is still required.
+
 `check:fast` runs Biome, Markdownlint, file-name checks, and all TypeScript
 checks. It needs only the installed JavaScript toolchain. It leaves dependency
 reachability, shell lint, and Terraform checks to `check`.
@@ -120,6 +136,11 @@ The full check needs ShellCheck, Terraform, TFLint, and the Ruby bundle.
 Browser tests need Chrome or Chromium; set `CHROME_PATH` to its executable when
 needed. Git's pre-commit hook fixes staged formatting; pre-push runs `check`
 and `test`.
+
+The `test:staging`, `test:env`, and `test:scope` steps inside `bun run test`
+exercise local fixtures and command stubs. They do not deploy, contact a live
+staging service, use real cloud/agent credentials, or require Scope containers.
+Live staging verification and Scope assessments are separate opt-in commands.
 
 ## Compact command output
 

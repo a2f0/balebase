@@ -11,7 +11,7 @@ import {
 } from "../storage";
 import { readClaudeTranscript } from "./claudeEvidence";
 import { grade, model } from "./codex";
-import { loadCriteria } from "./criteria";
+import { checkGate, loadCriteria } from "./criteria";
 
 const turnSchema = z
   .object({
@@ -42,13 +42,7 @@ export async function evaluate(input: EvaluationInput) {
   // A fresh provider records exactly the current, project-scoped criterion definitions.
   const criteria = await loadCriteria(input.criteria, input.projectId);
   if (!criteria.length) throw new Error("No criteria resolved");
-  for (const criterion of criteria) {
-    if (criterion.gates?.length && !criterion.gates.includes(input.gate)) {
-      throw new Error(
-        `Criterion ${criterion.id} is incompatible with ${input.gate}`,
-      );
-    }
-  }
+  checkGate(criteria, input.gate);
   await mkdir(jobsDir, { recursive: true, mode: 0o700 });
   const jobDir = await mkdtemp(join(jobsDir, "evaluation-"));
   const workspace = join(jobDir, "workspace");

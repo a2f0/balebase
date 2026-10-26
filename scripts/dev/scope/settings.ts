@@ -20,11 +20,13 @@ const pins = z
 const { SCOPE_SOURCE_DIR, SCOPE_API_URL, SCOPE_TOKEN, CODEX_JUDGE_MODEL } =
   process.env;
 const configPath = join(stateDir, "config.json");
-export const savedConfig = existsSync(configPath)
-  ? configSchema.parse(JSON.parse(readFileSync(configPath, "utf8")))
-  : undefined;
+export function readSavedConfig() {
+  return existsSync(configPath)
+    ? configSchema.parse(JSON.parse(readFileSync(configPath, "utf8")))
+    : undefined;
+}
 
-function loopbackOrigin(value: string): string {
+export function loopbackOrigin(value: string): string {
   const url = new URL(value);
   if (
     !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) ||
@@ -42,11 +44,12 @@ function loopbackOrigin(value: string): string {
 
 export const settings = {
   sourceDir: SCOPE_SOURCE_DIR ?? join(homedir(), ".local/share/scope/source"),
-  apiUrl: loopbackOrigin(
-    SCOPE_API_URL ??
-      savedConfig?.apiUrl ??
-      `http://127.0.0.1:${pins.ports.api}`,
-  ),
+  // Validate only when a live command uses the API, not when offline tests import helpers.
+  get apiUrl() {
+    return loopbackOrigin(
+      SCOPE_API_URL ?? `http://127.0.0.1:${pins.ports.api}`,
+    );
+  },
   blobOrigin: `http://127.0.0.1:${pins.ports.blob}`,
   containerBlobOrigin: "http://azurite:10000",
   workerContainer: "balebase-scope-coder-acp-claude-code-1",

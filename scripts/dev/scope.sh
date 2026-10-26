@@ -54,15 +54,6 @@ fi
 
 export SCOPE_API_URL="${SCOPE_API_URL:-http://127.0.0.1:3100}"
 
-if [[ -z "${SCOPE_PROJECT:-}" && -f "$repo_root/.scope/config.json" ]]; then
-  SCOPE_PROJECT="$(bun -e '
-    const config = await Bun.file(process.argv[1]).json();
-    if (config.apiUrl !== process.env.SCOPE_API_URL) throw new Error("Scope project belongs to another API.");
-    process.stdout.write(config.projectId);
-  ' "$repo_root/.scope/config.json")"
-  export SCOPE_PROJECT
-fi
-
 if [[ "${1:-}" == up && -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" &&
   -z "${ANTHROPIC_API_KEY:-}" &&
   -n "${SCOPE_CLAUDE_CREDENTIALS_FILE:-}" ]]; then
@@ -114,5 +105,18 @@ case "${1:-}" in
       status) "${compose[@]}" ps "$@" ;;
     esac
     ;;
-  *) exec node "$scope_dir/apps/cli/dist/scope.mjs" "$@" ;;
+  *)
+    if [[ -z "${SCOPE_PROJECT:-}" && -f "$repo_root/.scope/config.json" ]]; then
+      SCOPE_PROJECT="$(bun -e '
+        const config = await Bun.file(process.argv[1]).json();
+        if (new URL(config.apiUrl).origin !== new URL(process.env.SCOPE_API_URL).origin)
+          throw new Error("Scope project belongs to another API; run scope register.");
+        if (typeof config.projectId !== "string" || !config.projectId)
+          throw new Error("Missing saved Scope project; run scope register.");
+        process.stdout.write(config.projectId);
+      ' "$repo_root/.scope/config.json")"
+      export SCOPE_PROJECT
+    fi
+    exec node "$scope_dir/apps/cli/dist/scope.mjs" "$@"
+    ;;
 esac

@@ -51,7 +51,7 @@ services:
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
       JUDGE_SERVICE_URL: ${SCOPE_JUDGE_URL:-http://host.docker.internal:3202}
     volumes:
-      - claude_sessions:/home/node/.claude
+      - claude_projects:/home/node/.claude/projects
     depends_on:
       judge: !reset null
       claude-sessions-init:
@@ -60,8 +60,8 @@ services:
     image: busybox:1.37.0
     command: ["chown", "1000:1000", "/sessions"]
     volumes:
-      - claude_sessions:/sessions
+      - claude_projects:/sessions
     restart: "no"
 
 volumes:
-  claude_sessions:
+  claude_projects:

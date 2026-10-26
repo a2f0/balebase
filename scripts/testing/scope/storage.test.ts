@@ -1,6 +1,10 @@
 import { test } from "bun:test";
 import assert from "node:assert/strict";
-import { blobName, safeArchiveEntry, selectToolEvents } from "./storage";
+import {
+  blobName,
+  safeArchiveEntry,
+  selectToolEvents,
+} from "../../dev/scope/storage";
 
 test("snapshot paths reject traversal, absolute paths and links", () => {
   for (const path of [
@@ -17,6 +21,18 @@ test("snapshot paths reject traversal, absolute paths and links", () => {
   }
   assert.equal(safeArchiveEntry("./packages/api/index.ts", "File"), true);
   assert.equal(safeArchiveEntry("packages/api/", "Directory"), true);
+});
+
+test("decoded artifact names reject escaping or ambiguous segments", () => {
+  for (const path of [
+    "run/%2e%2e%2foutside",
+    "run/%5coutside",
+    "run//file",
+    "",
+  ])
+    assert.throws(() =>
+      blobName(`http://127.0.0.1:10102/devstoreaccount1/snapshots/${path}`),
+    );
 });
 
 test("artifact downloads accept only the local snapshots container", () => {

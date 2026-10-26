@@ -17,6 +17,7 @@ let env: Record<string, string | undefined> & {
   SCOPE_INSTALL_DIR: string;
   SCOPE_TEST_DIRTY: string;
   SCOPE_TEST_PNPM_EXIT: string;
+  SCOPE_API_URL?: string;
 };
 
 beforeEach(async () => {
@@ -37,6 +38,7 @@ await Bun.write(process.env.SCOPE_TEST_RECORD, JSON.stringify({
   args: process.argv.slice(2),
   token: process.env.CLAUDE_CODE_OAUTH_TOKEN,
   url: process.env.SCOPE_API_URL,
+  project: process.env.SCOPE_PROJECT,
 }));
 `;
   for (const command of ["docker", "node"]) {
@@ -260,4 +262,37 @@ test("configuration-only startup reuses images without conflicting build flags",
   const args = (await record()).args;
   expect(args).toContain("--no-build");
   expect(args).not.toContain("--build");
+});
+
+test("malformed saved project cannot block stack management, help or assessment dispatch", async () => {
+  await writeFile(join(directory, ".scope/config.json"), "not JSON");
+  await writeFile(
+    join(directory, "scripts/dev/scope.ts"),
+    'console.log("assessment", ...process.argv.slice(2));',
+  );
+  for (const command of ["down", "status", "up", "--help", "register"]) {
+    const result = run(command);
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+    if (command === "--help")
+      expect(result.stdout.toString()).toContain("Assessment:");
+    if (command === "register")
+      expect(result.stdout.toString()).toContain("assessment register");
+  }
+});
+
+test("CLI project selection normalizes origins and rejects mismatches", async () => {
+  await writeFile(
+    join(directory, ".scope/config.json"),
+    JSON.stringify({
+      apiUrl: "http://127.0.0.1:3100/",
+      projectId: "saved-project",
+    }),
+  );
+  expect(run("run", "list").exitCode).toBe(0);
+  expect((await Bun.file(join(directory, "record.json")).json()).project).toBe(
+    "saved-project",
+  );
+  env.SCOPE_API_URL = "http://127.0.0.1:3199";
+  expect(run("run", "list").stderr.toString()).toContain("another API");
+  expect(run("down").exitCode).toBe(0);
 });
