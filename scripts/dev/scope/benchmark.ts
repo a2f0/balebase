@@ -1,8 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { selectCriteria } from "./judge/criteria";
 import { git } from "./register";
-import { isCompleted } from "./runState";
+import { isCompleted, validateScores } from "./runState";
 import { apiRequest, judgeHealth, settings, stateDir } from "./settings";
 import { projectConfig, readSuite, seedCriteria } from "./suites";
 
@@ -108,13 +109,10 @@ export async function benchmark(
       });
       await persist();
       const results = run.run.turns?.at(-1)?.criteriaResults ?? [];
-      const ids = new Set(results.map((result) => result.criterionId));
-      if (
-        ids.size !== results.length ||
-        task.criteria.some((id) => !ids.has(id))
-      ) {
-        throw new Error(`Missing or ambiguous scores; inspect ${entry.url}`);
-      }
+      validateScores(
+        results,
+        selectCriteria(suite.criteria, task.criteria).map((c) => c.id),
+      );
       console.log(`${task.id}: ${run.run.outcome ?? run.run.status}`);
     }
   }

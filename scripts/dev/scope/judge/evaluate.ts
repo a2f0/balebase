@@ -121,18 +121,8 @@ async function captureToolOutputs(input: EvaluationInput, evidence: string) {
       2,
     ),
   );
-  const logs = input.conversationHistory.flatMap((turn, index) =>
-    turn.toolCallsUrl
-      ? [{ iteration: turn.iteration || index + 1, url: turn.toolCallsUrl }]
-      : [],
-  );
-  if (input.toolCallsUrl)
-    logs.push({
-      iteration: input.iteration || input.conversationHistory.length + 1,
-      url: input.toolCallsUrl,
-    });
   const captured = [];
-  for (const log of logs) {
+  for (const log of toolOutputRequests(input)) {
     blobName(log.url);
     captured.push({
       iteration: log.iteration,
@@ -143,4 +133,18 @@ async function captureToolOutputs(input: EvaluationInput, evidence: string) {
     join(evidence, "tool-outputs.json"),
     JSON.stringify(captured, null, 2),
   );
+}
+
+export function toolOutputRequests(input: EvaluationInput) {
+  const logs = input.conversationHistory.flatMap((turn, index) =>
+    turn.toolCallsUrl
+      ? [{ iteration: turn.iteration || index + 1, url: turn.toolCallsUrl }]
+      : [],
+  );
+  if (input.toolCallsUrl)
+    logs.push({
+      iteration: input.iteration || input.conversationHistory.length + 1,
+      url: input.toolCallsUrl,
+    });
+  return logs;
 }

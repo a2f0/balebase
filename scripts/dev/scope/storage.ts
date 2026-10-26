@@ -89,7 +89,8 @@ export async function extractArchive(
 
 export async function readToolCalls(url: string): Promise<unknown[]> {
   const blob = container.getBlobClient(blobName(url));
-  if (!(await blob.exists())) return [];
+  if (!(await blob.exists()))
+    throw new Error("Requested tool evidence is missing");
   const body = (await blob.downloadToBuffer()).toString("utf8");
   return body
     .split("\n")
@@ -101,21 +102,28 @@ export async function readToolCalls(url: string): Promise<unknown[]> {
 export async function readWorkerLog(
   snapshotUrl: string,
 ): Promise<{ iteration: number; events: unknown[] } | undefined> {
-  const match =
-    /^([^/]+)\/runs\/([^/]+)\/iteration-(\d+)\/workspace\.tar\.gz$/.exec(
-      blobName(snapshotUrl),
-    );
-  if (!match) return undefined;
-  const blob = service
-    .getContainerClient("logs")
-    .getBlobClient(`${match[1]}/runs/${match[2]}/run.jsonl`);
+  const identity = runLogIdentity(blobName(snapshotUrl));
+  if (!identity) return undefined;
+  const blob = service.getContainerClient("logs").getBlobClient(identity.name);
   if (!(await blob.exists())) return undefined;
   const values: unknown[] = (await blob.downloadToBuffer())
     .toString("utf8")
     .split("\n")
     .filter((line) => line.trim())
     .map((line) => JSON.parse(line) as unknown);
-  return { iteration: Number(match[3]), events: values };
+  return { iteration: identity.iteration, events: values };
+}
+
+export function runLogIdentity(name: string) {
+  const match =
+    /^([^/]+)\/runs\/([^/]+)\/iteration-([1-9]\d*)\/workspace\.tar\.gz$/.exec(
+      name,
+    );
+  if (!match || !Number.isSafeInteger(Number(match[3]))) return undefined;
+  return {
+    name: `${match[1]}/runs/${match[2]}/run.jsonl`,
+    iteration: Number(match[3]),
+  };
 }
 
 /** Exclude prior turns and Judge feedback, including when replaying an evaluation. */

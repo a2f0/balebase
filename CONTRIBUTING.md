@@ -196,6 +196,8 @@ Use the [Scope guide](docs/scope.md) for the local CLI/container setup,
 Claude worker, calibrated Codex judge, and versioned agent-readiness tasks.
 The assessment measures repository discoverability against committed snapshots;
 its inspection tasks do not establish clean-bootstrap or implementation success.
+See the [assessment report](docs/agent-readiness.md) for the measured baseline,
+fixes, and comparison.
 
 ## Editor setup
 

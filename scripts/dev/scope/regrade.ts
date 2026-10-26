@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { git } from "./register";
 import { isCompleted } from "./runState";
-import { apiRequest, settings, stateDir } from "./settings";
+import { apiRequest, judgeHealth, settings, stateDir } from "./settings";
 import { configSchema, evaluationResultSchema } from "./types";
 
 const receiptSchema = z.object({
@@ -35,11 +35,28 @@ const runSchema = z.object({
   }),
 });
 
+export function regradeInput(value: unknown, projectId: string, id: string) {
+  const run = runSchema.parse(value);
+  isCompleted(run.run.status, run.run.outcome);
+  const turn = run.run.turns[0];
+  if (!turn) throw new Error("Missing completed turn");
+  return {
+    snapshotUrl: turn.snapshotUrl,
+    toolCallsUrl: turn.toolCallsUrl,
+    iteration: turn.iteration,
+    projectId,
+    currentAgentResponse: turn.codingAgentResponse,
+    criteria: run.scenario.criteria,
+    requestId: `regrade-${id}`,
+  };
+}
+
 /** Reuse completed one-turn outputs; original dashboard runs and grades remain intact. */
 export async function regrade(path: string): Promise<void> {
   const receipt = receiptSchema.parse(JSON.parse(await readFile(path, "utf8")));
   if (receipt.snapshot.apiUrl !== settings.apiUrl)
     throw new Error("Receipt belongs to a different API");
+  const judge = await judgeHealth();
   const directory = join(stateDir, "regrades", String(Date.now()));
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const cases: unknown[] = [];
@@ -48,6 +65,7 @@ export async function regrade(path: string): Promise<void> {
     snapshot: receipt.snapshot,
     judgeToolingCommit: git("rev-parse", "HEAD"),
     judgeModel: settings.judgeModel,
+    judge,
     cases,
   };
   console.log(`Regrade receipt: ${directory}/receipt.json`);
@@ -56,24 +74,17 @@ export async function regrade(path: string): Promise<void> {
     JSON.stringify(report, null, 2),
   );
   for (const entry of receipt.cases) {
-    const run = runSchema.parse(
+    const input = regradeInput(
       await apiRequest(`/requests/${encodeURIComponent(entry.id)}`),
+      receipt.snapshot.projectId,
+      entry.id,
     );
-    isCompleted(run.run.status, run.run.outcome);
-    const turn = run.run.turns[0];
-    if (!turn) throw new Error("Missing completed turn");
     const response = await fetch(
       `http://127.0.0.1:${settings.judgePort}/api/v1/evaluate`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...turn,
-          projectId: receipt.snapshot.projectId,
-          currentAgentResponse: turn.codingAgentResponse,
-          criteria: run.scenario.criteria,
-          requestId: `regrade-${entry.id}`,
-        }),
+        body: JSON.stringify(input),
         signal: AbortSignal.timeout(300000),
       },
     );
@@ -85,7 +96,7 @@ export async function regrade(path: string): Promise<void> {
     if (!response.ok)
       throw new Error(`Judge HTTP ${response.status}; inspect ${directory}`);
     const result = evaluationResultSchema.parse(raw);
-    cases.push({ ...entry, snapshotUrl: turn.snapshotUrl, result });
+    cases.push({ ...entry, snapshotUrl: input.snapshotUrl, result });
     await writeFile(
       join(directory, "receipt.json"),
       JSON.stringify(report, null, 2),

@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { settings } from "../settings";
 import { model } from "./codex";
-import { evaluate, inputSchema } from "./evaluate";
-import { trustedEvaluationRequest } from "./request";
+import { evaluate } from "./evaluate";
+import { judgeHandler } from "./http";
 
 const auth = spawnSync("codex", ["login", "status"], { encoding: "utf8" });
 if (auth.status !== 0 || !`${auth.stdout}${auth.stderr}`.includes("ChatGPT")) {
@@ -11,62 +11,23 @@ if (auth.status !== 0 || !`${auth.stdout}${auth.stderr}`.includes("ChatGPT")) {
 const version = spawnSync("codex", ["--version"], {
   encoding: "utf8",
 }).stdout.trim();
-let active = false;
+const handle = judgeHandler({
+  port: settings.judgePort,
+  model,
+  version,
+  evaluate,
+});
 Bun.serve({
   hostname: "127.0.0.1",
   port: settings.judgePort,
   idleTimeout: 255,
   maxRequestBodySize: 10 * 1024 * 1024,
-  async fetch(request, server) {
-    const path = new URL(request.url).pathname;
-    if (path === "/health" && request.method === "GET") {
-      return Response.json({
-        status: "healthy",
-        service: "judge",
-        provider: "codex-cli",
-        model,
-        authentication: "ChatGPT",
-        codexVersion: version,
-        active,
-      });
-    }
-    if (path !== "/api/v1/evaluate" || request.method !== "POST") {
-      return new Response("Not found", { status: 404 });
-    }
-    if (!trustedEvaluationRequest(request, settings.judgePort))
-      return Response.json(
-        { error: "Only local non-browser JSON clients are allowed" },
-        { status: 403 },
-      );
-    const parsed = inputSchema.safeParse(
-      await request.json().catch(() => null),
-    );
-    if (!parsed.success)
-      return Response.json(
-        { error: "Invalid evaluation input" },
-        { status: 400 },
-      );
-    if (active)
-      return Response.json(
-        { error: "Judge is busy; retry evaluation" },
-        { status: 503 },
-      );
-    active = true;
+  fetch(request, server) {
     // Archive I/O and grading can together exceed Bun's connection idle limit.
-    server.timeout(request, 0);
-    try {
-      return Response.json(await evaluate(parsed.data));
-    } catch (error) {
-      console.error("[codex-judge]", error);
-      return Response.json(
-        { error: error instanceof Error ? error.message : String(error) },
-        { status: 500 },
-      );
-    } finally {
-      active = false;
-    }
+    return handle(request, () => server.timeout(request, 0));
   },
 });
+
 console.log(
   `Codex Judge: http://127.0.0.1:${settings.judgePort} (${version}, ${model})`,
 );

@@ -37,6 +37,12 @@ export async function loadCriteria(
     .parse(
       await request(`/criteria?projectId=${encodeURIComponent(projectId)}`),
     );
+  return selectCriteria(all, ids);
+}
+
+export function selectCriteria(all: Criterion[], ids: string[]): Criterion[] {
+  if (!ids.length || new Set(ids).size !== ids.length)
+    throw new Error("Empty or duplicate criteria");
   const index = new Map(all.map((c) => [c.id, c]));
   if (index.size !== all.length) throw new Error("Duplicate criterion IDs");
   const selected = new Map<string, Criterion>();

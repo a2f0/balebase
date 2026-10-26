@@ -39,6 +39,9 @@ and exposes `API-Version` and other response headers
 (`packages/api/src/auth.ts`). An arbitrary new shell origin is not automatically
 authorized. Check its origin, cookie policy, and sign-in flow against a local
 or staging API before treating this example as a working integration.
+The production origin is declared in `packages/api/wrangler.jsonc`; staging
+sets it in `scripts/deploy/createStagingConfigs.ts`. These are configured
+values, not proof of the settings currently deployed to a live Worker.
 
 ## Existing application and native hosts
 
@@ -58,6 +61,8 @@ Do not add it to an ordinary browser request.
 Outside a browser, default `fetch` does not provide a browser session cookie
 jar. `ApiClientOptions.fetch` can supply a transport, but the caller must
 explicitly implement its environment's authentication and cookie handling.
+Standard `fetch` already matches the optional transport signature; a narrowing
+wrapper is not required. Add a wrapper when you need additional behavior.
 The package alone does not establish a signed-in Node/Bun or native session.
 
 ## Verification

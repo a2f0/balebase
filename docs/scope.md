@@ -10,6 +10,8 @@ setup, feature boundaries, and public client API it needs to work here.
 A passing inspection task is evidence about that task and environment. It is
 not an overall readiness score, proof of a clean install, or a successful code
 change. Keep infrastructure failures separate from agent and repository findings.
+The [2026-10-26 assessment report](agent-readiness.md) records the baseline,
+documentation fixes, comparison results, and remaining limitations.
 
 ## Install and start
 
@@ -126,7 +128,9 @@ prompt instructs it to inspect only the job directory, but this is not a
 filesystem isolation boundary. It accepts artifact URLs only from
 the configured local emulator, rejects archive links and escaping paths, and
 requires one complete verdict for every criterion. Tool evidence is resolved
-from the exact worker session named in Scope's run log. Reasoning content,
+from the exact worker session named in Scope's run log. The benchmark and
+regrade commands support one iteration per run; Scope creates one workspace
+per run, and its iteration-tagged session identifies that turn. Reasoning content,
 unrelated sessions and old judge verdicts are excluded. Missing evidence cannot
 establish an execution claim. Artifact download, session-read, or malformed-log
 errors stop grading as infrastructure failures rather than assigning an agent score.
