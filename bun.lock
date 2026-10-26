@@ -58,7 +58,7 @@
     },
     "packages/app": {
       "name": "@balebase/app",
-      "version": "0.1.72",
+      "version": "0.1.73",
       "dependencies": {
         "@balebase/api-client": "workspace:*",
         "@balebase/ui": "workspace:*",
@@ -103,7 +103,7 @@
     },
     "packages/app-web": {
       "name": "@balebase/app-web",
-      "version": "0.1.64",
+      "version": "0.1.65",
       "dependencies": {
         "@a2f0/ct-client": "0.1.4",
         "@balebase/app": "workspace:*",
