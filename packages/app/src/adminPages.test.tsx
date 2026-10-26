@@ -20,7 +20,8 @@ describe("root admin pages", () => {
 
   it("provides a maintenance jobs page", () => {
     const markup = renderToStaticMarkup(<AdminJobs />);
-    expect(markup).toContain("Maintenance jobs");
+    expect(markup).toContain("Available jobs");
+    expect(markup).toContain("Run history");
     expect(markup).toContain("Loading jobs…");
   });
   it("keeps the user listing on the Users page", () => {

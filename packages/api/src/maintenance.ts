@@ -1,3 +1,4 @@
+import type { JobOutput } from "@balebase/validators/adminJobs";
 import { purgePendingAuditIssueImages } from "./auditIssueImages";
 import {
   purgeStripeWebhookReceipts,
@@ -7,6 +8,8 @@ import { purgeExpiredFreeAuditRuns } from "./billingRetention";
 import { refreshActiveCheckrScreenings } from "./checkrSync";
 import { maintainContracts } from "./contractReminders";
 import { purgeDeletedObjects } from "./deletedObjectCleanup";
+import { captureApiError } from "./diagnostics";
+import { dispatchJob, type JobRow } from "./jobRuns";
 import type { Bindings } from "./types";
 import { purgeRequestedUsers } from "./userDeletion";
 
@@ -59,9 +62,8 @@ export const maintenanceJobs = [
   },
 ] as const;
 
-type MaintenanceJobId = (typeof maintenanceJobs)[number]["id"];
-type MaintenanceTasks = Record<MaintenanceJobId, () => Promise<unknown>>;
-
+export type MaintenanceJobId = (typeof maintenanceJobs)[number]["id"];
+type MaintenanceTasks = Record<MaintenanceJobId, () => Promise<JobOutput>>;
 type RunSource =
   | { trigger: "manual"; actorUserId: string }
   | { trigger: "scheduled"; cron: string; scheduledTime: number };
@@ -69,79 +71,138 @@ type RunSource =
 export function maintenanceTasks(environment: Bindings): MaintenanceTasks {
   return {
     purgeRequestedUsers: () => purgeRequestedUsers(environment),
-    purgeDeletedObjects: () => purgeDeletedObjects(environment),
-    purgeExpiredFreeAuditRuns: () => purgeExpiredFreeAuditRuns(environment),
-    purgePendingAuditIssueImages: () =>
-      purgePendingAuditIssueImages(environment),
-    purgeStripeWebhookReceipts: () => purgeStripeWebhookReceipts(environment),
+    purgeDeletedObjects: async () => ({
+      purged: await purgeDeletedObjects(environment),
+    }),
+    purgeExpiredFreeAuditRuns: async () => ({
+      purged: await purgeExpiredFreeAuditRuns(environment),
+    }),
+    purgePendingAuditIssueImages: async () => ({
+      purged: await purgePendingAuditIssueImages(environment),
+    }),
+    purgeStripeWebhookReceipts: async () => ({
+      purged: await purgeStripeWebhookReceipts(environment),
+    }),
     reconcileSubscriptionSeats: () => reconcileSubscriptionSeats(environment),
-    maintainContracts: () => maintainContracts(environment),
-    refreshCheckrScreenings: () => refreshActiveCheckrScreenings(environment),
+    maintainContracts: async () => ({
+      reminded: await maintainContracts(environment),
+    }),
+    refreshCheckrScreenings: async () => {
+      const { refreshed, skipped, notifications } =
+        await refreshActiveCheckrScreenings(environment);
+      return {
+        refreshed,
+        skipped,
+        notificationsSent: notifications.sent,
+        notificationsFailed: notifications.failed,
+        notificationsAbandoned: notifications.abandoned,
+        notificationQueueUnavailable: notifications.queueUnavailable,
+      };
+    },
   };
+}
+
+export async function enqueueMaintenance(
+  env: Bindings,
+  jobId: MaintenanceJobId,
+  source: RunSource,
+  dependsOn: string | null = null,
+) {
+  if (!env.FINANCE_SYNC_QUEUE)
+    throw new Error("Background job queue is not configured.");
+  const scheduled = source.trigger === "scheduled" ? source : null;
+  const id = scheduled
+    ? `scheduled:${jobId}:${scheduled.scheduledTime}`
+    : crypto.randomUUID();
+  const now = new Date().toISOString();
+  const results = await env.DB.batch([
+    env.DB.prepare(`INSERT OR IGNORE INTO job_runs
+      (id, job_id, source, requested_by, cron, scheduled_time, depends_on, available_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+      id,
+      jobId,
+      source.trigger,
+      source.trigger === "manual" ? source.actorUserId : null,
+      scheduled?.cron ?? null,
+      scheduled?.scheduledTime ?? null,
+      dependsOn,
+      now,
+      now,
+    ),
+    env.DB.prepare(`SELECT * FROM job_runs WHERE job_id = ?
+      AND (id = ? OR status IN ('queued', 'running'))
+      ORDER BY created_at DESC, rowid DESC LIMIT 1`).bind(jobId, id),
+  ]);
+  const job = results.at(-1)?.results[0] as JobRow;
+  if (job.status === "queued") await dispatchJob(env, job.id);
+  return job;
 }
 
 export async function runMaintenanceJob(
-  jobId: MaintenanceJobId,
-  task: () => Promise<unknown>,
-  source: RunSource,
+  database: D1Database,
+  job: JobRow,
+  task: (() => Promise<JobOutput>) | undefined,
 ) {
-  const started = Date.now();
-  const details = {
-    event: "maintenance_job",
-    runId: crypto.randomUUID(),
-    jobId,
-    ...source,
-    startedAt: new Date(started).toISOString(),
-  };
-  console.log({ ...details, status: "running" });
+  console.log({
+    event: "background_job",
+    runId: job.id,
+    jobId: job.job_id,
+    status: "running",
+  });
+  let output: JobOutput | null = null;
+  let errorCode: string | null = null;
   try {
-    const result = await task();
-    const run = {
-      ...details,
-      status: "succeeded" as const,
-      finishedAt: new Date().toISOString(),
-      durationMs: Date.now() - started,
-      result: result ?? null,
-    };
-    console.log(run);
-    return run;
+    if (!task) throw new Error("Unknown job handler.");
+    output = await task();
   } catch (cause) {
-    const run = {
-      ...details,
-      status: "failed" as const,
-      finishedAt: new Date().toISOString(),
-      durationMs: Date.now() - started,
-      error:
-        "Job failed; some work may have completed. Check Workers Logs before retrying.",
-    };
-    console.error(run, cause);
-    return run;
+    console.error(
+      { event: "background_job_error", runId: job.id, jobId: job.job_id },
+      cause,
+    );
+    await captureApiError(cause, "job-error");
+    errorCode = "MAINTENANCE_FAILED";
   }
+  // A failed completion write leaves the lease in place: recovery marks it
+  // interrupted instead of repeating possibly completed external side effects.
+  await database
+    .prepare(`UPDATE job_runs SET status = ?, output_json = ?, error_code = ?,
+    finished_at = ?, lease_until = NULL WHERE id = ? AND status = 'running' AND lease_until = ?`)
+    .bind(
+      errorCode ? "failed" : "succeeded",
+      output ? JSON.stringify(output) : null,
+      errorCode,
+      new Date().toISOString(),
+      job.id,
+      job.lease_until,
+    )
+    .run();
+  console.log({
+    event: "background_job",
+    runId: job.id,
+    jobId: job.job_id,
+    status: errorCode ? "failed" : "succeeded",
+    output,
+    errorCode,
+  });
 }
 
 export async function runScheduledMaintenance(
-  tasks: MaintenanceTasks,
-  source: Extract<RunSource, { trigger: "scheduled" }> = {
-    trigger: "scheduled",
-    cron: "17 * * * *",
-    scheduledTime: Date.now(),
-  },
+  env: Bindings,
+  source: Extract<RunSource, { trigger: "scheduled" }>,
 ) {
-  // Retention queues deleted image objects before object cleanup runs.
-  const retention = await runMaintenanceJob(
+  const retention = await enqueueMaintenance(
+    env,
     "purgeExpiredFreeAuditRuns",
-    tasks.purgeExpiredFreeAuditRuns,
     source,
   );
-  const results = await Promise.all(
-    maintenanceJobs
-      .filter(({ id }) => id !== "purgeExpiredFreeAuditRuns")
-      .map(({ id }) => runMaintenanceJob(id, tasks[id], source)),
-  );
-  const failures = [retention, ...results].filter(
-    (run) => run.status === "failed",
-  );
-  if (failures.length > 0) {
-    throw new AggregateError(failures, "Scheduled maintenance failed.");
+  // Object cleanup waits for the retention run, even if queue messages arrive out of order.
+  for (const { id } of maintenanceJobs) {
+    if (id !== "purgeExpiredFreeAuditRuns")
+      await enqueueMaintenance(
+        env,
+        id,
+        source,
+        id === "purgeDeletedObjects" ? retention.id : null,
+      );
   }
 }

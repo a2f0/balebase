@@ -6,7 +6,14 @@ import { adminJobs } from "./adminJobs";
 import { adminUsers } from "./adminUsers";
 import type { AuthSession } from "./auth";
 import type { AuthVariables } from "./authMiddleware";
-import { runMaintenanceJob } from "./maintenance";
+import { claimJob, recoverJobs } from "./jobRuns";
+import { consumeJobs } from "./jobWorker";
+import { waitForLegacyJob } from "./legacyJobRun";
+import {
+  enqueueMaintenance,
+  runMaintenanceJob,
+  runScheduledMaintenance,
+} from "./maintenance";
 import { withNativeOrigin } from "./nativeRequest";
 import type { Bindings } from "./types";
 import { purgeRequestedUsers, userDeletion } from "./userDeletion";
@@ -29,7 +36,13 @@ async function fixture(role = "admin", impersonatedBy?: string) {
     .sort()) {
     database.exec(await Bun.file(new URL(file, directory)).text());
   }
+  const messages: string[] = [];
   const bindings = {
+    FINANCE_SYNC_QUEUE: {
+      async send(body: { jobId: string }) {
+        messages.push(body.jobId);
+      },
+    },
     CORS_ORIGIN: origin,
     DB: {
       async batch(statements: { execute: () => unknown }[]) {
@@ -113,6 +126,22 @@ async function fixture(role = "admin", impersonatedBy?: string) {
   return {
     database,
     bindings,
+    messages,
+    deliver: (jobId: string) =>
+      consumeJobs(
+        {
+          messages: [
+            {
+              body: { jobId },
+              ack() {},
+              retry() {
+                throw new Error("Unexpected retry");
+              },
+            },
+          ],
+        } as unknown as MessageBatch<{ jobId: string }>,
+        bindings,
+      ),
     insertUser,
     beforeUserDelete(callback: () => void) {
       beforeUserDelete = callback;
@@ -334,7 +363,7 @@ it.each(["capacitor://localhost", "https://localhost"])(
     expect(
       (
         await f.request(
-          "/jobs/purgeRequestedUsers/run",
+          "/jobs/purgeRequestedUsers/runs",
           nativePost("purgeRequestedUsers"),
         )
       ).status,
@@ -343,11 +372,11 @@ it.each(["capacitor://localhost", "https://localhost"])(
     expect(
       (
         await admin.request(
-          "/jobs/purgeRequestedUsers/run",
+          "/jobs/purgeRequestedUsers/runs",
           nativePost("purgeRequestedUsers"),
         )
       ).status,
-    ).toBe(200);
+    ).toBe(202);
   },
 );
 
@@ -452,7 +481,7 @@ it("requires root admin access, trusted origin, a known job, and explicit confir
   expect(
     (
       await regular.request(
-        "/jobs/purgeRequestedUsers/run",
+        "/jobs/purgeRequestedUsers/runs",
         post("purgeRequestedUsers"),
       )
     ).status,
@@ -462,89 +491,217 @@ it("requires root admin access, trusted origin, a known job, and explicit confir
   expect(
     (
       await admin.request(
-        "/jobs/purgeRequestedUsers/run",
+        "/jobs/purgeRequestedUsers/runs",
         post("purgeRequestedUsers", "https://evil.example"),
       )
     ).status,
   ).toBe(403);
   expect(
-    (await admin.request("/jobs/unknown/run", post("unknown"))).status,
+    (await admin.request("/jobs/unknown/runs", post("unknown"))).status,
   ).toBe(404);
   expect(
-    (await admin.request("/jobs/purgeRequestedUsers/run", post("wrong")))
+    (await admin.request("/jobs/purgeRequestedUsers/runs", post("wrong")))
       .status,
   ).toBe(400);
   const response = await admin.request(
-    "/jobs/purgeRequestedUsers/run",
+    "/jobs/purgeRequestedUsers/runs",
     post("purgeRequestedUsers"),
   );
-  expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({
+  expect(response.status).toBe(202);
+  const { run } = (await response.json()) as { run: { runId: string } };
+  expect(
+    await (await admin.request(`/jobs/runs/${run.runId}`)).json(),
+  ).toMatchObject({
+    run: {
+      status: "queued",
+      requestedBy: "actor",
+      source: "manual",
+      attempts: 0,
+      output: null,
+    },
+    logs: [{ message: "Job queued." }],
+  });
+  await admin.deliver(run.runId);
+  expect(
+    await (await admin.request(`/jobs/runs/${run.runId}`)).json(),
+  ).toMatchObject({
     run: {
       status: "succeeded",
-      actorUserId: "actor",
-      trigger: "manual",
-      result: { purged: 0, blocked: 0 },
+      output: { purged: 0, blocked: 0 },
+      attempts: 1,
     },
+    logs: [
+      { message: "Job queued." },
+      { message: "Attempt started." },
+      { message: "Job completed." },
+    ],
+  });
+  expect((await regular.request("/jobs/runs")).status).toBe(403);
+  expect((await regular.request(`/jobs/runs/${run.runId}`)).status).toBe(403);
+});
+
+it("keeps a sanitized failed run and does not replay duplicate deliveries", async () => {
+  const f = await fixture();
+  const job = await enqueueMaintenance(f.bindings, "purgeDeletedObjects", {
+    trigger: "manual",
+    actorUserId: "actor",
+  });
+  const claimed = await claimJob(f.bindings.DB, job.id);
+  if (!claimed) throw new Error("Missing claim");
+  await runMaintenanceJob(f.bindings.DB, claimed, async () => {
+    throw new Error("secret provider response");
+  });
+  await f.deliver(job.id);
+  const response = await f.request(`/jobs/runs/${job.id}`);
+  const body = await response.text();
+  expect(body).not.toContain("secret provider response");
+  expect(JSON.parse(body)).toMatchObject({
+    run: { status: "failed", attempts: 1, errorCode: "MAINTENANCE_FAILED" },
   });
 });
 
-it("logs correlated start and completion records and sanitizes failed run responses", async () => {
-  const log = spyOn(console, "log").mockImplementation(() => {});
-  const error = spyOn(console, "error").mockImplementation(() => {});
-  try {
-    const success = await runMaintenanceJob(
-      "purgeDeletedObjects",
-      async () => 3,
-      { trigger: "manual", actorUserId: "actor" },
-    );
-    expect(log.mock.calls[0]?.[0]).toMatchObject({
-      runId: success.runId,
-      status: "running",
-      actorUserId: "actor",
-    });
-    expect(log.mock.calls[1]?.[0]).toMatchObject({
-      runId: success.runId,
-      status: "succeeded",
-      result: 3,
-    });
-    const failure = await runMaintenanceJob(
-      "purgeDeletedObjects",
-      async () => {
-        throw new Error("internal detail");
-      },
-      { trigger: "manual", actorUserId: "actor" },
-    );
-    expect(failure.status).toBe("failed");
-    expect(JSON.stringify(failure)).not.toContain("internal detail");
-    expect(error.mock.calls[0]?.[0]).toMatchObject({
-      runId: failure.runId,
-      status: "failed",
-    });
-  } finally {
-    log.mockRestore();
-    error.mockRestore();
-  }
-});
-
-it("returns a failed run with its ID when a manual job fails", async () => {
+it("retains execution failures after an accepted manual request", async () => {
   const f = await fixture();
   f.database.exec("DROP TABLE user_deletion_requests");
-  const error = spyOn(console, "error").mockImplementation(() => {});
-  try {
-    const response = await f.request(
-      "/jobs/purgeRequestedUsers/run",
-      post("purgeRequestedUsers"),
-    );
-    expect(response.status).toBe(500);
-    const body = (await response.json()) as {
-      run: { runId: string; status: string };
-    };
-    expect(body.run.status).toBe("failed");
-    expect(body.run.runId).toBeString();
-  } finally {
-    error.mockRestore();
-  }
+  const response = await f.request(
+    "/jobs/purgeRequestedUsers/runs",
+    post("purgeRequestedUsers"),
+  );
+  expect(response.status).toBe(202);
+  const { run } = (await response.json()) as { run: { runId: string } };
+  await f.deliver(run.runId);
+  expect(
+    await (await f.request(`/jobs/runs/${run.runId}`)).json(),
+  ).toMatchObject({ run: { status: "failed" } });
+});
+
+it("deduplicates active requests, recovers failed sends, and never replays interrupted maintenance", async () => {
+  const f = await fixture();
+  if (!f.bindings.FINANCE_SYNC_QUEUE) throw new Error("Missing queue");
+  const send = spyOn(f.bindings.FINANCE_SYNC_QUEUE, "send").mockRejectedValue(
+    new Error("offline"),
+  );
+  const start = () =>
+    enqueueMaintenance(f.bindings, "purgeRequestedUsers", {
+      trigger: "manual",
+      actorUserId: "actor",
+    });
+  const first = await start();
+  expect((await start()).id).toBe(first.id);
+  expect(
+    f.database.query("SELECT count(*) AS count FROM job_logs").get(),
+  ).toEqual({ count: 1 });
+  send.mockRestore();
+  await recoverJobs(f.bindings);
+  expect(f.messages).toContain(first.id);
+  expect(await claimJob(f.bindings.DB, first.id)).not.toBeNull();
+  expect(await claimJob(f.bindings.DB, first.id)).toBeNull();
+  f.database.exec("UPDATE job_runs SET lease_until = '2000-01-01'");
+  await recoverJobs(f.bindings);
+  await f.deliver(first.id);
+  expect(
+    f.database.query("SELECT status, attempts, error_code FROM job_runs").get(),
+  ).toEqual({ status: "failed", attempts: 1, error_code: "INTERRUPTED" });
+  expect((await start()).id).not.toBe(first.id);
+});
+
+it("keeps hourly scheduling idempotent and gates cleanup on retention even when messages arrive out of order", async () => {
+  const f = await fixture();
+  const source = {
+    trigger: "scheduled" as const,
+    cron: "17 * * * *",
+    scheduledTime: Date.now(),
+  };
+  await runScheduledMaintenance(f.bindings, source);
+  await runScheduledMaintenance(f.bindings, source);
+  expect(
+    f.database.query("SELECT count(*) AS count FROM job_runs").get(),
+  ).toEqual({ count: 8 });
+  const rows = f.database.query("SELECT id, job_id FROM job_runs").all() as {
+    id: string;
+    job_id: string;
+  }[];
+  const retention = rows.find(
+    (row) => row.job_id === "purgeExpiredFreeAuditRuns",
+  );
+  const cleanup = rows.find((row) => row.job_id === "purgeDeletedObjects");
+  if (!retention || !cleanup) throw new Error("Missing scheduled jobs");
+  expect(await claimJob(f.bindings.DB, cleanup.id)).toBeNull();
+  const parent = await claimJob(f.bindings.DB, retention.id);
+  if (!parent) throw new Error("Missing retention claim");
+  await runMaintenanceJob(f.bindings.DB, parent, async () => {
+    throw new Error("retention failed");
+  });
+  expect(await claimJob(f.bindings.DB, cleanup.id)).not.toBeNull();
+});
+
+it("paginates filtered history and logs, rejects invalid filters, and expires only terminal runs after 30 days", async () => {
+  const f = await fixture();
+  const created = new Date().toISOString();
+  const old = new Date(Date.now() - 31 * 86400000).toISOString();
+  for (let i = 0; i < 55; i++)
+    f.database
+      .query(`INSERT INTO job_runs (id, job_id, source, status, available_at, created_at, finished_at)
+    VALUES (?, 'purgeRequestedUsers', 'manual', 'succeeded', ?, ?, ?)`)
+      .run(`run-${String(i).padStart(2, "0")}`, created, created, created);
+  const history = (await (
+    await f.request("/jobs/runs?jobId=purgeRequestedUsers&status=succeeded")
+  ).json()) as { runs: { runId: string }[]; nextCursor: string };
+  expect(history.runs).toHaveLength(50);
+  const older = (await (
+    await f.request(
+      `/jobs/runs?jobId=purgeRequestedUsers&status=succeeded&cursor=${encodeURIComponent(history.nextCursor)}`,
+    )
+  ).json()) as { runs: { runId: string }[]; nextCursor: string | null };
+  expect(older.runs).toHaveLength(5);
+  expect(older.nextCursor).toBeNull();
+  expect(
+    new Set([...history.runs, ...older.runs].map((run) => run.runId)).size,
+  ).toBe(55);
+  for (const query of ["cursor=bad", "status=bad"])
+    expect((await f.request(`/jobs/runs?${query}`)).status).toBe(400);
+  expect((await f.request("/jobs/runs/missing")).status).toBe(404);
+  expect((await f.request("/jobs/runs/run-00?before=bad")).status).toBe(400);
+  for (let i = 0; i < 205; i++)
+    f.database
+      .query(
+        "INSERT INTO job_logs (run_id, occurred_at, level, message, details_json) VALUES ('run-00', ?, 'info', 'Progress', '{}')",
+      )
+      .run(created);
+  const logs = (await (await f.request("/jobs/runs/run-00")).json()) as {
+    logs: { id: number }[];
+    nextBefore: string;
+  };
+  expect(logs.logs).toHaveLength(200);
+  const previous = (await (
+    await f.request(`/jobs/runs/run-00?before=${logs.nextBefore}`)
+  ).json()) as { logs: { id: number }[]; nextBefore: string | null };
+  expect(previous.logs).toHaveLength(6);
+  expect(previous.nextBefore).toBeNull();
+  expect(
+    new Set([...logs.logs, ...previous.logs].map((log) => log.id)).size,
+  ).toBe(206);
+  f.database
+    .query("UPDATE job_runs SET finished_at = ? WHERE id = 'run-00'")
+    .run(old);
+  f.database
+    .query(
+      "INSERT INTO job_runs (id, job_id, source, available_at, created_at) VALUES ('active', 'purgeRequestedUsers', 'manual', ?, ?)",
+    )
+    .run(created, old);
+  await recoverJobs(f.bindings);
+  expect(
+    f.database.query("SELECT id FROM job_runs WHERE id = 'run-00'").get(),
+  ).toBeNull();
+  expect(
+    f.database.query("SELECT id FROM job_logs WHERE run_id = 'run-00'").get(),
+  ).toBeNull();
+  expect(
+    f.database.query("SELECT id FROM job_runs WHERE id = 'active'").get(),
+  ).not.toBeNull();
+  expect(
+    f.database.query("SELECT count(*) AS count FROM job_runs").get(),
+  ).toEqual({ count: 55 });
 });
 
 it("lets root admins mark and cancel users with durable actor history", async () => {
@@ -804,4 +961,51 @@ it("records only one request event when duplicate requests have the same timesta
   } finally {
     clock.mockRestore();
   }
+});
+
+it("preserves completed results for older apps and never reports queued work as completed", async () => {
+  const f = await fixture();
+  const run = await enqueueMaintenance(f.bindings, "purgeRequestedUsers", {
+    trigger: "manual",
+    actorUserId: "actor",
+  });
+  expect(
+    await waitForLegacyJob(f.bindings.DB, run.id, async () => {}),
+  ).toBeNull();
+  if (!f.bindings.FINANCE_SYNC_QUEUE) throw new Error("Missing queue");
+  const send = spyOn(f.bindings.FINANCE_SYNC_QUEUE, "send").mockImplementation(
+    async (body) => {
+      await f.deliver(body.jobId);
+      return { metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } };
+    },
+  );
+  try {
+    const completed = await f.request(
+      "/jobs/purgeRequestedUsers/run",
+      post("purgeRequestedUsers"),
+    );
+    expect(completed.status).toBe(200);
+    expect(await completed.json()).toMatchObject({
+      run: { status: "succeeded", result: { purged: 0, blocked: 0 } },
+    });
+    f.database.exec("DROP TABLE user_deletion_requests");
+    const failed = await f.request(
+      "/jobs/purgeRequestedUsers/run",
+      post("purgeRequestedUsers"),
+    );
+    expect(failed.status).toBe(500);
+    expect(await failed.json()).toMatchObject({
+      run: { status: "failed", error: expect.any(String) },
+    });
+  } finally {
+    send.mockRestore();
+  }
+  const oldCatalog = (await (await f.request("/jobs")).json()) as {
+    jobs: { id: string }[];
+  };
+  expect(oldCatalog.jobs).toHaveLength(8);
+  const catalog = (await (await f.request("/jobs?all=true")).json()) as {
+    jobs: { id: string }[];
+  };
+  expect(catalog.jobs.map((job) => job.id)).toContain("syncFinanceConnection");
 });

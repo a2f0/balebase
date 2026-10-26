@@ -1,5 +1,4 @@
 import {
-  Banner,
   Button,
   confirmDialog,
   LoadingState,
@@ -9,38 +8,40 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
-import type {
-  MaintenanceJob,
-  MaintenanceRun,
-} from "@balebase/validators/adminJobs";
+import type { JobDefinition } from "@balebase/validators/adminJobs";
 import { useEffect, useState } from "react";
+import { AdminJobHistory } from "./AdminJobHistory";
 import { api } from "./apiClient";
 
 export function AdminJobs() {
-  const [jobs, setJobs] = useState<MaintenanceJob[]>();
+  const [jobs, setJobs] = useState<JobDefinition[]>();
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
-  const [run, setRun] = useState<MaintenanceRun>();
+  const [selectedRun, setSelectedRun] = useState<string>();
   useEffect(() => {
+    let active = true;
     void api.adminJobs
       .list()
-      .then(setJobs)
+      .then((result) => {
+        if (active) setJobs(result);
+      })
       .catch((cause: unknown) => {
-        setError(messageFrom(cause));
+        if (active) setError(messageFrom(cause));
       });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  async function trigger(job: MaintenanceJob) {
+  async function trigger(job: JobDefinition) {
     if (!(await confirmJobRun(job))) return;
     setBusy(job.id);
     setError(undefined);
-    setRun(undefined);
     try {
-      setRun(await api.adminJobs.run(job.id));
+      const run = await api.adminJobs.run(job.id);
+      setSelectedRun(run.runId);
     } catch (cause) {
-      setError(
-        `${messageFrom(cause)} The outcome may be unknown; check Workers Logs before retrying.`,
-      );
+      setError(`${messageFrom(cause)} Check recent runs before trying again.`);
     } finally {
       setBusy(undefined);
     }
@@ -51,15 +52,14 @@ export function AdminJobs() {
       <PageHeader
         eyebrow="Root Admin"
         title="Jobs"
-        description="Run platform maintenance on demand using the same rules as scheduled jobs."
+        description="Run maintenance and inspect background jobs, logs, and saved output."
       />
       <PageBody>
         {error && <Toast tone="danger">{error}</Toast>}
-        {run && <RunResult run={run} />}
-        <PageSection title="Maintenance jobs">
+        <PageSection title="Available jobs">
           <p className="textSm textSubtle">
-            Runs apply across the platform. Keep this page open until the result
-            appears. Run details are recorded in Cloudflare Workers Logs.
+            Maintenance applies across the platform. Jobs continue after you
+            close this page. Completed runs and their logs are kept for 30 days.
           </p>
           {!jobs && !error && <LoadingState label="Loading jobs…" />}
           <div className="stack stackMd">
@@ -69,31 +69,26 @@ export function AdminJobs() {
                   <strong>{job.name}</strong>
                   <p className="textSm textSubtle">{job.description}</p>
                 </div>
-                <Button
-                  busy={busy === job.id}
-                  disabled={busy !== undefined}
-                  onClick={() => void trigger(job)}
-                >
-                  Run now
-                </Button>
+                {job.manual && (
+                  <Button
+                    busy={busy === job.id}
+                    disabled={busy !== undefined}
+                    onClick={() => void trigger(job)}
+                  >
+                    Run now
+                  </Button>
+                )}
               </div>
             ))}
           </div>
         </PageSection>
+        <AdminJobHistory
+          jobs={jobs ?? []}
+          selectedRun={selectedRun}
+          onSelect={setSelectedRun}
+        />
       </PageBody>
     </Page>
-  );
-}
-
-function RunResult({ run }: { run: MaintenanceRun }) {
-  return (
-    <Banner tone={run.status === "failed" ? "danger" : "success"}>
-      <p>{run.status === "failed" ? run.error : "Job completed."}</p>
-      {run.result != null && <p>Result: {JSON.stringify(run.result)}</p>}
-      <p>
-        Run ID: {run.runId} · {run.durationMs} ms
-      </p>
-    </Banner>
   );
 }
 
@@ -103,10 +98,10 @@ function messageFrom(cause: unknown) {
     : "Could not complete the request.";
 }
 
-function confirmJobRun(job: MaintenanceJob) {
+function confirmJobRun(job: JobDefinition) {
   return confirmDialog({
     confirmLabel: "Run job",
-    message: `${job.description}\n\nThis affects all eligible organizations. Existing retention periods still apply.`,
+    message: `${job.description}\n\nThis affects all eligible organizations. Existing retention periods still apply. An active run of this job will be reused.`,
     title: `Run ${job.name}?`,
   });
 }

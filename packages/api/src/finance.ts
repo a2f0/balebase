@@ -423,11 +423,11 @@ async function claimDisconnection(database: D1Database, id: string) {
       .prepare(`UPDATE plaid_items SET status = 'disconnecting', disconnect_lease_until = ?
       WHERE id = ? AND (status IN ('active', 'error') OR
         (status = 'disconnecting' AND disconnect_lease_until <= ?)) AND NOT EXISTS
-        (SELECT 1 FROM finance_sync_jobs WHERE connection_id = ?
+        (SELECT 1 FROM job_runs WHERE connection_id = ?
           AND status = 'running' AND lease_until > ?)`)
       .bind(new Date(Date.now() + 20 * 60_000).toISOString(), id, now, id, now),
     database
-      .prepare(`UPDATE finance_sync_jobs SET status = 'cancelled', finished_at = ?,
+      .prepare(`UPDATE job_runs SET status = 'cancelled', finished_at = ?,
       lease_until = NULL, error_code = 'SYNC_CANCELLED',
       error_message = 'Cancelled by a disconnect request.'
       WHERE connection_id = ? AND status IN ('queued', 'running') AND changes() > 0`)
@@ -597,7 +597,7 @@ async function listConnections(database: D1Database, organizationId: string) {
     .prepare(
       `SELECT item.id, item.institution_id, item.institution_name, item.status,
               item.error_code, item.last_synced_at, item.created_at, item.daily_sync,
-              (SELECT status FROM finance_sync_jobs WHERE connection_id = item.id
+              (SELECT status FROM job_runs WHERE connection_id = item.id
                 ORDER BY created_at DESC, rowid DESC LIMIT 1) AS sync_status,
               COUNT(account.id) AS account_count
        FROM plaid_items AS item
