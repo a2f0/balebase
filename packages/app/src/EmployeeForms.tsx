@@ -4,6 +4,7 @@ import {
   Card,
   Field,
   LoadingState,
+  Select,
   Toast,
 } from "@balebase/ui/react";
 import type {
@@ -67,8 +68,7 @@ export function RequirementDraftEditor({
     <div className="requirementEditor">
       <div className="requirementEditorFields">
         <Field label="Requirement">
-          <select
-            className="select"
+          <Select
             disabled={disabled}
             onChange={(event) => setOptionIndex(Number(event.target.value))}
             value={optionIndex}
@@ -78,7 +78,7 @@ export function RequirementDraftEditor({
                 {option.title}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         {selected.title === "Other form" && (
           <Field label="Form name">
@@ -651,9 +651,9 @@ function RequirementStatusControl({
 }) {
   if (requirement.kind === "form" && !requirement.hasDocument) return null;
   return (
-    <select
+    <Select
       aria-label={`Status for ${requirement.title}`}
-      className="select inputSm"
+      className="inputSm"
       disabled={busy}
       onChange={(event) =>
         void action(
@@ -690,7 +690,7 @@ function RequirementStatusControl({
       >
         Complete
       </option>
-    </select>
+    </Select>
   );
 }
 

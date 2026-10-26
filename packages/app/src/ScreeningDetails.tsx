@@ -1,4 +1,4 @@
-import { Badge, Button, Card, Field } from "@balebase/ui/react";
+import { Badge, Button, Card, Field, Select } from "@balebase/ui/react";
 import type { CheckrTestCandidate } from "@balebase/validators/employeeForms";
 
 const usStates =
@@ -211,8 +211,7 @@ function StateSelect({
   value: string;
 }) {
   return (
-    <select
-      className="select"
+    <Select
       onChange={(event) => onChange(event.target.value)}
       required={required}
       value={value}
@@ -223,7 +222,7 @@ function StateSelect({
           {state}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }
 

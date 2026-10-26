@@ -1,4 +1,11 @@
-import { Button, LoadingState, PageSection, Toast } from "@balebase/ui/react";
+import {
+  Button,
+  Field,
+  LoadingState,
+  PageSection,
+  Select,
+  Toast,
+} from "@balebase/ui/react";
 import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
 import { useEffect, useState } from "react";
 import { AdminJobRun } from "./AdminJobRun";
@@ -65,9 +72,8 @@ export function AdminJobHistory({ jobs, selectedRun, onSelect }: Props) {
     <>
       <PageSection title="Run history">
         <div className="cluster">
-          <label>
-            Job{" "}
-            <select
+          <Field label="Job">
+            <Select
               value={jobId}
               onChange={(event) => {
                 setJobId(event.target.value);
@@ -80,11 +86,10 @@ export function AdminJobHistory({ jobs, selectedRun, onSelect }: Props) {
                   {job.name}
                 </option>
               ))}
-            </select>
-          </label>
-          <label>
-            Status{" "}
-            <select
+            </Select>
+          </Field>
+          <Field label="Status">
+            <Select
               value={status}
               onChange={(event) => {
                 setStatus(event.target.value as JobRun["status"] | "");
@@ -99,8 +104,8 @@ export function AdminJobHistory({ jobs, selectedRun, onSelect }: Props) {
                   </option>
                 ),
               )}
-            </select>
-          </label>
+            </Select>
+          </Field>
         </div>
         {error && <Toast tone="danger">{error}</Toast>}
         {!data && !error && <LoadingState label="Loading run history…" />}

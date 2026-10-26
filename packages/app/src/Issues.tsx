@@ -9,6 +9,7 @@ import {
   PageBody,
   PageHeader,
   PageSection,
+  Select,
 } from "@balebase/ui/react";
 import type { Issue, IssueInput } from "@balebase/validators/issues";
 import { useEffect, useMemo, useState } from "react";
@@ -89,8 +90,7 @@ function IssuesIndex({
         </Button>
         <fieldset className="issueToolbar" aria-label="Issue filters">
           <Field label="Status">
-            <select
-              className="select"
+            <Select
               value={filters.status}
               onChange={(event) =>
                 setFilters({
@@ -102,11 +102,10 @@ function IssuesIndex({
               <option value="open">Open</option>
               <option value="resolved">Resolved</option>
               <option value="all">All statuses</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Source">
-            <select
-              className="select"
+            <Select
               value={filters.type}
               onChange={(event) =>
                 setFilters({
@@ -121,7 +120,7 @@ function IssuesIndex({
                 <option value="finance_transaction">Transactions</option>
               )}
               <option value="workspace">Workspace</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Search issues">
             <input

@@ -8,6 +8,7 @@ import {
   EmptyState,
   Field,
   LoadingState,
+  Select,
   Toast,
 } from "@balebase/ui/react";
 import type {
@@ -173,8 +174,7 @@ function CreateApiKeyCard({
         </Field>
         <div className="formRow">
           <Field label="Access">
-            <select
-              className="select"
+            <Select
               disabled={busy}
               onChange={(event) =>
                 setAccess(event.target.value as ApiKeyAccess)
@@ -183,11 +183,10 @@ function CreateApiKeyCard({
             >
               <option value="read">Read everything</option>
               <option value="write">Read and write everything</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Expires after">
-            <select
-              className="select"
+            <Select
               disabled={busy}
               onChange={(event) => setExpiration(event.target.value)}
               value={expiration}
@@ -197,7 +196,7 @@ function CreateApiKeyCard({
                   {option.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </div>
         {error && <Toast tone="danger">{error}</Toast>}

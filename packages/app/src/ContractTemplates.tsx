@@ -9,6 +9,7 @@ import {
   Page,
   PageBody,
   PageHeader,
+  Select,
   Toast,
 } from "@balebase/ui/react";
 import type {
@@ -390,8 +391,7 @@ function TemplateActions({ page }: { page: TemplatePageState }) {
   return (
     <>
       <Field label="Version">
-        <select
-          className="select"
+        <Select
           disabled={loading || deleting || working}
           onChange={(event) => void selectVersion(Number(event.target.value))}
           value={template.version}
@@ -403,7 +403,7 @@ function TemplateActions({ page }: { page: TemplatePageState }) {
               {formatDate(version.createdAt.slice(0, 10))}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Button
         disabled={loading || deleting || mapping || working}

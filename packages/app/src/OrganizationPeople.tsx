@@ -9,6 +9,7 @@ import {
   Field,
   Icon,
   LoadingState,
+  Select,
   Toast,
 } from "@balebase/ui/react";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
@@ -590,8 +591,7 @@ function InviteFields({
         />
       </Field>
       <Field hint={roleDescription(role)} label="Organization role">
-        <select
-          className="select"
+        <Select
           disabled={busy}
           name="invite-role"
           onChange={(event) =>
@@ -604,7 +604,7 @@ function InviteFields({
               {formatRole(assignableRole)}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
     </div>
   );

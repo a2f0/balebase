@@ -5,6 +5,7 @@ import {
   Page,
   PageBody,
   PageHeader,
+  Select,
   Toast,
 } from "@balebase/ui/react";
 import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
@@ -169,8 +170,7 @@ function AccountGeneral({
         title="Default organization"
       >
         <Field label="Organization">
-          <select
-            className="select"
+          <Select
             disabled={saving || organizations.length === 0}
             onChange={(event) => {
               setSelected(event.target.value);
@@ -187,7 +187,7 @@ function AccountGeneral({
                 {organization.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       </Card>
       {error && <Toast tone="danger">{error}</Toast>}

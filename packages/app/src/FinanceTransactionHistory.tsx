@@ -10,6 +10,7 @@ import {
   Icon,
   LoadingState,
   PageSection,
+  Select,
 } from "@balebase/ui/react";
 import type {
   ExpenseCategory,
@@ -294,11 +295,11 @@ export function FinanceTransactionRow({
       </div>
       <div className="financeTransactionCategory">
         {categories.length > 0 && (
-          <select
+          <Select
             disabled={busy}
             aria-label={`Expense category for ${title}`}
             className={cx(
-              "select inputSm",
+              "inputSm",
               !transaction.expenseCategoryId && "financeCategoryUnset",
             )}
             onChange={(event) =>
@@ -312,7 +313,7 @@ export function FinanceTransactionRow({
                 {category.name}
               </option>
             ))}
-          </select>
+          </Select>
         )}
       </div>
       <div className="cluster financeTransactionStatus">

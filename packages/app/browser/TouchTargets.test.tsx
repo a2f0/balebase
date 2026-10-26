@@ -3,7 +3,9 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Select } from "@balebase/ui/react";
 import { type Browser, launch } from "puppeteer-core";
+import { renderToStaticMarkup } from "react-dom/server";
 
 const { CHROME_PATH } = process.env;
 const chrome =
@@ -25,7 +27,11 @@ const fixture = `
   <button class="button" id="medium">Save</button>
   <div class="segmented"><button aria-pressed="true" id="segment">Grid</button><button>List</button></div>
   <input class="input inputSm" id="smallInput">
-  <select class="select" id="select"><option>Member</option></select>
+  ${renderToStaticMarkup(
+    <Select id="select">
+      <option>Member</option>
+    </Select>,
+  )}
   <label class="check" id="check"><input type="checkbox"><span>Required</span></label>
   <div><a class="rowTitle" href="#issue" id="rowTitle">Inventory spreadsheet</a></div>
   <nav><a class="navItem" href="#library" id="navItem">Library</a></nav>
@@ -105,6 +111,7 @@ it("touch screens get fingertip-sized controls while a mouse keeps compact ones"
       medium: 40,
       segment: 30,
       smallInput: 32,
+      select: 40,
       navItem: 38,
     });
   } finally {

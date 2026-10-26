@@ -12,6 +12,7 @@ import {
   Page,
   PageBody,
   PageSection,
+  Select,
   Toast,
 } from "@balebase/ui/react";
 import type {
@@ -818,8 +819,7 @@ function IssueForm({
     >
       {draft.error && <Toast tone="danger">{draft.error}</Toast>}
       <Field label="Checklist item">
-        <select
-          className="select"
+        <Select
           onChange={(event) => {
             const nextId = event.target.value;
             draft.setItemId(nextId);
@@ -835,7 +835,7 @@ function IssueForm({
               {item.prompt}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <IssueDraftFields draft={draft} members={members} />
     </Card>
@@ -1014,8 +1014,7 @@ function IssueAssignmentFields({
   return (
     <div className="formRow">
       <Field label="Priority">
-        <select
-          className="select"
+        <Select
           onChange={(event) =>
             onPriorityChange(event.target.value as AuditIssuePriority)
           }
@@ -1025,11 +1024,10 @@ function IssueAssignmentFields({
           <option value="medium">Medium</option>
           <option value="high">High</option>
           <option value="critical">Critical</option>
-        </select>
+        </Select>
       </Field>
       <Field label="Assignee">
-        <select
-          className="select"
+        <Select
           onChange={(event) => onAssignedToChange(event.target.value)}
           value={assignedTo}
         >
@@ -1039,7 +1037,7 @@ function IssueAssignmentFields({
               {member.name} · {member.email}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
     </div>
   );
@@ -1151,8 +1149,8 @@ function IssueCardActions({
     <div className="rowActions runIssueActions">
       <label className="runAssignee">
         <span>Assignee</span>
-        <select
-          className="select inputSm runAssigneeSelect"
+        <Select
+          className="inputSm runAssigneeSelect"
           disabled={busy}
           onChange={(event) =>
             void onUpdate({ assignedTo: event.target.value || null })
@@ -1171,7 +1169,7 @@ function IssueCardActions({
               {member.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <Button
         disabled={busy}

@@ -1,4 +1,11 @@
-import { Button, Card, confirmDialog, Field, Toast } from "@balebase/ui/react";
+import {
+  Button,
+  Card,
+  confirmDialog,
+  Field,
+  Select,
+  Toast,
+} from "@balebase/ui/react";
 import type {
   ContractTemplate,
   TemplateDefinition,
@@ -229,8 +236,7 @@ function TemplateDetails({ editor }: { editor: Editor }) {
           />
         </Field>
         <Field label="Reminders">
-          <select
-            className="select"
+          <Select
             onChange={(event) =>
               update((current) => ({
                 ...current,
@@ -246,7 +252,7 @@ function TemplateDetails({ editor }: { editor: Editor }) {
                 {option.label}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       </div>
     </Card>
@@ -295,8 +301,7 @@ function TemplateRoles({ editor }: { editor: Editor }) {
           create a contract.
         </p>
         <Field label="Signing order">
-          <select
-            className="select"
+          <Select
             onChange={(event) =>
               update((current) => ({
                 ...current,
@@ -307,7 +312,7 @@ function TemplateRoles({ editor }: { editor: Editor }) {
           >
             <option value="parallel">Any order</option>
             <option value="sequential">One after another</option>
-          </select>
+          </Select>
         </Field>
         {draft.recipients.map((role, index) => (
           <TemplateRoleRow
