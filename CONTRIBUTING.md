@@ -193,6 +193,9 @@ bun run scope --help
 
 `scope:install` builds the CLI from a fixed upstream commit because Scope has
 no published CLI release yet, and installs `scope` in `~/.local/bin`.
+Override the binary destination with `SCOPE_INSTALL_DIR`. The plain `scope`
+command uses Scope's standard environment; `bun run scope` also loads this
+repository's local configuration.
 The package commands and container builds use that same source checkout.
 The local API listens at `http://127.0.0.1:3100`; backing services have no
 published ports. This configuration uses Scope's anonymous development mode
@@ -209,7 +212,7 @@ Alternatively, supply `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` in the
 environment. The file option requires an existing JSON credential file. For
 installations using macOS Keychain, run `claude setup-token` and store the
 result as `CLAUDE_CODE_OAUTH_TOKEN` in `.scope/local.env`. An explicit token
-takes precedence over the credential file. A scored run also needs a
+or API key takes precedence over the credential file. A scored run also needs a
 Copilot-enabled `GITHUB_TOKEN`.
 `scope:up` reads the selected Claude login at startup; refresh an expired login
 with Claude Code and rerun it. With Podman, set `DOCKER_HOST` to the machine's

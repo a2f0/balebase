@@ -11,6 +11,7 @@ if [[ -f "$repo_root/.scope/local.env" ]]; then
 fi
 
 scope_dir="${SCOPE_SOURCE_DIR:-$HOME/.local/share/scope/source}"
+scope_install_dir="${SCOPE_INSTALL_DIR:-$HOME/.local/bin}"
 scope_revision=16544702d9dd4f0f5a7991fa4dbdf07a9247fedc
 
 install_scope() {
@@ -27,9 +28,9 @@ install_scope() {
   fi
   pnpm --dir "$scope_dir" --filter cli... install --frozen-lockfile
   pnpm --dir "$scope_dir" build:cli
-  mkdir -p "$HOME/.local/bin"
-  install -m 755 "$scope_dir/apps/cli/dist/scope.mjs" "$HOME/.local/bin/scope"
-  "$HOME/.local/bin/scope" --version
+  mkdir -p "$scope_install_dir"
+  install -m 755 "$scope_dir/apps/cli/dist/scope.mjs" "$scope_install_dir/scope"
+  "$scope_install_dir/scope" --version
 }
 
 if [[ "${1:-}" == install ]]; then
@@ -37,16 +38,22 @@ if [[ "${1:-}" == install ]]; then
   exit
 fi
 
-if [[ ! -f "$scope_dir/apps/cli/dist/scope.mjs" ]] ||
-  [[ "$(git -C "$scope_dir" rev-parse HEAD 2>/dev/null || true)" != "$scope_revision" ]]; then
-  echo 'Scope is missing or uses a different revision. Run bun run scope:install.' >&2
+if [[ "${1:-}" != down && "${1:-}" != status ]]; then
+  if [[ ! -f "$scope_dir/apps/cli/dist/scope.mjs" ]] ||
+    [[ "$(git -C "$scope_dir" rev-parse HEAD 2>/dev/null || true)" != "$scope_revision" ]]; then
+    echo 'Scope is missing or uses a different revision. Run bun run scope:install.' >&2
+    exit 1
+  fi
+fi
+if [[ "${1:-}" == up && -n "$(git -C "$scope_dir" status --porcelain)" ]]; then
+  echo "Scope source has local changes: $scope_dir" >&2
   exit 1
 fi
 
 export SCOPE_API_URL="${SCOPE_API_URL:-http://127.0.0.1:3100}"
-export GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 
 if [[ "${1:-}" == up && -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" &&
+  -z "${ANTHROPIC_API_KEY:-}" &&
   -n "${SCOPE_CLAUDE_CREDENTIALS_FILE:-}" ]]; then
   # Read the existing login at startup so tokens are never copied into the repo.
   CLAUDE_CODE_OAUTH_TOKEN="$(bun -e '
@@ -69,6 +76,7 @@ case "${1:-}" in
     action="$1"
     shift
     cd "$scope_dir"
+    export GITHUB_TOKEN="${GITHUB_TOKEN:-}"
     compose=(docker compose --project-name balebase-scope
       --env-file .env.base
       --env-file apps/workers/coder-acp-claude-code/versions.env
