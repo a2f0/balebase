@@ -70,6 +70,7 @@ const detail: FinanceAccountDetail = {
     updatedAt: "2026-10-18T12:00:00.000Z",
   },
   connection: {
+    dailySync: false,
     id: "item-1",
     institutionId: "ins_109508",
     institutionName: "First Platypus Bank",
@@ -129,6 +130,26 @@ async function click(element: HTMLElement) {
 }
 
 describe("Finance account page", () => {
+  it("updates daily sync on the account's bank connection", async () => {
+    let enabled = false;
+    globalThis.fetch = (async (input, init) => {
+      if (init?.method === "PATCH") {
+        expect(String(input)).toEndWith("/connections/item-1/sync-settings");
+        enabled = JSON.parse(String(init.body)).dailySync;
+        return Response.json({ dailySync: enabled });
+      }
+      return Response.json(detail);
+    }) as typeof fetch;
+    await mount();
+    expect(container.textContent).toContain("Daily sync");
+    const checkbox = container.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    );
+    if (!checkbox) throw new Error("Missing daily sync setting");
+    await click(checkbox);
+    expect(enabled).toBe(true);
+    expect(checkbox.checked).toBe(true);
+  });
   it("shows the account, its newest transactions, and copyable identifiers", async () => {
     const requests: string[] = [];
     globalThis.fetch = (async (input) => {

@@ -45,6 +45,7 @@ export interface TransactionsSyncResponse {
 
 export interface PlaidRequestBody extends Record<string, unknown> {
   access_token?: unknown;
+  cursor?: unknown;
   public_token?: unknown;
   transactions?: unknown;
 }
@@ -85,6 +86,7 @@ export const plaidRequest: PlaidRequest = async <T>(
       "Plaid-Version": "2020-09-14",
     },
     method: "POST",
+    signal: AbortSignal.timeout(30_000),
   });
   const result: unknown = await response.json().catch(() => null);
   if (response.ok) return result as T;

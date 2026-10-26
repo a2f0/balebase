@@ -77,3 +77,9 @@ resource "cloudflare_workers_custom_domain" "main" {
   service    = each.value.service
   zone_id    = data.cloudflare_zone.main.id
 }
+
+# Wrangler owns consumers and schedules; Terraform owns the queue resource.
+resource "cloudflare_queue" "finance_sync" {
+  account_id = var.cloudflare_account_id
+  queue_name = "${var.api_worker_name}-finance-sync"
+}

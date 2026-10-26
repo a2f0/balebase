@@ -39,6 +39,8 @@ const connection = (
   overrides: Partial<FinanceConnection> = {},
 ): FinanceConnection => ({
   accountCount: 1,
+  dailySync: false,
+  syncStatus: null,
   createdAt: "2026-09-01T00:00:00.000Z",
   errorCode: null,
   id: "connection-1",
@@ -114,6 +116,31 @@ describe("Finance overview notices", () => {
 });
 
 describe("Finance connections", () => {
+  it("shows a pending daily sync, disables duplicate syncs, and permits disconnect", () => {
+    const markup = renderFinance(
+      {
+        ...populatedData,
+        connections: [connection({ dailySync: true, syncStatus: "running" })],
+      },
+      { page: "connections" },
+    );
+    expect(markup).toContain("Daily sync");
+    expect(markup).toContain("Running");
+    expect(markup).toContain("Syncing…");
+    expect(markup.match(/<button[^>]*disabled=""/g)).toHaveLength(1);
+  });
+
+  it("offers retry for an interrupted disconnect and prevents syncing it", () => {
+    const markup = renderFinance(
+      {
+        ...populatedData,
+        connections: [connection({ status: "disconnecting" })],
+      },
+      { page: "connections" },
+    );
+    expect(markup).toContain("Retry disconnect");
+    expect(markup.match(/<button[^>]*disabled=""/g)).toHaveLength(1);
+  });
   it("lists connections on their own tab instead of the overview", () => {
     const data = { ...populatedData, connections: [connection()] };
 

@@ -91,7 +91,10 @@ export async function findActivity(
   ];
   const bindings: (string | number)[] =
     organizationId === null ? [] : [organizationId];
-  if (!includeFinance) filters.push("root_type <> 'finance_transaction'");
+  if (!includeFinance)
+    filters.push(
+      "root_type NOT IN ('finance_transaction', 'finance_connection')",
+    );
   if (resourceType) {
     filters.push("root_type = ?");
     bindings.push(resourceType);

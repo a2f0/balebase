@@ -11,6 +11,7 @@ const resourceLabels: Record<ActivityResourceType, string> = {
   organization_member: "People",
   api_key: "API keys",
   finance_transaction: "Transactions",
+  finance_connection: "Bank connections",
 };
 
 function isResourceType(value: string): value is ActivityResourceType {
@@ -28,11 +29,11 @@ export function Activity({
   useEffect(() => {
     if (!canAccessFinance)
       setSelected((previous) =>
-        previous === "finance_transaction" ? undefined : previous,
+        previous?.startsWith("finance_") ? undefined : previous,
       );
   }, [canAccessFinance]);
   const resourceType =
-    selected === "finance_transaction" && !canAccessFinance
+    selected?.startsWith("finance_") && !canAccessFinance
       ? undefined
       : selected;
   return (
@@ -55,8 +56,7 @@ export function Activity({
             <option value="">All resources</option>
             {Object.entries(resourceLabels)
               .filter(
-                ([value]) =>
-                  canAccessFinance || value !== "finance_transaction",
+                ([value]) => canAccessFinance || !value.startsWith("finance_"),
               )
               .map(([value, label]) => (
                 <option key={value} value={value}>

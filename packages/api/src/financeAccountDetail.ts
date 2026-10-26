@@ -10,6 +10,7 @@ const recentTransactionLimit = 10;
 
 interface AccountRow {
   available_balance: number | null;
+  daily_sync: number;
   connection_id: string;
   connection_status: string;
   currency_code: string | null;
@@ -53,7 +54,7 @@ export async function accountDetail(context: FinanceContext) {
                 account.subtype, account.current_balance,
                 account.available_balance, account.currency_code,
                 account.updated_at, item.id AS connection_id,
-                item.status AS connection_status, item.institution_id,
+                item.status AS connection_status, item.daily_sync, item.institution_id,
                 item.institution_name, item.plaid_item_id,
                 COUNT(txn.id) AS transaction_count,
                 MIN(txn.transaction_date) AS first_transaction_date,
@@ -86,6 +87,7 @@ export async function accountDetail(context: FinanceContext) {
     account: toAccount(account),
     connection: {
       id: account.connection_id,
+      dailySync: Boolean(account.daily_sync),
       institutionId: account.institution_id,
       institutionName: account.institution_name,
       plaidItemId: account.plaid_item_id,

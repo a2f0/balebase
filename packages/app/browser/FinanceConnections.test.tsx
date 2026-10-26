@@ -23,6 +23,8 @@ const connection = (
   status: string,
 ): FinanceConnection => ({
   accountCount: 2,
+  dailySync: false,
+  syncStatus: null,
   createdAt: "2026-09-01T00:00:00.000Z",
   errorCode: null,
   id,

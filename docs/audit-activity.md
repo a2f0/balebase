@@ -1,11 +1,12 @@
 # Audit activity
 
-Activity is the shared history of consequential changes across Balebase.
-The checklist Audits feature is one producer alongside equipment, issues,
-organization roles, API keys, and transaction annotations and categories.
-The workspace page is `/activity`; individual records can expose the same
-events in their own history. Contract signing also has a separate history.
-Coverage is incremental: an empty shared feed does not prove no changes occurred.
+Activity is the shared history of consequential changes across Balebase. The
+checklist Audits feature is one producer alongside equipment, issues,
+organization roles, API keys, and transaction annotations, categories, and bank
+connection sync settings. The workspace page is `/activity`; individual records
+can expose the same events in their own history. Contract signing also has a
+separate history. Coverage is incremental: an empty shared feed does not prove
+no changes occurred.
 
 ## Recording a change
 
@@ -41,12 +42,12 @@ actor model, never a fabricated human identity.
 `GET /api/activity` reads the active organization's events newest first, with
 cursor pagination. Its optional `resourceType` filter selects the root type
 before pagination. The Activity page offers all resources, audits, forms,
-workspace issues, equipment, people, API keys, and transactions. Audit and
-transaction filters include issues attached to those roots; workspace issues
-are standalone issues. Transaction activity requires Finance capability even
-when a caller supplies the filter directly.
-The MCP `list_activity` tool accepts the same optional `resourceType`; keep
-that filter when passing the next cursor.
+workspace issues, equipment, people, API keys, transactions, and bank
+connections. Audit and transaction filters include issues attached to those
+roots; workspace issues are standalone issues. Transaction and bank connection
+activity requires Finance capability even when a caller supplies the filter
+directly. The MCP `list_activity` tool accepts the same optional
+`resourceType`; keep that filter when passing the next cursor.
 
 Resource history routes authorize the resource before using `findActivity`.
 Shared global form history only exposes published versions to organization

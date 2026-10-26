@@ -15,6 +15,7 @@ import type {
   FinanceAccount,
   FinanceConnection,
 } from "@balebase/validators/finance";
+import { syncPending } from "./financeConnectionActions";
 import { formatMoney } from "./financeFormat";
 import { financeConnectionPath } from "./financePages";
 import { countLabel, formatLabel } from "./labels";
@@ -156,6 +157,7 @@ function ConnectionRow({
         <span className="rowMeta financeConnectionMeta">
           {countLabel(connection.accountCount, "account")} ·{" "}
           {syncTime(connection)}
+          {connection.dailySync && " · Daily sync"}
           {connection.status === "error" && connection.errorCode && (
             <>
               {" · "}
@@ -169,7 +171,11 @@ function ConnectionRow({
         dot
         tone={connectionTone(connection.status)}
       >
-        {formatLabel(connection.status)}
+        {formatLabel(
+          syncPending(connection.syncStatus)
+            ? (connection.syncStatus ?? connection.status)
+            : connection.status,
+        )}
       </Badge>
       <ConnectionActions connection={connection} {...handlers} />
     </li>
@@ -188,7 +194,7 @@ function ConnectionActions({
     return (
       <div className="rowActions financeConnectionActions">
         <Button
-          disabled={busy}
+          disabled={busy || syncPending(connection.syncStatus)}
           icon="refresh"
           onClick={() => void onConnect()}
           size="sm"
@@ -196,7 +202,7 @@ function ConnectionActions({
           Reconnect
         </Button>
         <Button
-          disabled={busy}
+          disabled={busy || syncPending(connection.syncStatus)}
           icon="trash"
           onClick={() => void onDeleteData(connection)}
           size="sm"
@@ -210,12 +216,16 @@ function ConnectionActions({
   return (
     <div className="rowActions financeConnectionActions">
       <Button
-        disabled={busy}
+        disabled={
+          busy ||
+          connection.status === "disconnecting" ||
+          syncPending(connection.syncStatus)
+        }
         icon="refresh"
         onClick={() => void onSync(connection.id)}
         size="sm"
       >
-        Sync now
+        {syncPending(connection.syncStatus) ? "Syncing…" : "Sync now"}
       </Button>
       <Button
         disabled={busy}
@@ -224,7 +234,9 @@ function ConnectionActions({
         size="sm"
         variant="ghost"
       >
-        Disconnect
+        {connection.status === "disconnecting"
+          ? "Retry disconnect"
+          : "Disconnect"}
       </Button>
     </div>
   );

@@ -20,13 +20,16 @@ import {
   EquipmentActivityDetails,
   equipmentActivitySummary,
 } from "./equipmentActivity";
-import { financeTransactionPath } from "./financePages";
+import { financeConnectionPath, financeTransactionPath } from "./financePages";
 import { issuePath } from "./issuePaths";
 import { organizationPeoplePath } from "./organizationState";
 import { RecordActivityDetails } from "./recordActivity";
 import { equipmentPath } from "./workspacePaths";
 
 const actionLabels: Record<string, string> = {
+  "finance.daily_sync_changed": "changed daily sync",
+  "finance.sync_requested": "requested a bank sync",
+  "finance.connection_disconnected": "disconnected a bank",
   "finance.transaction_annotated": "updated a transaction annotation",
   "finance.transaction_categorized": "changed the expense category",
   "issue.created": "raised an issue",
@@ -266,6 +269,8 @@ function CompactActivityRow({
 
 function activitySummary(event: ActivityEvent) {
   const { details } = event;
+  if (event.action === "finance.daily_sync_changed")
+    return `Daily sync ${details.before ? "on" : "off"} → ${details.after ? "on" : "off"}`;
   if (event.action === "finance.transaction_annotated")
     return "Annotation changes";
   if (event.action === "finance.transaction_categorized") {
@@ -328,6 +333,8 @@ function ActivityRow({
 
 function ActivityDetails({ event }: { event: ActivityEvent }) {
   const details = event.details;
+  if (event.action === "finance.daily_sync_changed")
+    return <p>{activitySummary(event)}</p>;
   if (event.root.type === "equipment") {
     return <EquipmentActivityDetails event={event} />;
   }
@@ -466,6 +473,8 @@ function categoryLabel(id: unknown, name: unknown) {
 function activityPath(event: ActivityEvent) {
   if (event.subject.type === "issue" || event.subject.type === "audit_issue")
     return issuePath(event.subject.id);
+  if (event.root.type === "finance_connection")
+    return financeConnectionPath(event.root.id);
   if (event.root.type === "finance_transaction")
     return financeTransactionPath(event.root.id);
   // Deleted equipment has no page to open.
@@ -486,6 +495,7 @@ function activityPath(event: ActivityEvent) {
 function activityLinkLabel(event: ActivityEvent) {
   if (event.subject.type === "issue" || event.subject.type === "audit_issue")
     return "Open issue";
+  if (event.root.type === "finance_connection") return "Open connection";
   if (event.root.type === "finance_transaction") return "Open transaction";
   if (event.root.type === "equipment") return "Open equipment";
   if (event.root.type === "organization_member") return "Open member";

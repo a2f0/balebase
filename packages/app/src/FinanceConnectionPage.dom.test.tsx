@@ -70,6 +70,8 @@ function detail(
       },
     ],
     connection: {
+      dailySync: false,
+      syncJob: null,
       createdAt: "2026-09-01T12:00:00.000Z",
       createdBy: { email: "person@example.com", name: "Example Person" },
       disconnectedAt: null,
@@ -232,4 +234,100 @@ describe("Finance connection page", () => {
     ]);
     expect(paths).toEqual(["/finance/connections"]);
   });
+});
+
+it("keeps an accepted sync visible after navigation and polls its saved outcome", async () => {
+  const job = {
+    id: "sync-1",
+    status: "queued" as "queued" | "running" | "succeeded",
+    source: "manual",
+    added: 0,
+    modified: 0,
+    removed: 0,
+    createdAt: "2026-10-26T12:00:00Z",
+    finishedAt: null,
+    errorCode: null,
+  } as const;
+  let requested = false;
+  let finished = false;
+  let starts = 0;
+  let statusRequests = 0;
+  let detailRequests = 0;
+  globalThis.fetch = (async (input, init) => {
+    if (init?.method === "POST") {
+      expect(String(input)).toEndWith("/connections/item-1/sync-jobs");
+      requested = true;
+      starts++;
+      return Response.json(job, { status: 202 });
+    }
+    if (String(input).endsWith("/sync-status")) statusRequests++;
+    else detailRequests++;
+    return Response.json(
+      detail({
+        syncJob: requested
+          ? {
+              ...job,
+              status: finished ? "succeeded" : "running",
+              added: finished ? 7 : 0,
+              finishedAt: finished ? "2026-10-26T12:01:00Z" : null,
+            }
+          : null,
+      }),
+    );
+  }) as typeof fetch;
+  await mount();
+  await click("Sync now");
+  expect(container.textContent).toContain("You can leave this page");
+  expect(button("Syncing…").disabled).toBe(true);
+  await act(async () => root?.unmount());
+  container.remove();
+  root = undefined;
+  await mount();
+  expect(container.textContent).toContain("Running");
+  const loaded = detailRequests;
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 3150));
+  });
+  expect(statusRequests).toBe(1);
+  expect(detailRequests).toBe(loaded);
+  finished = true;
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 3150));
+  });
+  expect(container.textContent).toContain("Succeeded · 7 added");
+  expect(button("Sync now").disabled).toBe(false);
+  expect(starts).toBe(1);
+}, 10_000);
+
+it("saves daily sync for the bank connection and preserves the setting on a failed save", async () => {
+  let enabled = false;
+  let fail = false;
+  globalThis.fetch = (async (input, init) => {
+    if (init?.method === "PATCH") {
+      expect(String(input)).toEndWith("/connections/item-1/sync-settings");
+      if (fail)
+        return Response.json(
+          { error: "Could not save sync settings." },
+          { status: 503 },
+        );
+      enabled = JSON.parse(String(init.body)).dailySync;
+      return Response.json({ dailySync: enabled });
+    }
+    return Response.json(detail({ dailySync: enabled }));
+  }) as typeof fetch;
+  await mount();
+  const checkbox = container.querySelector<HTMLInputElement>(
+    'input[type="checkbox"]',
+  );
+  if (!checkbox) throw new Error("Daily sync checkbox missing");
+  expect(checkbox.checked).toBe(false);
+  await act(async () => checkbox.click());
+  await settle();
+  expect(enabled).toBe(true);
+  expect(checkbox.checked).toBe(true);
+  fail = true;
+  await act(async () => checkbox.click());
+  await settle();
+  expect(checkbox.checked).toBe(true);
+  expect(container.textContent).toContain("Could not save sync settings.");
 });

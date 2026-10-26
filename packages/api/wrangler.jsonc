@@ -15,7 +15,20 @@
     "head_sampling_rate": 1
   },
   "triggers": {
-    "crons": ["17 * * * *"]
+    "crons": ["17 * * * *", "*/5 * * * *"]
+  },
+  "queues": {
+    "producers": [
+      { "binding": "FINANCE_SYNC_QUEUE", "queue": "balebase-api-finance-sync" }
+    ],
+    "consumers": [
+      {
+        "queue": "balebase-api-finance-sync",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 3
+      }
+    ]
   },
   "vars": {
     "AUTH_EMAIL_FROM": "security@auth.balebase.com",

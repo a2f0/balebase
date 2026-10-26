@@ -8,7 +8,12 @@ import {
 } from "@balebase/validators/finance";
 import type { LinkedEmail } from "@balebase/validators/inbox";
 import { Hono } from "hono";
-import { activityBatch, findActivity } from "./activity";
+import {
+  activityBatch,
+  activityStatement,
+  findActivity,
+  requestActor,
+} from "./activity";
 import { accountDetail } from "./financeAccountDetail";
 import {
   addDefaultCategories,
@@ -23,7 +28,13 @@ import { connectionDetail } from "./financeConnectionDetail";
 import type { FinanceContext, FinanceEnv } from "./financeContext";
 import { financeListingFilters } from "./financeListingFilters";
 import { expenseReport } from "./financeReports";
-import { type PlaidItemRow, syncPlaidItem } from "./financeSync";
+import type { PlaidItemRow } from "./financeSync";
+import {
+  connectionSyncStatus,
+  legacySyncConnection,
+  startConnectionSync,
+  updateSyncSettings,
+} from "./financeSyncRoutes";
 import { searchTransactions } from "./financeTransactionSearch";
 import { listLinkedEmails, toLinkedEmail } from "./inboundEmailLinks";
 import { PlaidApiError, type PlaidRequest, plaidRequest } from "./plaid";
@@ -33,6 +44,8 @@ import type { Bindings } from "./types";
 
 interface ConnectionRow {
   account_count: number;
+  daily_sync: number;
+  sync_status: FinanceConnection["syncStatus"];
   created_at: string;
   error_code: string | null;
   id: string;
@@ -112,9 +125,10 @@ export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
   finance.post("/exchange", async (context) =>
     exchangePublicToken(context, requestPlaid),
   );
-  finance.post("/connections/:id/sync", async (context) =>
-    syncConnection(context, requestPlaid),
-  );
+  finance.post("/connections/:id/sync", legacySyncConnection);
+  finance.post("/connections/:id/sync-jobs", startConnectionSync);
+  finance.get("/connections/:id/sync-status", connectionSyncStatus);
+  finance.patch("/connections/:id/sync-settings", updateSyncSettings);
   finance.get("/connections/:id", connectionDetail);
   finance.delete("/connections/:id", async (context) =>
     disconnectConnection(context, requestPlaid),
@@ -323,29 +337,6 @@ async function exchangePublicToken(
   );
 }
 
-async function syncConnection(
-  context: FinanceContext,
-  requestPlaid: PlaidRequest,
-) {
-  const connectionId = context.req.param("id");
-  if (!connectionId) {
-    return context.json({ error: "Connection not found." }, 404);
-  }
-  const item = await findItem(
-    context.env.DB,
-    context.get("organizationId"),
-    connectionId,
-  );
-  if (!item) return context.json({ error: "Connection not found." }, 404);
-  const result = await syncPlaidItem(
-    context.env,
-    context.get("organizationId"),
-    item,
-    requestPlaid,
-  );
-  return respond(context, financeRoutes.syncConnection, result);
-}
-
 async function disconnectConnection(
   context: FinanceContext,
   requestPlaid: PlaidRequest,
@@ -365,21 +356,117 @@ async function disconnectConnection(
     requireEncryptionKey(context.env),
     `${organizationId}:${item.id}`,
   );
-  await requestPlaid(context.env, "/item/remove", {
-    access_token: accessToken,
-  });
-  const now = new Date().toISOString();
-  await context.env.DB.prepare(
-    `UPDATE plaid_items
-       SET access_token_ciphertext = '', access_token_iv = '', cursor = NULL,
-           status = 'disconnected', error_code = NULL, error_message = NULL,
-           disconnected_at = ?,
-           updated_at = ?
-       WHERE id = ? AND organization_id = ?`,
-  )
-    .bind(now, now, item.id, organizationId)
-    .run();
+  if (!(await claimDisconnection(context.env.DB, item.id)))
+    return context.json(
+      {
+        error:
+          "A sync or disconnect is in progress. Try again when it finishes.",
+      },
+      409,
+    );
+  try {
+    await requestPlaid(context.env, "/item/remove", {
+      access_token: accessToken,
+    });
+  } catch (error) {
+    // The earlier request may have removed the remote Item before its local
+    // commit was interrupted. An expired claim can finish that disconnection.
+    const alreadyRemoved =
+      error instanceof PlaidApiError &&
+      (error.code === "ITEM_NOT_FOUND" ||
+        (item.status === "disconnecting" &&
+          error.code === "INVALID_ACCESS_TOKEN"));
+    if (!alreadyRemoved) {
+      await releaseDisconnectionClaim(context.env.DB, item, error);
+      throw error;
+    }
+  }
+  if (!(await recordDisconnection(context, item)))
+    return context.json(
+      { error: "Connection changed. Reload and try again." },
+      409,
+    );
   return context.body(null, 204);
+}
+
+async function releaseDisconnectionClaim(
+  database: D1Database,
+  item: { id: string; status: string },
+  error: unknown,
+) {
+  await database
+    .prepare(
+      `UPDATE plaid_items SET status = ?, disconnect_lease_until = NULL,
+        error_code = CASE WHEN ? THEN ? ELSE error_code END,
+        error_message = CASE WHEN ? THEN ? ELSE error_message END
+        WHERE id = ? AND status = 'disconnecting'`,
+    )
+    .bind(
+      item.status === "disconnecting" ? "error" : item.status,
+      item.status === "disconnecting" ? 1 : 0,
+      error instanceof PlaidApiError ? error.code : "DISCONNECT_FAILED",
+      item.status === "disconnecting" ? 1 : 0,
+      error instanceof PlaidApiError
+        ? error.message
+        : "Could not disconnect this bank. Try again.",
+      item.id,
+    )
+    .run();
+}
+
+/** Waiting jobs must not prevent revoking bank access during an outage. Only a
+ * live consumer blocks the claim; the same transaction cancels all other work. */
+async function claimDisconnection(database: D1Database, id: string) {
+  const now = new Date().toISOString();
+  const [claimed] = await database.batch([
+    database
+      .prepare(`UPDATE plaid_items SET status = 'disconnecting', disconnect_lease_until = ?
+      WHERE id = ? AND (status IN ('active', 'error') OR
+        (status = 'disconnecting' AND disconnect_lease_until <= ?)) AND NOT EXISTS
+        (SELECT 1 FROM finance_sync_jobs WHERE connection_id = ?
+          AND status = 'running' AND lease_until > ?)`)
+      .bind(new Date(Date.now() + 20 * 60_000).toISOString(), id, now, id, now),
+    database
+      .prepare(`UPDATE finance_sync_jobs SET status = 'cancelled', finished_at = ?,
+      lease_until = NULL, error_code = 'SYNC_CANCELLED',
+      error_message = 'Cancelled by a disconnect request.'
+      WHERE connection_id = ? AND status IN ('queued', 'running') AND changes() > 0`)
+      .bind(now, id),
+  ]);
+  return Boolean(claimed?.meta.changes);
+}
+
+async function recordDisconnection(
+  context: FinanceContext,
+  item: NonNullable<Awaited<ReturnType<typeof findItem>>>,
+) {
+  const now = new Date().toISOString();
+  const [result] = await activityBatch(context.env.DB, context.get("apiKey"), [
+    context.env.DB.prepare(
+      `UPDATE plaid_items SET access_token_ciphertext = '', access_token_iv = '', cursor = NULL,
+      status = 'disconnected', daily_sync = 0, disconnect_lease_until = NULL,
+      error_code = NULL, error_message = NULL, disconnected_at = ?, updated_at = ?
+      WHERE id = ? AND organization_id = ? AND status = 'disconnecting'`,
+    ).bind(now, now, item.id, context.get("organizationId")),
+    activityStatement(
+      context.env.DB,
+      {
+        action: "finance.connection_disconnected",
+        actorId: requestActor(context).userId,
+        occurredAt: now,
+        organizationId: context.get("organizationId"),
+        root: {
+          id: item.id,
+          label: item.institution_name ?? "Bank connection",
+          type: "finance_connection",
+        },
+        subject: { id: item.id, type: "finance_connection" },
+        details: { dailySync: false },
+      },
+      { sql: "changes() > 0", bindings: [] },
+    ),
+  ]);
+  return Boolean(result?.meta.changes);
 }
 
 async function deleteConnectionData(context: FinanceContext) {
@@ -509,7 +596,9 @@ async function listConnections(database: D1Database, organizationId: string) {
   const result = await database
     .prepare(
       `SELECT item.id, item.institution_id, item.institution_name, item.status,
-              item.error_code, item.last_synced_at, item.created_at,
+              item.error_code, item.last_synced_at, item.created_at, item.daily_sync,
+              (SELECT status FROM finance_sync_jobs WHERE connection_id = item.id
+                ORDER BY created_at DESC, rowid DESC LIMIT 1) AS sync_status,
               COUNT(account.id) AS account_count
        FROM plaid_items AS item
        LEFT JOIN plaid_accounts AS account
@@ -575,12 +664,14 @@ async function findItem(
 ) {
   return database
     .prepare(
-      `SELECT id, access_token_ciphertext, access_token_iv, cursor
+      `SELECT id, access_token_ciphertext, access_token_iv, cursor, status, institution_name
        FROM plaid_items
        WHERE id = ? AND organization_id = ? AND status <> 'disconnected'`,
     )
     .bind(id, organizationId)
-    .first<PlaidItemRow>();
+    .first<
+      PlaidItemRow & { status: string; institution_name: string | null }
+    >();
 }
 
 async function findItemByPlaidId(database: D1Database, plaidItemId: string) {
@@ -596,6 +687,8 @@ async function findItemByPlaidId(database: D1Database, plaidItemId: string) {
 function toConnection(row: ConnectionRow): FinanceConnection {
   return {
     accountCount: row.account_count,
+    dailySync: Boolean(row.daily_sync),
+    syncStatus: row.sync_status,
     createdAt: row.created_at,
     errorCode: row.error_code,
     id: row.id,
