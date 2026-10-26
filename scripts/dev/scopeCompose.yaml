@@ -31,6 +31,9 @@ services:
   register-agents:
     environment:
       SCOPE_REGISTER_CLAUDE_CODE_AGENT: "true"
+  model-scanner-anthropic:
+    # Model discovery requires an API key; subscription OAuth can run the worker.
+    profiles: !override [anthropic-model-scanner]
   coder-acp-claude-code:
     environment:
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}

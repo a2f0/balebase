@@ -15,6 +15,8 @@ scope_install_dir="${SCOPE_INSTALL_DIR:-$HOME/.local/bin}"
 scope_revision=16544702d9dd4f0f5a7991fa4dbdf07a9247fedc
 
 install_scope() {
+  # Docker preserves source modes; the worker runs as an unprivileged user.
+  umask 022
   if [[ ! -d "$scope_dir/.git" ]]; then
     git clone https://github.com/microsoft/scope.git "$scope_dir"
   fi

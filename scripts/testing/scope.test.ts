@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -49,7 +49,11 @@ await Bun.write(process.env.SCOPE_TEST_RECORD, JSON.stringify({
     git,
     `#!/bin/sh
 printf '%s\\n' "$*" >> "$SCOPE_TEST_GIT_LOG"
-if [ "$1" = clone ]; then mkdir -p "$3/.git"; exit; fi
+if [ "$1" = clone ]; then
+  mkdir -p "$3/.git"
+  printf '{}\\n' > "$3/package.json"
+  exit
+fi
 case "$3" in
   rev-parse) printf '%s\\n' "$SCOPE_TEST_REVISION" ;;
   status) printf '%s' "$SCOPE_TEST_DIRTY" ;;
@@ -204,6 +208,16 @@ test("install fetches the pin for stale source and clones a missing checkout", a
   expect(await Bun.file(join(directory, "git.log")).text()).toContain(
     "clone https://github.com/microsoft/scope.git",
   );
+});
+
+test("install keeps cloned manifests readable with a restrictive caller umask", async () => {
+  await rm(join(source, ".git"), { recursive: true });
+  const result = Bun.spawnSync(
+    ["bash", "-c", "umask 077; exec bash scripts/dev/scope.sh install"],
+    { cwd: directory, env, stdout: "pipe", stderr: "pipe" },
+  );
+  expect(result.exitCode, result.stderr.toString()).toBe(0);
+  expect((await stat(join(source, "package.json"))).mode & 0o777).toBe(0o644);
 });
 
 test("dirty source and failed builds preserve an existing installed CLI", async () => {

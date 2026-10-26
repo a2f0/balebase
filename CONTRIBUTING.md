@@ -214,6 +214,9 @@ installations using macOS Keychain, run `claude setup-token` and store the
 result as `CLAUDE_CODE_OAUTH_TOKEN` in `.scope/local.env`. An explicit token
 or API key takes precedence over the credential file. A scored run also needs a
 Copilot-enabled `GITHUB_TOKEN`.
+Model discovery is optional and requires `ANTHROPIC_API_KEY`; enable it with
+`COMPOSE_PROFILES=anthropic-model-scanner`. Subscription OAuth can run the worker
+without model discovery, using the worker's default model.
 `scope:up` reads the selected Claude login at startup; refresh an expired login
 with Claude Code and rerun it. With Podman, set `DOCKER_HOST` to the machine's
 forwarded host socket and `DOCKER_SOCK` to its in-VM socket in the same local
@@ -228,7 +231,8 @@ repository's project without changing the CLI's global selection.
 
 Use `bun run scope run submit --help` for tasks, criteria, codebase revisions,
 and model options. Start an unscored smoke run with `--max-iterations 1` and no
-criteria. Inspect it with `run get`, `run logs`, and `run download`. Scope marks
+criteria, passing the task with `--message` (scenario files require criteria).
+Inspect it with `run get`, `run logs`, and `run download`. Scope marks
 these unscored runs as passed when execution succeeds; that status is not a
 judge verdict. Stop the stack when idle with `bun run scope:down`; named
 volumes retain projects and artifacts.
