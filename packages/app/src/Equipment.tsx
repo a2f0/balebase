@@ -12,6 +12,7 @@ import {
   PageBody,
   PageHeader,
   PageSection,
+  Select,
   Toast,
 } from "@balebase/ui/react";
 import type {
@@ -238,9 +239,9 @@ function EquipmentFilters({
           </button>
         ))}
       </nav>
-      <select
+      <Select
         aria-label="Assigned to"
-        className="select inputSm equipmentAssigneeFilter"
+        className="inputSm equipmentAssigneeFilter"
         onChange={(event) => onAssigneeChange(event.target.value)}
         value={assignee}
       >
@@ -251,7 +252,7 @@ function EquipmentFilters({
             {member.name}
           </option>
         ))}
-      </select>
+      </Select>
     </div>
   );
 }
@@ -632,9 +633,9 @@ function AssigneeSelect({
   value: string | null;
 }) {
   return (
-    <select
+    <Select
       aria-label={label}
-      className={compact ? "select inputSm equipmentAssigneeSelect" : "select"}
+      className={compact ? "inputSm equipmentAssigneeSelect" : undefined}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value || null)}
       value={value ?? ""}
@@ -645,7 +646,7 @@ function AssigneeSelect({
           {member.name} ({member.email})
         </option>
       ))}
-    </select>
+    </Select>
   );
 }
 
@@ -745,8 +746,7 @@ function EquipmentFields({
   return (
     <div className="equipmentFields">
       <Field label="Type">
-        <select
-          className="select"
+        <Select
           ref={firstField}
           onChange={(event) => set("type", event.target.value)}
           required
@@ -757,7 +757,7 @@ function EquipmentFields({
               {equipmentTypeLabel(type)}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label="Assigned to" optional>
         <AssigneeSelect

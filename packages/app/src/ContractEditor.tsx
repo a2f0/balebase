@@ -1,4 +1,4 @@
-import { Button, Card, cx, Field, Toast } from "@balebase/ui/react";
+import { Button, Card, cx, Field, Select, Toast } from "@balebase/ui/react";
 import type {
   ContractDetail,
   DraftRecipient,
@@ -305,8 +305,7 @@ function DraftDetails({ editor }: { editor: Editor }) {
             />
           </Field>
           <Field label="Reminders">
-            <select
-              className="select"
+            <Select
               onChange={(event) =>
                 set(
                   "reminderIntervalDays",
@@ -320,7 +319,7 @@ function DraftDetails({ editor }: { editor: Editor }) {
                   {option.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </div>
       </div>

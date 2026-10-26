@@ -11,6 +11,7 @@ import {
   Page,
   PageBody,
   PageHeader,
+  Select,
   Toast,
 } from "@balebase/ui/react";
 import type {
@@ -402,8 +403,8 @@ function BuilderHeader({
           )}
           <label className="auditVersionPicker">
             <span className="auditVersionLabel">Version</span>
-            <select
-              className="select auditVersionSelect"
+            <Select
+              className="auditVersionSelect"
               disabled={busy || versions.length === 0}
               onChange={(event) =>
                 void onVersionChange(Number(event.target.value))
@@ -416,7 +417,7 @@ function BuilderHeader({
                   {version.createdBy.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <Button
             busy={busy}
@@ -648,9 +649,9 @@ function QuestionEditor({
         value={item.prompt}
       />
       <div className="auditQuestionControls">
-        <select
+        <Select
           aria-label="Response type"
-          className="select inputSm auditResponseType"
+          className="inputSm auditResponseType"
           onChange={(event) =>
             onChange({
               ...item,
@@ -661,7 +662,7 @@ function QuestionEditor({
         >
           <option value="check">Pass / fail / N/A</option>
           <option value="text">Text answer</option>
-        </select>
+        </Select>
         <label className="check auditRequired">
           <input
             checked={item.required}

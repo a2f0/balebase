@@ -1,4 +1,4 @@
-import { Button, Card, cx, Field, Icon } from "@balebase/ui/react";
+import { Button, Card, cx, Field, Icon, Select } from "@balebase/ui/react";
 import type { FieldType } from "@balebase/validators/contracts";
 import {
   type KeyboardEvent,
@@ -113,8 +113,7 @@ export function FieldToolbox({ editor }: { editor: Editor }) {
     <Card title="Fields">
       <div className="stack stackMd">
         <Field label="Place fields for">
-          <select
-            className="select"
+          <Select
             onChange={(event) => editor.setActiveKey(event.target.value)}
             value={activeKey ?? ""}
           >
@@ -123,7 +122,7 @@ export function FieldToolbox({ editor }: { editor: Editor }) {
                 {recipient.name || `Signer ${index + 1}`}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <fieldset className="contractTools">
           <legend className="srOnly">Field types</legend>
@@ -182,8 +181,7 @@ export function SelectedField({ editor }: { editor: Editor }) {
         </p>
         {editor.pageCount > 1 && (
           <Field label="Page">
-            <select
-              className="select"
+            <Select
               onChange={(event) =>
                 editor.changeField(field.key, {
                   page: Number(event.target.value),
@@ -196,7 +194,7 @@ export function SelectedField({ editor }: { editor: Editor }) {
                   Page {number}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         )}
         {field.type === "text" && (

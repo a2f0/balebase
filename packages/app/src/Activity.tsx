@@ -1,4 +1,4 @@
-import { Field, Page, PageBody, PageHeader } from "@balebase/ui/react";
+import { Field, Page, PageBody, PageHeader, Select } from "@balebase/ui/react";
 import type { ActivityResourceType } from "@balebase/validators/activity";
 import { useEffect, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
@@ -45,8 +45,7 @@ export function Activity({
       />
       <PageBody>
         <Field label="Resource" className="activityFilter">
-          <select
-            className="select"
+          <Select
             value={resourceType ?? ""}
             onChange={(event) => {
               const value = event.target.value;
@@ -63,7 +62,7 @@ export function Activity({
                   {label}
                 </option>
               ))}
-          </select>
+          </Select>
         </Field>
         <ActivityFeed
           compact

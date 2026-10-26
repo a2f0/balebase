@@ -3,7 +3,9 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Select } from "@balebase/ui/react";
 import { type Browser, launch } from "puppeteer-core";
+import { renderToStaticMarkup } from "react-dom/server";
 
 const { CHROME_PATH } = process.env;
 const chrome =
@@ -25,7 +27,16 @@ const fixture = `
   <button class="button" id="medium">Save</button>
   <div class="segmented"><button aria-pressed="true" id="segment">Grid</button><button>List</button></div>
   <input class="input inputSm" id="smallInput">
-  <select class="select" id="select"><option>Member</option></select>
+  ${renderToStaticMarkup(
+    <Select id="select">
+      <option>Member</option>
+    </Select>,
+  )}
+  ${renderToStaticMarkup(
+    <Select className="inputSm" id="selectSm">
+      <option>Member</option>
+    </Select>,
+  )}
   <label class="check" id="check"><input type="checkbox"><span>Required</span></label>
   <div><a class="rowTitle" href="#issue" id="rowTitle">Inventory spreadsheet</a></div>
   <nav><a class="navItem" href="#library" id="navItem">Library</a></nav>
@@ -60,13 +71,18 @@ async function measure(browser: Browser, touch: boolean) {
           "segment",
           "smallInput",
           "select",
+          "selectSm",
           "check",
           "rowTitle",
           "navItem",
           "codeChip",
         ].map((id) => [id, Math.round(box(id).height)]),
       ),
-      inputFonts: [fontSize("smallInput"), fontSize("select")],
+      inputFonts: [
+        fontSize("smallInput"),
+        fontSize("select"),
+        fontSize("selectSm"),
+      ],
     };
   });
 }
@@ -89,7 +105,7 @@ it("touch screens get fingertip-sized controls while a mouse keeps compact ones"
     const touch = await measure(browser, true);
     expect(touch.coarse).toBe(true);
     // iOS zooms into any focused field set below 16px.
-    expect(touch.inputFonts).toEqual(["16px", "16px"]);
+    expect(touch.inputFonts).toEqual(["16px", "16px", "16px"]);
     for (const [id, height] of Object.entries(touch.heights)) {
       // The segmented control's 3px inset keeps each option at 40px.
       const minimum =
@@ -99,12 +115,14 @@ it("touch screens get fingertip-sized controls while a mouse keeps compact ones"
 
     const mouse = await measure(browser, false);
     expect(mouse.coarse).toBe(false);
-    expect(mouse.inputFonts).toEqual(["13px", "15px"]);
+    expect(mouse.inputFonts).toEqual(["13px", "15px", "13px"]);
     expect(mouse.heights).toMatchObject({
       small: 32,
       medium: 40,
       segment: 30,
       smallInput: 32,
+      select: 40,
+      selectSm: 32,
       navItem: 38,
     });
   } finally {

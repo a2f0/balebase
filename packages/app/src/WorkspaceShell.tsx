@@ -3,6 +3,7 @@ import {
   type IconName,
   Logo,
   promptDialog,
+  Select,
   Toast,
 } from "@balebase/ui/react";
 import {
@@ -400,9 +401,9 @@ function OrganizationSwitcher({
     <div className="organizationSwitcher">
       <label className="field">
         <span className="organizationSwitcherLabel">Organization</span>
-        <select
+        <Select
           aria-label="Active organization"
-          className="select inputSm"
+          className="inputSm"
           disabled={busy}
           onChange={(event) => void select(event.target.value)}
           value={activeOrganizationId}
@@ -413,7 +414,7 @@ function OrganizationSwitcher({
             </option>
           ))}
           <option value="create">Create organization…</option>
-        </select>
+        </Select>
       </label>
       {error && <Toast tone="danger">{error}</Toast>}
     </div>

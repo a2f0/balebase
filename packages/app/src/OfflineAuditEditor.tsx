@@ -1,4 +1,11 @@
-import { Banner, Button, Card, Field, PageSection } from "@balebase/ui/react";
+import {
+  Banner,
+  Button,
+  Card,
+  Field,
+  PageSection,
+  Select,
+} from "@balebase/ui/react";
 import { useEffect, useRef, useState } from "react";
 import { guardWorkspaceChange } from "./navigationGuard";
 import { OfflineIssueCreator, OfflineIssueList } from "./OfflineIssues";
@@ -74,8 +81,7 @@ export function OfflineAuditEditor({
                     }
                   />
                 ) : (
-                  <select
-                    className="select"
+                  <Select
                     disabled={audit.queued || sealing}
                     value={responses[item.id] ?? ""}
                     onChange={(event) =>
@@ -88,7 +94,7 @@ export function OfflineAuditEditor({
                     <option value="pass">Pass</option>
                     <option value="fail">Fail</option>
                     <option value="na">N/A</option>
-                  </select>
+                  </Select>
                 )}
               </Field>
               <Button

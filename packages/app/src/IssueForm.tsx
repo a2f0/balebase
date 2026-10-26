@@ -1,4 +1,4 @@
-import { Banner, Button, Field } from "@balebase/ui/react";
+import { Banner, Button, Field, Select } from "@balebase/ui/react";
 import type { IssueInput, IssueMember } from "@balebase/validators/issues";
 import { type FormEvent, useEffect, useState } from "react";
 import { api } from "./apiClient";
@@ -82,8 +82,7 @@ export function IssueForm({
         </Field>
         <div className="formGrid">
           <Field label="Priority">
-            <select
-              className="select"
+            <Select
               value={input.priority}
               onChange={(event) =>
                 setInput({
@@ -96,11 +95,10 @@ export function IssueForm({
               <option value="medium">Medium</option>
               <option value="high">High</option>
               <option value="critical">Critical</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Assignee">
-            <select
-              className="select"
+            <Select
               disabled={Boolean(memberError)}
               value={input.assignedTo ?? ""}
               onChange={(event) =>
@@ -117,7 +115,7 @@ export function IssueForm({
                   {member.name || member.email}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </div>
         <div>

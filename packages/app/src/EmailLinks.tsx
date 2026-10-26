@@ -1,4 +1,11 @@
-import { Button, cx, Icon, type IconName, Toast } from "@balebase/ui/react";
+import {
+  Button,
+  cx,
+  Icon,
+  type IconName,
+  Select,
+  Toast,
+} from "@balebase/ui/react";
 import type { EquipmentItem } from "@balebase/validators/equipment";
 import type { FinanceTransactionMatch } from "@balebase/validators/finance";
 import type {
@@ -300,9 +307,9 @@ function EquipmentPicker({
       className="emailLinkFolderForm"
       onSubmit={(event) => void submit(event)}
     >
-      <select
+      <Select
         aria-label="Equipment"
-        className="select inputSm"
+        className="inputSm"
         onChange={(event) => setEquipmentId(event.target.value)}
         value={equipmentId}
       >
@@ -314,7 +321,7 @@ function EquipmentPicker({
             {item.assignee ? ` (${item.assignee.name})` : ""}
           </option>
         ))}
-      </select>
+      </Select>
       <Button
         busy={saving}
         disabled={!equipmentId}
@@ -383,9 +390,9 @@ function FolderPicker({
       className="emailLinkFolderForm"
       onSubmit={(event) => void submit(event)}
     >
-      <select
+      <Select
         aria-label="Folder"
-        className="select inputSm"
+        className="inputSm"
         onChange={(event) => setFolderId(event.target.value)}
         value={folderId}
       >
@@ -395,7 +402,7 @@ function FolderPicker({
             {folder.name}
           </option>
         ))}
-      </select>
+      </Select>
       <Button
         busy={saving}
         disabled={!folderId}
