@@ -5,7 +5,7 @@
     "": {
       "name": "balebase",
       "devDependencies": {
-        "@a2f0/agent-tool": "0.1.20",
+        "@a2f0/agent-tool": "0.1.21",
         "@biomejs/biome": "2.5.15",
         "@commitlint/cli": "21.2.3",
         "@commitlint/config-conventional": "21.2.3",
@@ -182,7 +182,7 @@
     },
   },
   "packages": {
-    "@a2f0/agent-tool": ["@a2f0/agent-tool@0.1.20", "", { "dependencies": { "@resvg/resvg-wasm": "2.6.2" }, "bin": { "agent-tool": "src/index.ts" } }, "sha512-/MOrIZvDkCh73zGTn4Qs3W+WjjhlPvVz52ZiirVP6W9HbT5hLqs+PA58uVPNZLLrL8Sf2QXVpunXWodrroTLuw=="],
+    "@a2f0/agent-tool": ["@a2f0/agent-tool@0.1.21", "", { "dependencies": { "@resvg/resvg-wasm": "2.6.2" }, "bin": { "agent-tool": "src/index.ts" } }, "sha512-wfI1kvTJIf2VXimYnB2t1eFEEmitccDF2DegYztqoTwFnwuVmtf8lHYdopmuZ4WQIFY7aBQU2HwybXLFZE6vdg=="],
 
     "@a2f0/ct-client": ["@a2f0/ct-client@0.1.4", "", {}, "sha512-b6JYVDpKMEbkPgMdd55D6JM+S45sqxTJj9wx687wjrGZEN2DBSE7M7v02Xxyh33QwUpv+kzG7NTBqQtR6tDgXg=="],
 
