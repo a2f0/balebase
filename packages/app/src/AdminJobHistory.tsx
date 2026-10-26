@@ -8,14 +8,13 @@ import {
 } from "@balebase/ui/react";
 import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
 import { useEffect, useState } from "react";
-import { AdminJobRun } from "./AdminJobRun";
+import { AdminJobHistoryRow } from "./AdminJobHistoryRow";
 import { api } from "./apiClient";
 
 type History = Awaited<ReturnType<typeof api.adminJobs.runs>>;
 type Props = {
   jobs: JobDefinition[];
-  selectedRun: string | undefined;
-  onSelect: (id: string) => void;
+  initialRun: JobRun | undefined;
 };
 
 function useJobHistory(
@@ -63,87 +62,100 @@ function useJobHistory(
   return { data, error };
 }
 
-export function AdminJobHistory({ jobs, selectedRun, onSelect }: Props) {
+export function AdminJobHistory({ jobs, initialRun }: Props) {
+  const [selectedRun, setSelectedRun] = useState(initialRun?.runId);
   const [jobId, setJobId] = useState("");
   const [status, setStatus] = useState<JobRun["status"] | "">("");
   const [cursor, setCursor] = useState("");
   const { data, error } = useJobHistory(jobId, status, cursor);
+  const runs = data?.runs ?? [];
+  // A newly requested run is visible immediately, even before history refreshes.
+  const visibleRuns =
+    initialRun &&
+    !jobId &&
+    !status &&
+    !cursor &&
+    !runs.some((run) => run.runId === initialRun.runId)
+      ? [initialRun, ...runs]
+      : runs;
   return (
-    <>
-      <PageSection title="Run history">
-        <div className="cluster">
-          <Field label="Job">
-            <Select
-              value={jobId}
-              onChange={(event) => {
-                setJobId(event.target.value);
-                setCursor("");
-              }}
-            >
-              <option value="">All jobs</option>
-              {jobs.map((job) => (
-                <option key={job.id} value={job.id}>
-                  {job.name}
+    <PageSection title="Run history">
+      <div className="cluster">
+        <Field label="Job">
+          <Select
+            value={jobId}
+            onChange={(event) => {
+              setJobId(event.target.value);
+              setCursor("");
+              setSelectedRun(undefined);
+            }}
+          >
+            <option value="">All jobs</option>
+            {jobs.map((job) => (
+              <option key={job.id} value={job.id}>
+                {job.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Status">
+          <Select
+            value={status}
+            onChange={(event) => {
+              setStatus(event.target.value as JobRun["status"] | "");
+              setCursor("");
+              setSelectedRun(undefined);
+            }}
+          >
+            <option value="">All statuses</option>
+            {["queued", "running", "succeeded", "failed", "cancelled"].map(
+              (value) => (
+                <option key={value} value={value}>
+                  {value}
                 </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Status">
-            <Select
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value as JobRun["status"] | "");
-                setCursor("");
-              }}
-            >
-              <option value="">All statuses</option>
-              {["queued", "running", "succeeded", "failed", "cancelled"].map(
-                (value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ),
-              )}
-            </Select>
-          </Field>
-        </div>
-        {error && <Toast tone="danger">{error}</Toast>}
-        {!data && !error && <LoadingState label="Loading run history…" />}
-        {data?.runs.length === 0 && <p>No runs match these filters.</p>}
-        <div className="stack stackMd">
-          {data?.runs.map((run) => (
-            <div className="cluster clusterBetween" key={run.runId}>
-              <div>
-                <strong>
-                  {jobs.find((job) => job.id === run.jobId)?.name ?? run.jobId}
-                </strong>
-                <p className="textSm textSubtle">
-                  {run.status} · {run.source} ·{" "}
-                  {new Date(run.createdAt).toLocaleString()}
-                </p>
-                {run.organizationId && (
-                  <p className="textSm">Organization: {run.organizationId}</p>
-                )}
-              </div>
-              <Button
-                aria-pressed={selectedRun === run.runId}
-                onClick={() => onSelect(run.runId)}
-              >
-                View run
-              </Button>
-            </div>
-          ))}
-        </div>
-        <div className="cluster">
-          {cursor && <Button onClick={() => setCursor("")}>Latest runs</Button>}
-          {data?.nextCursor && (
-            <Button onClick={() => setCursor(data.nextCursor ?? "")}>
-              Older runs
-            </Button>
-          )}
-        </div>
-      </PageSection>
-      {selectedRun && <AdminJobRun key={selectedRun} runId={selectedRun} />}
-    </>
+              ),
+            )}
+          </Select>
+        </Field>
+      </div>
+      {error && <Toast tone="danger">{error}</Toast>}
+      {!data && !error && <LoadingState label="Loading run history…" />}
+      {data && visibleRuns.length === 0 && <p>No runs match these filters.</p>}
+      <div className="stack stackMd">
+        {visibleRuns.map((run) => (
+          <AdminJobHistoryRow
+            key={run.runId}
+            run={run}
+            name={jobs.find((job) => job.id === run.jobId)?.name ?? run.jobId}
+            expanded={selectedRun === run.runId}
+            onToggle={() =>
+              setSelectedRun(selectedRun === run.runId ? undefined : run.runId)
+            }
+          />
+        ))}
+      </div>
+      <div className="cluster">
+        {cursor && (
+          <Button
+            onClick={() => {
+              setCursor("");
+              setSelectedRun(undefined);
+            }}
+          >
+            Latest runs
+          </Button>
+        )}
+        {data?.nextCursor && (
+          <Button
+            onClick={() => {
+              setCursor(data.nextCursor ?? "");
+              setSelectedRun(undefined);
+            }}
+          >
+            Older runs
+          </Button>
+        )}
+      </div>
+    </PageSection>
   );
 }

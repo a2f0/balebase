@@ -168,6 +168,17 @@ it("queues confirmed maintenance, exposes persisted output after remount, and fi
   await act(async () => button("View run").click());
   expect(container.textContent).toContain('"purged": 3');
   expect(container.textContent).toContain("succeeded");
+  const disclosure = button("Hide run");
+  expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+  const panel = document.getElementById(
+    disclosure.getAttribute("aria-controls") ?? "",
+  );
+  expect(panel?.parentElement).toBe(disclosure.closest(".adminJobHistoryItem"));
+  expect(panel?.textContent).toContain('"purged": 3');
+  await act(async () => disclosure.click());
+  expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+  expect(container.textContent).not.toContain("Run ID: run-1");
+  await act(async () => button("View run").click());
   const select = container.querySelector("select");
   if (!select) throw new Error("Missing job filter");
   await act(async () => {
@@ -177,6 +188,7 @@ it("queues confirmed maintenance, exposes persisted output after remount, and fi
   expect(requests).toContain(
     "GET /api/admin/jobs/runs?jobId=syncFinanceConnection",
   );
+  expect(container.textContent).not.toContain("Run ID: run-1");
 });
 
 it("shows failed saved runs and guards against a stale detail response", async () => {
@@ -205,15 +217,55 @@ it("shows failed saved runs and guards against a stale detail response", async (
     (item) => item.textContent === "View run",
   );
   await act(async () => views[0]?.click());
-  await act(async () =>
-    [...container.querySelectorAll("button")]
-      .filter((item) => item.textContent === "View run")[1]
-      ?.click(),
-  );
+  await act(async () => views[1]?.click());
+  expect(views[0]?.getAttribute("aria-expanded")).toBe("false");
+  expect(views[1]?.getAttribute("aria-expanded")).toBe("true");
   expect(container.textContent).toContain("INTERRUPTED");
   await act(async () =>
     finishFirst?.(Response.json({ run: queued, logs: [], nextBefore: null })),
   );
   expect(container.textContent).toContain("Run ID: run-2");
   expect(container.textContent).not.toContain("Run ID: run-1");
+});
+
+it("opens a requested run inline immediately and resets older filtered history", async () => {
+  const requests: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    requests.push(`${init?.method ?? "GET"} ${url.pathname}${url.search}`);
+    if (init?.method === "POST")
+      return Response.json({ run: queued }, { status: 202 });
+    if (url.pathname.endsWith("/runs/run-1"))
+      return Response.json({ run: queued, logs: [], nextBefore: null });
+    if (url.pathname.endsWith("/runs"))
+      // History has not yet included the new run; the POST response supplies its row.
+      return Response.json({
+        runs: [],
+        nextCursor: url.searchParams.has("cursor") ? null : "older",
+      });
+    return Response.json({ jobs: definitions });
+  }) as typeof fetch;
+  await render();
+  const filter = container.querySelector("select");
+  if (!filter) throw new Error("Missing job filter");
+  await act(async () => {
+    filter.value = "syncFinanceConnection";
+    filter.dispatchEvent(new window.Event("change", { bubbles: true }));
+  });
+  await act(async () => button("Older runs").click());
+  expect(requests).toContain(
+    "GET /api/admin/jobs/runs?jobId=syncFinanceConnection&cursor=older",
+  );
+  await act(async () => button("Run now").click());
+  await act(async () => button("Run job").click());
+  expect(container.querySelector("select")?.value).toBe("");
+  expect(
+    button("Hide run").closest(".adminJobHistoryItem")?.textContent,
+  ).toContain("Run ID: run-1");
+  expect(container.textContent).not.toContain("No runs match");
+  // Reusing the same active job must reopen its inline details after a collapse.
+  await act(async () => button("Hide run").click());
+  await act(async () => button("Run now").click());
+  await act(async () => button("Run job").click());
+  expect(button("Hide run").getAttribute("aria-expanded")).toBe("true");
 });
