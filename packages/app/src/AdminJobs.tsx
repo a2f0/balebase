@@ -8,7 +8,7 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
-import type { JobDefinition } from "@balebase/validators/adminJobs";
+import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
 import { useEffect, useState } from "react";
 import { AdminJobHistory } from "./AdminJobHistory";
 import { api } from "./apiClient";
@@ -17,7 +17,10 @@ export function AdminJobs() {
   const [jobs, setJobs] = useState<JobDefinition[]>();
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
-  const [selectedRun, setSelectedRun] = useState<string>();
+  const [startedRun, setStartedRun] = useState<{
+    run: JobRun;
+    request: number;
+  }>();
   useEffect(() => {
     let active = true;
     void api.adminJobs
@@ -39,7 +42,10 @@ export function AdminJobs() {
     setError(undefined);
     try {
       const run = await api.adminJobs.run(job.id);
-      setSelectedRun(run.runId);
+      setStartedRun((previous) => ({
+        run,
+        request: (previous?.request ?? 0) + 1,
+      }));
     } catch (cause) {
       setError(`${messageFrom(cause)} Check recent runs before trying again.`);
     } finally {
@@ -64,8 +70,8 @@ export function AdminJobs() {
           {!jobs && !error && <LoadingState label="Loading jobs…" />}
           <div className="stack stackMd">
             {jobs?.map((job) => (
-              <div className="cluster clusterBetween" key={job.id}>
-                <div>
+              <div className="adminJobRow" key={job.id}>
+                <div className="adminJobSummary">
                   <strong>{job.name}</strong>
                   <p className="textSm textSubtle">{job.description}</p>
                 </div>
@@ -83,9 +89,9 @@ export function AdminJobs() {
           </div>
         </PageSection>
         <AdminJobHistory
+          key={startedRun?.request ?? 0}
           jobs={jobs ?? []}
-          selectedRun={selectedRun}
-          onSelect={setSelectedRun}
+          initialRun={startedRun?.run}
         />
       </PageBody>
     </Page>

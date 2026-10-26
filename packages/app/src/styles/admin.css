@@ -87,3 +87,39 @@
 .adminOrganizationTable {
   min-width: 56rem;
 }
+
+/* Descriptions wrap in their column without displacing the row action. */
+.adminJobRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.adminJobSummary {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.adminJobHistoryItem {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.adminJobRunDetails {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  overflow-wrap: anywhere;
+}
+
+.adminJobRunDetails pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

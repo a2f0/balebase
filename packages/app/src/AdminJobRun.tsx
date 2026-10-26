@@ -1,10 +1,4 @@
-import {
-  Banner,
-  Button,
-  LoadingState,
-  PageSection,
-  Toast,
-} from "@balebase/ui/react";
+import { Banner, Button, LoadingState, Toast } from "@balebase/ui/react";
 import { useEffect, useState } from "react";
 import { api } from "./apiClient";
 
@@ -55,7 +49,8 @@ export function AdminJobRun({ runId }: { runId: string }) {
   const { detail, error } = useRunDetail(runId, before);
   const run = detail?.run;
   return (
-    <PageSection title="Run details">
+    <div className="adminJobRunDetails">
+      <h3>Run details</h3>
       {error && <Toast tone="danger">{error}</Toast>}
       {!detail && !error && <LoadingState label="Loading job output…" />}
       {run && (
@@ -130,6 +125,6 @@ export function AdminJobRun({ runId }: { runId: string }) {
           </div>
         </div>
       )}
-    </PageSection>
+    </div>
   );
 }
