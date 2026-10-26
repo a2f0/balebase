@@ -18,6 +18,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { AdminDeletionMenu } from "./AdminDeletionMenu";
 import { AdminOrganizationDetails } from "./AdminOrganizationDetails";
 import { formatDate, Identity } from "./adminDisplay";
 import { api } from "./apiClient";
@@ -343,7 +344,7 @@ function OrganizationTableRow({
         {formatDate(organization.createdAt)}
       </td>
       <td className="adminActions">
-        <OrganizationActionButton
+        <OrganizationActionMenu
           action={action}
           onMarkForDeletion={onMarkForDeletion}
           onRestore={onRestore}
@@ -394,40 +395,24 @@ function DeletedBy({ organization }: { organization: AdminOrganization }) {
   );
 }
 
-function OrganizationActionButton({
+function OrganizationActionMenu({
   action,
   onMarkForDeletion,
   onRestore,
   organization,
 }: OrganizationActions & { organization: AdminOrganization }) {
-  if (organization.deletedAt) {
-    const restoring =
-      action?.organizationId === organization.id && action.type === "restore";
-    return (
-      <Button
-        busy={restoring}
-        disabled={action !== undefined}
-        icon="restore"
-        onClick={() => void onRestore(organization)}
-        size="sm"
-      >
-        {restoring ? "Restoring…" : "Restore"}
-      </Button>
-    );
-  }
-  const deleting =
-    action?.organizationId === organization.id && action.type === "delete";
+  const pending = Boolean(organization.deletedAt);
   return (
-    <Button
-      busy={deleting}
+    <AdminDeletionMenu
+      busy={action?.organizationId === organization.id}
       disabled={action !== undefined}
-      icon="trash"
-      onClick={() => void onMarkForDeletion(organization)}
-      size="sm"
-      variant="danger"
-    >
-      {deleting ? "Marking…" : "Mark for deletion"}
-    </Button>
+      label={pending ? "Restore" : "Mark for deletion"}
+      name={organization.name}
+      onSelect={() =>
+        void (pending ? onRestore : onMarkForDeletion)(organization)
+      }
+      pending={pending}
+    />
   );
 }
 

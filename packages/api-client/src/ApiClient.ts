@@ -3,6 +3,7 @@ import { activityApi } from "./activity";
 import { adminAuditTemplatesApi } from "./adminAuditTemplates";
 import { adminJobsApi } from "./adminJobs";
 import { adminOrganizationsApi } from "./adminOrganizations";
+import { adminUsersApi } from "./adminUsers";
 import { apiKeysApi } from "./apiKeys";
 import { auditsApi } from "./audits";
 import { billingApi } from "./billing";
@@ -33,6 +34,7 @@ export class ApiClient extends Transport {
   readonly adminAuditTemplates = adminAuditTemplatesApi(this);
   readonly adminJobs = adminJobsApi(this);
   readonly adminOrganizations = adminOrganizationsApi(this);
+  readonly adminUsers = adminUsersApi(this);
   readonly apiKeys = apiKeysApi(this);
   readonly audits = auditsApi(this);
   readonly billing = billingApi(this);
