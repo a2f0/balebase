@@ -20,6 +20,10 @@ interface WorkerConfig extends Record<string, unknown> {
   }[];
   r2_buckets?: { binding: string; bucket_name: string }[];
   triggers?: unknown;
+  queues?: {
+    producers: { binding: string; queue: string }[];
+    consumers: { queue: string; [key: string]: unknown }[];
+  };
 }
 
 async function config(app: string): Promise<WorkerConfig> {
@@ -68,8 +72,13 @@ api.d1_databases = [
 api.r2_buckets = [
   { binding: "STORAGE", bucket_name: required("STAGING_R2_BUCKET_NAME") },
 ];
-// Staging has its own data and should not run production's scheduled jobs.
-delete api.triggers;
+// Only finance scheduling runs in staging, against its isolated sandbox queue.
+api.triggers = { crons: ["*/5 * * * *"] };
+if (api.queues) {
+  for (const queue of [...api.queues.producers, ...api.queues.consumers]) {
+    queue.queue = "balebase-api-staging-finance-sync";
+  }
+}
 await save("api", api);
 
 const client = await config("app-web");

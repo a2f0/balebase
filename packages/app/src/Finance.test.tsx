@@ -39,6 +39,8 @@ const connection = (
   overrides: Partial<FinanceConnection> = {},
 ): FinanceConnection => ({
   accountCount: 1,
+  dailySync: false,
+  syncStatus: null,
   createdAt: "2026-09-01T00:00:00.000Z",
   errorCode: null,
   id: "connection-1",

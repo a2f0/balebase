@@ -487,8 +487,29 @@ including the shared feeds and API-key access.
 The organization-scoped Finance page at `/finance` uses
 [Plaid Link](https://plaid.com/docs/link/) to connect financial institutions
 and [Transactions Sync](https://plaid.com/docs/api/products/transactions/) to
-import up to 24 months of account and transaction history. Syncing is manual in
-this first release; Plaid webhooks can be added later for automatic updates.
+import up to 24 months of account and transaction history. **Sync now** queues a
+server-side job. Once accepted, it continues when the user navigates away or
+closes the app. Returning to Finance shows its saved status; open pages refresh
+while it runs. Repeated clicks share the current job.
+
+**Daily sync** is an opt-in setting on each connection and its account pages.
+It applies to every account linked through that connection and starts disabled.
+The scheduler queues one run per UTC calendar day, starting within five minutes
+of enabling it or the start of a new day (subject to queue availability). It
+imports updates already available from Plaid; it does not force the bank to
+refresh or call Plaid's separately billed Transactions Refresh endpoint.
+Disabling daily sync affects future runs; an accepted run finishes. Transient
+failures retry automatically, and exhausted retries or bank login errors appear
+on the connection. Manual sync can start a fresh attempt after failure.
+
+Sync jobs retain their source, requesting user and API key identity when
+present, timestamps, outcome, and counts. Daily runs identify their source
+without inventing a human actor. Setting changes retain before/after state in
+`finance_sync_settings_history` records and actor snapshots in the same
+transaction as the setting. Job and setting history remain until the
+connection's data or organization is purged; operators can inspect it in D1.
+Finance-authorized members can read the latest job on the connection page.
+
 Each institution's sync, disconnect, and delete actions live at
 `/finance/connections`; the overview only warns when a connection stops
 syncing. Selecting an institution opens `/finance/connections/<id>`, which
@@ -527,7 +548,8 @@ accounts is not double-counted. Totals are grouped by currency. Earlier
 free-text category overrides were converted into categories by migration
 `0034`.
 
-Disconnecting an institution calls Plaid's `/item/remove`, erases the stored
+Disconnecting waits until any accepted sync has finished, disables daily sync,
+calls Plaid's `/item/remove`, erases the stored
 access token, and retains the imported history and annotations. A later Link
 connection reconciles unambiguous matching accounts and transactions onto the
 same internal records so annotations survive changed Plaid IDs. Deleting the

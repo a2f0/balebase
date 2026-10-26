@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { api } from "./apiClient";
 import { connectionTone } from "./FinanceAccounts";
 import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
+import { FinanceSyncSettings } from "./FinanceSyncSettings";
 import {
   formatDateTime,
   formatDay,
@@ -57,6 +58,11 @@ export function FinanceAccountPage({
         {data && (
           <>
             <AccountSummary data={data} onNavigate={onNavigate} />
+            <FinanceSyncSettings
+              id={data.connection.id}
+              dailySync={data.connection.dailySync}
+              status={data.connection.status}
+            />
             <RecentTransactions
               onNavigate={onNavigate}
               transactions={data.recentTransactions}

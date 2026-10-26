@@ -3,8 +3,30 @@ import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import { LinkedEmailSchema } from "./inbox";
 import { route } from "./route";
 
+const FinanceSyncStatusSchema = z.enum([
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "cancelled",
+]);
+const FinanceSyncJobSchema = z.object({
+  id: z.string(),
+  status: FinanceSyncStatusSchema,
+  source: z.enum(["manual", "daily"]),
+  added: z.number(),
+  modified: z.number(),
+  removed: z.number(),
+  createdAt: z.string(),
+  finishedAt: z.string().nullable(),
+  errorCode: z.string().nullable(),
+});
+export type FinanceSyncJob = z.infer<typeof FinanceSyncJobSchema>;
+
 const FinanceConnectionSchema = z.object({
   accountCount: z.number(),
+  dailySync: z.boolean(),
+  syncStatus: FinanceSyncStatusSchema.nullable(),
   createdAt: z.string(),
   errorCode: z.string().nullable(),
   id: z.string(),
@@ -52,6 +74,8 @@ export type FinanceConnectionAccount = z.infer<
 const FinanceConnectionDetailSchema = z.object({
   accounts: z.array(FinanceConnectionAccountSchema),
   connection: z.object({
+    dailySync: z.boolean(),
+    syncJob: FinanceSyncJobSchema.nullable(),
     createdAt: z.string(),
     createdBy: z.object({ email: z.string(), name: z.string() }).nullable(),
     disconnectedAt: z.string().nullable(),
@@ -115,6 +139,7 @@ const FinanceAccountDetailSchema = z.object({
     institutionName: true,
     plaidItemId: true,
     status: true,
+    dailySync: true,
   }),
   /** The ten newest active transactions. */
   recentTransactions: z.array(
@@ -253,6 +278,17 @@ export const financeRoutes = {
       modified: z.number(),
       removed: z.number(),
     }),
+  }),
+  startSync: route({
+    method: "POST",
+    path: "/api/finance/connections/:id/sync-jobs",
+    response: FinanceSyncJobSchema,
+  }),
+  updateSyncSettings: route({
+    method: "PATCH",
+    path: "/api/finance/connections/:id/sync-settings",
+    body: z.object({ dailySync: z.boolean() }).strict(),
+    response: z.object({ dailySync: z.boolean() }),
   }),
   connection: route({
     method: "GET",

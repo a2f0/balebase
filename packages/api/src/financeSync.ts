@@ -15,84 +15,30 @@ export interface PlaidItemRow {
   id: string;
 }
 
-interface SyncResult {
-  added: number;
-  modified: number;
-  removed: number;
-}
-
-interface SyncRequest extends Record<string, unknown> {
-  cursor?: string;
-}
-
-export async function syncPlaidItem(
+/** One bounded page per queue delivery; the job checkpoints its cursor separately.
+ * Replaying a page preserves local identifiers, annotations, and categories. */
+export async function syncPlaidPage(
   env: Bindings,
   organizationId: string,
   item: PlaidItemRow,
   requestPlaid: PlaidRequest,
-): Promise<SyncResult> {
-  const accessToken = await decryptAccessToken(env, organizationId, item);
-  const initialCursor = item.cursor;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      return await syncPages(
-        env,
-        organizationId,
-        item.id,
-        accessToken,
-        initialCursor,
-        requestPlaid,
-      );
-    } catch (error) {
-      if (!isPaginationMutation(error) || attempt === 2) {
-        await recordSyncError(env.DB, item.id, error);
-        throw error;
-      }
-    }
-  }
-  throw new Error("Plaid synchronization retry limit reached.");
-}
-
-async function syncPages(
-  env: Bindings,
-  organizationId: string,
-  itemId: string,
-  accessToken: string,
-  initialCursor: string | null,
-  requestPlaid: PlaidRequest,
 ) {
-  let cursor = initialCursor;
-  const total: SyncResult = { added: 0, modified: 0, removed: 0 };
-  for (let page = 0; page < 100; page += 1) {
-    const response = await requestPlaid<TransactionsSyncResponse>(
-      env,
-      "/transactions/sync",
-      syncRequest(accessToken, cursor),
-    );
-    await persistPage(env.DB, organizationId, itemId, response);
-    total.added += response.added.length;
-    total.modified += response.modified.length;
-    total.removed += response.removed.length;
-    cursor = response.next_cursor;
-    if (!response.has_more) {
-      await recordSyncSuccess(env.DB, itemId, cursor);
-      return total;
-    }
-  }
-  throw new Error("Plaid synchronization exceeded 100 pages.");
-}
-
-function syncRequest(accessToken: string, cursor: string | null) {
-  const body: SyncRequest = {
-    access_token: accessToken,
-    count: 500,
-    options: {
-      include_original_description: false,
-      personal_finance_category_version: "v2",
+  const accessToken = await decryptAccessToken(env, organizationId, item);
+  const response = await requestPlaid<TransactionsSyncResponse>(
+    env,
+    "/transactions/sync",
+    {
+      access_token: accessToken,
+      count: 100,
+      ...(item.cursor ? { cursor: item.cursor } : {}),
+      options: {
+        include_original_description: false,
+        personal_finance_category_version: "v2",
+      },
     },
-  };
-  if (cursor) body.cursor = cursor;
-  return body;
+  );
+  await persistPage(env.DB, organizationId, item.id, response);
+  return response;
 }
 
 async function persistPage(
@@ -380,49 +326,6 @@ async function decryptAccessToken(
     },
     env.PLAID_TOKEN_ENCRYPTION_KEY,
     `${organizationId}:${item.id}`,
-  );
-}
-
-async function recordSyncSuccess(
-  database: D1Database,
-  itemId: string,
-  cursor: string,
-) {
-  const now = new Date().toISOString();
-  await database
-    .prepare(
-      `UPDATE plaid_items SET cursor = ?, status = 'active', error_code = NULL,
-       error_message = NULL, last_synced_at = ?, updated_at = ? WHERE id = ?`,
-    )
-    .bind(cursor, now, now, itemId)
-    .run();
-}
-
-async function recordSyncError(
-  database: D1Database,
-  itemId: string,
-  error: unknown,
-) {
-  // Only Plaid's own message is kept; other errors may describe internals.
-  const plaid = error instanceof PlaidApiError ? error : null;
-  await database
-    .prepare(
-      `UPDATE plaid_items SET status = 'error', error_code = ?,
-       error_message = ?, updated_at = ? WHERE id = ?`,
-    )
-    .bind(
-      plaid?.code ?? "SYNC_ERROR",
-      plaid?.message ?? null,
-      new Date().toISOString(),
-      itemId,
-    )
-    .run();
-}
-
-function isPaginationMutation(error: unknown) {
-  return (
-    error instanceof PlaidApiError &&
-    error.code === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
   );
 }
 

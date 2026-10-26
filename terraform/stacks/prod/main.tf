@@ -119,3 +119,9 @@ resource "cloudflare_ruleset" "api_cors" {
     }
   }]
 }
+
+# Wrangler owns consumers and schedules; Terraform owns the queue resource.
+resource "cloudflare_queue" "finance_sync" {
+  account_id = var.cloudflare_account_id
+  queue_name = "${var.api_worker_name}-finance-sync"
+}

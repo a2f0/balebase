@@ -27,6 +27,17 @@ const endpoints = {
     path: "/api/finance/connections/:id/sync",
     response: "json",
   }),
+  startSync: endpoint<typeof financeRoutes.startSync>({
+    method: "POST",
+    path: "/api/finance/connections/:id/sync-jobs",
+    response: "json",
+  }),
+  updateSyncSettings: endpoint<typeof financeRoutes.updateSyncSettings>({
+    method: "PATCH",
+    path: "/api/finance/connections/:id/sync-settings",
+    body: "json",
+    response: "json",
+  }),
   connection: endpoint<typeof financeRoutes.connection>({
     method: "GET",
     path: "/api/finance/connections/:id",
@@ -154,6 +165,15 @@ export function financeApi(transport: Transport) {
     },
     connection(id: string) {
       return transport.call(endpoints.connection, { params: { id } });
+    },
+    startSync(id: string) {
+      return transport.call(endpoints.startSync, { params: { id } });
+    },
+    updateSyncSettings(id: string, dailySync: boolean) {
+      return transport.call(endpoints.updateSyncSettings, {
+        params: { id },
+        body: { dailySync },
+      });
     },
     syncConnection(id: string) {
       return transport.call(endpoints.syncConnection, { params: { id } });

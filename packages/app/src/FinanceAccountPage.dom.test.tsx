@@ -70,6 +70,7 @@ const detail: FinanceAccountDetail = {
     updatedAt: "2026-10-18T12:00:00.000Z",
   },
   connection: {
+    dailySync: false,
     id: "item-1",
     institutionId: "ins_109508",
     institutionName: "First Platypus Bank",

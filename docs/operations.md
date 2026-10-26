@@ -133,6 +133,57 @@ client at `/inbox`. The production tier also needs
 subdomain's Email Routing setup. The Terraform token needs Email Routing Rules
 Write.
 
+## Finance background sync
+
+Before deploying this change, review and apply each tier's Terraform plan to
+create its queue: `balebase-api-finance-sync` in production and
+`balebase-api-staging-finance-sync` in staging. The Cloudflare token needs Queues
+Edit permission. Terraform owns the queues; Wrangler owns their producer and
+consumer bindings and Cron Triggers. Apply `0072_finance_sync_jobs.sql` before
+deploying the API, then deploy the app. The normal API deployment applies D1
+migrations. A merge alone does not provision resources or deploy.
+
+Both API Workers run the finance scheduler every five minutes (`*/5 * * * *`).
+Staging uses only its own D1 database, queue, and Plaid Sandbox credentials; it
+still excludes production's hourly maintenance schedule. Production keeps that
+hourly schedule in addition to finance scheduling. The staging config generator
+preserves this separation. Cron changes can take up to 15 minutes to propagate.
+See [Cloudflare Cron Triggers](https://developers.cloudflare.com/workers/configuration/cron-triggers/).
+
+Manual requests first commit a job to D1, then await a Queue send before returning
+202. If delivery fails or the request disappears between those operations, the
+scheduler republishes the pending job. Queue messages contain only a job ID.
+Consumers claim a 20-minute lease (longer than the 15-minute queue invocation
+limit), import one page of up to 100 transactions, and save the continuation.
+Duplicate deliveries cannot run the same job simultaneously. Each page's writes
+can be replayed without replacing annotations or categories. The connection's
+Plaid cursor advances only when the entire import finishes; a pagination mutation
+restarts from the original cursor, up to twice. See
+[Cloudflare's background-work guidance](https://developers.cloudflare.com/workers/runtime-apis/context/)
+and [queue delivery guarantees](https://developers.cloudflare.com/queues/reference/delivery-guarantees/).
+
+Temporary errors use exponential backoff (one, two, four, then eight minutes,
+rounded up to a scheduler pass), with five attempts per page. Expired leases are
+recovered by the scheduler. Failed jobs stay in D1 instead of depending on queue
+message retention or a dead-letter queue. Inspect `finance_sync_jobs` for saved
+status, attempts, timestamps, and provider error codes; look for
+`finance_sync_dispatch_failed`, `finance_sync_delivery_failed`, or
+`finance_sync_attempt_failed` in Workers Logs. A job may remain queued longer
+when the provider or queue is unavailable. Users can retry a failed job with
+**Sync now**. Do not delete job rows or advance cursors to force completion.
+
+Older installed clients may still use the synchronous `/sync` endpoint. It
+starts the same durable job and waits briefly for completed counts; if the job
+continues, it returns a message explaining that background sync is still active.
+New clients use `/sync-jobs` and monitor the connection's saved status.
+
+Wrangler's local API emulates the queue. Apply local migrations, start the API,
+and exercise a scheduled pass with
+`curl 'http://localhost:8787/__scheduled?cron=*/5%20*%20*%20*%20*'`.
+After deployment, enable daily sync on a Sandbox connection, start a manual sync,
+close the page, then reopen it and verify the completed status. Confirm only one
+job per opted-in connection and UTC day and verify failures can be retried.
+
 ## Shared issues migration
 
 The API 0.1.32 release requires `0062_create_issues.sql` and

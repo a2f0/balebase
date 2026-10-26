@@ -1,15 +1,18 @@
 import { confirmDialog } from "@balebase/ui/react";
+import type { FinanceSyncJob } from "@balebase/validators/finance";
 
 /** The part of a connection its confirmations name. */
 interface Institution {
   institutionName: string | null;
 }
 
-export function syncNotice(result: {
-  added: number;
-  modified: number;
-  removed: number;
-}) {
+export function syncPending(status: string | null | undefined) {
+  return status === "queued" || status === "running";
+}
+
+export function syncNotice(result: FinanceSyncJob) {
+  if (syncPending(result.status))
+    return "Sync queued. You can leave this page; syncing will continue in the background.";
   return `Sync complete: ${result.added} added, ${result.modified} updated, ${result.removed} removed.`;
 }
 

@@ -5,6 +5,8 @@ import { Hono } from "hono";
 import type { AuthSession } from "./auth";
 import type { AuthVariables } from "./authMiddleware";
 import { createFinanceRouter } from "./finance";
+import { scheduleFinanceSync } from "./financeSyncJobs";
+import { consumeFinanceSync } from "./financeSyncWorker";
 import {
   PlaidApiError,
   type PlaidRequest,
@@ -624,6 +626,7 @@ describe("finance", () => {
       type: "depository",
     });
     expect(detail.body.connection).toEqual({
+      dailySync: false,
       id: "item-report",
       institutionId: null,
       institutionName: null,
@@ -1599,11 +1602,28 @@ function postedPage(): TransactionsSyncResponse {
 function testApp(organizationId: string, requestPlaid: PlaidRequest) {
   const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
   app.use("*", async (context, next) => {
+    context.env = {
+      ...context.env,
+      FINANCE_SYNC_QUEUE:
+        context.env.FINANCE_SYNC_QUEUE ??
+        ({
+          send: async (body: { jobId: string }) =>
+            consumeFinanceSync(
+              {
+                messages: [{ body, ack() {}, retry() {} }],
+              } as unknown as MessageBatch<{ jobId: string }>,
+              context.env,
+              requestPlaid,
+            ),
+        } as unknown as Queue<{ jobId: string }>),
+    };
     context.set("organizationId", organizationId);
     context.set("authSession", {
       user: {
         defaultOrganizationId: organizationId,
         id: "user-1",
+        name: "Example Person",
+        email: "person@example.com",
         role: "user",
       },
     } as unknown as AuthSession);
@@ -1626,7 +1646,10 @@ async function jsonRequest<T = unknown>(
   };
   if (body !== undefined) init.body = JSON.stringify(body);
   const response = await app.request(financePath(path), init, bindings);
-  return { body: (await response.json()) as T, response };
+  return {
+    body: (response.status === 204 ? null : await response.json()) as T,
+    response,
+  };
 }
 
 function financePath(path: string) {
@@ -1659,7 +1682,9 @@ interface TestStatement {
 function toD1(database: Database) {
   return {
     batch: async (statements: TestStatement[]) =>
-      statements.map((statement) => statement.execute()),
+      database.transaction(() =>
+        statements.map((statement) => statement.execute()),
+      )(),
     prepare: (query: string) => {
       let values: SQLQueryBindings[] = [];
       const statement = {
@@ -1690,3 +1715,361 @@ async function applyMigration(database: Database, filename: string) {
     ).text(),
   );
 }
+
+async function queuedFixture() {
+  const fixture = await createFixture();
+  const messages: { jobId: string }[] = [];
+  fixture.bindings.FINANCE_SYNC_QUEUE = {
+    send: async (body: { jobId: string }) => {
+      messages.push(body);
+    },
+  } as unknown as Queue<{ jobId: string }>;
+  const exchange = await jsonRequest<{ connectionId: string }>(
+    fixture.app,
+    fixture.bindings,
+    "/exchange",
+    "POST",
+    { publicToken: "public-sandbox-test" },
+  );
+  const id = exchange.body.connectionId;
+  const request = <T = Record<string, unknown>>(
+    path: string,
+    method = "GET",
+    body?: unknown,
+  ) =>
+    jsonRequest<T>(
+      fixture.app,
+      fixture.bindings,
+      `/connections/${id}${path}`,
+      method,
+      body,
+    );
+  const deliver = (jobId: string, plaid = fixture.requestPlaid) =>
+    consumeFinanceSync(
+      {
+        messages: [
+          {
+            body: { jobId },
+            ack() {},
+            retry() {
+              throw new Error("Unexpected delivery failure");
+            },
+          },
+        ],
+      } as unknown as MessageBatch<{ jobId: string }>,
+      fixture.bindings,
+      plaid,
+    );
+  return { ...fixture, id, request, messages, deliver };
+}
+
+describe("durable finance sync", () => {
+  it("accepts a manual job before any Plaid work, deduplicates clicks, and finishes without another browser request", async () => {
+    const fixture = await queuedFixture();
+    const first = await fixture.request<{ id: string; status: string }>(
+      "/sync-jobs",
+      "POST",
+    );
+    expect(first.response.status).toBe(202);
+    expect(first.body.status).toBe("queued");
+    expect(
+      fixture.database
+        .query("SELECT count(*) AS count FROM plaid_accounts")
+        .get(),
+    ).toEqual({ count: 0 });
+    const second = await fixture.request<{ id: string }>("/sync-jobs", "POST");
+    expect(second.body.id).toBe(first.body.id);
+    await fixture.deliver(first.body.id);
+    await fixture.deliver(first.body.id);
+    const detail = await fixture.request<{
+      connection: {
+        syncJob: { status: string; added: number };
+        lastSyncedAt: string;
+      };
+    }>("");
+    expect(detail.body.connection.syncJob).toMatchObject({
+      status: "succeeded",
+      added: 1,
+    });
+    expect(detail.body.connection.lastSyncedAt).toBeString();
+    expect(
+      fixture.database
+        .query("SELECT count(*) AS count FROM plaid_transactions")
+        .get(),
+    ).toEqual({ count: 1 });
+    expect(
+      fixture.database.query("SELECT actor FROM finance_sync_jobs").get(),
+    ).toMatchObject({ actor: expect.stringContaining("person@example.com") });
+  });
+
+  it("audits setting changes atomically, skips no-ops, and enforces organization boundaries and valid input", async () => {
+    const fixture = await queuedFixture();
+    expect(
+      (await fixture.request("/sync-settings", "PATCH", { dailySync: "true" }))
+        .response.status,
+    ).toBe(400);
+    expect(
+      (
+        await fixture.request("/sync-settings", "PATCH", {
+          dailySync: true,
+          extra: 1,
+        })
+      ).response.status,
+    ).toBe(400);
+    expect(
+      (await fixture.request("/sync-settings", "PATCH", { dailySync: true }))
+        .body,
+    ).toEqual({ dailySync: true });
+    await fixture.request("/sync-settings", "PATCH", { dailySync: true });
+    const rows = fixture.database
+      .query("SELECT daily_sync, actor FROM finance_sync_settings_history")
+      .all();
+    expect(rows).toEqual([
+      { daily_sync: 1, actor: expect.stringContaining('"userId":"user-1"') },
+    ]);
+    const other = testApp("other-org", fixture.requestPlaid);
+    for (const [path, method, body] of [
+      ["sync-settings", "PATCH", { dailySync: false }],
+      ["sync-jobs", "POST", undefined],
+    ] as const) {
+      expect(
+        (
+          await jsonRequest(
+            other,
+            fixture.bindings,
+            `/connections/${fixture.id}/${path}`,
+            method,
+            body,
+          )
+        ).response.status,
+      ).toBe(404);
+    }
+    fixture.database.exec(`CREATE TRIGGER fail_settings_history BEFORE INSERT ON finance_sync_settings_history
+      BEGIN SELECT RAISE(ABORT, 'history failed'); END;`);
+    expect(
+      (await fixture.request("/sync-settings", "PATCH", { dailySync: false }))
+        .response.status,
+    ).toBe(500);
+    expect(
+      fixture.database.query("SELECT daily_sync FROM plaid_items").get(),
+    ).toEqual({ daily_sync: 1 });
+  });
+
+  it("recovers an unsent manual job from the durable outbox", async () => {
+    const fixture = await queuedFixture();
+    const producer = fixture.bindings.FINANCE_SYNC_QUEUE;
+    if (!producer) throw new Error("Expected queue");
+    fixture.bindings.FINANCE_SYNC_QUEUE = {
+      send: async () => {
+        throw new Error("Queue unavailable");
+      },
+    } as unknown as Queue<{ jobId: string }>;
+    const accepted = await fixture.request<{ id: string }>(
+      "/sync-jobs",
+      "POST",
+    );
+    expect(accepted.response.status).toBe(202);
+    expect(fixture.messages).toHaveLength(0);
+    fixture.bindings.FINANCE_SYNC_QUEUE = producer;
+    await scheduleFinanceSync(fixture.bindings);
+    expect(fixture.messages).toEqual([{ jobId: accepted.body.id }]);
+    await fixture.deliver(accepted.body.id);
+    expect(
+      fixture.database.query("SELECT status FROM finance_sync_jobs").get(),
+    ).toEqual({ status: "succeeded" });
+  });
+
+  it("schedules only opted-in connections once per UTC day and stops future runs when disabled", async () => {
+    const fixture = await queuedFixture();
+    const today = Date.now();
+    await scheduleFinanceSync(fixture.bindings, today);
+    expect(fixture.messages).toHaveLength(0);
+    await fixture.request("/sync-settings", "PATCH", { dailySync: true });
+    await scheduleFinanceSync(fixture.bindings, today);
+    const job = fixture.messages[0];
+    if (!job) throw new Error("Expected daily job");
+    await fixture.deliver(job.jobId);
+    await scheduleFinanceSync(fixture.bindings, today);
+    expect(
+      fixture.database
+        .query("SELECT count(*) AS count FROM finance_sync_jobs")
+        .get(),
+    ).toEqual({ count: 1 });
+    await scheduleFinanceSync(fixture.bindings, today + 86_400_000);
+    expect(
+      fixture.database
+        .query("SELECT count(*) AS count FROM finance_sync_jobs")
+        .get(),
+    ).toEqual({ count: 2 });
+    expect(
+      fixture.database
+        .query("SELECT source, actor FROM finance_sync_jobs LIMIT 1")
+        .get(),
+    ).toEqual({ source: "daily", actor: null });
+    // Let the accepted run finish; disabling changes future scheduling only.
+    fixture.database.run(
+      "UPDATE finance_sync_jobs SET available_at = '2000-01-01' WHERE status = 'queued'",
+    );
+    const next = fixture.messages.find(({ jobId }) => jobId !== job.jobId);
+    if (!next) throw new Error("Expected next day's job");
+    await fixture.deliver(next.jobId);
+    await fixture.request("/sync-settings", "PATCH", { dailySync: false });
+    await scheduleFinanceSync(fixture.bindings, today + 2 * 86_400_000);
+    expect(
+      fixture.database
+        .query("SELECT count(*) AS count FROM finance_sync_jobs")
+        .get(),
+    ).toEqual({ count: 2 });
+  });
+
+  it("leases one consumer at a time and rejects disconnects while a job is active", async () => {
+    const fixture = await queuedFixture();
+    const { body: job } = await fixture.request<{ id: string }>(
+      "/sync-jobs",
+      "POST",
+    );
+    let finish: (() => void) | undefined;
+    const waiting = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let calls = 0;
+    const plaid: PlaidRequest = async <T>() => {
+      calls++;
+      await waiting;
+      return transactionPage() as T;
+    };
+    const running = fixture.deliver(job.id, plaid);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await fixture.deliver(job.id, plaid);
+    expect(calls).toBe(1);
+    expect((await fixture.request("", "DELETE")).response.status).toBe(409);
+    expect(
+      (await fixture.request<{ id: string }>("/sync-jobs", "POST")).body.id,
+    ).toBe(job.id);
+    finish?.();
+    await running;
+    expect((await fixture.request("", "DELETE")).response.status).toBe(204);
+    expect((await fixture.request("/sync-jobs", "POST")).response.status).toBe(
+      404,
+    );
+    expect(
+      (await fixture.request("/sync-settings", "PATCH", { dailySync: true }))
+        .response.status,
+    ).toBe(404);
+  });
+
+  it("checkpoints pages, resumes a lost lease, and restarts pagination on Plaid mutations", async () => {
+    const fixture = await queuedFixture();
+    const { body: job } = await fixture.request<{ id: string }>(
+      "/sync-jobs",
+      "POST",
+    );
+    const cursors: unknown[] = [];
+    let mutated = false;
+    const plaid: PlaidRequest = async <T>(
+      _env: Bindings,
+      _path: string,
+      body: PlaidRequestBody,
+    ) => {
+      cursors.push(body.cursor);
+      if (body.cursor === "page-1" && !mutated) {
+        mutated = true;
+        throw new PlaidApiError(
+          "Restart pagination",
+          "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION",
+          400,
+        );
+      }
+      const page = transactionPage();
+      page.has_more = !body.cursor;
+      page.next_cursor = body.cursor ? "finished" : "page-1";
+      if (body.cursor) page.added = [];
+      return page as T;
+    };
+    await fixture.deliver(job.id, plaid);
+    expect(
+      fixture.database.query("SELECT cursor FROM plaid_items").get(),
+    ).toEqual({ cursor: null });
+    // Simulate an isolate disappearing after it acquired the next page.
+    fixture.database.run(
+      "UPDATE finance_sync_jobs SET status = 'running', lease_until = '2000-01-01'",
+    );
+    await scheduleFinanceSync(fixture.bindings);
+    await fixture.deliver(job.id, plaid);
+    await fixture.deliver(job.id, plaid);
+    await fixture.deliver(job.id, plaid);
+    expect(cursors).toEqual([undefined, "page-1", undefined, "page-1"]);
+    expect(
+      fixture.database
+        .query("SELECT status, added, restarts FROM finance_sync_jobs")
+        .get(),
+    ).toEqual({ status: "succeeded", added: 1, restarts: 1 });
+    expect(
+      fixture.database
+        .query("SELECT count(*) AS count FROM plaid_transactions")
+        .get(),
+    ).toEqual({ count: 1 });
+    expect(
+      fixture.database.query("SELECT cursor FROM plaid_items").get(),
+    ).toEqual({ cursor: "finished" });
+  });
+
+  it("backs off transient failures, stops after five attempts, and allows a fresh manual retry", async () => {
+    const fixture = await queuedFixture();
+    const { body: job } = await fixture.request<{ id: string }>(
+      "/sync-jobs",
+      "POST",
+    );
+    let calls = 0;
+    const failing: PlaidRequest = async () => {
+      calls++;
+      throw new PlaidApiError("Try later", "INTERNAL_SERVER_ERROR", 500);
+    };
+    await fixture.deliver(job.id, failing);
+    await fixture.deliver(job.id, failing);
+    expect(calls).toBe(1);
+    for (let attempt = 1; attempt < 5; attempt++) {
+      fixture.database.run(
+        "UPDATE finance_sync_jobs SET available_at = '2000-01-01'",
+      );
+      await fixture.deliver(job.id, failing);
+    }
+    expect(
+      fixture.database
+        .query("SELECT status, failures FROM finance_sync_jobs")
+        .get(),
+    ).toEqual({ status: "failed", failures: 5 });
+    expect(
+      fixture.database
+        .query("SELECT status, error_code FROM plaid_items")
+        .get(),
+    ).toEqual({ status: "error", error_code: "INTERNAL_SERVER_ERROR" });
+    const retry = await fixture.request<{ id: string }>("/sync-jobs", "POST");
+    expect(retry.body.id).not.toBe(job.id);
+    await fixture.deliver(retry.body.id);
+    expect(
+      fixture.database.query("SELECT status FROM plaid_items").get(),
+    ).toEqual({ status: "active" });
+  });
+
+  it("cancels pending jobs for deleted organizations and never schedules them", async () => {
+    const fixture = await queuedFixture();
+    await fixture.request("/sync-settings", "PATCH", { dailySync: true });
+    const { body: job } = await fixture.request<{ id: string }>(
+      "/sync-jobs",
+      "POST",
+    );
+    fixture.database.run(
+      "UPDATE organization SET deletedAt = '2026-01-01' WHERE id = 'org_user-1'",
+    );
+    await fixture.deliver(job.id, async () => {
+      throw new Error("Must not contact Plaid");
+    });
+    expect(
+      fixture.database.query("SELECT status FROM finance_sync_jobs").get(),
+    ).toEqual({ status: "cancelled" });
+    fixture.messages.length = 0;
+    await scheduleFinanceSync(fixture.bindings);
+    expect(fixture.messages).toHaveLength(0);
+  });
+});

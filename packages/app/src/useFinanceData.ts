@@ -2,6 +2,7 @@ import type { FinanceFilters } from "@balebase/api-client";
 import type { FinanceData } from "@balebase/validators/finance";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./apiClient";
+import { syncPending } from "./financeConnectionActions";
 
 type CategoryRoute = Pick<FinanceFilters, "categorySlug" | "uncategorized">;
 
@@ -72,6 +73,7 @@ export function useFinanceData(route: CategoryRoute | null) {
       ++requestId.current;
     };
   }, [load]);
+  useSyncPolling(data, load);
   const onFiltersChange = useCallback(
     (next: FinanceFilters) => {
       currentFilters.current = next;
@@ -84,9 +86,7 @@ export function useFinanceData(route: CategoryRoute | null) {
   async function onLoadMore() {
     if (
       data?.nextCursor &&
-      !loading &&
-      !loadingMore &&
-      !refreshing &&
+      !(loading || loadingMore || refreshing) &&
       filters === loadedFilters.current
     )
       await load(data.nextCursor);
@@ -167,4 +167,28 @@ function mergeFinancePage(
 
 function financeLoadMessage(cause: unknown) {
   return cause instanceof Error ? cause.message : "Could not load finances.";
+}
+
+function useSyncPolling(
+  data: FinanceData | undefined,
+  load: () => Promise<void>,
+) {
+  const pending =
+    data?.connections.some((connection) =>
+      syncPending(connection.syncStatus),
+    ) ?? false;
+  useEffect(() => {
+    if (!pending) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      await load();
+      if (active) timer = setTimeout(() => void poll(), 3000);
+    }
+    timer = setTimeout(() => void poll(), 3000);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [pending, load]);
 }
