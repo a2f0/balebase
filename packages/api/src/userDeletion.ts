@@ -3,6 +3,10 @@ import { Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
 import { respond } from "./respond";
 import type { Bindings } from "./types";
+import {
+  cancelUserDeletion,
+  requestUserDeletion,
+} from "./userDeletionActivity";
 
 export const userDeletion = new Hono<{
   Bindings: Bindings;
@@ -41,13 +45,9 @@ userDeletion.post("/", async (context) => {
     );
   }
   const userId = session.user.id;
-  await context.env.DB.prepare(
-    `INSERT INTO user_deletion_requests (user_id, requested_at) VALUES (?, ?)
-     ON CONFLICT(user_id) DO NOTHING`,
-  )
-    .bind(userId, new Date().toISOString())
-    .run();
-  console.log({ event: "user_deletion_requested", actorUserId: userId });
+  if (await requestUserDeletion(context.env.DB, userId, session.user)) {
+    console.log({ event: "user_deletion_requested", actorUserId: userId });
+  }
   return respond(context, accountSettingsRoutes.requestDeletion, { ok: true });
 });
 
@@ -55,13 +55,16 @@ userDeletion.delete("/", async (context) => {
   if (context.req.header("Origin") !== context.env.CORS_ORIGIN) {
     return context.json({ error: "Untrusted request origin." }, 403);
   }
-  const userId = context.get("authSession").user.id;
-  await context.env.DB.prepare(
-    "DELETE FROM user_deletion_requests WHERE user_id = ?",
-  )
-    .bind(userId)
-    .run();
-  console.log({ event: "user_deletion_canceled", actorUserId: userId });
+  const actor = context.get("authSession").user;
+  if (context.get("authSession").session.impersonatedBy) {
+    return context.json(
+      { error: "An impersonated session cannot cancel account deletion." },
+      403,
+    );
+  }
+  if (await cancelUserDeletion(context.env.DB, actor.id, actor)) {
+    console.log({ event: "user_deletion_canceled", actorUserId: actor.id });
+  }
   return respond(context, accountSettingsRoutes.cancelDeletion, { ok: true });
 });
 

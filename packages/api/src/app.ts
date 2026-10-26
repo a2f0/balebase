@@ -7,6 +7,7 @@ import { activity } from "./activity";
 import { adminAuditTemplates } from "./adminAuditTemplates";
 import { adminJobs } from "./adminJobs";
 import { adminOrganizations } from "./adminOrganizations";
+import { adminUsers } from "./adminUsers";
 import { apiKeys, mcpToolRequest } from "./apiKeys";
 import { audits } from "./audits";
 import { createAuth } from "./auth";
@@ -117,6 +118,7 @@ app.get("/api", (context) =>
       adminAuditTemplates: "/api/admin/audit-templates",
       adminJobs: "/api/admin/jobs",
       adminOrganizations: "/api/admin/organizations",
+      adminUsers: "/api/admin/users",
       accountSettings: "/api/account-settings",
       apiKeys: "/api/organization-settings/api-keys",
       activity: "/api/activity",
@@ -195,6 +197,10 @@ app.route("/api/admin/audit-templates", adminAuditTemplates);
 app.use("/api/admin/organizations", requireAuth, requireRole("admin"));
 app.use("/api/admin/organizations/*", requireAuth, requireRole("admin"));
 app.route("/api/admin/organizations", adminOrganizations);
+
+app.use("/api/admin/users", requireAuth);
+app.use("/api/admin/users/*", requireAuth);
+app.route("/api/admin/users", adminUsers);
 
 app.use("/api/audits", requireAuth, requireOrganization);
 app.use("/api/audits/*", requireAuth, requireOrganization);

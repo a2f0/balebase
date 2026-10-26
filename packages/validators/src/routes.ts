@@ -3,6 +3,7 @@ import { activityRoutes } from "./activity";
 import { adminAuditTemplatesRoutes } from "./adminAuditTemplates";
 import { adminJobsRoutes } from "./adminJobs";
 import { adminOrganizationsRoutes } from "./adminOrganizations";
+import { adminUsersRoutes } from "./adminUsers";
 import { apiKeysRoutes } from "./apiKeys";
 import { auditsRoutes } from "./audits";
 import { billingRoutes } from "./billing";
@@ -30,6 +31,7 @@ export const routes: Record<string, Record<string, Route>> = {
   adminAuditTemplates: adminAuditTemplatesRoutes,
   adminJobs: adminJobsRoutes,
   adminOrganizations: adminOrganizationsRoutes,
+  adminUsers: adminUsersRoutes,
   apiKeys: apiKeysRoutes,
   audits: auditsRoutes,
   billing: billingRoutes,
