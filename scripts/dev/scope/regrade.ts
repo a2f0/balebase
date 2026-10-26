@@ -1,8 +1,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { loadCriteria } from "./judge/criteria";
 import { git } from "./register";
-import { isCompleted } from "./runState";
+import { isCompleted, validateScores } from "./runState";
 import { apiRequest, judgeHealth, settings, stateDir } from "./settings";
 import { configSchema, evaluationResultSchema } from "./types";
 
@@ -79,6 +80,7 @@ export async function regrade(path: string): Promise<void> {
       receipt.snapshot.projectId,
       entry.id,
     );
+    const criteria = await loadCriteria(input.criteria, input.projectId);
     const response = await fetch(
       `http://127.0.0.1:${settings.judgePort}/api/v1/evaluate`,
       {
@@ -96,6 +98,10 @@ export async function regrade(path: string): Promise<void> {
     if (!response.ok)
       throw new Error(`Judge HTTP ${response.status}; inspect ${directory}`);
     const result = evaluationResultSchema.parse(raw);
+    validateScores(
+      result.criteriaResults,
+      criteria.map((criterion) => criterion.id),
+    );
     cases.push({ ...entry, snapshotUrl: input.snapshotUrl, result });
     await writeFile(
       join(directory, "receipt.json"),

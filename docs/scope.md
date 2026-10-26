@@ -109,8 +109,7 @@ in snapshots that contain them. This is an onboarding probe, not a hidden test.
 is a pilot; record the actual coder model from captured session evidence before
 comparing runs. The judge model, CLI version, exact prompts, criteria, source
 commit, tooling commit and dirty state, run URLs, timings and verdicts are saved
-beneath
-`.scope/benchmarks/`. Changing a criterion requires a new versioned ID;
+beneath `.scope/benchmarks/`. Changing a criterion requires a new versioned ID;
 criteria seeding refuses to silently overwrite definitions.
 
 The optional portal runs in the foreground at `http://127.0.0.1:5102`. Logs,

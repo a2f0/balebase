@@ -211,6 +211,10 @@ test("judge is exclusive while evaluating and releases its slot on completion or
       throw new Error("fixture failure");
     },
   });
-  expect((await failing(request(), noop)).status).toBe(500);
+  const failure = await failing(request(), noop);
+  expect(failure.status).toBe(500);
+  expect(await failure.json()).toEqual({
+    error: "Evaluation failed; inspect the local judge log",
+  });
   expect((await (await failing(health(), noop)).json()).active).toBe(false);
 });

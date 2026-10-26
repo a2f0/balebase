@@ -53,7 +53,7 @@ export function judgeHandler(options: {
     } catch (error) {
       console.error("[codex-judge]", error);
       return Response.json(
-        { error: error instanceof Error ? error.message : String(error) },
+        { error: "Evaluation failed; inspect the local judge log" },
         { status: 500 },
       );
     } finally {

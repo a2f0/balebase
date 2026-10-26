@@ -119,7 +119,7 @@ export async function calibrate(): Promise<void> {
     "Unknown criteria must never create a vacuous pass",
   );
   assert.deepEqual(await invalid.json(), {
-    error: "Unknown criterion: missing_calibration_criterion",
+    error: "Evaluation failed; inspect the local judge log",
   });
   await writeFile(
     join(directory, "receipt.json"),

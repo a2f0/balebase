@@ -35,8 +35,7 @@ Calibration accepted the known-correct fixture (4/4), rejected the deliberately
 incorrect fixture (only report existence passed: 1/4), and rejected an unknown
 criterion with HTTP 500. The scored smoke run scored 3/4: the agent omitted the
 shared `packages/app` location already present in README. That was an agent
-miss,
-not a missing-documentation finding. Older unscored smoke runs are excluded.
+miss, not a missing-documentation finding. Older unscored smoke runs are excluded.
 
 ## Results
 
@@ -49,7 +48,8 @@ not a missing-documentation finding. Older unscored smoke runs are excluded.
 
 The shipping branch also incorporates the concurrent README website-link
 change from `40f44885ca501698d4d901d3588748d15cbfd960` and shipping-tool update
-`6e1946e1da3bc82ce71874d81f6c2d0de6ecfa56`; the measured snapshots remain fixed.
+`6e1946e1da3bc82ce71874d81f6c2d0de6ecfa56`, plus finance sync update
+`bff5fcdfbbc4b73773df10eafdfb2534126484fa`; the measured snapshots remain fixed.
 Later assessment hardening and the final documentation clarifications below
 are shipping changes, not additional scored trials.
 
@@ -141,8 +141,7 @@ All 834 returned baseline source files and all 862 returned comparison source
 files matched their registered archives; the only addition in each snapshot
 was the requested report. Scope excludes the two
 `.vscode` files from returned snapshots. Tool evidence showed inspection
-commands
-and one report write per task, with no tests/builds/installs or deployments.
+commands and one report write per task, with no tests/builds/installs or deployments.
 Client discovery included two unsuccessful guessed entrypoint paths in the
 baseline and one missing-file read in the comparison. These are retained in
 the evidence rather than treated as infrastructure errors. No direct reads of
@@ -172,13 +171,12 @@ architecture task and excluded. The worker now uses writable temporary state
 and a separate persistent project-transcript volume. Permissions and the
 container-to-judge route were verified before restarting all three tasks.
 The local judge was recalibrated before the corrected comparison. The judge's
-read-only sandbox prevents
-writes but does not confine reads to its job directory; this host setup is for
+read-only sandbox prevents writes but does not confine reads to its job directory;
+this host setup is for
 trusted source and tasks, as described in the Scope guide.
 
 A single trial per task cannot separate documentation effects from model
-variation. The coder uses a provider-default model, so compare the model
-recorded
+variation. The coder uses a provider-default model, so compare the model recorded
 in worker evidence, not just the worker label. The source archive omits Git
 metadata and dependencies; this did not test a clean bootstrap, a successful
 implementation, live authentication, deployment, or a native device build.
