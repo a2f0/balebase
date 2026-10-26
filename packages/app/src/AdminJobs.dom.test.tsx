@@ -269,3 +269,35 @@ it("opens a requested run inline immediately and resets older filtered history",
   await act(async () => button("Run job").click());
   expect(button("Hide run").getAttribute("aria-expanded")).toBe("true");
 });
+
+it("does not restore a requested run after history has shown it and newer runs replace it", async () => {
+  let historyRuns = [queued];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (init?.method === "POST")
+      return Response.json({ run: queued }, { status: 202 });
+    if (url.pathname.endsWith("/runs/run-1"))
+      return Response.json({ run: queued, logs: [], nextBefore: null });
+    if (url.pathname.endsWith("/runs"))
+      return Response.json({ runs: historyRuns, nextCursor: null });
+    return Response.json({ jobs: definitions });
+  }) as typeof fetch;
+  await render();
+  await act(async () => button("Run now").click());
+  await act(async () => button("Run job").click());
+  expect(container.textContent).toContain("Run ID: run-1");
+  historyRuns = [{ ...queued, runId: "newer-run", status: "succeeded" }];
+  const filter = container.querySelector("select");
+  if (!filter) throw new Error("Missing job filter");
+  for (const value of ["purgeRequestedUsers", ""]) {
+    await act(async () => {
+      filter.value = value;
+      filter.dispatchEvent(new window.Event("change", { bubbles: true }));
+    });
+  }
+  expect(container.querySelectorAll(".adminJobHistoryItem")).toHaveLength(1);
+  expect(
+    container.querySelector(".adminJobHistoryItem")?.textContent,
+  ).toContain("succeeded");
+  expect(container.textContent).not.toContain("queued · manual");
+});

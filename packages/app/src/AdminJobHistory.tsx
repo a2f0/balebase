@@ -64,19 +64,24 @@ function useJobHistory(
 
 export function AdminJobHistory({ jobs, initialRun }: Props) {
   const [selectedRun, setSelectedRun] = useState(initialRun?.runId);
+  const [pendingRun, setPendingRun] = useState(initialRun);
   const [jobId, setJobId] = useState("");
   const [status, setStatus] = useState<JobRun["status"] | "">("");
   const [cursor, setCursor] = useState("");
   const { data, error } = useJobHistory(jobId, status, cursor);
+  useEffect(() => {
+    if (data?.runs.some((run) => run.runId === pendingRun?.runId))
+      setPendingRun(undefined);
+  }, [data, pendingRun]);
   const runs = data?.runs ?? [];
   // A newly requested run is visible immediately, even before history refreshes.
   const visibleRuns =
-    initialRun &&
+    pendingRun &&
     !jobId &&
     !status &&
     !cursor &&
-    !runs.some((run) => run.runId === initialRun.runId)
-      ? [initialRun, ...runs]
+    !runs.some((run) => run.runId === pendingRun.runId)
+      ? [pendingRun, ...runs]
       : runs;
   return (
     <PageSection title="Run history">
