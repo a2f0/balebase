@@ -172,6 +172,10 @@ status, attempts, timestamps, and provider error codes; look for
 when the provider or queue is unavailable. Users can retry a failed job with
 **Sync now**. Do not delete job rows or advance cursors to force completion.
 
+Disconnecting a bank cancels waiting syncs, including backoff and expired leases.
+Only a consumer with a live lease temporarily blocks disconnection. Retrying a
+disconnect also finishes local cleanup when Plaid has already removed the Item.
+
 Older installed clients may still use the synchronous `/sync` endpoint. It
 starts the same durable job and waits briefly for completed counts; if the job
 continues, it returns a message explaining that background sync is still active.

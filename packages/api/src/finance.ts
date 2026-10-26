@@ -356,21 +356,7 @@ async function disconnectConnection(
     requireEncryptionKey(context.env),
     `${organizationId}:${item.id}`,
   );
-  // Claim disconnection atomically against enqueuers and consumers.
-  const claimed =
-    await context.env.DB.prepare(`UPDATE plaid_items SET status = 'disconnecting', disconnect_lease_until = ?
-    WHERE id = ? AND (status IN ('active', 'error') OR
-      (status = 'disconnecting' AND disconnect_lease_until <= ?)) AND NOT EXISTS
-      (SELECT 1 FROM finance_sync_jobs WHERE connection_id = ? AND status IN ('queued', 'running'))
-    RETURNING id`)
-      .bind(
-        new Date(Date.now() + 20 * 60_000).toISOString(),
-        item.id,
-        new Date().toISOString(),
-        item.id,
-      )
-      .first();
-  if (!claimed)
+  if (!(await claimDisconnection(context.env.DB, item.id)))
     return context.json(
       {
         error:
@@ -386,21 +372,68 @@ async function disconnectConnection(
     // The earlier request may have removed the remote Item before its local
     // commit was interrupted. An expired claim can finish that disconnection.
     const alreadyRemoved =
-      item.status === "disconnecting" &&
       error instanceof PlaidApiError &&
       (error.code === "ITEM_NOT_FOUND" ||
-        error.code === "INVALID_ACCESS_TOKEN");
+        (item.status === "disconnecting" &&
+          error.code === "INVALID_ACCESS_TOKEN"));
     if (!alreadyRemoved) {
-      await context.env.DB.prepare(
-        "UPDATE plaid_items SET status = ?, disconnect_lease_until = NULL WHERE id = ? AND status = 'disconnecting'",
-      )
-        .bind(item.status === "disconnecting" ? "error" : item.status, item.id)
-        .run();
+      await releaseDisconnectionClaim(context.env.DB, item, error);
       throw error;
     }
   }
-  await recordDisconnection(context, item);
+  if (!(await recordDisconnection(context, item)))
+    return context.json(
+      { error: "Connection changed. Reload and try again." },
+      409,
+    );
   return context.body(null, 204);
+}
+
+async function releaseDisconnectionClaim(
+  database: D1Database,
+  item: { id: string; status: string },
+  error: unknown,
+) {
+  await database
+    .prepare(
+      `UPDATE plaid_items SET status = ?, disconnect_lease_until = NULL,
+        error_code = CASE WHEN ? THEN ? ELSE error_code END,
+        error_message = CASE WHEN ? THEN ? ELSE error_message END
+        WHERE id = ? AND status = 'disconnecting'`,
+    )
+    .bind(
+      item.status === "disconnecting" ? "error" : item.status,
+      item.status === "disconnecting" ? 1 : 0,
+      error instanceof PlaidApiError ? error.code : "DISCONNECT_FAILED",
+      item.status === "disconnecting" ? 1 : 0,
+      error instanceof PlaidApiError
+        ? error.message
+        : "Could not disconnect this bank. Try again.",
+      item.id,
+    )
+    .run();
+}
+
+/** Waiting jobs must not prevent revoking bank access during an outage. Only a
+ * live consumer blocks the claim; the same transaction cancels all other work. */
+async function claimDisconnection(database: D1Database, id: string) {
+  const now = new Date().toISOString();
+  const [claimed] = await database.batch([
+    database
+      .prepare(`UPDATE plaid_items SET status = 'disconnecting', disconnect_lease_until = ?
+      WHERE id = ? AND (status IN ('active', 'error') OR
+        (status = 'disconnecting' AND disconnect_lease_until <= ?)) AND NOT EXISTS
+        (SELECT 1 FROM finance_sync_jobs WHERE connection_id = ?
+          AND status = 'running' AND lease_until > ?)`)
+      .bind(new Date(Date.now() + 20 * 60_000).toISOString(), id, now, id, now),
+    database
+      .prepare(`UPDATE finance_sync_jobs SET status = 'cancelled', finished_at = ?,
+      lease_until = NULL, error_code = 'SYNC_CANCELLED',
+      error_message = 'Cancelled by a disconnect request.'
+      WHERE connection_id = ? AND status IN ('queued', 'running') AND changes() > 0`)
+      .bind(now, id),
+  ]);
+  return Boolean(claimed?.meta.changes);
 }
 
 async function recordDisconnection(
@@ -408,7 +441,7 @@ async function recordDisconnection(
   item: NonNullable<Awaited<ReturnType<typeof findItem>>>,
 ) {
   const now = new Date().toISOString();
-  await activityBatch(context.env.DB, context.get("apiKey"), [
+  const [result] = await activityBatch(context.env.DB, context.get("apiKey"), [
     context.env.DB.prepare(
       `UPDATE plaid_items SET access_token_ciphertext = '', access_token_iv = '', cursor = NULL,
       status = 'disconnected', daily_sync = 0, disconnect_lease_until = NULL,
@@ -433,6 +466,7 @@ async function recordDisconnection(
       { sql: "changes() > 0", bindings: [] },
     ),
   ]);
+  return Boolean(result?.meta.changes);
 }
 
 async function deleteConnectionData(context: FinanceContext) {

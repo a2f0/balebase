@@ -228,7 +228,7 @@ function ConnectionActions({
         {syncPending(connection.syncStatus) ? "Syncing…" : "Sync now"}
       </Button>
       <Button
-        disabled={busy || syncPending(connection.syncStatus)}
+        disabled={busy}
         icon="unlink"
         onClick={() => void onDisconnect(connection)}
         size="sm"

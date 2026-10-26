@@ -2270,3 +2270,62 @@ it.each(["ITEM_NOT_FOUND", "INVALID_ACCESS_TOKEN"])(
     ).toEqual({ count: 1 });
   },
 );
+
+it.each(["queued", "backoff", "expired"])(
+  "disconnects by cancelling %s work without requiring queue delivery",
+  async (state) => {
+    const fixture = await queuedFixture();
+    const { body: job } = await fixture.request<{ id: string }>(
+      "/sync-jobs",
+      "POST",
+    );
+    if (state === "backoff")
+      fixture.database
+        .query("UPDATE finance_sync_jobs SET available_at = ?")
+        .run(new Date(Date.now() + 8 * 60_000).toISOString());
+    if (state === "expired")
+      fixture.database
+        .query(
+          "UPDATE finance_sync_jobs SET status = 'running', lease_until = ?",
+        )
+        .run(new Date(Date.now() - 60_000).toISOString());
+    expect((await fixture.request("", "DELETE")).response.status).toBe(204);
+    expect(
+      fixture.database
+        .query("SELECT status, error_code, lease_until FROM finance_sync_jobs")
+        .get(),
+    ).toEqual({
+      status: "cancelled",
+      error_code: "SYNC_CANCELLED",
+      lease_until: null,
+    });
+    let calls = 0;
+    await fixture.deliver(job.id, async <T>() => {
+      calls++;
+      return transactionPage() as T;
+    });
+    expect(calls).toBe(0);
+    expect((await fixture.request("/data", "DELETE")).response.status).toBe(
+      204,
+    );
+  },
+);
+
+it("finishes disconnecting after a lost Plaid removal response", async () => {
+  const fixture = await queuedFixture();
+  let calls = 0;
+  const app = testApp("org_user-1", async () => {
+    if (++calls === 1) throw new Error("Response lost after removal");
+    throw new PlaidApiError("Already removed", "ITEM_NOT_FOUND", 400);
+  });
+  const disconnect = () =>
+    jsonRequest(app, fixture.bindings, `/connections/${fixture.id}`, "DELETE");
+  expect((await disconnect()).response.status).toBe(500);
+  expect(
+    fixture.database.query("SELECT status FROM plaid_items").get(),
+  ).toEqual({ status: "active" });
+  expect((await disconnect()).response.status).toBe(204);
+  expect(
+    fixture.database.query("SELECT status FROM plaid_items").get(),
+  ).toEqual({ status: "disconnected" });
+});

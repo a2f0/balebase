@@ -30,7 +30,7 @@ export function confirmDisconnect(connection: Institution) {
   return confirmDialog({
     confirmLabel: "Disconnect",
     message:
-      "Plaid access will be revoked, but imported transactions and annotations will remain.",
+      "Plaid access will be revoked and waiting syncs cancelled. Imported transactions and annotations will remain.",
     title: `Disconnect ${institutionName(connection)}?`,
     tone: "danger",
   });

@@ -116,7 +116,7 @@ describe("Finance overview notices", () => {
 });
 
 describe("Finance connections", () => {
-  it("shows a pending daily sync and disables competing actions", () => {
+  it("shows a pending daily sync, disables duplicate syncs, and permits disconnect", () => {
     const markup = renderFinance(
       {
         ...populatedData,
@@ -127,7 +127,7 @@ describe("Finance connections", () => {
     expect(markup).toContain("Daily sync");
     expect(markup).toContain("Running");
     expect(markup).toContain("Syncing…");
-    expect(markup.match(/<button[^>]*disabled=""/g)).toHaveLength(2);
+    expect(markup.match(/<button[^>]*disabled=""/g)).toHaveLength(1);
   });
 
   it("offers retry for an interrupted disconnect and prevents syncing it", () => {

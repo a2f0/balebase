@@ -27,6 +27,7 @@ CREATE TABLE finance_sync_jobs (
 CREATE UNIQUE INDEX finance_sync_jobs_active ON finance_sync_jobs(connection_id)
   WHERE status IN ('queued', 'running');
 CREATE INDEX finance_sync_jobs_connection ON finance_sync_jobs(connection_id, created_at DESC);
+CREATE INDEX finance_sync_jobs_organization ON finance_sync_jobs(organization_id);
 CREATE INDEX finance_sync_jobs_pending ON finance_sync_jobs(status, available_at);
 CREATE INDEX plaid_items_daily_sync ON plaid_items(daily_sync, last_daily_sync_date);
 

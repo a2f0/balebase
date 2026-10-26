@@ -132,7 +132,7 @@ function ConnectionActions({
         {syncPending(connection.syncJob?.status) ? "Syncing…" : "Sync now"}
       </Button>
       <Button
-        disabled={busy || syncPending(connection.syncJob?.status)}
+        disabled={busy}
         icon="unlink"
         onClick={() => void disconnect()}
         variant="ghost"
