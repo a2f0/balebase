@@ -251,6 +251,8 @@ it("keeps an accepted sync visible after navigation and polls its saved outcome"
   let requested = false;
   let finished = false;
   let starts = 0;
+  let statusRequests = 0;
+  let detailRequests = 0;
   globalThis.fetch = (async (input, init) => {
     if (init?.method === "POST") {
       expect(String(input)).toEndWith("/connections/item-1/sync-jobs");
@@ -258,6 +260,8 @@ it("keeps an accepted sync visible after navigation and polls its saved outcome"
       starts++;
       return Response.json(job, { status: 202 });
     }
+    if (String(input).endsWith("/sync-status")) statusRequests++;
+    else detailRequests++;
     return Response.json(
       detail({
         syncJob: requested
@@ -280,6 +284,12 @@ it("keeps an accepted sync visible after navigation and polls its saved outcome"
   root = undefined;
   await mount();
   expect(container.textContent).toContain("Running");
+  const loaded = detailRequests;
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 3150));
+  });
+  expect(statusRequests).toBe(1);
+  expect(detailRequests).toBe(loaded);
   finished = true;
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 3150));

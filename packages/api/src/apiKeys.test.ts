@@ -1315,6 +1315,12 @@ function toD1(database: Database) {
     prepare: (query: string) => {
       let values: SQLQueryBindings[] = [];
       const run = () => {
+        if (/^\s*SELECT\b/i.test(query))
+          return {
+            meta: { changes: 0 },
+            results: database.query(query).all(...values),
+            success: true,
+          };
         const result = database.query(query).run(...values);
         return {
           meta: { changes: result.changes },
@@ -1387,4 +1393,37 @@ it("attributes daily-sync settings to API keys and protects bank activity with F
     (await f.withKey<{ events: unknown[] }>(read.token, "GET", historyPath))
       .body.events,
   ).toEqual([]);
+});
+
+it("queues MCP finance sync immediately and exposes saved status to readers", async () => {
+  const f = await createFixture();
+  const read = await f.createKey("read");
+  const write = await f.createKey("write");
+  f.database
+    .query(`INSERT INTO plaid_items
+    (id, organization_id, plaid_item_id, access_token_ciphertext, access_token_iv, institution_name, created_by, created_at, updated_at)
+    VALUES ('sync-item', ?, 'sync-plaid', '', '', 'Example bank', ?, ?, ?)`)
+    .run(f.organizationId, f.userId, now(), now());
+  const sent: { jobId: string }[] = [];
+  f.bindings.FINANCE_SYNC_QUEUE = {
+    send: async (body: { jobId: string }) => {
+      sent.push(body);
+    },
+  } as unknown as Queue<{ jobId: string }>;
+  const result = await f.callTool<{
+    content: Array<{ text: string }>;
+    isError?: boolean;
+  }>(write.token, "sync_finance_connection", { id: "sync-item" });
+  expect(result.content[0]?.text).toContain('"queued"');
+  const job = JSON.parse(result.content[0]?.text ?? "");
+  expect(job.status).toBe("queued");
+  expect(sent).toEqual([{ jobId: job.id }]);
+  const status = await f.callTool<{ content: Array<{ text: string }> }>(
+    read.token,
+    "get_finance_sync_status",
+    { id: "sync-item" },
+  );
+  expect(JSON.parse(status.content[0]?.text ?? "")).toMatchObject({
+    connection: { syncJob: { id: job.id, status: "queued" } },
+  });
 });

@@ -284,6 +284,19 @@ export const financeRoutes = {
     path: "/api/finance/connections/:id/sync-jobs",
     response: FinanceSyncJobSchema,
   }),
+  syncStatus: route({
+    method: "GET",
+    path: "/api/finance/connections/:id/sync-status",
+    response: z.object({
+      connection: FinanceConnectionDetailSchema.shape.connection.pick({
+        status: true,
+        errorCode: true,
+        errorMessage: true,
+        lastSyncedAt: true,
+        syncJob: true,
+      }),
+    }),
+  }),
   updateSyncSettings: route({
     method: "PATCH",
     path: "/api/finance/connections/:id/sync-settings",

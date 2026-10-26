@@ -121,7 +121,11 @@ function ConnectionActions({
     <>
       <Button
         busy={busy}
-        disabled={busy || syncPending(connection.syncJob?.status)}
+        disabled={
+          busy ||
+          connection.status === "disconnecting" ||
+          syncPending(connection.syncJob?.status)
+        }
         icon="refresh"
         onClick={() => void sync()}
       >
@@ -133,7 +137,9 @@ function ConnectionActions({
         onClick={() => void disconnect()}
         variant="ghost"
       >
-        Disconnect
+        {connection.status === "disconnecting"
+          ? "Retry disconnect"
+          : "Disconnect"}
       </Button>
     </>
   );
@@ -267,9 +273,31 @@ function useConnection(id: string, onNavigate: (path: string) => void) {
       } catch (cause) {
         if (active) setError(message(cause));
       }
-      if (active && pending) timer = setTimeout(() => void load(), 3000);
     }
-    void load();
+    async function poll() {
+      try {
+        const next = await api.finance.syncStatus(id);
+        if (!active) return;
+        if (syncPending(next.connection.syncJob?.status)) {
+          setData(
+            (current) =>
+              current && {
+                ...current,
+                connection: { ...current.connection, ...next.connection },
+              },
+          );
+          setError(undefined);
+        } else {
+          // Refresh account balances and history only when the job finishes.
+          await load();
+        }
+      } catch (cause) {
+        if (active) setError(message(cause));
+      }
+      if (active) timer = setTimeout(() => void poll(), 3000);
+    }
+    if (pending) timer = setTimeout(() => void poll(), 3000);
+    else void load();
     return () => {
       active = false;
       clearTimeout(timer);

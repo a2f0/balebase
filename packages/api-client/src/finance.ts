@@ -32,6 +32,11 @@ const endpoints = {
     path: "/api/finance/connections/:id/sync-jobs",
     response: "json",
   }),
+  syncStatus: endpoint<typeof financeRoutes.syncStatus>({
+    method: "GET",
+    path: "/api/finance/connections/:id/sync-status",
+    response: "json",
+  }),
   updateSyncSettings: endpoint<typeof financeRoutes.updateSyncSettings>({
     method: "PATCH",
     path: "/api/finance/connections/:id/sync-settings",
@@ -133,6 +138,7 @@ export interface FinanceFilters {
 
 export function financeApi(transport: Transport) {
   return {
+    ...financeSyncApi(transport),
     /** Connections, accounts, categories, and a page of transactions. */
     data(filters?: FinanceFilters, cursor?: string) {
       return transport.call(endpoints.listing, {
@@ -165,18 +171,6 @@ export function financeApi(transport: Transport) {
     },
     connection(id: string) {
       return transport.call(endpoints.connection, { params: { id } });
-    },
-    startSync(id: string) {
-      return transport.call(endpoints.startSync, { params: { id } });
-    },
-    updateSyncSettings(id: string, dailySync: boolean) {
-      return transport.call(endpoints.updateSyncSettings, {
-        params: { id },
-        body: { dailySync },
-      });
-    },
-    syncConnection(id: string) {
-      return transport.call(endpoints.syncConnection, { params: { id } });
     },
     disconnectConnection(id: string) {
       return transport.call(endpoints.disconnectConnection, {
@@ -242,6 +236,26 @@ export function financeApi(transport: Transport) {
       return transport.call(endpoints.expenseReport, {
         query: { from: range.from || undefined, to: range.to || undefined },
       });
+    },
+  };
+}
+
+function financeSyncApi(transport: Transport) {
+  return {
+    startSync(id: string) {
+      return transport.call(endpoints.startSync, { params: { id } });
+    },
+    syncStatus(id: string) {
+      return transport.call(endpoints.syncStatus, { params: { id } });
+    },
+    updateSyncSettings(id: string, dailySync: boolean) {
+      return transport.call(endpoints.updateSyncSettings, {
+        params: { id },
+        body: { dailySync },
+      });
+    },
+    syncConnection(id: string) {
+      return transport.call(endpoints.syncConnection, { params: { id } });
     },
   };
 }

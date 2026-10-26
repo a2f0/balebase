@@ -1,7 +1,12 @@
 import { financeRoutes } from "@balebase/validators/finance";
 import { activityBatch, activityStatement, requestActor } from "./activity";
 import type { FinanceContext } from "./financeContext";
-import { enqueueSync, type SyncJobRow, toSyncJob } from "./financeSyncJobs";
+import {
+  enqueueSync,
+  latestSyncJob,
+  type SyncJobRow,
+  toSyncJob,
+} from "./financeSyncJobs";
 import { respond } from "./respond";
 
 async function requestSync(context: FinanceContext) {
@@ -12,6 +17,30 @@ async function requestSync(context: FinanceContext) {
     "manual",
     requestActor(context),
   );
+}
+
+/** Poll metadata without loading accounts or scanning transaction history. */
+export async function connectionSyncStatus(context: FinanceContext) {
+  const id = context.req.param("id") ?? "";
+  const row = await context.env.DB.prepare(`SELECT status, error_code,
+    error_message, last_synced_at FROM plaid_items WHERE id = ? AND organization_id = ?`)
+    .bind(id, context.get("organizationId"))
+    .first<{
+      status: string;
+      error_code: string | null;
+      error_message: string | null;
+      last_synced_at: string | null;
+    }>();
+  if (!row) return context.json({ error: "Connection not found." }, 404);
+  return respond(context, financeRoutes.syncStatus, {
+    connection: {
+      status: row.status,
+      errorCode: row.error_code,
+      errorMessage: row.error_message,
+      lastSyncedAt: row.last_synced_at,
+      syncJob: await latestSyncJob(context.env.DB, id),
+    },
+  });
 }
 
 export async function startConnectionSync(context: FinanceContext) {

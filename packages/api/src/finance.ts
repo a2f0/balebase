@@ -30,6 +30,7 @@ import { financeListingFilters } from "./financeListingFilters";
 import { expenseReport } from "./financeReports";
 import type { PlaidItemRow } from "./financeSync";
 import {
+  connectionSyncStatus,
   legacySyncConnection,
   startConnectionSync,
   updateSyncSettings,
@@ -126,6 +127,7 @@ export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
   );
   finance.post("/connections/:id/sync", legacySyncConnection);
   finance.post("/connections/:id/sync-jobs", startConnectionSync);
+  finance.get("/connections/:id/sync-status", connectionSyncStatus);
   finance.patch("/connections/:id/sync-settings", updateSyncSettings);
   finance.get("/connections/:id", connectionDetail);
   finance.delete("/connections/:id", async (context) =>
@@ -381,12 +383,21 @@ async function disconnectConnection(
       access_token: accessToken,
     });
   } catch (error) {
-    await context.env.DB.prepare(
-      "UPDATE plaid_items SET status = ?, disconnect_lease_until = NULL WHERE id = ? AND status = 'disconnecting'",
-    )
-      .bind(item.status === "disconnecting" ? "error" : item.status, item.id)
-      .run();
-    throw error;
+    // The earlier request may have removed the remote Item before its local
+    // commit was interrupted. An expired claim can finish that disconnection.
+    const alreadyRemoved =
+      item.status === "disconnecting" &&
+      error instanceof PlaidApiError &&
+      (error.code === "ITEM_NOT_FOUND" ||
+        error.code === "INVALID_ACCESS_TOKEN");
+    if (!alreadyRemoved) {
+      await context.env.DB.prepare(
+        "UPDATE plaid_items SET status = ?, disconnect_lease_until = NULL WHERE id = ? AND status = 'disconnecting'",
+      )
+        .bind(item.status === "disconnecting" ? "error" : item.status, item.id)
+        .run();
+      throw error;
+    }
   }
   await recordDisconnection(context, item);
   return context.body(null, 204);

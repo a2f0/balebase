@@ -216,7 +216,11 @@ function ConnectionActions({
   return (
     <div className="rowActions financeConnectionActions">
       <Button
-        disabled={busy || syncPending(connection.syncStatus)}
+        disabled={
+          busy ||
+          connection.status === "disconnecting" ||
+          syncPending(connection.syncStatus)
+        }
         icon="refresh"
         onClick={() => void onSync(connection.id)}
         size="sm"
@@ -230,7 +234,9 @@ function ConnectionActions({
         size="sm"
         variant="ghost"
       >
-        Disconnect
+        {connection.status === "disconnecting"
+          ? "Retry disconnect"
+          : "Disconnect"}
       </Button>
     </div>
   );

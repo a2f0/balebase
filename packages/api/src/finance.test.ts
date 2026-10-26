@@ -1777,6 +1777,16 @@ describe("durable finance sync", () => {
     );
     expect(first.response.status).toBe(202);
     expect(first.body.status).toBe("queued");
+    expect((await fixture.request("/sync-status")).body).toMatchObject({
+      connection: { syncJob: { id: first.body.id, status: "queued" } },
+    });
+    const foreign = await jsonRequest(
+      testApp("org-other", fixture.requestPlaid),
+      fixture.bindings,
+      `/connections/${fixture.id}/sync-status`,
+      "GET",
+    );
+    expect(foreign.response.status).toBe(404);
     expect(
       fixture.database
         .query("SELECT count(*) AS count FROM plaid_accounts")
@@ -1797,6 +1807,15 @@ describe("durable finance sync", () => {
       added: 1,
     });
     expect(detail.body.connection.lastSyncedAt).toBeString();
+    const status = await fixture.request("/sync-status");
+    expect(status.body).toMatchObject({
+      connection: {
+        syncJob: { status: "succeeded", added: 1 },
+        lastSyncedAt: detail.body.connection.lastSyncedAt,
+      },
+    });
+    expect(status.body).not.toHaveProperty("accounts");
+    expect(status.body).not.toHaveProperty("connection.transactions");
     expect(
       fixture.database
         .query("SELECT count(*) AS count FROM plaid_transactions")
@@ -2203,3 +2222,51 @@ it("records connection changes in shared activity with Finance reader permission
       .all(),
   ).toEqual([]);
 });
+
+it.each(["ITEM_NOT_FOUND", "INVALID_ACCESS_TOKEN"])(
+  "finishes an expired disconnect after Plaid already removed the Item (%s)",
+  async (code) => {
+    const fixture = await queuedFixture();
+    await fixture.request("/sync-settings", "PATCH", { dailySync: true });
+    fixture.database
+      .query(`UPDATE plaid_items SET status = 'disconnecting',
+      disconnect_lease_until = ?`)
+      .run(new Date(Date.now() + 60_000).toISOString());
+    let removals = 0;
+    const app = testApp("org_user-1", async () => {
+      removals++;
+      throw new PlaidApiError("Item already removed", code, 400);
+    });
+    const disconnect = () =>
+      jsonRequest(
+        app,
+        fixture.bindings,
+        `/connections/${fixture.id}`,
+        "DELETE",
+      );
+    expect((await disconnect()).response.status).toBe(409);
+    expect(removals).toBe(0);
+    fixture.database
+      .query("UPDATE plaid_items SET disconnect_lease_until = ?")
+      .run(new Date(Date.now() - 60_000).toISOString());
+    expect((await disconnect()).response.status).toBe(204);
+    expect(removals).toBe(1);
+    expect(
+      fixture.database
+        .query(`SELECT status, daily_sync, access_token_ciphertext,
+      disconnect_lease_until FROM plaid_items`)
+        .get(),
+    ).toEqual({
+      status: "disconnected",
+      daily_sync: 0,
+      access_token_ciphertext: "",
+      disconnect_lease_until: null,
+    });
+    expect(
+      fixture.database
+        .query(`SELECT count(*) AS count FROM activity_events
+      WHERE action = 'finance.connection_disconnected'`)
+        .get(),
+    ).toEqual({ count: 1 });
+  },
+);

@@ -174,16 +174,32 @@ function useSyncPolling(
   load: () => Promise<void>,
   busy: boolean,
 ) {
-  const pending =
-    data?.connections.some((connection) =>
-      syncPending(connection.syncStatus),
-    ) ?? false;
+  const pendingIds = JSON.stringify(
+    data?.connections
+      .filter((connection) => syncPending(connection.syncStatus))
+      .map((connection) => connection.id) ?? [],
+  );
   useEffect(() => {
-    if (!pending || busy) return;
+    const ids = JSON.parse(pendingIds) as string[];
+    if (!ids.length || busy) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
-      await load();
+      try {
+        const statuses = await Promise.all(
+          ids.map((id) => api.finance.syncStatus(id)),
+        );
+        // Reload history once a job finishes; retries only read small metadata.
+        if (
+          active &&
+          statuses.some(
+            ({ connection }) => !syncPending(connection.syncJob?.status),
+          )
+        )
+          await load();
+      } catch {
+        // Keep the saved pending state and retry after temporary request failures.
+      }
       if (active) timer = setTimeout(() => void poll(), 3000);
     }
     timer = setTimeout(() => void poll(), 3000);
@@ -191,5 +207,5 @@ function useSyncPolling(
       active = false;
       clearTimeout(timer);
     };
-  }, [pending, load, busy]);
+  }, [pendingIds, load, busy]);
 }
