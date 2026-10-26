@@ -70,3 +70,16 @@ it("passes history filters and log cursors through the typed client", async () =
     "https://api.test/api/admin/jobs/runs/run-1?before=123",
   ]);
 });
+
+it("requests the full job catalog for updated clients", async () => {
+  let requested = "";
+  const api = new ApiClient({
+    baseUrl: "https://api.test",
+    fetch: async (url) => {
+      requested = url;
+      return Response.json({ jobs: [] });
+    },
+  });
+  expect(await api.adminJobs.list()).toEqual([]);
+  expect(requested).toBe("https://api.test/api/admin/jobs?all=true");
+});

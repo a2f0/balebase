@@ -2032,6 +2032,13 @@ describe("durable finance sync", () => {
     await fixture.deliver(job.id, plaid);
     await fixture.deliver(job.id, plaid);
     expect(cursors).toEqual([undefined, "page-1", undefined, "page-1"]);
+    const history = await jobRunDetail(fixture.bindings.DB, job.id);
+    expect(history?.logs.map((log) => log.message)).toContain(
+      "Bank page saved.",
+    );
+    expect(history?.logs.map((log) => log.message)).toContain(
+      "Bank pagination restarted.",
+    );
     expect(
       fixture.database
         .query("SELECT status, added, restarts FROM job_runs")

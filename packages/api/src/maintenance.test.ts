@@ -626,6 +626,10 @@ it("keeps hourly scheduling idempotent and gates cleanup on retention even when 
   );
   const cleanup = rows.find((row) => row.job_id === "purgeDeletedObjects");
   if (!retention || !cleanup) throw new Error("Missing scheduled jobs");
+  f.messages.length = 0;
+  await recoverJobs(f.bindings);
+  expect(f.messages).toContain(retention.id);
+  expect(f.messages).not.toContain(cleanup.id);
   expect(await claimJob(f.bindings.DB, cleanup.id)).toBeNull();
   const parent = await claimJob(f.bindings.DB, retention.id);
   if (!parent) throw new Error("Missing retention claim");
@@ -1008,4 +1012,25 @@ it("preserves completed results for older apps and never reports queued work as 
     jobs: { id: string }[];
   };
   expect(catalog.jobs.map((job) => job.id)).toContain("syncFinanceConnection");
+});
+
+it("tells older clients that queued work continues without claiming completion", async () => {
+  const f = await fixture();
+  const legacy = await import("./legacyJobRun");
+  const wait = spyOn(legacy, "waitForLegacyJob").mockResolvedValue(null);
+  try {
+    const response = await f.request(
+      "/jobs/purgeRequestedUsers/run",
+      post("purgeRequestedUsers"),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: expect.stringContaining("continues in the background"),
+    });
+    expect(f.database.query("SELECT status FROM job_runs").get()).toEqual({
+      status: "queued",
+    });
+  } finally {
+    wait.mockRestore();
+  }
 });

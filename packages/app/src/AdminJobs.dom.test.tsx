@@ -158,6 +158,7 @@ it("queues confirmed maintenance, exposes persisted output after remount, and fi
   );
   await act(async () => button("Run job").click());
   expect(container.textContent).toContain("Run ID: run-1");
+  expect(container.textContent).not.toContain("Loading run history");
   expect(container.textContent).toContain("Job queued.");
   expect(container.textContent).not.toContain("Job completed.");
   completed = true;

@@ -158,7 +158,7 @@ own policies. Actor IDs and run creation are committed together, and lifecycle
 logs are written by database triggers in the same transaction as state changes.
 
 Saved output uses named counters and flags: purge counts, blocked user counts,
-reconciled subscriptions, contract reminders, screening/notification counts, and
+subscriptions checked, contract reminders, screening/notification counts, and
 bank import counts. Logs retain lifecycle changes, attempts, retries, page
 checkpoints, cancellations, and outcomes. Provider payloads, tokens, bank cursors,
 and raw exception messages are excluded from admin responses and saved logs.

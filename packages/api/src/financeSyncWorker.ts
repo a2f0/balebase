@@ -1,6 +1,6 @@
 import { type PlaidItemRow, syncPlaidPage } from "./financeSync";
 import type { SyncJobRow } from "./financeSyncJobs";
-import { dispatchJob, type JobRow } from "./jobRuns";
+import { dispatchJob } from "./jobRuns";
 import {
   PlaidApiError,
   type PlaidRequest,
@@ -10,10 +10,9 @@ import type { Bindings } from "./types";
 
 export async function runSyncPage(
   env: Bindings,
-  row: JobRow,
+  job: SyncJobRow,
   requestPlaid: PlaidRequest,
 ) {
-  const job = row as SyncJobRow;
   const now = new Date().toISOString();
   const id = job.id;
   const item = await env.DB.prepare(`SELECT item.* FROM plaid_items item

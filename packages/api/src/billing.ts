@@ -604,7 +604,7 @@ export async function reconcileSubscriptionSeats(
     }
   }
   if (firstFailure !== undefined) throw firstFailure;
-  return { reconciled: rows.results.length };
+  return { checked: rows.results.length };
 }
 
 export async function reconcilePendingCheckoutEntitlements(

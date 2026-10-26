@@ -12,13 +12,15 @@ export interface SyncJobRow extends JobRow {
   connection_id: string;
   organization_id: string;
   source: FinanceSyncJob["source"];
-  initial_cursor: string | null;
-  cursor: string | null;
-  added: number;
-  modified: number;
-  removed: number;
-  pages: number;
-  restarts: number;
+}
+
+export function isSyncJob(job: JobRow): job is SyncJobRow {
+  return (
+    job.job_id === "syncFinanceConnection" &&
+    job.connection_id !== null &&
+    job.organization_id !== null &&
+    (job.source === "manual" || job.source === "daily")
+  );
 }
 
 export function toSyncJob(row: SyncJobRow): FinanceSyncJob {

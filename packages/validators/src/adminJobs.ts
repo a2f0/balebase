@@ -16,7 +16,7 @@ const JobStatusSchema = z.enum([
   "failed",
   "cancelled",
 ]);
-const JobOutputSchema = z.record(
+export const JobOutputSchema = z.record(
   z.string(),
   z.union([z.number(), z.boolean(), z.string()]),
 );
@@ -40,12 +40,13 @@ const JobRunSchema = z.object({
   output: JobOutputSchema.nullable(),
 });
 export type JobRun = z.infer<typeof JobRunSchema>;
+export const JobLogDetailsSchema = z.record(z.string(), z.unknown());
 const JobLogSchema = z.object({
   id: z.number(),
   occurredAt: z.string(),
   level: z.enum(["info", "warn", "error"]),
   message: z.string(),
-  details: z.record(z.string(), z.unknown()),
+  details: JobLogDetailsSchema,
 });
 
 export const adminJobsRoutes = {
@@ -97,7 +98,7 @@ export const adminJobsRoutes = {
     query: z.object({
       before: z
         .string()
-        .regex(/^\d{1,16}$/)
+        .regex(/^\d{1,15}$/)
         .optional(),
     }),
     response: z.object({

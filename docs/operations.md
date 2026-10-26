@@ -164,8 +164,10 @@ a new run. Finance pages retain their existing retry and checkpoint behavior.
 
 Production's hourly trigger enqueues one run of each maintenance job. Scheduled
 IDs deduplicate repeated cron events, and active jobs are shared with manual
-requests. Deleted-file cleanup waits for audit-retention work to finish, including
-failure, even when queue messages arrive out of order. Every five minutes, both
+requests. Newly scheduled deleted-file cleanup waits for audit-retention work to
+finish, including failure, even when queue messages arrive out of order. An
+already-active manual cleanup is reused and can overlap that retention run;
+existing per-object claims and grace periods still apply. Every five minutes, both
 tiers recover pending deliveries and expired finance leases and remove up to 500
 terminal runs completed more than 30 days ago, cascading their logs. Active runs
 are never expired by history retention. Domain activity history is separate.

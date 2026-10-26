@@ -1,4 +1,4 @@
-import type { JobRun } from "@balebase/validators/adminJobs";
+import { JobOutputSchema, type JobRun } from "@balebase/validators/adminJobs";
 import type { Bindings } from "./types";
 
 export interface JobRow {
@@ -19,6 +19,13 @@ export interface JobRow {
   error_code: string | null;
   error_message: string | null;
   output_json: string | null;
+  initial_cursor: string | null;
+  cursor: string | null;
+  added: number;
+  modified: number;
+  removed: number;
+  pages: number;
+  restarts: number;
 }
 
 export function toJobRun(row: JobRow): JobRun {
@@ -44,7 +51,9 @@ export function toJobRun(row: JobRow): JobRun {
     error: row.error_code
       ? "Job encountered an error; some work may have completed. Review the saved logs before retrying."
       : null,
-    output: row.output_json ? JSON.parse(row.output_json) : null,
+    output: row.output_json
+      ? JobOutputSchema.parse(JSON.parse(row.output_json) as unknown)
+      : null,
   };
 }
 
@@ -53,6 +62,7 @@ export async function dispatchJob(env: Bindings, jobId: string) {
   if (!env.FINANCE_SYNC_QUEUE)
     throw new Error("Background job queue is not configured.");
   try {
+    // The existing wire field is named jobId; it identifies a run, not its job type.
     await env.FINANCE_SYNC_QUEUE.send({ jobId });
   } catch {
     console.error({ event: "job_dispatch_failed", jobId });

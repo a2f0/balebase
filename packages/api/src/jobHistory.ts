@@ -1,4 +1,7 @@
-import type { adminJobsRoutes } from "@balebase/validators/adminJobs";
+import {
+  type adminJobsRoutes,
+  JobLogDetailsSchema,
+} from "@balebase/validators/adminJobs";
 import type { RouteInput, RouteOutput } from "@balebase/validators/route";
 import { type JobRow, toJobRun } from "./jobRuns";
 
@@ -84,7 +87,9 @@ export async function jobRunDetail(
       occurredAt: log.occurred_at,
       level: log.level,
       message: log.message,
-      details: JSON.parse(log.details_json),
+      details: JobLogDetailsSchema.parse(
+        JSON.parse(log.details_json) as unknown,
+      ),
     })),
   } satisfies RouteOutput<typeof adminJobsRoutes.detail>;
 }

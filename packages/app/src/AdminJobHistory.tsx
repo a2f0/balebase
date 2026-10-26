@@ -15,7 +15,6 @@ function useJobHistory(
   jobId: string,
   status: JobRun["status"] | "",
   cursor: string,
-  selectedRun: string | undefined,
 ) {
   const [data, setData] = useState<History>();
   const [error, setError] = useState<string>();
@@ -48,13 +47,12 @@ function useJobHistory(
           if (active) timer = setTimeout(() => void load(), 5000);
         });
     }
-    void selectedRun;
     void load();
     return () => {
       active = false;
       clearTimeout(timer);
     };
-  }, [jobId, status, cursor, selectedRun]);
+  }, [jobId, status, cursor]);
   return { data, error };
 }
 
@@ -62,7 +60,7 @@ export function AdminJobHistory({ jobs, selectedRun, onSelect }: Props) {
   const [jobId, setJobId] = useState("");
   const [status, setStatus] = useState<JobRun["status"] | "">("");
   const [cursor, setCursor] = useState("");
-  const { data, error } = useJobHistory(jobId, status, cursor, selectedRun);
+  const { data, error } = useJobHistory(jobId, status, cursor);
   return (
     <>
       <PageSection title="Run history">

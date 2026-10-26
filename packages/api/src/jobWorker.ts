@@ -1,3 +1,4 @@
+import { isSyncJob } from "./financeSyncJobs";
 import { runSyncPage } from "./financeSyncWorker";
 import { claimJob } from "./jobRuns";
 import { maintenanceTasks, runMaintenanceJob } from "./maintenance";
@@ -12,7 +13,7 @@ export async function consumeJobs(
   for (const message of batch.messages) {
     try {
       const job = await claimJob(env.DB, message.body.jobId);
-      if (job?.job_id === "syncFinanceConnection") {
+      if (job && isSyncJob(job)) {
         await runSyncPage(env, job, requestPlaid);
       } else if (job) {
         const tasks = maintenanceTasks(env);

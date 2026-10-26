@@ -15,6 +15,7 @@ function useRunDetail(runId: string, before: string) {
   const [error, setError] = useState<string>();
   useEffect(() => {
     let active = true;
+    let polling = true;
     let timer: ReturnType<typeof setTimeout>;
     setDetail(undefined);
     function load() {
@@ -22,6 +23,8 @@ function useRunDetail(runId: string, before: string) {
         .detail(runId, before || undefined)
         .then((result) => {
           if (!active) return;
+          polling =
+            result.run.status === "queued" || result.run.status === "running";
           setDetail(result);
           setError(undefined);
         })
@@ -34,7 +37,8 @@ function useRunDetail(runId: string, before: string) {
           );
         })
         .finally(() => {
-          if (active && !before) timer = setTimeout(() => void load(), 5000);
+          if (active && !before && polling)
+            timer = setTimeout(() => void load(), 5000);
         });
     }
     void load();

@@ -133,7 +133,8 @@ export async function enqueueMaintenance(
       AND (id = ? OR status IN ('queued', 'running'))
       ORDER BY created_at DESC, rowid DESC LIMIT 1`).bind(jobId, id),
   ]);
-  const job = results.at(-1)?.results[0] as JobRow;
+  const job = results.at(-1)?.results[0] as JobRow | undefined;
+  if (!job) throw new Error("Maintenance job could not be saved.");
   if (job.status === "queued") await dispatchJob(env, job.id);
   return job;
 }
@@ -195,7 +196,8 @@ export async function runScheduledMaintenance(
     "purgeExpiredFreeAuditRuns",
     source,
   );
-  // Object cleanup waits for the retention run, even if queue messages arrive out of order.
+  // Newly scheduled cleanup waits for retention. An existing active manual run
+  // is reused and can overlap; its per-object claims and grace periods still apply.
   for (const { id } of maintenanceJobs) {
     if (id !== "purgeExpiredFreeAuditRuns")
       await enqueueMaintenance(
