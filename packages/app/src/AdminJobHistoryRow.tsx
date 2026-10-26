@@ -15,7 +15,6 @@ export function AdminJobHistoryRow({
   run: JobRun;
 }) {
   const detailId = useId();
-  const triggerId = `${detailId}-trigger`;
   const createdAt = new Date(run.createdAt).toLocaleString();
   return (
     <div className="adminJobHistoryItem">
@@ -33,13 +32,16 @@ export function AdminJobHistoryRow({
           aria-controls={detailId}
           aria-expanded={expanded}
           aria-label={`${expanded ? "Hide" : "View"} run for ${name} from ${createdAt}`}
-          id={triggerId}
           onClick={onToggle}
         >
           {expanded ? "Hide run" : "View run"}
         </Button>
       </div>
-      <section aria-labelledby={triggerId} hidden={!expanded} id={detailId}>
+      <section
+        aria-label={`Run details for ${name} from ${createdAt}`}
+        hidden={!expanded}
+        id={detailId}
+      >
         {expanded && <AdminJobRun runId={run.runId} />}
       </section>
     </div>

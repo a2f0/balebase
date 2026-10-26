@@ -65,11 +65,14 @@ it("keeps long job descriptions beside actions and expands run details in place"
       }, source);
       await page.waitForSelector(".adminJobHistoryItem");
       const layout = await page.evaluate(() => {
-        const rows = [
-          ...document.querySelectorAll(
-            ".pageSection:first-of-type .adminJobRow",
-          ),
-        ];
+        const availableJobs = [
+          ...document.querySelectorAll(".pageSection"),
+        ].find(
+          (section) =>
+            section.querySelector("h2")?.textContent === "Available jobs",
+        );
+        if (!availableJobs) throw new Error("Missing available jobs section.");
+        const rows = [...availableJobs.querySelectorAll(".adminJobRow")];
         return rows.map((row) => {
           const text = row
             .querySelector(".adminJobSummary")
