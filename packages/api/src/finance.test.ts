@@ -6,8 +6,9 @@ import { findActivity } from "./activity";
 import type { AuthSession } from "./auth";
 import type { AuthVariables } from "./authMiddleware";
 import { createFinanceRouter } from "./finance";
-import { scheduleFinanceSync } from "./financeSyncJobs";
-import { consumeFinanceSync } from "./financeSyncWorker";
+import { jobRunDetail } from "./jobHistory";
+import { scheduleJobs } from "./jobScheduler";
+import { consumeJobs as consumeFinanceSync } from "./jobWorker";
 import {
   PlaidApiError,
   type PlaidRequest,
@@ -1807,6 +1808,20 @@ describe("durable finance sync", () => {
       added: 1,
     });
     expect(detail.body.connection.lastSyncedAt).toBeString();
+    const saved = await jobRunDetail(fixture.bindings.DB, first.body.id);
+    expect(saved?.run).toMatchObject({
+      jobId: "syncFinanceConnection",
+      status: "succeeded",
+      attempts: 1,
+      output: { added: 1, modified: 0, removed: 0, pages: 1, restarts: 0 },
+    });
+    expect(saved?.logs.map((log) => log.message)).toEqual([
+      "Job queued.",
+      "Processing attempt started.",
+      "Job completed.",
+    ]);
+    expect(JSON.stringify(saved)).not.toContain("cursor-test");
+    expect(JSON.stringify(saved)).not.toContain("access-sandbox");
     const status = await fixture.request("/sync-status");
     expect(status.body).toMatchObject({
       connection: {
@@ -1822,9 +1837,7 @@ describe("durable finance sync", () => {
         .get(),
     ).toEqual({ count: 1 });
     expect(
-      fixture.database
-        .query("SELECT requested_by FROM finance_sync_jobs")
-        .get(),
+      fixture.database.query("SELECT requested_by FROM job_runs").get(),
     ).toMatchObject({ requested_by: "user-1" });
   });
 
@@ -1897,54 +1910,48 @@ describe("durable finance sync", () => {
     expect(accepted.response.status).toBe(202);
     expect(fixture.messages).toHaveLength(0);
     fixture.bindings.FINANCE_SYNC_QUEUE = producer;
-    await scheduleFinanceSync(fixture.bindings);
+    await scheduleJobs(fixture.bindings);
     expect(fixture.messages).toEqual([{ jobId: accepted.body.id }]);
     await fixture.deliver(accepted.body.id);
-    expect(
-      fixture.database.query("SELECT status FROM finance_sync_jobs").get(),
-    ).toEqual({ status: "succeeded" });
+    expect(fixture.database.query("SELECT status FROM job_runs").get()).toEqual(
+      { status: "succeeded" },
+    );
   });
 
   it("schedules only opted-in connections once per UTC day and stops future runs when disabled", async () => {
     const fixture = await queuedFixture();
     const today = Date.now();
-    await scheduleFinanceSync(fixture.bindings, today);
+    await scheduleJobs(fixture.bindings, today);
     expect(fixture.messages).toHaveLength(0);
     await fixture.request("/sync-settings", "PATCH", { dailySync: true });
-    await scheduleFinanceSync(fixture.bindings, today);
+    await scheduleJobs(fixture.bindings, today);
     const job = fixture.messages[0];
     if (!job) throw new Error("Expected daily job");
     await fixture.deliver(job.jobId);
-    await scheduleFinanceSync(fixture.bindings, today);
+    await scheduleJobs(fixture.bindings, today);
     expect(
-      fixture.database
-        .query("SELECT count(*) AS count FROM finance_sync_jobs")
-        .get(),
+      fixture.database.query("SELECT count(*) AS count FROM job_runs").get(),
     ).toEqual({ count: 1 });
-    await scheduleFinanceSync(fixture.bindings, today + 86_400_000);
+    await scheduleJobs(fixture.bindings, today + 86_400_000);
     expect(
-      fixture.database
-        .query("SELECT count(*) AS count FROM finance_sync_jobs")
-        .get(),
+      fixture.database.query("SELECT count(*) AS count FROM job_runs").get(),
     ).toEqual({ count: 2 });
     expect(
       fixture.database
-        .query("SELECT source, requested_by FROM finance_sync_jobs LIMIT 1")
+        .query("SELECT source, requested_by FROM job_runs LIMIT 1")
         .get(),
     ).toEqual({ source: "daily", requested_by: null });
     // Let the accepted run finish; disabling changes future scheduling only.
     fixture.database.run(
-      "UPDATE finance_sync_jobs SET available_at = '2000-01-01' WHERE status = 'queued'",
+      "UPDATE job_runs SET available_at = '2000-01-01' WHERE status = 'queued'",
     );
     const next = fixture.messages.find(({ jobId }) => jobId !== job.jobId);
     if (!next) throw new Error("Expected next day's job");
     await fixture.deliver(next.jobId);
     await fixture.request("/sync-settings", "PATCH", { dailySync: false });
-    await scheduleFinanceSync(fixture.bindings, today + 2 * 86_400_000);
+    await scheduleJobs(fixture.bindings, today + 2 * 86_400_000);
     expect(
-      fixture.database
-        .query("SELECT count(*) AS count FROM finance_sync_jobs")
-        .get(),
+      fixture.database.query("SELECT count(*) AS count FROM job_runs").get(),
     ).toEqual({ count: 2 });
   });
 
@@ -2018,16 +2025,23 @@ describe("durable finance sync", () => {
     ).toEqual({ cursor: null });
     // Simulate an isolate disappearing after it acquired the next page.
     fixture.database.run(
-      "UPDATE finance_sync_jobs SET status = 'running', lease_until = '2000-01-01'",
+      "UPDATE job_runs SET status = 'running', lease_until = '2000-01-01'",
     );
-    await scheduleFinanceSync(fixture.bindings);
+    await scheduleJobs(fixture.bindings);
     await fixture.deliver(job.id, plaid);
     await fixture.deliver(job.id, plaid);
     await fixture.deliver(job.id, plaid);
     expect(cursors).toEqual([undefined, "page-1", undefined, "page-1"]);
+    const history = await jobRunDetail(fixture.bindings.DB, job.id);
+    expect(history?.logs.map((log) => log.message)).toContain(
+      "Bank page saved.",
+    );
+    expect(history?.logs.map((log) => log.message)).toContain(
+      "Bank pagination restarted.",
+    );
     expect(
       fixture.database
-        .query("SELECT status, added, restarts FROM finance_sync_jobs")
+        .query("SELECT status, added, restarts FROM job_runs")
         .get(),
     ).toEqual({ status: "succeeded", added: 1, restarts: 1 });
     expect(
@@ -2055,15 +2069,11 @@ describe("durable finance sync", () => {
     await fixture.deliver(job.id, failing);
     expect(calls).toBe(1);
     for (let attempt = 1; attempt < 5; attempt++) {
-      fixture.database.run(
-        "UPDATE finance_sync_jobs SET available_at = '2000-01-01'",
-      );
+      fixture.database.run("UPDATE job_runs SET available_at = '2000-01-01'");
       await fixture.deliver(job.id, failing);
     }
     expect(
-      fixture.database
-        .query("SELECT status, failures FROM finance_sync_jobs")
-        .get(),
+      fixture.database.query("SELECT status, failures FROM job_runs").get(),
     ).toEqual({ status: "failed", failures: 5 });
     expect(
       fixture.database
@@ -2091,11 +2101,11 @@ describe("durable finance sync", () => {
     await fixture.deliver(job.id, async () => {
       throw new Error("Must not contact Plaid");
     });
-    expect(
-      fixture.database.query("SELECT status FROM finance_sync_jobs").get(),
-    ).toEqual({ status: "cancelled" });
+    expect(fixture.database.query("SELECT status FROM job_runs").get()).toEqual(
+      { status: "cancelled" },
+    );
     fixture.messages.length = 0;
-    await scheduleFinanceSync(fixture.bindings);
+    await scheduleJobs(fixture.bindings);
     expect(fixture.messages).toHaveLength(0);
   });
 });
@@ -2123,13 +2133,11 @@ it("keeps legacy sync running during backoff and returns a background status whe
   } finally {
     timer.mockRestore();
   }
-  fixture.database.run(
-    "UPDATE finance_sync_jobs SET available_at = '2000-01-01'",
-  );
+  fixture.database.run("UPDATE job_runs SET available_at = '2000-01-01'");
   await fixture.deliver(job.id);
-  expect(
-    fixture.database.query("SELECT status FROM finance_sync_jobs").get(),
-  ).toEqual({ status: "succeeded" });
+  expect(fixture.database.query("SELECT status FROM job_runs").get()).toEqual({
+    status: "succeeded",
+  });
 });
 
 it.each(["active", "error"])(
@@ -2281,18 +2289,16 @@ it.each(["queued", "backoff", "expired"])(
     );
     if (state === "backoff")
       fixture.database
-        .query("UPDATE finance_sync_jobs SET available_at = ?")
+        .query("UPDATE job_runs SET available_at = ?")
         .run(new Date(Date.now() + 8 * 60_000).toISOString());
     if (state === "expired")
       fixture.database
-        .query(
-          "UPDATE finance_sync_jobs SET status = 'running', lease_until = ?",
-        )
+        .query("UPDATE job_runs SET status = 'running', lease_until = ?")
         .run(new Date(Date.now() - 60_000).toISOString());
     expect((await fixture.request("", "DELETE")).response.status).toBe(204);
     expect(
       fixture.database
-        .query("SELECT status, error_code, lease_until FROM finance_sync_jobs")
+        .query("SELECT status, error_code, lease_until FROM job_runs")
         .get(),
     ).toEqual({
       status: "cancelled",

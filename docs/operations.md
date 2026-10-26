@@ -60,9 +60,9 @@ upload maps before publishing. API deploys build once, upload the resulting
 Reports name it `app:///index.js`, matching Sentry's uploaded artifact.
 Cloudflare's separate source-map upload remains disabled. React and global
 browser failures use an exact generated asset allowlist. The API reports Hono
-unhandled request errors, inbound email failures, and failed scheduled runs;
-errors caught and handled inside individual workflows are not automatically
-collected.
+unhandled request errors, inbound email failures, failed scheduled runs, and
+maintenance job failures; errors caught and handled inside individual workflows
+are not automatically collected.
 
 Google Play and TestFlight release lanes call `build:release android` or
 `build:release ios` before Capacitor sync. Existing installations need a new
@@ -133,6 +133,51 @@ client at `/inbox`. The production tier also needs
 subdomain's Email Routing setup. The Terraform token needs Email Routing Rules
 Write.
 
+## Background jobs and retained output
+
+Migration `0073_unify_job_runs.sql` moves existing finance runs into `job_runs`
+without changing IDs, statuses, checkpoints, leases, retry budgets, or counts.
+It preserves pending queue messages, which still contain only the run ID.
+Imported runs have an explicit import log; historical start times, attempt totals,
+and earlier logs cannot be reconstructed. Processing attempts count claims after
+migration: each bank page is an attempt, and retries add further attempts.
+The existing `FINANCE_SYNC_QUEUE` binding and per-tier queue names now carry both
+maintenance and finance jobs. No additional queue or Terraform resource is needed.
+
+This migration replaces `finance_sync_jobs`; the previous Worker cannot use the
+new schema. Deploy during a maintenance window: pause delivery on that tier's
+existing queue, let active consumers finish (allow 20 minutes for existing
+leases), apply the migration and deploy the new API, then resume queue delivery
+and deploy the app. The normal API deploy applies migrations before publishing.
+Finance/admin job requests can fail during the migration-to-Worker window. If
+publishing fails, keep consumers paused and finish deploying the new API; rolling
+back only the Worker does not restore the old table. Preserve the normal D1
+recovery point if a schema rollback is needed.
+
+Inspect runs, saved output, and paginated logs in `/root/jobs`. Only platform
+admins can read this global history. `job_runs` stores lifecycle state and
+allowlisted output; `job_logs` stores lifecycle messages and safe structured
+context atomically with state changes. Provider cursors remain internal handler
+state. Failed maintenance can have partial effects. If its execution disappears,
+a 20-minute lease expires and the next five-minute scheduler marks it failed with
+`INTERRUPTED`; it is not automatically replayed. Review its effects before starting
+a new run. Finance pages retain their existing retry and checkpoint behavior.
+
+Production's hourly trigger enqueues one run of each maintenance job. Scheduled
+IDs deduplicate repeated cron events, and active jobs are shared with manual
+requests. Newly scheduled deleted-file cleanup waits for audit-retention work to
+finish, including failure, even when queue messages arrive out of order. An
+already-active manual cleanup is reused and can overlap that retention run;
+existing per-object claims and grace periods still apply. Every five minutes, both
+tiers recover pending deliveries and expired finance leases and remove up to 500
+terminal runs completed more than 30 days ago, cascading their logs. Active runs
+are never expired by history retention. Domain activity history is separate.
+
+After deployment, start a small maintenance job, close and reopen the page, and
+verify its queued/running/completed history and named output. Check a manual bank
+sync in the same history, confirm duplicate requests share an active run, and
+verify a non-admin session cannot access run history or details.
+
 ## Finance background sync
 
 Before deploying this change, review and apply each tier's Terraform plan to
@@ -165,9 +210,9 @@ and [queue delivery guarantees](https://developers.cloudflare.com/queues/referen
 Temporary errors use exponential backoff (one, two, four, then eight minutes,
 rounded up to a scheduler pass), with five attempts per page. Expired leases are
 recovered by the scheduler. Failed jobs stay in D1 instead of depending on queue
-message retention or a dead-letter queue. Inspect `finance_sync_jobs` for saved
+message retention or a dead-letter queue. Inspect `job_runs` for saved
 status, attempts, timestamps, and provider error codes; look for
-`finance_sync_dispatch_failed`, `finance_sync_delivery_failed`, or
+`job_dispatch_failed`, `job_delivery_failed`, or
 `finance_sync_attempt_failed` in Workers Logs. A job may remain queued longer
 when the provider or queue is unavailable. Users can retry a failed job with
 **Sync now**. Do not delete job rows or advance cursors to force completion.

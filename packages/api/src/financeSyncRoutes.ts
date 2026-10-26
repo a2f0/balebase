@@ -62,7 +62,7 @@ export async function legacySyncConnection(context: FinanceContext) {
   job = requested;
   for (let poll = 0; poll < 100; poll++) {
     const current: SyncJobRow | null = await context.env.DB.prepare(
-      "SELECT * FROM finance_sync_jobs WHERE id = ?",
+      "SELECT * FROM job_runs WHERE id = ?",
     )
       .bind(job.id)
       .first<SyncJobRow>();

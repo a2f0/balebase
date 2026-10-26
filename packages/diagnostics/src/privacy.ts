@@ -21,6 +21,7 @@ const serverSources = new Set([
   "request-error",
   "email-error",
   "scheduled-error",
+  "job-error",
 ]);
 
 function safeFrame(frame: StackFrame, config: SentryConfig): StackFrame | null {

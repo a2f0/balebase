@@ -4,28 +4,23 @@ import {
   activityBatch,
   activityStatement,
 } from "./activity";
+import { dispatchJob, type JobRow } from "./jobRuns";
 import { PlaidApiError } from "./plaid";
 import type { Bindings } from "./types";
 
-export interface SyncJobRow {
-  id: string;
+export interface SyncJobRow extends JobRow {
   connection_id: string;
   organization_id: string;
   source: FinanceSyncJob["source"];
-  status: FinanceSyncJob["status"];
-  initial_cursor: string | null;
-  cursor: string | null;
-  added: number;
-  modified: number;
-  removed: number;
-  pages: number;
-  failures: number;
-  restarts: number;
-  lease_until: string | null;
-  created_at: string;
-  finished_at: string | null;
-  error_code: string | null;
-  error_message: string | null;
+}
+
+export function isSyncJob(job: JobRow): job is SyncJobRow {
+  return (
+    job.job_id === "syncFinanceConnection" &&
+    job.connection_id !== null &&
+    job.organization_id !== null &&
+    (job.source === "manual" || job.source === "daily")
+  );
 }
 
 export function toSyncJob(row: SyncJobRow): FinanceSyncJob {
@@ -47,22 +42,11 @@ export async function latestSyncJob(
   connectionId: string,
 ) {
   const row = await database
-    .prepare(`SELECT * FROM finance_sync_jobs
+    .prepare(`SELECT * FROM job_runs
     WHERE connection_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`)
     .bind(connectionId)
     .first<SyncJobRow>();
   return row ? toSyncJob(row) : null;
-}
-
-/** D1 is the outbox: a failed send or a terminated request is recovered by cron. */
-export async function dispatchSyncJob(env: Bindings, jobId: string) {
-  if (!env.FINANCE_SYNC_QUEUE)
-    throw new Error("Finance sync queue is not configured.");
-  try {
-    await env.FINANCE_SYNC_QUEUE.send({ jobId });
-  } catch {
-    console.error({ event: "finance_sync_dispatch_failed", jobId });
-  }
 }
 
 export async function enqueueSync(
@@ -92,9 +76,9 @@ export async function enqueueSync(
         .first<{ institution_name: string | null }>()
     : null;
   const statements = [
-    env.DB.prepare(`INSERT OR IGNORE INTO finance_sync_jobs
-      (id, connection_id, organization_id, source, requested_by, initial_cursor, cursor, available_at, created_at)
-      SELECT ?, item.id, item.organization_id, ?, ?, item.cursor, item.cursor, ?, ?
+    env.DB.prepare(`INSERT OR IGNORE INTO job_runs
+      (id, job_id, connection_id, organization_id, source, requested_by, initial_cursor, cursor, available_at, created_at)
+      SELECT ?, 'syncFinanceConnection', item.id, item.organization_id, ?, ?, item.cursor, item.cursor, ?, ?
       FROM plaid_items item JOIN organization org ON org.id = item.organization_id
       WHERE item.id = ? AND item.organization_id = ? AND org.deletedAt IS NULL
         AND item.status IN ('active', 'error')
@@ -132,13 +116,13 @@ export async function enqueueSync(
   statements.push(
     env.DB.prepare(`UPDATE plaid_items SET last_daily_sync_date = ?
       WHERE id = ? AND ? = 'daily'
-        AND EXISTS (SELECT 1 FROM finance_sync_jobs WHERE id = ?)`).bind(
+        AND EXISTS (SELECT 1 FROM job_runs WHERE id = ?)`).bind(
       now.slice(0, 10),
       connectionId,
       source,
       id,
     ),
-    env.DB.prepare(`SELECT * FROM finance_sync_jobs
+    env.DB.prepare(`SELECT * FROM job_runs
       WHERE connection_id = ? AND organization_id = ?
         AND (id = ? OR status IN ('queued', 'running'))
       ORDER BY created_at DESC, rowid DESC LIMIT 1`).bind(
@@ -152,11 +136,11 @@ export async function enqueueSync(
   const results = await activityBatch(env.DB, actor?.apiKey, statements);
   const job = results.at(-1)?.results[0] as SyncJobRow | undefined;
   if (!job) return null;
-  if (job.status === "queued") await dispatchSyncJob(env, job.id);
+  if (job.status === "queued") await dispatchJob(env, job.id);
   return job;
 }
 
-/** Five-minute outbox recovery also schedules each opted-in connection once per UTC day. */
+/** Schedule each opted-in connection once per UTC day. */
 export async function scheduleFinanceSync(
   env: Bindings,
   timestamp = Date.now(),
@@ -168,7 +152,7 @@ export async function scheduleFinanceSync(
     WHERE item.daily_sync = 1 AND item.status IN ('active', 'error')
       AND org.deletedAt IS NULL
       AND (item.last_daily_sync_date IS NULL OR item.last_daily_sync_date < ?)
-      AND NOT EXISTS (SELECT 1 FROM finance_sync_jobs job WHERE job.connection_id = item.id
+      AND NOT EXISTS (SELECT 1 FROM job_runs job WHERE job.connection_id = item.id
         AND job.status IN ('queued', 'running'))
     ORDER BY item.last_daily_sync_date, item.id LIMIT 100`)
       .bind(now.slice(0, 10))
@@ -176,12 +160,5 @@ export async function scheduleFinanceSync(
   for (const item of due.results) {
     await enqueueSync(env, item.organization_id, item.id, "daily", null, now);
   }
-  const pending = await env.DB.prepare(`SELECT id FROM finance_sync_jobs
-    WHERE (status = 'queued' AND available_at <= ?)
-      OR (status = 'running' AND lease_until <= ?)
-    ORDER BY available_at LIMIT 100`)
-    .bind(now, now)
-    .all<{ id: string }>();
-  for (const job of pending.results) await dispatchSyncJob(env, job.id);
-  return { scheduled: due.results.length, dispatched: pending.results.length };
+  return due.results.length;
 }

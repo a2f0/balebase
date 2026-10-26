@@ -93,15 +93,28 @@ migration. Organization owners and
 administrators can rename their organization at `/organization`. The API
 independently enforces the platform `admin` role for administrative data.
 
-Root admins can run maintenance from `/root/jobs`. Each **Run now** action
-requires confirmation and uses the same retention rules and batch sizes as the
-hourly production job (`17 * * * *`, UTC). The API lists jobs at
-`GET /api/admin/jobs` and accepts `POST /api/admin/jobs/:jobId/run` with JSON
+Root admins use `/root/jobs` to run platform maintenance and inspect maintenance
+and bank sync history. Every run uses the shared background queue and D1 run
+record, with a stable ID, source, requesting user when available, timestamps,
+processing attempt count, status, structured output, and chronological logs.
+Each bank page counts as a processing attempt, including retries. The page
+refreshes automatically, filters by job and status, and pages through older
+runs and logs. It is restricted to root admins, including the history endpoints
+`GET /api/admin/jobs/runs` and `GET /api/admin/jobs/runs/:runId`.
+
+Each maintenance **Run now** action requires confirmation and uses the same
+retention rules and batch sizes as hourly production maintenance
+(`17 * * * *`, UTC). `POST /api/admin/jobs/:jobId/runs` accepts JSON
 `{"confirm":"<jobId>"}`, an authenticated admin session, and the configured
-client `Origin` header. The response contains the run ID, outcome, timing, and
-result. Keep the page open while a manual run executes; if the connection drops,
-check logs before retrying. This is a synchronous Worker invocation, not a durable
-queue. Staging supports manual runs but has no cron schedule.
+client `Origin` header. It responds with 202 and the saved run; an active run
+of the same job is reused. Closing the page does not stop execution. Staging
+supports manual maintenance and five-minute queue recovery, but does not enqueue
+hourly maintenance. Bank sync is listed here for inspection; it is requested
+from Finance for a specific connection or through daily sync settings.
+Older installed apps retain `/run`, which queues the same durable job and waits
+briefly for a completed result. If it continues, the endpoint returns a background
+status message rather than claiming completion. The legacy catalog lists only
+maintenance; updated clients request `GET /api/admin/jobs?all=true`.
 
 Root admins manage organization deletion from the actions menu in each row of
 `/root/organizations`. Marking requires typing the organization name in a
@@ -137,22 +150,29 @@ their retained records must be managed separately; this does not erase all data
 an organization holds about a person. Users can cancel until their account is
 actually purged. Cancellation and eligibility are rechecked at deletion time.
 
-Both scheduled and manual jobs emit structured `maintenance_job` logs with a
-`runId`, `jobId`, trigger, initiating user ID (manual runs), timestamps, duration,
-and result or failure. User deletion requests, cancellations, and individual
-purge outcomes emit separate events. Failed jobs can have partial effects;
-inspect their logs before retrying. A completed user-purge run reports both
-`purged` and `blocked` counts. Other jobs report their existing result: deletion
-counts, reminder count for contract maintenance, or null for seat reconciliation.
+Completed, failed, and cancelled job runs and their logs are retained for 30 days
+from completion; queued and running jobs are retained until resolved. The
+five-minute scheduler purges expired history in batches. Bank-run history also
+follows connection and organization deletion. Job history is operational history,
+not an immutable audit ledger; domain activity and deletion history retain their
+own policies. Actor IDs and run creation are committed together, and lifecycle
+logs are written by database triggers in the same transaction as state changes.
 
-To inspect executions, select the API Worker in Cloudflare **Workers & Pages →
-Observability** and filter on `event = maintenance_job`, `jobId`, or `runId`.
-Both API configurations enable Workers Logs with full head sampling. Cloudflare
-captures invocation metadata, console output, and errors; it does not infer
-application deletion counts. [Workers Logs][workers-logs] retains logs for three
-days on Free and seven days on Paid, subject to service limits. Export logs for
-longer retention; these are operational logs, not an immutable application audit
-ledger. [Cloudflare Audit Logs][cloudflare-audit-logs] records Cloudflare account
+Saved output uses named counters and flags: purge counts, blocked user counts,
+subscriptions checked, contract reminders, screening/notification counts, and
+bank import counts. Logs retain lifecycle changes, attempts, retries, page
+checkpoints, cancellations, and outcomes. Provider payloads, tokens, bank cursors,
+and raw exception messages are excluded from admin responses and saved logs.
+Maintenance failures can have partial effects; interrupted maintenance is marked
+failed after its lease expires and requires review before a fresh manual run.
+Bank sync retains its existing checkpoint and automatic retry policy.
+
+Cloudflare Workers Logs additionally records invocation diagnostics under
+`event = background_job`, `jobId`, and `runId`, or `job_dispatch_failed` and
+`job_delivery_failed` for queue delivery problems. Both API configurations enable
+Workers Logs with full head sampling. [Workers Logs][workers-logs] retention is
+separate from the application's 30-day job history.
+[Cloudflare Audit Logs][cloudflare-audit-logs] records Cloudflare account
 and configuration actions and is separate from this application's user actions.
 
 [workers-logs]: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
@@ -507,8 +527,9 @@ Daily runs identify their source without inventing a human actor. The shared
 Activity feed records manual sync requests, daily-sync setting changes with
 before/after values, and disconnects, with user and API-key attribution in the
 same transaction as the mutation. **Bank connections** activity requires
-Finance access. History remains until the connection's data or organization is
-purged; operators can also inspect jobs in D1. Finance-authorized members can
+Finance access. This activity remains until the connection's data or organization
+is purged. Completed sync runs and operational logs are retained for 30 days;
+operators can inspect them in the Jobs page or D1. Finance-authorized members can
 read the latest job on the connection page.
 
 Each institution's sync, disconnect, and delete actions live at

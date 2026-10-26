@@ -6,7 +6,8 @@ export type DiagnosticSource =
   | "unhandled-rejection"
   | "request-error"
   | "email-error"
-  | "scheduled-error";
+  | "scheduled-error"
+  | "job-error";
 
 export interface SentryBuild {
   dsn: string;

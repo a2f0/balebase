@@ -1,9 +1,9 @@
 import { app } from "./app";
 import { captureApiError } from "./diagnostics";
 import { handleEmail } from "./email";
-import { scheduleFinanceSync } from "./financeSyncJobs";
-import { consumeFinanceSync } from "./financeSyncWorker";
-import { maintenanceTasks, runScheduledMaintenance } from "./maintenance";
+import { scheduleJobs } from "./jobScheduler";
+import { consumeJobs } from "./jobWorker";
+import { runScheduledMaintenance } from "./maintenance";
 import type { Bindings } from "./types";
 
 export default {
@@ -16,11 +16,11 @@ export default {
     }
   },
   fetch: app.fetch,
-  queue: (batch, environment) => consumeFinanceSync(batch, environment),
+  queue: (batch, environment) => consumeJobs(batch, environment),
   scheduled: (controller, environment, context) => {
     if (controller.cron === "*/5 * * * *") {
       context.waitUntil(
-        scheduleFinanceSync(environment).catch(async (error: unknown) => {
+        scheduleJobs(environment).catch(async (error: unknown) => {
           await captureApiError(error, "scheduled-error");
           throw error;
         }),
@@ -28,7 +28,7 @@ export default {
       return;
     }
     context.waitUntil(
-      runScheduledMaintenance(maintenanceTasks(environment), {
+      runScheduledMaintenance(environment, {
         trigger: "scheduled",
         cron: controller.cron,
         scheduledTime: controller.scheduledTime,

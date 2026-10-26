@@ -1,48 +1,20 @@
 import { type PlaidItemRow, syncPlaidPage } from "./financeSync";
-import { dispatchSyncJob, type SyncJobRow } from "./financeSyncJobs";
+import type { SyncJobRow } from "./financeSyncJobs";
+import { dispatchJob } from "./jobRuns";
 import {
   PlaidApiError,
   type PlaidRequest,
-  plaidRequest,
   type TransactionsSyncResponse,
 } from "./plaid";
 import type { Bindings } from "./types";
 
-/** Longer than Queues' 15-minute invocation limit, so an expired owner cannot still write. */
-const leaseMilliseconds = 20 * 60 * 1000;
-
-export async function consumeFinanceSync(
-  batch: MessageBatch<{ jobId: string }>,
+export async function runSyncPage(
   env: Bindings,
-  requestPlaid: PlaidRequest = plaidRequest,
-) {
-  for (const message of batch.messages) {
-    try {
-      await runSyncPage(env, message.body.jobId, requestPlaid);
-      message.ack();
-    } catch {
-      console.error({
-        event: "finance_sync_delivery_failed",
-        jobId: message.body.jobId,
-      });
-      message.retry({ delaySeconds: 60 });
-    }
-  }
-}
-
-async function runSyncPage(
-  env: Bindings,
-  id: string,
+  job: SyncJobRow,
   requestPlaid: PlaidRequest,
 ) {
   const now = new Date().toISOString();
-  const job = await env.DB.prepare(`UPDATE finance_sync_jobs
-    SET status = 'running', lease_until = ?, failures = failures + 1
-    WHERE id = ? AND ((status = 'queued' AND available_at <= ?)
-      OR (status = 'running' AND lease_until <= ?)) RETURNING *`)
-    .bind(new Date(Date.now() + leaseMilliseconds).toISOString(), id, now, now)
-    .first<SyncJobRow>();
-  if (!job) return;
+  const id = job.id;
   const item = await env.DB.prepare(`SELECT item.* FROM plaid_items item
     JOIN organization org ON org.id = item.organization_id
     WHERE item.id = ? AND item.organization_id = ?
@@ -50,9 +22,9 @@ async function runSyncPage(
     .bind(job.connection_id, job.organization_id)
     .first<PlaidItemRow>();
   if (!item) {
-    await env.DB.prepare(`UPDATE finance_sync_jobs SET status = 'cancelled', finished_at = ?, lease_until = NULL
-      WHERE id = ?`)
-      .bind(now, id)
+    await env.DB.prepare(`UPDATE job_runs SET status = 'cancelled', finished_at = ?, lease_until = NULL
+      WHERE id = ? AND status = 'running' AND lease_until = ?`)
+      .bind(now, id, job.lease_until)
       .run();
     return;
   }
@@ -88,10 +60,15 @@ async function checkpoint(
 ) {
   const now = new Date().toISOString();
   const statements = [
-    env.DB.prepare(`UPDATE finance_sync_jobs
-    SET cursor = ?, added = added + ?, modified = modified + ?, removed = removed + ?,
+    env.DB.prepare(`UPDATE job_runs
+    SET output_json = json_object('added', added + ?, 'modified', modified + ?,
+      'removed', removed + ?, 'pages', pages + 1, 'restarts', restarts),
+      cursor = ?, added = added + ?, modified = modified + ?, removed = removed + ?,
       pages = pages + 1, failures = 0, status = ?, lease_until = NULL, available_at = ?,
       error_code = NULL, error_message = NULL, finished_at = ? WHERE id = ? AND status = 'running' AND lease_until = ?`).bind(
+      page.added.length,
+      page.modified.length,
+      page.removed.length,
       page.next_cursor,
       page.added.length,
       page.modified.length,
@@ -115,7 +92,7 @@ async function checkpoint(
     );
   }
   await env.DB.batch(statements);
-  if (page.has_more) await dispatchSyncJob(env, job.id);
+  if (page.has_more) await dispatchJob(env, job.id);
 }
 
 async function retryOrFail(env: Bindings, job: SyncJobRow, error: unknown) {
@@ -124,12 +101,13 @@ async function retryOrFail(env: Bindings, job: SyncJobRow, error: unknown) {
     plaid?.code === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION" &&
     job.restarts < 2
   ) {
-    await env.DB.prepare(`UPDATE finance_sync_jobs SET cursor = initial_cursor,
+    await env.DB.prepare(`UPDATE job_runs SET cursor = initial_cursor,
+      output_json = json_object('added', 0, 'modified', 0, 'removed', 0, 'pages', 0, 'restarts', restarts + 1),
       added = 0, modified = 0, removed = 0, pages = 0, failures = 0, restarts = restarts + 1,
       status = 'queued', lease_until = NULL WHERE id = ? AND status = 'running' AND lease_until = ?`)
       .bind(job.id, job.lease_until)
       .run();
-    await dispatchSyncJob(env, job.id);
+    await dispatchJob(env, job.id);
     return;
   }
   const retryable = !plaid || plaid.status >= 500 || plaid.status === 429;
@@ -141,7 +119,7 @@ async function retryOrFail(env: Bindings, job: SyncJobRow, error: unknown) {
   const code = plaid?.code ?? "SYNC_ERROR";
   const message = plaid?.message ?? "Could not sync this connection.";
   const statements = [
-    env.DB.prepare(`UPDATE finance_sync_jobs SET status = ?,
+    env.DB.prepare(`UPDATE job_runs SET status = ?,
     error_code = ?, error_message = ?, available_at = ?, lease_until = NULL, finished_at = ? WHERE id = ? AND status = 'running' AND lease_until = ?`).bind(
       retry ? "queued" : "failed",
       code,
