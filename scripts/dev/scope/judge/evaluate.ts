@@ -13,12 +13,11 @@ import { readClaudeTranscript } from "./claudeEvidence";
 import { grade, model } from "./codex";
 import { checkGate, loadCriteria } from "./criteria";
 
-const turnSchema = z
-  .object({
-    iteration: z.number().int().positive().optional(),
-    toolCallsUrl: z.string().url().optional(),
-  })
-  .passthrough();
+const turnSchema = z.object({
+  iteration: z.number().int().positive().optional(),
+  toolCallsUrl: z.string().url().optional(),
+  codingAgentResponse: z.string().optional(),
+});
 export const inputSchema = z.object({
   snapshotUrl: z.string().url(),
   criteria: z.array(z.string().min(1)).min(1).max(50),

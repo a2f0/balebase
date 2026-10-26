@@ -46,11 +46,20 @@ test("tool evidence preserves original turn numbering and current iteration", ()
     ...input,
     conversationHistory: [
       {},
-      { toolCallsUrl: "http://localhost/previous" },
+      {
+        toolCallsUrl: "http://localhost/previous",
+        codingAgentResponse: "Previous source report",
+        judgeFeedback: "OLD GRADE",
+        criteriaResults: [{ passed: true }],
+      },
       { iteration: 7, toolCallsUrl: "http://localhost/seven" },
     ],
     iteration: 8,
     toolCallsUrl: "http://localhost/current",
+  });
+  expect(parsed.conversationHistory[1]).toEqual({
+    toolCallsUrl: "http://localhost/previous",
+    codingAgentResponse: "Previous source report",
   });
   expect(toolOutputRequests(parsed)).toEqual([
     { iteration: 2, url: "http://localhost/previous" },
