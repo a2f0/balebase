@@ -60,6 +60,10 @@ The local API reads `BETTER_AUTH_SECRET` and optional integration keys from
 `.secrets`, a gitignored link to `../matrix-secrets/balebase` that the
 [matrix repository](https://github.com/a2f0/matrix/blob/main/docs/secrets.md)
 manages and backs up. See [local secrets](docs/operations.md#local-secrets).
+The dev launcher stops before starting Wrangler if `.secrets/prod/app.env`
+is absent or `BETTER_AUTH_SECRET` is empty. Dependency installation and API
+unit tests do not need that file; see the
+[focused verification path](CONTRIBUTING.md#check-a-change).
 
 Wrangler persists the local D1 database and R2 bucket under
 `packages/api/.wrangler/`. The client defaults to the local API. Override it by

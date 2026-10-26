@@ -28,7 +28,7 @@ install_scope() {
     git -C "$scope_dir" fetch origin "$scope_revision"
     git -C "$scope_dir" checkout --detach "$scope_revision"
   fi
-  pnpm --dir "$scope_dir" --filter cli... install --frozen-lockfile
+  pnpm --dir "$scope_dir" --filter cli... --filter portal... install --frozen-lockfile
   pnpm --dir "$scope_dir" build:cli
   mkdir -p "$scope_install_dir"
   install -m 755 "$scope_dir/apps/cli/dist/scope.mjs" "$scope_install_dir/scope"
@@ -74,6 +74,15 @@ if [[ "${1:-}" == up && -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" &&
 fi
 
 case "${1:-}" in
+  --help|-h|"")
+    echo 'Local stack: install, up, down, status'
+    echo 'Assessment: judge, register [git-ref], calibrate, smoke, benchmark [count], regrade <receipt>, portal'
+    echo 'See docs/scope.md. Other commands use the upstream CLI:'
+    exec node "$scope_dir/apps/cli/dist/scope.mjs" --help
+    ;;
+  register|calibrate|benchmark|regrade|smoke|judge|portal)
+    exec bun "$repo_root/scripts/dev/scope.ts" "$@"
+    ;;
   up|down|status)
     action="$1"
     shift
@@ -85,10 +94,31 @@ case "${1:-}" in
       -f docker-compose.yml -f "$repo_root/scripts/dev/scopeCompose.yaml"
       --profile mongodb --profile claude-code)
     case "$action" in
-      up) "${compose[@]}" up --detach --build "$@" ;;
+      up)
+        build=true
+        for argument in "$@"; do
+          if [[ "$argument" == --no-build ]]; then build=false; fi
+        done
+        compose+=(up --detach)
+        if [[ "$build" == true ]]; then compose+=(--build); fi
+        "${compose[@]}" "$@"
+        ;;
       down) "${compose[@]}" down "$@" ;;
       status) "${compose[@]}" ps "$@" ;;
     esac
     ;;
-  *) exec node "$scope_dir/apps/cli/dist/scope.mjs" "$@" ;;
+  *)
+    if [[ -z "${SCOPE_PROJECT:-}" && -f "$repo_root/.scope/config.json" ]]; then
+      SCOPE_PROJECT="$(bun -e '
+        const config = await Bun.file(process.argv[1]).json();
+        if (new URL(config.apiUrl).origin !== new URL(process.env.SCOPE_API_URL).origin)
+          throw new Error("Scope project belongs to another API; run scope register.");
+        if (typeof config.projectId !== "string" || !config.projectId)
+          throw new Error("Missing saved Scope project; run scope register.");
+        process.stdout.write(config.projectId);
+      ' "$repo_root/.scope/config.json")"
+      export SCOPE_PROJECT
+    fi
+    exec node "$scope_dir/apps/cli/dist/scope.mjs" "$@"
+    ;;
 esac

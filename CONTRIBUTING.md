@@ -26,7 +26,7 @@ directories under `~/.local/share/mise/installs` to PATH without running
 | Public website | `packages/website/src` |
 | Deployment and live verification | `scripts/deploy`, `terraform` |
 | Account and data administration | `scripts/admin` |
-| Development launchers | `scripts/dev` |
+| Development launchers and local Scope assessments | `scripts/dev`, `scripts/dev/scope` |
 | Repository checks and test harnesses | `scripts/checks`, `scripts/testing` |
 | Shared script helpers | `scripts/lib` |
 | Agent review and merge policy | `agent-tool.json`, `AGENTS.md` |
@@ -63,6 +63,16 @@ mismatch, and `packages/api/src/contract.test.ts` checks that the API serves
 exactly the contract's routes. To add a route, define it in the area's
 validators file, send its response with `respond`, and add an endpoint and
 method to the area's client.
+
+See [API client onboarding](docs/api-client.md) for a public-import example,
+browser credentials and CORS, the shared wrapper, and native host assumptions.
+
+For issue changes, start with the [issue behavior](docs/product.md#issues-and-transaction-activity)
+and [offline behavior](docs/product.md#offline-work). Online
+creation lives in `packages/api/src/issues.ts` (general issues) and
+`audits.ts` (audit-specific routes); offline replay uses
+`offlineRecords.ts`. They share the `issues` table and its activity triggers.
+Check both route families and the offline operation schema when changing a field.
 
 `assets/brand/logo.svg` is the pixel B logo, drawn only with whole-unit
 `<rect>` elements; the app shells and website import this one copy. The `images`
@@ -101,6 +111,12 @@ bun run --cwd packages/app test src/Finance.test.tsx
 bun run --cwd packages/api test src/app.test.ts
 ```
 
+Run API tests through the package command: its working directory loads
+`packages/api/bunfig.toml`, whose `contractTestSetup.ts` preload checks response
+schemas after each test. API tests use in-memory database fixtures and test
+bindings; they do not need `.secrets`, Wrangler login, local migrations, or a
+running API. Installing dependencies is still required.
+
 `check:fast` runs Biome, Markdownlint, file-name checks, and all TypeScript
 checks. It needs only the installed JavaScript toolchain. It leaves dependency
 reachability, shell lint, and Terraform checks to `check`.
@@ -120,6 +136,11 @@ The full check needs ShellCheck, Terraform, TFLint, and the Ruby bundle.
 Browser tests need Chrome or Chromium; set `CHROME_PATH` to its executable when
 needed. Git's pre-commit hook fixes staged formatting; pre-push runs `check`
 and `test`.
+
+The `test:staging`, `test:env`, and `test:scope` steps inside `bun run test`
+exercise local fixtures and command stubs. They do not deploy, contact a live
+staging service, use real cloud/agent credentials, or require Scope containers.
+Live staging verification and Scope assessments are separate opt-in commands.
 
 ## Compact command output
 
@@ -171,71 +192,12 @@ reduce test coverage to save output.
 
 ## Scope evaluations
 
-[Microsoft Scope](https://microsoft.github.io/scope/) runs coding-agent tasks
-against isolated codebase snapshots. Its CLI requires a running Scope API and
-worker. The local setup selects Claude Code; Scope does not yet ship a Codex
-worker. Scored evaluations also require a Copilot credential for Scope's judge.
-A single iteration with no criteria records the agent's output and artifacts
-without a judge score.
-
-Install Node.js 22 or later, pnpm, and Docker with Compose 2.24.4 or later.
-Podman can provide the Docker API through its machine socket; use Docker
-Compose, not `podman-compose`, for the override tags. The pinned Scope source
-is kept outside this repository at `~/.local/share/scope/source`; override it
-with `SCOPE_SOURCE_DIR`.
-
-```sh
-bun run scope:install
-bun run scope:up
-bun run scope:status
-bun run scope --help
-```
-
-`scope:install` builds the CLI from a fixed upstream commit because Scope has
-no published CLI release yet, and installs `scope` in `~/.local/bin`.
-Override the binary destination with `SCOPE_INSTALL_DIR`. The plain `scope`
-command uses Scope's standard environment; `bun run scope` also loads this
-repository's local configuration.
-The package commands and container builds use that same source checkout.
-The local API listens at `http://127.0.0.1:3100`; backing services have no
-published ports. This configuration uses Scope's anonymous development mode
-and is intended only for this local machine.
-
-Put local settings in the ignored `.scope/local.env`, using shell syntax. For
-example, opt into using an existing Claude Code login without copying its token:
-
-```sh
-SCOPE_CLAUDE_CREDENTIALS_FILE="$HOME/.claude/.credentials.json"
-```
-
-Alternatively, supply `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` in the
-environment. The file option requires an existing JSON credential file. For
-installations using macOS Keychain, run `claude setup-token` and store the
-result as `CLAUDE_CODE_OAUTH_TOKEN` in `.scope/local.env`. An explicit token
-or API key takes precedence over the credential file. A scored run also needs a
-Copilot-enabled `GITHUB_TOKEN`.
-Model discovery is optional and requires `ANTHROPIC_API_KEY`; enable it with
-`COMPOSE_PROFILES=anthropic-model-scanner`. Subscription OAuth can run the worker
-without model discovery, using the worker's default model.
-`scope:up` reads the selected Claude login at startup; refresh an expired login
-with Claude Code and rerun it. With Podman, set `DOCKER_HOST` to the machine's
-forwarded host socket and `DOCKER_SOCK` to its in-VM socket in the same local
-file. Use `podman machine inspect` to find the host socket; a rootful machine
-normally uses `/run/podman/podman.sock` inside the VM.
-
-Create a project with `bun run scope project create --name Balebase --use`,
-then use `bun run scope codebase create --help` to register a snapshot. Use
-`git archive` to include only committed files; keep archives and downloaded
-artifacts in `.scope/`. Set `SCOPE_PROJECT` in `.scope/local.env` to select this
-repository's project without changing the CLI's global selection.
-
-Use `bun run scope run submit --help` for tasks, criteria, codebase revisions,
-and model options. Start an unscored smoke run with `--max-iterations 1` and no
-criteria, passing the task with `--message` (scenario files require criteria).
-Inspect it with `run get`, `run logs`, and `run download`. Scope marks
-these unscored runs as passed when execution succeeds; that status is not a
-judge verdict. Stop the stack when idle with `bun run scope:down`; named
-volumes retain projects and artifacts.
+Use the [Scope guide](docs/scope.md) for the local CLI/container setup,
+Claude worker, calibrated Codex judge, and versioned agent-readiness tasks.
+The assessment measures repository discoverability against committed snapshots;
+its inspection tasks do not establish clean-bootstrap or implementation success.
+See the [assessment report](docs/agent-readiness.md) for the measured baseline,
+fixes, and comparison.
 
 ## Editor setup
 

@@ -13,8 +13,11 @@ const androidBeforeSync = existsSync(
   : ["@capacitor/android"];
 
 const rootToolingWorkspace = {
-  project: ["*.{css,ts,mts}"],
-  ignoreBinaries: ["shellcheck"],
+  // The shell wrapper dispatches assessment commands to this TypeScript entrypoint.
+  entry: ["scripts/dev/scope.ts"],
+  project: ["*.{css,ts,mts}", "scripts/dev/scope/**/*.ts"],
+  // Installed host tools, not package-managed application dependencies.
+  ignoreBinaries: ["shellcheck", "codex"],
   // The release uploader invokes this binary through runBun.
   ignoreDependencies: ["@sentry/cli"],
 };

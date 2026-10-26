@@ -1,0 +1,153 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { z } from "zod";
+import { selectCriteria } from "./judge/criteria";
+import { git } from "./register";
+import { isCompleted, validateScores } from "./runState";
+import { apiRequest, judgeHealth, settings, stateDir } from "./settings";
+import { projectConfig, readSuite, seedCriteria } from "./suites";
+
+const runSchema = z
+  .object({
+    id: z.string(),
+    agentVersion: z.string().optional(),
+    model: z.string().optional(),
+    run: z
+      .object({
+        status: z.string(),
+        outcome: z.string().optional(),
+        durationMs: z.number().optional(),
+        turns: z
+          .array(
+            z
+              .object({
+                passed: z.boolean().optional(),
+                codingAgentResponse: z.string().optional(),
+                criteriaResults: z
+                  .array(
+                    z.object({
+                      criterionId: z.string(),
+                      passed: z.boolean(),
+                      evaluated: z.boolean(),
+                      feedback: z.string(),
+                    }),
+                  )
+                  .optional(),
+              })
+              .passthrough(),
+          )
+          .optional(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
+export async function benchmark(
+  name: "smoke" | "agent-friendliness",
+  count = 1,
+): Promise<void> {
+  if (!Number.isInteger(count) || count < 1 || count > 10)
+    throw new Error("Count must be 1–10");
+  const config = projectConfig();
+  const judge = await judgeHealth();
+  const suite = await readSuite(name);
+  await seedCriteria(suite);
+  const directory = join(stateDir, "benchmarks", `${Date.now()}-${suite.id}`);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const cases: unknown[] = [];
+  const receipt = {
+    suite,
+    snapshot: config,
+    toolingCommit: git("rev-parse", "HEAD"),
+    toolingDirty: git("status", "--porcelain").length > 0,
+    judgeModel: settings.judgeModel,
+    judge,
+    coderModel: "provider default; inspect recorded run metadata",
+    startedAt: new Date().toISOString(),
+    repetitions: count,
+    cases,
+  };
+  const persist = () =>
+    writeFile(
+      join(directory, "receipt.json"),
+      JSON.stringify(receipt, null, 2),
+    );
+  await persist();
+  console.log(`${suite.description}\nReceipt: ${directory}`);
+  // The judge and worker each process one request at a time.
+  for (let trial = 1; trial <= count; trial++) {
+    for (const task of suite.tasks) {
+      const submitted = z.object({ id: z.string() }).parse(
+        await apiRequest(
+          `/requests?worker=coder-acp-claude-code&projectId=${encodeURIComponent(config.projectId)}`,
+          {
+            scenario: { task: task.prompt, criteria: task.criteria },
+            codebase: config.revisionId,
+            maxIterations: 1,
+          },
+        ),
+      );
+      const entry = {
+        task: task.id,
+        trial,
+        id: submitted.id,
+        url: `http://127.0.0.1:${settings.portalPort}/runs/${submitted.id}`,
+      };
+      cases.push(entry);
+      await persist();
+      console.log(`${task.id} trial ${trial}: ${entry.url}`);
+      const run = await waitForRun(
+        entry,
+        join(directory, `${task.id}-${trial}.json`),
+      );
+      Object.assign(entry, {
+        outcome: run.run.outcome,
+        durationMs: run.run.durationMs,
+        agentVersion: run.agentVersion,
+        model: run.model,
+        turns: run.run.turns,
+      });
+      await persist();
+      const results = run.run.turns?.at(-1)?.criteriaResults ?? [];
+      validateScores(
+        results,
+        selectCriteria(suite.criteria, task.criteria).map((c) => c.id),
+      );
+      console.log(`${task.id}: ${run.run.outcome ?? run.run.status}`);
+    }
+  }
+  console.log(
+    `Finished ${cases.length} trials. Review criteria and friction in ${directory}/receipt.json`,
+  );
+}
+
+export async function waitForRun(
+  entry: { id: string; url: string; task: string },
+  file: string,
+  {
+    request = apiRequest,
+    now = Date.now,
+    sleep = (ms: number) => Bun.sleep(ms),
+    timeoutMs = 15 * 60 * 1000,
+  } = {},
+) {
+  const deadline = now() + timeoutMs;
+  let lastStatus = "";
+  while (true) {
+    const raw = await request(`/requests/${entry.id}`);
+    const run = runSchema.parse(raw);
+    await writeFile(file, JSON.stringify(raw, null, 2));
+    if (run.run.status !== lastStatus) {
+      console.log(`${entry.task}: ${run.run.status}`);
+      lastStatus = run.run.status;
+    }
+    if (isCompleted(run.run.status, run.run.outcome)) {
+      return run;
+    }
+    if (now() >= deadline)
+      throw new Error(
+        `Timed out; run is still active at ${entry.url}. Inspect before resubmitting.`,
+      );
+    await sleep(5000);
+  }
+}
