@@ -4,9 +4,11 @@ import {
   financeRoutes,
 } from "@balebase/validators/finance";
 import type { FinanceContext } from "./financeContext";
+import { latestSyncJob } from "./financeSyncJobs";
 import { respond } from "./respond";
 
 interface ConnectionRow {
+  daily_sync: number;
   created_at: string;
   created_by_email: string | null;
   created_by_name: string | null;
@@ -51,7 +53,7 @@ export async function connectionDetail(context: FinanceContext) {
       .prepare(
         `SELECT item.id, item.plaid_item_id, item.institution_id,
                 item.institution_name, item.status, item.error_code,
-                item.error_message, item.created_at, item.last_synced_at,
+                item.error_message, item.daily_sync, item.created_at, item.last_synced_at,
                 item.disconnected_at, creator.name AS created_by_name,
                 creator.email AS created_by_email,
                 COUNT(txn.id) AS transaction_count,
@@ -90,14 +92,18 @@ export async function connectionDetail(context: FinanceContext) {
   }
   return respond(context, financeRoutes.connection, {
     accounts: accounts.results.map(toAccount),
-    connection: toConnection(connection),
+    connection: {
+      ...toConnection(connection),
+      syncJob: await latestSyncJob(database, id),
+    },
   });
 }
 
 function toConnection(
   row: ConnectionRow,
-): FinanceConnectionDetail["connection"] {
+): Omit<FinanceConnectionDetail["connection"], "syncJob"> {
   return {
+    dailySync: Boolean(row.daily_sync),
     createdAt: row.created_at,
     createdBy:
       row.created_by_email === null

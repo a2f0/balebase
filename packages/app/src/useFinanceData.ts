@@ -2,6 +2,7 @@ import type { FinanceFilters } from "@balebase/api-client";
 import type { FinanceData } from "@balebase/validators/finance";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./apiClient";
+import { syncPending } from "./financeConnectionActions";
 
 type CategoryRoute = Pick<FinanceFilters, "categorySlug" | "uncategorized">;
 
@@ -72,6 +73,7 @@ export function useFinanceData(route: CategoryRoute | null) {
       ++requestId.current;
     };
   }, [load]);
+  useSyncPolling(data, load, loading || loadingMore || refreshing);
   const onFiltersChange = useCallback(
     (next: FinanceFilters) => {
       currentFilters.current = next;
@@ -84,9 +86,7 @@ export function useFinanceData(route: CategoryRoute | null) {
   async function onLoadMore() {
     if (
       data?.nextCursor &&
-      !loading &&
-      !loadingMore &&
-      !refreshing &&
+      !(loading || loadingMore || refreshing) &&
       filters === loadedFilters.current
     )
       await load(data.nextCursor);
@@ -167,4 +167,45 @@ function mergeFinancePage(
 
 function financeLoadMessage(cause: unknown) {
   return cause instanceof Error ? cause.message : "Could not load finances.";
+}
+
+function useSyncPolling(
+  data: FinanceData | undefined,
+  load: () => Promise<void>,
+  busy: boolean,
+) {
+  const pendingIds = JSON.stringify(
+    data?.connections
+      .filter((connection) => syncPending(connection.syncStatus))
+      .map((connection) => connection.id) ?? [],
+  );
+  useEffect(() => {
+    const ids = JSON.parse(pendingIds) as string[];
+    if (!ids.length || busy) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      try {
+        const statuses = await Promise.all(
+          ids.map((id) => api.finance.syncStatus(id)),
+        );
+        // Reload history once a job finishes; retries only read small metadata.
+        if (
+          active &&
+          statuses.some(
+            ({ connection }) => !syncPending(connection.syncJob?.status),
+          )
+        )
+          await load();
+      } catch {
+        // Keep the saved pending state and retry after temporary request failures.
+      }
+      if (active) timer = setTimeout(() => void poll(), 3000);
+    }
+    timer = setTimeout(() => void poll(), 3000);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [pendingIds, load, busy]);
 }

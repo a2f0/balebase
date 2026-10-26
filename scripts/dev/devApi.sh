@@ -61,6 +61,7 @@ fi
 
 cd "$REPO_ROOT/packages/api"
 bunx --bun wrangler dev \
+  --test-scheduled \
   --env-file "$auth_env_file" \
   --var "CHECKR_ENV:staging" \
   --var "PLAID_ENV:sandbox" \

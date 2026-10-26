@@ -19,10 +19,12 @@ import { useEffect, useState } from "react";
 import { api } from "./apiClient";
 import { connectionTone } from "./FinanceAccounts";
 import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
+import { FinanceSyncSettings } from "./FinanceSyncSettings";
 import {
   confirmDataDeletion,
   confirmDisconnect,
   syncNotice,
+  syncPending,
 } from "./financeConnectionActions";
 import {
   formatDateTime,
@@ -70,6 +72,11 @@ export function FinanceConnectionPage({
         {data && (
           <>
             <ConnectionSummary connection={data.connection} />
+            <FinanceSyncSettings
+              id={id}
+              dailySync={data.connection.dailySync}
+              status={data.connection.status}
+            />
             <ConnectionAccounts
               accounts={data.accounts}
               onNavigate={onNavigate}
@@ -101,7 +108,7 @@ function ConnectionActions({
   if (connection.status === "disconnected") {
     return (
       <Button
-        disabled={busy}
+        disabled={busy || syncPending(connection.syncJob?.status)}
         icon="trash"
         onClick={() => void deleteData()}
         variant="danger"
@@ -114,11 +121,15 @@ function ConnectionActions({
     <>
       <Button
         busy={busy}
-        disabled={busy}
+        disabled={
+          busy ||
+          connection.status === "disconnecting" ||
+          syncPending(connection.syncJob?.status)
+        }
         icon="refresh"
         onClick={() => void sync()}
       >
-        Sync now
+        {syncPending(connection.syncJob?.status) ? "Syncing…" : "Sync now"}
       </Button>
       <Button
         disabled={busy}
@@ -126,7 +137,9 @@ function ConnectionActions({
         onClick={() => void disconnect()}
         variant="ghost"
       >
-        Disconnect
+        {connection.status === "disconnecting"
+          ? "Retry disconnect"
+          : "Disconnect"}
       </Button>
     </>
   );
@@ -152,6 +165,16 @@ function ConnectionSummary({ connection }: { connection: Connection }) {
               </dd>
             </>
           )}
+          <dt>Latest sync</dt>
+          <dd role="status">
+            {connection.syncJob
+              ? formatLabel(connection.syncJob.status)
+              : "Not started"}
+            {syncPending(connection.syncJob?.status) &&
+              " · You can leave this page; syncing continues in the background."}
+            {connection.syncJob?.status === "succeeded" &&
+              ` · ${connection.syncJob.added} added, ${connection.syncJob.modified} updated, ${connection.syncJob.removed} removed`}
+          </dd>
           <dt>Connected</dt>
           <dd>
             {formatDateTime(connection.createdAt)}
@@ -236,20 +259,50 @@ function useConnection(id: string, onNavigate: (path: string) => void) {
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const pending = syncPending(data?.connection.syncJob?.status);
   useEffect(() => {
     let active = true;
-    void api.finance
-      .connection(id)
-      .then((next) => {
-        if (active) setData(next);
-      })
-      .catch((cause: unknown) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function load() {
+      try {
+        const next = await api.finance.connection(id);
+        if (active) {
+          setData(next);
+          setError(undefined);
+        }
+      } catch (cause) {
         if (active) setError(message(cause));
-      });
+      }
+    }
+    async function poll() {
+      try {
+        const next = await api.finance.syncStatus(id);
+        if (!active) return;
+        if (syncPending(next.connection.syncJob?.status)) {
+          setData(
+            (current) =>
+              current && {
+                ...current,
+                connection: { ...current.connection, ...next.connection },
+              },
+          );
+          setError(undefined);
+        } else {
+          // Refresh account balances and history only when the job finishes.
+          await load();
+        }
+      } catch (cause) {
+        if (active) setError(message(cause));
+      }
+      if (active) timer = setTimeout(() => void poll(), 3000);
+    }
+    if (pending) timer = setTimeout(() => void poll(), 3000);
+    else void load();
     return () => {
       active = false;
+      clearTimeout(timer);
     };
-  }, [id]);
+  }, [id, pending]);
   async function run(action: () => Promise<string>) {
     setBusy(true);
     setError(undefined);
@@ -287,8 +340,7 @@ function useConnection(id: string, onNavigate: (path: string) => void) {
         return "Bank disconnected. Imported history was retained.";
       });
     },
-    sync: () =>
-      run(async () => syncNotice(await api.finance.syncConnection(id))),
+    sync: () => run(async () => syncNotice(await api.finance.startSync(id))),
   };
   return { actions, busy, data, error, notice };
 }

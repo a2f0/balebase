@@ -61,15 +61,24 @@ export const financeTools: McpTool[] = [
   },
   {
     description:
-      "Imports new, changed, and removed transactions from Plaid for one bank connection.",
+      "Queues a durable background sync from Plaid for one bank connection and returns its job. Use get_finance_sync_status to check completion; leaving the session does not stop it.",
     method: "POST",
     name: "sync_finance_connection",
     openWorld: true,
     params: {
       id: id("Connection id from get_finance_overview."),
     },
-    path: "/api/finance/connections/{id}/sync",
+    path: "/api/finance/connections/{id}/sync-jobs",
     title: "Sync finance connection",
+  },
+  {
+    description:
+      "Gets the latest background sync job and connection status without loading transactions.",
+    method: "GET",
+    name: "get_finance_sync_status",
+    params: { id: id("Connection id from get_finance_overview.") },
+    path: "/api/finance/connections/{id}/sync-status",
+    title: "Get finance sync status",
   },
   {
     body: {

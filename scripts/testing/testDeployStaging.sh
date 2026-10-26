@@ -127,7 +127,8 @@ if (api.vars.PLAID_ENV !== "sandbox") throw new Error("Plaid environment is not 
 if (api.vars.STRIPE_PUBLISHABLE_KEY !== "pk_test_fixture") throw new Error("Stripe publishable key is not staging");
 if (api.d1_databases.length !== 1 || api.d1_databases[0].database_name !== "fixture-db-staging" || api.d1_databases[0].database_id !== "00000000-0000-4000-8000-000000000000") throw new Error("D1 binding ignored Terraform output");
 if (api.r2_buckets.length !== 1 || api.r2_buckets[0].bucket_name !== "fixture-objects-staging") throw new Error("R2 binding ignored Terraform output");
-if ("triggers" in api) throw new Error("Staging has production cron triggers");
+if (JSON.stringify(api.triggers.crons) !== JSON.stringify(["*/5 * * * *"])) throw new Error("Staging should run only finance scheduling");
+if (api.queues.producers[0].binding !== "FINANCE_SYNC_QUEUE" || api.queues.producers[0].queue !== "balebase-api-staging-finance-sync" || api.queues.consumers[0].queue !== "balebase-api-staging-finance-sync") throw new Error("Staging must use its own finance queue");
 if (read("app-web").name !== "balebase-client-staging") throw new Error("Client Worker name is not staging");
 if (read("website").name !== "balebase-website-staging") throw new Error("Website Worker name is not staging");
 for (const app of ["api", "app-web", "website"]) {

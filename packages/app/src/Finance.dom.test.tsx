@@ -572,3 +572,68 @@ describe("Finance filters", () => {
     expect(container.textContent).toContain("Could not save category.");
   });
 });
+
+it("polls status without loading history until completion or discarding an in-flight page", async () => {
+  const older = Promise.withResolvers<Response>();
+  let firstPageRequests = 0;
+  let statusRequests = 0;
+  let finished = false;
+  const listing: FinanceData = {
+    ...data,
+    nextCursor: "older",
+    connections: [
+      {
+        id: "connection-1",
+        institutionId: null,
+        institutionName: "Bank",
+        accountCount: 1,
+        createdAt: "2026-01-01",
+        errorCode: null,
+        lastSyncedAt: null,
+        status: "active",
+        dailySync: true,
+        syncStatus: "running",
+      },
+    ],
+  };
+  respond((url) => {
+    if (url.pathname.endsWith("/sync-status")) {
+      statusRequests++;
+      return Response.json({
+        connection: {
+          syncJob: { status: finished ? "succeeded" : "running" },
+        },
+      });
+    }
+    if (url.searchParams.has("cursor")) return older.promise;
+    firstPageRequests++;
+    return Response.json(finished ? { ...listing, connections: [] } : listing);
+  });
+  await mount();
+  await click("Load more transactions");
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 3150));
+  });
+  expect(firstPageRequests).toBe(1);
+  await act(async () =>
+    older.resolve(
+      Response.json({
+        ...listing,
+        nextCursor: null,
+        transactions: [transaction("Older expense")],
+      }),
+    ),
+  );
+  expect(rowNames()).toEqual(["Coffee", "Supplies", "Older expense"]);
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 3150));
+  });
+  expect(statusRequests).toBe(1);
+  expect(firstPageRequests).toBe(1);
+  finished = true;
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 3150));
+  });
+  expect(firstPageRequests).toBe(2);
+  expect(rowNames()).toEqual(["Coffee", "Supplies", "Older expense"]);
+}, 15_000);

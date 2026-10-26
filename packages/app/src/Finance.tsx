@@ -190,7 +190,7 @@ function financeActions(
       }
     },
     sync: (id: string) =>
-      run(async () => syncNotice(await api.finance.syncConnection(id))),
+      run(async () => syncNotice(await api.finance.startSync(id))),
   };
 }
 
@@ -510,9 +510,7 @@ function usePlaidConnect(
           },
         );
         clearOAuthState();
-        const result = await api.finance.syncConnection(
-          connection.connectionId,
-        );
+        const result = await api.finance.startSync(connection.connectionId);
         await load();
         setNotice(syncNotice(result));
       } catch (cause) {

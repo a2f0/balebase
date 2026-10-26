@@ -9,6 +9,7 @@ export interface Bindings {
   CHECKR_ENV?: "staging" | "production";
   CHECKR_BACKGROUND_PACKAGE?: string;
   DB: D1Database;
+  FINANCE_SYNC_QUEUE?: Queue<{ jobId: string }>;
   EMAIL: SendEmail;
   INBOUND_EMAIL_DOMAIN: string;
   IMAGES: ImagesBinding;
