@@ -1,0 +1,42 @@
+{
+  "id": "balebase-smoke-v1",
+  "description": "Judge calibration and transport check; not a repository-readiness score.",
+  "criteria": [
+    {
+      "id": "balebase_smoke_report",
+      "prompt": "The workspace contains a non-empty readable scope-smoke.txt report.",
+      "dependsOn": [],
+      "gates": ["select"]
+    },
+    {
+      "id": "balebase_smoke_bun",
+      "prompt": "scope-smoke.txt identifies Bun as the package manager and cites package.json; verify the packageManager field.",
+      "dependsOn": ["balebase_smoke_report"],
+      "gates": ["select"]
+    },
+    {
+      "id": "balebase_smoke_api",
+      "prompt": "scope-smoke.txt correctly describes Hono on Cloudflare Workers, using D1 and R2, citing README.md and/or packages/api/package.json.",
+      "dependsOn": ["balebase_smoke_report"],
+      "gates": ["select"]
+    },
+    {
+      "id": "balebase_smoke_shells",
+      "prompt": "scope-smoke.txt locates shared React screens in packages/app and distinguishes the app-web and app-capacitor web/native shells with source citations.",
+      "dependsOn": ["balebase_smoke_report"],
+      "gates": ["select"]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "smoke",
+      "prompt": "Inspect README.md, package.json and packages/api/package.json. Write scope-smoke.txt naming the package manager, API framework/runtime/storage, and shared versus web/native app packages. Cite source files. Read only repository files; write only scope-smoke.txt. Do not install, execute code, commit, deploy, access credentials or external services.",
+      "criteria": [
+        "balebase_smoke_report",
+        "balebase_smoke_bun",
+        "balebase_smoke_api",
+        "balebase_smoke_shells"
+      ]
+    }
+  ]
+}

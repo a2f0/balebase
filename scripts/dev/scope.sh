@@ -28,7 +28,7 @@ install_scope() {
     git -C "$scope_dir" fetch origin "$scope_revision"
     git -C "$scope_dir" checkout --detach "$scope_revision"
   fi
-  pnpm --dir "$scope_dir" --filter cli... install --frozen-lockfile
+  pnpm --dir "$scope_dir" --filter cli... --filter portal... install --frozen-lockfile
   pnpm --dir "$scope_dir" build:cli
   mkdir -p "$scope_install_dir"
   install -m 755 "$scope_dir/apps/cli/dist/scope.mjs" "$scope_install_dir/scope"
@@ -54,6 +54,15 @@ fi
 
 export SCOPE_API_URL="${SCOPE_API_URL:-http://127.0.0.1:3100}"
 
+if [[ -z "${SCOPE_PROJECT:-}" && -f "$repo_root/.scope/config.json" ]]; then
+  SCOPE_PROJECT="$(bun -e '
+    const config = await Bun.file(process.argv[1]).json();
+    if (config.apiUrl !== process.env.SCOPE_API_URL) throw new Error("Scope project belongs to another API.");
+    process.stdout.write(config.projectId);
+  ' "$repo_root/.scope/config.json")"
+  export SCOPE_PROJECT
+fi
+
 if [[ "${1:-}" == up && -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" &&
   -z "${ANTHROPIC_API_KEY:-}" &&
   -n "${SCOPE_CLAUDE_CREDENTIALS_FILE:-}" ]]; then
@@ -74,6 +83,15 @@ if [[ "${1:-}" == up && -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" &&
 fi
 
 case "${1:-}" in
+  --help|-h|"")
+    echo 'Local stack: install, up, down, status'
+    echo 'Assessment: judge, register [git-ref], calibrate, smoke, benchmark [count], regrade <receipt>, portal'
+    echo 'See docs/scope.md. Other commands use the upstream CLI:'
+    exec node "$scope_dir/apps/cli/dist/scope.mjs" --help
+    ;;
+  register|calibrate|benchmark|regrade|smoke|judge|portal)
+    exec bun "$repo_root/scripts/dev/scope.ts" "$@"
+    ;;
   up|down|status)
     action="$1"
     shift
@@ -85,7 +103,13 @@ case "${1:-}" in
       -f docker-compose.yml -f "$repo_root/scripts/dev/scopeCompose.yaml"
       --profile mongodb --profile claude-code)
     case "$action" in
-      up) "${compose[@]}" up --detach --build "$@" ;;
+      up)
+        build=(--build)
+        for argument in "$@"; do
+          if [[ "$argument" == --no-build ]]; then build=(); fi
+        done
+        "${compose[@]}" up --detach "${build[@]}" "$@"
+        ;;
       down) "${compose[@]}" down "$@" ;;
       status) "${compose[@]}" ps "$@" ;;
     esac

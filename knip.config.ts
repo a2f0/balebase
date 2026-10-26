@@ -13,6 +13,8 @@ const androidBeforeSync = existsSync(
   : ["@capacitor/android"];
 
 const rootToolingWorkspace = {
+  // The shell wrapper dispatches assessment commands to this TypeScript entrypoint.
+  entry: ["scripts/dev/scope.ts"],
   project: ["*.{css,ts,mts}"],
   ignoreBinaries: ["shellcheck"],
   // The release uploader invokes this binary through runBun.

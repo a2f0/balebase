@@ -1,0 +1,9 @@
+{
+  "judgeModel": "gpt-6-astra",
+  "ports": {
+    "api": 3100,
+    "judge": 3202,
+    "blob": 10102,
+    "portal": 5102
+  }
+}

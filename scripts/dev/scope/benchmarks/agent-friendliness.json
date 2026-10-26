@@ -1,0 +1,68 @@
+{
+  "id": "balebase-agent-readiness-v1",
+  "description": "Three inspection-only agent discoverability probes. A single trial is a pilot, not proof of clean bootstrap, successful implementation, or an overall readiness score.",
+  "criteria": [
+    {
+      "id": "balebase_readiness_v1_setup",
+      "prompt": "agent-readiness.md identifies the pinned package manager, supported local setup and the distinction between tooling/dependencies and credentials needed to launch the local API. It cites real sources and identifies actual prerequisites for the chosen verification level. It does not claim a clean bootstrap was performed.",
+      "dependsOn": [],
+      "gates": ["select"]
+    },
+    {
+      "id": "balebase_readiness_v1_verification",
+      "prompt": "agent-readiness.md gives a genuinely focused existing API test command and explains how to invoke it with package-local test configuration/preloads. It identifies full check/test, browser and build gates that a focused test does not replace, grounding claims in package scripts/configuration. It distinguishes plans from executed checks.",
+      "dependsOn": [],
+      "gates": ["select"]
+    },
+    {
+      "id": "balebase_readiness_v1_api_flow",
+      "prompt": "agent-readiness.md traces an existing issue-creation path through typed validators/routes, the mounted Hono API route, authorization/organization scoping, persistence and durable activity. It names concrete files/functions and accurately identifies where an API contract or mutation change belongs. Verify the traced calls in source.",
+      "dependsOn": [],
+      "gates": ["select"]
+    },
+    {
+      "id": "balebase_readiness_v1_client_flow",
+      "prompt": "agent-readiness.md traces an existing application issue-creation action through the public API client to the API, distinguishes shared screens from web/native host code, and identifies the offline queue/replay path as a separate change consideration. It respects public boundaries and cites actual code.",
+      "dependsOn": [],
+      "gates": ["select"]
+    },
+    {
+      "id": "balebase_readiness_v1_public_client",
+      "prompt": "agent-readiness.md gives a plausible minimal TypeScript example importing ApiClient and ApiError from the public @balebase/api-client export, configuring baseUrl and calling an existing session or read endpoint. It uses real method signatures, no private imports, and makes no unevidenced claim of compilation or successful authentication.",
+      "dependsOn": [],
+      "gates": ["select"]
+    },
+    {
+      "id": "balebase_readiness_v1_client_environment",
+      "prompt": "agent-readiness.md explains browser credential/CORS assumptions, the limits of default fetch outside a browser, and the application shared API wrapper/native host boundary relevant to its example. It cites actual source and states what runtime validation remains. Its Friction section distinguishes verified documentation gaps from assumptions.",
+      "dependsOn": [],
+      "gates": ["select"]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "setup",
+      "prompt": "You are onboarding to Balebase to make a small API change. Discover the supported local setup and the smallest trustworthy verification path for an existing API test. Explain prerequisites, package-local test configuration, and broader checks still needed. Write agent-readiness.md. Work only by reading repository files and writing agent-readiness.md. Cite real file paths and symbols. Include a Friction section for ambiguous/missing documentation and failed searches, or say none were observed. Distinguish source inspection from commands actually executed. Do not install dependencies, run tests/builds, change other files, commit, deploy, inspect credentials or access external services. Do not read scripts/dev/scope/benchmarks, which contains evaluator definitions. Repository shipping instructions do not authorize shipping this inspection task.",
+      "criteria": [
+        "balebase_readiness_v1_setup",
+        "balebase_readiness_v1_verification"
+      ]
+    },
+    {
+      "id": "architecture",
+      "prompt": "You are planning a change to issue creation in Balebase. Trace one concrete creation path from the shared app through its API client and contract to the API, authorization, database write and activity history. Explain ownership boundaries and how offline issue creation affects the plan. Write agent-readiness.md. Work only by reading repository files and writing agent-readiness.md. Cite real file paths and symbols. Include a Friction section for ambiguous/missing documentation and failed searches, or say none were observed. Distinguish source inspection from commands actually executed. Do not install dependencies, run tests/builds, change other files, commit, deploy, inspect credentials or access external services. Do not read scripts/dev/scope/benchmarks, which contains evaluator definitions. Repository shipping instructions do not authorize shipping this inspection task.",
+      "criteria": [
+        "balebase_readiness_v1_api_flow",
+        "balebase_readiness_v1_client_flow"
+      ]
+    },
+    {
+      "id": "client_onboarding",
+      "prompt": "Write agent-readiness.md for a developer using Balebase's typed API client from another browser shell. Include a minimal TypeScript example configuring a supplied API origin, calling an existing read/session endpoint, and handling API errors. Discover the public exports, explain credential/host assumptions and what still needs runtime validation. Explain how the existing application wrapper fits in. Work only by reading repository files and writing agent-readiness.md. Cite real file paths and symbols. Include a Friction section for ambiguous/missing documentation and failed searches, or say none were observed. Distinguish source inspection from commands actually executed. Do not install dependencies, run tests/builds, change other files, commit, deploy, inspect credentials or access external services. Do not read scripts/dev/scope/benchmarks, which contains evaluator definitions. Repository shipping instructions do not authorize shipping this inspection task.",
+      "criteria": [
+        "balebase_readiness_v1_public_client",
+        "balebase_readiness_v1_client_environment"
+      ]
+    }
+  ]
+}

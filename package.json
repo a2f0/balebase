@@ -64,8 +64,11 @@
     "organizations:objects:reorganize": "bash scripts/admin/reorganizeOrganizationObjects.sh",
     "organizations:purge": "bash scripts/admin/purgeOrganizations.sh",
     "scope": "bash scripts/dev/scope.sh",
+    "scope:benchmark": "bash scripts/dev/scope.sh benchmark",
     "scope:down": "bash scripts/dev/scope.sh down",
     "scope:install": "bash scripts/dev/scope.sh install",
+    "scope:judge": "bash scripts/dev/scope.sh judge",
+    "scope:register": "bash scripts/dev/scope.sh register",
     "scope:status": "bash scripts/dev/scope.sh status",
     "scope:up": "bash scripts/dev/scope.sh up",
     "terraform:apply": "bash terraform/scripts/run.sh apply",
@@ -78,7 +81,7 @@
     "test:hooks": "bun test scripts/testing/prePush.test.ts",
     "test:images": "bun test scripts/testing/brandImages.test.ts",
     "test:markdownlint": "bun test scripts/testing/markdownlintConfig.test.ts",
-    "test:scope": "bun test scripts/testing/scope.test.ts",
+    "test:scope": "bun test scripts/testing/scope.test.ts scripts/dev/scope",
     "test:sentry": "bun test scripts/testing/sentryRelease.test.ts scripts/testing/sentryOrchestration.test.ts",
     "test:seo-probe": "bun test scripts/testing/seoProbe.test.ts",
     "test:staging": "bash scripts/testing/testDeployStaging.sh && bun test scripts/testing/stagingFrontends.test.ts",
@@ -93,6 +96,7 @@
   },
   "devDependencies": {
     "@a2f0/agent-tool": "0.1.20",
+    "@azure/storage-blob": "12.30.0",
     "@biomejs/biome": "2.5.15",
     "@commitlint/cli": "21.2.3",
     "@commitlint/config-conventional": "21.2.3",
@@ -103,9 +107,11 @@
     "knip": "6.41.0",
     "lint-staged": "17.6.0",
     "markdownlint-cli2": "0.23.3",
+    "tar": "7.5.16",
     "turbo": "2.11.9",
     "typescript": "6.0.3",
-    "wrangler": "4.151.1"
+    "wrangler": "4.151.1",
+    "zod": "4.6.7"
   },
   "engines": {
     "bun": ">=1.4.2"

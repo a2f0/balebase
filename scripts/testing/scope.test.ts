@@ -190,7 +190,9 @@ test("install builds matching source without fetching and installs the CLI", asy
   expect(commands).not.toContain("fetch");
   expect(commands).not.toContain("checkout");
   const builds = await Bun.file(join(directory, "pnpm.log")).text();
-  expect(builds).toContain("--filter cli... install --frozen-lockfile");
+  expect(builds).toContain(
+    "--filter cli... --filter portal... install --frozen-lockfile",
+  );
   expect(builds).toContain("build:cli");
   expect(await Bun.file(join(env.SCOPE_INSTALL_DIR, "scope")).exists()).toBe(
     true,
@@ -251,4 +253,11 @@ test("local configuration selects the source and API for CLI commands", async ()
     "-o",
     "json",
   ]);
+});
+
+test("configuration-only startup reuses images without conflicting build flags", async () => {
+  expect(run("up", "--no-build").exitCode).toBe(0);
+  const args = (await record()).args;
+  expect(args).toContain("--no-build");
+  expect(args).not.toContain("--build");
 });
