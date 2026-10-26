@@ -5,6 +5,7 @@ import {
   loadCriteria,
   orderCriteria,
 } from "../../dev/scope/judge/criteria";
+import { trustedEvaluationRequest } from "../../dev/scope/judge/request";
 import { loopbackOrigin } from "../../dev/scope/settings";
 import { readSuite, validateSuite } from "../../dev/scope/suites";
 import type { Criterion } from "../../dev/scope/types";
@@ -39,6 +40,53 @@ test("API origins accept loopback only, without credentials or URL suffixes", ()
     "http://localhost#fragment",
   ])
     expect(() => loopbackOrigin(value)).toThrow();
+});
+
+test("judge rejects browser requests and foreign Host names", () => {
+  const request = (
+    origin: string,
+    headers: Record<string, string> = { "Content-Type": "application/json" },
+  ) =>
+    new Request(`${origin}/api/v1/evaluate`, {
+      method: "POST",
+      headers,
+      body: "{}",
+    });
+  for (const host of [
+    "127.0.0.1",
+    "localhost",
+    "host.docker.internal",
+    "host.containers.internal",
+  ])
+    expect(trustedEvaluationRequest(request(`http://${host}:3202`), 3202)).toBe(
+      true,
+    );
+  for (const value of [
+    request("http://attacker.example:3202"),
+    request("http://localhost:9999"),
+    request("http://localhost:3202", { "Content-Type": "text/plain" }),
+    request("http://localhost:3202", {
+      "Content-Type": "application/json",
+      Origin: "null",
+    }),
+  ])
+    expect(trustedEvaluationRequest(value, 3202)).toBe(false);
+});
+
+test("shell and Compose port mappings match the checked-in pins", async () => {
+  const pins = await Bun.file(
+    new URL("../../dev/scope/pins.json", import.meta.url),
+  ).json();
+  const shell = await Bun.file(
+    new URL("../../dev/scope.sh", import.meta.url),
+  ).text();
+  const compose = await Bun.file(
+    new URL("../../dev/scopeCompose.yaml", import.meta.url),
+  ).text();
+  expect(shell).toContain(`SCOPE_API_URL:-http://127.0.0.1:${pins.ports.api}`);
+  expect(compose).toContain(`127.0.0.1:${pins.ports.api}:80`);
+  expect(compose).toContain(`127.0.0.1:${pins.ports.blob}:10000`);
+  expect(compose).toContain(`host.docker.internal:${pins.ports.judge}`);
 });
 
 test("judge inherits CLI necessities but no provider keys or repository credentials", () => {

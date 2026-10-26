@@ -262,6 +262,13 @@ test("configuration-only startup reuses images without conflicting build flags",
   const args = (await record()).args;
   expect(args).toContain("--no-build");
   expect(args).not.toContain("--build");
+  // /bin/bash is 3.2 on stock macOS even when PATH selects a newer Bash.
+  const stock = Bun.spawnSync(
+    ["/bin/bash", "scripts/dev/scope.sh", "up", "--no-build"],
+    { cwd: directory, env, stdout: "pipe", stderr: "pipe" },
+  );
+  expect(stock.exitCode, stock.stderr.toString()).toBe(0);
+  expect((await record()).args).not.toContain("--build");
 });
 
 test("malformed saved project cannot block stack management, help or assessment dispatch", async () => {

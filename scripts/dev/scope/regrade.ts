@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { git } from "./register";
+import { isCompleted } from "./runState";
 import { apiRequest, settings, stateDir } from "./settings";
 import { configSchema, evaluationResultSchema } from "./types";
 
@@ -20,6 +21,7 @@ const runSchema = z.object({
   scenario: z.object({ criteria: z.array(z.string()).min(1) }),
   run: z.object({
     status: z.literal("done"),
+    outcome: z.string(),
     turns: z
       .array(
         z.object({
@@ -49,10 +51,15 @@ export async function regrade(path: string): Promise<void> {
     cases,
   };
   console.log(`Regrade receipt: ${directory}/receipt.json`);
+  await writeFile(
+    join(directory, "receipt.json"),
+    JSON.stringify(report, null, 2),
+  );
   for (const entry of receipt.cases) {
     const run = runSchema.parse(
       await apiRequest(`/requests/${encodeURIComponent(entry.id)}`),
     );
+    isCompleted(run.run.status, run.run.outcome);
     const turn = run.run.turns[0];
     if (!turn) throw new Error("Missing completed turn");
     const response = await fetch(

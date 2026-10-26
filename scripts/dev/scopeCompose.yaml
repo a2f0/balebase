@@ -52,6 +52,10 @@ services:
       JUDGE_SERVICE_URL: ${SCOPE_JUDGE_URL:-http://host.docker.internal:3202}
     volumes:
       - claude_projects:/home/node/.claude/projects
+    # Nested volume mounts otherwise create a root-owned parent directory.
+    # Keep non-project CLI state writable but ephemeral across restarts.
+    tmpfs:
+      - /home/node/.claude:mode=1777
     depends_on:
       judge: !reset null
       claude-sessions-init:

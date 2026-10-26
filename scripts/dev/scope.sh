@@ -95,11 +95,13 @@ case "${1:-}" in
       --profile mongodb --profile claude-code)
     case "$action" in
       up)
-        build=(--build)
+        build=true
         for argument in "$@"; do
-          if [[ "$argument" == --no-build ]]; then build=(); fi
+          if [[ "$argument" == --no-build ]]; then build=false; fi
         done
-        "${compose[@]}" up --detach "${build[@]}" "$@"
+        compose+=(up --detach)
+        if [[ "$build" == true ]]; then compose+=(--build); fi
+        "${compose[@]}" "$@"
         ;;
       down) "${compose[@]}" down "$@" ;;
       status) "${compose[@]}" ps "$@" ;;

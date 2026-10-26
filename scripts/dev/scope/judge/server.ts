@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { settings } from "../settings";
 import { model } from "./codex";
 import { evaluate, inputSchema } from "./evaluate";
+import { trustedEvaluationRequest } from "./request";
 
 const auth = spawnSync("codex", ["login", "status"], { encoding: "utf8" });
 if (auth.status !== 0 || !`${auth.stdout}${auth.stderr}`.includes("ChatGPT")) {
@@ -32,6 +33,11 @@ Bun.serve({
     if (path !== "/api/v1/evaluate" || request.method !== "POST") {
       return new Response("Not found", { status: 404 });
     }
+    if (!trustedEvaluationRequest(request, settings.judgePort))
+      return Response.json(
+        { error: "Only local non-browser JSON clients are allowed" },
+        { status: 403 },
+      );
     const parsed = inputSchema.safeParse(
       await request.json().catch(() => null),
     );

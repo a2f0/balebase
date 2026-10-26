@@ -1,9 +1,9 @@
 # Local Scope assessments
 
 [Microsoft Scope](https://microsoft.github.io/scope/) runs agents against fixed
-repository snapshots. This setup adapts the assessment tools in the
-`~/github/tearleads2` checkout
-(`2cda350734f39c5566045d59b116014db09258d6`) to Balebase, retaining this
+repository snapshots. This setup adapts the assessment tools in
+[`a2f0/tearleads`](https://github.com/a2f0/tearleads/tree/2cda350734f39c5566045d59b116014db09258d6)
+to Balebase, retaining this
 repository's container worker. It measures whether an agent can discover the
 setup, feature boundaries, and public client API it needs to work here.
 
@@ -65,7 +65,9 @@ The API uses anonymous local development mode. Local processes can submit
 work using the worker's credentials. The worker also has the container-engine
 socket, so it is intended for trusted tasks and source. Stop containers with
 `bun run scope:down` and stop the foreground judge with Ctrl-C when idle.
-Named volumes preserve projects, artifacts, and worker session evidence.
+Named volumes preserve projects, artifacts, and worker project transcripts.
+Other Claude user state lives in writable temporary memory and resets when
+the worker restarts.
 After a configuration-only change, `bun run scope:up --no-build` reuses the
 existing images. Rebuild when the pinned upstream source changes.
 

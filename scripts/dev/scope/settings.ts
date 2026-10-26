@@ -64,7 +64,11 @@ export async function judgeHealth() {
     {
       signal: AbortSignal.timeout(5000),
     },
-  );
+  ).catch((cause: unknown) => {
+    throw new Error("Start the local judge with bun run scope judge", {
+      cause,
+    });
+  });
   if (!response.ok)
     throw new Error("Start the local judge with bun run scope judge");
   return z
