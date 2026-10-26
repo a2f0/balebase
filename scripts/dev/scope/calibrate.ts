@@ -73,16 +73,17 @@ export async function calibrate(): Promise<void> {
       snapshotUrl,
       suite.criteria.map((c) => c.id),
     );
-    const verdict = evaluationResultSchema.parse(await response.json());
+    const raw: unknown = await response.json();
     await writeFile(
       join(directory, `${label}.json`),
       JSON.stringify(
-        { status: response.status, expectedPassed, verdict },
+        { status: response.status, expectedPassed, verdict: raw },
         null,
         2,
       ),
     );
-    assert.equal(response.status, 200, JSON.stringify(verdict));
+    assert.equal(response.status, 200, JSON.stringify(raw));
+    const verdict = evaluationResultSchema.parse(raw);
     assert.equal(verdict.passed, expectedPassed);
     assert.equal(verdict.criteriaResults.length, 4);
     assert.deepEqual(
