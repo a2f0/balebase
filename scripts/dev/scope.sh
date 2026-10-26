@@ -2,6 +2,14 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+if [[ -f "$repo_root/.scope/local.env" ]]; then
+  set -a
+  # Local developer configuration, including the container endpoint and tokens.
+  # shellcheck disable=SC1091
+  source "$repo_root/.scope/local.env"
+  set +a
+fi
+
 scope_dir="${SCOPE_SOURCE_DIR:-$HOME/.local/share/scope/source}"
 scope_revision=16544702d9dd4f0f5a7991fa4dbdf07a9247fedc
 
@@ -29,21 +37,26 @@ if [[ "${1:-}" == install ]]; then
   exit
 fi
 
-if [[ -f "$repo_root/.scope/local.env" ]]; then
-  set -a
-  # Local developer configuration, including the container endpoint and tokens.
-  # shellcheck disable=SC1091
-  source "$repo_root/.scope/local.env"
-  set +a
+if [[ ! -f "$scope_dir/apps/cli/dist/scope.mjs" ]] ||
+  [[ "$(git -C "$scope_dir" rev-parse HEAD 2>/dev/null || true)" != "$scope_revision" ]]; then
+  echo 'Scope is missing or uses a different revision. Run bun run scope:install.' >&2
+  exit 1
 fi
 
 export SCOPE_API_URL="${SCOPE_API_URL:-http://127.0.0.1:3100}"
+export GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 
-if [[ "${1:-}" == up && -n "${SCOPE_CLAUDE_CREDENTIALS_FILE:-}" ]]; then
+if [[ "${1:-}" == up && -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" &&
+  -n "${SCOPE_CLAUDE_CREDENTIALS_FILE:-}" ]]; then
   # Read the existing login at startup so tokens are never copied into the repo.
   CLAUDE_CODE_OAUTH_TOKEN="$(bun -e '
-    const { claudeAiOauth: oauth } = await Bun.file(process.argv[1]).json();
-    if (!oauth?.accessToken || oauth.expiresAt <= Date.now()) {
+    const file = Bun.file(process.argv[1]);
+    if (!await file.exists()) {
+      throw new Error("Claude credential file is missing; use claude setup-token instead.");
+    }
+    const { claudeAiOauth: oauth } = await file.json();
+    if (!oauth?.accessToken || !Number.isFinite(oauth.expiresAt) ||
+        oauth.expiresAt <= Date.now() + 300_000) {
       throw new Error("Claude login is missing or expired; refresh it with Claude Code.");
     }
     process.stdout.write(oauth.accessToken);
