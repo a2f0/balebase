@@ -1,3 +1,4 @@
+ALTER TABLE user_deletion_requests ADD COLUMN request_id TEXT;
 ALTER TABLE user_deletion_requests ADD COLUMN requested_by_user_id TEXT;
 ALTER TABLE user_deletion_requests ADD COLUMN requested_by_name TEXT;
 ALTER TABLE user_deletion_requests ADD COLUMN requested_by_email TEXT;

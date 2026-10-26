@@ -366,6 +366,24 @@ it("records a user's own request once and permits cancellation", async () => {
   expect((await f.request("/deletion", post("delete my account"))).status).toBe(
     200,
   );
+  const requested = f.database
+    .query("SELECT requested_at FROM user_deletion_requests")
+    .get() as { requested_at: string };
+  const events = () =>
+    f.database
+      .query(
+        "SELECT action, user_id, actor_user_id, actor_name, actor_email, requested_at FROM user_deletion_events ORDER BY rowid",
+      )
+      .all();
+  const actor = {
+    user_id: "actor",
+    actor_user_id: "actor",
+    actor_name: "Admin Actor",
+    actor_email: "actor@example.com",
+  };
+  expect(events()).toEqual([
+    { ...actor, action: "requested", requested_at: requested.requested_at },
+  ]);
   f.database
     .query("UPDATE user_deletion_requests SET requested_at = '2026-08-01'")
     .run();
@@ -382,6 +400,19 @@ it("records a user's own request once and permits cancellation", async () => {
       })
     ).status,
   ).toBe(200);
+  expect(events()).toEqual([
+    { ...actor, action: "requested", requested_at: requested.requested_at },
+    { ...actor, action: "canceled", requested_at: "2026-08-01" },
+  ]);
+  expect(
+    (
+      await f.request("/deletion", {
+        method: "DELETE",
+        headers: { Origin: origin },
+      })
+    ).status,
+  ).toBe(200);
+  expect(events()).toHaveLength(2);
   expect(await purgeRequestedUsers(f.bindings, now)).toEqual({
     purged: 0,
     blocked: 0,
@@ -393,6 +424,25 @@ it("rejects deletion requests from impersonated sessions", async () => {
   f.insertUser("actor");
   expect((await f.request("/deletion", post("delete my account"))).status).toBe(
     403,
+  );
+  f.database.exec(
+    "INSERT INTO user_deletion_requests (user_id, requested_at) VALUES ('actor', '2026-10-01')",
+  );
+  expect(
+    (
+      await f.request("/deletion", {
+        method: "DELETE",
+        headers: { Origin: origin },
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    f.database
+      .query("SELECT user_id, requested_at FROM user_deletion_requests")
+      .get(),
+  ).toEqual({ user_id: "actor", requested_at: "2026-10-01" });
+  expect(f.database.query("SELECT * FROM user_deletion_events").all()).toEqual(
+    [],
   );
 });
 
@@ -729,5 +779,29 @@ it("rolls back user deletion requests and cancellations when recording history f
     ).toEqual({ requested_at: "2026-10-01" });
   } finally {
     error.mockRestore();
+  }
+});
+
+it("records only one request event when duplicate requests have the same timestamp", async () => {
+  const f = await fixture();
+  f.insertUser("target");
+  const clock = spyOn(Date.prototype, "toISOString").mockReturnValue(
+    "2026-10-26T00:00:00.000Z",
+  );
+  try {
+    const responses = await Promise.all([
+      f.request("/users/target/deletion", post("target@example.com")),
+      f.request("/users/target/deletion", post("target@example.com")),
+    ]);
+    expect(responses.map(({ status }) => status).sort()).toEqual([200, 409]);
+    expect(
+      f.database
+        .query("SELECT action, requested_at FROM user_deletion_events")
+        .all(),
+    ).toEqual([
+      { action: "requested", requested_at: "2026-10-26T00:00:00.000Z" },
+    ]);
+  } finally {
+    clock.mockRestore();
   }
 });

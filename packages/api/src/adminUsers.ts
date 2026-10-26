@@ -11,6 +11,11 @@ import {
   requestUserDeletion,
 } from "./userDeletionActivity";
 
+interface AdminUserRow extends Omit<AdminUser, "banned" | "emailVerified"> {
+  banned: number;
+  emailVerified: number;
+}
+
 export const adminUsers = new Hono<{
   Bindings: Bindings;
   Variables: AuthVariables;
@@ -55,7 +60,7 @@ adminUsers.get("/", async (context) => {
   if (!users || !count) throw new Error("Could not load users.");
   return respond(context, adminUsersRoutes.list, {
     total: (count.results[0] as { total: number }).total,
-    users: (users.results as AdminUser[]).map((user) => ({
+    users: (users.results as AdminUserRow[]).map((user) => ({
       ...user,
       banned: Boolean(user.banned),
       emailVerified: Boolean(user.emailVerified),

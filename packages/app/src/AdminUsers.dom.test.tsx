@@ -226,3 +226,64 @@ it("shows failed requests without changing deletion status", async () => {
       ?.disabled,
   ).toBeFalse();
 });
+
+it("keeps rows mounted while a mutation refreshes their status", async () => {
+  const target = user("target@example.com", null);
+  let reload: ((response: Response) => void) | undefined;
+  let marked = false;
+  globalThis.fetch = ((_input, init) => {
+    if (init?.method === "POST") {
+      marked = true;
+      return Promise.resolve(Response.json({ requestedAt: "2026-10-26" }));
+    }
+    if (marked)
+      return new Promise<Response>((resolve) => {
+        reload = resolve;
+      });
+    return Promise.resolve(Response.json({ total: 1, users: [target] }));
+  }) as typeof fetch;
+  await renderUsers();
+  const row = container.querySelector("tbody tr");
+  await openUserAction("Mark for deletion");
+  await typeEmail(target.email);
+  await act(async () => button("Mark for deletion").click());
+  expect(container.querySelector("tbody tr")).toBe(row);
+  expect(
+    container.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')
+      ?.disabled,
+  ).toBeTrue();
+  await act(async () =>
+    reload?.(
+      Response.json({
+        total: 1,
+        users: [{ ...target, deletionRequestedAt: "2026-10-26" }],
+      }),
+    ),
+  );
+  expect(container.querySelector("tbody tr")).toBe(row);
+  expect(row?.textContent).toContain("Pending deletion");
+});
+
+it("refreshes a stale row when another admin already marked it", async () => {
+  const target = user("target@example.com", null);
+  globalThis.fetch = (async (_input, init) => {
+    if (init?.method === "POST") {
+      target.deletionRequestedAt = "2026-10-26";
+      return Response.json(
+        { error: "User is already marked for deletion." },
+        { status: 409 },
+      );
+    }
+    return Response.json({ total: 1, users: [target] });
+  }) as typeof fetch;
+  await renderUsers();
+  await openUserAction("Mark for deletion");
+  await typeEmail(target.email);
+  await act(async () => button("Mark for deletion").click());
+  expect(container.textContent).toContain(
+    "User is already marked for deletion.",
+  );
+  expect(container.textContent).toContain("Pending deletion");
+  await openUserAction("Cancel deletion");
+  await act(async () => button("Keep request").click());
+});

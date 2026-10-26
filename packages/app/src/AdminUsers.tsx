@@ -30,20 +30,23 @@ export function AdminUsers() {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string>();
 
-  const loadUsers = useCallback(async () => {
-    setBusy(true);
-    setError(undefined);
-    setListing(undefined);
-    try {
-      setListing(await api.adminUsers.list(adminUserListQuery(page)));
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(false);
-    }
-  }, [page]);
+  const loadUsers = useCallback(
+    async (preserveListing = false) => {
+      setBusy(true);
+      setError(undefined);
+      if (!preserveListing) setListing(undefined);
+      try {
+        setListing(await api.adminUsers.list(adminUserListQuery(page)));
+      } catch (cause) {
+        setError(messageFrom(cause));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [page],
+  );
 
-  const lifecycle = useAdminUserDeletion(loadUsers);
+  const lifecycle = useAdminUserDeletion(() => loadUsers(true));
 
   useEffect(() => {
     void loadUsers();

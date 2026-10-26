@@ -466,8 +466,8 @@ async function protectedOrganizationFixture() {
     "0031_require_member_two_factor.sql",
     "0040_pin_default_organization.sql",
     "0048_create_user_deletion_requests.sql",
-    "0071_record_user_deletion_activity.sql",
     "0055_track_user_last_active.sql",
+    "0071_record_user_deletion_activity.sql",
   ]) {
     database.exec(
       await Bun.file(

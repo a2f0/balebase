@@ -110,7 +110,8 @@ confirmation modal; restoring also requires confirmation.
 Root admins can mark users for deletion or cancel a pending request from the
 row actions menu at `/root/users`. Marking requires typing the user's email.
 The list shows pending requests, their dates, and who initiated them. Admin and
-system accounts cannot be marked from this page. The action uses the same
+system accounts, including the acting admin, cannot be marked from this page.
+The action uses the same
 30-day queue and retention rules as self-service requests below; it does not
 ban the user or delete their organizations.
 
