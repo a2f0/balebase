@@ -1346,3 +1346,45 @@ function toD1(database: Database) {
     },
   } as unknown as D1Database;
 }
+
+it("attributes daily-sync settings to API keys and protects bank activity with Finance access", async () => {
+  const f = await createFixture();
+  const read = await f.createKey("read");
+  const write = await f.createKey("write");
+  f.database
+    .query(`INSERT INTO plaid_items
+    (id, organization_id, plaid_item_id, access_token_ciphertext, access_token_iv, institution_name, created_by, created_at, updated_at)
+    VALUES ('daily-item', ?, 'daily-plaid', '', '', 'Example bank', ?, ?, ?)`)
+    .run(f.organizationId, f.userId, now(), now());
+  const path = "/api/finance/connections/daily-item/sync-settings";
+  expect(
+    (await f.withKey(read.token, "PATCH", path, { dailySync: true })).status,
+  ).toBe(403);
+  expect(
+    (await f.withKey(write.token, "PATCH", path, { dailySync: true })).status,
+  ).toBe(200);
+  const historyPath = "/api/activity?resourceType=finance_connection";
+  const history = await f.withKey<{ events: unknown[] }>(
+    read.token,
+    "GET",
+    historyPath,
+  );
+  expect(history.body.events).toEqual([
+    expect.objectContaining({
+      action: "finance.daily_sync_changed",
+      details: { before: false, after: true },
+      actor: expect.objectContaining({
+        id: f.userId,
+        apiKey: { id: write.apiKey.id, name: "write key", channel: "rest" },
+      }),
+    }),
+  ]);
+  f.database.query('DELETE FROM "teamMember" WHERE "userId" = ?').run(f.userId);
+  expect(
+    (await f.withKey(write.token, "PATCH", path, { dailySync: false })).status,
+  ).toBe(403);
+  expect(
+    (await f.withKey<{ events: unknown[] }>(read.token, "GET", historyPath))
+      .body.events,
+  ).toEqual([]);
+});

@@ -8,7 +8,12 @@ import {
 } from "@balebase/validators/finance";
 import type { LinkedEmail } from "@balebase/validators/inbox";
 import { Hono } from "hono";
-import { activityBatch, findActivity } from "./activity";
+import {
+  activityBatch,
+  activityStatement,
+  findActivity,
+  requestActor,
+} from "./activity";
 import { accountDetail } from "./financeAccountDetail";
 import {
   addDefaultCategories,
@@ -25,7 +30,6 @@ import { financeListingFilters } from "./financeListingFilters";
 import { expenseReport } from "./financeReports";
 import type { PlaidItemRow } from "./financeSync";
 import {
-  financeSyncActor,
   legacySyncConnection,
   startConnectionSync,
   updateSyncSettings,
@@ -378,24 +382,46 @@ async function disconnectConnection(
     });
   } catch (error) {
     await context.env.DB.prepare(
-      "UPDATE plaid_items SET status = 'error' WHERE id = ? AND status = 'disconnecting'",
+      "UPDATE plaid_items SET status = ?, disconnect_lease_until = NULL WHERE id = ? AND status = 'disconnecting'",
     )
-      .bind(item.id)
+      .bind(item.status === "disconnecting" ? "error" : item.status, item.id)
       .run();
     throw error;
   }
-  const now = new Date().toISOString();
-  await context.env.DB.prepare(
-    `UPDATE plaid_items
-       SET access_token_ciphertext = '', access_token_iv = '', cursor = NULL,
-           status = 'disconnected', daily_sync = 0, daily_sync_actor = ?, disconnect_lease_until = NULL, error_code = NULL, error_message = NULL,
-           disconnected_at = ?,
-           updated_at = ?
-       WHERE id = ? AND organization_id = ?`,
-  )
-    .bind(await financeSyncActor(context), now, now, item.id, organizationId)
-    .run();
+  await recordDisconnection(context, item);
   return context.body(null, 204);
+}
+
+async function recordDisconnection(
+  context: FinanceContext,
+  item: NonNullable<Awaited<ReturnType<typeof findItem>>>,
+) {
+  const now = new Date().toISOString();
+  await activityBatch(context.env.DB, context.get("apiKey"), [
+    context.env.DB.prepare(
+      `UPDATE plaid_items SET access_token_ciphertext = '', access_token_iv = '', cursor = NULL,
+      status = 'disconnected', daily_sync = 0, disconnect_lease_until = NULL,
+      error_code = NULL, error_message = NULL, disconnected_at = ?, updated_at = ?
+      WHERE id = ? AND organization_id = ? AND status = 'disconnecting'`,
+    ).bind(now, now, item.id, context.get("organizationId")),
+    activityStatement(
+      context.env.DB,
+      {
+        action: "finance.connection_disconnected",
+        actorId: requestActor(context).userId,
+        occurredAt: now,
+        organizationId: context.get("organizationId"),
+        root: {
+          id: item.id,
+          label: item.institution_name ?? "Bank connection",
+          type: "finance_connection",
+        },
+        subject: { id: item.id, type: "finance_connection" },
+        details: { dailySync: false },
+      },
+      { sql: "changes() > 0", bindings: [] },
+    ),
+  ]);
 }
 
 async function deleteConnectionData(context: FinanceContext) {
@@ -593,12 +619,14 @@ async function findItem(
 ) {
   return database
     .prepare(
-      `SELECT id, access_token_ciphertext, access_token_iv, cursor
+      `SELECT id, access_token_ciphertext, access_token_iv, cursor, status, institution_name
        FROM plaid_items
        WHERE id = ? AND organization_id = ? AND status <> 'disconnected'`,
     )
     .bind(id, organizationId)
-    .first<PlaidItemRow>();
+    .first<
+      PlaidItemRow & { status: string; institution_name: string | null }
+    >();
 }
 
 async function findItemByPlaidId(database: D1Database, plaidItemId: string) {

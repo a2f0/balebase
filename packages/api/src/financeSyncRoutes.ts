@@ -1,27 +1,8 @@
 import { financeRoutes } from "@balebase/validators/finance";
+import { activityBatch, activityStatement, requestActor } from "./activity";
 import type { FinanceContext } from "./financeContext";
 import { enqueueSync, type SyncJobRow, toSyncJob } from "./financeSyncJobs";
 import { respond } from "./respond";
-
-export async function financeSyncActor(context: FinanceContext) {
-  const user = context.get("authSession").user;
-  const key = context.get("apiKey");
-  const keyRow = key
-    ? await context.env.DB.prepare(
-        "SELECT name FROM organization_api_keys WHERE id = ?",
-      )
-        .bind(key.id)
-        .first<{ name: string }>()
-    : null;
-  return JSON.stringify({
-    userId: user.id,
-    name: user.name,
-    email: user.email,
-    apiKeyId: key?.id ?? null,
-    apiKeyName: keyRow?.name ?? null,
-    channel: key?.channel ?? "web",
-  });
-}
 
 async function requestSync(context: FinanceContext) {
   return enqueueSync(
@@ -29,7 +10,7 @@ async function requestSync(context: FinanceContext) {
     context.get("organizationId"),
     context.req.param("id") ?? "",
     "manual",
-    await financeSyncActor(context),
+    requestActor(context),
   );
 }
 
@@ -64,7 +45,7 @@ export async function legacySyncConnection(context: FinanceContext) {
         modified: job.modified,
         removed: job.removed,
       });
-    if (job.error_code || job.status === "cancelled")
+    if (job.status === "failed" || job.status === "cancelled")
       return context.json(
         {
           code: job.error_code ?? "SYNC_CANCELLED",
@@ -89,21 +70,55 @@ export async function updateSyncSettings(context: FinanceContext) {
   );
   if (!input.success)
     return context.json({ error: "dailySync must be a boolean." }, 400);
-  const result = await context.env.DB.prepare(`UPDATE plaid_items
-    SET daily_sync = ?, daily_sync_actor = ?, updated_at = ?
-    WHERE id = ? AND organization_id = ? AND status IN ('active', 'error') RETURNING id`)
-    .bind(
-      input.data.dailySync ? 1 : 0,
-      await financeSyncActor(context),
-      new Date().toISOString(),
-      context.req.param("id") ?? "",
-      context.get("organizationId"),
-    )
-    .first();
-  if (!result)
+  const id = context.req.param("id") ?? "";
+  const organizationId = context.get("organizationId");
+  const row =
+    await context.env.DB.prepare(`SELECT daily_sync, institution_name FROM plaid_items
+    WHERE id = ? AND organization_id = ? AND status IN ('active', 'error')`)
+      .bind(id, organizationId)
+      .first<{ daily_sync: number; institution_name: string | null }>();
+  if (!row)
     return context.json(
       { error: "Connection not found or disconnected." },
       404,
+    );
+  if (Boolean(row.daily_sync) === input.data.dailySync)
+    return respond(context, financeRoutes.updateSyncSettings, input.data);
+  const now = new Date().toISOString();
+  const [result] = await activityBatch(context.env.DB, context.get("apiKey"), [
+    context.env.DB.prepare(`UPDATE plaid_items SET daily_sync = ?, updated_at = ?
+      WHERE id = ? AND organization_id = ? AND daily_sync = ? AND status IN ('active', 'error')`).bind(
+      input.data.dailySync ? 1 : 0,
+      now,
+      id,
+      organizationId,
+      row.daily_sync,
+    ),
+    activityStatement(
+      context.env.DB,
+      {
+        action: "finance.daily_sync_changed",
+        actorId: requestActor(context).userId,
+        occurredAt: now,
+        organizationId,
+        root: {
+          id,
+          label: row.institution_name ?? "Bank connection",
+          type: "finance_connection",
+        },
+        subject: { id, type: "finance_connection" },
+        details: {
+          before: Boolean(row.daily_sync),
+          after: input.data.dailySync,
+        },
+      },
+      { sql: "changes() > 0", bindings: [] },
+    ),
+  ]);
+  if (!result?.meta.changes)
+    return context.json(
+      { error: "Connection changed. Reload and try again." },
+      409,
     );
   return respond(context, financeRoutes.updateSyncSettings, input.data);
 }

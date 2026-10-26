@@ -91,7 +91,7 @@ async function checkpoint(
     env.DB.prepare(`UPDATE finance_sync_jobs
     SET cursor = ?, added = added + ?, modified = modified + ?, removed = removed + ?,
       pages = pages + 1, failures = 0, status = ?, lease_until = NULL, available_at = ?,
-      error_code = NULL, error_message = NULL, finished_at = ? WHERE id = ?`).bind(
+      error_code = NULL, error_message = NULL, finished_at = ? WHERE id = ? AND status = 'running' AND lease_until = ?`).bind(
       page.next_cursor,
       page.added.length,
       page.modified.length,
@@ -100,12 +100,13 @@ async function checkpoint(
       now,
       page.has_more ? null : now,
       job.id,
+      job.lease_until,
     ),
   ];
   if (!page.has_more) {
     statements.push(
       env.DB.prepare(`UPDATE plaid_items SET cursor = ?, status = 'active',
-      error_code = NULL, error_message = NULL, last_synced_at = ?, updated_at = ? WHERE id = ?`).bind(
+      error_code = NULL, error_message = NULL, last_synced_at = ?, updated_at = ? WHERE id = ? AND changes() > 0`).bind(
         page.next_cursor,
         now,
         now,
@@ -125,8 +126,8 @@ async function retryOrFail(env: Bindings, job: SyncJobRow, error: unknown) {
   ) {
     await env.DB.prepare(`UPDATE finance_sync_jobs SET cursor = initial_cursor,
       added = 0, modified = 0, removed = 0, pages = 0, failures = 0, restarts = restarts + 1,
-      status = 'queued', lease_until = NULL WHERE id = ?`)
-      .bind(job.id)
+      status = 'queued', lease_until = NULL WHERE id = ? AND status = 'running' AND lease_until = ?`)
+      .bind(job.id, job.lease_until)
       .run();
     await dispatchSyncJob(env, job.id);
     return;
@@ -141,19 +142,20 @@ async function retryOrFail(env: Bindings, job: SyncJobRow, error: unknown) {
   const message = plaid?.message ?? "Could not sync this connection.";
   const statements = [
     env.DB.prepare(`UPDATE finance_sync_jobs SET status = ?,
-    error_code = ?, error_message = ?, available_at = ?, lease_until = NULL, finished_at = ? WHERE id = ?`).bind(
+    error_code = ?, error_message = ?, available_at = ?, lease_until = NULL, finished_at = ? WHERE id = ? AND status = 'running' AND lease_until = ?`).bind(
       retry ? "queued" : "failed",
       code,
       message,
       available,
       retry ? null : now,
       job.id,
+      job.lease_until,
     ),
   ];
   if (!retry) {
     statements.push(
       env.DB.prepare(`UPDATE plaid_items SET status = 'error', error_code = ?,
-      error_message = ?, updated_at = ? WHERE id = ?`).bind(
+      error_message = ?, updated_at = ? WHERE id = ? AND changes() > 0`).bind(
         code,
         message,
         now,

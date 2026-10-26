@@ -83,6 +83,7 @@ export const ActivityResourceTypeSchema = z.enum([
   "organization_member",
   "api_key",
   "finance_transaction",
+  "finance_connection",
   "issue",
 ]);
 export type ActivityResourceType = z.infer<typeof ActivityResourceTypeSchema>;

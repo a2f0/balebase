@@ -190,10 +190,13 @@ describe("activity feed, mounted", () => {
     expect(container.querySelectorAll(".activityRow")).toHaveLength(1);
     await choose("finance_transaction");
     expect(requests.at(-1)?.search).toBe("?resourceType=finance_transaction");
+    await choose("finance_connection");
+    expect(requests.at(-1)?.search).toBe("?resourceType=finance_connection");
     await act(async () => root?.render(<Activity onNavigate={() => {}} />));
     await settle();
     expect(requests.at(-1)?.search).toBe("");
     expect(container.textContent).not.toContain("Transactions");
+    expect(container.textContent).not.toContain("Bank connections");
     await act(async () =>
       root?.render(<Activity canAccessFinance onNavigate={() => {}} />),
     );

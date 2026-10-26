@@ -572,3 +572,47 @@ describe("Finance filters", () => {
     expect(container.textContent).toContain("Could not save category.");
   });
 });
+
+it("does not let background sync polling discard an in-flight transaction page", async () => {
+  const older = Promise.withResolvers<Response>();
+  let firstPageRequests = 0;
+  const listing: FinanceData = {
+    ...data,
+    nextCursor: "older",
+    connections: [
+      {
+        id: "connection-1",
+        institutionId: null,
+        institutionName: "Bank",
+        accountCount: 1,
+        createdAt: "2026-01-01",
+        errorCode: null,
+        lastSyncedAt: null,
+        status: "active",
+        dailySync: true,
+        syncStatus: "running",
+      },
+    ],
+  };
+  respond((url) => {
+    if (url.searchParams.has("cursor")) return older.promise;
+    firstPageRequests++;
+    return Response.json(listing);
+  });
+  await mount();
+  await click("Load more transactions");
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 3150));
+  });
+  expect(firstPageRequests).toBe(1);
+  await act(async () =>
+    older.resolve(
+      Response.json({
+        ...listing,
+        nextCursor: null,
+        transactions: [transaction("Older expense")],
+      }),
+    ),
+  );
+  expect(rowNames()).toEqual(["Coffee", "Supplies", "Older expense"]);
+}, 10_000);

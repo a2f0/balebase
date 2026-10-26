@@ -73,7 +73,7 @@ export function useFinanceData(route: CategoryRoute | null) {
       ++requestId.current;
     };
   }, [load]);
-  useSyncPolling(data, load);
+  useSyncPolling(data, load, loading || loadingMore || refreshing);
   const onFiltersChange = useCallback(
     (next: FinanceFilters) => {
       currentFilters.current = next;
@@ -172,13 +172,14 @@ function financeLoadMessage(cause: unknown) {
 function useSyncPolling(
   data: FinanceData | undefined,
   load: () => Promise<void>,
+  busy: boolean,
 ) {
   const pending =
     data?.connections.some((connection) =>
       syncPending(connection.syncStatus),
     ) ?? false;
   useEffect(() => {
-    if (!pending) return;
+    if (!pending || busy) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
@@ -190,5 +191,5 @@ function useSyncPolling(
       active = false;
       clearTimeout(timer);
     };
-  }, [pending, load]);
+  }, [pending, load, busy]);
 }

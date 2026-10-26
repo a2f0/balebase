@@ -1,7 +1,8 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { Hono } from "hono";
+import { findActivity } from "./activity";
 import type { AuthSession } from "./auth";
 import type { AuthVariables } from "./authMiddleware";
 import { createFinanceRouter } from "./finance";
@@ -1696,7 +1697,11 @@ function toD1(database: Database) {
           values = nextValues;
           return statement;
         },
-        execute: () => database.query(query).run(...values),
+        execute: () => {
+          const results = database.query(query).all(...values);
+          const meta = database.query("SELECT changes() AS changes").get();
+          return { results, meta };
+        },
         first: async () => database.query(query).get(...values),
         run: async () => {
           const result = database.query(query).run(...values);
@@ -1798,8 +1803,10 @@ describe("durable finance sync", () => {
         .get(),
     ).toEqual({ count: 1 });
     expect(
-      fixture.database.query("SELECT actor FROM finance_sync_jobs").get(),
-    ).toMatchObject({ actor: expect.stringContaining("person@example.com") });
+      fixture.database
+        .query("SELECT requested_by FROM finance_sync_jobs")
+        .get(),
+    ).toMatchObject({ requested_by: "user-1" });
   });
 
   it("audits setting changes atomically, skips no-ops, and enforces organization boundaries and valid input", async () => {
@@ -1822,11 +1829,11 @@ describe("durable finance sync", () => {
     ).toEqual({ dailySync: true });
     await fixture.request("/sync-settings", "PATCH", { dailySync: true });
     const rows = fixture.database
-      .query("SELECT daily_sync, actor FROM finance_sync_settings_history")
+      .query(
+        "SELECT json_extract(details, '$.after') AS daily_sync, actor_user_id FROM activity_events WHERE action = 'finance.daily_sync_changed'",
+      )
       .all();
-    expect(rows).toEqual([
-      { daily_sync: 1, actor: expect.stringContaining('"userId":"user-1"') },
-    ]);
+    expect(rows).toEqual([{ daily_sync: 1, actor_user_id: "user-1" }]);
     const other = testApp("other-org", fixture.requestPlaid);
     for (const [path, method, body] of [
       ["sync-settings", "PATCH", { dailySync: false }],
@@ -1844,7 +1851,7 @@ describe("durable finance sync", () => {
         ).response.status,
       ).toBe(404);
     }
-    fixture.database.exec(`CREATE TRIGGER fail_settings_history BEFORE INSERT ON finance_sync_settings_history
+    fixture.database.exec(`CREATE TRIGGER fail_settings_history BEFORE INSERT ON activity_events WHEN NEW.action = 'finance.daily_sync_changed'
       BEGIN SELECT RAISE(ABORT, 'history failed'); END;`);
     expect(
       (await fixture.request("/sync-settings", "PATCH", { dailySync: false }))
@@ -1903,9 +1910,9 @@ describe("durable finance sync", () => {
     ).toEqual({ count: 2 });
     expect(
       fixture.database
-        .query("SELECT source, actor FROM finance_sync_jobs LIMIT 1")
+        .query("SELECT source, requested_by FROM finance_sync_jobs LIMIT 1")
         .get(),
-    ).toEqual({ source: "daily", actor: null });
+    ).toEqual({ source: "daily", requested_by: null });
     // Let the accepted run finish; disabling changes future scheduling only.
     fixture.database.run(
       "UPDATE finance_sync_jobs SET available_at = '2000-01-01' WHERE status = 'queued'",
@@ -2072,4 +2079,127 @@ describe("durable finance sync", () => {
     await scheduleFinanceSync(fixture.bindings);
     expect(fixture.messages).toHaveLength(0);
   });
+});
+
+it("keeps legacy sync running during backoff and returns a background status when its waiter expires", async () => {
+  const fixture = await queuedFixture();
+  const { body: job } = await fixture.request<{ id: string }>(
+    "/sync-jobs",
+    "POST",
+  );
+  await fixture.deliver(job.id, async () => {
+    throw new PlaidApiError("Temporary outage", "INTERNAL_SERVER_ERROR", 500);
+  });
+  const originalTimer = globalThis.setTimeout;
+  const timer = spyOn(globalThis, "setTimeout").mockImplementation(((
+    callback: () => void,
+  ) => originalTimer(callback, 0)) as typeof setTimeout);
+  try {
+    const result = await fixture.request("/sync", "POST");
+    expect(result.response.status).toBe(503);
+    expect(result.body).toMatchObject({
+      error: expect.stringContaining("continues in the background"),
+    });
+    expect(timer).toHaveBeenCalledTimes(100);
+  } finally {
+    timer.mockRestore();
+  }
+  fixture.database.run(
+    "UPDATE finance_sync_jobs SET available_at = '2000-01-01'",
+  );
+  await fixture.deliver(job.id);
+  expect(
+    fixture.database.query("SELECT status FROM finance_sync_jobs").get(),
+  ).toEqual({ status: "succeeded" });
+});
+
+it.each(["active", "error"])(
+  "restores %s status and releases the disconnect claim when Plaid fails",
+  async (status) => {
+    const fixture = await queuedFixture();
+    await fixture.request("/sync-settings", "PATCH", { dailySync: true });
+    fixture.database.query("UPDATE plaid_items SET status = ?").run(status);
+    const app = testApp("org_user-1", async () => {
+      throw new PlaidApiError("Unavailable", "INTERNAL_SERVER_ERROR", 500);
+    });
+    const result = await jsonRequest(
+      app,
+      fixture.bindings,
+      `/connections/${fixture.id}`,
+      "DELETE",
+    );
+    expect(result.response.status).toBe(502);
+    expect(
+      fixture.database
+        .query(
+          "SELECT status, daily_sync, disconnect_lease_until FROM plaid_items",
+        )
+        .get(),
+    ).toEqual({ status, daily_sync: 1, disconnect_lease_until: null });
+    expect(
+      fixture.database
+        .query(
+          "SELECT id FROM activity_events WHERE action = 'finance.connection_disconnected'",
+        )
+        .all(),
+    ).toEqual([]);
+    expect((await fixture.request("/sync-jobs", "POST")).response.status).toBe(
+      202,
+    );
+  },
+);
+
+it("records connection changes in shared activity with Finance reader permissions and deletion retention", async () => {
+  const fixture = await queuedFixture();
+  await fixture.request("/sync-settings", "PATCH", { dailySync: true });
+  await fixture.request("/sync-settings", "PATCH", { dailySync: true });
+  const denied = await findActivity(
+    fixture.bindings.DB,
+    "org_user-1",
+    undefined,
+    undefined,
+    false,
+    "finance_connection",
+  );
+  expect(denied?.events).toEqual([]);
+  const page = await findActivity(
+    fixture.bindings.DB,
+    "org_user-1",
+    undefined,
+    undefined,
+    true,
+    "finance_connection",
+  );
+  expect(page?.events).toHaveLength(1);
+  expect(page?.events[0]).toMatchObject({
+    action: "finance.daily_sync_changed",
+    actor: { id: "user-1", email: "person@example.com" },
+    details: { before: false, after: true },
+  });
+  const started = await fixture.request<{ id: string }>("/sync-jobs", "POST");
+  await fixture.request("/sync-jobs", "POST");
+  expect(
+    fixture.database
+      .query(
+        "SELECT count(*) AS count FROM activity_events WHERE action = 'finance.sync_requested'",
+      )
+      .get(),
+  ).toEqual({ count: 1 });
+  await fixture.deliver(started.body.id);
+  await fixture.request("", "DELETE");
+  expect(
+    fixture.database
+      .query(
+        "SELECT count(*) AS count FROM activity_events WHERE action = 'finance.connection_disconnected'",
+      )
+      .get(),
+  ).toEqual({ count: 1 });
+  await fixture.request("/data", "DELETE");
+  expect(
+    fixture.database
+      .query(
+        "SELECT id FROM activity_events WHERE root_type = 'finance_connection'",
+      )
+      .all(),
+  ).toEqual([]);
 });
