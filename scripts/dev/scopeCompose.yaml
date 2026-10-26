@@ -1,0 +1,36 @@
+# CLI-only local stack. Keep the API on loopback and backing services private.
+services:
+  mongodb:
+    ports: !reset []
+  redis:
+    ports: !reset []
+  azurite:
+    ports: !reset []
+  lowkey-vault:
+    ports: !reset []
+  judge:
+    ports: !reset []
+  token-manager:
+    ports: !reset []
+  devproxy-claude-code:
+    ports: !reset []
+  api:
+    ports: !override
+      - "127.0.0.1:3100:80"
+    environment:
+      # Scope supports anonymous local operation when all IdP settings are empty.
+      AUTH_PROVIDER: ""
+      AUTH_AUTHORITY: ""
+      AUTH_API_CLIENT_ID: ""
+      AUTH_SCOPES: ""
+      AUTH_ISSUER_TEMPLATE: ""
+      AUTH_JWKS_URI: ""
+      AUTH_BOOTSTRAP_ADMINS: ""
+      AUTH_BOOTSTRAP_TENANTS: ""
+      NODE_EXTRA_CA_CERTS: ""
+  register-agents:
+    environment:
+      SCOPE_REGISTER_CLAUDE_CODE_AGENT: "true"
+  coder-acp-claude-code:
+    environment:
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
