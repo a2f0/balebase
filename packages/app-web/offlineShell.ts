@@ -29,7 +29,18 @@ export function offlineShell(): Plugin {
 function workerSource(version: string, assets: string[]) {
   return `const cacheName = ${JSON.stringify(`balebase-shell-${version}`)};
 const assets = ${JSON.stringify(assets)};
-const cachedShell = () => caches.open(cacheName).then(cache => cache.match("/index.html"));
+const cachedShell = async () => {
+  const cache = await caches.open(cacheName);
+  const response = await cache.match("/index.html");
+  if (!response?.redirected) return response;
+  // Cloudflare redirects /index.html to /. Navigation requests cannot reuse
+  // a followed redirect, so return the same public HTML without its URL history.
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+};
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(assets)));
 });

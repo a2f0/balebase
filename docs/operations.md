@@ -607,6 +607,15 @@ activate after existing tabs close, keeping the running bundle and its cache
 together. Navigation uses the active worker's cached HTML even while online;
 close all app tabs to allow a waiting update to activate. Native builds use
 their bundled shell and the same IndexedDB queue.
+
+Cloudflare serves nested app routes through the SPA fallback. Its
+default HTML handling redirects `/index.html` to `/`; the offline worker returns
+that cached HTML as a fresh response so navigation does not inherit its redirect
+history. If a worker built before `@balebase/app-web` 0.1.65 reports a
+redirected-response navigation error after deploying a newer web build, use
+**Application → Service Workers → Update** in Chrome DevTools,
+then close all app tabs and reopen the app so the waiting worker can activate.
+
 Do not clear browser storage as a sync troubleshooting step: pending work and
 photos live there. Inspect the device's sync status, restore its original
 account/organization access, and retry with the app open. Permanently rejected
