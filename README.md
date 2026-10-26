@@ -1,5 +1,7 @@
 # Balebase
 
+[balebase.com](https://balebase.com)
+
 Balebase runs on Cloudflare Workers, D1, and R2. Every workspace lives
 under `packages/`:
 
