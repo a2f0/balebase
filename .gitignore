@@ -35,3 +35,6 @@ override.tf.json
 
 # Private artifact-bound readiness reports (docs/readiness.md)
 .readiness/
+
+# Local Scope credentials, codebase snapshots, and run artifacts.
+.scope/

@@ -169,6 +169,74 @@ reduce test coverage to save output.
   README, product details in [product.md](docs/product.md), and operational
   procedures in [operations.md](docs/operations.md).
 
+## Scope evaluations
+
+[Microsoft Scope](https://microsoft.github.io/scope/) runs coding-agent tasks
+against isolated codebase snapshots. Its CLI requires a running Scope API and
+worker. The local setup selects Claude Code; Scope does not yet ship a Codex
+worker. Scored evaluations also require a Copilot credential for Scope's judge.
+A single iteration with no criteria records the agent's output and artifacts
+without a judge score.
+
+Install Node.js 22 or later, pnpm, and Docker with Compose 2.24.4 or later.
+Podman can provide the Docker API through its machine socket; use Docker
+Compose, not `podman-compose`, for the override tags. The pinned Scope source
+is kept outside this repository at `~/.local/share/scope/source`; override it
+with `SCOPE_SOURCE_DIR`.
+
+```sh
+bun run scope:install
+bun run scope:up
+bun run scope:status
+bun run scope --help
+```
+
+`scope:install` builds the CLI from a fixed upstream commit because Scope has
+no published CLI release yet, and installs `scope` in `~/.local/bin`.
+Override the binary destination with `SCOPE_INSTALL_DIR`. The plain `scope`
+command uses Scope's standard environment; `bun run scope` also loads this
+repository's local configuration.
+The package commands and container builds use that same source checkout.
+The local API listens at `http://127.0.0.1:3100`; backing services have no
+published ports. This configuration uses Scope's anonymous development mode
+and is intended only for this local machine.
+
+Put local settings in the ignored `.scope/local.env`, using shell syntax. For
+example, opt into using an existing Claude Code login without copying its token:
+
+```sh
+SCOPE_CLAUDE_CREDENTIALS_FILE="$HOME/.claude/.credentials.json"
+```
+
+Alternatively, supply `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` in the
+environment. The file option requires an existing JSON credential file. For
+installations using macOS Keychain, run `claude setup-token` and store the
+result as `CLAUDE_CODE_OAUTH_TOKEN` in `.scope/local.env`. An explicit token
+or API key takes precedence over the credential file. A scored run also needs a
+Copilot-enabled `GITHUB_TOKEN`.
+Model discovery is optional and requires `ANTHROPIC_API_KEY`; enable it with
+`COMPOSE_PROFILES=anthropic-model-scanner`. Subscription OAuth can run the worker
+without model discovery, using the worker's default model.
+`scope:up` reads the selected Claude login at startup; refresh an expired login
+with Claude Code and rerun it. With Podman, set `DOCKER_HOST` to the machine's
+forwarded host socket and `DOCKER_SOCK` to its in-VM socket in the same local
+file. Use `podman machine inspect` to find the host socket; a rootful machine
+normally uses `/run/podman/podman.sock` inside the VM.
+
+Create a project with `bun run scope project create --name Balebase --use`,
+then use `bun run scope codebase create --help` to register a snapshot. Use
+`git archive` to include only committed files; keep archives and downloaded
+artifacts in `.scope/`. Set `SCOPE_PROJECT` in `.scope/local.env` to select this
+repository's project without changing the CLI's global selection.
+
+Use `bun run scope run submit --help` for tasks, criteria, codebase revisions,
+and model options. Start an unscored smoke run with `--max-iterations 1` and no
+criteria, passing the task with `--message` (scenario files require criteria).
+Inspect it with `run get`, `run logs`, and `run download`. Scope marks
+these unscored runs as passed when execution succeeds; that status is not a
+judge verdict. Stop the stack when idle with `bun run scope:down`; named
+volumes retain projects and artifacts.
+
 ## Editor setup
 
 VS Code recommends the repository's Biome, Astro, Markdownlint, and EditorConfig
