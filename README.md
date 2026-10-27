@@ -8,8 +8,8 @@ the web at <https://balebase.com>. The browser app at
 
 ## Quick start
 
-Install [mise](https://mise.jdx.dev/), or [Bun](https://bun.sh/) 1.4.3
-directly; Node.js and npm are not required.
+Install [mise](https://mise.jdx.dev/), or install [Bun](https://bun.sh/) 1.4.3
+directly and skip `mise install`. Node.js and npm are not required.
 
 ```sh
 mise install                 # the Bun and Ruby versions pinned in .mise.toml
