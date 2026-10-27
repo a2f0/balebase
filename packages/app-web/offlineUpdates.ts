@@ -6,7 +6,8 @@ self.addEventListener("message", event => {
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     const appWindows = windows.filter(client => client.url.startsWith(self.registration.scope));
     // Waiting workers control no clients, so includeUncontrolled is essential.
-    // Never replace another tab's shell while it may contain unsaved work.
+    // Refuse when another open tab may contain unsaved work. A new tab can
+    // still open between this snapshot and activation; it never auto-reloads.
     if (appWindows.some(client => client.id !== event.source.id)) {
       event.ports[0].postMessage("OTHER_TABS");
       return;

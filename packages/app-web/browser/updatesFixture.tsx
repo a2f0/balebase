@@ -1,6 +1,7 @@
 import { DialogHost, ToastProvider } from "@balebase/ui/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { AppBoundary } from "../../app/src/AppBoundary";
 import { WebUpdates } from "../src/WebUpdates";
 
 export function mount(version: string) {
@@ -13,11 +14,23 @@ export function mount(version: string) {
   createRoot(root).render(
     <StrictMode>
       <ToastProvider>
-        <p id="version">{version}</p>
-        <input aria-label="Draft" />
+        <AppBoundary>
+          <FixtureApp version={version} />
+        </AppBoundary>
         <WebUpdates />
         <DialogHost />
       </ToastProvider>
     </StrictMode>,
+  );
+}
+
+function FixtureApp({ version }: { version: string }) {
+  if (version === "A" && new URLSearchParams(location.search).has("broken"))
+    throw new Error("Broken application release");
+  return (
+    <>
+      <p id="version">{version}</p>
+      <input aria-label="Draft" />
+    </>
   );
 }

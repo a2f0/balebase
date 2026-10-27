@@ -134,6 +134,43 @@ it("times out a slow job output read and lets the user retry", async () => {
   }
 });
 
+it("keeps saved job output visible while retrying a failed poll", async () => {
+  let detailRequests = 0;
+  let finishRetry: ((response: Response) => void) | undefined;
+  const response = (progress: number) =>
+    Response.json({
+      run: { ...queued, status: "running", output: { progress } },
+      logs: [],
+      nextBefore: null,
+    });
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/runs/run-1")) {
+      detailRequests += 1;
+      if (detailRequests === 1) return response(1);
+      if (detailRequests === 2) throw new Error("Connection interrupted");
+      return new Promise<Response>((resolve) => {
+        finishRetry = resolve;
+      });
+    }
+    if (url.pathname.endsWith("/runs"))
+      return Response.json({ runs: [queued], nextCursor: null });
+    return Response.json({ jobs: definitions });
+  }) as typeof fetch;
+  await render();
+  await act(async () => button("View run").click());
+  expect(container.textContent).toContain('"progress": 1');
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 5200));
+  });
+  expect(container.textContent).toContain("Connection interrupted");
+  await act(async () => button("Retry loading output").click());
+  expect(container.textContent).toContain('"progress": 1');
+  expect(container.textContent).not.toContain("Loading job output…");
+  await act(async () => finishRetry?.(response(2)));
+  expect(container.textContent).toContain('"progress": 2');
+}, 15_000);
+
 function button(label: string) {
   const match = [...document.querySelectorAll("button")].find(
     (item) => item.textContent?.trim() === label,

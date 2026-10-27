@@ -3,6 +3,7 @@ import { type ReactNode, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "@balebase/ui/styles.css";
 import { App } from "./App";
+import { AppBoundary } from "./AppBoundary";
 import { type AppHost, configureHost } from "./host";
 import "./styles/app.css";
 import { startThemeSync } from "./theme";
@@ -31,7 +32,9 @@ export function renderApp(host: AppHost = {}, notices?: ReactNode) {
   }).render(
     <StrictMode>
       <ToastProvider>
-        <App />
+        <AppBoundary>
+          <App />
+        </AppBoundary>
         {notices}
         <DialogHost />
       </ToastProvider>

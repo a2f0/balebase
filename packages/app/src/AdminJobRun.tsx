@@ -1,5 +1,5 @@
 import { Banner, Button, LoadingState, Toast } from "@balebase/ui/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./apiClient";
 
 type Detail = Awaited<ReturnType<typeof api.adminJobs.detail>>;
@@ -8,12 +8,15 @@ function useRunDetail(runId: string, before: string) {
   const [detail, setDetail] = useState<Detail>();
   const [error, setError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
+  const previous = useRef({ runId, before });
   // biome-ignore lint/correctness/useExhaustiveDependencies: A retry restarts the request even when its run and cursor are unchanged.
   useEffect(() => {
+    if (previous.current.runId !== runId || previous.current.before !== before)
+      setDetail(undefined);
+    previous.current = { runId, before };
     let active = true;
-    let polling = true;
+    let polling = false;
     let timer: ReturnType<typeof setTimeout>;
-    setDetail(undefined);
     setError(undefined);
     function load() {
       return api.adminJobs

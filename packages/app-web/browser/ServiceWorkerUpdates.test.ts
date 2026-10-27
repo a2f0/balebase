@@ -251,4 +251,124 @@ for (const engine of [chromium, firefox, webkit]) {
       await app.close();
     }
   }, 60_000);
+
+  it(`${engine.name()}: updates survive an app crash and external activation waits for consent`, async () => {
+    const app = await fixture();
+    const browser = await engine.launch(launchOptions);
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await page.clock.install();
+      const url = new URL(app.url);
+      url.searchParams.set("broken", "true");
+      await page.goto(url.href);
+      await page
+        .getByRole("heading", { name: "The app could not open" })
+        .waitFor();
+      await page.waitForFunction(() =>
+        Boolean(navigator.serviceWorker.controller),
+      );
+      app.deploy();
+      await checkForUpdate(page, "focus");
+      await page.getByText("Update available", { exact: true }).waitFor();
+      await page.evaluate(async () => {
+        const registration = await navigator.serviceWorker.getRegistration();
+        await new Promise<void>((resolve) => {
+          navigator.serviceWorker.addEventListener(
+            "controllerchange",
+            () => resolve(),
+            { once: true },
+          );
+          registration?.waiting?.postMessage({ type: "ACTIVATE_UPDATE" }, [
+            new MessageChannel().port2,
+          ]);
+        });
+      });
+      expect(await page.evaluate(() => sessionStorage.getItem("loads"))).toBe(
+        "1",
+      );
+      expect(
+        await page
+          .getByRole("heading", { name: "The app could not open" })
+          .count(),
+      ).toBe(1);
+      await confirmUpdate(page);
+      await page.waitForFunction(
+        () => document.querySelector("#version")?.textContent === "B",
+      );
+      expect(page.url()).toBe(url.href);
+      expect(await page.evaluate(() => sessionStorage.getItem("loads"))).toBe(
+        "2",
+      );
+    } finally {
+      await browser.close();
+      await app.close();
+    }
+  }, 60_000);
+
+  it(`${engine.name()}: failed messages stay visible and a delayed activation still reloads once`, async () => {
+    const app = await fixture();
+    const browser = await engine.launch(launchOptions);
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await page.clock.install();
+      await ready(page, app.url);
+      app.deploy();
+      await checkForUpdate(page, "focus");
+      await page.getByText("Update available", { exact: true }).waitFor();
+      await page.evaluate(() => {
+        const original = ServiceWorker.prototype.postMessage;
+        Reflect.set(window, "activationMode", "fail");
+        ServiceWorker.prototype.postMessage = function (
+          this: ServiceWorker,
+          message: unknown,
+          transfer: Transferable[] | StructuredSerializeOptions = [],
+        ) {
+          if ((message as { type?: string })?.type !== "ACTIVATE_UPDATE") {
+            Reflect.apply(original, this, [message, transfer]);
+            return;
+          }
+          const ports = Array.isArray(transfer)
+            ? transfer
+            : (transfer.transfer ?? []);
+          if (Reflect.get(window, "activationMode") === "fail") {
+            (ports[0] as MessagePort).postMessage("FAILED");
+            return;
+          }
+          Reflect.set(window, "releaseActivation", () => {
+            ServiceWorker.prototype.postMessage = original;
+            Reflect.apply(original, this, [message, transfer]);
+          });
+        };
+      });
+      await confirmUpdate(page);
+      const failure = page.getByText(
+        "The update could not start. Please try again.",
+        { exact: true },
+      );
+      await failure.waitFor();
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+      expect(await failure.count()).toBe(1);
+      await page.evaluate(() => Reflect.set(window, "activationMode", "hold"));
+      await confirmUpdate(page);
+      await page.clock.fastForward(16_000);
+      await page
+        .getByText(
+          "The update is taking longer than expected. This tab will reload when it is ready.",
+          { exact: true },
+        )
+        .waitFor();
+      await page.evaluate(() => Reflect.get(window, "releaseActivation")());
+      await page.waitForFunction(
+        () => document.querySelector("#version")?.textContent === "B",
+      );
+      expect(await page.evaluate(() => sessionStorage.getItem("loads"))).toBe(
+        "2",
+      );
+    } finally {
+      await browser.close();
+      await app.close();
+    }
+  }, 60_000);
 }

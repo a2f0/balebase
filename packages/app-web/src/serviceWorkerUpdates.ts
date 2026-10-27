@@ -11,6 +11,8 @@ export class ServiceWorkerUpdates {
   #registration?: ServiceWorkerRegistration;
   #controller = navigator.serviceWorker.controller;
   #requested: ServiceWorker | undefined;
+  #offered?: ServiceWorker;
+  #busy = false;
   #disposed = false;
   #checking = false;
   #lastCheck = 0;
@@ -30,7 +32,10 @@ export class ServiceWorkerUpdates {
     this.#listen(document, "visibilitychange", this.#check);
     const interval = setInterval(this.#check, 60 * 60 * 1000);
     this.#cleanup.add(() => clearInterval(interval));
-    void this.#register();
+    this.#checking = true;
+    void this.#register().finally(() => {
+      this.#checking = false;
+    });
   }
 
   async #register() {
@@ -73,8 +78,16 @@ export class ServiceWorkerUpdates {
   };
 
   #showWaiting = () => {
-    if (this.#registration?.waiting && this.#controller && !this.#requested)
+    const waiting = this.#registration?.waiting;
+    if (
+      waiting &&
+      this.#controller &&
+      !this.#busy &&
+      waiting !== this.#offered
+    ) {
+      this.#offered = waiting;
       this.#notify({ available: true, busy: false });
+    }
   };
 
   #check = () => {
@@ -117,9 +130,9 @@ export class ServiceWorkerUpdates {
   };
 
   apply() {
-    if (this.#disposed || this.#requested) return;
+    if (this.#disposed || this.#busy) return;
     if (!navigator.onLine) {
-      this.#fail("Reconnect to the internet, then try updating again.");
+      this.#fail("Reconnect to the internet, then try updating again.", false);
       return;
     }
     const worker = this.#registration?.waiting;
@@ -128,6 +141,7 @@ export class ServiceWorkerUpdates {
       return;
     }
     this.#requested = worker;
+    this.#busy = true;
     this.#notify({ available: true, busy: true });
     const channel = new MessageChannel();
     this.#port = channel.port1;
@@ -140,7 +154,11 @@ export class ServiceWorkerUpdates {
         this.#fail("The update could not start. Please try again.");
     };
     this.#timer = setTimeout(
-      () => this.#fail("The update did not finish. Please try again."),
+      () =>
+        this.#fail(
+          "The update is taking longer than expected. This tab will reload when it is ready.",
+          false,
+        ),
       15_000,
     );
     try {
@@ -151,10 +169,11 @@ export class ServiceWorkerUpdates {
     }
   }
 
-  #fail(error: string) {
+  #fail(error: string, forgetRequest = true) {
     clearTimeout(this.#timer);
     this.#port?.close();
-    this.#requested = undefined;
+    if (forgetRequest) this.#requested = undefined;
+    this.#busy = false;
     this.#notify({ available: true, busy: false, error });
   }
 

@@ -656,6 +656,10 @@ save changes and choose **Update**, then **Update and reload**. Close other app
 tabs and windows first: the worker refuses an explicit update while another
 app window is open. Only the tab that requested the update reloads, once its new
 worker takes control. Updates never unregister workers or clear offline records.
+The recovery screen keeps the update notice available if an app screen crashes.
+If activation is delayed, the notice explains that the tab will still reload
+when the requested worker takes control. Updates activated elsewhere require
+confirmation in this tab before it reloads.
 With no explicit update, a waiting worker activates after existing tabs close.
 Native builds use their bundled shell and the same IndexedDB queue.
 
