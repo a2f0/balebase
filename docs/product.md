@@ -93,6 +93,11 @@ migration. Organization owners and
 administrators can rename their organization at `/organization`. The API
 independently enforces the platform `admin` role for administrative data.
 
+Account settings let each user choose the default organization for new sign-ins,
+including signing in after a session expires. Saving that preference does not
+switch an existing session: reopening or refreshing it keeps its active
+organization. This behavior is shared by the web, iOS, and Android apps.
+
 Root admins use `/root/jobs` to run platform maintenance and inspect maintenance
 and bank sync history. Every run uses the shared background queue and D1 run
 record, with a stable ID, source, requesting user when available, timestamps,

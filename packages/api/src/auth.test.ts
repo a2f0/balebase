@@ -14,6 +14,98 @@ const originalPassword = "correct horse battery staple";
 const replacementPassword = "new correct horse battery staple";
 
 describe("password authentication", () => {
+  it.each(["sign-out", "expiry"])(
+    "opens the saved default after session %s on web and native",
+    async (endSession) => {
+      for (const requestOrigin of [
+        origin,
+        "capacitor://localhost",
+        "https://localhost",
+      ]) {
+        const fixture = await createFixture();
+        const bindings = { ...fixture.bindings, DB: toD1(fixture.database) };
+        const cookies = new CookieJar();
+        const request = async (
+          path: string,
+          body?: Record<string, unknown>,
+          method = "POST",
+        ) => {
+          const response = await app.request(
+            `/api${path}`,
+            {
+              method: body ? method : "GET",
+              headers: {
+                "content-type": "application/json",
+                cookie: cookies.header(),
+                ...(requestOrigin === origin
+                  ? { origin }
+                  : { "X-Balebase-Native-Origin": requestOrigin }),
+              },
+              ...(body ? { body: JSON.stringify(body) } : {}),
+            },
+            bindings,
+            executionContext(fixture.pending),
+          );
+          expect(response.status).toBe(200);
+          cookies.absorb(response);
+          return response.json();
+        };
+        const credentials = {
+          email: `${crypto.randomUUID()}@example.com`,
+          password: originalPassword,
+        };
+        await request("/auth/sign-up/email", {
+          ...credentials,
+          name: "Default Test",
+          termsAccepted: true,
+        });
+        await request("/auth/sign-in/email", credentials);
+        const initial = (await request("/auth/get-session")) as {
+          session: { id: string; token: string };
+          user: { defaultOrganizationId: string };
+        };
+        const personalId = initial.user.defaultOrganizationId;
+        const other = (await request("/auth/organization/create", {
+          name: "Other Organization",
+          slug: crypto.randomUUID(),
+        })) as { id: string };
+        await request(
+          "/account-settings/default-organization",
+          { organizationId: personalId },
+          "PATCH",
+        );
+        await request("/auth/organization/set-active", {
+          organizationId: other.id,
+        });
+        // Refreshing a live session keeps its current workspace. The saved
+        // preference applies when a new session is created.
+        expect(await request("/auth/get-session")).toMatchObject({
+          session: { activeOrganizationId: other.id },
+          user: { defaultOrganizationId: personalId },
+        });
+        if (endSession === "expiry") {
+          fixture.database
+            .query("UPDATE session SET expiresAt = ? WHERE id = ?")
+            .run(
+              new Date(Date.now() - 60_000).toISOString(),
+              initial.session.id,
+            );
+        } else {
+          await request("/auth/multi-session/revoke", {
+            sessionToken: initial.session.token,
+          });
+        }
+        expect(await request("/auth/get-session")).toBeNull();
+        await request("/auth/sign-in/email", credentials);
+        expect(await request("/auth/get-session")).toMatchObject({
+          session: { activeOrganizationId: personalId },
+          user: { defaultOrganizationId: personalId },
+        });
+        await Promise.all(fixture.pending);
+      }
+    },
+  );
+
   it("supports native cookie sessions without accepting foreign origins", async () => {
     const { auth } = await createFixture();
     // Better Auth skips origin validation in tests unless explicitly enabled.
