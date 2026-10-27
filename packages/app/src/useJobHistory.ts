@@ -15,7 +15,7 @@ const initialState: HistoryState = { loadingMore: false, refreshing: false };
 
 export function useJobHistory(jobId: string, status: JobRun["status"] | "") {
   const [state, setState] = useState(initialState);
-  const nextPage = useRef<() => Promise<void>>(undefined);
+  const nextPage = useRef<() => Promise<boolean>>(undefined);
   useEffect(() => {
     setState(initialState);
     const loader = historyLoader(
@@ -27,7 +27,7 @@ export function useJobHistory(jobId: string, status: JobRun["status"] | "") {
     return loader.stop;
   }, [jobId, status]);
   const loadMore = useCallback(async () => {
-    await nextPage.current?.();
+    return (await nextPage.current?.()) ?? false;
   }, []);
   return { ...state, loadMore };
 }
@@ -42,14 +42,14 @@ function historyLoader(
   let pageCount = 1;
   let timer: ReturnType<typeof setTimeout>;
   async function load(cursor?: string) {
-    if (!active || busy) return;
+    if (!active || busy) return false;
     busy = true;
     clearTimeout(timer);
     publish({ loadingMore: Boolean(cursor), refreshing: !cursor });
     try {
       if (cursor) {
         const next = await api.adminJobs.runs({ ...query, cursor });
-        if (!active) return;
+        if (!active) return true;
         data = {
           ...next,
           runs: uniqueRuns([...(data?.runs ?? []), ...next.runs]),
@@ -62,13 +62,13 @@ function historyLoader(
           data?.runs.at(-1),
           () => active,
         );
-        if (!active) return;
+        if (!active) return true;
         data = refreshed.data;
         pageCount = refreshed.pageCount;
         publish({ data, error: undefined });
       }
     } catch (cause) {
-      if (!active) return;
+      if (!active) return true;
       const message = historyError(cause);
       publish(cursor ? { loadMoreError: message } : { error: message });
     } finally {
@@ -79,11 +79,12 @@ function historyLoader(
         timer = setTimeout(() => void load(), 5000 * pageCount);
       }
     }
+    return true;
   }
   return {
     start: () => void load(),
     loadMore: async () => {
-      if (data?.nextCursor) await load(data.nextCursor);
+      return data?.nextCursor ? load(data.nextCursor) : false;
     },
     stop: () => {
       active = false;

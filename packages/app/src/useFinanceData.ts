@@ -83,14 +83,15 @@ export function useFinanceData(route: CategoryRoute | null) {
     [load],
   );
   useCategoryRoute(route, currentFilters, onFiltersChange);
-  async function onLoadMore() {
-    if (
-      data?.nextCursor &&
-      !(loading || loadingMore || refreshing) &&
-      filters === loadedFilters.current
-    )
-      await load(data.nextCursor);
-  }
+  const cursor = data?.nextCursor;
+  const canLoadMore =
+    !(loading || loadingMore || refreshing) &&
+    filters === loadedFilters.current;
+  const onLoadMore = useCallback(async () => {
+    if (!cursor || !canLoadMore) return false;
+    await load(cursor);
+    return true;
+  }, [canLoadMore, cursor, load]);
   return {
     data,
     filters,

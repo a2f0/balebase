@@ -1,7 +1,9 @@
 import { expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { launch } from "puppeteer-core";
+import { type Browser, launch } from "puppeteer-core";
 
 it("appends job and transaction pages on desktop/mobile scroll and fills a short viewport", async () => {
   const built = await Bun.build({
@@ -25,17 +27,25 @@ it("appends job and transaction pages on desktop/mobile scroll and fills a short
     .map((url) => readFileSync(url, "utf8"))
     .join("\n");
   const { CHROME_PATH } = process.env;
-  const browser = await launch({
-    executablePath:
-      CHROME_PATH ||
-      Bun.which("google-chrome") ||
-      Bun.which("chromium") ||
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    headless: true,
-    pipe: true,
-    args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-  });
+  const chrome =
+    CHROME_PATH ||
+    Bun.which("google-chrome") ||
+    Bun.which("chromium") ||
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+  if (!existsSync(chrome))
+    throw new Error("Chrome is required for the infinite history check.");
+  const profile = mkdtempSync(join(tmpdir(), "infinite-history-"));
+  let browser: Browser | undefined;
   try {
+    browser = await launch({
+      executablePath: chrome,
+      headless: true,
+      pipe: true,
+      userDataDir: profile,
+      timeout: 10_000,
+      protocolTimeout: 10_000,
+      args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
+    });
     for (const mode of ["jobs", "finance"] as const) {
       for (const [width, pageSize] of [
         [1200, 20],
@@ -43,9 +53,14 @@ it("appends job and transaction pages on desktop/mobile scroll and fills a short
         [1200, 1],
       ] as const) {
         const page = await browser.newPage();
-        await page.setViewport({ width, height: 600 });
+        await page.setViewport({
+          width,
+          height: 600,
+          isMobile: width === 375,
+          hasTouch: width === 375,
+        });
         await page.setContent(
-          `<!doctype html><html><head><style>${css}</style></head><body><div id="root"></div></body></html>`,
+          `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body><div id="root"></div></body></html>`,
         );
         await page.evaluate(
           async ({ source, mode, pageSize }) => {
@@ -94,6 +109,7 @@ it("appends job and transaction pages on desktop/mobile scroll and fills a short
       }
     }
   } finally {
-    await browser.close();
+    await browser?.close();
+    rmSync(profile, { recursive: true, force: true });
   }
 }, 30_000);

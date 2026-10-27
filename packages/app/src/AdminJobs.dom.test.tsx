@@ -517,6 +517,48 @@ it("pauses automatic history paging on failure and retries the same cursor manua
   expect(container.textContent).not.toContain("History unavailable.");
 });
 
+it("retries automatic loading when a poll wins the race to load history", async () => {
+  const timer = spyOn(globalThis, "setTimeout");
+  let firstPages = 0;
+  let olderPages = 0;
+  let finishPoll: ((response: Response) => void) | undefined;
+  const firstPage = () =>
+    Response.json({ runs: [queued], nextCursor: "older" });
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    if (!url.pathname.endsWith("/runs"))
+      return Response.json({ jobs: definitions });
+    if (url.searchParams.has("cursor")) {
+      olderPages++;
+      return Response.json({
+        runs: [{ ...queued, runId: "old" }],
+        nextCursor: null,
+      });
+    }
+    if (++firstPages === 1) return firstPage();
+    return new Promise<Response>((resolve) => {
+      finishPoll = resolve;
+    });
+  }) as typeof fetch;
+  try {
+    await render();
+    const poll = timer.mock.calls.findLast(([, delay]) => delay === 5000)?.[0];
+    if (typeof poll !== "function") throw new Error("Missing history refresh");
+    await act(async () => {
+      poll();
+      // The observer still has the render before the poll published its busy state.
+      IntersectionObserverFixture.intersect();
+    });
+    expect(olderPages).toBe(0);
+    await act(async () => finishPoll?.(firstPage()));
+    await act(async () => IntersectionObserverFixture.intersect());
+    expect(olderPages).toBe(1);
+    expect(container.querySelectorAll(".adminJobHistoryItem")).toHaveLength(2);
+  } finally {
+    timer.mockRestore();
+  }
+});
+
 it("refreshes through the oldest loaded run when new jobs shift page boundaries", async () => {
   const timer = spyOn(globalThis, "setTimeout");
   let refreshed = false;

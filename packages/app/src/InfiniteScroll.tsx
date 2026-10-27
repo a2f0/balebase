@@ -15,7 +15,7 @@ export function InfiniteScroll({
   children: string;
   cursor: string;
   disabled?: boolean;
-  onLoadMore: () => Promise<void>;
+  onLoadMore: () => Promise<boolean>;
 }) {
   const sentinel = useRef<HTMLDivElement>(null);
   const pending = useRef(false);
@@ -24,11 +24,11 @@ export function InfiniteScroll({
     if (pending.current || busy || disabled) return;
     pending.current = true;
     try {
-      await onLoadMore();
+      if (await onLoadMore()) requestedCursor.current = cursor;
     } finally {
       pending.current = false;
     }
-  }, [busy, disabled, onLoadMore]);
+  }, [busy, cursor, disabled, onLoadMore]);
 
   useEffect(() => {
     const element = sentinel.current;
@@ -45,10 +45,10 @@ export function InfiniteScroll({
       (entries) => {
         if (
           active &&
+          !pending.current &&
           requestedCursor.current !== cursor &&
           entries.some((entry) => entry.isIntersecting)
         ) {
-          requestedCursor.current = cursor;
           void load();
         }
       },

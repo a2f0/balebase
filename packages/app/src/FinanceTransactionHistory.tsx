@@ -65,7 +65,7 @@ export function FinanceTransactionHistory({
   loadingMore: boolean;
   loadError: string | undefined;
   loadMoreError: string | undefined;
-  onLoadMore: () => Promise<void>;
+  onLoadMore: () => Promise<boolean>;
   onReload: () => Promise<void>;
   transactions: FinanceTransaction[] | undefined;
 }) {
