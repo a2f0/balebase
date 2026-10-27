@@ -10,10 +10,18 @@ import { maintainContracts } from "./contractReminders";
 import { purgeDeletedObjects } from "./deletedObjectCleanup";
 import { captureApiError } from "./diagnostics";
 import { dispatchJob, type JobRow } from "./jobRuns";
+import { MaintenanceFailure } from "./maintenanceFailure";
+import { purgeDeletedOrganizations } from "./organizationPurge";
 import type { Bindings } from "./types";
 import { purgeRequestedUsers } from "./userDeletion";
 
 export const maintenanceJobs = [
+  {
+    id: "purgeDeletedOrganizations",
+    name: "Purge deleted organizations",
+    description:
+      "Permanently deletes up to 25 organizations deleted at least 30 days ago and their workspace records. Files are queued for the Purge deleted files job after its upload grace period. Restoration is no longer possible after the purge.",
+  },
   {
     id: "purgeRequestedUsers",
     name: "Purge requested user accounts",
@@ -70,6 +78,7 @@ type RunSource =
 
 export function maintenanceTasks(environment: Bindings): MaintenanceTasks {
   return {
+    purgeDeletedOrganizations: () => purgeDeletedOrganizations(environment),
     purgeRequestedUsers: () => purgeRequestedUsers(environment),
     purgeDeletedObjects: async () => ({
       purged: await purgeDeletedObjects(environment),
@@ -156,6 +165,7 @@ export async function runMaintenanceJob(
     if (!task) throw new Error("Unknown job handler.");
     output = await task();
   } catch (cause) {
+    if (cause instanceof MaintenanceFailure) output = cause.output;
     console.error(
       { event: "background_job_error", runId: job.id, jobId: job.job_id },
       cause,
