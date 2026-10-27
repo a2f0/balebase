@@ -1,6 +1,6 @@
 # Contributing
 
-Start with the [local setup](README.md#start-locally). Run commands from the
+Start with the [quick start](README.md#quick-start). Run commands from the
 repository root unless a command specifies `--cwd`.
 
 `.mise.toml` pins Bun to the CI version. With mise installed, run
@@ -8,6 +8,12 @@ repository root unless a command specifies `--cwd`.
 `mise exec -- bun run check:fast`. In agent shells, prepend the pinned binary
 directories under `~/.local/share/mise/installs` to PATH without running
 `mise trust`.
+
+Bun manages dependencies and runs all JavaScript tooling, including commitlint,
+lint-staged, and Wrangler. Commands use `--bun` to keep that runtime even when
+Node.js is installed. `install:dependencies` also runs dependency install
+scripts on Bun, including packages whose install command invokes `node`
+directly.
 
 ## Find the code
 
@@ -159,25 +165,6 @@ The `test:staging`, `test:env`, and `test:scope` steps inside `bun run test`
 exercise local fixtures and command stubs. They do not deploy, contact a live
 staging service, use real cloud/agent credentials, or require Scope containers.
 Live staging verification and Scope assessments are separate opt-in commands.
-
-## Compact command output
-
-Use the pinned `@a2f0/agent-tool` capture harness for noisy, finite development
-commands:
-
-```sh
-bun run agent:run --label tests -- bun run test
-bun run agent:run --label checks -- bun run check
-bun run agent:logs /private/path/from-the-receipt.log
-```
-
-The harness preserves the command's exit status and full stdout/stderr in a
-private log. Success returns a compact receipt; failures include a bounded
-excerpt (4 KiB and 40 lines by default). Inspect warnings, timings, and artifacts
-with `agent:logs` or targeted searches before accepting a check. Keep review
-verdicts, structured audit results, and infrastructure previews visible. Do not
-wrap interactive tools or persistent servers, and do not silence warnings or
-reduce test coverage to save output.
 
 ## Keep changes readable
 

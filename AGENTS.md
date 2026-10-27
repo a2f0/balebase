@@ -19,8 +19,18 @@ Validate with `bun run check` and `bun run test`; CI also runs the client
 browser tests and `bun run build`. The pre-push hook checks installed hooks,
 destination branch names, and commit trust before running `check` and `test`.
 `bun run verify` additionally runs all browser
-suites, builds, and mobile sync. Capture noisy finite commands with
-`bun run agent:run --label <check> -- <command>`.
+suites, builds, and mobile sync.
+
+Capture noisy finite commands with the pinned capture harness, for example
+`bun run agent:run --label tests -- bun run test` or
+`bun run agent:run --label checks -- bun run check`. It preserves the exit
+status and full stdout/stderr in a private log, returns a compact receipt on
+success, and shows a bounded excerpt (4 KiB and 40 lines by default) on
+failure. Inspect warnings, timings, and artifacts with
+`bun run agent:logs <log-path>` or targeted searches before accepting a check.
+Keep review verdicts, structured audit results, and infrastructure previews
+visible. Do not wrap interactive tools or persistent servers, and do not
+silence warnings or reduce test coverage to save output.
 
 Ship with the installed `ship-pr` skill. Title, required CI, and version policy
 are in `agent-tool.json`: changes to `packages/api`, `packages/app`,
