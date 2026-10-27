@@ -66,6 +66,8 @@ export function AdminJobs() {
           <p className="textSm textSubtle">
             Maintenance applies across the platform. Jobs continue after you
             close this page. Completed runs and their logs are kept for 30 days.
+            Schedules show when jobs are queued; actual start times depend on
+            queue availability and any preceding jobs.
           </p>
           {!jobs && !error && <LoadingState label="Loading jobs…" />}
           <div className="stack stackMd">
@@ -74,6 +76,10 @@ export function AdminJobs() {
                 <div className="adminJobSummary">
                   <strong>{job.name}</strong>
                   <p className="textSm textSubtle">{job.description}</p>
+                  <p className="textSm">
+                    <strong>Run schedule:</strong>{" "}
+                    {job.runSchedule ?? "Schedule unavailable."}
+                  </p>
                 </div>
                 {job.manual && (
                   <Button
