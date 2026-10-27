@@ -155,6 +155,12 @@ their retained records must be managed separately; this does not erase all data
 an organization holds about a person. Users can cancel until their account is
 actually purged. Cancellation and eligibility are rechecked at deletion time.
 
+Root Admin → Jobs shows each job's run schedule. Production maintenance is
+queued hourly at 17 minutes past the hour (UTC); staging maintenance is manual
+only. Bank sync checks every five minutes for enabled connections due for their
+daily UTC run. Schedules describe queueing times; queue availability and preceding
+jobs can delay execution.
+
 Completed, failed, and cancelled job runs and their logs are retained for 30 days
 from completion; queued and running jobs are retained until resolved. The
 five-minute scheduler purges expired history in batches. Bank-run history also

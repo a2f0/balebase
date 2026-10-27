@@ -13,13 +13,20 @@ adminJobs.use("*", requireRole("admin"));
 adminJobs.get("/", (context) =>
   respond(context, adminJobsRoutes.list, {
     jobs: [
-      ...maintenanceJobs.map((job) => ({ ...job, manual: true })),
+      ...maintenanceJobs.map((job) => ({
+        ...job,
+        manual: true,
+        runSchedule:
+          "Every hour at 17 minutes past the hour (UTC) in production. Manual only in staging.",
+      })),
       ...(context.req.query("all") === "true"
         ? [
             {
               id: "syncFinanceConnection",
               name: "Sync bank accounts",
               manual: false,
+              runSchedule:
+                "Once per UTC day for connections with daily sync enabled; checked every 5 minutes from 00:00 UTC. Manual sync from Finance.",
               description:
                 "Imports bank transactions. Start a sync from Finance or enable daily sync on a connection.",
             },
