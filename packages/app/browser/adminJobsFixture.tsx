@@ -9,6 +9,8 @@ const jobs: JobDefinition[] = [
     description:
       "Permanently deletes accounts requested for deletion at least 30 days ago. Skips admins, active organization members, and accounts required by retained audit, financial, or contract records.",
     manual: true,
+    runSchedule:
+      "Every hour at 17 minutes past the hour (UTC) in production. Manual only in staging.",
   },
   {
     id: "purgeDeletedObjects",
@@ -16,6 +18,8 @@ const jobs: JobDefinition[] = [
     description:
       "Deletes a batch of queued files from storage after their upload grace period.",
     manual: true,
+    runSchedule:
+      "Every hour at 17 minutes past the hour (UTC) in production. Manual only in staging.",
   },
 ];
 const run: JobRun = {

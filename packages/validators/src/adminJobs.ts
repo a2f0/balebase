@@ -6,6 +6,7 @@ const JobDefinitionSchema = z.object({
   id: z.string(),
   name: z.string(),
   manual: z.boolean(),
+  runSchedule: z.string(),
 });
 export type JobDefinition = z.infer<typeof JobDefinitionSchema>;
 

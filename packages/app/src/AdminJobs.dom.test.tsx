@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, expect, it, spyOn } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
-import type { JobRun } from "@balebase/validators/adminJobs";
+import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
@@ -67,18 +67,22 @@ const queued: JobRun = {
   errorCode: null,
   output: null,
 };
-const definitions = [
+const definitions: JobDefinition[] = [
   {
     id: "purgeRequestedUsers",
     name: "Purge requested user accounts",
     description: "Purges eligible accounts.",
     manual: true,
+    runSchedule:
+      "Every hour at 17 minutes past the hour (UTC) in production. Manual only in staging.",
   },
   {
     id: "syncFinanceConnection",
     name: "Sync bank accounts",
     description: "Start sync from Finance.",
     manual: false,
+    runSchedule:
+      "Once per UTC day for connections with daily sync enabled; checked every 5 minutes from 00:00 UTC. Manual sync from Finance.",
   },
 ];
 
@@ -195,6 +199,11 @@ it("queues confirmed maintenance, exposes persisted output after remount, and fi
   await render();
   expect(container.textContent).toContain("30 days");
   expect(container.textContent).toContain("Sync bank accounts");
+  const jobRows = [...container.querySelectorAll(".adminJobRow")];
+  for (const job of definitions) {
+    const row = jobRows.find((item) => item.textContent?.includes(job.name));
+    expect(row?.textContent).toContain(`Run schedule: ${job.runSchedule}`);
+  }
   expect(
     [...container.querySelectorAll("button")].filter(
       (item) => item.textContent === "Run now",
