@@ -7,11 +7,14 @@ type Detail = Awaited<ReturnType<typeof api.adminJobs.detail>>;
 function useRunDetail(runId: string, before: string) {
   const [detail, setDetail] = useState<Detail>();
   const [error, setError] = useState<string>();
+  const [attempt, setAttempt] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A retry restarts the request even when its run and cursor are unchanged.
   useEffect(() => {
     let active = true;
     let polling = true;
     let timer: ReturnType<typeof setTimeout>;
     setDetail(undefined);
+    setError(undefined);
     function load() {
       return api.adminJobs
         .detail(runId, before || undefined)
@@ -25,9 +28,11 @@ function useRunDetail(runId: string, before: string) {
         .catch((cause: unknown) => {
           if (!active) return;
           setError(
-            cause instanceof Error
-              ? cause.message
-              : "Could not load job output.",
+            cause instanceof Error && cause.name === "TimeoutError"
+              ? "Loading job output took too long. Try again."
+              : cause instanceof Error
+                ? cause.message
+                : "Could not load job output.",
           );
         })
         .finally(() => {
@@ -40,18 +45,25 @@ function useRunDetail(runId: string, before: string) {
       active = false;
       clearTimeout(timer);
     };
-  }, [runId, before]);
-  return { detail, error };
+  }, [runId, before, attempt]);
+  return { detail, error, retry: () => setAttempt((value) => value + 1) };
 }
 
 export function AdminJobRun({ runId }: { runId: string }) {
   const [before, setBefore] = useState("");
-  const { detail, error } = useRunDetail(runId, before);
+  const { detail, error, retry } = useRunDetail(runId, before);
   const run = detail?.run;
   return (
     <div className="adminJobRunDetails">
       <h3>Run details</h3>
-      {error && <Toast tone="danger">{error}</Toast>}
+      {error && (
+        <Toast
+          tone="danger"
+          actions={<Button onClick={retry}>Retry loading output</Button>}
+        >
+          {error}
+        </Toast>
+      )}
       {!detail && !error && <LoadingState label="Loading job output…" />}
       {run && (
         <div className="stack stackMd">

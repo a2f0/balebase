@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Plugin } from "vite";
+import { offlineUpdates } from "./offlineUpdates.ts";
 
 /** Cache only the public app shell; authenticated API responses never enter Cache Storage. */
 export function offlineShell(): Plugin {
@@ -29,6 +30,7 @@ export function offlineShell(): Plugin {
 function workerSource(version: string, assets: string[]) {
   return `const cacheName = ${JSON.stringify(`balebase-shell-${version}`)};
 const assets = ${JSON.stringify(assets)};
+${offlineUpdates}
 const cachedShell = async () => {
   const cache = await caches.open(cacheName);
   const response = await cache.match("/index.html");

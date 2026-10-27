@@ -10,8 +10,11 @@
     "../app/src/env.d.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
+    "browser/**/*.ts",
+    "browser/**/*.tsx",
     "searchIndexing.test.ts",
     "vite.config.ts",
-    "offlineShell.ts"
+    "offlineShell.ts",
+    "offlineUpdates.ts"
   ]
 }

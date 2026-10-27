@@ -647,11 +647,23 @@ same D1 transaction. Receipts survive source deletion so an old device cannot
 recreate deleted work; organization purges remove them through foreign keys.
 
 The web build emits `offline-worker.js`, which precaches the public app shell
-and bundled assets. It does not cache authenticated API responses. New workers
-activate after existing tabs close, keeping the running bundle and its cache
-together. Navigation uses the active worker's cached HTML even while online;
-close all app tabs to allow a waiting update to activate. Native builds use
-their bundled shell and the same IndexedDB queue.
+and bundled assets. It does not cache authenticated API responses. Navigation
+uses the active worker's cached HTML even while online, keeping HTML and assets
+on the same version. The web shell checks for updates on startup, focus, page
+restoration, reconnection, and return to a visible tab, plus hourly while visible.
+Checks are throttled to once a minute. A waiting worker shows **Update available**;
+save changes and choose **Update**, then **Update and reload**. Close other app
+tabs and windows first: the worker refuses an explicit update while another
+app window is open. Only the tab that requested the update reloads, once its new
+worker takes control. Updates never unregister workers or clear offline records.
+With no explicit update, a waiting worker activates after existing tabs close.
+Native builds use their bundled shell and the same IndexedDB queue.
+
+Clients cached before this update flow was added must close all app tabs once
+to activate a newer worker and receive the update UI. New page code cannot run
+inside an older cached shell. The Chromium, Firefox, and WebKit update tests run
+with `bun run --cwd packages/app-web test:browser`; install their engines with
+`bun run --cwd packages/app-web browsers:install` first.
 
 Cloudflare serves nested app routes through the SPA fallback. Its
 default HTML handling redirects `/index.html` to `/`; the offline worker returns
