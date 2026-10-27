@@ -74,14 +74,14 @@ async function fixture(role = "admin", impersonatedBy?: string) {
             return statement;
           },
           async all() {
+            return { results: database.query(sql).all(...values) };
+          },
+          async first() {
             if (sql.startsWith("DELETE FROM organization")) {
               const interleave = beforeOrganizationPurge;
               beforeOrganizationPurge = undefined;
               interleave?.();
             }
-            return { results: database.query(sql).all(...values) };
-          },
-          async first() {
             if (sql.startsWith("DELETE FROM user WHERE")) {
               const interleave = beforeUserDelete;
               beforeUserDelete = undefined;
@@ -204,6 +204,8 @@ it("purges only organizations past 30 days and honors a restore or renewed delet
   });
   expect(await purgeDeletedOrganizations(f.bindings, now)).toEqual({
     purged: 2,
+    skipped: 2,
+    failed: 0,
   });
   expect(
     f.database.query("SELECT id FROM organization ORDER BY id").all(),
@@ -214,6 +216,8 @@ it("purges only organizations past 30 days and honors a restore or renewed delet
   );
   expect(await purgeDeletedOrganizations(f.bindings, now)).toEqual({
     purged: 0,
+    skipped: 0,
+    failed: 0,
   });
   expect(f.deletedKeys).toEqual([]);
 });
@@ -228,15 +232,21 @@ it("bounds organization purges to 25 and makes progress across repeated runs", a
   }
   expect(await purgeDeletedOrganizations(f.bindings, now)).toEqual({
     purged: 25,
+    skipped: 0,
+    failed: 0,
   });
   expect(
     f.database.query("SELECT id FROM organization ORDER BY id").all(),
   ).toEqual(Array.from({ length: 5 }, (_, i) => ({ id: `org-${i + 25}` })));
   expect(await purgeDeletedOrganizations(f.bindings, now)).toEqual({
     purged: 5,
+    skipped: 0,
+    failed: 0,
   });
   expect(await purgeDeletedOrganizations(f.bindings, now)).toEqual({
     purged: 0,
+    skipped: 0,
+    failed: 0,
   });
 });
 
@@ -394,7 +404,11 @@ it("rolls back organization deletion and cleanup tombstones together on a cascad
   );
   await f.deliver(run.id);
   expect(await (await f.request(`/jobs/runs/${run.id}`)).json()).toMatchObject({
-    run: { status: "failed", errorCode: "MAINTENANCE_FAILED", output: null },
+    run: {
+      status: "failed",
+      errorCode: "MAINTENANCE_FAILED",
+      output: { purged: 0, skipped: 0, failed: 1 },
+    },
   });
   expect(f.database.query("SELECT id FROM organization").all()).toEqual([
     { id: "purge" },
@@ -406,6 +420,66 @@ it("rolls back organization deletion and cleanup tombstones together on a cascad
     f.database.query("SELECT * FROM deleted_object_cleanup").all(),
   ).toEqual([]);
   expect(f.deletedKeys).toEqual([]);
+});
+
+it("isolates failing organizations, retains partial counters, and rotates the batch", async () => {
+  const f = await fixture();
+  const insert = f.database.query(`INSERT INTO organization
+    (id, name, slug, createdAt, deletedAt) VALUES (?, ?, ?, '2020-01-01', '2020-02-01')`);
+  for (let i = 0; i < 30; i++) {
+    const id = `org-${String(i).padStart(2, "0")}`;
+    insert.run(id, id, id);
+  }
+  f.database.exec(`CREATE TRIGGER reject_selected_purges BEFORE DELETE ON organization
+    WHEN OLD.id < 'org-24' BEGIN SELECT RAISE(ABORT, 'Failed cascade'); END;`);
+  const log = spyOn(console, "log");
+  try {
+    for (const output of [
+      { purged: 1, skipped: 0, failed: 24 },
+      { purged: 5, skipped: 0, failed: 20 },
+    ]) {
+      const run = await enqueueMaintenance(
+        f.bindings,
+        "purgeDeletedOrganizations",
+        {
+          trigger: "manual",
+          actorUserId: "actor",
+        },
+      );
+      await f.deliver(run.id);
+      expect(
+        await (await f.request(`/jobs/runs/${run.id}`)).json(),
+      ).toMatchObject({
+        run: { status: "failed", errorCode: "MAINTENANCE_FAILED", output },
+      });
+    }
+    expect(
+      f.database
+        .query(
+          "SELECT count(*) AS count FROM organization WHERE id >= 'org-24'",
+        )
+        .get(),
+    ).toEqual({ count: 0 });
+    expect(
+      f.database
+        .query(
+          "SELECT count(*) AS count FROM organization WHERE purgeAttemptedAt IS NOT NULL",
+        )
+        .get(),
+    ).toEqual({ count: 24 });
+    expect(log).toHaveBeenCalledWith({
+      event: "organization_purged",
+      organizationId: "org-24",
+    });
+    f.database.exec("DROP TRIGGER reject_selected_purges");
+    expect(await purgeDeletedOrganizations(f.bindings, now)).toEqual({
+      purged: 24,
+      skipped: 0,
+      failed: 0,
+    });
+  } finally {
+    log.mockRestore();
+  }
 });
 
 it("only purges requested, aged accounts without active memberships or protected roles", async () => {

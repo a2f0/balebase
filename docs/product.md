@@ -159,11 +159,15 @@ actually purged. Cancellation and eligibility are rechecked at deletion time.
 
 The **Purge deleted organizations** job permanently removes up to 25 organizations
 per run once they have been deleted for at least 30 days. Root admins can run it
-from **Root Admin → Jobs**, where its saved output shows the number purged. It
+from **Root Admin → Jobs**, where its saved output shows purged, skipped, and
+failed counts, including partial progress on failed runs. Failures are isolated
+per organization and previous attempts rotate behind untouched organizations. It
 also runs with production hourly maintenance. Restoring an organization before
 the purge protects it; after the purge it cannot be restored. Organization records
-are removed together and their files are queued for **Purge deleted files**, which
-waits at least 15 minutes for uploads to finish and retries storage failures.
+for each organization are removed together and their files are queued for
+**Purge deleted files**, which waits at least 15 minutes for uploads to finish
+and retries storage failures. File cleanup removes 25 objects per run, so a large
+backlog can take days to drain; root admins can start additional cleanup runs.
 User accounts are retained and follow the separate account-deletion policy.
 
 Root Admin → Jobs shows each job's run schedule. Production maintenance is

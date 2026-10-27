@@ -1,3 +1,7 @@
+-- Rotate attempted organizations behind untouched ones so a failed cascade
+-- cannot starve the rest of the purge backlog.
+ALTER TABLE organization ADD COLUMN purgeAttemptedAt TEXT;
+
 -- Raw messages and attachments must survive their row cascades as cleanup
 -- tombstones, just like uploads, contracts, and employee documents. Keep them
 -- in the same transaction as the organization purge and outlive the organization.
