@@ -687,9 +687,25 @@ work remains local for inspection; retries do not overwrite server records.
 Organization owners can soft-delete an organization from its general settings.
 The organization and its workspace data become inaccessible immediately and
 retain a `deletedAt` timestamp and the initiating user's ID in D1. Root admins
-can initiate the same lifecycle from the admin organization list. Preview or
-permanently purge organizations that have been deleted for at least 30 days
-with:
+can initiate the same lifecycle from the admin organization list.
+
+The **Purge deleted organizations** job (`purgeDeletedOrganizations`) permanently
+deletes up to 25 organizations per run once their deletion is at least 30 days
+old, oldest first. It runs with hourly maintenance at :17 UTC in production and
+can be started from **Root Admin → Jobs → Run now** in either tier. Staging
+maintenance is manual. The run's saved output reports `purged`, the number of
+organizations removed. Apply `0074_queue_organization_email_cleanup.sql` before
+deploying this job so raw messages and attachments join the existing cleanup
+for uploads, contract documents, templates, employee forms, and screening consents.
+
+Eligibility, organization deletion, foreign-key cascades, and file-cleanup
+tombstones commit in one D1 statement. A restore committed first prevents the
+purge; a purged organization cannot be restored. User accounts are retained.
+The **Purge deleted files** job removes the queued R2 objects in later batches,
+after its 15-minute upload grace period, and retries storage failures. In staging,
+run that job manually after the grace period to finish file deletion.
+
+The existing operator command can also preview or purge eligible organizations:
 
 ```sh
 bun run organizations:purge --dry-run

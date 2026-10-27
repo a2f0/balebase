@@ -157,6 +157,15 @@ their retained records must be managed separately; this does not erase all data
 an organization holds about a person. Users can cancel until their account is
 actually purged. Cancellation and eligibility are rechecked at deletion time.
 
+The **Purge deleted organizations** job permanently removes up to 25 organizations
+per run once they have been deleted for at least 30 days. Root admins can run it
+from **Root Admin → Jobs**, where its saved output shows the number purged. It
+also runs with production hourly maintenance. Restoring an organization before
+the purge protects it; after the purge it cannot be restored. Organization records
+are removed together and their files are queued for **Purge deleted files**, which
+waits at least 15 minutes for uploads to finish and retries storage failures.
+User accounts are retained and follow the separate account-deletion policy.
+
 Root Admin → Jobs shows each job's run schedule. Production maintenance is
 queued hourly at 17 minutes past the hour (UTC); staging maintenance is manual
 only. Bank sync checks every five minutes for enabled connections due for their
