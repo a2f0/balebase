@@ -1,60 +1,26 @@
 # Balebase
 
-[balebase.com](https://balebase.com)
+Balebase is small business management software for expenses, contracts,
+employee forms, documents, equipment, and audits. This repo is available on
+the web at <https://balebase.com>. The browser app at
+<https://app.balebase.com> and the iOS and Android apps all use the API at
+<https://api.balebase.com>. Balebase runs on Cloudflare Workers, D1, and R2.
 
-Balebase runs on Cloudflare Workers, D1, and R2. Every workspace lives
-under `packages/`:
+## Quick start
 
-- `packages/api` — Hono API on Cloudflare Workers, with D1 and R2 bindings.
-- `packages/app` — the React application: screens, API calls, and the host
-  interface each shell fills in.
-- `packages/app-web` — the Vite web shell deployed to Cloudflare.
-- `packages/app-capacitor` — the Capacitor iOS and Android shell, with its
-  native projects and Fastlane release lanes.
-- `packages/ui` — the shared design system (tokens, component styles, React
-  primitives, icons, and pricing copy) used by the app and the website.
-- `packages/website` — static Astro marketing site.
-
-Infrastructure lives outside the workspaces in `terraform` (D1, R2, and
-`balebase.com` Worker-domain infrastructure).
-
-Release builds report filtered errors to Sentry, with separate projects for
-web, API, Android, and iOS in staging and production. Development builds stay
-local. See [error diagnostics](docs/operations.md#error-diagnostics) for setup,
-collection limits, and source-map uploads.
-
-The hosted website and browser app use the CT click tracker in production and
-staging. Tracking honors Do Not Track and Global Privacy Control browser
-settings. See [click tracking](docs/product.md#click-tracking) for collected
-fields, administrator access, and opt-outs.
-
-## Start locally
-
-Install [Bun](https://bun.sh/) 1.4.3. Bun manages dependencies and runs all
-JavaScript tooling, including commitlint, lint-staged, and Wrangler. Commands
-use `--bun` to keep that runtime even when Node.js is installed. Install
-Terraform, TFLint, and ShellCheck for the complete lint suite. Authenticate
-Wrangler with a Cloudflare account when you are ready to provision remote
-resources.
-
-If you use mise, `mise install` installs the Bun version pinned in `.mise.toml`,
-matching CI. Node.js and npm are not required.
+Install [mise](https://mise.jdx.dev/), or install [Bun](https://bun.sh/) 1.4.3
+directly and skip `mise install`. Node.js and npm are not required.
 
 ```sh
+mise install                 # the Bun and Ruby versions pinned in .mise.toml
 bun run install:dependencies
 bun run hooks:install
 bun run --cwd packages/api db:migrate:local
 bun run dev
+# API:     http://localhost:8787
+# Client:  http://localhost:5173
+# Website: http://localhost:4321
 ```
-
-`install:dependencies` also runs dependency install scripts on Bun, including
-packages whose install command invokes `node` directly.
-
-Local services use these addresses:
-
-- API: <http://localhost:8787>
-- Client: <http://localhost:5173>
-- Website: <http://localhost:4321>
 
 The local API reads `BETTER_AUTH_SECRET` and optional integration keys from
 `.secrets`, a gitignored link to `../matrix-secrets/balebase` that the
@@ -67,53 +33,39 @@ unit tests do not need that file; see the
 
 Wrangler persists the local D1 database and R2 bucket under
 `packages/api/.wrangler/`. The client defaults to the local API. Override it by
-copying `packages/app-web/.env.example` to `packages/app-web/.env`.
+copying `packages/app-web/.env.example` to `packages/app-web/.env`. To build
+and run the native apps, see the
+[Capacitor shell's local development](packages/app-capacitor/README.md#develop-locally).
 
-## Mobile development
+## Layout
 
-The native app is named **Balebase** and uses `com.balebase.app` on both
-platforms. Its staging build, **Balebase Staging**
-(`com.balebase.staging.app`), installs beside it. Install Xcode 26 or later
-for iOS, or Android Studio with Android SDK 37 and JDK 21 for Android, and
-the pinned Ruby (`mise install`) for the Fastlane release lanes. The app
-supports iOS 18+ and Android 12+; the iOS floor also covers the embedded PDF
-viewer's browser APIs.
+Every workspace lives under `packages/`, and infrastructure lives in
+`terraform/`:
 
-```sh
-bun run mobile:ios      # build, sync both native projects, and open Xcode
-bun run mobile:android  # build, sync both native projects, and open Android Studio
-bun run mobile:sync     # rebuild web assets, icons, and native dependencies
-bun run mobile:run:ios      # build and run on a selected simulator/device
-bun run mobile:run:android  # build and run on a selected emulator/device
-```
+| Path | Contents |
+| --- | --- |
+| `packages/api` | Hono API on Cloudflare Workers, with D1 and R2 bindings |
+| `packages/validators` | The zod request and response contract for every API route |
+| `packages/api-client` | The typed client for those routes |
+| `packages/app` | The React application: screens, API calls, and the host interface each shell fills in |
+| `packages/app-web` | The Vite web shell deployed to Cloudflare |
+| [`packages/app-capacitor`](packages/app-capacitor/README.md) | The Capacitor iOS and Android shell, with its native projects and Fastlane release lanes |
+| [`packages/ui`](packages/ui/README.md) | The shared design system (tokens, component styles, React primitives, icons, and pricing copy) used by the app and the website |
+| `packages/diagnostics` | Sentry error reporting shared by the API and app shells |
+| `packages/website` | The static Astro marketing site |
+| [`terraform`](terraform/README.md) | D1, R2, and `balebase.com` Worker-domain infrastructure |
 
-Choose a simulator or connected device and run the app from the IDE. These
-commands bundle the app locally into `packages/app-capacitor/dist` and default
-to `https://api.balebase.com`. Native networking preserves cookie
-authentication; deploy the API's mobile-origin support before testing against
-a remote environment.
+Release builds report filtered errors to Sentry, with separate projects for
+web, API, Android, and iOS in staging and production. Development builds stay
+local. See [error diagnostics](docs/operations.md#error-diagnostics) for setup,
+collection limits, and source-map uploads.
 
-To point a local build at staging, prefix these commands with
-`NATIVE_RELEASE_TIER=staging`, or put these values in
-`packages/app-capacitor/.env.local`. The debug app keeps its
-`com.balebase.app` identifier; the staging store app comes from the release
-wrappers.
+The hosted website and browser app use the CT click tracker in production and
+staging. Tracking honors Do Not Track and Global Privacy Control browser
+settings. See [click tracking](docs/product.md#click-tracking) for collected
+fields, administrator access, and opt-outs.
 
-The `.env.local` values:
-
-```dotenv
-VITE_API_URL=https://api-staging.balebase.com
-VITE_APP_URL=https://app-staging.balebase.com
-```
-
-Both URLs must use HTTPS. Emailed verification and password-reset links open
-the hosted app. See
-[packages/app-capacitor/README.md](packages/app-capacitor/README.md) for the
-store release lanes and
-[mobile builds and release setup](docs/operations.md#mobile-builds-and-release-setup)
-for the remaining store setup.
-
-## Working in the repo
+## Common commands
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for focused checks, editor setup, code
 organization, and the pull request workflow.
@@ -126,9 +78,9 @@ bun run build     # production builds
 bun run format    # apply source and Markdown fixes
 ```
 
-Agents can capture noisy finite commands with
-`bun run agent:run --label tests -- bun run test`. See
-[compact output](CONTRIBUTING.md#compact-command-output) for private logs.
+The full `check` also needs ShellCheck, Terraform, TFLint, and the Fastlane
+Ruby bundle. Provisioning and deploys read their Cloudflare credentials from
+`.secrets`, as the deployment guide describes.
 
 ## Reference
 
@@ -137,6 +89,8 @@ Agents can capture noisy finite commands with
   employee forms, and billing.
 - [Deployment and maintenance](docs/operations.md): local secrets, Cloudflare
   provisioning, production and staging deploys, and data retention commands.
+- [Native apps](packages/app-capacitor/README.md): local iOS and Android
+  builds, the staging app, and the store release lanes.
 - [Release readiness](docs/readiness.md): store candidate audits and the
   readiness lanes.
 - [Infrastructure](terraform/README.md): Terraform state and domains.
