@@ -103,8 +103,10 @@ and bank sync history. Every run uses the shared background queue and D1 run
 record, with a stable ID, source, requesting user when available, timestamps,
 processing attempt count, status, structured output, and chronological logs.
 Each bank page counts as a processing attempt, including retries. The page
-refreshes automatically, filters by job and status, and pages through older
-runs and logs. It is restricted to root admins, including the history endpoints
+refreshes automatically, filters by job and status, and loads older runs as you
+scroll. Loaded runs and expanded details stay in place; a button also supports
+manual loading and retries. Logs have their own pagination. It is restricted to
+root admins, including the history endpoints
 `GET /api/admin/jobs/runs` and `GET /api/admin/jobs/runs/:runId`.
 
 Each maintenance **Run now** action requires confirmation and uses the same
@@ -563,7 +565,9 @@ calendar year, previous calendar year, or all time, and an uncategorized-expense
 filter. That filter follows the Reports rules: posted outflows without an
 expense category, excluding transfers and loan or card payments, and it has the
 bookmarkable path `/finance/expenses/category/uncategorized`. Filters search
-all imported history; **Load more transactions** retrieves the next 250 matches.
+all imported history. Scrolling near the end retrieves the next 250 matches,
+keeping earlier rows and annotation forms visible. **Load more transactions**
+also supports manual loading and retries; changing filters starts a fresh list.
 
 Each organization keeps its own list of expense categories at
 `/finance/categories` (with a one-click common set), and each transaction can

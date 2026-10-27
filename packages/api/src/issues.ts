@@ -2,6 +2,7 @@ import { issuesRoutes } from "@balebase/validators/issues";
 import { Hono } from "hono";
 import { activityBatch, findActivity } from "./activity";
 import { isRecord } from "./auditDefinition";
+import { cursorPage, decodeCursor, encodeCursor } from "./cursorPagination";
 import {
   canSeeFinanceIssues,
   findIssue,
@@ -19,6 +20,7 @@ import { listMemberDirectory } from "./organizationMembers";
 import { respond } from "./respond";
 
 export const issues = new Hono<IssueEnv>();
+const issuePageSize = 50;
 issues.get("/", listIssues);
 issues.get("/members", async (context) =>
   respond(context, issuesRoutes.members, {
@@ -62,17 +64,20 @@ async function listIssues(context: IssueContext) {
   const rows = await context.env.DB.prepare(`${issueSelect}
     WHERE issue.organization_id = ? AND (? = 1 OR issue.target_type <> 'finance_transaction')
       AND target_available = 1 ${filter.sql}
-    ORDER BY issue.created_at DESC, issue.id DESC LIMIT 51`)
-    .bind(context.get("organizationId"), finance ? 1 : 0, ...filter.bindings)
+    ORDER BY issue.created_at DESC, issue.id DESC LIMIT ?`)
+    .bind(
+      context.get("organizationId"),
+      finance ? 1 : 0,
+      ...filter.bindings,
+      issuePageSize + 1,
+    )
     .all<IssueRow>();
-  const page = rows.results.slice(0, 50);
-  const last = page.at(-1);
+  const page = cursorPage(rows.results, issuePageSize, (row) =>
+    encodeCursor(row.created_at, row.id),
+  );
   return respond(context, issuesRoutes.list, {
-    issues: page.map(toIssue),
-    nextCursor:
-      rows.results.length > 50 && last
-        ? JSON.stringify({ createdAt: last.created_at, id: last.id })
-        : null,
+    issues: page.items.map(toIssue),
+    nextCursor: page.nextCursor,
   });
 }
 
@@ -111,7 +116,7 @@ function issueFilters(context: IssueContext) {
     const cursor = parseCursor(value);
     if (!cursor) return null;
     conditions.push("(issue.created_at, issue.id) < (?, ?)");
-    bindings.push(cursor.createdAt, cursor.id);
+    bindings.push(...cursor);
   }
   return {
     sql: conditions.length ? `AND ${conditions.join(" AND ")}` : "",
@@ -120,23 +125,11 @@ function issueFilters(context: IssueContext) {
 }
 
 function parseCursor(value: string) {
-  if (value.length > 500) return null;
-  try {
-    const cursor: unknown = JSON.parse(value);
-    if (!isRecord(cursor)) return null;
-    const { createdAt } = cursor;
-    if (
-      typeof createdAt !== "string" ||
-      typeof cursor.id !== "string" ||
-      !cursor.id
-    )
-      return null;
-    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(createdAt))
-      return null;
-    return { createdAt, id: cursor.id };
-  } catch {
-    return null;
-  }
+  const cursor = decodeCursor(value, "createdAt", 500);
+  return cursor &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(cursor[0])
+    ? cursor
+    : null;
 }
 
 async function createIssue(context: IssueContext) {

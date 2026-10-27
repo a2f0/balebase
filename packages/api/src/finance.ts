@@ -14,6 +14,7 @@ import {
   findActivity,
   requestActor,
 } from "./activity";
+import { cursorPage, encodeCursor } from "./cursorPagination";
 import { accountDetail } from "./financeAccountDetail";
 import {
   addDefaultCategories,
@@ -41,6 +42,8 @@ import { PlaidApiError, type PlaidRequest, plaidRequest } from "./plaid";
 import { decryptToken, encryptToken } from "./plaidCrypto";
 import { respond } from "./respond";
 import type { Bindings } from "./types";
+
+const transactionPageSize = 250;
 
 interface ConnectionRow {
   account_count: number;
@@ -174,18 +177,16 @@ async function financeListing(context: FinanceContext) {
     linkedEmails,
     ({ target_id }) => target_id,
   );
-  const page = transactions.slice(0, 250);
-  const last = page.at(-1);
+  const page = cursorPage(transactions, transactionPageSize, (row) =>
+    encodeCursor(row.transaction_date, row.id),
+  );
   return respond(context, financeRoutes.listing, {
     accounts: accounts.map(toAccount),
     categories,
     configured: isConfigured(context.env),
     connections: connections.map(toConnection),
-    nextCursor:
-      transactions.length > 250 && last
-        ? JSON.stringify({ date: last.transaction_date, id: last.id })
-        : null,
-    transactions: page.map((row) =>
+    nextCursor: page.nextCursor,
+    transactions: page.items.map((row) =>
       toTransaction(
         row,
         (emailsByTransaction.get(row.id) ?? []).map(toLinkedEmail),
@@ -650,7 +651,7 @@ async function listTransactions(
          ON annotation.transaction_id = txn.id
        WHERE ${filters.where}
        ORDER BY txn.transaction_date DESC, txn.id DESC
-       LIMIT 251`,
+       LIMIT ${transactionPageSize + 1}`,
     )
     .bind(...filters.bindings)
     .all<TransactionRow>();

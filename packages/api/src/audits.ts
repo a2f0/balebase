@@ -54,6 +54,7 @@ import {
 } from "./auditTemplates";
 import type { AuthVariables } from "./authMiddleware";
 import { freeFormTemplateLimit, organizationTemplateLimit } from "./billing";
+import { cursorPage, decodeCursor, encodeCursor } from "./cursorPagination";
 import { respond } from "./respond";
 import type { Bindings } from "./types";
 
@@ -61,11 +62,6 @@ const audits = new Hono<{
   Bindings: Bindings;
   Variables: AuthVariables;
 }>();
-
-interface AuditCursor {
-  createdAt: string;
-  id: string;
-}
 
 interface IssueRow {
   assigned_to: string | null;
@@ -326,7 +322,9 @@ audits.post("/templates/:id/runs", async (context) => {
 audits.get("/runs", async (context) => {
   const cursorValue = context.req.query("cursor");
   const cursor =
-    cursorValue === undefined ? undefined : parseAuditCursor(cursorValue);
+    cursorValue === undefined
+      ? undefined
+      : decodeCursor(cursorValue, "createdAt", 2048);
   if (cursorValue !== undefined && !cursor) {
     return context.json({ error: "Invalid audit cursor." }, 400);
   }
@@ -353,30 +351,25 @@ audits.get("/runs", async (context) => {
      LEFT JOIN user AS deleted_by ON deleted_by.id = audit.deleted_by_user_id
      LEFT JOIN issues AS issue ON issue.organization_id = audit.organization_id AND issue.target_id = audit.id AND issue.target_type = 'audit_run'
      WHERE audit.organization_id = ? AND ${deletedFilter}
-       AND (? IS NULL OR audit.created_at < ? OR
-            (audit.created_at = ? AND audit.id < ?))
+       AND (? IS NULL OR (audit.created_at, audit.id) < (?, ?))
      GROUP BY audit.id
      ORDER BY audit.created_at DESC, audit.id DESC
      LIMIT ?`,
   )
     .bind(
       context.get("organizationId"),
-      cursor?.createdAt ?? null,
-      cursor?.createdAt ?? null,
-      cursor?.createdAt ?? null,
-      cursor?.id ?? null,
+      cursor?.[0] ?? null,
+      cursor?.[0] ?? null,
+      cursor?.[1] ?? null,
       auditRunPageSize + 1,
     )
     .all<AuditSummaryRow>();
-  const page = result.results.slice(0, auditRunPageSize);
-  const last = page.at(-1);
-  const nextCursor =
-    result.results.length > auditRunPageSize && last
-      ? encodeAuditCursor({ createdAt: last.created_at, id: last.id })
-      : null;
+  const page = cursorPage(result.results, auditRunPageSize, (row) =>
+    encodeCursor(row.created_at, row.id),
+  );
   return respond(context, auditsRoutes.listRuns, {
-    audits: page.map(toAuditSummary),
-    nextCursor,
+    audits: page.items.map(toAuditSummary),
+    nextCursor: page.nextCursor,
   });
 });
 
@@ -829,52 +822,6 @@ function groupImagesByIssue(images: AuditIssueImageRow[]) {
     grouped.set(image.issue_id, issueImages);
   }
   return grouped;
-}
-
-function encodeAuditCursor(cursor: AuditCursor) {
-  const bytes = new TextEncoder().encode(JSON.stringify(cursor));
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary)
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replace(/=+$/, "");
-}
-
-function parseAuditCursor(value: string): AuditCursor | undefined {
-  if (
-    value.length === 0 ||
-    value.length > 2_048 ||
-    value.length % 4 === 1 ||
-    !/^[A-Za-z0-9_-]+$/.test(value)
-  ) {
-    return undefined;
-  }
-  try {
-    const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
-    const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="));
-    const bytes = Uint8Array.from(binary, (character) =>
-      character.charCodeAt(0),
-    );
-    const decoded: unknown = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes),
-    );
-    if (!isRecord(decoded)) return undefined;
-    const createdAt: unknown = Reflect.get(decoded, "createdAt");
-    if (
-      typeof createdAt !== "string" ||
-      createdAt.length === 0 ||
-      createdAt.length > 1_000 ||
-      typeof decoded.id !== "string" ||
-      decoded.id.length === 0 ||
-      decoded.id.length > 1_000
-    ) {
-      return undefined;
-    }
-    return { createdAt, id: decoded.id };
-  } catch {
-    return undefined;
-  }
 }
 
 function toIssue(row: IssueRow, images: AuditIssueImageRow[]): AuditIssue {

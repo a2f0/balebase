@@ -70,6 +70,13 @@ exactly the contract's routes. To add a route, define it in the area's
 validators file, send its response with `respond`, and add an endpoint and
 method to the area's client.
 
+Cursor-paginated API lists use `packages/api/src/cursorPagination.ts`. Query one
+extra row in a stable order, then use `cursorPage` to trim the page and derive
+its continuation from the last visible row. Date-based lists sort by the date
+and a unique ID together and use the shared opaque cursor codec; the decoder
+also accepts the earlier JSON and base64 formats. Keep filters and authorization
+in each query before pagination, and treat returned cursors as opaque in clients.
+
 See [API client onboarding](docs/api-client.md) for a public-import example,
 browser credentials and CORS, the shared wrapper, and native host assumptions.
 

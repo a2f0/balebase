@@ -22,6 +22,7 @@ import { type FormEvent, useState } from "react";
 import { FinanceTransactionFilters } from "./FinanceTransactionFilters";
 import { formatMoney } from "./financeFormat";
 import { financeTransactionPath } from "./financePages";
+import { InfiniteScroll } from "./InfiniteScroll";
 import { transactionIssuePath } from "./issuePaths";
 import { formatLabel } from "./labels";
 import { handleNavigation, inboxEmailPath } from "./workspacePaths";
@@ -47,7 +48,7 @@ export function FinanceTransactionHistory({
   onClearFilter,
   filters,
   onFiltersChange,
-  hasMore,
+  nextCursor,
   loadingMore,
   loadError,
   loadMoreError,
@@ -60,7 +61,7 @@ export function FinanceTransactionHistory({
   onClearFilter: () => void;
   filters: FinanceFilters;
   onFiltersChange: (filters: FinanceFilters) => void;
-  hasMore: boolean;
+  nextCursor: string | null | undefined;
   loadingMore: boolean;
   loadError: string | undefined;
   loadMoreError: string | undefined;
@@ -132,15 +133,16 @@ export function FinanceTransactionHistory({
         />
       )}
       {loadMoreError && <Banner tone="danger">{loadMoreError}</Banner>}
-      {hasMore && transactions && (
-        <Button
+      {nextCursor && transactions && (
+        <InfiniteScroll
+          autoLoad={!loadError && !loadMoreError}
+          cursor={nextCursor}
           busy={loadingMore}
           disabled={handlers.busy}
-          onClick={() => void onLoadMore()}
-          size="sm"
+          onLoadMore={onLoadMore}
         >
           {loadMoreError ? "Retry loading more" : "Load more transactions"}
-        </Button>
+        </InfiniteScroll>
       )}
     </PageSection>
   );
