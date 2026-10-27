@@ -83,14 +83,15 @@ export function useFinanceData(route: CategoryRoute | null) {
     [load],
   );
   useCategoryRoute(route, currentFilters, onFiltersChange);
-  async function onLoadMore() {
-    if (
-      data?.nextCursor &&
-      !(loading || loadingMore || refreshing) &&
-      filters === loadedFilters.current
-    )
-      await load(data.nextCursor);
-  }
+  const cursor = data?.nextCursor;
+  const canLoadMore =
+    !(loading || loadingMore || refreshing) &&
+    filters === loadedFilters.current;
+  const onLoadMore = useCallback(async () => {
+    if (!cursor || !canLoadMore) return false;
+    await load(cursor);
+    return true;
+  }, [canLoadMore, cursor, load]);
   return {
     data,
     filters,
@@ -147,7 +148,10 @@ async function loadFinancePages(
     result.transactions.length < minimum
   ) {
     const next = await api.finance.data(filters, result.nextCursor);
-    result.transactions.push(...next.transactions);
+    result.transactions = mergeTransactions(
+      result.transactions,
+      next.transactions,
+    );
     result.nextCursor = next.nextCursor;
   }
   return result;
@@ -161,8 +165,19 @@ function mergeFinancePage(
   if (!cursor || !current) return next;
   return {
     ...next,
-    transactions: [...current.transactions, ...next.transactions],
+    transactions: mergeTransactions(current.transactions, next.transactions),
   };
+}
+
+function mergeTransactions(
+  current: FinanceData["transactions"],
+  next: FinanceData["transactions"],
+) {
+  return [
+    ...new Map(
+      [...current, ...next].map((transaction) => [transaction.id, transaction]),
+    ).values(),
+  ];
 }
 
 function financeLoadMessage(cause: unknown) {

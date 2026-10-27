@@ -1,5 +1,4 @@
 import {
-  Button,
   Field,
   LoadingState,
   PageSection,
@@ -9,66 +8,21 @@ import {
 import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
 import { useEffect, useState } from "react";
 import { AdminJobHistoryRow } from "./AdminJobHistoryRow";
-import { api } from "./apiClient";
+import { InfiniteScroll } from "./InfiniteScroll";
+import { useJobHistory } from "./useJobHistory";
 
-type History = Awaited<ReturnType<typeof api.adminJobs.runs>>;
 type Props = {
   jobs: JobDefinition[];
   initialRun: JobRun | undefined;
 };
-
-function useJobHistory(
-  jobId: string,
-  status: JobRun["status"] | "",
-  cursor: string,
-) {
-  const [data, setData] = useState<History>();
-  const [error, setError] = useState<string>();
-  useEffect(() => {
-    let active = true;
-    let timer: ReturnType<typeof setTimeout>;
-    setData(undefined);
-    const query = {
-      ...(jobId ? { jobId } : {}),
-      ...(status ? { status } : {}),
-      ...(cursor ? { cursor } : {}),
-    };
-    function load() {
-      return api.adminJobs
-        .runs(query)
-        .then((result) => {
-          if (!active) return;
-          setData(result);
-          setError(undefined);
-        })
-        .catch((cause: unknown) => {
-          if (!active) return;
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Could not load job history.",
-          );
-        })
-        .finally(() => {
-          if (active) timer = setTimeout(() => void load(), 5000);
-        });
-    }
-    void load();
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [jobId, status, cursor]);
-  return { data, error };
-}
 
 export function AdminJobHistory({ jobs, initialRun }: Props) {
   const [selectedRun, setSelectedRun] = useState(initialRun?.runId);
   const [pendingRun, setPendingRun] = useState(initialRun);
   const [jobId, setJobId] = useState("");
   const [status, setStatus] = useState<JobRun["status"] | "">("");
-  const [cursor, setCursor] = useState("");
-  const { data, error } = useJobHistory(jobId, status, cursor);
+  const { data, error, loadMoreError, loadingMore, refreshing, loadMore } =
+    useJobHistory(jobId, status);
   useEffect(() => {
     if (data?.runs.some((run) => run.runId === pendingRun?.runId))
       setPendingRun(undefined);
@@ -79,7 +33,6 @@ export function AdminJobHistory({ jobs, initialRun }: Props) {
     pendingRun &&
     !jobId &&
     !status &&
-    !cursor &&
     !runs.some((run) => run.runId === pendingRun.runId)
       ? [pendingRun, ...runs]
       : runs;
@@ -91,7 +44,6 @@ export function AdminJobHistory({ jobs, initialRun }: Props) {
             value={jobId}
             onChange={(event) => {
               setJobId(event.target.value);
-              setCursor("");
               setSelectedRun(undefined);
             }}
           >
@@ -108,7 +60,6 @@ export function AdminJobHistory({ jobs, initialRun }: Props) {
             value={status}
             onChange={(event) => {
               setStatus(event.target.value as JobRun["status"] | "");
-              setCursor("");
               setSelectedRun(undefined);
             }}
           >
@@ -139,28 +90,18 @@ export function AdminJobHistory({ jobs, initialRun }: Props) {
           />
         ))}
       </div>
-      <div className="cluster">
-        {cursor && (
-          <Button
-            onClick={() => {
-              setCursor("");
-              setSelectedRun(undefined);
-            }}
-          >
-            Latest runs
-          </Button>
-        )}
-        {data?.nextCursor && (
-          <Button
-            onClick={() => {
-              setCursor(data.nextCursor ?? "");
-              setSelectedRun(undefined);
-            }}
-          >
-            Older runs
-          </Button>
-        )}
-      </div>
+      {loadMoreError && <Toast tone="danger">{loadMoreError}</Toast>}
+      {data?.nextCursor && (
+        <InfiniteScroll
+          autoLoad={!error && !loadMoreError}
+          cursor={data.nextCursor}
+          busy={loadingMore}
+          disabled={refreshing}
+          onLoadMore={loadMore}
+        >
+          {loadMoreError ? "Retry loading older runs" : "Older runs"}
+        </InfiniteScroll>
+      )}
     </PageSection>
   );
 }

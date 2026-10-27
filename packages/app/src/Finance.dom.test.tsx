@@ -7,6 +7,7 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { Finance } from "./Finance";
+import { IntersectionObserverFixture } from "./intersectionObserverFixture";
 
 const dom = new Window({ url: "http://localhost:5173/finance" });
 const saved = new Map<string, PropertyDescriptor | undefined>();
@@ -73,6 +74,7 @@ beforeAll(async () => {
     document: dom.document,
     Element: dom.Element,
     HTMLElement: dom.HTMLElement,
+    IntersectionObserver: IntersectionObserverFixture,
     Node: dom.Node,
     IS_REACT_ACT_ENVIRONMENT: true,
     window: dom,
@@ -91,6 +93,7 @@ afterEach(async () => {
   root = undefined;
   container?.remove();
   globalThis.fetch = originalFetch;
+  IntersectionObserverFixture.instances.length = 0;
 });
 afterAll(async () => {
   for (const [key, descriptor] of saved) {
@@ -153,6 +156,45 @@ function selectedAccounts() {
 }
 
 describe("Finance filters", () => {
+  it("ignores an older page and stale observer when account filters change during infinite loading", async () => {
+    const older = Promise.withResolvers<Response>();
+    let pageRequests = 0;
+    respond((url) => {
+      if (url.searchParams.has("cursor")) {
+        pageRequests++;
+        return older.promise;
+      }
+      return Response.json({
+        ...data,
+        transactions: [
+          transaction(
+            url.searchParams.has("accountId") ? "Filtered" : "Coffee",
+          ),
+        ],
+        nextCursor: url.searchParams.has("accountId") ? null : "older",
+      });
+    });
+    await mount();
+    const oldObserver = IntersectionObserverFixture.instances.at(-1);
+    await act(async () => {
+      IntersectionObserverFixture.intersect();
+      IntersectionObserverFixture.intersect();
+    });
+    expect(pageRequests).toBe(1);
+    await click("Savings");
+    await act(async () =>
+      older.resolve(
+        Response.json({
+          ...data,
+          transactions: [transaction("Stale")],
+          nextCursor: "stale-cursor",
+        }),
+      ),
+    );
+    await act(async () => oldObserver?.notify());
+    expect(pageRequests).toBe(1);
+    expect(rowNames()).toEqual(["Filtered"]);
+  });
   it("combines Shift account toggles, year shortcuts, and uncategorized expenses, then clears them", async () => {
     const queries: URLSearchParams[] = [];
     respond((url) => {
@@ -232,18 +274,16 @@ describe("Finance filters", () => {
       return Response.json({
         ...data,
         nextCursor: url.searchParams.has("cursor") ? null : cursor,
-        transactions: [
-          transaction(
-            url.searchParams.has("cursor") ? "Older expense" : "Coffee",
-          ),
-        ],
+        transactions: url.searchParams.has("cursor")
+          ? [transaction("Coffee"), transaction("Older expense")]
+          : [transaction("Coffee")],
       });
     });
     await mount();
     await click("Savings");
     await click("Current year");
     await click("Uncategorized expenses");
-    await click("Load more transactions");
+    await act(async () => IntersectionObserverFixture.intersect());
     expect(queries.at(-1)?.get("cursor")).toBe(cursor);
     expect(queries.at(-1)?.get("accountId")).toBe("savings");
     expect(queries.at(-1)?.get("year")).toBe(String(year));
@@ -350,11 +390,13 @@ describe("Finance filters", () => {
           });
     });
     await mount();
-    await click("Load more transactions");
+    await act(async () => IntersectionObserverFixture.intersect());
     expect(rowNames()).toEqual(["Coffee"]);
     expect(container.textContent).toContain(
       "Older transactions are temporarily unavailable.",
     );
+    await act(async () => IntersectionObserverFixture.intersect());
+    expect(cursors).toEqual([cursor]);
     await click("Retry loading more");
     expect(cursors).toEqual([cursor, cursor]);
     expect(rowNames()).toEqual(["Coffee", "Older expense"]);

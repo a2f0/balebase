@@ -5,12 +5,14 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { AdminJobs } from "./AdminJobs";
+import { IntersectionObserverFixture } from "./intersectionObserverFixture";
 
 const dom = new Window({ url: "http://localhost:5173/root/jobs" });
 const domGlobals = {
   document: dom.document,
   Element: dom.Element,
   HTMLElement: dom.HTMLElement,
+  IntersectionObserver: IntersectionObserverFixture,
   IS_REACT_ACT_ENVIRONMENT: true,
   navigator: dom.navigator,
   Node: dom.Node,
@@ -39,6 +41,7 @@ afterEach(async () => {
   root = undefined;
   container?.remove();
   globalThis.fetch = originalFetch;
+  IntersectionObserverFixture.instances.length = 0;
 });
 
 afterAll(async () => {
@@ -394,4 +397,214 @@ it("does not restore a requested run after history has shown it and newer runs r
     container.querySelector(".adminJobHistoryItem")?.textContent,
   ).toContain("succeeded");
   expect(container.textContent).not.toContain("queued · manual");
+});
+
+it("loads older runs on intersection once, deduplicates overlaps, and preserves expanded details", async () => {
+  const older = Promise.withResolvers<Response>();
+  let olderRequests = 0;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/runs/run-1"))
+      return Response.json({ run: queued, logs: [], nextBefore: null });
+    if (url.pathname.endsWith("/runs")) {
+      if (url.searchParams.has("cursor")) {
+        olderRequests++;
+        return older.promise;
+      }
+      return Response.json({ runs: [queued], nextCursor: "older" });
+    }
+    return Response.json({ jobs: definitions });
+  }) as typeof fetch;
+  await render();
+  await act(async () => button("View run").click());
+  const firstRow = container.querySelector(".adminJobHistoryItem");
+  await act(async () => {
+    IntersectionObserverFixture.intersect();
+    IntersectionObserverFixture.intersect();
+    button("Older runs").click();
+  });
+  expect(olderRequests).toBe(1);
+  expect(container.textContent).toContain("Run ID: run-1");
+  await act(async () =>
+    older.resolve(
+      Response.json({
+        runs: [queued, { ...queued, runId: "older-run", status: "succeeded" }],
+        nextCursor: null,
+      }),
+    ),
+  );
+  expect(container.querySelectorAll(".adminJobHistoryItem")).toHaveLength(2);
+  expect(container.querySelector(".adminJobHistoryItem")).toBe(firstRow);
+  expect(button("Hide run").getAttribute("aria-expanded")).toBe("true");
+  await act(async () => IntersectionObserverFixture.intersect());
+  expect(olderRequests).toBe(1);
+});
+
+it("discards old pages and observer notifications after job and status filters change", async () => {
+  const older = Promise.withResolvers<Response>();
+  const queries: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    if (!url.pathname.endsWith("/runs"))
+      return Response.json({ jobs: definitions });
+    queries.push(url.search);
+    if (url.searchParams.has("cursor")) return older.promise;
+    return Response.json({
+      runs: [
+        {
+          ...queued,
+          runId: url.searchParams.has("status") ? "filtered" : "initial",
+        },
+      ],
+      nextCursor: url.search ? null : "older",
+    });
+  }) as typeof fetch;
+  await render();
+  const oldObserver = IntersectionObserverFixture.instances.at(-1);
+  await act(async () => IntersectionObserverFixture.intersect());
+  const selects = container.querySelectorAll("select");
+  for (const [index, value] of [
+    [0, "syncFinanceConnection"],
+    [1, "failed"],
+  ] as const) {
+    await act(async () => {
+      const select = selects[index];
+      if (!select) throw new Error("Missing filter");
+      select.value = value;
+      select.dispatchEvent(new window.Event("change", { bubbles: true }));
+    });
+  }
+  expect(queries.at(-1)).toBe("?jobId=syncFinanceConnection&status=failed");
+  await act(async () =>
+    older.resolve(
+      Response.json({
+        runs: [{ ...queued, runId: "stale" }],
+        nextCursor: "stale-cursor",
+      }),
+    ),
+  );
+  await act(async () => oldObserver?.notify());
+  expect(queries).toHaveLength(4);
+  expect(container.querySelectorAll(".adminJobHistoryItem")).toHaveLength(1);
+  expect(container.textContent).not.toContain("Older runs");
+});
+
+it("pauses automatic history paging on failure and retries the same cursor manually", async () => {
+  const cursors: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    if (!url.pathname.endsWith("/runs"))
+      return Response.json({ jobs: definitions });
+    const cursor = url.searchParams.get("cursor");
+    if (!cursor) return Response.json({ runs: [queued], nextCursor: "older" });
+    cursors.push(cursor);
+    if (cursors.length === 1)
+      return Response.json({ error: "History unavailable." }, { status: 503 });
+    return Response.json({
+      runs: [{ ...queued, runId: "older-run" }],
+      nextCursor: null,
+    });
+  }) as typeof fetch;
+  await render();
+  await act(async () => IntersectionObserverFixture.intersect());
+  expect(container.textContent).toContain("History unavailable.");
+  expect(container.querySelectorAll(".adminJobHistoryItem")).toHaveLength(1);
+  await act(async () => IntersectionObserverFixture.intersect());
+  expect(cursors).toEqual(["older"]);
+  await act(async () => button("Retry loading older runs").click());
+  expect(cursors).toEqual(["older", "older"]);
+  expect(container.querySelectorAll(".adminJobHistoryItem")).toHaveLength(2);
+  expect(container.textContent).not.toContain("History unavailable.");
+});
+
+it("retries automatic loading when a poll wins the race to load history", async () => {
+  const timer = spyOn(globalThis, "setTimeout");
+  let firstPages = 0;
+  let olderPages = 0;
+  let finishPoll: ((response: Response) => void) | undefined;
+  const firstPage = () =>
+    Response.json({ runs: [queued], nextCursor: "older" });
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    if (!url.pathname.endsWith("/runs"))
+      return Response.json({ jobs: definitions });
+    if (url.searchParams.has("cursor")) {
+      olderPages++;
+      return Response.json({
+        runs: [{ ...queued, runId: "old" }],
+        nextCursor: null,
+      });
+    }
+    if (++firstPages === 1) return firstPage();
+    return new Promise<Response>((resolve) => {
+      finishPoll = resolve;
+    });
+  }) as typeof fetch;
+  try {
+    await render();
+    const poll = timer.mock.calls.findLast(([, delay]) => delay === 5000)?.[0];
+    if (typeof poll !== "function") throw new Error("Missing history refresh");
+    await act(async () => {
+      poll();
+      // The observer still has the render before the poll published its busy state.
+      IntersectionObserverFixture.intersect();
+    });
+    expect(olderPages).toBe(0);
+    await act(async () => finishPoll?.(firstPage()));
+    await act(async () => IntersectionObserverFixture.intersect());
+    expect(olderPages).toBe(1);
+    expect(container.querySelectorAll(".adminJobHistoryItem")).toHaveLength(2);
+  } finally {
+    timer.mockRestore();
+  }
+});
+
+it("refreshes through the oldest loaded run when new jobs shift page boundaries", async () => {
+  const timer = spyOn(globalThis, "setTimeout");
+  let refreshed = false;
+  const history = (ids: string[], nextCursor: string | null) =>
+    Response.json({
+      runs: ids.map((runId) => ({ ...queued, runId, status: "succeeded" })),
+      nextCursor,
+    });
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/runs/run-1"))
+      return Response.json({
+        run: { ...queued, status: "succeeded" },
+        logs: [],
+        nextBefore: null,
+      });
+    if (!url.pathname.endsWith("/runs"))
+      return Response.json({ jobs: definitions });
+    const cursor = url.searchParams.get("cursor");
+    if (cursor === "page-2") return history(["run-1"], null);
+    if (cursor === "new-2") return history(["run-2"], "new-3");
+    if (cursor === "new-3") return history(["run-1"], null);
+    return refreshed
+      ? history(["run-4", "run-3"], "new-2")
+      : history(["run-3", "run-2"], "page-2");
+  }) as typeof fetch;
+  try {
+    await render();
+    await act(async () => IntersectionObserverFixture.intersect());
+    const oldest = container.querySelectorAll(".adminJobHistoryItem")[2];
+    await act(async () =>
+      oldest?.querySelector<HTMLButtonElement>("button")?.click(),
+    );
+    const poll = timer.mock.calls.findLast(
+      ([, delay]) => delay === 10_000,
+    )?.[0];
+    if (typeof poll !== "function") throw new Error("Missing history refresh");
+    refreshed = true;
+    await act(async () => {
+      poll();
+    });
+    expect(container.querySelectorAll(".adminJobHistoryItem")).toHaveLength(4);
+    expect(container.querySelectorAll(".adminJobHistoryItem")[3]).toBe(oldest);
+    expect(container.textContent).toContain("Run ID: run-1");
+    expect(timer.mock.calls.some(([, delay]) => delay === 15_000)).toBe(true);
+  } finally {
+    timer.mockRestore();
+  }
 });

@@ -6,6 +6,7 @@ import {
 import { type Context, Hono } from "hono";
 import type { ApiKeyChannel, ApiKeyPrincipal } from "./apiKeys";
 import type { AuthVariables } from "./authMiddleware";
+import { cursorPage } from "./cursorPagination";
 import { userHasCapability } from "./organizationGroups";
 import { respond } from "./respond";
 import type { Bindings } from "./types";
@@ -129,10 +130,10 @@ export async function findActivity(
     )
     .bind(...bindings, pageSize + 1)
     .all<ActivityRow>();
-  const page = rows.results.slice(0, pageSize);
+  const page = cursorPage(rows.results, pageSize, (row) => String(row.id));
   return {
-    events: page.map(toActivity),
-    nextCursor: rows.results.length > pageSize ? String(page.at(-1)?.id) : null,
+    events: page.items.map(toActivity),
+    nextCursor: page.nextCursor,
   };
 }
 

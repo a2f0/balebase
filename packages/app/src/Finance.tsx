@@ -347,7 +347,7 @@ function FinanceOverview({
         accountName={accountName}
         filters={filters}
         onFiltersChange={onFiltersChange}
-        hasMore={Boolean(data?.nextCursor)}
+        nextCursor={data?.nextCursor}
         loadingMore={loadingMore}
         loadError={loadError}
         loadMoreError={loadMoreError}

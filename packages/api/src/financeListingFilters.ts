@@ -1,3 +1,4 @@
+import { decodeCursor } from "./cursorPagination";
 import type { FinanceContext } from "./financeContext";
 
 /** Filters are applied before pagination, including for older imported years. */
@@ -60,31 +61,17 @@ export function financeListingFilters(context: FinanceContext) {
   }
   if (cursor) {
     conditions.push("(txn.transaction_date, txn.id) < (?, ?)");
-    bindings.push(cursor.date, cursor.id);
+    bindings.push(...cursor);
   }
   return { bindings, where: conditions.join(" AND ") };
 }
 
 function parseCursor(value: string | undefined) {
   if (value === undefined) return null;
-  if (value.length > 512) return false;
-  try {
-    const cursor: unknown = JSON.parse(value);
-    if (
-      !cursor ||
-      typeof cursor !== "object" ||
-      !("date" in cursor) ||
-      typeof cursor.date !== "string" ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(cursor.date) ||
-      !("id" in cursor) ||
-      typeof cursor.id !== "string" ||
-      !cursor.id ||
-      cursor.id.length > 200
-    ) {
-      return false;
-    }
-    return { date: cursor.date, id: cursor.id };
-  } catch {
-    return false;
-  }
+  const cursor = decodeCursor(value, "date", 512);
+  return cursor &&
+    /^\d{4}-\d{2}-\d{2}$/.test(cursor[0]) &&
+    cursor[1].length <= 200
+    ? cursor
+    : false;
 }

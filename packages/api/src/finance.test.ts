@@ -70,6 +70,14 @@ describe("finance", () => {
     );
     expect(second.body.nextCursor).toBeNull();
     expect(second.body.transactions).toHaveLength(18);
+    const legacyCursor = JSON.stringify({
+      date: "2026-01-01",
+      id: first.body.transactions.at(-1)?.id,
+    });
+    const legacyPage = await list(
+      `?year=2026&cursor=${encodeURIComponent(legacyCursor)}`,
+    );
+    expect(legacyPage.body.transactions).toEqual(second.body.transactions);
     expect(
       new Set(
         [...first.body.transactions, ...second.body.transactions].map(

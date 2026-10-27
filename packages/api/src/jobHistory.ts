@@ -3,22 +3,11 @@ import {
   JobLogDetailsSchema,
 } from "@balebase/validators/adminJobs";
 import type { RouteInput, RouteOutput } from "@balebase/validators/route";
+import { cursorPage, decodeCursor, encodeCursor } from "./cursorPagination";
 import { type JobRow, toJobRun } from "./jobRuns";
 
-function historyCursor(cursor: string) {
-  try {
-    const value: unknown = JSON.parse(atob(cursor));
-    if (
-      Array.isArray(value) &&
-      value.length === 2 &&
-      value.every((part) => typeof part === "string")
-    )
-      return value as [string, string];
-  } catch {
-    /* Invalid cursors are rejected before running a query. */
-  }
-  return null;
-}
+const runPageSize = 50;
+const logPageSize = 200;
 
 export async function listJobRuns(
   database: D1Database,
@@ -34,26 +23,24 @@ export async function listJobRuns(
     conditions.push("status = ?");
     values.push(query.status);
   }
-  if (query.cursor) {
-    const cursor = historyCursor(query.cursor);
+  if (query.cursor !== undefined) {
+    const cursor = decodeCursor(query.cursor, "createdAt", 500);
     if (!cursor) return null;
-    conditions.push("(created_at < ? OR (created_at = ? AND id < ?))");
-    values.push(cursor[0], cursor[0], cursor[1]);
+    conditions.push("(created_at, id) < (?, ?)");
+    values.push(...cursor);
   }
   const { results } = await database
     .prepare(`SELECT * FROM job_runs
     ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
-    ORDER BY created_at DESC, id DESC LIMIT 51`)
-    .bind(...values)
+    ORDER BY created_at DESC, id DESC LIMIT ?`)
+    .bind(...values, runPageSize + 1)
     .all<JobRow>();
-  const page = results.slice(0, 50);
-  const last = page.at(-1);
+  const page = cursorPage(results, runPageSize, (row) =>
+    encodeCursor(row.created_at, row.id),
+  );
   return {
-    runs: page.map(toJobRun),
-    nextCursor:
-      results.length > 50 && last
-        ? btoa(JSON.stringify([last.created_at, last.id]))
-        : null,
+    runs: page.items.map(toJobRun),
+    nextCursor: page.nextCursor,
   };
 }
 
@@ -69,8 +56,8 @@ export async function jobRunDetail(
   if (!row) return null;
   const { results } = await database
     .prepare(`SELECT * FROM job_logs WHERE run_id = ?
-    ${before ? "AND id < ?" : ""} ORDER BY id DESC LIMIT 201`)
-    .bind(...(before ? [id, Number(before)] : [id]))
+    ${before ? "AND id < ?" : ""} ORDER BY id DESC LIMIT ?`)
+    .bind(...(before ? [id, Number(before)] : [id]), logPageSize + 1)
     .all<{
       id: number;
       occurred_at: string;
@@ -78,11 +65,11 @@ export async function jobRunDetail(
       message: string;
       details_json: string;
     }>();
-  const page = results.slice(0, 200);
+  const page = cursorPage(results, logPageSize, (log) => String(log.id));
   return {
     run: toJobRun(row),
-    nextBefore: results.length > 200 ? String(page.at(-1)?.id) : null,
-    logs: page.toReversed().map((log) => ({
+    nextBefore: page.nextCursor,
+    logs: page.items.toReversed().map((log) => ({
       id: log.id,
       occurredAt: log.occurred_at,
       level: log.level,

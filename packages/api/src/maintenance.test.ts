@@ -659,6 +659,15 @@ it("paginates filtered history and logs, rejects invalid filters, and expires on
   ).json()) as { runs: { runId: string }[]; nextCursor: string | null };
   expect(older.runs).toHaveLength(5);
   expect(older.nextCursor).toBeNull();
+  const legacyCursor = btoa(
+    JSON.stringify([created, history.runs.at(-1)?.runId]),
+  );
+  const legacyPage = await (
+    await f.request(
+      `/jobs/runs?jobId=purgeRequestedUsers&status=succeeded&cursor=${encodeURIComponent(legacyCursor)}`,
+    )
+  ).json();
+  expect(legacyPage).toEqual(older);
   expect(
     new Set([...history.runs, ...older.runs].map((run) => run.runId)).size,
   ).toBe(55);
