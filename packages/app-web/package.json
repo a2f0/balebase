@@ -1,6 +1,6 @@
 {
   "name": "@balebase/app-web",
-  "version": "0.1.65",
+  "version": "0.1.66",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
@@ -10,16 +10,24 @@
     "check": "bunx --bun --no-install tsc --noEmit",
     "deploy": "bun --bun run build:release && bunx --bun --no-install wrangler deploy",
     "dev": "bunx --bun --no-install agent-tool --repo ../.. images build favicons --out packages/app-web/public && bunx --bun --no-install vite",
-    "test": "bun test ./searchIndexing.test.ts"
+    "test": "bun test ./searchIndexing.test.ts",
+    "test:browser": "bun test browser",
+    "browsers:install": "bunx --bun --no-install playwright install --with-deps"
   },
   "dependencies": {
     "@a2f0/ct-client": "0.1.4",
     "@balebase/app": "workspace:*",
-    "@balebase/diagnostics": "workspace:*"
+    "@balebase/diagnostics": "workspace:*",
+    "@balebase/ui": "workspace:*",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
     "@types/bun": "1.4.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
+    "playwright": "1.64.1",
     "vite": "8.3.4"
   }
 }

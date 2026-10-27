@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Plugin } from "vite";
+import { offlineUpdates } from "./offlineUpdates.ts";
 
 /** Cache only the public app shell; authenticated API responses never enter Cache Storage. */
 export function offlineShell(): Plugin {
@@ -29,6 +30,7 @@ export function offlineShell(): Plugin {
 function workerSource(version: string, assets: string[]) {
   return `const cacheName = ${JSON.stringify(`balebase-shell-${version}`)};
 const assets = ${JSON.stringify(assets)};
+${offlineUpdates}
 const cachedShell = async () => {
   const cache = await caches.open(cacheName);
   const response = await cache.match("/index.html");
@@ -52,7 +54,7 @@ self.addEventListener("fetch", event => {
   const url = new URL(request.url);
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
   if (request.mode === "navigate") {
-    // Keep HTML and assets on the active worker's version until all its tabs close.
+    // Serve the active worker's complete shell version online and offline.
     event.respondWith(cachedShell().then(cached => cached || fetch(request)));
   } else if (assets.includes(url.pathname) && !url.search) {
     event.respondWith(caches.open(cacheName).then(async cache => (await cache.match(request)) || fetch(request)));

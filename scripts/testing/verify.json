@@ -14,6 +14,10 @@
       "command": ["bun", "run", "--cwd", "packages/app", "test:browser"]
     },
     {
+      "label": "web-browser",
+      "command": ["bun", "run", "--cwd", "packages/app-web", "test:browser"]
+    },
+    {
       "label": "app-capacitor-browser",
       "command": [
         "bun",

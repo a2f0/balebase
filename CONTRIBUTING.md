@@ -133,6 +133,7 @@ Before opening a PR, run the same commands as CI:
 bun run check
 bun run test
 bun run --cwd packages/app test:browser
+bun run --cwd packages/app-web test:browser
 bun run --cwd packages/app-capacitor test:browser
 bun run --cwd packages/website test:browser
 bun run build
@@ -142,6 +143,10 @@ The full check needs ShellCheck, Terraform, TFLint, and the Ruby bundle.
 Browser tests need Chrome or Chromium; set `CHROME_PATH` to its executable when
 needed. Git's pre-commit hook fixes staged formatting; pre-push runs `check`
 and `test`.
+
+The web shell's service worker update suite uses Playwright's Chromium, Firefox,
+and WebKit engines. Run `bun run --cwd packages/app-web browsers:install` once
+before its browser tests; CI installs them automatically.
 
 The `test:staging`, `test:env`, and `test:scope` steps inside `bun run test`
 exercise local fixtures and command stubs. They do not deploy, contact a live

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, expect, it, spyOn } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
 import { Window } from "happy-dom";
@@ -85,6 +85,91 @@ const definitions: JobDefinition[] = [
       "Once per UTC day for connections with daily sync enabled; checked every 5 minutes from 00:00 UTC. Manual sync from Finance.",
   },
 ];
+
+it("times out a slow job output read and lets the user retry", async () => {
+  const timeout = spyOn(AbortSignal, "timeout");
+  const deadline = new AbortController();
+  timeout.mockReturnValue(deadline.signal);
+  let detailRequests = 0;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/runs/run-1")) {
+      detailRequests += 1;
+      if (detailRequests === 1)
+        return new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(init.signal?.reason),
+            { once: true },
+          );
+        });
+      return Response.json({
+        run: { ...queued, status: "succeeded", output: { recovered: true } },
+        logs: [],
+        nextBefore: null,
+      });
+    }
+    if (url.pathname.endsWith("/runs"))
+      return Response.json({ runs: [queued], nextCursor: null });
+    return Response.json({ jobs: definitions });
+  }) as typeof fetch;
+  try {
+    await render();
+    await act(async () => button("View run").click());
+    expect(container.textContent).toContain("Loading job output…");
+    expect(timeout).toHaveBeenCalledWith(30_000);
+    await act(async () =>
+      deadline.abort(new DOMException("Slow response", "TimeoutError")),
+    );
+    expect(container.textContent).toContain(
+      "Loading job output took too long. Try again.",
+    );
+    expect(container.textContent).not.toContain("Loading job output…");
+    timeout.mockReturnValue(new AbortController().signal);
+    await act(async () => button("Retry loading output").click());
+    expect(container.textContent).toContain('"recovered": true');
+    expect(detailRequests).toBe(2);
+  } finally {
+    timeout.mockRestore();
+  }
+});
+
+it("keeps saved job output visible while retrying a failed poll", async () => {
+  let detailRequests = 0;
+  let finishRetry: ((response: Response) => void) | undefined;
+  const response = (progress: number) =>
+    Response.json({
+      run: { ...queued, status: "running", output: { progress } },
+      logs: [],
+      nextBefore: null,
+    });
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/runs/run-1")) {
+      detailRequests += 1;
+      if (detailRequests === 1) return response(1);
+      if (detailRequests === 2) throw new Error("Connection interrupted");
+      return new Promise<Response>((resolve) => {
+        finishRetry = resolve;
+      });
+    }
+    if (url.pathname.endsWith("/runs"))
+      return Response.json({ runs: [queued], nextCursor: null });
+    return Response.json({ jobs: definitions });
+  }) as typeof fetch;
+  await render();
+  await act(async () => button("View run").click());
+  expect(container.textContent).toContain('"progress": 1');
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 5200));
+  });
+  expect(container.textContent).toContain("Connection interrupted");
+  await act(async () => button("Retry loading output").click());
+  expect(container.textContent).toContain('"progress": 1');
+  expect(container.textContent).not.toContain("Loading job output…");
+  await act(async () => finishRetry?.(response(2)));
+  expect(container.textContent).toContain('"progress": 2');
+}, 15_000);
 
 function button(label: string) {
   const match = [...document.querySelectorAll("button")].find(
