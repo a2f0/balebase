@@ -16,7 +16,7 @@ export class ServiceWorkerUpdates {
   #lastCheck = 0;
   #timer?: ReturnType<typeof setTimeout>;
   #port?: MessagePort;
-  #cleanup: (() => void)[] = [];
+  #cleanup = new Set<() => void>();
   #notify: (state: UpdateState) => void;
 
   constructor(notify: (state: UpdateState) => void) {
@@ -29,7 +29,7 @@ export class ServiceWorkerUpdates {
     this.#listen(window, "pageshow", this.#check);
     this.#listen(document, "visibilitychange", this.#check);
     const interval = setInterval(this.#check, 60 * 60 * 1000);
-    this.#cleanup.push(() => clearInterval(interval));
+    this.#cleanup.add(() => clearInterval(interval));
     void this.#register();
   }
 
@@ -53,12 +53,23 @@ export class ServiceWorkerUpdates {
 
   #listen(target: EventTarget, event: string, listener: () => void) {
     target.addEventListener(event, listener);
-    this.#cleanup.push(() => target.removeEventListener(event, listener));
+    const stop = () => {
+      target.removeEventListener(event, listener);
+      this.#cleanup.delete(stop);
+    };
+    this.#cleanup.add(stop);
+    return stop;
   }
 
   #watchInstalling = () => {
     const worker = this.#registration?.installing;
-    if (worker) this.#listen(worker, "statechange", this.#showWaiting);
+    if (!worker) return;
+    const changed = () => {
+      this.#showWaiting();
+      if (worker.state === "installed" || worker.state === "redundant") stop();
+    };
+    const stop = this.#listen(worker, "statechange", changed);
+    changed();
   };
 
   #showWaiting = () => {
@@ -152,5 +163,6 @@ export class ServiceWorkerUpdates {
     clearTimeout(this.#timer);
     this.#port?.close();
     for (const cleanup of this.#cleanup) cleanup();
+    this.#cleanup.clear();
   }
 }

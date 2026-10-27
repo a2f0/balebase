@@ -10,7 +10,7 @@ export const api = new ApiClient({
       input,
       input.includes("/api/offline/")
         ? { ...init, signal: AbortSignal.timeout(90_000) }
-        : init?.method === "GET" && input.includes("/api/admin/jobs")
+        : init?.method === "GET" && input.includes("/api/admin/jobs/runs/")
           ? { ...init, signal: AbortSignal.timeout(30_000) }
           : init,
     ),

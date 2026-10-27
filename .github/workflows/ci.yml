@@ -81,7 +81,7 @@ jobs:
           install-dependencies: true
 
       - name: Install service worker test browsers
-        run: bun run --cwd packages/app-web browsers:install
+        run: bun run --cwd packages/app-web browsers:install firefox webkit
 
       - name: Test browser layout and service worker updates
         run: |

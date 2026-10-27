@@ -65,7 +65,9 @@ const baseConfig = {
       ignoreDependencies: androidBeforeSync,
     },
     "packages/app-web": {
-      project: ["src/**/*.{css,ts,tsx}"],
+      // The browser tests generate an entry script that imports this fixture.
+      entry: ["browser/**/*.test.ts", "browser/updatesFixture.tsx"],
+      project: ["src/**/*.{css,ts,tsx}", "browser/**/*.{ts,tsx}"],
     },
     "packages/ui": {
       entry: ["src/**/*.test.ts"],
