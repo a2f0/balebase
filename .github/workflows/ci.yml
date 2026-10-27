@@ -81,7 +81,14 @@ jobs:
           install-dependencies: true
 
       - name: Install service worker test browsers
-        run: bun run --cwd packages/app-web browsers:install firefox webkit
+        timeout-minutes: 10
+        run: |
+          # The runner's Azure mirror can stall while fetching WebKit dependencies.
+          # Keep Ubuntu's signed packages, using its standard archive mirror.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt
+          fi
+          bun run --cwd packages/app-web browsers:install firefox webkit
 
       - name: Test browser layout and service worker updates
         run: |
