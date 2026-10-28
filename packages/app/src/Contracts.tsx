@@ -214,7 +214,7 @@ function ContractList({
                 href={path}
                 onClick={(event) => handleNavigation(event, path, onNavigate)}
               >
-                <span className="contractRowMark">
+                <span className="iconTile">
                   <Icon name="contract" size={20} />
                 </span>
                 <span className="rowMain">

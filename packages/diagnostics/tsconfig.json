@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ESNext", "DOM"],
-    "types": ["@types/bun"]
+    "types": ["@types/bun", "vite/client"]
   },
   "include": ["src/**/*.ts", "vite.ts"]
 }

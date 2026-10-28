@@ -396,12 +396,13 @@ CT is initialized only by the production browser bundles at these exact origins:
 
 Both use site `balebase` and CT's default DNT/GPC behavior. The API checks the
 environment against its registered Origin. Update the CT registry before
-adding a hostname. The SDK is pinned in `app-web` and `website`; the shared
-React package and Capacitor bootstrap do not initialize tracking. The browser
-app deliberately keeps CT's generic `/` page so click records do not reveal
-workspace routes or workflows. Only the marketing tracker uses fixed public
-page names. Never pass record IDs, query parameters, user-derived labels, or
-dynamic `data-ct-app` values.
+adding a hostname. The SDK is pinned in `packages/diagnostics`, whose
+`clickTracking` module the web shell and website call with these origins; the
+shared React package and Capacitor bootstrap do not initialize tracking. The
+browser app deliberately keeps CT's generic `/` page so click records do not
+reveal workspace routes or workflows. Only the marketing tracker uses fixed
+public page names. Never pass record IDs, query parameters, user-derived
+labels, or dynamic `data-ct-app` values.
 
 Deploy CT's authenticated dashboard and data API before enabling these
 integrations. Both require a signed-in CT account provisioned through the CT
@@ -440,11 +441,11 @@ Workers and checks the staging URLs. It does not migrate or deploy the API,
 write Worker secrets, or apply Terraform.
 
 Verify the live bundles and privacy page on both tiers. Ordinary automated
-browser tests must send no CT events. The website browser suite checks both
-integrations with intercepted requests, so its privacy tests never write
-synthetic data to CT. Sign in to the dashboard with a provisioned CT account,
-then choose site `balebase` and the desired app and environment; the dashboard
-defaults to production. See
+browser tests must send no CT events. The website and web shell browser suites
+check the shared tracker and both bundles with intercepted requests, so their
+privacy tests never write synthetic data to CT. Sign in to the dashboard with a
+provisioned CT account, then choose site `balebase` and the desired app and
+environment; the dashboard defaults to production. See
 [click tracking](product.md#click-tracking) for data and retention details.
 
 ## Checkr communications

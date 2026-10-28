@@ -2,51 +2,35 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { initClickTracking } from "@balebase/diagnostics/clickTracking";
 import { type Browser, launch } from "puppeteer-core";
-// One intercepted-browser harness exercises the two independent browser
-// bootstraps without adding CT to the shared app or native shell.
-import { initClickTracking as initApp } from "../../app-web/src/clickTracking";
-import { initClickTracking as initWebsite } from "../src/clickTracking";
 
+// The shared tracker runs here because diagnostics has no browser suite. The
+// layout test and the web shell's suite check each bundle's own origins.
+const app = "test-app";
+const origins = {
+  production: "https://tracked.example",
+  staging: "https://staging.tracked.example",
+};
 const profile = mkdtempSync(join(tmpdir(), "balebase-clicks-"));
-const sources = new Map<string, string>();
+const sources = new Map<boolean, string>();
 let browser: Browser;
-const targets = [
-  { app: "website", origin: "https://balebase.com", environment: "production" },
-  {
-    app: "website",
-    origin: "https://website-staging.balebase.com",
-    environment: "staging",
-  },
-  {
-    app: "web-app",
-    origin: "https://app.balebase.com",
-    environment: "production",
-  },
-  {
-    app: "web-app",
-    origin: "https://app-staging.balebase.com",
-    environment: "staging",
-  },
-];
 
 beforeAll(async () => {
-  for (const [app, module] of [
-    ["website", "../src/clickTracking.ts"],
-    ["web-app", "../../app-web/src/clickTracking.ts"],
-  ] as const) {
-    for (const production of [true, false]) {
-      const build = await Bun.build({
-        entrypoints: [fileURLToPath(new URL(module, import.meta.url))],
-        target: "browser",
-        define: { "import.meta.env.PROD": String(production) },
-      });
-      if (!build.success) throw new Error(build.logs.join("\n"));
-      const source = await build.outputs[0]?.text();
-      if (!source) throw new Error("Tracking bundle is empty");
-      sources.set(`${app}:${production}`, source);
-    }
+  const entrypoint = Bun.resolveSync(
+    "@balebase/diagnostics/clickTracking",
+    import.meta.dir,
+  );
+  for (const production of [true, false]) {
+    const build = await Bun.build({
+      entrypoints: [entrypoint],
+      target: "browser",
+      define: { "import.meta.env.PROD": String(production) },
+    });
+    if (!build.success) throw new Error(build.logs.join("\n"));
+    const source = await build.outputs[0]?.text();
+    if (!source) throw new Error("Tracking bundle is empty");
+    sources.set(production, source);
   }
   browser = await launch({
     executablePath:
@@ -85,10 +69,12 @@ type Guard =
   | "webdriver";
 
 async function fixture(
-  app: string,
   origin: string,
-  guard: Guard = "none",
-  production = true,
+  {
+    guard = "none",
+    production = true,
+    named = false,
+  }: { guard?: Guard; production?: boolean; named?: boolean } = {},
 ) {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
@@ -138,16 +124,34 @@ async function fixture(
     await page.evaluate(() =>
       document.documentElement.setAttribute("data-ct-disabled", ""),
     );
-  const source = sources.get(`${app}:${production}`);
+  const source = sources.get(production);
   if (!source) throw new Error("Missing tracker bundle");
-  await page.evaluate(async (code) => {
-    const url = URL.createObjectURL(
-      new Blob([code], { type: "text/javascript" }),
-    );
-    const { initClickTracking } = await import(url);
-    URL.revokeObjectURL(url);
-    Reflect.set(window, "clickTracker", initClickTracking());
-  }, source);
+  await page.evaluate(
+    async (code, options) => {
+      const url = URL.createObjectURL(
+        new Blob([code], { type: "text/javascript" }),
+      );
+      const tracking = await import(url);
+      URL.revokeObjectURL(url);
+      const pages = new Set(["/", "/privacy"]);
+      Reflect.set(
+        window,
+        "clickTracker",
+        tracking.initClickTracking({
+          app: options.app,
+          origins: options.origins,
+          ...(options.named && {
+            page: () => {
+              const path = location.pathname.replace(/\/$/, "") || "/";
+              return pages.has(path) ? path : "/other";
+            },
+          }),
+        }),
+      );
+    },
+    source,
+    { app, origins, named },
+  );
   const flush = async () => {
     await page.evaluate(async () => {
       await (
@@ -161,27 +165,21 @@ async function fixture(
 }
 
 test("server imports never initialize a tracker", () => {
-  expect(initApp()).toBeUndefined();
-  expect(initWebsite()).toBeUndefined();
+  expect(initClickTracking({ app, origins })).toBeUndefined();
 });
 
-for (const target of targets) {
-  test(`${target.app} attributes ${target.environment} clicks without private content`, async () => {
-    const { page, batches, flush, close } = await fixture(
-      target.app,
-      target.origin,
-    );
+for (const [environment, origin] of Object.entries(origins)) {
+  test(`attributes ${environment} clicks to the app and named page without private content`, async () => {
+    const { page, batches, flush, close } = await fixture(origin, {
+      named: true,
+    });
     try {
-      await page.evaluate(
-        (app) =>
-          history.replaceState(
-            null,
-            "",
-            app === "website"
-              ? "/privacy/?token=private-token#private-fragment"
-              : "/finance/accounts/private-account?token=private-token#private-fragment",
-          ),
-        target.app,
+      await page.evaluate(() =>
+        history.replaceState(
+          null,
+          "",
+          "/privacy/?token=private-token#private-fragment",
+        ),
       );
       await page.click("input");
       await page.click("[contenteditable]");
@@ -197,7 +195,7 @@ for (const target of targets) {
       expect(batches).toHaveLength(1);
       const batch = JSON.parse(batches[0] ?? "");
       expect(batch.site).toBe("balebase");
-      expect(batch.environment).toBe(target.environment);
+      expect(batch.environment).toBe(environment);
       expect(
         batch.events.map((event: Record<string, unknown>) => ({
           app: event.app,
@@ -206,18 +204,8 @@ for (const target of targets) {
           label: event.label,
         })),
       ).toEqual([
-        {
-          app: target.app,
-          page: target.app === "website" ? "/privacy" : "/",
-          target: "button",
-          label: null,
-        },
-        {
-          app: target.app,
-          page: target.app === "website" ? "/privacy" : "/",
-          target: "p",
-          label: null,
-        },
+        { app, page: "/privacy", target: "button", label: null },
+        { app, page: "/privacy", target: "p", label: null },
       ]);
       expect(batches.join("")).not.toMatch(/private|action|ignored/i);
       await page.evaluate(async () => {
@@ -232,82 +220,76 @@ for (const target of targets) {
   });
 }
 
-for (const app of ["website", "web-app"]) {
-  const origin =
-    app === "website" ? "https://balebase.com" : "https://app.balebase.com";
-  for (const guard of [
-    "dnt",
-    "gpc",
-    "extension",
-    "local",
-    "storage",
-    "webdriver",
-  ] as const) {
-    test(`${app} honors ${guard} at initialization and delivery`, async () => {
-      const { page, batches, flush, close } = await fixture(app, origin, guard);
-      try {
-        await page.click("#action");
-        await flush();
-        expect(batches).toHaveLength(0);
-      } finally {
-        await close();
-      }
+for (const guard of [
+  "dnt",
+  "gpc",
+  "extension",
+  "local",
+  "storage",
+  "webdriver",
+] as const) {
+  test(`honors ${guard} at initialization and delivery`, async () => {
+    const { page, batches, flush, close } = await fixture(origins.production, {
+      guard,
     });
-  }
-  for (const [host, production] of [
-    [origin, false],
-    ["https://localhost", true],
-    [`${origin}:8443`, true],
-    [origin.replace("https:", "http:"), true],
-    ["https://unregistered.example", true],
-  ] as const) {
-    test(`${app} rejects ${host} with production=${production}`, async () => {
-      const { page, batches, flush, close } = await fixture(
-        app,
-        host,
-        "none",
-        production,
-      );
-      try {
-        expect(
-          await page.evaluate(
-            () => Reflect.get(window, "clickTracker") === undefined,
-          ),
-        ).toBe(true);
-        await page.click("#action");
-        await flush();
-        expect(batches).toHaveLength(0);
-      } finally {
-        await close();
-      }
-    });
-  }
-  test(`${app} rechecks DNT and GPC before sending queued clicks`, async () => {
-    for (const flag of ["doNotTrack", "globalPrivacyControl"]) {
-      const { page, batches, flush, close } = await fixture(app, origin);
-      try {
-        await page.click("#action");
-        await page.evaluate(
-          (name) =>
-            Object.defineProperty(navigator, name, {
-              get: () => (name === "doNotTrack" ? "1" : true),
-            }),
-          flag,
-        );
-        await flush();
-        expect(batches).toHaveLength(0);
-      } finally {
-        await close();
-      }
+    try {
+      await page.click("#action");
+      await flush();
+      expect(batches).toHaveLength(0);
+    } finally {
+      await close();
     }
-  }, 20_000);
+  });
 }
 
-test("app clicks use one generic page across every workspace route", async () => {
-  const { page, batches, flush, close } = await fixture(
-    "web-app",
-    "https://app.balebase.com",
-  );
+for (const [host, production] of [
+  [origins.production, false],
+  ["https://localhost", true],
+  [`${origins.production}:8443`, true],
+  [origins.production.replace("https:", "http:"), true],
+  ["https://unregistered.example", true],
+] as const) {
+  test(`rejects ${host} with production=${production}`, async () => {
+    const { page, batches, flush, close } = await fixture(host, {
+      production,
+    });
+    try {
+      expect(
+        await page.evaluate(
+          () => Reflect.get(window, "clickTracker") === undefined,
+        ),
+      ).toBe(true);
+      await page.click("#action");
+      await flush();
+      expect(batches).toHaveLength(0);
+    } finally {
+      await close();
+    }
+  });
+}
+
+test("rechecks DNT and GPC before sending queued clicks", async () => {
+  for (const flag of ["doNotTrack", "globalPrivacyControl"]) {
+    const { page, batches, flush, close } = await fixture(origins.production);
+    try {
+      await page.click("#action");
+      await page.evaluate(
+        (name) =>
+          Object.defineProperty(navigator, name, {
+            get: () => (name === "doNotTrack" ? "1" : true),
+          }),
+        flag,
+      );
+      await flush();
+      expect(batches).toHaveLength(0);
+    } finally {
+      await close();
+    }
+  }
+}, 20_000);
+
+test("without a page function, clicks use one generic page across every route", async () => {
+  const { page, batches, flush, close } = await fixture(origins.production);
   try {
     const routes = [
       "/organization/people/private-person",

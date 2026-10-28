@@ -6,22 +6,10 @@
  * sitemap. Staging still allows crawling, because a crawler that may not fetch
  * a page never sees its noindex.
  */
+import type { ReleaseTier } from "@balebase/diagnostics/config";
 import type { Plan } from "@balebase/ui/brand";
 
 const siteUrl = "https://balebase.com";
-
-export type ReleaseTier = "production" | "staging";
-
-/** The build's tier from PUBLIC_RELEASE_TIER; production when unset. */
-export function releaseTier(value: string | undefined): ReleaseTier {
-  const tier = (value ?? "production").trim().toLowerCase();
-  if (tier !== "production" && tier !== "staging") {
-    throw new Error(
-      `Unknown PUBLIC_RELEASE_TIER=${JSON.stringify(value)}. Expected production or staging.`,
-    );
-  }
-  return tier;
-}
 
 const noindex = "noindex, nofollow";
 

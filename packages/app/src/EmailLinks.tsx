@@ -157,7 +157,7 @@ function EmailLinkChip({
         onClick={(event) => handleNavigation(event, path, onNavigate)}
       >
         <Icon name={icon} size={16} />
-        <span className="emailLinkLabel">{label}</span>
+        <span className="truncate">{label}</span>
       </a>
       {editable && (
         <Button
