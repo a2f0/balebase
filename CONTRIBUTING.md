@@ -183,6 +183,12 @@ Browser tests need Chrome or Chromium; set `CHROME_PATH` to its executable when
 needed. Git's pre-commit hook fixes staged formatting; pre-push runs `check`
 and `test`.
 
+Git exports `GIT_DIR` and similar variables to hooks, and a test fixture that
+inherits them runs its Git commands against the checkout under test. Pre-push
+clears them before its suites, and repository tests that create a Git fixture
+pass `gitFixtureEnv()` from `scripts/testing/gitFixture.ts` to its Git
+commands.
+
 The web shell's service worker update suite uses Playwright's Chromium, Firefox,
 and WebKit engines. Run `bun run --cwd packages/app-web browsers:install` once
 before its browser tests; CI installs them automatically.
