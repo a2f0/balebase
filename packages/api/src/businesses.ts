@@ -4,7 +4,7 @@ import {
 } from "@balebase/validators/businesses";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "./authMiddleware";
-import { canManageOrganization } from "./organizationMembers";
+import { canManage, requireManager } from "./organizationMembers";
 import { respond } from "./respond";
 
 interface BusinessRow {
@@ -27,6 +27,10 @@ const invalidBusinessMessage =
   "Business details are invalid. Use a valid name, EIN, DUNS number, incorporation date, street address, city, two-letter state, and ZIP code.";
 
 export const businesses = new Hono<ApiEnv>();
+
+const requireBusinessManager = requireManager(
+  "Organization manager access is required.",
+);
 
 businesses.get("/", async (context) => {
   const result = await context.env.DB.prepare(
@@ -60,8 +64,7 @@ businesses.get("/:id", async (context) => {
   });
 });
 
-businesses.post("/", async (context) => {
-  if (!canManage(context)) return managerRequired(context);
+businesses.post("/", requireBusinessManager, async (context) => {
   const body: unknown = await context.req.json().catch(() => null);
   const input = businessInput(body);
   if (!input) {
@@ -120,8 +123,7 @@ businesses.post("/", async (context) => {
   );
 });
 
-businesses.patch("/:id", async (context) => {
-  if (!canManage(context)) return managerRequired(context);
+businesses.patch("/:id", requireBusinessManager, async (context) => {
   const body: unknown = await context.req.json().catch(() => null);
   const input = businessInput(body);
   if (!input) {
@@ -190,8 +192,7 @@ businesses.patch("/:id", async (context) => {
   });
 });
 
-businesses.delete("/:id", async (context) => {
-  if (!canManage(context)) return managerRequired(context);
+businesses.delete("/:id", requireBusinessManager, async (context) => {
   const result = await context.env.DB.prepare(
     `DELETE FROM businesses
      WHERE id = ? AND organization_id = ?`,
@@ -353,16 +354,5 @@ async function duplicateIdentifier(
   return context.json(
     { error: `A business with that ${identifier} already exists.` },
     409,
-  );
-}
-
-function canManage(context: BusinessContext) {
-  return canManageOrganization(context.get("organizationRole"));
-}
-
-function managerRequired(context: BusinessContext) {
-  return context.json(
-    { error: "Organization manager access is required." },
-    403,
   );
 }

@@ -5,7 +5,11 @@ import {
 } from "@balebase/validators/billing";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "./authMiddleware";
-import { canManageOrganization } from "./organizationMembers";
+import {
+  canManage,
+  canManageOrganization,
+  requireManager,
+} from "./organizationMembers";
 import { respond } from "./respond";
 import {
   StripeApiError,
@@ -139,15 +143,15 @@ type StripeExpandable = string | { id: string };
 
 const billing = new Hono<ApiEnv>();
 
+const billingManagerRequired = "Organization billing access is required.";
+const requireBillingManager = requireManager(billingManagerRequired);
+
 billing.get("/", async (context) => {
   const organizationId = context.get("organizationId");
   const sessionId = context.req.query("session_id");
   if (sessionId) {
-    if (!canManageOrganization(context.get("organizationRole"))) {
-      return context.json(
-        { error: "Organization billing access is required." },
-        403,
-      );
+    if (!canManage(context)) {
+      return context.json({ error: billingManagerRequired }, 403);
     }
     if (!sessionId.startsWith("cs_") || sessionId.length > 255) {
       return context.json({ error: "Checkout session is invalid." }, 400);
@@ -179,13 +183,7 @@ billing.get("/", async (context) => {
   );
 });
 
-billing.post("/checkout", async (context) => {
-  if (!canManageOrganization(context.get("organizationRole"))) {
-    return context.json(
-      { error: "Organization billing access is required." },
-      403,
-    );
-  }
+billing.post("/checkout", requireBillingManager, async (context) => {
   const organizationId = context.get("organizationId");
   const priceId = context.env.STRIPE_PRO_PRICE_ID;
   if (!priceId) return billingUnavailableResponse(context);
@@ -258,13 +256,7 @@ billing.post("/checkout", async (context) => {
   }
 });
 
-billing.post("/portal", async (context) => {
-  if (!canManageOrganization(context.get("organizationRole"))) {
-    return context.json(
-      { error: "Organization billing access is required." },
-      403,
-    );
-  }
+billing.post("/portal", requireBillingManager, async (context) => {
   const organizationId = context.get("organizationId");
   const record = await findBilling(context.env.DB, organizationId);
   if (!record?.stripe_customer_id) {

@@ -8,8 +8,9 @@ import type { ApiEnv } from "./authMiddleware";
 import { normalizeBusinessDate } from "./businesses";
 import { listLinkedEmails, toLinkedEmail } from "./inboundEmailLinks";
 import {
-  canManageOrganization,
+  canManage,
   listMemberDirectory,
+  requireManager,
 } from "./organizationMembers";
 import { respond } from "./respond";
 
@@ -84,8 +85,7 @@ equipment.get("/", async (context) => {
   });
 });
 
-equipment.post("/", async (context) => {
-  if (!canManage(context)) return managerRequired(context);
+equipment.post("/", requireManager(), async (context) => {
   const input = equipmentInput(await context.req.json().catch(() => null));
   if (!input) return invalidEquipment(context);
   const organizationId = context.get("organizationId");
@@ -169,8 +169,7 @@ equipment.get("/:id/activity", async (context) => {
 
 // Updates only the fields present in the body, so concurrent edits to other
 // fields are kept; `assigneeId: null` unassigns.
-equipment.patch("/:id", async (context) => {
-  if (!canManage(context)) return managerRequired(context);
+equipment.patch("/:id", requireManager(), async (context) => {
   const organizationId = context.get("organizationId");
   const existing = await findEquipment(
     context.env.DB,
@@ -216,8 +215,7 @@ equipment.patch("/:id", async (context) => {
   });
 });
 
-equipment.delete("/:id", async (context) => {
-  if (!canManage(context)) return managerRequired(context);
+equipment.delete("/:id", requireManager(), async (context) => {
   const organizationId = context.get("organizationId");
   const item = await findEquipment(
     context.env.DB,
@@ -412,17 +410,6 @@ function toEquipment(row: EquipmentRow): EquipmentItem {
     type: row.type,
     updatedAt: row.updated_at,
   };
-}
-
-function canManage(context: EquipmentContext) {
-  return canManageOrganization(context.get("organizationRole"));
-}
-
-function managerRequired(context: EquipmentContext) {
-  return context.json(
-    { error: "Organization manager access is required." },
-    403,
-  );
 }
 
 function invalidEquipment(context: EquipmentContext) {

@@ -1,4 +1,7 @@
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
+import type { Context } from "hono";
+import { createMiddleware } from "hono/factory";
+import type { ApiEnv } from "./authMiddleware";
 
 interface OrganizationMemberRow {
   created_at: string;
@@ -90,6 +93,20 @@ export function canManageOrganization(role: string) {
   return role
     .split(",")
     .some((value) => ["owner", "admin"].includes(value.trim()));
+}
+
+/** Whether the member making the request is an organization owner or admin. */
+export function canManage(context: Context<ApiEnv>) {
+  return canManageOrganization(context.get("organizationRole"));
+}
+
+export function requireManager(
+  error = "Organization manager access required.",
+) {
+  return createMiddleware<ApiEnv>(async (context, next) => {
+    if (!canManage(context)) return context.json({ error }, 403);
+    return next();
+  });
 }
 
 export function isOrganizationOwner(role: string) {

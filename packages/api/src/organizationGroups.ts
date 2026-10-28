@@ -8,9 +8,9 @@ import { type Context, Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { ApiEnv } from "./authMiddleware";
 import {
-  canManageOrganization,
   countOrganizationOwners,
   listOrganizationMembers,
+  requireManager,
 } from "./organizationMembers";
 import { respond } from "./respond";
 
@@ -66,8 +66,7 @@ organizationGroups.get("/access", async (context) => {
   });
 });
 
-organizationGroups.get("/", async (context) => {
-  if (!canManageGroups(context)) return managerRequired(context);
+organizationGroups.get("/", requireManager(), async (context) => {
   const organizationId = context.get("organizationId");
   const [groups, capabilities, groupMembers, members] = await Promise.all([
     listGroups(context.env.DB, organizationId),
@@ -94,8 +93,7 @@ organizationGroups.get("/", async (context) => {
   });
 });
 
-organizationGroups.post("/", async (context) => {
-  if (!canManageGroups(context)) return managerRequired(context);
+organizationGroups.post("/", requireManager(), async (context) => {
   const input = await groupInput(context);
   if (!input) return invalidGroup(context);
   const organizationId = context.get("organizationId");
@@ -127,8 +125,7 @@ organizationGroups.post("/", async (context) => {
   );
 });
 
-organizationGroups.patch("/:id", async (context) => {
-  if (!canManageGroups(context)) return managerRequired(context);
+organizationGroups.patch("/:id", requireManager(), async (context) => {
   const groupId = context.req.param("id");
   const input = await groupInput(context);
   if (!groupId || !input) return invalidGroup(context);
@@ -160,8 +157,7 @@ organizationGroups.patch("/:id", async (context) => {
   return respond(context, organizationGroupsRoutes.update, { id: groupId });
 });
 
-organizationGroups.delete("/:id", async (context) => {
-  if (!canManageGroups(context)) return managerRequired(context);
+organizationGroups.delete("/:id", requireManager(), async (context) => {
   const groupId = context.req.param("id");
   const organizationId = context.get("organizationId");
   if (
@@ -201,10 +197,6 @@ export function requireCapability(capability: OrganizationCapability) {
     }
     return next();
   });
-}
-
-function canManageGroups(context: OrganizationContext) {
-  return canManageOrganization(context.get("organizationRole"));
 }
 
 async function listUserCapabilities(
@@ -429,13 +421,6 @@ async function writeGroup(
     ),
   );
   await database.batch(statements);
-}
-
-function managerRequired(context: OrganizationContext) {
-  return context.json(
-    { error: "Organization administrator access required." },
-    403,
-  );
 }
 
 function invalidGroup(context: OrganizationContext) {
