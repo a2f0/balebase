@@ -6,7 +6,8 @@ import { errorMessage } from "./errors";
  * `useCallback`. A new loader clears the old data; `reload` keeps it visible
  * while refreshing and always runs the newest loader, so an action that
  * finishes after navigation cannot repaint the previous view. A response
- * that arrives after a newer request or after unmount is dropped.
+ * that arrives after a newer request or after unmount is dropped. `reload`
+ * resolves true only when it loaded data that is still current.
  */
 export function useLoad<T>(load: () => Promise<T>, fallback: string) {
   const [data, setData] = useState<T>();
@@ -21,9 +22,12 @@ export function useLoad<T>(load: () => Promise<T>, fallback: string) {
     setError(undefined);
     try {
       const next = await load();
-      if (request === latest.current) setData(() => next);
+      if (request !== latest.current) return false;
+      setData(() => next);
+      return true;
     } catch (cause) {
       if (request === latest.current) setError(errorMessage(cause, fallback));
+      return false;
     } finally {
       if (request === latest.current) setLoading(false);
     }

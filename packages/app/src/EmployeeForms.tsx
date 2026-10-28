@@ -183,9 +183,15 @@ export function EmployeeForms({ scope }: { scope: RequirementScope }) {
     work: () => Promise<T>,
     success: string | ((result: T) => string),
   ) {
-    await change.run(work, success);
-    // Reload either way so a refused change shows what is stored.
-    await load();
+    // Reload either way so a refused change shows what is stored, and stay
+    // busy until it has, so no action runs against stale requirements.
+    await change.run(async () => {
+      try {
+        return await work();
+      } finally {
+        await load();
+      }
+    }, success);
   }
 
   return (

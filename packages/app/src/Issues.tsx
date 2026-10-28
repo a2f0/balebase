@@ -222,8 +222,8 @@ function IssueDetail({
   const [busy, setBusy] = useState(false);
   async function reload() {
     setFailure(undefined);
-    await loaded.reload();
-    setFormVersion((value) => value + 1);
+    // A failed reload keeps the form, and its unsaved edits, in place.
+    if (await loaded.reload()) setFormVersion((value) => value + 1);
   }
   async function save(
     input: Partial<IssueInput> & { status?: Issue["status"] },

@@ -106,6 +106,7 @@ function useTemplateBuilder({
   async function selectVersion(version: number) {
     if (!template || version === template.version) return;
     setNotice(undefined);
+    saving.setError(undefined);
     await versionLoad.run(async () => {
       const { template: selected } = await loadTemplate(
         id,
@@ -119,6 +120,7 @@ function useTemplateBuilder({
   async function save(status?: "published" | "unpublished") {
     if (!template) return;
     setNotice(undefined);
+    versionLoad.setError(undefined);
     await saving.run(async () => {
       const copiedGlobal = template.scope === "global" && !manageGlobal;
       const { template: saved } = await saveTemplate(

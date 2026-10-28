@@ -190,9 +190,15 @@ function useOwnRequirements() {
   );
   const change = useAction("Could not update your documents.");
   const action: Action = async (work, success) => {
-    await change.run(work, success);
-    // Reload either way so a refused change shows what is stored.
-    await loaded.reload();
+    // Reload either way so a refused change shows what is stored, and stay
+    // busy until it has, so no action runs against stale requirements.
+    await change.run(async () => {
+      try {
+        return await work();
+      } finally {
+        await loaded.reload();
+      }
+    }, success);
   };
   return {
     action,
