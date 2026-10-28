@@ -15,7 +15,6 @@
     "browsers:install": "bunx --bun --no-install playwright install --with-deps"
   },
   "dependencies": {
-    "@a2f0/ct-client": "0.1.4",
     "@balebase/app": "workspace:*",
     "@balebase/diagnostics": "workspace:*",
     "@balebase/ui": "workspace:*",

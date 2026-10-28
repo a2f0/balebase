@@ -77,9 +77,21 @@ const url = robots === null ? canonicalUrl(Astro.url.pathname) : null;
     </main>
     <SiteFooter />
     <script>
-      import { initClickTracking } from "../clickTracking";
+      import { initClickTracking } from "@balebase/diagnostics/clickTracking";
 
-      initClickTracking();
+      const pages = new Set(["/", "/privacy", "/terms", "/data-retention"]);
+
+      initClickTracking({
+        app: "website",
+        origins: {
+          production: "https://balebase.com",
+          staging: "https://website-staging.balebase.com",
+        },
+        page: () => {
+          const path = window.location.pathname.replace(/\/$/, "") || "/";
+          return pages.has(path) ? path : "/other";
+        },
+      });
     </script>
   </body>
 </html>

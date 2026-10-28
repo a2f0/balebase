@@ -105,7 +105,6 @@
       "name": "@balebase/app-web",
       "version": "0.1.66",
       "dependencies": {
-        "@a2f0/ct-client": "0.1.4",
         "@balebase/app": "workspace:*",
         "@balebase/diagnostics": "workspace:*",
         "@balebase/ui": "workspace:*",
@@ -125,6 +124,7 @@
       "name": "@balebase/diagnostics",
       "version": "0.1.0",
       "dependencies": {
+        "@a2f0/ct-client": "0.1.4",
         "@sentry/browser": "11.8.0",
         "@sentry/core": "11.8.0",
       },
@@ -168,7 +168,6 @@
       "name": "@balebase/website",
       "version": "0.1.0",
       "dependencies": {
-        "@a2f0/ct-client": "0.1.4",
         "@balebase/diagnostics": "workspace:*",
         "@balebase/ui": "workspace:*",
         "astro": "7.4.0",

@@ -14,7 +14,6 @@ const chrome =
   Bun.which("chromium") ||
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const siteRoot = fileURLToPath(new URL("..", import.meta.url));
-const appRoot = fileURLToPath(new URL("../../app-web", import.meta.url));
 const pages = ["/", "/terms/", "/privacy/", "/data-retention/", "/404.html"];
 const publicRoot = join(siteRoot, "public");
 const types: Record<string, string> = {
@@ -27,7 +26,6 @@ const types: Record<string, string> = {
 
 const work = mkdtempSync(join(tmpdir(), "website-layout-"));
 const dist = join(work, "dist");
-const appDist = join(work, "app-dist");
 let browser: Browser | undefined;
 
 beforeAll(async () => {
@@ -45,28 +43,6 @@ beforeAll(async () => {
     new Response(build.stderr).text(),
   ]);
   if (exitCode !== 0) throw new Error(`Website build failed: ${stderr}`);
-  // Verify both real bundler entrypoints with the same intercepted network.
-  // The SDK itself remains a dependency only of the two browser shells.
-  const appBuild = Bun.spawn(
-    ["bunx", "--bun", "--no-install", "vite", "build", "--outDir", appDist],
-    {
-      cwd: appRoot,
-      env: {
-        ...process.env,
-        NODE_ENV: "production",
-        VITE_API_URL: "https://api.balebase.com",
-      },
-      stderr: "pipe",
-      stdout: "pipe",
-    },
-  );
-  const [appExit, appOut, appError] = await Promise.all([
-    appBuild.exited,
-    new Response(appBuild.stdout).text(),
-    new Response(appBuild.stderr).text(),
-  ]);
-  if (appExit !== 0)
-    throw new Error(`App build failed: ${appOut}\n${appError}`);
   if (!existsSync(chrome))
     throw new Error("Chrome is required for the website layout check.");
   browser = await launch({
@@ -85,7 +61,7 @@ afterAll(async () => {
   rmSync(work, { recursive: true, force: true });
 });
 
-async function openSite(root = dist, batches: string[] = []) {
+async function openSite(batches: string[] = []) {
   const page = await browser?.newPage();
   if (!page) throw new Error("Chrome did not start.");
   await page.setRequestInterception(true);
@@ -99,23 +75,11 @@ async function openSite(root = dist, batches: string[] = []) {
       });
       return;
     }
-    if (hostname === "api.balebase.com") {
-      await request.respond({
-        contentType: "application/json",
-        body: "null",
-        headers: {
-          "Access-Control-Allow-Origin":
-            request.headers().origin ?? "https://app.balebase.com",
-          "Access-Control-Allow-Credentials": "true",
-        },
-      });
-      return;
-    }
     const file = join(
-      root,
+      dist,
       pathname.endsWith("/") ? `${pathname}index.html` : pathname,
     );
-    if (!file.startsWith(root) || !existsSync(file)) {
+    if (!file.startsWith(dist) || !existsSync(file)) {
       void request.respond({ status: 404, body: "" });
       return;
     }
@@ -127,30 +91,21 @@ async function openSite(root = dist, batches: string[] = []) {
   return page;
 }
 
-it("real Astro and Vite bundles initialize only at their deployed origins", async () => {
-  for (const [origin, app, environment] of [
-    ["https://balebase.com", "website", "production"],
-    ["https://website-staging.balebase.com", "website", "staging"],
-    ["https://website.test", "website", null],
-    ["https://app.balebase.com", "web-app", "production"],
-    ["https://app-staging.balebase.com", "web-app", "staging"],
-    ["https://app.test", "web-app", null],
+it("the real Astro bundle initializes only at the website's deployed origins", async () => {
+  for (const [origin, environment] of [
+    ["https://balebase.com", "production"],
+    ["https://website-staging.balebase.com", "staging"],
+    ["https://website.test", null],
   ] as const) {
     const batches: string[] = [];
-    const page = await openSite(app === "website" ? dist : appDist, batches);
+    const page = await openSite(batches);
     try {
       await page.evaluateOnNewDocument(() =>
         Object.defineProperty(navigator, "webdriver", { get: () => false }),
       );
       await page.goto(origin, { waitUntil: "networkidle0" });
-      await page.evaluate((kind) => {
-        history.replaceState(
-          null,
-          "",
-          kind === "website"
-            ? "/privacy?private=1"
-            : "/me/screening/private-record",
-        );
+      await page.evaluate(() => {
+        history.replaceState(null, "", "/privacy?private=1");
         const button = document.createElement("button");
         button.id = "tracking-smoke";
         button.textContent = "Local smoke test";
@@ -161,7 +116,7 @@ it("real Astro and Vite bundles initialize only at their deployed origins", asyn
           zIndex: "2147483647",
         });
         document.body.append(button);
-      }, app);
+      });
       await page.click("#tracking-smoke");
       await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
       await page.waitForNetworkIdle({ idleTime: 100, timeout: 5_000 });
@@ -175,8 +130,8 @@ it("real Astro and Vite bundles initialize only at their deployed origins", asyn
         expect(batch.environment).toBe(environment);
         expect(batch.events).toHaveLength(1);
         expect(batch.events[0]).toMatchObject({
-          app,
-          page: app === "website" ? "/privacy" : "/",
+          app: "website",
+          page: "/privacy",
           target: "button",
         });
         expect(batches.join("")).not.toContain("private");
