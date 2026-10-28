@@ -188,6 +188,10 @@ export function EmployeeForms({ scope }: { scope: RequirementScope }) {
     await change.run(async () => {
       try {
         return await work();
+      } catch (cause) {
+        // Until the reload succeeds, nothing stale stays actionable.
+        loaded.setData(undefined);
+        throw cause;
       } finally {
         await load();
       }

@@ -52,6 +52,7 @@ export function AuditHome({
   const runList = useAuditRunList();
 
   async function createTemplate() {
+    starting.setError(undefined);
     await creating.run(async () => {
       const { template } =
         await api.audits.createTemplate("Untitled checklist");
@@ -60,6 +61,7 @@ export function AuditHome({
   }
 
   async function beginAudit(templateId: string) {
+    creating.setError(undefined);
     await starting.run(async () => {
       const { auditId } = await api.audits.start(templateId);
       onNavigate(`/audits/runs/${auditId}`);

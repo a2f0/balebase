@@ -236,6 +236,8 @@ function IssueDetail({
         expectedRevision: issue.revision,
       });
       setData(data);
+      // The saved issue is current, so an earlier failed reload no longer applies.
+      loaded.setError(undefined);
       setFailure(undefined);
     } finally {
       setBusy(false);

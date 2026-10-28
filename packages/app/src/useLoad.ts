@@ -40,5 +40,5 @@ export function useLoad<T>(load: () => Promise<T>, fallback: string) {
       latest.current += 1;
     };
   }, [fallback, load, reload]);
-  return { data, error, loading, reload, setData };
+  return { data, error, loading, reload, setData, setError };
 }
