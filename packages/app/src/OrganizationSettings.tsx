@@ -11,7 +11,8 @@ import {
   PageHeader,
   Toast,
 } from "@balebase/ui/react";
-import { type FormEvent, type MouseEvent, useState } from "react";
+import { type FormEvent, useState } from "react";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import { authClient } from "./authClient";
 import { throwIfRefused } from "./errors";
@@ -211,15 +212,15 @@ function OrganizationSettingsNavigation({
   return (
     <>
       {items.map((item) => (
-        <a
+        <AppLink
           aria-current={page === item.page ? "page" : undefined}
           className="tab"
           href={item.path}
           key={item.path}
-          onClick={(event) => handleNavigation(event, item.path, onNavigate)}
+          onNavigate={onNavigate}
         >
           {item.label}
-        </a>
+        </AppLink>
       ))}
     </>
   );
@@ -514,24 +515,6 @@ function SettingsAccessDenied({
       title="Organization manager access is required."
     />
   );
-}
-
-function handleNavigation(
-  event: MouseEvent<HTMLAnchorElement>,
-  pathname: string,
-  onNavigate: (pathname: string) => void,
-) {
-  if (
-    event.button !== 0 ||
-    event.metaKey ||
-    event.ctrlKey ||
-    event.shiftKey ||
-    event.altKey
-  ) {
-    return;
-  }
-  event.preventDefault();
-  onNavigate(pathname);
 }
 
 function confirmLeave(name: string) {

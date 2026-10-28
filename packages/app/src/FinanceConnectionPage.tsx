@@ -22,6 +22,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import { errorMessage } from "./errors";
 import { connectionTone } from "./FinanceAccounts";
@@ -37,7 +38,7 @@ import { formatImportedHistory, formatMoney } from "./financeFormat";
 import { countLabel, formatDateTime, formatLabel } from "./labels";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
-import { financeAccountPath, handleNavigation } from "./workspacePaths";
+import { financeAccountPath } from "./workspacePaths";
 
 type Connection = FinanceConnectionDetail["connection"];
 
@@ -239,19 +240,13 @@ function ConnectionAccounts({
             {accounts.map((account) => (
               <li className="row rowInteractive" key={account.id}>
                 <div className="rowMain">
-                  <a
+                  <AppLink
                     className="rowTitle rowTarget"
                     href={financeAccountPath(account.id)}
-                    onClick={(event) =>
-                      handleNavigation(
-                        event,
-                        financeAccountPath(account.id),
-                        onNavigate,
-                      )
-                    }
+                    onNavigate={onNavigate}
                   >
                     {account.name}
-                  </a>
+                  </AppLink>
                   <span className="rowMeta">{accountMeta(account)}</span>
                 </div>
                 <span className="financeAmount">

@@ -28,6 +28,7 @@ import {
   useState,
 } from "react";
 import { ApiDownload } from "./ApiDownload";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import { LinkedEmailList } from "./LinkedEmailList";
 import { countLabel, formatBytes, formatShortDate } from "./labels";
@@ -35,11 +36,7 @@ import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
 import { useMenuDismissal } from "./useMenuDismissal";
 import type { WorkspaceUser } from "./WorkspaceShell";
-import {
-  handleNavigation,
-  libraryFolderIdForPath,
-  libraryPath,
-} from "./workspacePaths";
+import { libraryFolderIdForPath, libraryPath } from "./workspacePaths";
 
 const maxFolderNameLength = 80;
 
@@ -436,11 +433,11 @@ function FolderGrid({
       {folders.map((folder) => {
         const path = libraryPath(folder.id);
         return (
-          <a
+          <AppLink
             className="card cardInteractive folderCard"
             href={path}
             key={folder.id}
-            onClick={(event) => handleNavigation(event, path, onNavigate)}
+            onNavigate={onNavigate}
           >
             <span className="iconTile">
               <Icon name="folder" size={20} />
@@ -453,7 +450,7 @@ function FolderGrid({
                   ` · ${countLabel(folder.emailCount, "email")}`}
               </span>
             </span>
-          </a>
+          </AppLink>
         );
       })}
     </div>

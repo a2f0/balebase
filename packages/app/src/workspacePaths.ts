@@ -1,5 +1,4 @@
 import type { FinanceFilters } from "@balebase/api-client";
-import type { MouseEvent } from "react";
 
 /** The page at `base`, or a page beneath it. */
 export function isWithin(pathname: string, base: string) {
@@ -264,26 +263,4 @@ export function inboxEmailPath(
   const query = new URLSearchParams({ email: emailId });
   if (folder === "archived") query.set("folder", folder);
   return `/inbox?${query}`;
-}
-
-/**
- * Follows an in-app link without a page load, leaving modified clicks
- * (new tab, new window) to the browser.
- */
-export function handleNavigation(
-  event: MouseEvent<HTMLAnchorElement>,
-  pathname: string,
-  onNavigate: (pathname: string) => void,
-) {
-  if (
-    event.button !== 0 ||
-    event.metaKey ||
-    event.ctrlKey ||
-    event.shiftKey ||
-    event.altKey
-  ) {
-    return;
-  }
-  event.preventDefault();
-  onNavigate(pathname);
 }

@@ -13,6 +13,7 @@ import {
 } from "@balebase/ui/react";
 import type { FinanceAccountDetail } from "@balebase/validators/finance";
 import { useCallback } from "react";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import { connectionTone } from "./FinanceAccounts";
 import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
@@ -23,7 +24,6 @@ import { useLoad } from "./useLoad";
 import {
   financeConnectionPath,
   financeTransactionPath,
-  handleNavigation,
 } from "./workspacePaths";
 
 export function FinanceAccountPage({
@@ -102,14 +102,9 @@ function AccountSummary({
         <dl className="keyValue">
           <dt>Institution</dt>
           <dd>
-            <a
-              href={connectionPath}
-              onClick={(event) =>
-                handleNavigation(event, connectionPath, onNavigate)
-              }
-            >
+            <AppLink href={connectionPath} onNavigate={onNavigate}>
               {connection.institutionName ?? "Financial institution"}
-            </a>
+            </AppLink>
           </dd>
           <dt>Connection</dt>
           <dd>
@@ -151,15 +146,13 @@ function RecentTransactions({
               return (
                 <li className="row rowInteractive" key={transaction.id}>
                   <div className="rowMain">
-                    <a
+                    <AppLink
                       className="rowTitle rowTarget"
                       href={path}
-                      onClick={(event) =>
-                        handleNavigation(event, path, onNavigate)
-                      }
+                      onNavigate={onNavigate}
                     >
                       {transaction.merchantName ?? transaction.name}
-                    </a>
+                    </AppLink>
                     <span className="rowMeta">
                       {formatCalendarDate(transaction.transactionDate)}
                       {transaction.pending && " · Pending"}

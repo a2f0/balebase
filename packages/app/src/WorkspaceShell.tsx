@@ -8,7 +8,6 @@ import {
 } from "@balebase/ui/react";
 import {
   type CSSProperties,
-  type MouseEvent,
   type ReactNode,
   type RefObject,
   useEffect,
@@ -16,6 +15,7 @@ import {
   useState,
 } from "react";
 import { AccountControl } from "./AccountControl";
+import { AppLink } from "./AppLink";
 import type { AccountSession } from "./accountSessions";
 import { hasRole, type WorkspaceOrganization } from "./organizationState";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
@@ -131,14 +131,14 @@ function Sidebar({
     <aside className="sidebar onDark" data-open={open} ref={sidebar}>
       <div className="sidebarInner">
         <div className="sidebarTop">
-          <a
+          <AppLink
             aria-label="Balebase home"
             className="sidebarBrand"
             href="/"
-            onClick={(event) => handleNavigation(event, "/", navigate)}
+            onNavigate={navigate}
           >
             <Logo />
-          </a>
+          </AppLink>
           <button
             aria-controls="workspace-navigation"
             aria-expanded={open}
@@ -163,18 +163,16 @@ function Sidebar({
               <div className="navGroup" key={group.label ?? "main"}>
                 {group.label && <p className="navGroupLabel">{group.label}</p>}
                 {group.items.map((item) => (
-                  <a
+                  <AppLink
                     aria-current={activePage === item.page ? "page" : undefined}
                     className="navItem"
                     href={item.href}
                     key={item.href}
-                    onClick={(event) =>
-                      handleNavigation(event, item.href, navigate)
-                    }
+                    onNavigate={navigate}
                   >
                     <Icon name={item.icon} size={18} />
                     {item.label}
-                  </a>
+                  </AppLink>
                 ))}
               </div>
             ))}
@@ -403,24 +401,6 @@ function OrganizationSwitcher({
       {error && <Toast tone="danger">{error}</Toast>}
     </div>
   );
-}
-
-function handleNavigation(
-  event: MouseEvent<HTMLAnchorElement>,
-  pathname: string,
-  onNavigate: (pathname: string) => void,
-) {
-  if (
-    event.button !== 0 ||
-    event.metaKey ||
-    event.ctrlKey ||
-    event.shiftKey ||
-    event.altKey
-  ) {
-    return;
-  }
-  event.preventDefault();
-  onNavigate(pathname);
 }
 
 function askOrganizationName() {

@@ -19,13 +19,13 @@ import type {
 } from "@balebase/validators/finance";
 import type { LinkedEmail } from "@balebase/validators/inbox";
 import { type FormEvent, useState } from "react";
+import { AppLink } from "./AppLink";
 import { FinanceTransactionFilters } from "./FinanceTransactionFilters";
 import { formatMoney } from "./financeFormat";
 import { InfiniteScroll } from "./InfiniteScroll";
 import { formatCalendarDate, formatLabel } from "./labels";
 import {
   financeTransactionPath,
-  handleNavigation,
   inboxEmailPath,
   transactionIssuePath,
 } from "./workspacePaths";
@@ -280,19 +280,13 @@ export function FinanceTransactionRow({
         })}
       </time>
       <div className="rowMain financeTransactionMain">
-        <a
+        <AppLink
           className="rowTitle financeTransactionName"
           href={financeTransactionPath(transaction.id)}
-          onClick={(event) =>
-            handleNavigation(
-              event,
-              financeTransactionPath(transaction.id),
-              onNavigate,
-            )
-          }
+          onNavigate={onNavigate}
         >
           {title}
-        </a>
+        </AppLink>
         <span className="rowMeta financeTransactionMeta">
           {transactionMeta(transaction)}
         </span>
@@ -387,15 +381,15 @@ function LinkedEmailChips({
       {emails.map((email) => {
         const path = inboxEmailPath(email.id, email.status);
         return (
-          <a
+          <AppLink
             className="financeEmailChip"
             href={path}
             key={email.linkId}
-            onClick={(event) => handleNavigation(event, path, onNavigate)}
+            onNavigate={onNavigate}
           >
             <Icon name="mail" size={14} />
             <span className="truncate">{email.subject || "(no subject)"}</span>
-          </a>
+          </AppLink>
         );
       })}
     </span>

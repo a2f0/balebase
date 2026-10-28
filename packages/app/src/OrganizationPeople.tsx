@@ -3,7 +3,6 @@ import {
   Badge,
   Banner,
   Button,
-  ButtonLink,
   Card,
   cx,
   Field,
@@ -27,6 +26,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AppButtonLink, AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import { authClient } from "./authClient";
 import {
@@ -63,11 +63,7 @@ import {
 } from "./organizationState";
 import { useAction } from "./useAction";
 import { useFocusWhenFolded } from "./useFocusWhenFolded";
-import {
-  handleNavigation,
-  myDocumentsPath,
-  organizationPeoplePath,
-} from "./workspacePaths";
+import { myDocumentsPath, organizationPeoplePath } from "./workspacePaths";
 
 /**
  * The first invitation is sent from an open form. Once anyone else has joined
@@ -345,13 +341,9 @@ function OwnRequestsNotice({
   return (
     <Banner
       actions={
-        <ButtonLink
-          href={path}
-          onClick={(event) => handleNavigation(event, path, onNavigate)}
-          size="sm"
-        >
+        <AppButtonLink href={path} onNavigate={onNavigate} size="sm">
           Open My documents
-        </ButtonLink>
+        </AppButtonLink>
       }
       tone="info"
     >
@@ -732,10 +724,10 @@ function MemberRow({
   const open = openRequests(member);
   return (
     <li className="row memberRow">
-      <a
+      <AppLink
         className="memberIdentity memberLink"
         href={path}
-        onClick={(event) => handleNavigation(event, path, onNavigate)}
+        onNavigate={onNavigate}
       >
         <Avatar name={member.user.name} />
         <div className="rowMain">
@@ -753,7 +745,7 @@ function MemberRow({
             {canManage && ` · ${lastActiveLabel(member)}`}
           </span>
         </div>
-      </a>
+      </AppLink>
       <div className="memberTwoFactor">
         <MemberTwoFactorControl
           busy={busy}

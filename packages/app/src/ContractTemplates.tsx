@@ -18,6 +18,7 @@ import type {
   TemplateVersion,
 } from "@balebase/validators/contractTemplates";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import { ContractTemplateEditor } from "./ContractTemplateEditor";
 import { ContractTemplateMapping } from "./ContractTemplateMapping";
@@ -29,7 +30,6 @@ import {
   contractPath,
   contractTemplateIdForPath,
   contractTemplatePath,
-  handleNavigation,
 } from "./workspacePaths";
 
 export function ContractTemplates({
@@ -146,10 +146,10 @@ function TemplateRows({
           const path = contractTemplatePath(template.id);
           return (
             <li key={template.id}>
-              <a
+              <AppLink
                 className="row contractRow"
                 href={path}
-                onClick={(event) => handleNavigation(event, path, onNavigate)}
+                onNavigate={onNavigate}
               >
                 <span className="iconTile">
                   <Icon name="contract" size={20} />
@@ -162,7 +162,7 @@ function TemplateRows({
                   </span>
                 </span>
                 <Icon name="chevronRight" size={16} />
-              </a>
+              </AppLink>
             </li>
           );
         })}

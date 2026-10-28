@@ -15,10 +15,11 @@ import type {
   FinanceAccount,
   FinanceConnection,
 } from "@balebase/validators/finance";
+import { AppLink } from "./AppLink";
 import { syncPending } from "./financeConnectionActions";
 import { formatMoney } from "./financeFormat";
 import { countLabel, formatDate, formatLabel } from "./labels";
-import { financeConnectionPath, handleNavigation } from "./workspacePaths";
+import { financeConnectionPath } from "./workspacePaths";
 
 interface ConnectionHandlers {
   busy: boolean;
@@ -144,15 +145,13 @@ function ConnectionRow({
     <li className="row rowInteractive financeConnection">
       <Avatar className="financeInstitutionMark" name={name} size="lg" />
       <div className="rowMain financeConnectionMain">
-        <a
+        <AppLink
           className="rowTitle rowTarget financeConnectionName"
           href={path}
-          onClick={(event) =>
-            handleNavigation(event, path, handlers.onNavigate)
-          }
+          onNavigate={handlers.onNavigate}
         >
           {name}
-        </a>
+        </AppLink>
         <span className="rowMeta financeConnectionMeta">
           {countLabel(connection.accountCount, "account")} ·{" "}
           {syncTime(connection)}

@@ -26,6 +26,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import {
   type BusinessIdentifier,
@@ -42,11 +43,7 @@ import { countLabel, formatCalendarDate } from "./labels";
 import { useClipboard } from "./useClipboard";
 import { useFocusWhenFolded } from "./useFocusWhenFolded";
 import { useLoad } from "./useLoad";
-import {
-  businessIdForPath,
-  businessPath,
-  handleNavigation,
-} from "./workspacePaths";
+import { businessIdForPath, businessPath } from "./workspacePaths";
 
 interface BusinessFormState {
   city: string;
@@ -506,12 +503,10 @@ function BusinessSummary({
   }
   const address = formatBusinessAddress(business);
   return (
-    <a
+    <AppLink
       className="businessSummary businessSummaryLink"
       href={businessPath(business.id)}
-      onClick={(event) =>
-        handleNavigation(event, businessPath(business.id), onNavigate)
-      }
+      onNavigate={onNavigate}
     >
       <span aria-hidden="true" className="businessMark">
         <Icon name="businesses" size={18} />
@@ -521,7 +516,7 @@ function BusinessSummary({
         <span className="rowMeta tabular">{facts.join(" · ")}</span>
         {address && <span className="rowMeta">{address}</span>}
       </div>
-    </a>
+    </AppLink>
   );
 }
 

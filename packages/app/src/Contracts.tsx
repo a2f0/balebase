@@ -15,6 +15,7 @@ import type {
   ContractSummary as ContractListItem,
 } from "@balebase/validators/contracts";
 import { useCallback, useRef, useState } from "react";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import { ContractEditor } from "./ContractEditor";
 import { ContractStatusBadge, ContractSummary } from "./ContractSummary";
@@ -31,7 +32,6 @@ import {
   contractIdForPath,
   contractPath,
   contractTemplatePath,
-  handleNavigation,
   isWithin,
 } from "./workspacePaths";
 
@@ -191,10 +191,10 @@ function ContractList({
           const path = contractPath(contract.id);
           return (
             <li key={contract.id}>
-              <a
+              <AppLink
                 className="row contractRow"
                 href={path}
-                onClick={(event) => handleNavigation(event, path, onNavigate)}
+                onNavigate={onNavigate}
               >
                 <span className="iconTile">
                   <Icon name="contract" size={20} />
@@ -206,7 +206,7 @@ function ContractList({
                   </span>
                 </span>
                 <ContractStatusBadge contract={contract} />
-              </a>
+              </AppLink>
             </li>
           );
         })}

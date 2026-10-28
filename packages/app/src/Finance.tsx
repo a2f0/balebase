@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import { websiteUrl } from "./config";
 import { errorMessage } from "./errors";
@@ -50,7 +51,6 @@ import {
   financeOverviewPath,
   financePageFor,
   financePages,
-  handleNavigation,
 } from "./workspacePaths";
 
 const linkTokenStorageKey = "balebase.plaid.linkToken";
@@ -403,15 +403,15 @@ function FinanceHeader({
       description="Balances and transactions from your connected institutions, ready for your team to review, categorize, and report on."
       eyebrow="Connected accounts"
       tabs={financePages.map((item) => (
-        <a
+        <AppLink
           aria-current={page === item.page ? "page" : undefined}
           className="tab"
           href={item.path}
           key={item.path}
-          onClick={(event) => handleNavigation(event, item.path, onNavigate)}
+          onNavigate={onNavigate}
         >
           {item.label}
-        </a>
+        </AppLink>
       ))}
       tabsLabel="Finance sections"
       title="Finance"

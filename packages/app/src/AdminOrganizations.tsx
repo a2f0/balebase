@@ -19,6 +19,7 @@ import {
 } from "react";
 import { AdminDeletionMenu } from "./AdminDeletionMenu";
 import { AdminOrganizationDetails } from "./AdminOrganizationDetails";
+import { AppLink } from "./AppLink";
 import { Identity } from "./adminDisplay";
 import { api } from "./apiClient";
 import { countLabel, formatDate } from "./labels";
@@ -282,25 +283,13 @@ function OrganizationTableRow({
     <tr>
       <td>
         <div className="adminIdentityText adminOrganization">
-          <a
+          <AppLink
             className="adminOrganizationName adminOrganizationLink"
             href={adminOrganizationPath(organization.id)}
-            onClick={(event) => {
-              if (
-                event.button !== 0 ||
-                event.metaKey ||
-                event.ctrlKey ||
-                event.shiftKey ||
-                event.altKey
-              ) {
-                return;
-              }
-              event.preventDefault();
-              onNavigate(adminOrganizationPath(organization.id));
-            }}
+            onNavigate={onNavigate}
           >
             {organization.name}
-          </a>
+          </AppLink>
           <span className="adminSlug mono">{organization.slug}</span>
         </div>
       </td>

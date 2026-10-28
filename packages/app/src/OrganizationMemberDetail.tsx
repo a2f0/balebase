@@ -3,13 +3,13 @@ import {
   Badge,
   Banner,
   Button,
-  ButtonLink,
   Card,
   EmptyState,
   LoadingState,
   Toast,
 } from "@balebase/ui/react";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
+import { AppButtonLink } from "./AppLink";
 import { EmployeeForms } from "./EmployeeForms";
 import { formatDate } from "./labels";
 import {
@@ -28,11 +28,7 @@ import {
   type OrganizationInvitationRole,
   type WorkspaceOrganization,
 } from "./organizationState";
-import {
-  handleNavigation,
-  myDocumentsPath,
-  organizationPeoplePath,
-} from "./workspacePaths";
+import { myDocumentsPath, organizationPeoplePath } from "./workspacePaths";
 
 /**
  * One member: who they are, their role and two-factor requirement, and, for
@@ -144,13 +140,9 @@ function MyDocumentsNotice({
   return (
     <Banner
       actions={
-        <ButtonLink
-          href={path}
-          onClick={(event) => handleNavigation(event, path, onNavigate)}
-          size="sm"
-        >
+        <AppButtonLink href={path} onNavigate={onNavigate} size="sm">
           Open My documents
-        </ButtonLink>
+        </AppButtonLink>
       }
       tone="info"
     >
@@ -167,15 +159,15 @@ function BackToPeople({
   const path = organizationPeoplePath();
   return (
     <div>
-      <ButtonLink
+      <AppButtonLink
         href={path}
         icon="arrowLeft"
-        onClick={(event) => handleNavigation(event, path, onNavigate)}
+        onNavigate={onNavigate}
         size="sm"
         variant="ghost"
       >
         All people
-      </ButtonLink>
+      </AppButtonLink>
     </div>
   );
 }
