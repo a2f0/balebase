@@ -1,15 +1,9 @@
 import { expect, it } from "bun:test";
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 
 const harness = `
 import { Toast, ToastProvider } from "@balebase/ui/react";
@@ -35,18 +29,9 @@ createRoot(document.getElementById("root")).render(<StrictMode><App /></StrictMo
 `;
 
 it("stacks feedback at the viewport bottom without shifting or clipping page content", async () => {
-  const { CHROME_PATH } = process.env;
-  const chrome =
-    CHROME_PATH ||
-    Bun.which("google-chrome") ||
-    Bun.which("chromium") ||
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  if (!existsSync(chrome))
-    throw new Error("Chrome is required for toast layout.");
   const fixture = mkdtempSync(
     join(fileURLToPath(new URL(".", import.meta.url)), ".toast-"),
   );
-  const profile = mkdtempSync(join(tmpdir(), "toast-layout-"));
   let browser: Browser | undefined;
   try {
     const entry = join(fixture, "entry.tsx");
@@ -68,15 +53,7 @@ it("stacks feedback at the viewport bottom without shifting or clipping page con
     const css = ["tokens", "base", "surfaces"]
       .map((name) => readFileSync(join(styleRoot, `${name}.css`), "utf8"))
       .join("\n");
-    browser = await launch({
-      executablePath: chrome,
-      headless: true,
-      pipe: true,
-      userDataDir: profile,
-      timeout: 10_000,
-      protocolTimeout: 10_000,
-      args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-    });
+    browser = await launch(chromeLaunchOptions());
     for (const width of [1200, 375]) {
       const page = await browser.newPage();
       await page.setViewport({ width, height: 800 });
@@ -143,11 +120,5 @@ it("stacks feedback at the viewport bottom without shifting or clipping page con
   } finally {
     await browser?.close();
     rmSync(fixture, { recursive: true, force: true });
-    rmSync(profile, {
-      recursive: true,
-      force: true,
-      maxRetries: 3,
-      retryDelay: 100,
-    });
   }
 }, 30_000);

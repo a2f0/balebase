@@ -1,19 +1,10 @@
 import { expect, it } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 
 it("keeps long job descriptions beside actions and expands run details in place", async () => {
-  const { CHROME_PATH } = process.env;
-  const chrome =
-    CHROME_PATH ||
-    Bun.which("google-chrome") ||
-    Bun.which("chromium") ||
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  if (!existsSync(chrome))
-    throw new Error("Chrome is required for the jobs layout check.");
   const bundle = await Bun.build({
     entrypoints: [
       fileURLToPath(new URL("./adminJobsFixture.tsx", import.meta.url)),
@@ -32,18 +23,9 @@ it("keeps long job descriptions beside actions and expands run details in place"
   ]
     .map((url) => readFileSync(fileURLToPath(url), "utf8"))
     .join("\n");
-  const profile = mkdtempSync(join(tmpdir(), "job-row-layout-"));
   let browser: Browser | undefined;
   try {
-    browser = await launch({
-      executablePath: chrome,
-      headless: true,
-      pipe: true,
-      userDataDir: profile,
-      timeout: 10_000,
-      protocolTimeout: 10_000,
-      args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-    });
+    browser = await launch(chromeLaunchOptions());
     for (const width of [1500, 375]) {
       const page = await browser.newPage();
       await page.setViewport({
@@ -128,6 +110,5 @@ it("keeps long job descriptions beside actions and expands run details in place"
     }
   } finally {
     await browser?.close();
-    rmSync(profile, { recursive: true, force: true });
   }
 }, 30_000);

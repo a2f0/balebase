@@ -1,9 +1,8 @@
 import { expect, it } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 
 it("appends job and transaction pages on desktop/mobile scroll and fills a short viewport", async () => {
   const built = await Bun.build({
@@ -26,26 +25,9 @@ it("appends job and transaction pages on desktop/mobile scroll and fills a short
   ]
     .map((url) => readFileSync(url, "utf8"))
     .join("\n");
-  const { CHROME_PATH } = process.env;
-  const chrome =
-    CHROME_PATH ||
-    Bun.which("google-chrome") ||
-    Bun.which("chromium") ||
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  if (!existsSync(chrome))
-    throw new Error("Chrome is required for the infinite history check.");
-  const profile = mkdtempSync(join(tmpdir(), "infinite-history-"));
   let browser: Browser | undefined;
   try {
-    browser = await launch({
-      executablePath: chrome,
-      headless: true,
-      pipe: true,
-      userDataDir: profile,
-      timeout: 10_000,
-      protocolTimeout: 10_000,
-      args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-    });
+    browser = await launch(chromeLaunchOptions());
     for (const mode of ["jobs", "finance"] as const) {
       for (const [width, pageSize] of [
         [1200, 20],
@@ -110,6 +92,5 @@ it("appends job and transaction pages on desktop/mobile scroll and fills a short
     }
   } finally {
     await browser?.close();
-    rmSync(profile, { recursive: true, force: true });
   }
 }, 30_000);

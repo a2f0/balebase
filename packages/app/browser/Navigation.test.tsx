@@ -1,19 +1,9 @@
 import { expect, it } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 
 it("guarded Back, Forward, and links ask first and keep history entries", async () => {
-  const { CHROME_PATH } = process.env;
-  const chrome =
-    CHROME_PATH ||
-    Bun.which("google-chrome") ||
-    Bun.which("chromium") ||
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  if (!existsSync(chrome))
-    throw new Error("Chrome is required for the navigation check.");
   const bundle = await Bun.build({
     entrypoints: [
       fileURLToPath(new URL("../src/navigationGuard.ts", import.meta.url)),
@@ -26,18 +16,9 @@ it("guarded Back, Forward, and links ask first and keep history entries", async 
     );
   const source = await bundle.outputs[0]?.text();
   if (!source) throw new Error("Navigation fixture is empty.");
-  const profile = mkdtempSync(join(tmpdir(), "workspace-navigation-"));
   let browser: Browser | undefined;
   try {
-    browser = await launch({
-      executablePath: chrome,
-      headless: true,
-      pipe: true,
-      userDataDir: profile,
-      timeout: 10_000,
-      protocolTimeout: 10_000,
-      args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-    });
+    browser = await launch(chromeLaunchOptions());
     const page = await browser.newPage();
     await page.setRequestInterception(true);
     page.on("request", (request) => {
@@ -162,6 +143,5 @@ it("guarded Back, Forward, and links ask first and keep history entries", async 
     expect(await page.evaluate(() => history.length)).toBe(historyLength + 3);
   } finally {
     await browser?.close();
-    rmSync(profile, { force: true, recursive: true });
   }
 }, 20_000);

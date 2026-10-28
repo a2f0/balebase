@@ -1,9 +1,9 @@
 import { expect, it } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 
 // Three tall entries in a 600px viewport. The first is lifted and held at the
 // bottom edge, where the page scrolls a frame at a time. Its transform grows
@@ -54,19 +54,10 @@ createRoot(document.getElementById("root")).render(<App />);
 `;
 
 it("never scrolls past the page while a lifted entry rests at the edge", async () => {
-  const { CHROME_PATH } = process.env;
-  const chrome =
-    CHROME_PATH ||
-    Bun.which("google-chrome") ||
-    Bun.which("chromium") ||
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  if (!existsSync(chrome))
-    throw new Error("Chrome is required for the reorder check.");
   // Inside the package, so the fixture resolves React like the app does.
   const fixture = mkdtempSync(
     join(fileURLToPath(new URL(".", import.meta.url)), ".reorder-"),
   );
-  const profile = mkdtempSync(join(tmpdir(), "reorder-drag-"));
   let browser: Browser | undefined;
   try {
     const entry = join(fixture, "entry.tsx");
@@ -88,15 +79,7 @@ it("never scrolls past the page while a lifted entry rests at the edge", async (
     const source = await bundle.outputs[0]?.text();
     if (!source) throw new Error("Reorder fixture is empty.");
 
-    browser = await launch({
-      executablePath: chrome,
-      headless: true,
-      pipe: true,
-      userDataDir: profile,
-      timeout: 10_000,
-      protocolTimeout: 20_000,
-      args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-    });
+    browser = await launch(chromeLaunchOptions({ protocolTimeout: 20_000 }));
     const page = await browser.newPage();
     await page.setViewport({ height: 600, width: 800 });
     await page.setRequestInterception(true);
@@ -135,6 +118,5 @@ it("never scrolls past the page while a lifted entry rests at the edge", async (
   } finally {
     await browser?.close();
     rmSync(fixture, { force: true, recursive: true });
-    rmSync(profile, { force: true, recursive: true });
   }
 }, 30_000);

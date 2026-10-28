@@ -1,21 +1,12 @@
 import { expect, it } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FinanceConnection } from "@balebase/validators/finance";
 import { type Browser, launch } from "puppeteer-core";
 import { renderToStaticMarkup } from "react-dom/server";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 import { FinanceConnections } from "../src/FinanceAccounts";
-
-const { CHROME_PATH } = process.env;
-const chrome =
-  CHROME_PATH ||
-  Bun.which("google-chrome") ||
-  Bun.which("chromium") ||
-  (existsSync("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
-    ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    : null);
 
 const connection = (
   id: string,
@@ -35,8 +26,6 @@ const connection = (
 });
 
 it("opens a connection from anywhere on its row except its own buttons", async () => {
-  if (!chrome)
-    throw new Error("Chrome is required for the connection row layout check.");
   const markup = renderToStaticMarkup(
     <FinanceConnections
       busy={false}
@@ -64,20 +53,9 @@ it("opens a connection from anywhere on its row except its own buttons", async (
   ]
     .map((path) => readFileSync(path, "utf8"))
     .join("\n");
-  const profile = mkdtempSync(join(tmpdir(), "finance-connection-rows-"));
   let browser: Browser | undefined;
   try {
-    browser = await launch({
-      executablePath: chrome,
-      headless: true,
-      pipe: true,
-      userDataDir: profile,
-      timeout: 10_000,
-      protocolTimeout: 10_000,
-      // Hosted Ubuntu runners restrict Chrome's sandbox. This browser only
-      // opens the generated fixture in a disposable profile.
-      args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-    });
+    browser = await launch(chromeLaunchOptions());
     const page = await browser.newPage();
     for (const width of [1200, 375]) {
       await page.setViewport({ width, height: 800 });
@@ -140,11 +118,5 @@ it("opens a connection from anywhere on its row except its own buttons", async (
     }
   } finally {
     await browser?.close();
-    rmSync(profile, {
-      recursive: true,
-      force: true,
-      maxRetries: 3,
-      retryDelay: 100,
-    });
   }
 }, 30_000);

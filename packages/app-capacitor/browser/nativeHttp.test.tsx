@@ -4,19 +4,10 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "puppeteer-core";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 
 it("preserves native CSRF markers through Capacitor's real browser fetch patch", async () => {
-  const { CHROME_PATH } = process.env;
-  const browser = await launch({
-    executablePath:
-      CHROME_PATH ||
-      Bun.which("google-chrome") ||
-      Bun.which("chromium") ||
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    headless: true,
-    pipe: true,
-    args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-  });
+  const browser = await launch(chromeLaunchOptions());
   try {
     const iosRoot = dirname(
       createRequire(import.meta.url).resolve("@capacitor/ios/package.json"),

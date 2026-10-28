@@ -1,19 +1,9 @@
 import { expect, it } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { type Browser, launch } from "puppeteer-core";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 import type {} from "./offlineFixture";
 
 it("persists audits and photos across reload, retries in dependency order, and isolates tabs and accounts", async () => {
-  const { CHROME_PATH } = process.env;
-  const chrome =
-    CHROME_PATH ||
-    Bun.which("google-chrome") ||
-    Bun.which("chromium") ||
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  if (!existsSync(chrome))
-    throw new Error("Chrome is required for offline storage tests.");
   const build = await Bun.build({
     entrypoints: [new URL("./offlineFixture.tsx", import.meta.url).pathname],
     target: "browser",
@@ -71,18 +61,9 @@ it("persists audits and photos across reload, retries in dependency order, and i
       );
     },
   });
-  const profile = mkdtempSync(join(tmpdir(), "offline-browser-"));
   let browser: Browser | undefined;
   try {
-    browser = await launch({
-      executablePath: chrome,
-      headless: true,
-      pipe: true,
-      userDataDir: profile,
-      timeout: 10_000,
-      protocolTimeout: 20_000,
-      args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-    });
+    browser = await launch(chromeLaunchOptions({ protocolTimeout: 20_000 }));
     const page = await browser.newPage();
     await page.goto(server.url.href);
     await page.waitForFunction(() => Boolean(window.offlineTest));
@@ -176,6 +157,5 @@ it("persists audits and photos across reload, retries in dependency order, and i
   } finally {
     await browser?.close();
     await server.stop(true);
-    rmSync(profile, { recursive: true, force: true });
   }
 }, 30_000);

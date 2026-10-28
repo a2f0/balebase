@@ -192,8 +192,10 @@ the evidence with `agent-tool runs list --head <commit>`.
 
 The full check needs ShellCheck, Terraform, TFLint, and the Ruby bundle.
 Browser tests need Chrome or Chromium; set `CHROME_PATH` to its executable when
-needed. Git's pre-commit hook fixes staged formatting; pre-push runs `check`
-and `test`.
+needed. Puppeteer suites launch it with `chromeLaunchOptions` from
+`scripts/testing/chrome.ts`, which gives each browser a disposable profile.
+Git's pre-commit hook fixes staged formatting; pre-push runs `check` and
+`test`.
 
 Git exports `GIT_DIR` and similar variables to hooks, and a test fixture that
 inherits them runs its Git commands against the checkout under test. Pre-push

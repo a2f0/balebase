@@ -1,16 +1,8 @@
 import { expect, it } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
-
-const { CHROME_PATH } = process.env;
-const chrome =
-  CHROME_PATH ||
-  Bun.which("google-chrome") ||
-  Bun.which("chromium") ||
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 
 const read = (url: URL) => readFileSync(fileURLToPath(url), "utf8");
 const css = [
@@ -122,20 +114,9 @@ async function layOut(
 }
 
 it("keeps the app clear of the system bars it draws under", async () => {
-  if (!existsSync(chrome))
-    throw new Error("Chrome is required for the safe area check.");
-  const profile = mkdtempSync(join(tmpdir(), "safe-area-"));
   let browser: Browser | undefined;
   try {
-    browser = await launch({
-      executablePath: chrome,
-      headless: true,
-      pipe: true,
-      userDataDir: profile,
-      timeout: 10_000,
-      protocolTimeout: 10_000,
-      args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-    });
+    browser = await launch(chromeLaunchOptions());
     const phone = { top: 48, right: 0, bottom: 24, left: 0 };
 
     // The status bar sits on ink over the sticky top bar, which stays below it.
@@ -199,6 +180,5 @@ it("keeps the app clear of the system bars it draws under", async () => {
     expect(web.mainPadding).toEqual(["0px", "0px", "0px"]);
   } finally {
     await browser?.close();
-    rmSync(profile, { recursive: true, force: true });
   }
 }, 20_000);

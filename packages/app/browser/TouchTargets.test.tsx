@@ -1,18 +1,10 @@
 import { expect, it } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Select } from "@balebase/ui/react";
 import { type Browser, launch } from "puppeteer-core";
 import { renderToStaticMarkup } from "react-dom/server";
-
-const { CHROME_PATH } = process.env;
-const chrome =
-  CHROME_PATH ||
-  Bun.which("google-chrome") ||
-  Bun.which("chromium") ||
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 
 const read = (url: URL) => readFileSync(fileURLToPath(url), "utf8");
 const css = [
@@ -88,20 +80,9 @@ async function measure(browser: Browser, touch: boolean) {
 }
 
 it("touch screens get fingertip-sized controls while a mouse keeps compact ones", async () => {
-  if (!existsSync(chrome))
-    throw new Error("Chrome is required for the touch target check.");
-  const profile = mkdtempSync(join(tmpdir(), "touch-targets-"));
   let browser: Browser | undefined;
   try {
-    browser = await launch({
-      executablePath: chrome,
-      headless: true,
-      pipe: true,
-      userDataDir: profile,
-      timeout: 10_000,
-      protocolTimeout: 10_000,
-      args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-    });
+    browser = await launch(chromeLaunchOptions());
     const touch = await measure(browser, true);
     expect(touch.coarse).toBe(true);
     // iOS zooms into any focused field set below 16px.
@@ -127,6 +108,5 @@ it("touch screens get fingertip-sized controls while a mouse keeps compact ones"
     });
   } finally {
     await browser?.close();
-    rmSync(profile, { recursive: true, force: true });
   }
 }, 20_000);
