@@ -442,7 +442,7 @@ function FolderGrid({
             key={folder.id}
             onClick={(event) => handleNavigation(event, path, onNavigate)}
           >
-            <span className="folderCardIcon">
+            <span className="iconTile">
               <Icon name="folder" size={20} />
             </span>
             <span className="folderCardText">

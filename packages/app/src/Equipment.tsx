@@ -296,7 +296,7 @@ function EquipmentList({
                 href={path}
                 onClick={(event) => handleNavigation(event, path, onNavigate)}
               >
-                <span className="equipmentTypeMark">
+                <span className="iconTile">
                   <Icon name={equipmentTypeIcon(item.type)} size={20} />
                 </span>
                 <span className="rowMain">

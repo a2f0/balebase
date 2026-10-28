@@ -302,7 +302,7 @@ function AccountCard({
       type="button"
     >
       <span className="financeAccountLine">
-        <span className="financeAccountName" title={account.name}>
+        <span className="financeAccountName truncate" title={account.name}>
           {account.name}
         </span>
         <span className="financeAccountBalance">
@@ -311,7 +311,7 @@ function AccountCard({
       </span>
       <span className="financeAccountLine">
         <span className="financeAccountMeta">
-          <span className="financeAccountDetails" title={details}>
+          <span className="truncate" title={details}>
             {details}
           </span>
           {account.mask && (

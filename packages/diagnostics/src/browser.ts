@@ -1,5 +1,5 @@
 import { BrowserClient, defaultStackParser, Scope } from "@sentry/browser";
-import { privateDataCollection } from "./collectionPolicy";
+import { privateClientOptions } from "./clientOptions";
 import {
   browserConfig,
   type DiagnosticSource,
@@ -8,30 +8,17 @@ import {
   type SentryConfig,
 } from "./config";
 import { fetchJsonWithTimeout } from "./fetch";
-import { sanitizeSentryEvent } from "./privacy";
-import { createPrivateTransport } from "./transport";
 
-export function createBrowserDiagnostics(config: SentryConfig) {
+function createBrowserDiagnostics(config: SentryConfig) {
   const client = new BrowserClient({
     ...config,
-    dist: config.environment,
+    ...privateClientOptions(config),
     stackParser: defaultStackParser,
-    transport: createPrivateTransport(config),
-    integrations: [],
-    traceLifecycle: "static",
-    tracesSampleRate: 0,
-    dataCollection: privateDataCollection(),
-    sendClientReports: false,
-    maxBreadcrumbs: 0,
-    beforeSend: (event) => sanitizeSentryEvent(event, config),
   });
   const scope = new Scope();
   scope.setClient(client);
   client.init();
-  const captureError = (
-    error: unknown,
-    source: DiagnosticSource = "boundary",
-  ) => {
+  const captureError = (error: unknown, source: DiagnosticSource) => {
     try {
       if (error instanceof Error)
         scope.captureException(error, {
@@ -46,34 +33,14 @@ export function createBrowserDiagnostics(config: SentryConfig) {
       // Diagnostics never interrupt application behavior.
     }
   };
-  const onError = (event: ErrorEvent) =>
-    captureError(event.error, "unhandled-error");
-  const onRejection = (event: PromiseRejectionEvent) =>
-    captureError(event.reason, "unhandled-rejection");
   const flush = () => Promise.resolve(client.flush(2000)).catch(() => false);
-  const onPageHide = () => {
+  window.addEventListener("pagehide", () => {
     void flush();
-  };
-  window.addEventListener("error", onError);
-  window.addEventListener("unhandledrejection", onRejection);
-  window.addEventListener("pagehide", onPageHide);
-  return {
-    captureError,
-    flush,
-    dispose() {
-      window.removeEventListener("error", onError);
-      window.removeEventListener("unhandledrejection", onRejection);
-      window.removeEventListener("pagehide", onPageHide);
-      return client.close(2000);
-    },
-  };
+  });
+  return { captureError, flush };
 }
 
-async function configureBrowserDiagnostics(
-  build: SentryBuild | undefined,
-  target: string,
-) {
-  if (!isSentryBuild(build) || build.target !== target) return undefined;
+async function configureBrowserDiagnostics(build: SentryBuild) {
   try {
     const manifest = await fetchJsonWithTimeout(
       new URL("/sentry-assets.json", window.location.href),
@@ -111,18 +78,17 @@ export function startBrowserDiagnostics(
     captureError(event.reason, "unhandled-rejection");
   window.addEventListener("error", onError);
   window.addEventListener("unhandledrejection", onRejection);
-  const ready = configureBrowserDiagnostics(build, target).then(
-    (configured) => {
+  const ready = configureBrowserDiagnostics(build).then((configured) => {
+    if (!configured) {
       window.removeEventListener("error", onError);
       window.removeEventListener("unhandledrejection", onRejection);
-      waiting = false;
-      client = configured;
-      for (const [error, source] of pending)
-        client?.captureError(error, source);
-      pending.length = 0;
-      return client;
-    },
-  );
+    }
+    waiting = false;
+    client = configured;
+    for (const [error, source] of pending) client?.captureError(error, source);
+    pending.length = 0;
+    return client;
+  });
   return {
     captureError,
     flush: () => ready.then((configured) => configured?.flush() ?? false),

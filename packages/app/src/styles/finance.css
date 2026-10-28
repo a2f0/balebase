@@ -47,14 +47,6 @@
   min-width: 0;
 }
 
-.financeAccountName,
-.financeAccountDetails {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .financeAccountName {
   font-size: var(--text-sm);
   font-weight: 650;
