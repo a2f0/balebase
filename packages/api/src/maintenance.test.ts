@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { afterEach, expect, it, spyOn } from "bun:test";
 import { adminJobs } from "./adminJobs";
 import { adminUsers } from "./adminUsers";
+import { requireRole } from "./authMiddleware";
 import { purgeDeletedObjects } from "./deletedObjectCleanup";
 import { claimJob, recoverJobs } from "./jobRuns";
 import { consumeJobs } from "./jobWorker";
@@ -64,6 +65,8 @@ function fixture(role = "admin", impersonatedBy?: string) {
     );
     await next();
   });
+  app.use("/jobs/*", requireRole("admin"));
+  app.use("/users/*", requireRole("admin"));
   app.route("/jobs", adminJobs);
   app.route("/deletion", userDeletion);
   app.route("/users", adminUsers);

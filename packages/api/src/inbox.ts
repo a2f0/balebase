@@ -6,7 +6,7 @@ import {
 } from "@balebase/validators/inbox";
 import { type Context, Hono } from "hono";
 import PostalMime from "postal-mime";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { organizationInboxAddress } from "./inboundEmailAddress";
 import {
   createEmailLink,
@@ -14,14 +14,8 @@ import {
   listEmailLinks,
 } from "./inboundEmailLinks";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
-type InboxEnv = {
-  Bindings: Bindings;
-  Variables: AuthVariables;
-};
-
-const inbox = new Hono<InboxEnv>();
+const inbox = new Hono<ApiEnv>();
 
 interface InboundEmailRow {
   archived_at: string | null;
@@ -325,7 +319,7 @@ function emailFolderFilter(folder: InboxFolder) {
   return `email.deleted_at IS NULL AND email.archived_at IS ${folder === "archived" ? "NOT " : ""}NULL`;
 }
 
-function invalidFolder(context: Context<InboxEnv>) {
+function invalidFolder(context: Context<ApiEnv>) {
   return context.json(
     { error: "Folder must be inbox, trash, or archived." },
     400,

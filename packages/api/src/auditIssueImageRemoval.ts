@@ -4,14 +4,10 @@ import { activityBatch, activityStatement } from "./activity";
 import { findAuditIssueImage } from "./auditIssueImageRecords";
 import { deletePendingAuditIssueObject } from "./auditIssueImages";
 import { discardedAuditError, imageAuditNotDiscarded } from "./auditRunRecords";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
-export const auditIssueImageRemoval = new Hono<{
-  Bindings: Bindings;
-  Variables: AuthVariables;
-}>();
+export const auditIssueImageRemoval = new Hono<ApiEnv>();
 
 auditIssueImageRemoval.delete("/:issueId/images/:imageId", async (context) => {
   const organizationId = context.get("organizationId");

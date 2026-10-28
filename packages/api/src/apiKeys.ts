@@ -1,10 +1,9 @@
 import { type ApiKey, apiKeysRoutes } from "@balebase/validators/apiKeys";
 import { type Context, Hono } from "hono";
 import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
-import { canManageOrganization } from "./organizationMembers";
+import type { ApiEnv } from "./authMiddleware";
+import { canManageOrganization, requireManager } from "./organizationMembers";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
 export type ApiKeyAccess = "read" | "write";
 
@@ -19,11 +18,7 @@ export interface ApiKeyPrincipal {
   organizationId: string;
 }
 
-type ApiKeysEnv = {
-  Bindings: Bindings;
-  Variables: AuthVariables;
-};
-type ApiKeysContext = Context<ApiKeysEnv>;
+type ApiKeysContext = Context<ApiEnv>;
 
 interface ApiKeyRow {
   access: ApiKeyAccess;
@@ -284,17 +279,9 @@ function isBanned(row: CredentialRow, now: Date) {
   return new Date(row.banExpires).getTime() > now.getTime();
 }
 
-const apiKeys = new Hono<ApiKeysEnv>();
+const apiKeys = new Hono<ApiEnv>();
 
-apiKeys.use("*", async (context, next) => {
-  if (!canManageOrganization(context.get("organizationRole"))) {
-    return context.json(
-      { error: "Organization manager access required." },
-      403,
-    );
-  }
-  return next();
-});
+apiKeys.use("*", requireManager());
 
 apiKeys.get("/", async (context) => {
   const result = await context.env.DB.prepare(

@@ -1,3 +1,4 @@
+import { productName } from "@balebase/ui/brand";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { addTextPages, formatUtcTimestamp, type PdfLine } from "./pdfText";
 import {
@@ -34,7 +35,7 @@ export async function buildScreeningConsentPdf(
 ) {
   const document = await PDFDocument.create();
   document.setTitle(`Background check authorization: ${consent.signatureName}`);
-  document.setProducer("Balebase");
+  document.setProducer(productName);
   const font = await document.embedFont(StandardFonts.Helvetica);
   const bold = await document.embedFont(StandardFonts.HelveticaBold);
   const location = [consent.workCity, consent.workState]
@@ -42,7 +43,7 @@ export async function buildScreeningConsentPdf(
     .join(", ");
   const lines: PdfLine[] = [
     { bold: true, size: 18, text: "Background check authorization" },
-    { gap: 6, size: 10, text: `${consent.organizationName} · Balebase` },
+    { gap: 6, size: 10, text: `${consent.organizationName} · ${productName}` },
     { bold: true, gap: 18, size: 12, text: consent.requirementTitle },
     { size: 9, text: `Consent ID: ${consent.consentId}` },
     { size: 9, text: `Disclosure version: ${disclosures.version}` },

@@ -3,7 +3,7 @@ import {
   organizationSettingsRoutes,
 } from "@balebase/validators/organizationSettings";
 import { Hono } from "hono";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import {
   cancelOrganizationSubscription,
   recoverCheckoutAfterFailedDeletion,
@@ -13,21 +13,16 @@ import {
   canManageOrganization,
   isOrganizationOwner,
   listOrganizationMembers,
+  requireManager,
 } from "./organizationMembers";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
 interface OrganizationRow {
   id: string;
   name: string;
 }
 
-type OrganizationSettingsEnv = {
-  Bindings: Bindings;
-  Variables: AuthVariables;
-};
-
-const organizationSettings = new Hono<OrganizationSettingsEnv>();
+const organizationSettings = new Hono<ApiEnv>();
 
 organizationSettings.get("/organizations", async (context) => {
   const userId = context.get("authSession").user.id;
@@ -73,13 +68,8 @@ organizationSettings.get("/people", async (context) => {
 
 organizationSettings.patch(
   "/people/:memberId/two-factor-required",
+  requireManager(),
   async (context) => {
-    if (!canManageOrganization(context.get("organizationRole"))) {
-      return context.json(
-        { error: "Organization manager access required." },
-        403,
-      );
-    }
     const body: unknown = await context.req.json().catch(() => null);
     if (!isTwoFactorRequirement(body)) {
       return context.json({ error: "A required boolean is required." }, 400);

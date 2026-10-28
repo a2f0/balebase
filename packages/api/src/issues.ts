@@ -1,13 +1,12 @@
 import { issuesRoutes } from "@balebase/validators/issues";
 import { Hono } from "hono";
 import { activityBatch, findActivity } from "./activity";
-import { isRecord } from "./auditDefinition";
+import type { ApiEnv } from "./authMiddleware";
 import { cursorPage, decodeCursor, encodeCursor } from "./cursorPagination";
 import {
   canSeeFinanceIssues,
   findIssue,
   type IssueContext,
-  type IssueEnv,
   type IssueRow,
   issueSelect,
   issueTargetAvailable,
@@ -16,10 +15,11 @@ import {
   parseIssueTarget,
   toIssue,
 } from "./issueRecords";
+import { isRecord } from "./jsonInput";
 import { listMemberDirectory } from "./organizationMembers";
 import { respond } from "./respond";
 
-export const issues = new Hono<IssueEnv>();
+export const issues = new Hono<ApiEnv>();
 const issuePageSize = 50;
 issues.get("/", listIssues);
 issues.get("/members", async (context) =>
@@ -196,7 +196,7 @@ async function updateIssue(context: IssueContext) {
   if (!issue) return context.json({ error: "Issue not found." }, 404);
   const body: unknown = await context.req.json().catch(() => null);
   if (
-    !isRecord(body) ||
+    !isRecord<"expectedRevision">(body) ||
     !Number.isSafeInteger(body.expectedRevision) ||
     Number(body.expectedRevision) < 0
   )

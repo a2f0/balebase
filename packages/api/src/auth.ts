@@ -1,3 +1,4 @@
+import { productName } from "@balebase/ui/brand";
 import {
   APIError,
   betterAuth,
@@ -20,6 +21,7 @@ import {
   assignAcceptedInvitationRequirements,
   assignRenewedInvitationRequirements,
 } from "./employeeForms";
+import { sendMail } from "./mailSender";
 import { organizationRoleActivity } from "./organizationRoleActivity";
 import type { Bindings } from "./types";
 
@@ -98,13 +100,12 @@ export function createAuth(env: Bindings, waitUntil: WaitUntil) {
       revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }) => {
         waitUntil(
-          env.EMAIL.send({
-            from: { email: env.AUTH_EMAIL_FROM, name: "Balebase" },
-            subject: "Reset your Balebase password",
+          sendMail(env, {
+            subject: `Reset your ${productName} password`,
             text: [
               `Hi ${user.name},`,
               "",
-              "Use this link to reset your Balebase password:",
+              `Use this link to reset your ${productName} password:`,
               url,
               "",
               "The link expires in one hour. If you did not request this, you can ignore this email.",
@@ -119,13 +120,12 @@ export function createAuth(env: Bindings, waitUntil: WaitUntil) {
       sendOnSignUp: true,
       sendVerificationEmail: async ({ user, url }) => {
         waitUntil(
-          env.EMAIL.send({
-            from: { email: env.AUTH_EMAIL_FROM, name: "Balebase" },
-            subject: "Verify your Balebase email",
+          sendMail(env, {
+            subject: `Verify your ${productName} email`,
             text: [
               `Hi ${user.name},`,
               "",
-              "Verify your email address for Balebase:",
+              `Verify your email address for ${productName}:`,
               url,
               "",
               "The link expires in one hour. You can still sign in before verifying.",
@@ -138,7 +138,7 @@ export function createAuth(env: Bindings, waitUntil: WaitUntil) {
     plugins: [
       admin({ adminRoles: ["admin"], defaultRole: "user" }),
       twoFactor({
-        issuer: "Balebase",
+        issuer: productName,
       }),
       multiSession({ maximumSessions: 5 }),
       configuredOrganizationPlugin(env, waitUntil),
@@ -291,13 +291,12 @@ function queueInvitationEmail(
   const invitationURL = new URL("/invite", env.CORS_ORIGIN);
   invitationURL.searchParams.set("id", data.id);
   waitUntil(
-    env.EMAIL.send({
-      from: { email: env.AUTH_EMAIL_FROM, name: "Balebase" },
+    sendMail(env, {
       subject: `You're invited to ${data.organization.name}`,
       text: [
         "Hi,",
         "",
-        `${data.inviter.user.name} (${data.inviter.user.email}) invited you to join ${data.organization.name} on Balebase with the ${data.role} role.`,
+        `${data.inviter.user.name} (${data.inviter.user.email}) invited you to join ${data.organization.name} on ${productName} with the ${data.role} role.`,
         "",
         "Accept the invitation:",
         invitationURL.toString(),

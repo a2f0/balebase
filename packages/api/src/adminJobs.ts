@@ -1,15 +1,13 @@
 import { adminJobsRoutes } from "@balebase/validators/adminJobs";
 import { type Context, Hono } from "hono";
-import { type AuthVariables, requireRole } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { jobRunDetail, listJobRuns } from "./jobHistory";
 import { toJobRun } from "./jobRuns";
 import { waitForLegacyJob } from "./legacyJobRun";
 import { enqueueMaintenance, maintenanceJobs } from "./maintenance";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
-const adminJobs = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-adminJobs.use("*", requireRole("admin"));
+const adminJobs = new Hono<ApiEnv>();
 adminJobs.get("/", (context) =>
   respond(context, adminJobsRoutes.list, {
     jobs: [
@@ -58,10 +56,7 @@ adminJobs.get("/runs/:runId", async (context) => {
 adminJobs.post("/:jobId/run", (context) => startMaintenance(context, true));
 adminJobs.post("/:jobId/runs", (context) => startMaintenance(context, false));
 
-async function startMaintenance(
-  context: Context<{ Bindings: Bindings; Variables: AuthVariables }>,
-  legacy: boolean,
-) {
+async function startMaintenance(context: Context<ApiEnv>, legacy: boolean) {
   if (context.req.header("Origin") !== context.env.CORS_ORIGIN) {
     return context.json({ error: "Untrusted request origin." }, 403);
   }

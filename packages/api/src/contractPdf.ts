@@ -1,3 +1,4 @@
+import { productName } from "@balebase/ui/brand";
 import {
   degrees,
   PDFDocument,
@@ -290,7 +291,11 @@ function appendCertificate(
 ) {
   const lines: PdfLine[] = [
     { bold: true, size: 18, text: "Certificate of completion" },
-    { gap: 6, size: 10, text: `${certificate.organizationName} · Balebase` },
+    {
+      gap: 6,
+      size: 10,
+      text: `${certificate.organizationName} · ${productName}`,
+    },
     { bold: true, gap: 18, size: 12, text: certificate.title },
     { size: 9, text: `Contract ID: ${certificate.contractId}` },
     {
