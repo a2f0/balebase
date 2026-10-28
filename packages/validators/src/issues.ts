@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
+import { issuePriorities } from "./issueRules";
 import { route } from "./route";
 
 export const IssueTargetTypeSchema = z.enum([
@@ -9,7 +10,7 @@ export const IssueTargetTypeSchema = z.enum([
 ]);
 export type IssueTargetType = z.infer<typeof IssueTargetTypeSchema>;
 
-const IssuePrioritySchema = z.enum(["low", "medium", "high", "critical"]);
+const IssuePrioritySchema = z.enum(issuePriorities);
 const IssueStatusSchema = z.enum(["open", "resolved"]);
 
 export const IssueMemberSchema = z.object({

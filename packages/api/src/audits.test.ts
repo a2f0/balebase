@@ -757,6 +757,49 @@ describe("audits", () => {
     expect(() => encodeURIComponent(unicodeBody.image.filename)).not.toThrow();
   });
 
+  it("checks a declared image type, ignoring case, and refuses empty images", async () => {
+    const fixture = createFixture();
+    const now = "2026-08-25T12:00:00.000Z";
+    fixture.database
+      .query(
+        `INSERT INTO audits
+         (id, organization_id, template_name, definition, responses, status,
+          started_by, created_at, updated_at)
+         VALUES ('declared-audit', 'org_user-1', 'Declared types', '{}', '{}',
+                 'in_progress', 'user-1', ?, ?)`,
+      )
+      .run(now, now);
+    fixture.database
+      .query(
+        `INSERT INTO issues
+         (target_type, id, organization_id, target_id, item_id, title, created_by,
+          created_at, updated_at)
+         VALUES ('audit_run', 'declared-issue', 'org_user-1', 'declared-audit',
+                 'item', 'Declared type issue', 'user-1', ?, ?)`,
+      )
+      .run(now, now);
+    const upload = (body: Uint8Array, contentType: string) =>
+      fixture.request(
+        "/issues/declared-issue/images?filename=evidence.png",
+        imageUpload(body, contentType),
+      );
+
+    for (const contentType of ["", "png", "text/plain"]) {
+      const refused = await upload(pngBytes(), contentType);
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toEqual({
+        error: "Images must be JPEG, PNG, GIF, or WebP files.",
+      });
+    }
+    expect((await upload(new Uint8Array(), "image/png")).status).toBe(400);
+    expect(fixture.stored.size).toBe(0);
+
+    for (const contentType of ["IMAGE/PNG", "application/octet-stream"]) {
+      expect((await upload(pngBytes(), contentType)).status).toBe(201);
+    }
+    expect(fixture.stored.size).toBe(2);
+  });
+
   it("bounds concurrent maximum-size image upload memory", async () => {
     const fixture = createFixture();
     const now = "2026-08-25T12:00:00.000Z";

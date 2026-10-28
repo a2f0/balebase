@@ -1,7 +1,10 @@
+import {
+  issueImageTypeAccepted,
+  maxIssueImageBytes,
+} from "@balebase/validators/issueRules";
 import { maxFilenameBytes, normalizeFilename } from "./filenames";
 import { BodyReadTimeoutError, readBodyWithLimit } from "./storage";
 
-export const maxImageBytes = 10 * 1024 * 1024;
 export const maxImageReadMilliseconds = 60_000;
 const maxImageDimension = 12_000;
 const maxImagePixels = 40_000_000;
@@ -14,15 +17,12 @@ export async function parseImageUpload(
   | { error: string; status: 400 | 408 | 413 }
 > {
   const contentLength = Number(request.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > maxImageBytes) {
+  if (Number.isFinite(contentLength) && contentLength > maxIssueImageBytes) {
     return { error: "Images must be 10 MB or smaller.", status: 413 };
   }
   const contentType = request.headers.get("content-type") ?? "";
   const declaredType = (contentType.split(";", 1)[0] ?? "").toLowerCase();
-  if (
-    declaredType !== "application/octet-stream" &&
-    !supportedImageType(declaredType)
-  ) {
+  if (!issueImageTypeAccepted(declaredType)) {
     return {
       error: "Images must be JPEG, PNG, GIF, or WebP files.",
       status: 400,
@@ -32,7 +32,7 @@ export async function parseImageUpload(
   try {
     requestBytes = await readBodyWithLimit(
       request.body,
-      maxImageBytes,
+      maxIssueImageBytes,
       maxImageReadMilliseconds,
     );
   } catch (cause) {

@@ -1,15 +1,10 @@
 import { ApiError } from "@balebase/api-client";
 import type { AuditIssueInput } from "@balebase/validators/audits";
+import {
+  issueImageProblem,
+  maxIssueImages,
+} from "@balebase/validators/issueRules";
 import { api } from "./apiClient";
-
-export const acceptedImageTypes = [
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-];
-export const maxIssueImages = 10;
-const maxIssueImageBytes = 10 * 1024 * 1024;
 
 type IssueImageUploader = (issueId: string, file: File) => Promise<unknown>;
 
@@ -95,24 +90,6 @@ function waitForRetry(milliseconds: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
 
-export function validateImageFiles(files: File[], availableSlots: number) {
-  if (files.length > availableSlots) {
-    return `You can attach ${Math.max(availableSlots, 0)} more image${availableSlots === 1 ? "" : "s"}.`;
-  }
-  if (
-    files.some(
-      (file) =>
-        file.type && !acceptedImageTypes.includes(file.type.toLowerCase()),
-    )
-  ) {
-    return "Images must be JPEG, PNG, GIF, or WebP files.";
-  }
-  if (files.some((file) => file.size > maxIssueImageBytes)) {
-    return "Images must be 10 MB or smaller.";
-  }
-  return files;
-}
-
 export function appendIssueImageSelection(
   existingFiles: File[],
   selectedFiles: File[],
@@ -124,13 +101,12 @@ export function appendIssueImageSelection(
     identities.add(identity);
     return true;
   });
-  const validated = validateImageFiles(
-    additions,
-    maxIssueImages - existingFiles.length,
+  return (
+    issueImageProblem(additions, maxIssueImages - existingFiles.length) ?? [
+      ...existingFiles,
+      ...additions,
+    ]
   );
-  return typeof validated === "string"
-    ? validated
-    : [...existingFiles, ...validated];
 }
 
 export function issueImageSelectionKey(file: File) {

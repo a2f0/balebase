@@ -1,11 +1,14 @@
 import { auditsRoutes } from "@balebase/validators/audits";
+import {
+  maxIssueImageBytes,
+  maxIssueImages,
+} from "@balebase/validators/issueRules";
 import { offlineRoutes } from "@balebase/validators/offline";
 import type { Context } from "hono";
 import { activityBatch } from "./activity";
 import type { ApiKeyPrincipal } from "./apiKeys";
 import { attemptPendingObjectCleanup } from "./auditIssueImageCleanup";
 import {
-  maxImageBytes,
   maxImageReadMilliseconds,
   normalizedImageFilename,
   parseImageUpload,
@@ -29,8 +32,6 @@ import { BodyReadTimeoutError, readBodyWithLimit } from "./storage";
 import type { Bindings } from "./types";
 
 type AuditIssueImageContext = Context<ApiEnv>;
-
-const maxImagesPerIssue = 10;
 
 // A maximum-size request can briefly retain its 10 MB input buffer, the
 // immutable Blob consumed by Images, and a 10 MB normalized R2 body. Keep two
@@ -123,7 +124,7 @@ export async function uploadAuditIssueImage(
         {
           error: discarded
             ? discardedAuditError
-            : `Issues are limited to ${maxImagesPerIssue} images.`,
+            : `Issues are limited to ${maxIssueImages} images.`,
         },
         409,
       );
@@ -298,7 +299,7 @@ async function reserveAuditIssueImage(
          RETURNING id`,
       )
       .bind(
-        maxImagesPerIssue,
+        maxIssueImages,
         imageId,
         issueId,
         objectId,
@@ -624,7 +625,7 @@ async function writeNormalizedAuditIssueImage(
   try {
     normalizedBytes = await readBodyWithLimit(
       stream,
-      maxImageBytes,
+      maxIssueImageBytes,
       maxImageReadMilliseconds,
     );
   } catch (cause) {

@@ -1,4 +1,5 @@
 import { Button, Card, Field } from "@balebase/ui/react";
+import { issueImageTypes } from "@balebase/validators/issueRules";
 import { useEffect, useState } from "react";
 import { IssueForm } from "./IssueForm";
 import { type OfflineWorkspace, offlineImage } from "./offlineStore";
@@ -27,7 +28,7 @@ export function OfflineIssueCreator({
       <Field label="Photos (up to 10, 10 MB each)">
         <input
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
+          accept={issueImageTypes.join(",")}
           multiple
           disabled={saving}
           onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
