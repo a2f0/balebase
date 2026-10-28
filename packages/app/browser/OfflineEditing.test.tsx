@@ -388,6 +388,91 @@ for (const { path, kind } of [
   }, 30_000);
 }
 
+it("opens offline work in the workspace shell without remounting through coverage and session loss", async () => {
+  let signedIn = true;
+  const user = {
+    id: "user-1",
+    name: "Inspector",
+    email: "inspector@example.com",
+    emailVerified: true,
+  };
+  await withOfflineBrowser(
+    async (page) => {
+      await page.evaluate(async () => {
+        await window.offlineTest.seed();
+        history.replaceState(null, "", "/offline");
+        window.offlineAppTest.mount();
+      });
+      const current = 'nav a[aria-current="page"]';
+      await page.waitForSelector(current);
+      expect(await page.$eval(current, (link) => link.textContent)).toBe(
+        "Offline work",
+      );
+      await openDraft(page);
+      await press(page, "Raise issue");
+      const title = 'form[aria-label="Issue details"] input';
+      await page.type(title, "Shell draft");
+      await page.setOfflineMode(true);
+      await page.waitForFunction(
+        () => document.body.textContent?.includes("Offline ·"),
+        { polling: 100 },
+      );
+      expect(await page.$(current)).not.toBeNull();
+      expect(await page.$eval(title, (field) => field.value)).toBe(
+        "Shell draft",
+      );
+      signedIn = false;
+      await page.setOfflineMode(false);
+      await page.evaluate(() => window.offlineAppTest.refreshSession());
+      await page.waitForFunction(
+        () =>
+          document.getElementById("session-state")?.textContent ===
+          "signed-out",
+        { polling: 100 },
+      );
+      await page.waitForFunction(
+        (selector) => !document.querySelector(selector),
+        { polling: 100 },
+        current,
+      );
+      expect(await page.$eval(title, (field) => field.value)).toBe(
+        "Shell draft",
+      );
+    },
+    (request) => {
+      const pathname = new URL(request.url).pathname;
+      if (pathname === "/api/auth/get-session")
+        return Response.json(
+          signedIn
+            ? {
+                user,
+                session: {
+                  id: "session-user-1",
+                  token: "fixture-user-1",
+                  userId: user.id,
+                  activeOrganizationId: "org-1",
+                  expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+                },
+              }
+            : null,
+        );
+      if (pathname === "/api/organization-settings/organizations")
+        return Response.json({
+          organizations: [{ id: "org-1", name: "Test team" }],
+        });
+      if (pathname === "/api/organization-groups/access")
+        return Response.json({
+          capabilities: [],
+          memberRole: "owner",
+          ownerCount: 1,
+        });
+      if (pathname.startsWith("/api/offline/"))
+        return Response.json({ error: "Offline fixture" }, { status: 503 });
+      return Response.json([]);
+    },
+  );
+}, 30_000);
+
 it("keeps unsaved issue details and photos when reconnecting with an expired session", async () => {
   const requests: string[] = [];
   await withOfflineBrowser(

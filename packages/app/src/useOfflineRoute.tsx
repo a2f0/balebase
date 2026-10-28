@@ -19,6 +19,10 @@ interface Workspace {
   organizations: { id: string; name: string }[];
 }
 
+/**
+ * The offline page for this path, if any. It opens in the workspace shell
+ * while signed in, and stands alone otherwise.
+ */
 export function useOfflineRoute(
   session: OfflineSession | null | undefined,
   workspace: Workspace,
@@ -78,12 +82,27 @@ export function useOfflineRoute(
     // begins, so reconnecting never replaces an in-progress local editor.
     if (fallback && pathname !== "/offline") navigate("/offline");
   }, [fallback, pathname, navigate]);
-  if (excluded) return undefined;
-  if (local && (pathname === "/offline" || fallback)) {
+  const page = offlinePage();
+  return (
+    page && {
+      page,
+      standalone: !session || Boolean(sessionError),
+    }
+  );
+
+  function offlinePage() {
+    if (excluded) return undefined;
+    const saved = pathname === "/offline" || fallback ? local : undefined;
+    const key =
+      saved?.key ??
+      (pathname === "/offline" && identity
+        ? offlineScopeKey(identity.scope)
+        : undefined);
+    if (!key) return undefined;
     return (
       <OfflineWorkspacePage
-        key={local.key}
-        workspace={local}
+        key={key}
+        workspace={saved}
         identity={identity}
         online={offline.online}
         onNavigate={navigate}
@@ -91,21 +110,6 @@ export function useOfflineRoute(
       />
     );
   }
-  if (pathname === "/offline" && identity) {
-    return (
-      <OfflineWorkspacePage
-        key={offlineScopeKey(identity.scope)}
-        workspace={
-          local?.key === offlineScopeKey(identity.scope) ? local : undefined
-        }
-        identity={identity}
-        online={offline.online}
-        onNavigate={navigate}
-        storageError={offline.error}
-      />
-    );
-  }
-  return undefined;
 }
 
 function matchingWorkspace(
