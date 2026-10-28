@@ -49,12 +49,27 @@ load_tier_env() {
   source_env_file "$tier_dir/app.env"
 }
 
-load_cloudflare_env() {
-  load_tier_env prod
+# Load a tier's Cloudflare account credentials and export them for Wrangler and
+# the Cloudflare API. Staging first clears inherited Cloudflare variables, so a
+# value missing from the staging files never falls back to production's. Pass a
+# root as load_tier_env does, and call it as a plain command for the same reason.
+load_cloudflare_tier_env() {
+  local tier="$1"
+  local repo_root="${2:-}"
+
+  if [[ "$tier" == "staging" ]]; then
+    unset TF_VAR_cloudflare_api_token TF_VAR_cloudflare_account_id \
+      CLOUDFLARE_EMAIL_API_TOKEN
+  fi
+  load_tier_env "$tier" "$repo_root"
   validate_cloudflare_env
 
   export CLOUDFLARE_API_TOKEN="$TF_VAR_cloudflare_api_token"
   export CLOUDFLARE_ACCOUNT_ID="$TF_VAR_cloudflare_account_id"
+}
+
+load_cloudflare_env() {
+  load_cloudflare_tier_env prod
 }
 
 load_cloudflare_email_env() {

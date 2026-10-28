@@ -161,7 +161,7 @@ The web shell's service worker update suite uses Playwright's Chromium, Firefox,
 and WebKit engines. Run `bun run --cwd packages/app-web browsers:install` once
 before its browser tests; CI installs them automatically.
 
-The `test:staging` and `test:env` steps inside `bun run test` exercise local
+The `test:deploy` and `test:env` steps inside `bun run test` exercise local
 fixtures and command stubs. They do not deploy, contact a live staging service,
 or use real cloud credentials. Live staging verification and Scope assessments,
 including the `test:scope` tooling tests, are separate opt-in commands.

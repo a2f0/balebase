@@ -21,7 +21,8 @@
     "deploy:email:verify": "bash scripts/deploy/verifyInboundEmail.sh",
     "deploy:staging": "bash scripts/deploy/deployStaging.sh",
     "deploy:staging:frontends": "bash scripts/deploy/deployStagingFrontends.sh",
-    "deploy:verify": "bash scripts/deploy/verifyProduction.sh",
+    "deploy:staging:verify": "DEPLOY_TIER=staging bash scripts/deploy/verifyDeployment.sh",
+    "deploy:verify": "bash scripts/deploy/verifyDeployment.sh",
     "deploy:website": "bash scripts/deploy/deployWebsite.sh",
     "dev": "bunx --bun --no-install turbo run dev",
     "emails:purge": "bash scripts/admin/purgeEmails.sh",
@@ -63,6 +64,7 @@
     "terraform:staging:apply": "bash terraform/scripts/run.sh staging apply",
     "terraform:staging:plan": "bash terraform/scripts/run.sh staging plan",
     "test": "OPENSSL_CONF=/dev/null agent-tool run-group scripts/testing/test.json",
+    "test:deploy": "bash scripts/testing/testDeployStaging.sh && bun test scripts/testing/stagingFrontends.test.ts scripts/testing/verifyDeployment.test.ts",
     "test:env": "bash scripts/testing/testCloudflareEnv.sh",
     "test:hooks": "bun test scripts/testing/prePush.test.ts",
     "test:images": "bun test scripts/testing/brandImages.test.ts",
@@ -70,7 +72,6 @@
     "test:scope": "bun test scripts/testing/scope.test.ts scripts/testing/scope",
     "test:sentry": "bun test scripts/testing/sentryRelease.test.ts scripts/testing/sentryOrchestration.test.ts",
     "test:seo-probe": "bun test scripts/testing/seoProbe.test.ts",
-    "test:staging": "bash scripts/testing/testDeployStaging.sh && bun test scripts/testing/stagingFrontends.test.ts",
     "verify": "OPENSSL_CONF=/dev/null agent-tool run-group scripts/testing/verify.json"
   },
   "workspaces": [

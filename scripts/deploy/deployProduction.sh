@@ -22,6 +22,6 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
 fi
 
 "$SCRIPT_DIR/configureProductionDomains.sh"
-"$SCRIPT_DIR/verifyProduction.sh"
+DEPLOY_TIER=prod "$SCRIPT_DIR/verifyDeployment.sh"
 
 echo "Production deployment completed successfully."

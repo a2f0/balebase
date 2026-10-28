@@ -6,8 +6,8 @@
       "command": ["bunx", "--bun", "--no-install", "turbo", "run", "test"]
     },
     {
-      "label": "test:staging",
-      "command": ["bun", "--bun", "run", "test:staging"]
+      "label": "test:deploy",
+      "command": ["bun", "--bun", "run", "test:deploy"]
     },
     {
       "label": "test:env",

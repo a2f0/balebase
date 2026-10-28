@@ -319,7 +319,9 @@ bun run deploy:staging
 
 The staging deploy runs checks and tests, applies staging D1 migrations, updates
 staging Worker secrets, deploys the three Workers, attaches the staging domains
-and inbound mail route through Terraform, and checks the public URLs. Terraform
+and inbound mail route through Terraform, and checks the public URLs. Recheck
+them later with `bun run deploy:staging:verify`; it runs the production checks
+except the Cloudflare edge-error CORS rule, which only production has. Terraform
 asks for confirmation before applying the domains. The generated
 `wrangler.staging.jsonc` files are ignored; their D1 ID comes from staging
 Terraform output. The staging API does not run production's scheduled jobs.
