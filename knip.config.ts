@@ -18,8 +18,9 @@ const rootToolingWorkspace = {
   project: ["*.{css,ts,mts}", "scripts/dev/scope/**/*.ts"],
   // Installed host tools, not package-managed application dependencies.
   ignoreBinaries: ["shellcheck", "codex"],
-  // The release uploader invokes this binary through runBun.
-  ignoreDependencies: ["@sentry/cli"],
+  // The commit-msg hook runs commitlint, and the release uploader invokes the
+  // Sentry CLI through runBun.
+  ignoreDependencies: ["@commitlint/cli", "@sentry/cli"],
 };
 
 // Knip does not read CSS by default; surfacing @import lets it see font
