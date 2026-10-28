@@ -1,4 +1,6 @@
-export type DiagnosticTarget = "web" | "android" | "ios" | "api";
+const diagnosticTargets = ["web", "android", "ios", "api"] as const;
+
+export type DiagnosticTarget = (typeof diagnosticTargets)[number];
 export type DiagnosticSource =
   | "boundary"
   | "uncaught-react"
@@ -46,7 +48,7 @@ export function isSentryBuild(value: unknown): value is SentryBuild {
     typeof dsn === "string" &&
     isHostedSentryDsn(dsn) &&
     (environment === "staging" || environment === "production") &&
-    ["web", "android", "ios", "api"].includes(target) &&
+    diagnosticTargets.includes(target) &&
     typeof release === "string" &&
     new RegExp(`^balebase-${target}@[a-f0-9]{40}$`, "u").test(release)
   );
