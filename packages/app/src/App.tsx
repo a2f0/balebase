@@ -8,7 +8,7 @@ import {
   PageHeader,
 } from "@balebase/ui/react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { type AuthenticationAction, AuthPage } from "./AuthPage";
+import { AuthPage } from "./AuthPage";
 import {
   accountReturnPath,
   addAccountPath,
@@ -17,6 +17,7 @@ import {
 } from "./accountNavigation";
 import { useAccountSessions } from "./accountSessions";
 import { api } from "./apiClient";
+import type { AuthenticationAction } from "./authActions";
 import { authClient } from "./authClient";
 import { authCallbackUrl } from "./config";
 import { Library } from "./Library";
