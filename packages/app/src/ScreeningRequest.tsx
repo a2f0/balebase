@@ -12,11 +12,8 @@ import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { useCallback } from "react";
 import { api } from "./apiClient";
 import { downloadScreeningConsent } from "./employeeFormDownloads";
-import {
-  formatTimestamp,
-  localDate,
-  personalRequirement,
-} from "./requirementStatus";
+import { formatDate } from "./labels";
+import { localDate, personalRequirement } from "./requirementStatus";
 import { ScreeningForm } from "./ScreeningForm";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
@@ -110,7 +107,7 @@ export function ScreeningRequest({
         <p>{screeningProgress(requirement, organizationName)}</p>
         {requirement.completedAt && (
           <p className="muted">
-            Completed {formatTimestamp(requirement.completedAt)}.
+            Completed {formatDate(requirement.completedAt)}.
           </p>
         )}
         {requirement.checkrReportStatus && (

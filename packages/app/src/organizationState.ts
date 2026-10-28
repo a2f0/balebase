@@ -43,20 +43,20 @@ export function resolveActiveOrganizationId(
 }
 
 export function canManageOrganization(role: string | null | undefined) {
-  return hasOrganizationRole(role, "owner", "admin");
+  return hasRole(role, "owner", "admin");
 }
 
 export function canDeleteOrganization(role: string | null | undefined) {
-  return hasOrganizationRole(role, "owner");
+  return hasRole(role, "owner");
 }
 
 export function assignableOrganizationRoles(
   role: string | null | undefined,
 ): OrganizationInvitationRole[] {
-  if (hasOrganizationRole(role, "owner")) {
+  if (hasRole(role, "owner")) {
     return [...organizationInvitationRoles];
   }
-  if (hasOrganizationRole(role, "admin")) return ["member", "admin"];
+  if (hasRole(role, "admin")) return ["member", "admin"];
   return [];
 }
 
@@ -66,16 +66,13 @@ export function editableOrganizationRoles(
   memberRoles: string[],
 ): OrganizationInvitationRole[] {
   const assignableRoles = assignableOrganizationRoles(managerRole);
-  if (
-    hasOrganizationRole(memberRole, "owner") &&
-    !assignableRoles.includes("owner")
-  ) {
+  if (hasRole(memberRole, "owner") && !assignableRoles.includes("owner")) {
     return [];
   }
   const ownerCount = memberRoles.filter((role) =>
-    hasOrganizationRole(role, "owner"),
+    hasRole(role, "owner"),
   ).length;
-  if (hasOrganizationRole(memberRole, "owner") && ownerCount <= 1) {
+  if (hasRole(memberRole, "owner") && ownerCount <= 1) {
     return ["owner"];
   }
   return assignableRoles;
@@ -84,8 +81,8 @@ export function editableOrganizationRoles(
 export function organizationRoleValue(
   role: string,
 ): OrganizationInvitationRole {
-  if (hasOrganizationRole(role, "owner")) return "owner";
-  if (hasOrganizationRole(role, "admin")) return "admin";
+  if (hasRole(role, "owner")) return "owner";
+  if (hasRole(role, "admin")) return "admin";
   return "member";
 }
 
@@ -95,16 +92,28 @@ export function canLeaveOrganizationWithOwnerCount(
   hasAnotherOrganization: boolean,
 ) {
   if (!hasAnotherOrganization) return false;
-  if (!hasOrganizationRole(role, "owner")) return true;
+  if (!hasRole(role, "owner")) return true;
   return ownerCount > 1;
 }
 
-function hasOrganizationRole(
+/** The roles in a comma-separated role string such as "admin,owner". */
+function rolesOf(role: string | null | undefined) {
+  return (role ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+export function hasRole(
   role: string | null | undefined,
   ...expectedRoles: string[]
 ) {
-  return (
-    role?.split(",").some((value) => expectedRoles.includes(value.trim())) ??
-    false
-  );
+  return rolesOf(role).some((value) => expectedRoles.includes(value));
+}
+
+/** "Admin, Owner" for "admin,owner". */
+export function formatRoles(role: string | null | undefined) {
+  return rolesOf(role)
+    .map((value) => value.charAt(0).toUpperCase() + value.slice(1))
+    .join(", ");
 }

@@ -33,12 +33,8 @@ import {
   syncNotice,
   syncPending,
 } from "./financeConnectionActions";
-import {
-  formatDateTime,
-  formatImportedHistory,
-  formatMoney,
-} from "./financeFormat";
-import { countLabel, formatLabel } from "./labels";
+import { formatImportedHistory, formatMoney } from "./financeFormat";
+import { countLabel, formatDateTime, formatLabel } from "./labels";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
 import { financeAccountPath, handleNavigation } from "./workspacePaths";

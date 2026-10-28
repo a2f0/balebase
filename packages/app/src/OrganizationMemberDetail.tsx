@@ -11,6 +11,7 @@ import {
 } from "@balebase/ui/react";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { EmployeeForms } from "./EmployeeForms";
+import { formatDate } from "./labels";
 import {
   MemberRoleControl,
   MemberTwoFactorControl,
@@ -259,11 +260,5 @@ function MemberProfile({
         )}
       </dl>
     </Card>
-  );
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(value),
   );
 }

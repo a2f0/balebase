@@ -37,10 +37,9 @@ import {
   equipmentName,
   equipmentTypeIcon,
   equipmentTypeLabel,
-  formatPurchaseDate,
 } from "./equipmentLabels";
 import { LinkedEmailList } from "./LinkedEmailList";
-import { countLabel } from "./labels";
+import { countLabel, formatCalendarDate } from "./labels";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
 import {
@@ -554,7 +553,7 @@ function EquipmentDetails({
           <dt>Purchase date</dt>
           <dd className={item.purchaseDate ? undefined : "equipmentMissing"}>
             {item.purchaseDate
-              ? formatPurchaseDate(item.purchaseDate)
+              ? formatCalendarDate(item.purchaseDate)
               : "Not recorded"}
           </dd>
           <dt>Assigned to</dt>

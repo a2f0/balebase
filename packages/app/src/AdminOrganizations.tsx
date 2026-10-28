@@ -19,9 +19,9 @@ import {
 } from "react";
 import { AdminDeletionMenu } from "./AdminDeletionMenu";
 import { AdminOrganizationDetails } from "./AdminOrganizationDetails";
-import { formatDate, Identity } from "./adminDisplay";
+import { Identity } from "./adminDisplay";
 import { api } from "./apiClient";
-import { countLabel } from "./labels";
+import { countLabel, formatDate } from "./labels";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
 import {

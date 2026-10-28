@@ -24,10 +24,9 @@ import {
   downloadEmployeeForm,
   downloadScreeningConsent,
 } from "./employeeFormDownloads";
+import { formatCalendarDate, formatDate } from "./labels";
 import type { WorkspaceOrganization } from "./organizationState";
 import {
-  formatDueDate,
-  formatTimestamp,
   localDate,
   type PersonalGroup,
   personalRequirement,
@@ -282,8 +281,8 @@ function Group({
                 <span className="rowMeta">
                   {kinds[requirement.kind].label} ·{" "}
                   {requirement.completedAt
-                    ? `Completed ${formatTimestamp(requirement.completedAt)}`
-                    : `Due ${formatDueDate(requirement.dueDate)}`}
+                    ? `Completed ${formatDate(requirement.completedAt)}`
+                    : `Due ${formatCalendarDate(requirement.dueDate)}`}
                 </span>
                 <Hint
                   organizationName={organizationName}

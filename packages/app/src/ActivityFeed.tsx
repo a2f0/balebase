@@ -20,6 +20,8 @@ import {
   equipmentActivitySummary,
 } from "./equipmentActivity";
 import { InfiniteScroll } from "./InfiniteScroll";
+import { formatDateTime } from "./labels";
+import { formatRoles } from "./organizationState";
 import { RecordActivityDetails } from "./recordActivity";
 import { useCursorPages } from "./useCursorPages";
 import {
@@ -212,7 +214,7 @@ function CompactActivityRow({
           )}
         </p>
         <time className="activityTime" dateTime={event.occurredAt}>
-          {formatActivityTime(event.occurredAt)}
+          {formatDateTime(event.occurredAt)}
         </time>
       </div>
       <details className="activityDisclosure">
@@ -240,7 +242,7 @@ function activitySummary(event: ActivityEvent) {
   if (event.root.type === "equipment") return equipmentActivitySummary(event);
   if (event.root.type === "api_key") return apiKeySummary(event);
   if (event.action === "organization.member_role_changed") {
-    return `${memberLabel(event)} · ${roleLabel(details.before)} → ${roleLabel(details.after)}`;
+    return `${memberLabel(event)} · ${formatRoles(textValue(details.before))} → ${formatRoles(textValue(details.after))}`;
   }
   if (event.action === "audit.answer_changed") {
     return `${textValue(details.prompt)} · ${answerLabel(details.before, details.responseType)} → ${answerLabel(details.after, details.responseType)}`;
@@ -272,7 +274,7 @@ function ActivityRow({
         <p className="activityMeta">
           {event.actor.email} ·{" "}
           <time dateTime={event.occurredAt}>
-            {formatActivityTime(event.occurredAt)}
+            {formatDateTime(event.occurredAt)}
           </time>
         </p>
         {onNavigate && <p className="activityRoot">{event.root.label}</p>}
@@ -313,7 +315,7 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
         <p className="activityDetails">
           Device-reported times: started {textValue(details.clientStartedAt)},
           completed {textValue(details.clientCompletedAt)}. Synced at{" "}
-          {formatActivityTime(event.occurredAt)}.
+          {formatDateTime(event.occurredAt)}.
         </p>
       );
     case "organization.member_role_changed":
@@ -409,7 +411,8 @@ function MemberRoleDetails({ event }: { event: ActivityEvent }) {
         {memberLabel(event)} · {textValue(event.details.userEmail)}
       </p>
       <p>
-        {roleLabel(event.details.before)} → {roleLabel(event.details.after)}
+        {formatRoles(textValue(event.details.before))} →{" "}
+        {formatRoles(textValue(event.details.after))}
       </p>
     </div>
   );
@@ -475,15 +478,6 @@ function memberLabel(event: ActivityEvent) {
   );
 }
 
-function roleLabel(value: unknown) {
-  return textValue(value)
-    .split(",")
-    .map((role) => role.trim())
-    .filter(Boolean)
-    .map((role) => role.charAt(0).toUpperCase() + role.slice(1))
-    .join(", ");
-}
-
 const channelLabels = { mcp: "MCP", rest: "API" } as const;
 
 /** Names the API key, if any, that the actor made a change through. */
@@ -498,11 +492,4 @@ export function ApiKeyAttribution({ actor }: { actor: ActivityActor }) {
       {` via ${name} (${channelLabels[channel]})`}
     </span>
   );
-}
-
-export function formatActivityTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
 }

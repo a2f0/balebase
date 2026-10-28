@@ -1,5 +1,5 @@
 import type { IconName } from "@balebase/ui/react";
-import { formatLabel } from "./labels";
+import { formatCalendarDate, formatLabel } from "./labels";
 
 const typeLabels: Record<string, { icon: IconName; label: string }> = {
   cell_phone: { icon: "cellPhone", label: "Cell phone" },
@@ -30,15 +30,8 @@ export function equipmentMeta(item: {
   return [
     equipmentTypeLabel(item.type),
     item.serialNumber,
-    item.purchaseDate && `Purchased ${formatPurchaseDate(item.purchaseDate)}`,
+    item.purchaseDate && `Purchased ${formatCalendarDate(item.purchaseDate)}`,
   ]
     .filter(Boolean)
     .join(" · ");
-}
-
-/** A purchase date ("2026-03-01") in the viewer's format, on its own day. */
-export function formatPurchaseDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(`${value}T12:00:00`),
-  );
 }

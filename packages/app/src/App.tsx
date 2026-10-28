@@ -31,13 +31,14 @@ import { useOfflineSlot } from "./offlineSlot";
 import { lockOfflineWorkspace } from "./offlineStore";
 import {
   createOrganizationSlug,
+  hasRole,
   resolveActiveOrganizationId,
   type WorkspaceOrganization,
 } from "./organizationState";
 import { SigningPage } from "./SigningPage";
 import { useOfflineRoute } from "./useOfflineRoute";
 import { useOrganizationAccess } from "./useOrganizationAccess";
-import { hasRole, WorkspaceShell, type WorkspaceUser } from "./WorkspaceShell";
+import { WorkspaceShell, type WorkspaceUser } from "./WorkspaceShell";
 import {
   isRootAdminPath,
   isWithin,

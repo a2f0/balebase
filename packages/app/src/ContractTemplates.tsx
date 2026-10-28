@@ -19,9 +19,9 @@ import type {
 } from "@balebase/validators/contractTemplates";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./apiClient";
-import { formatDate } from "./ContractSummary";
 import { ContractTemplateEditor } from "./ContractTemplateEditor";
 import { ContractTemplateMapping } from "./ContractTemplateMapping";
+import { formatDate } from "./labels";
 import { confirmDiscardChanges } from "./unsavedChanges";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
@@ -373,7 +373,7 @@ function TemplateActions({ page }: { page: TemplatePageState }) {
             <option key={version.version} value={version.version}>
               v{version.version}
               {version.version === template.currentVersion ? " · Latest" : ""} ·{" "}
-              {formatDate(version.createdAt.slice(0, 10))}
+              {formatDate(version.createdAt)}
             </option>
           ))}
         </Select>

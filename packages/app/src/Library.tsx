@@ -30,7 +30,7 @@ import {
 import { ApiDownload } from "./ApiDownload";
 import { api } from "./apiClient";
 import { LinkedEmailList } from "./LinkedEmailList";
-import { countLabel, formatBytes } from "./labels";
+import { countLabel, formatBytes, formatShortDate } from "./labels";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
 import { useMenuDismissal } from "./useMenuDismissal";
@@ -529,7 +529,7 @@ function FileCard({
         <div className="fileMeta">
           <strong className="truncate">{object.filename}</strong>
           <span>
-            {formatBytes(object.size)} · {formatDate(object.createdAt)}
+            {formatBytes(object.size)} · {formatShortDate(object.createdAt)}
           </span>
         </div>
       </ApiDownload>
@@ -709,13 +709,6 @@ function LibraryEmptyState({ onUpload }: { onUpload: () => void }) {
 function extensionFor(filename: string) {
   const extension = filename.split(".").pop();
   return extension && extension !== filename ? extension.slice(0, 4) : "file";
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    month: "short",
-  }).format(new Date(value));
 }
 
 function confirmFolderDeletion({ emailCount, fileCount, name }: LibraryFolder) {

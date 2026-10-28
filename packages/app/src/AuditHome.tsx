@@ -28,7 +28,7 @@ import {
 } from "./auditTemplateView";
 import { ErrorToast } from "./ErrorToast";
 import { InfiniteScroll } from "./InfiniteScroll";
-import { countLabel, formatLabel } from "./labels";
+import { countLabel, formatDate, formatLabel } from "./labels";
 import { useAction } from "./useAction";
 import { useCursorPages } from "./useCursorPages";
 import { useLoad } from "./useLoad";
@@ -577,10 +577,4 @@ export function templateStatusTone(value: string): BadgeTone {
 
 function scopeLabel(scope: AuditTemplateScope) {
   return scope === "global" ? "Global" : "Organization";
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(value),
-  );
 }

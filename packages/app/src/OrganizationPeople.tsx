@@ -42,13 +42,13 @@ import {
   type RequirementDraft,
 } from "./employeeOnboarding";
 import { errorMessage } from "./errors";
+import { formatDate } from "./labels";
 import {
   MemberRoleControl,
   MemberTwoFactorControl,
   TwoFactorStatus,
 } from "./memberControls";
 import {
-  formatRole,
   organizationPeopleActions,
   removeOrganizationMember,
   useOrganizationPeopleData,
@@ -57,6 +57,7 @@ import {
   assignableOrganizationRoles,
   canManageOrganization,
   editableOrganizationRoles,
+  formatRoles,
   type OrganizationInvitationRole,
   type WorkspaceOrganization,
 } from "./organizationState";
@@ -597,7 +598,7 @@ function InviteFields({
         >
           {assignableOrganizationRoles(memberRole).map((assignableRole) => (
             <option key={assignableRole} value={assignableRole}>
-              {formatRole(assignableRole)}
+              {formatRoles(assignableRole)}
             </option>
           ))}
         </Select>
@@ -810,7 +811,7 @@ function PendingInvitations({
               <div className="rowMain">
                 <span className="rowTitle truncate">{invitation.email}</span>
                 <span className="rowMeta">
-                  {formatRole(invitation.role)} · Expires{" "}
+                  {formatRoles(invitation.role)} · Expires{" "}
                   {formatDate(invitation.expiresAt)}
                 </span>
               </div>
@@ -834,12 +835,6 @@ function lastActiveLabel({ lastActiveAt }: OrganizationMember) {
   return lastActiveAt
     ? `Last active ${formatDate(lastActiveAt)}`
     : "Never active";
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(value),
-  );
 }
 
 function roleDescription(role: OrganizationInvitationRole) {

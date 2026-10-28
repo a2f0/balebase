@@ -17,7 +17,7 @@ import type {
 } from "@balebase/validators/finance";
 import { syncPending } from "./financeConnectionActions";
 import { formatMoney } from "./financeFormat";
-import { countLabel, formatLabel } from "./labels";
+import { countLabel, formatDate, formatLabel } from "./labels";
 import { financeConnectionPath, handleNavigation } from "./workspacePaths";
 
 interface ConnectionHandlers {
@@ -331,7 +331,7 @@ function AccountCard({
 
 function syncTime(connection: FinanceConnection) {
   return connection.lastSyncedAt
-    ? `synced ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(connection.lastSyncedAt))}`
+    ? `synced ${formatDate(connection.lastSyncedAt)}`
     : "not synced yet";
 }
 

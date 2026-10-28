@@ -33,13 +33,12 @@ import {
   businessListReducer,
   copiedNotice,
   formatBusinessAddress,
-  formatBusinessDate,
   formatDuns,
   formatEin,
   initialBusinessListState,
 } from "./businessState";
 import { errorMessage } from "./errors";
-import { countLabel } from "./labels";
+import { countLabel, formatCalendarDate } from "./labels";
 import { useClipboard } from "./useClipboard";
 import { useFocusWhenFolded } from "./useFocusWhenFolded";
 import { useLoad } from "./useLoad";
@@ -502,7 +501,7 @@ function BusinessSummary({
   if (business.duns) facts.push(`DUNS ${formatDuns(business.duns)}`);
   if (business.incorporationDate) {
     facts.push(
-      `Incorporated ${formatBusinessDate(business.incorporationDate)}`,
+      `Incorporated ${formatCalendarDate(business.incorporationDate)}`,
     );
   }
   const address = formatBusinessAddress(business);
@@ -642,7 +641,7 @@ function BusinessDetailCard({
             <dt>Incorporation date</dt>
             <dd>
               {business.incorporationDate
-                ? formatBusinessDate(business.incorporationDate)
+                ? formatCalendarDate(business.incorporationDate)
                 : "Not provided"}
             </dd>
           </div>

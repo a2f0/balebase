@@ -20,11 +20,11 @@ import { OrganizationBilling } from "./OrganizationBilling";
 import { OrganizationAccessSettings } from "./OrganizationGroups";
 import { OrganizationMemberDetail } from "./OrganizationMemberDetail";
 import { OrganizationPeople } from "./OrganizationPeople";
-import { formatRole } from "./organizationPeopleState";
 import {
   canDeleteOrganization,
   canLeaveOrganizationWithOwnerCount,
   canManageOrganization,
+  formatRoles,
   type WorkspaceOrganization,
 } from "./organizationState";
 import { useAction } from "./useAction";
@@ -392,7 +392,7 @@ function OrganizationDetailsCard({
     <Card
       description={
         memberRole
-          ? `Active workspace · your role is ${formatRole(memberRole)}.`
+          ? `Active workspace · your role is ${formatRoles(memberRole)}.`
           : loadError
             ? "Your organization role could not be loaded."
             : "Loading your organization role…"

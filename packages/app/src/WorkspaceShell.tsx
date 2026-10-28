@@ -17,7 +17,7 @@ import {
 } from "react";
 import { AccountControl } from "./AccountControl";
 import type { AccountSession } from "./accountSessions";
-import type { WorkspaceOrganization } from "./organizationState";
+import { hasRole, type WorkspaceOrganization } from "./organizationState";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { readSidebarWidth } from "./sidebarWidth";
 import { useAction } from "./useAction";
@@ -421,15 +421,6 @@ function handleNavigation(
   }
   event.preventDefault();
   onNavigate(pathname);
-}
-
-export function hasRole(
-  roles: string | null | undefined,
-  expectedRole: string,
-) {
-  return (
-    roles?.split(",").some((role) => role.trim() === expectedRole) ?? false
-  );
 }
 
 function askOrganizationName() {

@@ -17,18 +17,14 @@ import type {
 import { useCallback, useRef, useState } from "react";
 import { api } from "./apiClient";
 import { ContractEditor } from "./ContractEditor";
-import {
-  ContractStatusBadge,
-  ContractSummary,
-  formatDate,
-} from "./ContractSummary";
+import { ContractStatusBadge, ContractSummary } from "./ContractSummary";
 import { ContractTemplates } from "./ContractTemplates";
 import {
   type ContractFilter,
   contractFilters,
   matchesFilter,
 } from "./contractFields";
-import { countLabel } from "./labels";
+import { countLabel, formatCalendarDate } from "./labels";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
 import {
@@ -285,7 +281,8 @@ function contractMeta(contract: ContractListItem) {
       ? `${contract.signedCount} of ${countLabel(contract.signerCount, "signer")} signed`
       : "No signers yet",
   ];
-  if (contract.dueDate) parts.push(`due ${formatDate(contract.dueDate)}`);
+  if (contract.dueDate)
+    parts.push(`due ${formatCalendarDate(contract.dueDate)}`);
   if (contract.senderName) parts.push(`from ${contract.senderName}`);
   return parts.join(" · ");
 }

@@ -6,6 +6,8 @@ import {
   canManageOrganization,
   createOrganizationSlug,
   editableOrganizationRoles,
+  formatRoles,
+  hasRole,
   organizationRoleValue,
   resolveActiveOrganizationId,
 } from "./organizationState";
@@ -41,6 +43,19 @@ describe("organization state", () => {
     expect(resolveActiveOrganizationId("removed", "removed", [])).toBe(
       undefined,
     );
+  });
+
+  it("reads each of several comma-separated roles", () => {
+    expect(hasRole("admin", "admin")).toBe(true);
+    expect(hasRole("member, admin", "admin")).toBe(true);
+    expect(hasRole("member", "owner", "admin")).toBe(false);
+    expect(hasRole("administrator", "admin")).toBe(false);
+    expect(hasRole(null, "admin")).toBe(false);
+    expect(hasRole(undefined, "admin")).toBe(false);
+    expect(formatRoles("member")).toBe("Member");
+    expect(formatRoles("admin,owner")).toBe("Admin, Owner");
+    expect(formatRoles(" admin , ,owner ")).toBe("Admin, Owner");
+    expect(formatRoles(null)).toBe("");
   });
 
   it("only lets organization managers invite members", () => {

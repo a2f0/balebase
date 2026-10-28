@@ -16,9 +16,9 @@ import type {
 } from "@balebase/validators/adminOrganizations";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { useCallback } from "react";
-import { formatDate, Identity } from "./adminDisplay";
+import { Identity } from "./adminDisplay";
 import { api } from "./apiClient";
-import { countLabel } from "./labels";
+import { countLabel, formatCalendarDate, formatDate } from "./labels";
 import { useLoad } from "./useLoad";
 import { adminOrganizationPath } from "./workspacePaths";
 
@@ -206,7 +206,7 @@ function OrganizationRequirements({
                     />
                   </td>
                   <td className="adminDate">
-                    {formatDate(new Date(`${requirement.dueDate}T12:00:00`))}
+                    {formatCalendarDate(requirement.dueDate)}
                   </td>
                   <td>
                     <Badge

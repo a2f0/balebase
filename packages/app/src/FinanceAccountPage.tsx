@@ -17,13 +17,8 @@ import { api } from "./apiClient";
 import { connectionTone } from "./FinanceAccounts";
 import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
 import { FinanceSyncSettings } from "./FinanceSyncSettings";
-import {
-  formatDateTime,
-  formatDay,
-  formatImportedHistory,
-  formatMoney,
-} from "./financeFormat";
-import { formatLabel } from "./labels";
+import { formatImportedHistory, formatMoney } from "./financeFormat";
+import { formatCalendarDate, formatDateTime, formatLabel } from "./labels";
 import { useLoad } from "./useLoad";
 import {
   financeConnectionPath,
@@ -166,7 +161,7 @@ function RecentTransactions({
                       {transaction.merchantName ?? transaction.name}
                     </a>
                     <span className="rowMeta">
-                      {formatDay(transaction.transactionDate)}
+                      {formatCalendarDate(transaction.transactionDate)}
                       {transaction.pending && " · Pending"}
                     </span>
                   </div>

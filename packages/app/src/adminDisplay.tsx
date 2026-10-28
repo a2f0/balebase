@@ -19,9 +19,3 @@ export function Identity({
     </div>
   );
 }
-
-export function formatDate(value: Date | number | string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-  }).format(new Date(value));
-}

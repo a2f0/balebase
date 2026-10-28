@@ -22,7 +22,7 @@ import { type FormEvent, useState } from "react";
 import { FinanceTransactionFilters } from "./FinanceTransactionFilters";
 import { formatMoney } from "./financeFormat";
 import { InfiniteScroll } from "./InfiniteScroll";
-import { formatLabel } from "./labels";
+import { formatCalendarDate, formatLabel } from "./labels";
 import {
   financeTransactionPath,
   handleNavigation,
@@ -274,7 +274,10 @@ export function FinanceTransactionRow({
         className="financeTransactionDate"
         dateTime={transaction.transactionDate}
       >
-        {formatDate(transaction.transactionDate)}
+        {formatCalendarDate(transaction.transactionDate, {
+          day: "numeric",
+          month: "short",
+        })}
       </time>
       <div className="rowMain financeTransactionMain">
         <a
@@ -498,11 +501,4 @@ function hasAnnotation(transaction: FinanceTransaction) {
   return Boolean(
     annotation.note || annotation.labels.length || annotation.reviewed,
   );
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    month: "short",
-  }).format(new Date(`${value}T12:00:00`));
 }

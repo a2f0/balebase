@@ -13,11 +13,12 @@ import {
 import type { AdminUser } from "@balebase/validators/adminUsers";
 import { useCallback, useState } from "react";
 import { AdminDeletionMenu } from "./AdminDeletionMenu";
-import { formatDate, Identity } from "./adminDisplay";
+import { Identity } from "./adminDisplay";
 import { useAdminUserDeletion } from "./adminUserDeletion";
 import { adminUserListQuery, adminUserPageSize } from "./adminUserList";
 import { api } from "./apiClient";
-import { countLabel } from "./labels";
+import { countLabel, formatDate } from "./labels";
+import { formatRoles, hasRole } from "./organizationState";
 import { useLoad } from "./useLoad";
 
 interface UserListing {
@@ -187,8 +188,7 @@ function UserRow({
           busy={lifecycle.userId === user.id}
           disabled={
             lifecycle.userId !== undefined ||
-            (!user.deletionRequestedAt &&
-              user.role.split(",").some((role) => role.trim() === "admin"))
+            (!user.deletionRequestedAt && hasRole(user.role, "admin"))
           }
           label={
             user.deletionRequestedAt ? "Cancel deletion" : "Mark for deletion"
@@ -223,13 +223,9 @@ function UserDeletionStatus({ user }: { user: AdminUser }) {
 }
 
 function RoleBadge({ role }: { role: string }) {
-  const roles = role
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
   return (
-    <Badge tone={roles.includes("admin") ? "info" : "neutral"}>
-      {roles.map(capitalize).join(", ")}
+    <Badge tone={hasRole(role, "admin") ? "info" : "neutral"}>
+      {formatRoles(role)}
     </Badge>
   );
 }
@@ -278,8 +274,4 @@ function statusFor(user: AdminUser): { label: string; tone: BadgeTone } {
   if (user.banned) return { label: "Banned", tone: "danger" };
   if (user.emailVerified) return { label: "Verified", tone: "success" };
   return { label: "Unverified", tone: "warning" };
-}
-
-function capitalize(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
