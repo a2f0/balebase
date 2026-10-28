@@ -1,6 +1,7 @@
 const diagnosticTargets = ["web", "android", "ios", "api"] as const;
 
 export type DiagnosticTarget = (typeof diagnosticTargets)[number];
+export type ReleaseTier = "production" | "staging";
 export type DiagnosticSource =
   | "boundary"
   | "uncaught-react"
@@ -13,7 +14,7 @@ export type DiagnosticSource =
 
 export interface SentryBuild {
   dsn: string;
-  environment: "staging" | "production";
+  environment: ReleaseTier;
   release: string;
   target: DiagnosticTarget;
 }
@@ -21,6 +22,20 @@ export interface SentryBuild {
 export interface SentryConfig extends SentryBuild {
   origin: string;
   paths: ReadonlySet<string>;
+}
+
+/** A build's tier from the named environment variable; production when unset. */
+export function releaseTier(
+  variable: string,
+  value: string | undefined,
+): ReleaseTier {
+  const tier = (value ?? "production").trim().toLowerCase();
+  if (tier !== "production" && tier !== "staging") {
+    throw new Error(
+      `Unknown ${variable}=${JSON.stringify(value)}. Expected production or staging.`,
+    );
+  }
+  return tier;
 }
 
 export function isHostedSentryDsn(value: string): boolean {

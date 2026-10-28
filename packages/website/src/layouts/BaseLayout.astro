@@ -5,16 +5,11 @@
  */
 import "@balebase/ui/styles.css";
 import "../styles/global.css";
+import { releaseTier } from "@balebase/diagnostics/config";
 import { productName } from "@balebase/ui/brand";
 import SiteFooter from "../components/SiteFooter.astro";
 import SiteHeader from "../components/SiteHeader.astro";
-import {
-  canonicalUrl,
-  releaseTier,
-  robotsMeta,
-  scriptJson,
-  socialImage,
-} from "../search";
+import { canonicalUrl, robotsMeta, scriptJson, socialImage } from "../search";
 
 interface Props {
   description: string;
@@ -30,7 +25,7 @@ interface Props {
 
 const { description, indexed = true, structuredData, title } = Astro.props;
 const robots = robotsMeta(
-  releaseTier(import.meta.env.PUBLIC_RELEASE_TIER),
+  releaseTier("PUBLIC_RELEASE_TIER", import.meta.env.PUBLIC_RELEASE_TIER),
   indexed,
 );
 // Only an indexed page names a canonical URL; a noindex page naming one

@@ -1,6 +1,7 @@
 import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pdfjsAssets } from "@balebase/app/vite";
+import { type ReleaseTier, releaseTier } from "@balebase/diagnostics/config";
 import { sentryAssets } from "@balebase/diagnostics/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from "vite";
@@ -22,26 +23,13 @@ import { offlineShell } from "./offlineShell.ts";
 export const appUrl = "https://app.balebase.com/";
 export const noindex = "noindex, nofollow";
 
-export type ReleaseTier = "production" | "staging";
-
-/** The build's tier from VITE_RELEASE_TIER; production when unset. */
-export function releaseTier(value: string | undefined): ReleaseTier {
-  const tier = (value ?? "production").trim().toLowerCase();
-  if (tier !== "production" && tier !== "staging") {
-    throw new Error(
-      `Unknown VITE_RELEASE_TIER=${JSON.stringify(value)}. Expected production or staging.`,
-    );
-  }
-  return tier;
-}
-
 /**
  * buildSentryApp.ts sets VITE_RELEASE_TIER from the release's environment
  * argument; a plain `bun run build` is production.
  */
 export function searchIndexing(override?: ReleaseTier): Plugin {
   const { VITE_RELEASE_TIER } = process.env;
-  const tier = override ?? releaseTier(VITE_RELEASE_TIER);
+  const tier = override ?? releaseTier("VITE_RELEASE_TIER", VITE_RELEASE_TIER);
   const tags: HtmlTagDescriptor[] =
     tier === "production"
       ? [

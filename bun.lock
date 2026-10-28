@@ -169,6 +169,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@a2f0/ct-client": "0.1.4",
+        "@balebase/diagnostics": "workspace:*",
         "@balebase/ui": "workspace:*",
         "astro": "7.4.0",
       },
