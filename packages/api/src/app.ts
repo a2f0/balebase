@@ -20,7 +20,9 @@ import {
   requireOrganizationPluginAccess,
   requireRole,
 } from "./authMiddleware";
-import { billing, handleStripeWebhook, syncOrganizationSeats } from "./billing";
+import { billing } from "./billing";
+import { syncOrganizationSeats } from "./billingSeats";
+import { handleStripeWebhook } from "./billingWebhook";
 import { businesses } from "./businesses";
 import { handleCheckrWebhook } from "./checkrSync";
 import { contracts } from "./contracts";
