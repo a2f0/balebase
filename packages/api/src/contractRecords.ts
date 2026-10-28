@@ -1,3 +1,4 @@
+import { productName } from "@balebase/ui/brand";
 import type {
   ContractStatus,
   FieldType,
@@ -254,7 +255,7 @@ export async function mailFor(
     contractId: contract.id,
     dueDate: contract.due_date,
     message: contract.message,
-    organizationName: row?.organization_name ?? "Balebase",
+    organizationName: row?.organization_name ?? productName,
     sender:
       row?.sender_email && row.sender_name
         ? { email: row.sender_email, name: row.sender_name }

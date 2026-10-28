@@ -22,11 +22,6 @@ const endpoints = {
     body: "json",
     response: "json",
   }),
-  syncConnection: endpoint<typeof financeRoutes.syncConnection>({
-    method: "POST",
-    path: "/api/finance/connections/:id/sync",
-    response: "json",
-  }),
   startSync: endpoint<typeof financeRoutes.startSync>({
     method: "POST",
     path: "/api/finance/connections/:id/sync-jobs",
@@ -253,9 +248,6 @@ function financeSyncApi(transport: Transport) {
         params: { id },
         body: { dailySync },
       });
-    },
-    syncConnection(id: string) {
-      return transport.call(endpoints.syncConnection, { params: { id } });
     },
   };
 }

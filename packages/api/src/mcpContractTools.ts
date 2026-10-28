@@ -1,3 +1,4 @@
+import { productName } from "@balebase/ui/brand";
 import type { JsonSchemaType } from "@modelcontextprotocol/server";
 import {
   boolean,
@@ -400,8 +401,7 @@ export const contractTools: McpTool[] = [
       },
       required: ["state"],
     },
-    description:
-      "Requests a Checkr background check at a work location. Balebase emails the person, who reviews the disclosures, enters their details, and signs the authorization in the app; Balebase then orders the report. Credit checks are tracked manually.",
+    description: `Requests a Checkr background check at a work location. ${productName} emails the person, who reviews the disclosures, enters their details, and signs the authorization in the app; ${productName} then orders the report. Credit checks are tracked manually.`,
     method: "POST",
     name: "request_checkr_screening",
     openWorld: true,

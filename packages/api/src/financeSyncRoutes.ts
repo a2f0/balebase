@@ -7,6 +7,7 @@ import {
   type SyncJobRow,
   toSyncJob,
 } from "./financeSyncJobs";
+import { delay, waitForRun } from "./legacyJobRun";
 import { respond } from "./respond";
 
 async function requestSync(context: FinanceContext) {
@@ -57,33 +58,28 @@ export async function startConnectionSync(context: FinanceContext) {
  * the durable job remains independent and never reports uncompleted work as success. */
 export async function legacySyncConnection(context: FinanceContext) {
   const requested = await requestSync(context);
-  let job: SyncJobRow;
   if (!requested) return context.json({ error: "Connection not found." }, 404);
-  job = requested;
-  for (let poll = 0; poll < 100; poll++) {
-    const current: SyncJobRow | null = await context.env.DB.prepare(
-      "SELECT * FROM job_runs WHERE id = ?",
-    )
-      .bind(job.id)
-      .first<SyncJobRow>();
-    if (!current) return context.json({ error: "Connection not found." }, 404);
-    job = current;
-    if (job.status === "succeeded")
-      return respond(context, financeRoutes.syncConnection, {
-        added: job.added,
-        modified: job.modified,
-        removed: job.removed,
-      });
-    if (job.status === "failed" || job.status === "cancelled")
-      return context.json(
-        {
-          code: job.error_code ?? "SYNC_CANCELLED",
-          error: job.error_message ?? "Sync cancelled.",
-        },
-        502,
-      );
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
+  const job = await waitForRun<SyncJobRow>(
+    context.env.DB,
+    requested.id,
+    100,
+    () => delay(250),
+  );
+  if (!job) return context.json({ error: "Connection not found." }, 404);
+  if (job.status === "succeeded")
+    return respond(context, financeRoutes.syncConnection, {
+      added: job.added,
+      modified: job.modified,
+      removed: job.removed,
+    });
+  if (job.status === "failed" || job.status === "cancelled")
+    return context.json(
+      {
+        code: job.error_code ?? "SYNC_CANCELLED",
+        error: job.error_message ?? "Sync cancelled.",
+      },
+      502,
+    );
   return context.json(
     {
       error:

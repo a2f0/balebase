@@ -3,9 +3,8 @@ import {
   adminUsersRoutes,
 } from "@balebase/validators/adminUsers";
 import { Hono } from "hono";
-import { type AuthVariables, requireRole } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 import {
   cancelUserDeletion,
   requestUserDeletion,
@@ -16,11 +15,7 @@ interface AdminUserRow extends Omit<AdminUser, "banned" | "emailVerified"> {
   emailVerified: number;
 }
 
-export const adminUsers = new Hono<{
-  Bindings: Bindings;
-  Variables: AuthVariables;
-}>();
-adminUsers.use("*", requireRole("admin"));
+export const adminUsers = new Hono<ApiEnv>();
 adminUsers.use("*", async (context, next) => {
   if (context.get("authSession").session.impersonatedBy) {
     return context.json(

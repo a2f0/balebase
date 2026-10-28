@@ -12,10 +12,9 @@ import { apiKeys, mcpToolRequest } from "./apiKeys";
 import { audits } from "./audits";
 import { createAuth } from "./auth";
 import {
-  type AuthVariables,
+  type ApiEnv,
   requireApiKey,
   requireAuth,
-  requireAuthOrganizationSeat,
   requireBillingOrganization,
   requireOrganization,
   requireOrganizationPluginAccess,
@@ -38,16 +37,12 @@ import { organizationGroups, requireCapability } from "./organizationGroups";
 import { organizationSettings } from "./organizationSettings";
 import { respond } from "./respond";
 import { signing } from "./signing";
-import type { Bindings } from "./types";
 import { respondToUnexpectedError } from "./unexpectedError";
 import { userDeletion } from "./userDeletion";
 
 const apiVersionHeader = "API-Version";
 
-const app = new Hono<{
-  Bindings: Bindings;
-  Variables: AuthVariables;
-}>();
+const app = new Hono<ApiEnv>();
 
 // Every response names the API version, errors and preflights included, so
 // the client can show which deploy answered.
@@ -77,7 +72,6 @@ app.use(
   "/api/auth/organization/*",
   requireAuth,
   requireOrganizationPluginAccess,
-  requireAuthOrganizationSeat,
 );
 app.post("/api/auth/organization/leave", async (context) => {
   const input = (await context.req.raw
@@ -176,31 +170,21 @@ app.all(
   },
 );
 
-app.get("/api/admin", requireAuth, requireRole("admin"), (context) =>
+// Mount every admin router below /api/admin so this guard covers it.
+app.use("/api/admin/*", requireAuth, requireRole("admin"));
+app.get("/api/admin", (context) =>
   respond(context, sessionRoutes.admin, {
     user: context.get("authSession").user,
   }),
 );
+app.route("/api/admin/jobs", adminJobs);
+app.route("/api/admin/audit-templates", adminAuditTemplates);
+app.route("/api/admin/organizations", adminOrganizations);
+app.route("/api/admin/users", adminUsers);
 
 app.use("/api/account-settings/*", requireAuth);
 app.route("/api/account-settings", accountSettings);
 app.route("/api/account-settings/deletion", userDeletion);
-
-app.use("/api/admin/jobs", requireAuth);
-app.use("/api/admin/jobs/*", requireAuth);
-app.route("/api/admin/jobs", adminJobs);
-
-app.use("/api/admin/audit-templates", requireAuth, requireRole("admin"));
-app.use("/api/admin/audit-templates/*", requireAuth, requireRole("admin"));
-app.route("/api/admin/audit-templates", adminAuditTemplates);
-
-app.use("/api/admin/organizations", requireAuth, requireRole("admin"));
-app.use("/api/admin/organizations/*", requireAuth, requireRole("admin"));
-app.route("/api/admin/organizations", adminOrganizations);
-
-app.use("/api/admin/users", requireAuth);
-app.use("/api/admin/users/*", requireAuth);
-app.route("/api/admin/users", adminUsers);
 
 app.use("/api/audits", requireAuth, requireOrganization);
 app.use("/api/audits/*", requireAuth, requireOrganization);

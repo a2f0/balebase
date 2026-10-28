@@ -5,7 +5,7 @@ import {
   type TemplateVersion,
 } from "@balebase/validators/contractTemplates";
 import { type Context, Hono } from "hono";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { draftStatements } from "./contractDraft";
 import { InvalidPdfError, inspectPdf, sha256Hex } from "./contractPdf";
 import { eventStatement } from "./contractRecords";
@@ -16,10 +16,8 @@ import {
 } from "./contractTemplateDefinition";
 import { normalizeFilename } from "./filenames";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
-type TemplateEnv = { Bindings: Bindings; Variables: AuthVariables };
-type TemplateContext = Context<TemplateEnv>;
+type TemplateContext = Context<ApiEnv>;
 interface VersionRow {
   created_at: string;
   created_by_name: string | null;
@@ -43,7 +41,7 @@ interface DocumentInput {
   sha256: string;
 }
 
-const contractTemplates = new Hono<TemplateEnv>();
+const contractTemplates = new Hono<ApiEnv>();
 
 contractTemplates.get("/", async (context) => {
   const result = await context.env.DB.prepare(

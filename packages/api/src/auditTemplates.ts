@@ -6,7 +6,8 @@ import type {
   AuditTemplateVersion,
 } from "@balebase/validators/audits";
 import { type ActivityActor, activityBatch } from "./activity";
-import { isRecord, parseAuditDefinition, validText } from "./auditDefinition";
+import { parseAuditDefinition } from "./auditDefinition";
+import { isRecord, validText } from "./jsonInput";
 import { nfpa70eStarter } from "./nfpa70eStarter";
 import { residentialCoreStarter } from "./residentialAuditLibrary";
 
@@ -344,7 +345,10 @@ async function loadTemplate(
 }
 
 export function templateSaveInput(value: unknown): TemplateSaveInput | string {
-  if (!isRecord(value) || !validText(value.name, 200)) {
+  if (
+    !isRecord<keyof TemplateSaveInput>(value) ||
+    !validText(value.name, 200)
+  ) {
     return "A template name is required.";
   }
   const definition = parseAuditDefinition(value.definition);

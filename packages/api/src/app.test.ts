@@ -5,6 +5,7 @@ import { createAuth } from "./auth";
 import { testBindings } from "./testing/bindings";
 import { toD1 } from "./testing/d1";
 import { createTestDatabase } from "./testing/database";
+import { seedMember, seedUser } from "./testing/seed";
 
 describe("api", () => {
   it("applies native origins through the real authenticated route middleware", async () => {
@@ -228,24 +229,32 @@ describe("api", () => {
     expect(response.status).toBe(401);
   });
 
-  it("requires platform admin access even for an organization owner", async () => {
+  it("requires platform admin access on every admin route, even for an organization owner", async () => {
     const fixture = await protectedOrganizationFixture();
-    for (const [path, method] of [
-      [`/api/admin/organizations/${fixture.organizationId}`, "GET"],
-      ["/api/admin/users", "GET"],
-      ["/api/admin/users/user-id/deletion", "POST"],
-      ["/api/admin/users/user-id/deletion", "DELETE"],
-      ["/api/admin/audit-templates", "GET"],
-      ["/api/admin/audit-templates", "POST"],
-      ["/api/admin/audit-templates/nfpa70e_global", "PUT"],
-    ] as const) {
+    const adminRoutes = app.routes.filter(
+      ({ method, path }) =>
+        method !== "ALL" && /^\/api\/admin(?:\/|$)/.test(path),
+    );
+    expect(adminRoutes.map(({ path }) => path.split("/")[3])).toEqual(
+      expect.arrayContaining([
+        undefined,
+        "audit-templates",
+        "jobs",
+        "organizations",
+        "users",
+      ]),
+    );
+    for (const { method, path } of adminRoutes) {
+      const url = path.replaceAll(/:\w+/g, fixture.organizationId);
+      const signedOut = await app.request(url, { method }, authBindings());
+      expect([method, path, signedOut.status]).toEqual([method, path, 401]);
       const response = await app.request(
-        path,
+        url,
         { headers: { cookie: fixture.cookie }, method },
         fixture.bindings,
         fixture.executionContext,
       );
-      expect(response.status).toBe(403);
+      expect([method, path, response.status]).toEqual([method, path, 403]);
       const body: unknown = await response.json();
       expect(body).toEqual({
         error: "Insufficient permissions.",
@@ -391,6 +400,59 @@ describe("api", () => {
         )
         .get(fixture.memberId, fixture.organizationId),
     ).toEqual({ count: 1 });
+  });
+
+  it("names the missing seat on organization plugin routes but lets the member leave", async () => {
+    const fixture = await protectedOrganizationFixture();
+    // An earlier owner holds the Free plan's one seat.
+    seedUser(fixture.database, { id: "seat-holder", name: "Seat Holder" });
+    seedMember(fixture.database, {
+      createdAt: "2026-01-01",
+      id: "seat-member",
+      organizationId: fixture.organizationId,
+      role: "owner",
+      userId: "seat-holder",
+    });
+    fixture.database
+      .query(
+        "UPDATE member SET createdAt = '2026-02-01', twoFactorRequired = 0 WHERE id = ?",
+      )
+      .run(fixture.memberId);
+    const request = (path: string, body?: Record<string, unknown>) =>
+      app.request(
+        path,
+        {
+          headers: {
+            "content-type": "application/json",
+            cookie: fixture.cookie,
+            origin: "https://app.test",
+          },
+          ...(body ? { body: JSON.stringify(body), method: "POST" } : {}),
+        },
+        fixture.bindings,
+        fixture.executionContext,
+      );
+    const members = `/api/auth/organization/list-members?organizationId=${fixture.organizationId}`;
+
+    const owner = await request(members);
+    expect(owner.status).toBe(403);
+    expect(await owner.json()).toMatchObject({ code: "UPGRADE_REQUIRED" });
+    fixture.database
+      .query("UPDATE member SET role = 'member' WHERE id = ?")
+      .run(fixture.memberId);
+    const member = await request(members);
+    expect(member.status).toBe(403);
+    expect(await member.json()).toMatchObject({ code: "SEAT_UNAVAILABLE" });
+
+    const leave = await request("/api/auth/organization/leave", {
+      organizationId: fixture.organizationId,
+    });
+    expect(leave.status).toBe(200);
+    expect(
+      fixture.database
+        .query("SELECT COUNT(*) AS count FROM member WHERE id = ?")
+        .get(fixture.memberId),
+    ).toEqual({ count: 0 });
   });
 });
 

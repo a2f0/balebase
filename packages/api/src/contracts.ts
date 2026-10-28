@@ -7,7 +7,7 @@ import {
   contractsRoutes,
 } from "@balebase/validators/contracts";
 import { type Context, Hono } from "hono";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { draftInput, draftStatements, validEmail } from "./contractDraft";
 import { sendVoided } from "./contractMail";
 import { InvalidPdfError, inspectPdf, sha256Hex } from "./contractPdf";
@@ -29,13 +29,8 @@ import {
 import { contractTemplates } from "./contractTemplates";
 import { normalizeFilename } from "./filenames";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
-type ContractEnv = {
-  Bindings: Bindings;
-  Variables: AuthVariables;
-};
-type ContractContext = Context<ContractEnv>;
+type ContractContext = Context<ApiEnv>;
 
 // Stamping holds the document in memory several times over, so this stays
 // well inside a Worker's memory limit.
@@ -56,7 +51,7 @@ interface SummaryRow {
   updated_at: string;
 }
 
-const contracts = new Hono<ContractEnv>();
+const contracts = new Hono<ApiEnv>();
 
 contracts.route("/templates", contractTemplates);
 

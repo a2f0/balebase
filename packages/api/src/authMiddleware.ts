@@ -1,3 +1,4 @@
+import { productName } from "@balebase/ui/brand";
 import type { Context, Next } from "hono";
 import { createMiddleware } from "hono/factory";
 import {
@@ -11,6 +12,7 @@ import {
 import type { AuthSession } from "./auth";
 import { createAuth } from "./auth";
 import { organizationUserHasSeat } from "./billing";
+import { isRecord } from "./jsonInput";
 import { isOrganizationOwner } from "./organizationMembers";
 import type { Bindings } from "./types";
 
@@ -22,24 +24,12 @@ export interface AuthVariables {
   organizationRole: string;
 }
 
-type AuthEnv = {
+export type ApiEnv = {
   Bindings: Bindings;
   Variables: AuthVariables;
 };
 
-const organizationSeatRouteExemptions = new Set([
-  "/api/auth/organization/accept-invitation",
-  "/api/auth/organization/check-slug",
-  "/api/auth/organization/create",
-  "/api/auth/organization/get-invitation",
-  "/api/auth/organization/leave",
-  "/api/auth/organization/list",
-  "/api/auth/organization/list-user-invitations",
-  "/api/auth/organization/reject-invitation",
-  "/api/auth/organization/set-active",
-]);
-
-export const requireAuth = createMiddleware<AuthEnv>(async (context, next) => {
+export const requireAuth = createMiddleware<ApiEnv>(async (context, next) => {
   const token = apiKeyFromHeader(context.req.header("Authorization"));
   if (token !== undefined) {
     const failure = await authenticateRequestApiKey(context, token);
@@ -77,23 +67,21 @@ export const requireAuth = createMiddleware<AuthEnv>(async (context, next) => {
  * Authenticates the MCP endpoint, which accepts only API keys: tools reach the
  * workspace through the same per-route API-key policy as REST calls.
  */
-export const requireApiKey = createMiddleware<AuthEnv>(
-  async (context, next) => {
-    const token = apiKeyFromHeader(context.req.header("Authorization"));
-    if (token === undefined) {
-      context.header("WWW-Authenticate", 'Bearer realm="Balebase"');
-      return context.json(
-        { error: "An API key is required. Send it as a Bearer token." },
-        401,
-      );
-    }
-    const failure = await authenticateRequestApiKey(context, token);
-    return failure ?? next();
-  },
-);
+export const requireApiKey = createMiddleware<ApiEnv>(async (context, next) => {
+  const token = apiKeyFromHeader(context.req.header("Authorization"));
+  if (token === undefined) {
+    context.header("WWW-Authenticate", `Bearer realm="${productName}"`);
+    return context.json(
+      { error: "An API key is required. Send it as a Bearer token." },
+      401,
+    );
+  }
+  const failure = await authenticateRequestApiKey(context, token);
+  return failure ?? next();
+});
 
 async function authenticateRequestApiKey(
-  context: Context<AuthEnv>,
+  context: Context<ApiEnv>,
   token: string,
 ) {
   const now = new Date();
@@ -102,7 +90,7 @@ async function authenticateRequestApiKey(
     if (result.status === 401) {
       context.header(
         "WWW-Authenticate",
-        'Bearer realm="Balebase", error="invalid_token"',
+        `Bearer realm="${productName}", error="invalid_token"`,
       );
     }
     return context.json({ error: result.error }, result.status);
@@ -143,7 +131,7 @@ async function recordUserActivity(
 }
 
 function requireSessionOrganization(requiresSeat: (role: string) => boolean) {
-  return createMiddleware<AuthEnv>(async (context, next) => {
+  return createMiddleware<ApiEnv>(async (context, next) => {
     const session = context.get("authSession");
     // A key belongs to one organization; it never falls back to another.
     const apiKey = context.get("apiKey");
@@ -175,7 +163,7 @@ const organizationPluginAccessExemptPaths = new Set([
   "/api/auth/organization/set-active",
 ]);
 
-export const requireOrganizationPluginAccess = createMiddleware<AuthEnv>(
+export const requireOrganizationPluginAccess = createMiddleware<ApiEnv>(
   async (context, next) => {
     if (organizationPluginAccessExemptPaths.has(context.req.path)) {
       return next();
@@ -201,12 +189,14 @@ export const requireOrganizationPluginAccess = createMiddleware<AuthEnv>(
           session.session.activeOrganizationId,
           session.user.defaultOrganizationId,
         );
-    return authorizeOrganization(context, next, candidates, () => false);
+    // A member without a Free-plan seat can still leave the organization.
+    const requiresSeat = context.req.path !== "/api/auth/organization/leave";
+    return authorizeOrganization(context, next, candidates, () => requiresSeat);
   },
 );
 
 function listsCurrentUsersTeamsAcrossOrganizations(
-  context: Context<AuthEnv>,
+  context: Context<ApiEnv>,
   currentUserId: string,
 ) {
   if (
@@ -224,7 +214,7 @@ function listsCurrentUsersTeamsAcrossOrganizations(
 }
 
 async function filterTeamsRequiringAccess(
-  context: Context<AuthEnv>,
+  context: Context<ApiEnv>,
   next: Next,
 ) {
   const session = context.get("authSession");
@@ -281,7 +271,7 @@ async function filterTeamsRequiringAccess(
 }
 
 async function authorizeOrganization(
-  context: Context<AuthEnv>,
+  context: Context<ApiEnv>,
   next: Next,
   candidates: string[],
   requiresSeat: (role: string) => boolean,
@@ -369,7 +359,7 @@ async function authorizeOrganization(
 }
 
 async function organizationIdsFromRequest(
-  context: Context<AuthEnv>,
+  context: Context<ApiEnv>,
   activeTeamId: string | null | undefined,
 ) {
   const organizationIds: string[] = [];
@@ -445,10 +435,6 @@ const organizationPluginPathsUsingActiveTeam = new Set([
   "/api/auth/organization/list-team-members",
 ]);
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 function stringProperty(value: Record<string, unknown>, key: string) {
   const property = value[key];
   return typeof property === "string" && property ? property : undefined;
@@ -474,155 +460,6 @@ async function organizationIdForSlug(database: D1Database, slug: string) {
   return record?.organizationId;
 }
 
-export const requireAuthOrganizationSeat = createMiddleware<AuthEnv>(
-  async (context, next) => {
-    if (organizationSeatRouteExemptions.has(context.req.path)) return next();
-    const session = context.get("authSession");
-    if (listsCurrentUsersTeamsAcrossOrganizations(context, session.user.id)) {
-      return next();
-    }
-    const authorizedOrganizationId = context.get("organizationId");
-    const target = authorizedOrganizationId
-      ? { conflict: false, organizationId: authorizedOrganizationId }
-      : await authOrganizationTarget(context, session);
-    if (target.conflict) {
-      return context.json(
-        { error: "Organization selectors do not match." },
-        400,
-      );
-    }
-    if (!target.organizationId) return next();
-    if (
-      !(await organizationUserHasSeat(
-        context.env.DB,
-        target.organizationId,
-        session.user.id,
-        context.env.STRIPE_PRO_PRICE_ID,
-        context.env.STRIPE_PRO_LEGACY_PRICE_IDS,
-      ))
-    ) {
-      return context.json(
-        {
-          error:
-            "This organization's Free plan includes one user. Ask an owner to upgrade or remove another member.",
-        },
-        403,
-      );
-    }
-    return next();
-  },
-);
-
-async function authOrganizationTarget(
-  context: Context<AuthEnv>,
-  session: AuthSession,
-) {
-  const body = (await context.req.raw
-    .clone()
-    .json()
-    .catch(() => null)) as {
-    data?: { organizationId?: unknown; [key: string]: unknown };
-    invitationId?: unknown;
-    memberId?: unknown;
-    memberIdOrEmail?: unknown;
-    organizationId?: unknown;
-    organizationSlug?: unknown;
-    teamId?: unknown;
-    [key: string]: unknown;
-  } | null;
-  const targets = new Set<string>();
-  addStringValue(targets, body?.organizationId);
-  addStringValue(targets, body?.data?.organizationId);
-  addStringValue(targets, context.req.query("organizationId"));
-
-  for (const slugValue of [
-    body?.organizationSlug,
-    context.req.query("organizationSlug"),
-  ]) {
-    const slug = stringValue(slugValue);
-    if (!slug) continue;
-    const organization = await context.env.DB.prepare(
-      `SELECT id FROM organization WHERE slug = ? AND deletedAt IS NULL`,
-    )
-      .bind(slug)
-      .first<{ id: string }>();
-    if (organization) targets.add(organization.id);
-  }
-
-  const teamId = stringValue(body?.teamId ?? context.req.query("teamId"));
-  if (teamId) {
-    await addResourceOrganization(
-      targets,
-      context.env.DB,
-      `SELECT organizationId FROM team WHERE id = ?`,
-      teamId,
-    );
-  }
-
-  const invitationId = stringValue(
-    body?.invitationId ?? context.req.query("invitationId"),
-  );
-  if (invitationId) {
-    await addResourceOrganization(
-      targets,
-      context.env.DB,
-      `SELECT organizationId FROM invitation WHERE id = ?`,
-      invitationId,
-    );
-  }
-
-  const memberIdOrEmail = stringValue(body?.memberIdOrEmail);
-  const memberId =
-    stringValue(body?.memberId) ??
-    (memberIdOrEmail && !memberIdOrEmail.includes("@")
-      ? memberIdOrEmail
-      : null);
-  if (memberId) {
-    await addResourceOrganization(
-      targets,
-      context.env.DB,
-      `SELECT organizationId FROM member WHERE id = ?`,
-      memberId,
-    );
-  }
-
-  if (targets.size > 0) {
-    return {
-      conflict: targets.size > 1,
-      organizationId: targets.values().next().value ?? null,
-    };
-  }
-  return {
-    conflict: false,
-    organizationId:
-      session.session.activeOrganizationId ??
-      session.user.defaultOrganizationId ??
-      null,
-  };
-}
-
-async function addResourceOrganization(
-  targets: Set<string>,
-  database: D1Database,
-  query: string,
-  resourceId: string,
-) {
-  const resource = await database
-    .prepare(query)
-    .bind(resourceId)
-    .first<{ organizationId: string }>();
-  if (resource) targets.add(resource.organizationId);
-}
-
-function addStringValue(targets: Set<string>, value: unknown) {
-  const string = stringValue(value);
-  if (string) targets.add(string);
-}
-
-function stringValue(value: unknown) {
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-
 function organizationCandidates(
   activeOrganizationId: string | null | undefined,
   defaultOrganizationId: string | null | undefined,
@@ -637,7 +474,7 @@ function organizationCandidates(
 }
 
 export function requireRole(role: "admin" | "user") {
-  return createMiddleware<AuthEnv>(async (context, next) => {
+  return createMiddleware<ApiEnv>(async (context, next) => {
     const roles = context.get("authSession").user.role.split(",");
 
     if (!roles.includes(role)) {

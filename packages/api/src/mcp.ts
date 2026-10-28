@@ -1,3 +1,4 @@
+import { productName } from "@balebase/ui/brand";
 import {
   type CallToolResult,
   createMcpHandler,
@@ -7,7 +8,7 @@ import {
 import type { Context } from "hono";
 import { version } from "../package.json";
 import type { ApiKeyAccess } from "./apiKeys";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { auditTools } from "./mcpAuditTools";
 import { contractTools } from "./mcpContractTools";
 import { financeTools } from "./mcpFinanceTools";
@@ -15,9 +16,6 @@ import { issueTools } from "./mcpIssueTools";
 import { libraryTools } from "./mcpLibraryTools";
 import { type McpTool, toolAccess, toolInputSchema } from "./mcpToolSchema";
 import { workspaceTools } from "./mcpWorkspaceTools";
-import type { Bindings } from "./types";
-
-type McpEnv = { Bindings: Bindings; Variables: AuthVariables };
 
 /** Runs a request through the API itself, with every route's own checks. */
 export type ApiDispatch = (request: Request) => Response | Promise<Response>;
@@ -41,7 +39,7 @@ export const mcpTools: McpTool[] = [
  * to direct API calls.
  */
 export function handleMcpRequest(
-  context: Context<McpEnv>,
+  context: Context<ApiEnv>,
   dispatch: ApiDispatch,
 ) {
   const apiKey = context.get("apiKey");
@@ -68,7 +66,7 @@ interface ForwardedRequest {
 
 function createServer(access: ApiKeyAccess, forward: ForwardedRequest) {
   const server = new McpServer(
-    { name: "balebase", title: "Balebase", version },
+    { name: "balebase", title: productName, version },
     {
       cacheHints: {
         "server/discover": { cacheScope: "private", ttlMs: toolListTtlMs },
@@ -107,7 +105,7 @@ function createServer(access: ApiKeyAccess, forward: ForwardedRequest) {
 
 function serverInstructions(access: ApiKeyAccess) {
   return [
-    "Balebase is an organization workspace: audits and checklists, equipment, contracts and e-signature, the shared inbox, the document library, finance, businesses, and employee forms.",
+    `${productName} is an organization workspace: audits and checklists, equipment, contracts and e-signature, the shared inbox, the document library, finance, businesses, and employee forms.`,
     access === "write"
       ? "This API key can read and change data in one organization."
       : "This API key is read-only: it can read data in one organization but cannot change it.",

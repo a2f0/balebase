@@ -1,3 +1,4 @@
+import { isRecord } from "./jsonInput";
 import type { Bindings } from "./types";
 
 export interface PlaidAccount {
@@ -115,8 +116,4 @@ function plaidError(value: unknown, status: number) {
   const code =
     typeof body.error_code === "string" ? body.error_code : "PLAID_ERROR";
   return new PlaidApiError(message, code, status);
-}
-
-function isRecord(value: unknown): value is PlaidErrorBody {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

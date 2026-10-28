@@ -4,8 +4,12 @@ import {
   type CheckoutOutcome,
 } from "@balebase/validators/billing";
 import { type Context, Hono } from "hono";
-import type { AuthVariables } from "./authMiddleware";
-import { canManageOrganization } from "./organizationMembers";
+import type { ApiEnv } from "./authMiddleware";
+import {
+  canManage,
+  canManageOrganization,
+  requireManager,
+} from "./organizationMembers";
 import { respond } from "./respond";
 import {
   StripeApiError,
@@ -38,11 +42,6 @@ const subscriptionSyncClaimSeconds = 2 * 60;
 const stripeWebhookReceiptCleanupLimit = 500;
 const stripeWebhookReceiptRetentionDays = 31;
 const checkoutDeletionLeaseSeconds = 5 * 60;
-
-type BillingEnv = {
-  Bindings: Bindings;
-  Variables: AuthVariables;
-};
 
 interface BillingRow {
   cancel_at_period_end: number;
@@ -142,17 +141,17 @@ interface StripePayloadRecord extends Record<string, unknown> {
 
 type StripeExpandable = string | { id: string };
 
-const billing = new Hono<BillingEnv>();
+const billing = new Hono<ApiEnv>();
+
+const billingManagerRequired = "Organization billing access is required.";
+const requireBillingManager = requireManager(billingManagerRequired);
 
 billing.get("/", async (context) => {
   const organizationId = context.get("organizationId");
   const sessionId = context.req.query("session_id");
   if (sessionId) {
-    if (!canManageOrganization(context.get("organizationRole"))) {
-      return context.json(
-        { error: "Organization billing access is required." },
-        403,
-      );
+    if (!canManage(context)) {
+      return context.json({ error: billingManagerRequired }, 403);
     }
     if (!sessionId.startsWith("cs_") || sessionId.length > 255) {
       return context.json({ error: "Checkout session is invalid." }, 400);
@@ -184,13 +183,7 @@ billing.get("/", async (context) => {
   );
 });
 
-billing.post("/checkout", async (context) => {
-  if (!canManageOrganization(context.get("organizationRole"))) {
-    return context.json(
-      { error: "Organization billing access is required." },
-      403,
-    );
-  }
+billing.post("/checkout", requireBillingManager, async (context) => {
   const organizationId = context.get("organizationId");
   const priceId = context.env.STRIPE_PRO_PRICE_ID;
   if (!priceId) return billingUnavailableResponse(context);
@@ -263,13 +256,7 @@ billing.post("/checkout", async (context) => {
   }
 });
 
-billing.post("/portal", async (context) => {
-  if (!canManageOrganization(context.get("organizationRole"))) {
-    return context.json(
-      { error: "Organization billing access is required." },
-      403,
-    );
-  }
+billing.post("/portal", requireBillingManager, async (context) => {
   const organizationId = context.get("organizationId");
   const record = await findBilling(context.env.DB, organizationId);
   if (!record?.stripe_customer_id) {
@@ -296,7 +283,7 @@ billing.post("/portal", async (context) => {
   }
 });
 
-export async function handleStripeWebhook(context: Context<BillingEnv>) {
+export async function handleStripeWebhook(context: Context<ApiEnv>) {
   const payload = await readWebhookPayload(
     context.req.raw,
     maxStripeWebhookBytes,
@@ -1805,7 +1792,7 @@ function completeCheckoutClaim(
 }
 
 async function prepareCheckoutState(
-  context: Context<BillingEnv>,
+  context: Context<ApiEnv>,
   organizationId: string,
 ) {
   let state = await checkoutState(context.env.DB, organizationId);
@@ -1831,7 +1818,7 @@ async function prepareCheckoutState(
 }
 
 async function checkoutStateResponse(
-  context: Context<BillingEnv>,
+  context: Context<ApiEnv>,
   state: Awaited<ReturnType<typeof checkoutState>>,
 ) {
   if (checkoutDeletionInProgress(state.billingRecord, state.nowSeconds)) {
@@ -1850,7 +1837,7 @@ async function checkoutStateResponse(
  * it is read back from Stripe while the session is still open.
  */
 async function pendingCheckoutResponse(
-  context: Context<BillingEnv>,
+  context: Context<ApiEnv>,
   pending: { id: string; url: string | null },
 ) {
   if (pending.url)
@@ -2437,7 +2424,7 @@ function validEvent(value: StripeEvent) {
   );
 }
 
-function billingError(context: Context<BillingEnv>, cause: unknown) {
+function billingError(context: Context<ApiEnv>, cause: unknown) {
   if (cause instanceof StripeConfigurationError) {
     return context.json({ error: cause.message }, 503);
   }
@@ -2450,7 +2437,7 @@ function billingError(context: Context<BillingEnv>, cause: unknown) {
 }
 
 async function checkoutCreationError(
-  context: Context<BillingEnv>,
+  context: Context<ApiEnv>,
   cause: unknown,
   organizationId: string,
   claimId: string,
@@ -2464,7 +2451,7 @@ async function checkoutCreationError(
   return billingError(context, cause);
 }
 
-function checkoutDisabledResponse(context: Context<BillingEnv>) {
+function checkoutDisabledResponse(context: Context<ApiEnv>) {
   return context.json(
     {
       error:
@@ -2474,18 +2461,18 @@ function checkoutDisabledResponse(context: Context<BillingEnv>) {
   );
 }
 
-function billingUnavailableResponse(context: Context<BillingEnv>) {
+function billingUnavailableResponse(context: Context<ApiEnv>) {
   return context.json({ error: "Stripe billing is not configured." }, 503);
 }
 
-function checkoutInProgressResponse(context: Context<BillingEnv>) {
+function checkoutInProgressResponse(context: Context<ApiEnv>) {
   return context.json(
     { error: "Checkout is already being prepared. Try again shortly." },
     409,
   );
 }
 
-function alreadyProResponse(context: Context<BillingEnv>) {
+function alreadyProResponse(context: Context<ApiEnv>) {
   return context.json(
     { error: "This organization already has a Pro subscription." },
     409,

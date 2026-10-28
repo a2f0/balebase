@@ -1,13 +1,17 @@
 import type { Issue, IssueTargetType } from "@balebase/validators/issues";
 import type { Context } from "hono";
-import { isRecord, validText } from "./auditDefinition";
 import { storedDefinition } from "./auditTemplates";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
+import { isRecord, validText } from "./jsonInput";
 import { userHasCapability } from "./organizationGroups";
-import type { Bindings } from "./types";
 
-export type IssueEnv = { Bindings: Bindings; Variables: AuthVariables };
-export type IssueContext = Context<IssueEnv>;
+export type IssueContext = Context<ApiEnv>;
+export type IssueField =
+  | "assignedTo"
+  | "description"
+  | "priority"
+  | "status"
+  | "title";
 export interface IssueTarget {
   type: IssueTargetType;
   id: string | null;
@@ -109,7 +113,7 @@ export function toIssue(row: IssueRow): Issue {
 }
 
 export function parseIssueInput(body: unknown): IssueInput | null {
-  if (!isRecord(body) || !validText(body.title, 300)) return null;
+  if (!isRecord<IssueField>(body) || !validText(body.title, 300)) return null;
   if (typeof body.description !== "string" || body.description.length > 2000)
     return null;
   if (!["low", "medium", "high", "critical"].includes(String(body.priority)))
@@ -127,7 +131,7 @@ export function parseIssueInput(body: unknown): IssueInput | null {
 
 export function parseIssueTarget(value: unknown): IssueTarget | null {
   if (value === undefined) return { type: "workspace", id: null, itemId: null };
-  if (!isRecord(value)) return null;
+  if (!isRecord<"id" | "itemId">(value)) return null;
   const { type } = value;
   if (type === "workspace" && value.id == null && value.itemId == null)
     return { type: "workspace", id: null, itemId: null };
