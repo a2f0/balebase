@@ -16,14 +16,14 @@ import type {
 import { useEffect, useState } from "react";
 import { api } from "./apiClient";
 import { errorMessage } from "./errors";
-import { formatMoney } from "./financeFormat";
 import {
   categoryShare,
   presetRange,
   type ReportPreset,
   type ReportRange,
   reportPresets,
-} from "./financePages";
+} from "./expenseReport";
+import { formatMoney } from "./financeFormat";
 import { countLabel, formatCalendarDate } from "./labels";
 import { financeOverviewPath } from "./workspacePaths";
 

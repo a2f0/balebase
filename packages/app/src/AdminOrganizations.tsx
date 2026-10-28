@@ -18,9 +18,9 @@ import {
   useState,
 } from "react";
 import { AdminDeletionMenu } from "./AdminDeletionMenu";
+import { AdminIdentity } from "./AdminIdentity";
 import { AdminOrganizationDetails } from "./AdminOrganizationDetails";
 import { AppLink } from "./AppLink";
-import { Identity } from "./adminDisplay";
 import { api } from "./apiClient";
 import { countLabel, formatDate } from "./labels";
 import { useAction } from "./useAction";
@@ -295,7 +295,7 @@ function OrganizationTableRow({
       </td>
       <td>
         {organization.ownerName || organization.ownerEmail ? (
-          <Identity
+          <AdminIdentity
             detail={
               organization.ownerName
                 ? (organization.ownerEmail ?? undefined)
@@ -359,7 +359,7 @@ function DeletedBy({ organization }: { organization: AdminOrganization }) {
     return <span className="textSubtle">—</span>;
   }
   return (
-    <Identity
+    <AdminIdentity
       detail={
         organization.deletedByEmail ??
         organization.deletedByUserId ??

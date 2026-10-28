@@ -13,7 +13,7 @@ import {
 import type { AdminUser } from "@balebase/validators/adminUsers";
 import { useCallback, useState } from "react";
 import { AdminDeletionMenu } from "./AdminDeletionMenu";
-import { Identity } from "./adminDisplay";
+import { AdminIdentity } from "./AdminIdentity";
 import { useAdminUserDeletion } from "./adminUserDeletion";
 import { adminUserListQuery, adminUserPageSize } from "./adminUserList";
 import { api } from "./apiClient";
@@ -166,7 +166,7 @@ function UserRow({
   return (
     <tr>
       <td>
-        <Identity avatar detail={user.email} name={user.name} />
+        <AdminIdentity avatar detail={user.email} name={user.name} />
       </td>
       <td>
         <Badge dot tone={status.tone}>

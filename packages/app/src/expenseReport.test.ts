@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { categoryShare, presetRange } from "./expenseReport";
 import { formatMoney } from "./financeFormat";
-import { categoryShare, presetRange } from "./financePages";
 
 describe("expense report ranges", () => {
   const today = new Date(2026, 8, 22);

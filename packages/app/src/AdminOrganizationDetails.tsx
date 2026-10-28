@@ -16,7 +16,7 @@ import type {
 } from "@balebase/validators/adminOrganizations";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { useCallback } from "react";
-import { Identity } from "./adminDisplay";
+import { AdminIdentity } from "./AdminIdentity";
 import { api } from "./apiClient";
 import { countLabel, formatCalendarDate, formatDate } from "./labels";
 import { useLoad } from "./useLoad";
@@ -95,7 +95,7 @@ function OrganizationOverview({
         <dt>Owner</dt>
         <dd>
           {organization.ownerName || organization.ownerEmail ? (
-            <Identity
+            <AdminIdentity
               detail={organization.ownerEmail ?? undefined}
               name={organization.ownerName ?? organization.ownerEmail ?? ""}
             />
@@ -143,7 +143,7 @@ function OrganizationPeople({ members }: { members: OrganizationMember[] }) {
               {members.map((member) => (
                 <tr key={member.id}>
                   <td>
-                    <Identity
+                    <AdminIdentity
                       detail={member.user.email}
                       name={member.user.name}
                     />
@@ -196,7 +196,7 @@ function OrganizationRequirements({
                 <tr key={requirement.id}>
                   <td>{requirement.title}</td>
                   <td>
-                    <Identity
+                    <AdminIdentity
                       detail={
                         requirement.targetName
                           ? requirement.targetEmail

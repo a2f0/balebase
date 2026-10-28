@@ -1,6 +1,6 @@
 import { Avatar } from "@balebase/ui/react";
 
-export function Identity({
+export function AdminIdentity({
   avatar = false,
   detail,
   name,

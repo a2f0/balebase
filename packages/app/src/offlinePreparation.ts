@@ -1,8 +1,8 @@
 import { nativeHost } from "./host";
-import type { OfflineIdentity } from "./OfflineWorkspacePage";
 import {
   activateOfflineWorkspace,
   changeOfflineWorkspace,
+  type OfflineIdentity,
   offlineScopeKey,
 } from "./offlineStore";
 

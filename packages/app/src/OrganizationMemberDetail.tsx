@@ -16,7 +16,7 @@ import {
   MemberRoleControl,
   MemberTwoFactorControl,
   TwoFactorStatus,
-} from "./memberControls";
+} from "./MemberControls";
 import {
   organizationPeopleActions,
   removeOrganizationMember,

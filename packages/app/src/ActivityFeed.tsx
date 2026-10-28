@@ -18,11 +18,11 @@ import { type ActivitySource, listActivity } from "./activitySource";
 import {
   EquipmentActivityDetails,
   equipmentActivitySummary,
-} from "./equipmentActivity";
+} from "./EquipmentActivity";
 import { InfiniteScroll } from "./InfiniteScroll";
 import { formatDateTime } from "./labels";
 import { formatRoles } from "./organizationState";
-import { RecordActivityDetails } from "./recordActivity";
+import { RecordActivityDetails } from "./RecordActivity";
 import { useCursorPages } from "./useCursorPages";
 import {
   auditRunPath,
