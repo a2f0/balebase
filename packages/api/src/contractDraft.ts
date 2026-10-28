@@ -1,4 +1,4 @@
-import { normalizeBusinessDate } from "./businesses";
+import { CalendarDateSchema } from "@balebase/validators/fields";
 import type { ContractRow, FieldRow } from "./contractRecords";
 
 const maxRecipients = 20;
@@ -82,9 +82,8 @@ function textValue(value: unknown) {
 /** A valid date, null when omitted, or undefined when invalid. */
 function dueDateValue(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
-  return typeof value === "string"
-    ? (normalizeBusinessDate(value) ?? undefined)
-    : undefined;
+  const date = CalendarDateSchema.safeParse(value);
+  return date.success ? date.data : undefined;
 }
 
 /** Days between reminders, null for none, or undefined when invalid. */

@@ -1,8 +1,31 @@
-import type { JsonRoute, RouteResponse } from "@balebase/validators/route";
+import type {
+  JsonRoute,
+  Route,
+  RouteResponse,
+} from "@balebase/validators/route";
 import type { Context } from "hono";
 import { routePath } from "hono/route";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
+
+/**
+ * Reads a route's JSON body through its contract. Returns the parsed body, or
+ * a 400 response naming the first rule it breaks: the rule's own message
+ * when the contract gives one, otherwise `invalid`.
+ */
+export async function readBody<Body extends z.ZodType>(
+  context: Context,
+  contract: Route & { body: Body },
+  invalid: string,
+): Promise<z.output<Body> | Response> {
+  const body: unknown = await context.req.json().catch(() => null);
+  const parsed = contract.body.safeParse(body, { error: () => invalid });
+  if (parsed.success) return parsed.data;
+  return context.json(
+    { error: parsed.error.issues[0]?.message ?? invalid },
+    400,
+  );
+}
 
 /** Set while tests run; production never checks a response. */
 let mismatches: string[] | undefined;

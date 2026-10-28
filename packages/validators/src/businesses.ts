@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { CalendarDateSchema, optionalText, requiredText } from "./fields";
 import { route } from "./route";
+import { businessLimits } from "./rules";
 
 const BusinessSchema = z.object({
   city: z.string().nullable(),
@@ -22,16 +24,44 @@ export type Business = z.infer<typeof BusinessSchema>;
 
 /** A field left out keeps its value on update; null or blank clears it. */
 const BusinessInputSchema = z.object({
-  city: z.string().nullish(),
-  duns: z.string().nullish(),
-  ein: z.string().nullish(),
-  incorporationDate: z.string().nullish(),
-  name: z.string(),
-  state: z.string().nullish(),
-  streetAddress: z.string().nullish(),
-  zip: z.string().nullish(),
+  city: optionalText(z.string().trim().max(businessLimits.city)),
+  /** Nine digits, bare or grouped as 12-345-6789; stored bare. */
+  duns: optionalText(
+    z
+      .string()
+      .trim()
+      .regex(/^(?:\d{9}|\d{2}-\d{3}-\d{4})$/)
+      .transform((value) => value.replaceAll("-", "")),
+  ),
+  /** Nine digits, optionally as 12-3456789; stored bare. */
+  ein: optionalText(
+    z
+      .string()
+      .trim()
+      .regex(/^\d{2}-?\d{7}$/)
+      .transform((value) => value.replace("-", "")),
+  ),
+  incorporationDate: optionalText(CalendarDateSchema),
+  name: requiredText(businessLimits.name),
+  /** A two-letter state code, in either case; stored in capitals. */
+  state: optionalText(
+    z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z]{2}$/)
+      .transform((value) => value.toUpperCase()),
+  ),
+  streetAddress: optionalText(
+    z.string().trim().max(businessLimits.streetAddress),
+  ),
+  zip: optionalText(
+    z
+      .string()
+      .trim()
+      .regex(/^\d{5}(?:-\d{4})?$/),
+  ),
 });
-export type BusinessInput = z.infer<typeof BusinessInputSchema>;
+export type BusinessInput = z.input<typeof BusinessInputSchema>;
 
 const BusinessListingSchema = z.object({
   businesses: z.array(BusinessSchema),

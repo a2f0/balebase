@@ -24,7 +24,7 @@ describe("equipment API", () => {
         model: "MacBook Pro",
         purchaseDate: "2026-03-01",
         serialNumber: null,
-        type: "computer",
+        type: "computer" as const,
       };
       await api.equipment.list();
       await api.equipment.get("item/1");

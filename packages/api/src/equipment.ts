@@ -2,23 +2,19 @@ import {
   type EquipmentItem,
   equipmentRoutes,
 } from "@balebase/validators/equipment";
+import { equipmentTypes, isEquipmentType } from "@balebase/validators/rules";
 import { type Context, Hono } from "hono";
 import { activityBatch, findActivity } from "./activity";
 import type { ApiEnv } from "./authMiddleware";
-import { normalizeBusinessDate } from "./businesses";
 import { listLinkedEmails, toLinkedEmail } from "./inboundEmailLinks";
 import {
   canManage,
   listMemberDirectory,
   requireManager,
 } from "./organizationMembers";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 
 type EquipmentContext = Context<ApiEnv>;
-
-/** The types offered for new equipment. Adding one needs no migration. */
-const equipmentTypes = ["computer", "cell_phone", "monitor"] as const;
-type EquipmentType = (typeof equipmentTypes)[number];
 
 interface EquipmentRow {
   assigned_user_id: string | null;
@@ -35,14 +31,18 @@ interface EquipmentRow {
   updated_at: string;
 }
 
-interface EquipmentInput {
-  assigneeId: string | null;
-  make: string;
-  model: string;
-  purchaseDate: string | null;
-  serialNumber: string | null;
-  type: EquipmentType;
-}
+const invalidEquipment =
+  "Equipment details are invalid. Choose a type and enter a make, model, and, optionally, a serial number and valid purchase date.";
+
+/** Each field an update can change, and the column that stores it. */
+const columns = {
+  assigneeId: "assigned_user_id",
+  make: "make",
+  model: "model",
+  purchaseDate: "purchase_date",
+  serialNumber: "serial_number",
+  type: "type",
+} as const;
 
 const equipmentSelect = `
   SELECT item.id, item.type, item.make, item.model, item.serial_number,
@@ -86,8 +86,13 @@ equipment.get("/", async (context) => {
 });
 
 equipment.post("/", requireManager(), async (context) => {
-  const input = equipmentInput(await context.req.json().catch(() => null));
-  if (!input) return invalidEquipment(context);
+  const input = await readBody(
+    context,
+    equipmentRoutes.create,
+    invalidEquipment,
+  );
+  if (input instanceof Response) return input;
+  const assigneeId = input.assigneeId ?? null;
   const organizationId = context.get("organizationId");
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -103,15 +108,15 @@ equipment.post("/", requireManager(), async (context) => {
     input.type,
     input.make,
     input.model,
-    input.serialNumber,
-    input.purchaseDate,
-    input.assigneeId,
+    input.serialNumber ?? null,
+    input.purchaseDate ?? null,
+    assigneeId,
     context.get("authSession").user.id,
     now,
     now,
-    input.assigneeId,
+    assigneeId,
     organizationId,
-    input.assigneeId,
+    assigneeId,
   );
   const [result] = await activityBatch(context.env.DB, context.get("apiKey"), [
     insert,
@@ -177,23 +182,34 @@ equipment.patch("/:id", requireManager(), async (context) => {
     context.req.param("id"),
   );
   if (!existing) return equipmentNotFound(context);
-  const changes = equipmentChanges(
-    await context.req.json().catch(() => null),
-    existing.type,
+  const input = await readBody(
+    context,
+    equipmentRoutes.update,
+    invalidEquipment,
   );
-  if (!changes) return invalidEquipment(context);
-  const columns = Object.keys(changes) as EquipmentColumn[];
-  const assigneeChanges = "assigned_user_id" in changes;
-  const assigneeId = changes.assigned_user_id ?? null;
+  if (input instanceof Response) return input;
+  // An item keeps its current type even after that type stops being offered.
+  if (
+    input.type !== undefined &&
+    input.type !== existing.type &&
+    !isEquipmentType(input.type)
+  )
+    return context.json({ error: invalidEquipment }, 400);
+  const changes = Object.entries(columns).flatMap(([field, column]) => {
+    const value = input[field as keyof typeof columns];
+    return value === undefined ? [] : [{ column, value }];
+  });
+  const assigneeChanges = input.assigneeId !== undefined;
+  const assigneeId = input.assigneeId ?? null;
   // The actor rides along so the update trigger records who changed what.
   const update = context.env.DB.prepare(
     `UPDATE equipment
-     SET ${columns.map((column) => `${column} = ?, `).join("")}updated_at = ?,
+     SET ${changes.map(({ column }) => `${column} = ?, `).join("")}updated_at = ?,
          activity_actor_id = ?
      WHERE id = ? AND organization_id = ?
        ${assigneeChanges ? `AND ${assigneeIsMember}` : ""}`,
   ).bind(
-    ...columns.map((column) => changes[column] ?? null),
+    ...changes.map(({ value }) => value),
     new Date().toISOString(),
     context.get("authSession").user.id,
     existing.id,
@@ -274,123 +290,6 @@ function findEquipment(
     .first<EquipmentRow>();
 }
 
-/** Validates a new item; optional fields may be omitted. */
-function equipmentInput(body: unknown): EquipmentInput | null {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return null;
-  }
-  const field = (name: string) => Reflect.get(body, name);
-  const type = field("type");
-  const make = requiredText(field("make"), 80);
-  const model = requiredText(field("model"), 120);
-  const serialNumber = optionalText(field("serialNumber"), normalizeSerial);
-  const purchaseDate = optionalText(
-    field("purchaseDate"),
-    normalizeBusinessDate,
-  );
-  const assigneeId = optionalText(field("assigneeId"), normalizeUserId);
-  if (
-    !isEquipmentType(type) ||
-    !make ||
-    !model ||
-    serialNumber === undefined ||
-    purchaseDate === undefined ||
-    assigneeId === undefined
-  ) {
-    return null;
-  }
-  return { assigneeId, make, model, purchaseDate, serialNumber, type };
-}
-
-type EquipmentColumn =
-  | "assigned_user_id"
-  | "make"
-  | "model"
-  | "purchase_date"
-  | "serial_number"
-  | "type";
-
-/**
- * Validates the fields present in an update, as column changes. An item keeps
- * its current type even after that type stops being offered.
- */
-function equipmentChanges(
-  body: unknown,
-  currentType: string,
-): Partial<Record<EquipmentColumn, string | null>> | null {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return null;
-  }
-  const changes: Partial<Record<EquipmentColumn, string | null>> = {};
-  const fields: Array<[string, EquipmentColumn, (value: unknown) => unknown]> =
-    [
-      [
-        "type",
-        "type",
-        (value) =>
-          isEquipmentType(value) || value === currentType ? value : undefined,
-      ],
-      ["make", "make", (value) => requiredText(value, 80) ?? undefined],
-      ["model", "model", (value) => requiredText(value, 120) ?? undefined],
-      [
-        "serialNumber",
-        "serial_number",
-        (value) => optionalText(value, normalizeSerial),
-      ],
-      [
-        "purchaseDate",
-        "purchase_date",
-        (value) => optionalText(value, normalizeBusinessDate),
-      ],
-      [
-        "assigneeId",
-        "assigned_user_id",
-        (value) => optionalText(value, normalizeUserId),
-      ],
-    ];
-  for (const [name, column, validate] of fields) {
-    const value = Reflect.get(body, name);
-    if (value === undefined) continue;
-    const valid = validate(value);
-    if (valid === undefined) return null;
-    changes[column] = valid as string | null;
-  }
-  return changes;
-}
-
-function requiredText(value: unknown, maxLength: number) {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed && trimmed.length <= maxLength ? trimmed : null;
-}
-
-/**
- * An optional text field: absent, null, or blank is null. Returns undefined
- * when the value is invalid.
- */
-function optionalText(
-  value: unknown,
-  normalize: (value: string) => string | null,
-) {
-  if (value === undefined || value === null) return null;
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  return normalize(trimmed) ?? undefined;
-}
-
-function normalizeSerial(value: string) {
-  return value.length <= 100 ? value : null;
-}
-
-function normalizeUserId(value: string) {
-  return value.length <= 200 ? value : null;
-}
-
-function isEquipmentType(value: unknown): value is EquipmentType {
-  return equipmentTypes.some((type) => type === value);
-}
-
 function toEquipment(row: EquipmentRow): EquipmentItem {
   return {
     assignee: row.assigned_user_id
@@ -410,16 +309,6 @@ function toEquipment(row: EquipmentRow): EquipmentItem {
     type: row.type,
     updatedAt: row.updated_at,
   };
-}
-
-function invalidEquipment(context: EquipmentContext) {
-  return context.json(
-    {
-      error:
-        "Equipment details are invalid. Choose a type and enter a make, model, and, optionally, a serial number and valid purchase date.",
-    },
-    400,
-  );
 }
 
 function assigneeNotMember(context: EquipmentContext) {

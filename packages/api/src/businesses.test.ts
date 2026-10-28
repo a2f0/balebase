@@ -1,12 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  businesses,
-  normalizeBusinessDate,
-  normalizeDuns,
-  normalizeEin,
-  normalizeState,
-  normalizeZip,
-} from "./businesses";
+import { businesses } from "./businesses";
 import { testBindings } from "./testing/bindings";
 import { toD1 } from "./testing/d1";
 import { applyMigrations, createTestDatabase } from "./testing/database";
@@ -59,48 +52,6 @@ interface BusinessResponse {
 interface BusinessDetailResponse extends BusinessResponse {
   canManage: boolean;
 }
-
-describe("business EINs", () => {
-  it("normalizes only valid nine-digit EINs", () => {
-    expect(normalizeEin("12-3456789")).toBe("123456789");
-    expect(normalizeEin(" 123456789 ")).toBe("123456789");
-    expect(normalizeEin("12 3456789")).toBeNull();
-    expect(normalizeEin("12345678")).toBeNull();
-    expect(normalizeEin("12-345678a")).toBeNull();
-  });
-});
-
-describe("business DUNS numbers", () => {
-  it("normalizes only nine-digit DUNS numbers, bare or fully grouped", () => {
-    expect(normalizeDuns("12-345-6789")).toBe("123456789");
-    expect(normalizeDuns(" 123456789 ")).toBe("123456789");
-    expect(normalizeDuns("12-3456789")).toBeNull();
-    expect(normalizeDuns("12 345 6789")).toBeNull();
-    expect(normalizeDuns("12345678")).toBeNull();
-    expect(normalizeDuns("12-345-678a")).toBeNull();
-  });
-});
-
-describe("business incorporation dates", () => {
-  it("normalizes only real ISO calendar dates", () => {
-    expect(normalizeBusinessDate(" 2024-02-29 ")).toBe("2024-02-29");
-    expect(normalizeBusinessDate("2026-02-29")).toBeNull();
-    expect(normalizeBusinessDate("2026-13-01")).toBeNull();
-    expect(normalizeBusinessDate("08/22/2026")).toBeNull();
-  });
-});
-
-describe("business locations", () => {
-  it("normalizes state abbreviations and ZIP codes", () => {
-    expect(normalizeState(" ny ")).toBe("NY");
-    expect(normalizeState("New York")).toBeNull();
-    expect(normalizeState("N1")).toBeNull();
-    expect(normalizeZip(" 10001 ")).toBe("10001");
-    expect(normalizeZip("10001-1234")).toBe("10001-1234");
-    expect(normalizeZip("1000")).toBeNull();
-    expect(normalizeZip("A0001")).toBeNull();
-  });
-});
 
 describe("organization businesses", () => {
   it("creates multiple businesses without EINs", async () => {
@@ -390,6 +341,10 @@ describe("organization businesses", () => {
       name: "Acme",
     });
     expect(invalidEin.status).toBe(400);
+    expect(await invalidEin.json()).toEqual({
+      error:
+        "Business details are invalid. Use a valid name, EIN, DUNS number, incorporation date, street address, city, two-letter state, and ZIP code.",
+    });
 
     const invalidDuns = await create(fixture.ownerApp, fixture.bindings, {
       duns: "12-3456789",

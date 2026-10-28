@@ -21,6 +21,7 @@ import type {
   EquipmentMember,
 } from "@balebase/validators/equipment";
 import type { LinkedEmail } from "@balebase/validators/inbox";
+import { isEquipmentType } from "@balebase/validators/rules";
 import {
   type FormEvent,
   type RefObject,
@@ -79,10 +80,12 @@ function useEquipmentListing() {
   const action = useAction("Could not add the equipment.");
   const [adding, setAdding] = useState(false);
 
-  const add = (input: EquipmentInput) =>
+  // The form offers only the listed types when adding.
+  const add = async ({ type, ...input }: EquipmentInput) =>
+    isEquipmentType(type) &&
     action.run(
       async () => {
-        const created = await api.equipment.create(input);
+        const created = await api.equipment.create({ ...input, type });
         setData((current) =>
           current
             ? { ...current, equipment: [created, ...current.equipment] }

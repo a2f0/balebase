@@ -1,0 +1,22 @@
+// Request rules as plain values. The contract's schemas are built from them,
+// and the app imports them for its form limits without pulling in zod.
+
+/** The types offered for new equipment. Adding one needs no migration. */
+export const equipmentTypes = ["computer", "cell_phone", "monitor"] as const;
+type EquipmentType = (typeof equipmentTypes)[number];
+
+export function isEquipmentType(value: string): value is EquipmentType {
+  return equipmentTypes.some((type) => type === value);
+}
+
+export const equipmentLimits = {
+  make: 80,
+  model: 120,
+  serialNumber: 100,
+} as const;
+
+export const businessLimits = {
+  city: 100,
+  name: 120,
+  streetAddress: 240,
+} as const;

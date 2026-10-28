@@ -5,7 +5,7 @@ import {
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "./authMiddleware";
 import { canManage, requireManager } from "./organizationMembers";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 
 interface BusinessRow {
   city: string | null;
@@ -65,11 +65,12 @@ businesses.get("/:id", async (context) => {
 });
 
 businesses.post("/", requireBusinessManager, async (context) => {
-  const body: unknown = await context.req.json().catch(() => null);
-  const input = businessInput(body);
-  if (!input) {
-    return context.json({ error: invalidBusinessMessage }, 400);
-  }
+  const input = await readBody(
+    context,
+    businessesRoutes.create,
+    invalidBusinessMessage,
+  );
+  if (input instanceof Response) return input;
 
   const id = crypto.randomUUID();
   const timestamp = new Date().toISOString();
@@ -124,11 +125,12 @@ businesses.post("/", requireBusinessManager, async (context) => {
 });
 
 businesses.patch("/:id", requireBusinessManager, async (context) => {
-  const body: unknown = await context.req.json().catch(() => null);
-  const input = businessInput(body);
-  if (!input) {
-    return context.json({ error: invalidBusinessMessage }, 400);
-  }
+  const input = await readBody(
+    context,
+    businessesRoutes.update,
+    invalidBusinessMessage,
+  );
+  if (input instanceof Response) return input;
 
   const id = context.req.param("id");
   const existing = await context.env.DB.prepare(
@@ -204,115 +206,6 @@ businesses.delete("/:id", requireBusinessManager, async (context) => {
   }
   return context.body(null, 204);
 });
-
-function businessInput(body: unknown) {
-  if (!body || typeof body !== "object") return null;
-  const {
-    city: cityValue,
-    duns,
-    ein,
-    incorporationDate: incorporationDateValue,
-    name,
-    state: stateValue,
-    streetAddress: streetAddressValue,
-    zip: zipValue,
-  } = body as {
-    city?: unknown;
-    duns?: unknown;
-    ein?: unknown;
-    incorporationDate?: unknown;
-    name?: unknown;
-    state?: unknown;
-    streetAddress?: unknown;
-    zip?: unknown;
-  };
-  if (typeof name !== "string") return null;
-  const normalizedName = name.trim();
-  if (!normalizedName || normalizedName.length > 120) {
-    return null;
-  }
-  const normalizedEin = optionalString(ein, normalizeEin);
-  const normalizedDuns = optionalString(duns, normalizeDuns);
-  const city = optionalString(cityValue, (value) =>
-    value.length <= 100 ? value : null,
-  );
-  const incorporationDate = optionalString(
-    incorporationDateValue,
-    normalizeBusinessDate,
-  );
-  const streetAddress = optionalString(streetAddressValue, (value) =>
-    value.length <= 240 ? value : null,
-  );
-  const state = optionalString(stateValue, normalizeState);
-  const zip = optionalString(zipValue, normalizeZip);
-  if (
-    !city.valid ||
-    !normalizedEin.valid ||
-    !normalizedDuns.valid ||
-    !incorporationDate.valid ||
-    !streetAddress.valid ||
-    !state.valid ||
-    !zip.valid
-  ) {
-    return null;
-  }
-  return {
-    city: city.value,
-    duns: normalizedDuns.value,
-    ein: normalizedEin.value,
-    incorporationDate: incorporationDate.value,
-    name: normalizedName,
-    state: state.value,
-    streetAddress: streetAddress.value,
-    zip: zip.value,
-  };
-}
-
-function optionalString(
-  value: unknown,
-  normalize: (value: string) => string | null,
-): { valid: false } | { valid: true; value: string | null | undefined } {
-  if (value === undefined) return { valid: true, value: undefined };
-  if (value === null) return { valid: true, value: null };
-  if (typeof value !== "string") return { valid: false };
-  const trimmed = value.trim();
-  if (!trimmed) return { valid: true, value: null };
-  const normalized = normalize(trimmed);
-  return normalized ? { valid: true, value: normalized } : { valid: false };
-}
-
-export function normalizeEin(value: string) {
-  const trimmed = value.trim();
-  if (!/^\d{2}-?\d{7}$/.test(trimmed)) return null;
-  return trimmed.replace("-", "");
-}
-
-/** A D-U-N-S number: nine digits, bare or grouped as 12-345-6789. */
-export function normalizeDuns(value: string) {
-  const trimmed = value.trim();
-  if (!/^(?:\d{9}|\d{2}-\d{3}-\d{4})$/.test(trimmed)) return null;
-  return trimmed.replaceAll("-", "");
-}
-
-export function normalizeBusinessDate(value: string) {
-  const trimmed = value.trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
-  const date = new Date(`${trimmed}T00:00:00.000Z`);
-  return !Number.isNaN(date.valueOf()) &&
-    date.toISOString().slice(0, 10) === trimmed
-    ? trimmed
-    : null;
-}
-
-export function normalizeState(value: string) {
-  const normalized = value.trim().toUpperCase();
-  return /^[A-Z]{2}$/.test(normalized) ? normalized : null;
-}
-
-export function normalizeZip(value: string) {
-  const trimmed = value.trim();
-  return /^\d{5}(?:-\d{4})?$/.test(trimmed) ? trimmed : null;
-}
 
 function businessResponse(row: BusinessRow): Business {
   return {
