@@ -77,6 +77,56 @@ export async function readBoundedRequest(request: Request, maxBytes: number) {
   return readBodyWithLimit(request.body, maxBytes);
 }
 
+interface Download {
+  /** "inline" lets the browser show the file; the default saves it. */
+  disposition?: "attachment" | "inline";
+  /** An ASCII name for clients that ignore `filename*`. */
+  fallbackFilename: string;
+  /** The real name, sent percent-encoded as `filename*`. */
+  filename?: string;
+  /** Headers that replace the stored ones, such as the content type. */
+  headers?: Record<string, string>;
+}
+
+/**
+ * The Content-Disposition for a download. `'` is escaped along with what
+ * encodeURIComponent escapes, because it delimits the charset and language
+ * in an RFC 5987 `filename*` value.
+ */
+export function contentDisposition({
+  disposition = "attachment",
+  fallbackFilename,
+  filename,
+}: Download) {
+  const header = `${disposition}; filename="${fallbackFilename}"`;
+  if (filename === undefined) return header;
+  const encoded = encodeURIComponent(filename).replaceAll("'", "%27");
+  return `${header}; filename*=UTF-8''${encoded}`;
+}
+
+/** Serves a stored object as a file the browser will not content-sniff. */
+export function downloadResponse(object: R2ObjectBody, download: Download) {
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("content-disposition", contentDisposition(download));
+  headers.set("etag", object.httpEtag);
+  headers.set("x-content-type-options", "nosniff");
+  for (const [name, value] of Object.entries(download.headers ?? {})) {
+    headers.set(name, value);
+  }
+  return new Response(object.body, { headers });
+}
+
+/** The object at `key` as a download, or null when storage has no bytes. */
+export async function storedDownload(
+  storage: R2Bucket,
+  key: string,
+  download: Download,
+) {
+  const object = await storage.get(key);
+  return object ? downloadResponse(object, download) : null;
+}
+
 /**
  * Parses a multipart upload whose file may be up to `maxFileBytes`, refusing
  * a larger body while it streams rather than after buffering all of it.

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { findAuditIssueImage } from "./auditIssueImageRecords";
 import { uploadAuditIssueImage } from "./auditIssueImageUploads";
 import type { ApiEnv } from "./authMiddleware";
+import { contentDisposition, downloadResponse } from "./storage";
 
 const auditIssueImages = new Hono<ApiEnv>();
 
@@ -29,7 +30,13 @@ auditIssueImages.get("/:issueId/images/:imageId", async (context) => {
       const response = thumbnail.response();
       const headers = new Headers(response.headers);
       headers.set("cache-control", "no-store");
-      headers.set("content-disposition", 'inline; filename="thumbnail.webp"');
+      headers.set(
+        "content-disposition",
+        contentDisposition({
+          disposition: "inline",
+          fallbackFilename: "thumbnail.webp",
+        }),
+      );
       headers.set("x-content-type-options", "nosniff");
       return new Response(response.body, { headers, status: response.status });
     } catch (cause) {
@@ -40,19 +47,16 @@ auditIssueImages.get("/:issueId/images/:imageId", async (context) => {
       );
     }
   }
-  const encodedFilename = encodeURIComponent(row.filename).replaceAll(
-    "'",
-    "%27",
-  );
-  const headers = new Headers({
-    "cache-control": "no-store",
-    "content-disposition": `inline; filename="image"; filename*=UTF-8''${encodedFilename}`,
-    "content-length": String(row.size),
-    "content-type": row.content_type,
-    etag: object.httpEtag,
-    "x-content-type-options": "nosniff",
+  return downloadResponse(object, {
+    disposition: "inline",
+    fallbackFilename: "image",
+    filename: row.filename,
+    headers: {
+      "cache-control": "no-store",
+      "content-length": String(row.size),
+      "content-type": row.content_type,
+    },
   });
-  return new Response(object.body, { headers });
 });
 
 export { auditIssueImages };

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { readBodyWithLimit, readBoundedRequest } from "./storage";
+import {
+  contentDisposition,
+  readBodyWithLimit,
+  readBoundedRequest,
+} from "./storage";
 
 function streamOf(chunks: Uint8Array[]) {
   const progress = { pulled: 0 };
@@ -13,6 +17,25 @@ function streamOf(chunks: Uint8Array[]) {
   });
   return { body, progress };
 }
+
+describe("download headers", () => {
+  it("percent-encodes the real filename, including its apostrophes", () => {
+    expect(
+      contentDisposition({
+        fallbackFilename: "download",
+        filename: 'Dana\'s café; "notes".txt',
+      }),
+    ).toBe(
+      `attachment; filename="download"; filename*=UTF-8''Dana%27s%20caf%C3%A9%3B%20%22notes%22.txt`,
+    );
+    expect(
+      contentDisposition({
+        disposition: "inline",
+        fallbackFilename: "thumbnail.webp",
+      }),
+    ).toBe('inline; filename="thumbnail.webp"');
+  });
+});
 
 describe("bounded body reads", () => {
   it("keeps every byte while the buffer grows toward the limit", async () => {

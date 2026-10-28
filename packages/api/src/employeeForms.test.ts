@@ -462,6 +462,28 @@ describe("employee forms", () => {
     ).toEqual({ count: 1 });
   });
 
+  it("escapes the document's name in its download header", async () => {
+    const fixture = await createFixture();
+    const id = await createRequirement(fixture, "form", "W-4");
+    const form = new FormData();
+    form.set(
+      "file",
+      new File(["form contents"], "Dana's W-4 (final).pdf", {
+        type: "application/pdf",
+      }),
+    );
+    const upload = await fixture
+      .app("employee", "member")
+      .request(`/${id}/document`, { body: form, method: "POST" });
+    expect(upload.status).toBe(200);
+    const download = await fixture
+      .app("employee", "member")
+      .request(`/${id}/document`);
+    expect(download.headers.get("content-disposition")).toBe(
+      `attachment; filename="document"; filename*=UTF-8''Dana%27s%20W-4%20(final).pdf`,
+    );
+  });
+
   it("purges an uploaded form after an interrupted request", async () => {
     const fixture = await createFixture();
     const id = await createRequirement(fixture, "form", "W-4");
@@ -3171,6 +3193,7 @@ async function createFixture(migrations: { before?: string } = {}) {
         return file
           ? {
               body: file.stream(),
+              httpEtag: '"test-etag"',
               writeHttpMetadata: (headers: Headers) => {
                 headers.set("content-type", file.type);
               },

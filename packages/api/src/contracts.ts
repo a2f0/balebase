@@ -29,7 +29,7 @@ import {
 import { contractTemplates } from "./contractTemplates";
 import { normalizeFilename } from "./filenames";
 import { respond } from "./respond";
-import { readBoundedForm } from "./storage";
+import { readBoundedForm, storedDownload } from "./storage";
 
 type ContractContext = Context<ApiEnv>;
 
@@ -516,17 +516,14 @@ async function pdfResponse(
   key: string,
   filename: string,
 ) {
-  const object = await context.env.STORAGE.get(key);
-  if (!object)
-    return context.json({ error: "The document file is missing." }, 404);
-  const encoded = encodeURIComponent(filename).replaceAll("'", "%27");
-  return new Response(object.body, {
-    headers: {
-      "content-disposition": `attachment; filename="contract.pdf"; filename*=UTF-8''${encoded}`,
-      "content-type": "application/pdf",
-      "x-content-type-options": "nosniff",
-    },
+  const download = await storedDownload(context.env.STORAGE, key, {
+    fallbackFilename: "contract.pdf",
+    filename,
+    headers: { "content-type": "application/pdf" },
   });
+  return (
+    download ?? context.json({ error: "The document file is missing." }, 404)
+  );
 }
 
 function toSummary(row: SummaryRow): ContractSummary {

@@ -4,7 +4,7 @@ import type { ApiEnv } from "./authMiddleware";
 import { maxFilenameBytes, normalizeFilename } from "./filenames";
 import { findLibraryFolder } from "./libraryFolders";
 import { respond } from "./respond";
-import { readBoundedForm } from "./storage";
+import { readBoundedForm, storedDownload } from "./storage";
 import type { StoredObjectRow } from "./types";
 import { toStoredObject } from "./types";
 
@@ -138,23 +138,11 @@ objects.get("/:id", async (context) => {
     return context.json({ error: "Object not found." }, 404);
   }
 
-  const object = await context.env.STORAGE.get(row.object_key);
-  if (!object) {
-    return context.json({ error: "Object data not found." }, 404);
-  }
-
-  const headers = new Headers();
-  object.writeHttpMetadata(headers);
-  const encodedFilename = encodeURIComponent(row.filename).replaceAll(
-    "'",
-    "%27",
-  );
-  headers.set(
-    "content-disposition",
-    `attachment; filename="download"; filename*=UTF-8''${encodedFilename}`,
-  );
-  headers.set("etag", object.httpEtag);
-  return new Response(object.body, { headers });
+  const download = await storedDownload(context.env.STORAGE, row.object_key, {
+    fallbackFilename: "download",
+    filename: row.filename,
+  });
+  return download ?? context.json({ error: "Object data not found." }, 404);
 });
 
 // Moves a document into a folder, or back to the library root with null.

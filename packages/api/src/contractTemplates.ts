@@ -16,7 +16,7 @@ import {
 } from "./contractTemplateDefinition";
 import { normalizeFilename } from "./filenames";
 import { respond } from "./respond";
-import { readBoundedForm } from "./storage";
+import { readBoundedForm, storedDownload } from "./storage";
 
 type TemplateContext = Context<ApiEnv>;
 interface VersionRow {
@@ -166,20 +166,18 @@ contractTemplates.get("/:id/document", async (context) => {
     selected ? Number(selected) : undefined,
   );
   if (!version) return notFound(context);
-  const object = await context.env.STORAGE.get(version.document_object_key);
-  if (!object)
-    return context.json({ error: "The document file is missing." }, 404);
-  const filename = encodeURIComponent(version.document_filename).replaceAll(
-    "'",
-    "%27",
-  );
-  return new Response(object.body, {
-    headers: {
-      "content-disposition": `attachment; filename="contract.pdf"; filename*=UTF-8''${filename}`,
-      "content-type": "application/pdf",
-      "x-content-type-options": "nosniff",
+  const download = await storedDownload(
+    context.env.STORAGE,
+    version.document_object_key,
+    {
+      fallbackFilename: "contract.pdf",
+      filename: version.document_filename,
+      headers: { "content-type": "application/pdf" },
     },
-  });
+  );
+  return (
+    download ?? context.json({ error: "The document file is missing." }, 404)
+  );
 });
 
 // Saving always appends a version, and guards against overwriting a newer save.

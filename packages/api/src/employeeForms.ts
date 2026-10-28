@@ -32,7 +32,7 @@ import {
 } from "./screeningDisclosures";
 import { sendScreeningRequest } from "./screeningMail";
 import { isUsStateCode, parseScreeningSubmission } from "./screeningSubmission";
-import { readBoundedForm } from "./storage";
+import { readBoundedForm, storedDownload } from "./storage";
 import type { Bindings } from "./types";
 import { respondToUnexpectedError } from "./unexpectedError";
 
@@ -376,18 +376,15 @@ employeeForms.get("/:id/document", async (context) => {
   ) {
     return context.json({ error: "Document not found." }, 404);
   }
-  const object = await context.env.STORAGE.get(row.document_key);
-  if (!object) return context.json({ error: "Document not found." }, 404);
-  const headers = new Headers();
-  object.writeHttpMetadata(headers);
-  headers.set("Cache-Control", "private, no-store");
-  headers.set("X-Document-Revision", String(row.document_revision));
-  headers.set("X-Content-Type-Options", "nosniff");
-  headers.set(
-    "Content-Disposition",
-    `attachment; filename="document"; filename*=UTF-8''${encodeURIComponent(row.document_filename ?? "document")}`,
-  );
-  return new Response(object.body, { headers });
+  const download = await storedDownload(context.env.STORAGE, row.document_key, {
+    fallbackFilename: "document",
+    filename: row.document_filename ?? "document",
+    headers: {
+      "cache-control": "private, no-store",
+      "x-document-revision": String(row.document_revision),
+    },
+  });
+  return download ?? context.json({ error: "Document not found." }, 404);
 });
 
 employeeForms.post("/:id/checkr/request", requireManager(), async (context) => {
@@ -603,19 +600,16 @@ employeeForms.get("/:id/checkr/consent", async (context) => {
   )
     .bind(row.checkr_consent_id, context.get("organizationId"), row.id)
     .first<{ document_key: string }>();
-  const object = consent
-    ? await context.env.STORAGE.get(consent.document_key)
-    : null;
-  if (!object) return context.json({ error: "Authorization not found." }, 404);
-  return new Response(object.body, {
-    headers: {
-      "Cache-Control": "private, no-store",
-      "Content-Disposition":
-        'attachment; filename="background-check-authorization.pdf"',
-      "Content-Type": "application/pdf",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
+  const download =
+    consent &&
+    (await storedDownload(context.env.STORAGE, consent.document_key, {
+      fallbackFilename: "background-check-authorization.pdf",
+      headers: {
+        "cache-control": "private, no-store",
+        "content-type": "application/pdf",
+      },
+    }));
+  return download || context.json({ error: "Authorization not found." }, 404);
 });
 
 employeeForms.onError((error, context) => {
