@@ -23,17 +23,6 @@
   border-top: 1px solid var(--color-border-subtle);
 }
 
-.equipmentTypeMark {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: var(--radius-md);
-  color: var(--color-green-deep);
-  background: var(--color-lime-wash);
-}
-
 .equipmentEmailCount {
   display: inline-flex;
   flex: none;

@@ -14,7 +14,6 @@
     "browser/**/*.tsx",
     "searchIndexing.test.ts",
     "vite.config.ts",
-    "offlineShell.ts",
-    "offlineUpdates.ts"
+    "offlineShell.ts"
   ]
 }

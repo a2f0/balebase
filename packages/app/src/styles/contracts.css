@@ -12,17 +12,6 @@
   gap: var(--space-4);
 }
 
-.contractRowMark {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: var(--radius-md);
-  color: var(--color-green-deep);
-  background: var(--color-lime-wash);
-}
-
 .contractHint {
   color: var(--color-text-subtle);
   font-size: var(--text-sm);

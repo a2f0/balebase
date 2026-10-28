@@ -1,14 +1,12 @@
 import { createStackParser, Scope } from "@sentry/core";
 import { nodeStackLineParser, ServerRuntimeClient } from "@sentry/core/server";
 import { createSentryEventBudget } from "./budget";
-import { privateDataCollection } from "./collectionPolicy";
+import { privateClientOptions } from "./clientOptions";
 import {
   type DiagnosticSource,
   isSentryBuild,
   type SentryBuild,
 } from "./config";
-import { sanitizeSentryEvent } from "./privacy";
-import { createPrivateTransport } from "./transport";
 
 const admit = createSentryEventBudget(60 * 60 * 1000);
 
@@ -23,16 +21,8 @@ export async function captureServerError(
     const config = { ...build, origin: "", paths: new Set(["/index.js"]) };
     const client = new ServerRuntimeClient({
       ...build,
-      dist: build.environment,
+      ...privateClientOptions(config, admit),
       stackParser: createStackParser(nodeStackLineParser()),
-      transport: createPrivateTransport(config, admit),
-      integrations: [],
-      traceLifecycle: "static",
-      tracesSampleRate: 0,
-      dataCollection: privateDataCollection(),
-      sendClientReports: false,
-      maxBreadcrumbs: 0,
-      beforeSend: (event) => sanitizeSentryEvent(event, config),
     });
     client.init();
     const scope = new Scope();

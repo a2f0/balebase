@@ -89,13 +89,14 @@ both themes, so `.onDark` regions need no theme-specific styles.
   `menuSeparator`
 - **Page:** `page`, `pageNarrow`, `pageHeader`, `pageBody`, `pageSection`,
   `sectionHeader`, `sectionTitle`, `sectionDescription`, `sectionCount`
-- **Layout:** `stack` (+ `stackXs`…`stackXl`), `cluster` (+ `clusterBetween`),
+- **Layout:** `stack` (+ `stackSm`…`stackLg`), `cluster` (+ `clusterBetween`),
   `gridAuto` (`--grid-min`)
 - **Type:** `display`, `headline`, `title`, `lead`, `eyebrow`, `eyebrowDot`,
   `serifAccent`, `prose`, `textMuted`, `textSubtle`, `textXs`, `textSm`,
   `textStrong`, `mono`, `tabular`, `truncate`
 - **Identity:** `brand`, `brandMark`, `avatar` (+ `avatarSm`,
-  `avatarLg`), `keyValue`, `codeChip`, `icon`
+  `avatarLg`), `keyValue`, `codeChip`, `icon`, `iconTile` (an icon on a
+  lime-wash square, beside a row or card's title)
 
 ## React primitives
 

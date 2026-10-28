@@ -2,14 +2,9 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ReleaseTier } from "@balebase/diagnostics/config";
 import { build } from "vite";
-import {
-  appUrl,
-  noindex,
-  type ReleaseTier,
-  releaseTier,
-  searchIndexing,
-} from "./vite.config";
+import { appUrl, noindex, searchIndexing } from "./vite.config";
 
 const roots: string[] = [];
 afterAll(() =>
@@ -54,10 +49,4 @@ test("staging marks the shell and every response noindex, with no canonical", as
   expect(html).not.toContain("og:url");
   // The existing rules stay, followed by a rule for every path.
   expect(headers).toBe(`${aasa}\n/*\n  X-Robots-Tag: ${noindex}\n`);
-});
-
-test("the tier defaults to production and rejects unknown names", () => {
-  expect(releaseTier(undefined)).toBe("production");
-  expect(releaseTier(" Staging ")).toBe("staging");
-  expect(() => releaseTier("prod")).toThrow("Unknown VITE_RELEASE_TIER");
 });

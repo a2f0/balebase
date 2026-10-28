@@ -4,22 +4,15 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { ReleaseTier } from "@balebase/diagnostics/config";
 import { legalEntityName, plans, productName } from "@balebase/ui/brand";
 import {
   canonicalUrl,
   homeStructuredData,
-  type ReleaseTier,
-  releaseTier,
   robotsMeta,
   scriptJson,
   searchFiles,
 } from "./search";
-
-test("the tier defaults to production and rejects unknown names", () => {
-  expect(releaseTier(undefined)).toBe("production");
-  expect(releaseTier(" Staging ")).toBe("staging");
-  expect(() => releaseTier("prod")).toThrow("Unknown PUBLIC_RELEASE_TIER");
-});
 
 test("production noindexes only pages kept out of search; staging noindexes all", () => {
   expect(robotsMeta("production", true)).toBeNull();
