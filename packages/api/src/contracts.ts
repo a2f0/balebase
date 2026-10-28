@@ -17,16 +17,15 @@ import {
   eventStatement,
   type FieldRow,
   findContract,
-  firstSigners,
   listEvents,
   listFields,
   listRecipients,
   mailFor,
-  notifyRecipients,
   type RecipientRow,
   recordEvent,
 } from "./contractRecords";
 import { contractTemplates } from "./contractTemplates";
+import { firstSigners, notifyRecipients } from "./contractWorkflow";
 import { normalizeFilename } from "./filenames";
 import { respond } from "./respond";
 import {

@@ -3,9 +3,7 @@ import { type Context, Hono } from "hono";
 import { sendDeclined } from "./contractMail";
 import { isEmbeddablePng } from "./contractPdf";
 import {
-  advanceContract,
   type ContractRow,
-  decodePngDataUrl,
   eventStatement,
   type FieldRow,
   findContractById,
@@ -19,6 +17,7 @@ import {
   signingToken,
   signingTokenHash,
 } from "./contractTokens";
+import { advanceContract, decodePngDataUrl } from "./contractWorkflow";
 import { respond } from "./respond";
 import { storedDownload } from "./storage";
 import type { Bindings } from "./types";
