@@ -21,16 +21,27 @@ destination branch names, and commit trust before running `check` and `test`.
 `bun run verify` additionally runs all browser
 suites, builds, and mobile sync.
 
-Capture noisy finite commands with the pinned capture harness, for example
-`bun run agent:run --label tests -- bun run test` or
-`bun run agent:run --label checks -- bun run check`. It preserves the exit
-status and full stdout/stderr in a private log, returns a compact receipt on
-success, and shows a bounded excerpt (4 KiB and 40 lines by default) on
-failure. Inspect warnings, timings, and artifacts with
-`bun run agent:logs <log-path>` or targeted searches before accepting a check.
-Keep review verdicts, structured audit results, and infrastructure previews
-visible. Do not wrap interactive tools or persistent servers, and do not
-silence warnings or reduce test coverage to save output.
+Run finite, noisy commands, such as installs, builds, tests, linters, and Git
+commands that run hooks, through
+`bun run agent:run --label <name> -- <command> [args...]`, for example
+`bun run agent:run --label build -- bun run build` or
+`bun run agent:run --label api-tests -- bun run --cwd packages/api test`. It
+keeps complete output in a private log, preserves the exit status, and prints a
+compact receipt, with a bounded excerpt of the log on failure. Read more with
+`bun run agent:logs <log-path>`, raising `--tail-lines` or `--max-bytes` as
+needed, or with a targeted search of the log. A zero exit does not rule out
+warnings: inspect required warnings, timings, and artifacts before accepting a
+check. Run reviews, version preparation, audits, infrastructure previews, and
+run-group checks directly so their results stay visible, and run interactive
+tools and servers directly too. Never narrow a suite or silence warnings to
+reduce output.
+
+The failure excerpt defaults to 4 KiB and 40 lines. `check`, `check:fast`,
+`lint`, `test`, and `verify` are run groups that capture each step and print a
+structured report, so run them directly rather than through `agent:run`; find
+their stored evidence with `agent-tool runs list --head <commit>`. Keep
+structured audit results visible, and do not reduce test coverage to save
+output.
 
 Ship with the installed `ship-pr` skill. Title, required CI, and version policy
 are in `agent-tool.json`: changes to `packages/api`, `packages/app`,
