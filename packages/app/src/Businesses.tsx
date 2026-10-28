@@ -4,9 +4,7 @@ import {
   Card,
   ContextMenu,
   confirmDialog,
-  cx,
   EmptyState,
-  Field,
   Icon,
   LoadingState,
   Page,
@@ -15,11 +13,10 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
-import type { Business, BusinessInput } from "@balebase/validators/businesses";
+import type { Business } from "@balebase/validators/businesses";
 import {
   type ComponentProps,
   type FormEvent,
-  type RefObject,
   useCallback,
   useEffect,
   useReducer,
@@ -28,33 +25,29 @@ import {
 } from "react";
 import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
+import { BusinessDetailPage } from "./BusinessDetail";
 import {
-  type BusinessIdentifier,
+  BusinessFields,
+  type BusinessFormState,
+  businessForm,
+  businessInput,
+  emptyBusinessForm,
+} from "./BusinessForm";
+import {
   type BusinessListState,
+  businessIdentifiers,
   businessListReducer,
-  copiedNotice,
+  type CopyIdentifier,
   formatBusinessAddress,
   formatDuns,
   formatEin,
   initialBusinessListState,
+  useIdentifierCopy,
 } from "./businessState";
 import { errorMessage } from "./errors";
 import { countLabel, formatCalendarDate } from "./labels";
-import { useClipboard } from "./useClipboard";
 import { useFocusWhenFolded } from "./useFocusWhenFolded";
-import { useLoad } from "./useLoad";
 import { businessIdForPath, businessPath } from "./workspacePaths";
-
-interface BusinessFormState {
-  city: string;
-  duns: string;
-  ein: string;
-  incorporationDate: string;
-  name: string;
-  state: string;
-  streetAddress: string;
-  zip: string;
-}
 
 export function Businesses({
   onNavigate,
@@ -116,7 +109,7 @@ function BusinessListPage({
 }
 
 interface BusinessListViewProps extends BusinessListState {
-  copyNotice: CopyNotice | undefined;
+  copyNotice: ReturnType<typeof useIdentifierCopy>["copyNotice"];
   onAddingChange: (adding: boolean) => void;
   onCopy: CopyIdentifier;
   onCreated: (business: Business) => void;
@@ -450,41 +443,6 @@ function BusinessContextMenu({
   );
 }
 
-/** A business's copyable identifiers, formatted as they are displayed. */
-function businessIdentifiers(business: Business) {
-  return [
-    {
-      id: "ein",
-      identifier: "EIN",
-      value: business.ein ? formatEin(business.ein) : null,
-    },
-    {
-      id: "duns",
-      identifier: "DUNS number",
-      value: business.duns ? formatDuns(business.duns) : null,
-    },
-  ] satisfies {
-    id: string;
-    identifier: BusinessIdentifier;
-    value: string | null;
-  }[];
-}
-
-type CopyIdentifier = (identifier: BusinessIdentifier, value: string) => void;
-type CopyNotice = ReturnType<typeof useClipboard>["notice"];
-
-/** Copies an identifier from the row menu or the detail page alike. */
-function useIdentifierCopy() {
-  const { copy, notice } = useClipboard();
-  const onCopy: CopyIdentifier = (identifier, value) =>
-    void copy(
-      value,
-      copiedNotice(identifier),
-      `Could not copy the ${identifier}. Please try again.`,
-    );
-  return { copyNotice: notice, onCopy };
-}
-
 function BusinessSummary({
   business,
   onNavigate,
@@ -517,207 +475,6 @@ function BusinessSummary({
         {address && <span className="rowMeta">{address}</span>}
       </div>
     </AppLink>
-  );
-}
-
-function BusinessDetailPage({
-  id,
-  onNavigate,
-}: {
-  id: string;
-  onNavigate: (pathname: string) => void;
-}) {
-  const loaded = useLoad(
-    useCallback(() => api.businesses.get(id), [id]),
-    "Could not load the business.",
-  );
-  const detail = loaded.data;
-  const [editing, setEditing] = useState(false);
-  const [failure, setFailure] = useState<string>();
-  const [notice, setNotice] = useState<string>();
-  const { copyNotice, onCopy } = useIdentifierCopy();
-  const editButton = useFocusWhenFolded(editing);
-  const business = detail?.business;
-  const error = failure ?? loaded.error;
-  const announce = (message: string) => {
-    setFailure(undefined);
-    setNotice(message);
-  };
-  const fail = (message: string) => {
-    setNotice(undefined);
-    setFailure(message);
-  };
-
-  return (
-    <Page>
-      <PageHeader
-        actions={
-          <>
-            {detail?.canManage && !editing && (
-              <Button
-                icon="edit"
-                onClick={() => setEditing(true)}
-                ref={editButton}
-              >
-                Edit
-              </Button>
-            )}
-            <Button icon="arrowLeft" onClick={() => onNavigate(businessPath())}>
-              Businesses
-            </Button>
-          </>
-        }
-        eyebrow="Business"
-        title={business?.name ?? "Business details"}
-      />
-      <PageBody>
-        {error && <Toast tone="danger">{error}</Toast>}
-        {notice && <Toast tone="success">{notice}</Toast>}
-        {copyNotice && (
-          <Toast tone={copyNotice.tone}>{copyNotice.message}</Toast>
-        )}
-        {!business && !error && <LoadingState label="Loading business…" />}
-        {business &&
-          (editing ? (
-            <BusinessEditCard
-              business={business}
-              onCancel={() => setEditing(false)}
-              onError={fail}
-              onSaved={(updated) => {
-                loaded.setData((current) =>
-                  current ? { ...current, business: updated } : current,
-                );
-                setEditing(false);
-                announce("Business updated.");
-              }}
-            />
-          ) : (
-            <BusinessDetailCard business={business} onCopy={onCopy} />
-          ))}
-      </PageBody>
-    </Page>
-  );
-}
-
-function BusinessDetailCard({
-  business,
-  onCopy,
-}: {
-  business: Business;
-  onCopy: CopyIdentifier;
-}) {
-  return (
-    <PageSection title="Details">
-      <Card>
-        <dl className="businessDetails">
-          <div>
-            <dt>Name</dt>
-            <dd>{business.name}</dd>
-          </div>
-          {businessIdentifiers(business).map(({ id, identifier, value }) => (
-            <div key={id}>
-              <dt>{identifier}</dt>
-              <dd className="businessDetailValue">
-                {value ?? "Not provided"}
-                {value && (
-                  <Button
-                    aria-label={`Copy ${identifier}`}
-                    icon="copy"
-                    iconOnly
-                    onClick={() => onCopy(identifier, value)}
-                    size="sm"
-                    variant="ghost"
-                  />
-                )}
-              </dd>
-            </div>
-          ))}
-          <div>
-            <dt>Incorporation date</dt>
-            <dd>
-              {business.incorporationDate
-                ? formatCalendarDate(business.incorporationDate)
-                : "Not provided"}
-            </dd>
-          </div>
-          <div>
-            <dt>Address</dt>
-            <dd>{formatBusinessAddress(business) || "Not provided"}</dd>
-          </div>
-        </dl>
-      </Card>
-    </PageSection>
-  );
-}
-
-/** The detail page's editor: the add form's fields, filled from the business. */
-function BusinessEditCard({
-  business,
-  onCancel,
-  onError,
-  onSaved,
-}: {
-  business: Business;
-  onCancel: () => void;
-  onError: (message: string) => void;
-  onSaved: (business: Business) => void;
-}) {
-  const [form, setForm] = useState<BusinessFormState>(() =>
-    businessForm(business),
-  );
-  const [busy, setBusy] = useState(false);
-  const nameField = useRef<HTMLInputElement>(null);
-  // The Edit button that opened the form is gone; move focus into the form.
-  useEffect(() => nameField.current?.focus(), []);
-
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      const result = await api.businesses.update(
-        business.id,
-        businessInput(form),
-      );
-      onSaved(result.business);
-    } catch (cause) {
-      onError(errorMessage(cause, "Could not save the business."));
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Card
-      footer={
-        <>
-          <span className="textSm textSubtle">
-            Only the business name is required.
-          </span>
-          <div className="cluster">
-            <Button disabled={busy} onClick={onCancel} variant="ghost">
-              Cancel
-            </Button>
-            <Button
-              busy={busy}
-              disabled={!form.name.trim()}
-              icon="check"
-              type="submit"
-              variant="primary"
-            >
-              {busy ? "Saving…" : "Save changes"}
-            </Button>
-          </div>
-        </>
-      }
-      onSubmit={(event) => void save(event)}
-      title="Edit business"
-    >
-      <BusinessFields
-        disabled={busy}
-        form={form}
-        nameField={nameField}
-        onChange={setForm}
-      />
-    </Card>
   );
 }
 
@@ -784,198 +541,6 @@ function BusinessEditRow({
       </form>
     </li>
   );
-}
-
-function BusinessFields({
-  compact = false,
-  disabled,
-  form,
-  nameField,
-  onChange,
-}: {
-  compact?: boolean;
-  disabled: boolean;
-  form: BusinessFormState;
-  nameField?: RefObject<HTMLInputElement | null>;
-  onChange: (form: BusinessFormState) => void;
-}) {
-  const set = (field: keyof BusinessFormState, value: string) => {
-    onChange({ ...form, [field]: value });
-  };
-  const input = cx("input", compact && "inputSm");
-  return (
-    <div className="businessFieldsFrame">
-      <div className="businessFields">
-        <Field className="businessFieldWide" label="Business name">
-          <input
-            autoComplete="organization"
-            className={input}
-            disabled={disabled}
-            maxLength={120}
-            onChange={(event) => set("name", event.target.value)}
-            placeholder="Acme, Inc."
-            ref={nameField}
-            required
-            type="text"
-            value={form.name}
-          />
-        </Field>
-        <Field className="businessFieldHalf" label="EIN" optional>
-          <input
-            className={input}
-            disabled={disabled}
-            inputMode="numeric"
-            maxLength={10}
-            onChange={(event) => set("ein", event.target.value)}
-            pattern="[0-9]{2}-?[0-9]{7}"
-            placeholder="12-3456789"
-            type="text"
-            value={form.ein}
-          />
-        </Field>
-        <Field className="businessFieldHalf" label="DUNS number" optional>
-          <input
-            className={input}
-            disabled={disabled}
-            inputMode="numeric"
-            maxLength={11}
-            onChange={(event) => set("duns", event.target.value)}
-            pattern="[0-9]{9}|[0-9]{2}-[0-9]{3}-[0-9]{4}"
-            placeholder="12-345-6789"
-            type="text"
-            value={form.duns}
-          />
-        </Field>
-        <Field
-          className="businessFieldHalf"
-          label="Incorporation date"
-          optional
-        >
-          <input
-            className={input}
-            disabled={disabled}
-            onChange={(event) => set("incorporationDate", event.target.value)}
-            type="date"
-            value={form.incorporationDate}
-          />
-        </Field>
-        <BusinessAddressFields
-          disabled={disabled}
-          form={form}
-          input={input}
-          set={set}
-        />
-      </div>
-    </div>
-  );
-}
-
-function BusinessAddressFields({
-  disabled,
-  form,
-  input,
-  set,
-}: {
-  disabled: boolean;
-  form: BusinessFormState;
-  input: string;
-  set: (field: keyof BusinessFormState, value: string) => void;
-}) {
-  return (
-    <>
-      <Field className="businessFieldWide" label="Street address" optional>
-        <input
-          autoComplete="street-address"
-          className={input}
-          disabled={disabled}
-          maxLength={240}
-          onChange={(event) => set("streetAddress", event.target.value)}
-          placeholder="123 Main Street"
-          type="text"
-          value={form.streetAddress}
-        />
-      </Field>
-      <Field className="businessFieldHalf" label="City" optional>
-        <input
-          autoComplete="address-level2"
-          className={input}
-          disabled={disabled}
-          maxLength={100}
-          onChange={(event) => set("city", event.target.value)}
-          placeholder="New York"
-          type="text"
-          value={form.city}
-        />
-      </Field>
-      <Field className="businessFieldQuarter" label="State" optional>
-        <input
-          autoCapitalize="characters"
-          autoComplete="address-level1"
-          className={input}
-          disabled={disabled}
-          maxLength={2}
-          onChange={(event) => set("state", event.target.value)}
-          pattern="[A-Za-z]{2}"
-          placeholder="NY"
-          type="text"
-          value={form.state}
-        />
-      </Field>
-      <Field className="businessFieldQuarter" label="ZIP" optional>
-        <input
-          autoComplete="postal-code"
-          className={input}
-          disabled={disabled}
-          inputMode="numeric"
-          maxLength={10}
-          onChange={(event) => set("zip", event.target.value)}
-          pattern="[0-9]{5}(-[0-9]{4})?"
-          placeholder="10001"
-          type="text"
-          value={form.zip}
-        />
-      </Field>
-    </>
-  );
-}
-
-function businessForm(business: Business): BusinessFormState {
-  return {
-    city: business.city ?? "",
-    duns: business.duns ? formatDuns(business.duns) : "",
-    ein: business.ein ? formatEin(business.ein) : "",
-    incorporationDate: business.incorporationDate ?? "",
-    name: business.name,
-    state: business.state ?? "",
-    streetAddress: business.streetAddress ?? "",
-    zip: business.zip ?? "",
-  };
-}
-
-function emptyBusinessForm(): BusinessFormState {
-  return {
-    city: "",
-    duns: "",
-    ein: "",
-    incorporationDate: "",
-    name: "",
-    state: "",
-    streetAddress: "",
-    zip: "",
-  };
-}
-
-function businessInput(form: BusinessFormState): BusinessInput {
-  return {
-    city: form.city.trim() || null,
-    duns: form.duns.trim() || null,
-    ein: form.ein.trim() || null,
-    incorporationDate: form.incorporationDate || null,
-    name: form.name.trim(),
-    state: form.state.trim() || null,
-    streetAddress: form.streetAddress.trim() || null,
-    zip: form.zip.trim() || null,
-  };
 }
 
 function BusinessEmptyState({ title }: { title: string }) {

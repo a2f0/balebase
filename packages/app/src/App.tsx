@@ -7,8 +7,8 @@ import {
   PageBody,
   PageHeader,
 } from "@balebase/ui/react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { type AuthenticationAction, AuthPage } from "./AuthPage";
+import { type ReactNode, useEffect, useState } from "react";
+import { AuthPage } from "./AuthPage";
 import {
   accountReturnPath,
   addAccountPath,
@@ -16,7 +16,7 @@ import {
   workspaceContentKey,
 } from "./accountNavigation";
 import { useAccountSessions } from "./accountSessions";
-import { api } from "./apiClient";
+import type { AuthenticationAction } from "./authActions";
 import { authClient } from "./authClient";
 import { authCallbackUrl } from "./config";
 import { Library } from "./Library";
@@ -28,16 +28,15 @@ import {
 } from "./navigationGuard";
 import { OrganizationGate } from "./OrganizationGate";
 import { useOfflineSlot } from "./offlineSlot";
-import { lockOfflineWorkspace } from "./offlineStore";
-import {
-  createOrganizationSlug,
-  hasRole,
-  resolveActiveOrganizationId,
-  type WorkspaceOrganization,
-} from "./organizationState";
+import { hasRole } from "./organizationState";
 import { SigningPage } from "./SigningPage";
 import { useOfflineRoute } from "./useOfflineRoute";
 import { useOrganizationAccess } from "./useOrganizationAccess";
+import { useSessionRefetch } from "./useSessionRefetch";
+import {
+  type OrganizationSession,
+  useWorkspaceOrganizations,
+} from "./useWorkspaceOrganizations";
 import { WorkspaceShell, type WorkspaceUser } from "./WorkspaceShell";
 import {
   isRootAdminPath,
@@ -143,40 +142,6 @@ export function App() {
       />
     );
   }
-}
-
-/**
- * Tells a background session refetch from one the sign-in page asks for.
- * Better Auth marks every refetch without a session as pending, and returning
- * to the app refetches it. Swapping the sign-in page for a loading screen then
- * would drop a pending two-factor challenge while the person fetches the code
- * from another app. So once the session has loaded, the sign-in page stays
- * through refetches it didn't ask for, and ignores their failures. After
- * signing in, it requests the new session, which still loads and reports a
- * failure as before, until an answer arrives.
- */
-function useSessionRefetch(
-  session: unknown,
-  isPending: boolean,
-  error: unknown,
-  refetch: () => Promise<unknown>,
-) {
-  const answered = !isPending && !error;
-  const [loaded, setLoaded] = useState(answered);
-  const [requested, setRequested] = useState(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a changed session answers a request too.
-  useEffect(() => {
-    if (!answered) return;
-    setLoaded(true);
-    setRequested(false);
-  }, [answered, session]);
-  return {
-    background: (loaded || answered) && !requested,
-    request: () => {
-      setRequested(true);
-      return refetch();
-    },
-  };
 }
 
 function AuthenticationRoute({
@@ -443,79 +408,6 @@ async function resendVerification(email: string) {
       result.error.message ?? "Could not send verification email.",
     );
   }
-}
-
-interface OrganizationSession {
-  session: { activeOrganizationId?: string | null | undefined };
-  user: {
-    defaultOrganizationId?: string | null | undefined;
-    id: string;
-  };
-}
-
-function useWorkspaceOrganizations(
-  session: OrganizationSession | null | undefined,
-  refetchSession: () => Promise<unknown>,
-) {
-  const [organizations, setOrganizations] = useState<
-    WorkspaceOrganization[] | undefined
-  >();
-  const loadOrganizations = useCallback(async () => {
-    setOrganizations(await api.organizationSettings.organizations());
-  }, []);
-  const signedInUserId = session?.user.id;
-  useEffect(() => {
-    if (!signedInUserId) {
-      setOrganizations(undefined);
-      return;
-    }
-    void loadOrganizations().catch(() => setOrganizations([]));
-  }, [loadOrganizations, signedInUserId]);
-  const activeOrganizationId = organizations
-    ? resolveActiveOrganizationId(
-        session?.session.activeOrganizationId,
-        session?.user.defaultOrganizationId,
-        organizations,
-      )
-    : (session?.session.activeOrganizationId ??
-      session?.user.defaultOrganizationId ??
-      undefined);
-  const createOrganization = async (name: string) => {
-    const result = await authClient.organization.create({
-      name,
-      slug: createOrganizationSlug(name, crypto.randomUUID()),
-    });
-    if (result.error) {
-      throw new Error(
-        result.error.message ?? "Could not create this organization.",
-      );
-    }
-    await loadOrganizations();
-    await refetchSession();
-  };
-  const switchOrganization = async (organizationId: string) => {
-    lockOfflineWorkspace();
-    const result = await authClient.organization.setActive({ organizationId });
-    if (result.error) {
-      throw new Error(
-        result.error.message ?? "Could not switch organizations.",
-      );
-    }
-    lockOfflineWorkspace();
-    await refetchSession();
-  };
-  const refresh = async () => {
-    await loadOrganizations();
-    await refetchSession();
-  };
-  return {
-    activeOrganizationId,
-    createOrganization,
-    isPending: organizations === undefined,
-    organizations: organizations ?? [],
-    refresh,
-    switchOrganization,
-  };
 }
 
 /**

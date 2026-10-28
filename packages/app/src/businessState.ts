@@ -2,6 +2,7 @@ import type {
   Business,
   BusinessListing,
 } from "@balebase/validators/businesses";
+import { useClipboard } from "./useClipboard";
 
 export function formatEin(ein: string) {
   return /^\d{9}$/.test(ein) ? `${ein.slice(0, 2)}-${ein.slice(2)}` : ein;
@@ -14,10 +15,43 @@ export function formatDuns(duns: string) {
 }
 
 /** The identifiers a business offers to copy, as the notice names them. */
-export type BusinessIdentifier = "DUNS number" | "EIN";
+type BusinessIdentifier = "DUNS number" | "EIN";
 
-export function copiedNotice(identifier: BusinessIdentifier) {
-  return `${identifier} copied.`;
+/** A business's copyable identifiers, formatted as they are displayed. */
+export function businessIdentifiers(business: Business) {
+  return [
+    {
+      id: "ein",
+      identifier: "EIN",
+      value: business.ein ? formatEin(business.ein) : null,
+    },
+    {
+      id: "duns",
+      identifier: "DUNS number",
+      value: business.duns ? formatDuns(business.duns) : null,
+    },
+  ] satisfies {
+    id: string;
+    identifier: BusinessIdentifier;
+    value: string | null;
+  }[];
+}
+
+export type CopyIdentifier = (
+  identifier: BusinessIdentifier,
+  value: string,
+) => void;
+
+/** Copies an identifier from the row menu or the detail page alike. */
+export function useIdentifierCopy() {
+  const { copy, notice } = useClipboard();
+  const onCopy: CopyIdentifier = (identifier, value) =>
+    void copy(
+      value,
+      `${identifier} copied.`,
+      `Could not copy the ${identifier}. Please try again.`,
+    );
+  return { copyNotice: notice, onCopy };
 }
 
 /** One line: street, then city with state and ZIP; blank parts are skipped. */
