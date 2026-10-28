@@ -2978,6 +2978,23 @@ describe("audit issue writes", () => {
     });
   });
 
+  it("keeps a checklist item ID exactly as the form defines it", async () => {
+    const fixture = createFixture();
+    const { auditId } = await createActivityAudit(fixture, " check ");
+    const raised = await jsonRequest<{ issueId: string }>(
+      fixture,
+      `/runs/${auditId}/issues`,
+      "POST",
+      { itemId: " check ", title: "Loose rail" },
+    );
+    expect(raised.status).toBe(201);
+    expect(
+      fixture.database
+        .query("SELECT item_id FROM issues WHERE id = ?")
+        .get(raised.body.issueId),
+    ).toEqual({ item_id: " check " });
+  });
+
   it("refuses an assignee who leaves after the initial read", async () => {
     const fixture = createFixture();
     const { auditId } = await createActivityAudit(fixture);
@@ -3621,7 +3638,10 @@ describe("audit activity", () => {
   });
 });
 
-async function createActivityAudit(fixture: ReturnType<typeof createFixture>) {
+async function createActivityAudit(
+  fixture: ReturnType<typeof createFixture>,
+  checkId = "check",
+) {
   const created = await jsonRequest<TemplateResponse>(
     fixture,
     "/templates",
@@ -3637,7 +3657,7 @@ async function createActivityAudit(fixture: ReturnType<typeof createFixture>) {
         title: "Questions",
         items: [
           {
-            id: "check",
+            id: checkId,
             prompt: "Check question",
             required: true,
             responseType: "check",

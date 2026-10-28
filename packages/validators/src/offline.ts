@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { auditsRoutes } from "./audits";
 import { PersonSchema } from "./fields";
-import { NewIssueSchema } from "./issues";
+import { issueLimits, issuePriorities } from "./issueRules";
 import { route } from "./route";
+import { auditLimits } from "./rules";
 
 export const OfflineScopeSchema = z.object({
   organizationId: z.string().min(1).max(200),
@@ -20,16 +21,18 @@ export const OfflineOperationSchema = z.discriminatedUnion("type", [
     completedAt: z.iso.datetime().optional(),
     responses: z.record(z.string().max(100), z.string().max(2000)),
   }),
-  // Keys stay in this order: a receipt's digest is of the parsed operation.
+  // A receipt's digest is of the parsed operation, so these fields keep the
+  // keys, order, and normalization of earlier releases: a retry of work
+  // synced before an upgrade must hash the same.
   z.object({
     id: z.uuid(),
     type: z.literal("issue"),
-    title: NewIssueSchema.shape.title,
-    description: NewIssueSchema.shape.description,
-    priority: NewIssueSchema.shape.priority,
-    assignedTo: NewIssueSchema.shape.assignedTo,
+    title: z.string().trim().min(1).max(issueLimits.title),
+    description: z.string().max(issueLimits.description),
+    priority: z.enum(issuePriorities),
+    assignedTo: z.string().min(1).max(200).nullable(),
     auditId: z.uuid().optional(),
-    itemId: z.string().trim().min(1).max(100).optional(),
+    itemId: z.string().min(1).max(auditLimits.itemId).optional(),
   }),
 ]);
 export type OfflineOperation = z.infer<typeof OfflineOperationSchema>;

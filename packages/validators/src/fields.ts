@@ -1,4 +1,14 @@
 import { z } from "zod";
+import { auditLimits } from "./rules";
+
+/**
+ * A checklist section or item ID, kept exactly as sent: answers and issues
+ * refer to it, so it is never trimmed.
+ */
+export const ChecklistIdSchema = z
+  .string()
+  .max(auditLimits.itemId)
+  .refine((id) => id.trim() !== "");
 
 /** A person a record names, such as its creator or assignee. */
 export const PersonSchema = z.object({

@@ -4,19 +4,18 @@ import {
   ActivityPageSchema,
   ActivityQuerySchema,
 } from "./activity";
-import { optionalText, PersonSchema, requiredText } from "./fields";
+import {
+  ChecklistIdSchema,
+  optionalText,
+  PersonSchema,
+  requiredText,
+} from "./fields";
 import { IssueSchema, NewIssueSchema } from "./issues";
 import { route } from "./route";
 import { auditLimits } from "./rules";
 
-/** Kept exactly as sent, since answers and issues refer to it. */
-const DefinitionIdSchema = z
-  .string()
-  .max(auditLimits.itemId)
-  .refine((id) => id.trim() !== "");
-
 const AuditTemplateItemSchema = z.object({
-  id: DefinitionIdSchema,
+  id: ChecklistIdSchema,
   prompt: requiredText(auditLimits.prompt),
   required: z.boolean(),
   responseType: z.enum(["check", "text"]),
@@ -24,7 +23,7 @@ const AuditTemplateItemSchema = z.object({
 export type AuditTemplateItem = z.infer<typeof AuditTemplateItemSchema>;
 
 const AuditTemplateSectionSchema = z.object({
-  id: DefinitionIdSchema,
+  id: ChecklistIdSchema,
   items: z.array(AuditTemplateItemSchema).max(auditLimits.itemsPerSection),
   title: requiredText(auditLimits.sectionTitle),
 });
@@ -195,7 +194,7 @@ export type AuditDetail = z.infer<typeof AuditDetailSchema>;
 
 const AuditIssueCreateSchema = NewIssueSchema.extend({
   /** The checklist item the issue is about. */
-  itemId: z.string().trim().min(1).max(100),
+  itemId: ChecklistIdSchema,
 });
 export type AuditIssueInput = z.input<typeof AuditIssueCreateSchema>;
 

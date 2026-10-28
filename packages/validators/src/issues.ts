@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import {
+  ChecklistIdSchema,
   type FormInput,
   optionalText,
   PersonSchema,
@@ -94,7 +95,7 @@ const IssueCreateSchema = NewIssueSchema.extend({
       z.object({
         id: targetId,
         /** The audit checklist item the issue is about. */
-        itemId: z.string().trim().min(1).max(100),
+        itemId: ChecklistIdSchema,
         type: z.literal("audit_run"),
       }),
     ])
