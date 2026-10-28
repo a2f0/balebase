@@ -1,3 +1,4 @@
+import { isUsStateCode } from "@balebase/validators/rules";
 import type { CheckrCandidateDetails } from "./checkr";
 import { isRecord } from "./jsonInput";
 import { requiredStateNotices } from "./screeningDisclosures";
@@ -8,17 +9,6 @@ export interface ScreeningSubmission {
   residenceState: string;
   signatureName: string;
   stateNotices: string[];
-}
-
-const usStates = new Set(
-  "AK AL AR AZ CA CO CT DC DE FL GA HI IA ID IL IN KS KY LA MA MD ME MI MN MO MS MT NC ND NE NH NJ NM NV NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY".split(
-    " ",
-  ),
-);
-
-/** A two-letter US state or DC code. */
-export function isUsStateCode(value: unknown): value is string {
-  return typeof value === "string" && usStates.has(value);
 }
 
 type Candidate = ScreeningSubmission["candidate"];
@@ -64,7 +54,10 @@ export function parseScreeningSubmission(
   }
   const candidate = parseCandidate(form.candidate, today);
   if ("error" in candidate) return candidate;
-  if (!isUsStateCode(form.residenceState)) {
+  if (
+    typeof form.residenceState !== "string" ||
+    !isUsStateCode(form.residenceState)
+  ) {
     return { error: "Choose the state you live in." };
   }
   const required = requiredStateNotices(workState, form.residenceState);
@@ -229,6 +222,7 @@ function driverLicense(number: unknown, state: unknown) {
   if (
     typeof number !== "string" ||
     !/^[A-Za-z0-9*-]{1,30}$/.test(number.trim()) ||
+    typeof state !== "string" ||
     !isUsStateCode(state)
   ) {
     return null;

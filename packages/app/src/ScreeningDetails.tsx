@@ -1,10 +1,6 @@
 import { Badge, Button, Card, Field, Select } from "@balebase/ui/react";
 import type { CheckrTestCandidate } from "@balebase/validators/employeeForms";
-
-const usStates =
-  "AK AL AR AZ CA CO CT DC DE FL GA HI IA ID IL IN KS KY LA MA MD ME MI MN MO MS MT NC ND NE NH NJ NM NV NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY".split(
-    " ",
-  );
+import { usStateCodes } from "@balebase/validators/rules";
 
 export interface PersonDetails {
   dob: string;
@@ -217,7 +213,7 @@ function StateSelect({
       value={value}
     >
       <option value="">Choose a state</option>
-      {usStates.map((state) => (
+      {usStateCodes.map((state) => (
         <option key={state} value={state}>
           {state}
         </option>

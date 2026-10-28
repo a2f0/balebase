@@ -12,6 +12,10 @@ import type {
   EmployeeRequirementKind,
   EmployeeRequirementStatus,
 } from "@balebase/validators/employeeForms";
+import {
+  employeeRequirementLimits,
+  isUsStateCode,
+} from "@balebase/validators/rules";
 import { type FormEvent, useCallback, useState } from "react";
 import { api } from "./apiClient";
 import {
@@ -59,7 +63,12 @@ export function RequirementDraftEditor({
   function add() {
     const title =
       selected.title === "Other form" ? customTitle.trim() : selected.title;
-    if (!title || !dueDate || drafts.length >= 20) return;
+    if (
+      !title ||
+      !dueDate ||
+      drafts.length >= employeeRequirementLimits.requirements
+    )
+      return;
     onChange([
       ...drafts,
       { id: crypto.randomUUID(), kind: selected.kind, title, dueDate },
@@ -87,7 +96,7 @@ export function RequirementDraftEditor({
             <input
               className="input"
               disabled={disabled}
-              maxLength={100}
+              maxLength={employeeRequirementLimits.title}
               onChange={(event) => setCustomTitle(event.target.value)}
               value={customTitle}
             />
@@ -107,7 +116,7 @@ export function RequirementDraftEditor({
             disabled ||
             !dueDate ||
             (selected.title === "Other form" && !customTitle.trim()) ||
-            drafts.length >= 20
+            drafts.length >= employeeRequirementLimits.requirements
           }
           onClick={add}
           size="sm"
@@ -497,6 +506,7 @@ function CheckrRequestControl({
     requirement.checkrWorkLocation?.state ?? "",
   );
   const [city, setCity] = useState(requirement.checkrWorkLocation?.city ?? "");
+  const stateCode = isUsStateCode(state) ? state : null;
   const person = requirement.targetName ?? requirement.targetEmail ?? "them";
   return (
     <div className="checkrStart">
@@ -514,23 +524,28 @@ function CheckrRequestControl({
         aria-label={`Work city for ${requirement.title}`}
         className="input inputSm checkrCity"
         disabled={busy}
-        maxLength={100}
+        maxLength={employeeRequirementLimits.city}
         onChange={(event) => setCity(event.target.value)}
         placeholder="City (optional)"
         value={city}
       />
       <Button
-        disabled={busy || !/^[A-Z]{2}$/.test(state)}
-        onClick={() =>
+        disabled={busy || !stateCode}
+        onClick={() => {
+          if (!stateCode) return;
           void action(
             () =>
-              api.employeeForms.requestScreening(requirement.id, state, city),
+              api.employeeForms.requestScreening(
+                requirement.id,
+                stateCode,
+                city,
+              ),
             ({ emailed }) =>
               emailed
                 ? `Background check requested. ${person} was emailed a link.`
                 : `Background check requested, but the email to ${person} couldn’t be sent. Ask them to open Forms and checks in Balebase.`,
-          )
-        }
+          );
+        }}
         size="sm"
       >
         {requirement.checkrRequested

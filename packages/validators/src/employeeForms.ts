@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { calendarDate, optionalText, requiredText } from "./fields";
 import { route } from "./route";
+import { employeeRequirementLimits, usStateCodes } from "./rules";
 
 export const EmployeeRequirementKindSchema = z.enum([
   "form",
@@ -53,31 +55,61 @@ const EmployeeRequirementSchema = z.object({
 });
 export type EmployeeRequirement = z.infer<typeof EmployeeRequirementSchema>;
 
-const EmployeeRequirementInputSchema = z.object({
-  /** YYYY-MM-DD. */
-  dueDate: z.string(),
-  kind: EmployeeRequirementKindSchema,
-  title: z.string(),
-});
-export type EmployeeRequirementInput = z.infer<
+const requirementsRule = `Choose 1 to ${employeeRequirementLimits.requirements} valid requirements.`;
+
+const EmployeeRequirementInputSchema = z.object(
+  {
+    dueDate: calendarDate(requirementsRule),
+    kind: z.enum(EmployeeRequirementKindSchema.options, {
+      error: requirementsRule,
+    }),
+    title: requiredText(employeeRequirementLimits.title, requirementsRule),
+  },
+  { error: requirementsRule },
+);
+export type EmployeeRequirementInput = z.input<
   typeof EmployeeRequirementInputSchema
 >;
 
-const requirements = z.array(EmployeeRequirementInputSchema);
+const targetRule = "Choose one member or invitation.";
 
 /** Requests for one member, or for one pending invitation. */
-const EmployeeRequirementCreateSchema = z.union([
-  z.object({ invitationId: z.string(), requirements }),
-  z.object({ memberId: z.string(), requirements }),
-]);
+const EmployeeRequirementCreateSchema = z
+  .object(
+    {
+      invitationId: z.string({ error: targetRule }).optional(),
+      memberId: z.string({ error: targetRule }).optional(),
+      requirements: z
+        .array(EmployeeRequirementInputSchema, { error: requirementsRule })
+        .min(1, requirementsRule)
+        .max(employeeRequirementLimits.requirements, requirementsRule),
+    },
+    { error: "A target and requirements are required." },
+  )
+  .refine(
+    ({ invitationId, memberId }) => Boolean(invitationId) !== Boolean(memberId),
+    targetRule,
+  );
 
-const EmployeeRequirementUpdateSchema = z.object({
-  /** A form's status changes only against the revision the manager saw. */
-  documentRevision: z.number().optional(),
-  dueDate: z.string().optional(),
-  status: EmployeeRequirementStatusSchema.optional(),
-});
-export type EmployeeRequirementUpdate = z.infer<
+/**
+ * A new status, due date, or both. Which statuses a requirement can take
+ * depends on its kind and screening, which the API checks.
+ */
+const EmployeeRequirementUpdateSchema = z
+  .object(
+    {
+      /** A form's status changes only against the revision the manager saw. */
+      documentRevision: z.int().min(0).optional(),
+      dueDate: calendarDate().optional(),
+      status: EmployeeRequirementStatusSchema.optional(),
+    },
+    { error: "Invalid update." },
+  )
+  .refine(
+    ({ dueDate, status }) => dueDate !== undefined || status !== undefined,
+    "Invalid status or due date.",
+  );
+export type EmployeeRequirementUpdate = z.input<
   typeof EmployeeRequirementUpdateSchema
 >;
 
@@ -213,7 +245,10 @@ export const employeeFormsRoutes = {
   requestScreening: route({
     method: "POST",
     path: "/api/employee-forms/:id/checkr/request",
-    body: z.object({ city: z.string().optional(), state: z.string() }),
+    body: z.object({
+      city: optionalText(requiredText(employeeRequirementLimits.city)),
+      state: z.enum(usStateCodes),
+    }),
     response: z.object({ emailed: z.boolean() }),
   }),
   screeningForm: route({

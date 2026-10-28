@@ -69,3 +69,69 @@ export const contractLimits = {
   signers: 20,
   title: 200,
 } as const;
+
+/** The two-letter codes of the US states and DC. */
+export const usStateCodes = [
+  "AK",
+  "AL",
+  "AR",
+  "AZ",
+  "CA",
+  "CO",
+  "CT",
+  "DC",
+  "DE",
+  "FL",
+  "GA",
+  "HI",
+  "IA",
+  "ID",
+  "IL",
+  "IN",
+  "KS",
+  "KY",
+  "LA",
+  "MA",
+  "MD",
+  "ME",
+  "MI",
+  "MN",
+  "MO",
+  "MS",
+  "MT",
+  "NC",
+  "ND",
+  "NE",
+  "NH",
+  "NJ",
+  "NM",
+  "NV",
+  "NY",
+  "OH",
+  "OK",
+  "OR",
+  "PA",
+  "RI",
+  "SC",
+  "SD",
+  "TN",
+  "TX",
+  "UT",
+  "VA",
+  "VT",
+  "WA",
+  "WI",
+  "WV",
+  "WY",
+] as const;
+export type UsStateCode = (typeof usStateCodes)[number];
+
+export function isUsStateCode(code: string): code is UsStateCode {
+  return usStateCodes.some((state) => state === code);
+}
+
+export const employeeRequirementLimits = {
+  city: 100,
+  requirements: 20,
+  title: 100,
+} as const;

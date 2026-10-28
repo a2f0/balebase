@@ -4,6 +4,7 @@ import type {
   employeeFormsRoutes,
   ScreeningSubmission,
 } from "@balebase/validators/employeeForms";
+import type { UsStateCode } from "@balebase/validators/rules";
 import { endpoint } from "./endpoint";
 import type { Transport } from "./transport";
 
@@ -110,7 +111,7 @@ export function employeeFormsApi(transport: Transport) {
     document(id: string) {
       return transport.call(endpoints.document, { params: { id } });
     },
-    requestScreening(id: string, state: string, city: string) {
+    requestScreening(id: string, state: UsStateCode, city: string) {
       return transport.call(endpoints.requestScreening, {
         body: { city, state },
         params: { id },

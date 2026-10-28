@@ -1,8 +1,8 @@
 import {
   type EmployeeRequirement,
-  type EmployeeRequirementInput,
   type EmployeeRequirementKind,
   type EmployeeRequirementStatus,
+  type EmployeeRequirementUpdate,
   employeeFormsRoutes,
 } from "@balebase/validators/employeeForms";
 import { type Context, Hono } from "hono";
@@ -24,14 +24,14 @@ import { checkrTestCandidates } from "./checkrTestCandidates";
 import { normalizeFilename } from "./filenames";
 import { isRecord } from "./jsonInput";
 import { canManage, requireManager } from "./organizationMembers";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 import {
   disclosureFingerprint,
   screeningDisclosures,
   summaryOfRightsUrl,
 } from "./screeningDisclosures";
 import { sendScreeningRequest } from "./screeningMail";
-import { isUsStateCode, parseScreeningSubmission } from "./screeningSubmission";
+import { parseScreeningSubmission } from "./screeningSubmission";
 import type { Bindings } from "./types";
 import { respondToUnexpectedError } from "./unexpectedError";
 
@@ -116,27 +116,14 @@ employeeForms.get("/", async (context) => {
 });
 
 employeeForms.post("/", requireManager(), async (context) => {
-  const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord<keyof InputRecord>(body)) {
-    return context.json(
-      { error: "A target and requirements are required." },
-      400,
-    );
-  }
-  const memberId = typeof body.memberId === "string" ? body.memberId : null;
-  const invitationId =
-    typeof body.invitationId === "string" ? body.invitationId : null;
-  if (Boolean(memberId) === Boolean(invitationId)) {
-    return context.json({ error: "Choose one member or invitation." }, 400);
-  }
-  if (
-    !Array.isArray(body.requirements) ||
-    body.requirements.length < 1 ||
-    body.requirements.length > 20 ||
-    !body.requirements.every(isRequirementInput)
-  ) {
-    return context.json({ error: "Choose 1 to 20 valid requirements." }, 400);
-  }
+  const body = await readBody(
+    context,
+    employeeFormsRoutes.create,
+    "A target and requirements are required.",
+  );
+  if (body instanceof Response) return body;
+  const memberId = body.memberId || null;
+  const invitationId = body.invitationId || null;
   const organizationId = context.get("organizationId");
   const target = await context.env.DB.prepare(
     memberId
@@ -151,7 +138,7 @@ employeeForms.post("/", requireManager(), async (context) => {
   if (!target) return context.json({ error: "Person not found." }, 404);
 
   const now = new Date().toISOString();
-  const requirements = body.requirements as EmployeeRequirementInput[];
+  const { requirements } = body;
   const ids = requirements.map(() => crypto.randomUUID());
   const inserted = await context.env.DB.batch(
     requirements.map((requirement, index) =>
@@ -174,7 +161,7 @@ employeeForms.post("/", requireManager(), async (context) => {
         target.email.toLowerCase(),
         target.user_id,
         requirement.kind,
-        requirement.title.trim(),
+        requirement.title,
         requirement.dueDate,
         now,
         now,
@@ -195,11 +182,13 @@ employeeForms.post("/", requireManager(), async (context) => {
 employeeForms.patch("/:id", requireManager(), async (context) => {
   const row = await findRequirement(context);
   if (!row) return context.json({ error: "Requirement not found." }, 404);
-  const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord<keyof InputRecord>(body))
-    return context.json({ error: "Invalid update." }, 400);
-  const status = body.status;
-  const dueDate = body.dueDate;
+  const body = await readBody(
+    context,
+    employeeFormsRoutes.update,
+    "Invalid status or due date.",
+  );
+  if (body instanceof Response) return body;
+  const { dueDate, status } = body;
   if (!isValidRequirementUpdate(row, body)) {
     return context.json({ error: "Invalid status or due date." }, 400);
   }
@@ -436,17 +425,12 @@ employeeForms.post("/:id/checkr/request", requireManager(), async (context) => {
       503,
     );
   }
-  const body: unknown = await context.req.json().catch(() => null);
-  if (
-    !isRecord<keyof InputRecord>(body) ||
-    !isUsStateCode(body.state) ||
-    !isCity(body.city)
-  ) {
-    return context.json(
-      { error: "A US work state and optional city are required." },
-      400,
-    );
-  }
+  const body = await readBody(
+    context,
+    employeeFormsRoutes.requestScreening,
+    "A US work state and optional city are required.",
+  );
+  if (body instanceof Response) return body;
   if (screeningActive(row)) {
     return context.json(
       { error: "This screening was already submitted to Checkr." },
@@ -458,7 +442,7 @@ employeeForms.post("/:id/checkr/request", requireManager(), async (context) => {
     context.get("organizationId"),
     row.id,
     body.state,
-    body.city?.trim() || null,
+    body.city ?? null,
   );
   if (!requested) {
     return context.json(
@@ -827,59 +811,12 @@ function toRequirement(
   };
 }
 
-interface InputRecord {
-  memberId?: unknown;
-  invitationId?: unknown;
-  requirements?: unknown;
-  status?: unknown;
-  dueDate?: unknown;
-  file?: unknown;
-  documentRevision?: unknown;
-  kind?: unknown;
-  title?: unknown;
-  state?: unknown;
-  city?: unknown;
-}
-
-function isDate(value: unknown): value is string {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
-  }
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  return (
-    !Number.isNaN(parsed.getTime()) &&
-    parsed.toISOString().slice(0, 10) === value
-  );
-}
-
-function isRequirementInput(value: unknown): value is EmployeeRequirementInput {
-  return (
-    isRecord<keyof InputRecord>(value) &&
-    typeof value.kind === "string" &&
-    ["form", "background_check", "credit_check"].includes(value.kind) &&
-    typeof value.title === "string" &&
-    value.title.trim().length > 0 &&
-    value.title.trim().length <= 100 &&
-    isDate(value.dueDate)
-  );
-}
-
-function isStatus(value: unknown): value is EmployeeRequirementStatus {
-  return (
-    typeof value === "string" &&
-    ["pending", "in_progress", "submitted", "complete"].includes(value)
-  );
-}
-
-function isValidRequirementUpdate(row: RequirementRow, body: InputRecord) {
-  const { status, dueDate, documentRevision } = body;
+/** Whether the requirement, as it is now, can take the update's status. */
+function isValidRequirementUpdate(
+  row: RequirementRow,
+  { documentRevision, status }: EmployeeRequirementUpdate,
+) {
   return !(
-    (status !== undefined && !isStatus(status)) ||
-    (dueDate !== undefined && !isDate(dueDate)) ||
-    (documentRevision !== undefined &&
-      (!Number.isSafeInteger(documentRevision) ||
-        Number(documentRevision) < 0)) ||
-    (status === undefined && dueDate === undefined) ||
     (row.kind === "form" && status === "in_progress") ||
     (row.kind !== "form" && status === "submitted") ||
     (row.kind === "form" && status === "complete" && !row.document_key) ||
@@ -905,12 +842,6 @@ function screeningActive(row: RequirementRow) {
     row.checkr_start_nonce !== null ||
     (row.checkr_report_id !== null &&
       !isClosedReportStatus(row.checkr_report_status))
-  );
-}
-
-function isCity(value: unknown): value is string | undefined {
-  return (
-    value === undefined || (typeof value === "string" && value.length <= 100)
   );
 }
 
