@@ -9,12 +9,12 @@ component styles) so both apps look like one product.
 | Import                     | Contents                                              |
 | -------------------------- | ----------------------------------------------------- |
 | `@balebase/ui/styles.css`  | Self-hosted fonts, tokens, base styles, component CSS |
-| `@balebase/ui/react`       | Typed React primitives for the client                 |
+| `@balebase/ui/react`       | Typed React primitives for the app                    |
 | `@balebase/ui/icons`       | The shared icon vocabulary (Lucide geometry)          |
 | `@balebase/ui/brand`       | Product name, pricing plans, and legal links          |
 
 Import `styles.css` once, before any app stylesheet. The website uses the
-same class names directly in Astro markup; the client prefers the React
+same class names directly in Astro markup; the app prefers the React
 primitives, which render those classes.
 
 ## Rules
@@ -58,7 +58,7 @@ rings switch to their inverse treatment.
 ## Themes
 
 Colors and shadows have a light and a dark theme. Light is the default; the
-client sets `data-theme="light"` or `"dark"` on `<html>` from the viewer's
+app sets `data-theme="light"` or `"dark"` on `<html>` from the viewer's
 choice (System, Light, or Dark), and the website never sets it. Any element
 can set `data-theme="light"` to stay light inside the dark theme, as PDF
 pages, the signature pad, and QR codes do. Ink stays the darkest surface in
@@ -117,3 +117,27 @@ both themes, so `.onDark` regions need no theme-specific styles.
 - `Field` wraps a control with its label, hint, and an `optional` marker.
 - `Icon` renders a name from `@balebase/ui/icons`; `Avatar` and `Logo`
   render identity.
+
+## Images
+
+`assets/brand/logo.svg` is the pixel B logo, drawn only with whole-unit
+`<rect>` elements; the app shells and the website import this one copy. The
+`images` section of `agent-tool.json` declares every image generated from it,
+and the pinned `agent-tool images build` renders them, with `pixelSnap`
+scaling the logo by whole numbers.
+
+- The web app and website write the `favicons` target to their `public/` in
+  dev and build. The website also writes the `social` target, the 1200×630
+  Open Graph image that both its pages and the app shell name.
+- `bun run images` writes the `native` target to `dist/images`: the iOS and
+  Android icons and splash screens in Capacitor's project layout, and the
+  1024×1024 Plaid icon at `plaid/icon-1024.png`. It writes the favicons to
+  `dist/images/web`.
+
+The lime and ink fills match `--color-lime` and `--color-ink` in
+`src/styles/tokens.css`. The touch and App Store icons are opaque, because iOS
+blackens transparent home-screen pixels and the App Store rejects
+transparency. The 60% Android adaptive foreground stays inside the 66dp that
+launchers may leave unmasked, and the Plaid icon's margin keeps the B whole
+under a circular crop. Generated images are ignored; keep binary files out of
+commits.

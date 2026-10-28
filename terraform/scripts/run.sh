@@ -17,14 +17,7 @@ STACK_DIR="$REPO_ROOT/terraform/stacks/$TIER"
 # shellcheck source=../../scripts/lib/cloudflareEnv.sh
 # shellcheck disable=SC1091
 source "$REPO_ROOT/scripts/lib/cloudflareEnv.sh"
-
-if [[ "$TIER" == "staging" ]]; then
-  unset TF_VAR_cloudflare_api_token TF_VAR_cloudflare_account_id
-  load_tier_env staging "$REPO_ROOT"
-  validate_cloudflare_env
-else
-  load_cloudflare_env
-fi
+load_cloudflare_tier_env "$TIER" "$REPO_ROOT"
 
 if [[ -z "${TF_STATE_ACCESS_KEY_ID:-}" || -z "${TF_STATE_SECRET_ACCESS_KEY:-}" ]]; then
   echo "ERROR: Missing TF_STATE_ACCESS_KEY_ID or TF_STATE_SECRET_ACCESS_KEY." >&2

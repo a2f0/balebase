@@ -10,6 +10,10 @@
       "command": ["bun", "--bun", "run", "test"]
     },
     {
+      "label": "test:scope",
+      "command": ["bun", "--bun", "run", "test:scope"]
+    },
+    {
       "label": "app-browser",
       "command": ["bun", "run", "--cwd", "packages/app", "test:browser"]
     },

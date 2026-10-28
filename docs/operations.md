@@ -233,19 +233,6 @@ After deployment, enable daily sync on a Sandbox connection, start a manual sync
 close the page, then reopen it and verify the completed status. Confirm only one
 job per opted-in connection and UTC day and verify failures can be retried.
 
-## Shared issues migration
-
-The API 0.1.32 release requires `0062_create_issues.sql` and
-`0063_record_finance_annotations.sql`. The deployment scripts apply migrations
-before deploying the API. Migration 0062 preserves audit issue IDs, attachments,
-and history while replacing `audit_issues` with the shared `issues` table.
-The previous Worker cannot read or write audit issues after that replacement:
-expect audit requests to fail during the migration-to-Worker deployment window.
-Schedule this release accordingly and finish the API deployment promptly.
-If deployment fails after migration, retry deploying the new API; rolling the
-Worker back alone does not restore the old schema. Keep the normal D1 recovery
-point available if a full schema-and-Worker rollback is needed.
-
 ## Deploy production
 
 The full deployment checks the repository, applies D1 migrations, deploys the
@@ -276,6 +263,9 @@ bun run deploy:domains  # preflight and attach custom domains
 bun run deploy:email:verify # verify inbound MX records and Worker route
 bun run deploy:verify   # check all production URLs
 ```
+
+`DEPLOY_TIER=staging` selects staging for `deploy:verify` and
+`deploy:email:verify`; `bun run deploy:staging:verify` is the shortcut.
 
 ## Deploy staging
 
@@ -319,7 +309,9 @@ bun run deploy:staging
 
 The staging deploy runs checks and tests, applies staging D1 migrations, updates
 staging Worker secrets, deploys the three Workers, attaches the staging domains
-and inbound mail route through Terraform, and checks the public URLs. Terraform
+and inbound mail route through Terraform, and checks the public URLs. Recheck
+them later with `bun run deploy:staging:verify`; it runs the production checks
+except the Cloudflare edge-error CORS rule, which only production has. Terraform
 asks for confirmation before applying the domains. The generated
 `wrangler.staging.jsonc` files are ignored; their D1 ID comes from staging
 Terraform output. The staging API does not run production's scheduled jobs.
@@ -698,9 +690,9 @@ maintenance at :17 UTC in production and can be started from
 maintenance is manual. The run's saved output reports `purged`, `skipped` (no
 longer eligible), and `failed`. A partial failure marks the run failed while
 preserving its counts. Worker logs record purged and failed organization IDs.
-Apply `0074_organization_purge.sql` before deploying this job so raw messages
-and attachments join the existing cleanup
-for uploads, contract documents, templates, employee forms, and screening consents.
+The purge queues the organization's uploads, raw messages and attachments,
+contract documents, templates, employee forms, and screening consents for file
+cleanup.
 
 Each organization's eligibility check, deletion, foreign-key cascades, and
 file-cleanup tombstones commit in one D1 statement. A restore committed first
@@ -712,22 +704,6 @@ run that job manually after the grace period to finish file deletion.
 File cleanup processes 25 objects per run, so a large backlog can take days to
 drain; the grace period is a minimum wait, not a deletion deadline. Additional
 manual cleanup runs can drain eligible files sooner.
-
-Before deploying, use `bun run organizations:purge --dry-run` to inspect the
-existing backlog that becomes eligible for the next production :17 run.
-
-The existing operator command can also preview or purge eligible organizations:
-
-```sh
-bun run organizations:purge --dry-run
-bun run organizations:purge
-```
-
-The command targets Cloudflare's remote D1 database and R2 bucket by default.
-Pass `--local` to exercise it against local Wrangler storage. R2 objects are
-removed before the corresponding D1 organization is deleted, including uploads,
-raw inbound messages, and email attachments. D1 foreign-key cascades then remove
-the organization's remaining rows.
 
 Inbox messages can be moved to Trash and restored by organization members.
 Deleted messages retain their deletion time and initiating user in D1, while
@@ -743,18 +719,6 @@ The command targets Cloudflare's remote D1 database and R2 bucket by default.
 Pass `--local` to use local Wrangler storage. It removes the raw message and
 attachment objects before deleting the D1 email; the attachment rows are then
 removed through their foreign-key cascade.
-
-Move legacy R2 keys beneath their owning organization prefix after deploying
-the organization-scoped schema:
-
-```sh
-bun run organizations:objects:reorganize --dry-run
-bun run organizations:objects:reorganize
-```
-
-The move downloads each legacy object, uploads it beneath
-`organizations/<organization-id>/`, verifies that the bytes match, updates its
-D1 key, and only then deletes the legacy object.
 
 Production URLs are `api.balebase.com`, `app.balebase.com`, and
 `balebase.com`. See [`terraform/README.md`](../terraform/README.md) for state and

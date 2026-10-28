@@ -135,6 +135,7 @@ async function shellFixture() {
   for (const script of [
     "deploy/deployStagingFrontends.sh",
     "lib/cloudflareEnv.sh",
+    "lib/workerDeploy.sh",
   ])
     await copyFile(
       join(repo, "scripts", script),
@@ -145,8 +146,8 @@ async function shellFixture() {
     "TF_VAR_cloudflare_api_token=staging-fixture\nTF_VAR_cloudflare_account_id=staging-account\n",
   );
   await writeFile(
-    join(root, "scripts/deploy/verifyStaging.sh"),
-    'printf "verify\\n" >> "$MOCK_LOG"\n',
+    join(root, "scripts/deploy/verifyDeployment.sh"),
+    'printf "verify %s\\n" "$DEPLOY_TIER" >> "$MOCK_LOG"\n',
   );
   const stub = `#!/usr/bin/env bash
 set -euo pipefail
@@ -202,12 +203,12 @@ test("preview and deploy touch only the two staging frontends with staging setti
       "api=https://api-staging.balebase.com website=https://website-staging.balebase.com",
     );
     expect(log).toContain(
-      "--cwd packages/website build token=staging-fixture api= website= app=https://app-staging.balebase.com tier=staging",
+      `--cwd ${root}/packages/website build token=staging-fixture api= website= app=https://app-staging.balebase.com tier=staging`,
     );
     expect(log).not.toMatch(
       /production-fixture|migrations|secret put|terraform|packages\/api\//,
     );
-    expect(log.includes("verify\n")).toBe(!dryRun);
+    expect(log.includes("verify staging\n")).toBe(!dryRun);
   }
   const failed = await runLane(root, false, true);
   expect(failed.code).not.toBe(0);

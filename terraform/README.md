@@ -101,7 +101,7 @@ bun run terraform:apply
 The production deployment script deploys the three Workers before applying the
 custom domains because each target Worker must already exist.
 
-## Domain cutover
+## Custom domains
 
 The domain deployment runs a read-only preflight that rejects hostnames attached
 to another Worker or occupied by A, AAAA, or CNAME records. It then presents an
@@ -114,23 +114,7 @@ bun run deploy:domains
 The canonical hostnames are part of the default Terraform desired state. Set
 `enable_custom_domains = false` only when intentionally removing them.
 
-## Moving from tearleads.de
-
-The stacks moved from the `tearleads.de` zone to `balebase.com` in October 2026.
-D1 and R2 names cannot change, so production data was copied from `stealth-db`
-and `stealth-objects` into the new resources, and the old ones were removed from
-state rather than destroyed. `stealth-objects` was later deleted on 2026-10-16.
-`stealth-db` was exported and then deleted on 2026-10-17, along with the retired
-`stealth-api`, `stealth-client`, and `stealth-website` Workers, served only on
-`workers.dev`. The old `tearleads-api`, `tearleads-client`, and
-`tearleads-website` Workers were deleted once the new domains were verified, so
-`tearleads-api`'s hourly cron can no longer reconcile Stripe seats from the
-retired database; `wrangler deployments list --name tearleads-api` now reports
-that the Worker does not exist. Nothing here references `tearleads.de` or
-`tearleads.com`.
-
-The old hostnames were retired without redirects by decision. At cutover no
-link on them was live: the only contract recipient had never been sent a
-signing token, nothing had been signed, and every invitation was accepted and
-expired, so no emailed `/sign/<token>`, document, or `/invite` link broke. New
-links are built from `CORS_ORIGIN` and point at `app.balebase.com`.
+The stacks manage only the `balebase.com` zone. The retired `tearleads.de`
+hostnames have no redirects, and their Workers, databases, and buckets are
+deleted. Emailed links are built from `CORS_ORIGIN`, so they point at
+`app.balebase.com`.

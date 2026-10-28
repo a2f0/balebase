@@ -17,20 +17,23 @@ directly.
 
 ## Find the code
 
+Every workspace lives under `packages/`, and infrastructure lives in
+`terraform/`.
+
 | Change | Start here |
 | --- | --- |
-| API routes, authorization, persistence | `packages/api/src` |
+| API routes, authorization, persistence (Hono on Workers, with D1 and R2) | `packages/api/src` |
 | Request and response schemas for every route | `packages/validators/src` |
 | Typed client for those routes | `packages/api-client/src` |
 | Database schema | `packages/api/migrations` |
-| Application screens | `packages/app/src` |
+| Application screens and the host interface each shell fills in | `packages/app/src` |
 | Web shell and its Worker | `packages/app-web` |
-| Native shell, mobile projects, and Fastlane lanes | `packages/app-capacitor`, `scripts/release/*Release.sh`, `scripts/dev/run*.sh`, `scripts/lib/nativeRelease.sh` |
+| Native shell, mobile projects, and Fastlane lanes | [`packages/app-capacitor`](packages/app-capacitor/README.md), `scripts/release/*Release.sh`, `scripts/dev/run*.sh`, `scripts/lib/nativeRelease.sh` |
 | Error diagnostics and release maps | `packages/diagnostics`, `scripts/deploy/*Sentry*.ts`, `scripts/lib/sentryRelease.ts` |
-| Shared components, icons, styles | `packages/ui/src` |
-| Logo and generated images | `assets/brand`, `images` in `agent-tool.json` |
-| Public website | `packages/website/src` |
-| Deployment and live verification | `scripts/deploy`, `terraform` |
+| Shared components, icons, styles, and pricing copy | [`packages/ui`](packages/ui/README.md) |
+| Logo and generated images | `assets/brand`, `images` in `agent-tool.json`; see [images](packages/ui/README.md#images) |
+| Public website (static Astro) | `packages/website/src` |
+| Deployment and live verification | `scripts/deploy`, [`terraform`](terraform/README.md) |
 | Account and data administration | `scripts/admin` |
 | Development launchers and local Scope assessments | `scripts/dev`, `scripts/dev/scope` |
 | Repository checks and test harnesses | `scripts/checks`, `scripts/testing` |
@@ -41,9 +44,9 @@ directly.
 Package scripts remain the supported entrypoints for CI, hooks, and people.
 Group repository scripts by purpose as shown above; keep infrastructure scripts
 with their Terraform stacks and Fastlane lanes in the native package. Move every
-caller and fixture together when relocating a script. Reusable Git, GitHub,
-hook, and validation-report mechanics belong in the pinned agent-tool, with
-repository policy in `agent-tool.json`.
+caller, fixture, and Turbo input together when relocating a script. Reusable
+Git, GitHub, hook, and validation-report mechanics belong in the pinned
+agent-tool, with repository policy in `agent-tool.json`.
 
 `packages/app` holds every screen and never imports Capacitor. A shell renders
 it with `renderApp` from `@balebase/app/client`, passing the host services in
@@ -93,23 +96,8 @@ creation lives in `packages/api/src/issues.ts` (general issues) and
 `offlineRecords.ts`. They share the `issues` table and its activity triggers.
 Check both route families and the offline operation schema when changing a field.
 
-`assets/brand/logo.svg` is the pixel B logo, drawn only with whole-unit
-`<rect>` elements; the app shells and website import this one copy. The `images`
-section of `agent-tool.json` declares every image generated from it, and the
-pinned `agent-tool images build` renders them, with `pixelSnap` scaling the logo
-by whole numbers. Website and client dev and build write the `favicons` target
-to their `public/`; the website also writes the `social` target, the 1200×630
-Open Graph image that both its pages and the app shell name. `bun run images`
-writes the `native` target to
-`packages/ui/dist/images` (iOS and Android icons and splash screens in
-Capacitor's project layout, and the 1024×1024 Plaid icon at
-`plaid/icon-1024.png`) and the favicons to its `web/`. The lime and ink fills
-match `--color-lime` and `--color-ink` in `packages/ui/src/styles/tokens.css`.
-The touch and App Store icons are opaque because iOS blackens transparent
-home-screen pixels and the App Store rejects transparency. The 60% Android
-adaptive foreground stays inside the 66dp that launchers may leave unmasked,
-and the Plaid icon's margin keeps the B whole under a circular crop.
-Generated images are ignored; keep binary files out of commits.
+The logo and every image generated from it are described in the
+[UI package's images section](packages/ui/README.md#images).
 
 `bun run mobile:sync` writes the native images into both checked-in Capacitor
 projects and restores the Gradle wrapper JAR from the pinned CLI template.
@@ -140,17 +128,14 @@ running API. Installing dependencies is still required.
 checks. It needs only the installed JavaScript toolchain. It leaves dependency
 reachability, shell lint, and Terraform checks to `check`.
 
-Before opening a PR, run the same commands as CI:
-
-```sh
-bun run check
-bun run test
-bun run --cwd packages/app test:browser
-bun run --cwd packages/app-web test:browser
-bun run --cwd packages/app-capacitor test:browser
-bun run --cwd packages/website test:browser
-bun run build
-```
+Before opening a PR, run `bun run verify`. CI runs the same command, so
+[`scripts/testing/verify.json`](scripts/testing/verify.json) is the one list
+of its steps: `check`, `test`, every browser suite, `build`, and
+`mobile:sync`. CI also checks the branch name and that the sync leaves the
+committed native projects unchanged. The other plans in `scripts/testing/`
+define `check`, `check:fast`, `lint`, and `test`. These run groups run their
+steps in order and record source-bound receipts; run them directly and find
+the evidence with `agent-tool runs list --head <commit>`.
 
 The full check needs ShellCheck, Terraform, TFLint, and the Ruby bundle.
 Browser tests need Chrome or Chromium; set `CHROME_PATH` to its executable when
@@ -161,21 +146,25 @@ The web shell's service worker update suite uses Playwright's Chromium, Firefox,
 and WebKit engines. Run `bun run --cwd packages/app-web browsers:install` once
 before its browser tests; CI installs them automatically.
 
-The `test:staging`, `test:env`, and `test:scope` steps inside `bun run test`
-exercise local fixtures and command stubs. They do not deploy, contact a live
-staging service, use real cloud/agent credentials, or require Scope containers.
-Live staging verification and Scope assessments are separate opt-in commands.
+The `test:deploy` and `test:env` steps inside `bun run test` exercise local
+fixtures and command stubs. They do not deploy, contact a live service, or use
+real cloud credentials. Live verification, such as
+`bun run deploy:staging:verify`, and Scope assessments are separate opt-in
+commands. The offline `test:scope` tooling tests run in `verify`, and so in CI,
+rather than in every `bun run test`.
 
 ## Keep changes readable
 
 - Keep related behavior together. Extract a module when it has a clear job;
   avoid generic helpers and re-export layers for a single caller.
 - Biome limits functions to 75 nonblank lines and cognitive complexity to 20
-  (15 in client TSX). Tests are exempt so fixtures can stay beside assertions.
-- API and client source files have an 800 nonblank-line limit. Existing larger
-  files have explicit budgets in `biome.jsonc`. Lower or remove those overrides
-  when splitting a file; split new responsibilities out instead of raising the
-  budget. Blank lines are free: use them to separate ideas.
+  (15 in `packages/app` TSX). Tests are exempt so fixtures can stay beside
+  assertions.
+- Source files in `packages/api/src` and `packages/app/src` have an 800
+  nonblank-line limit. Existing larger files have explicit budgets in
+  `biome.jsonc`. Lower or remove those overrides when splitting a file; split
+  new responsibilities out instead of raising the budget. Blank lines are
+  free: use them to separate ideas.
 - Keep exports used and dependencies reachable; both Knip modes run in
   `check`. Explain necessary lint suppressions at the affected line.
 - Test observable behavior and failure paths. Use the existing tests for
@@ -201,8 +190,8 @@ Use the [Scope guide](docs/scope.md) for the local CLI/container setup,
 Claude worker, calibrated Codex judge, and versioned agent-readiness tasks.
 The assessment measures repository discoverability against committed snapshots;
 its inspection tasks do not establish clean-bootstrap or implementation success.
-See the [assessment report](docs/agent-readiness.md) for the measured baseline,
-fixes, and comparison.
+See the [assessment summary](docs/agent-readiness.md) for the last measured
+result.
 
 ## Editor setup
 
@@ -214,53 +203,28 @@ and the same `biome.jsonc`; `bun run format` applies source and Markdown fixes.
 
 ## Submit a pull request
 
-Use a feature branch and a Conventional Commit subject of at most 50 characters,
-such as `refactor(client): split finance views`. Commits must be signed and
-must not include co-author trailers. Run `bun run hooks:install` after hook
-changes land.
+Use a feature branch and a Conventional Commit subject, such as
+`refactor(app): split finance views`. The Git hooks enforce the branch, commit,
+and signature policy in `agent-tool.json` and `commitlint.config.mts`. Run
+`bun run hooks:install` after cloning, after hook changes land, and after a
+merge returns the checkout to `main`; `bun run hooks:check` reports drift.
 
 For agent-assisted shipping, invoke the `ship-pr` skill. The skills in
 `.claude/skills` and `.agents/skills` are installed from the pinned
-`@a2f0/agent-tool` package; do not edit them. `agent-tool.json` holds the title
-policy, the required CI check, and the versioned packages: a change to
-`packages/api`, `packages/app`, `packages/app-web`, or `packages/app-capacitor`
-ships with a patch bump from
-`agent-tool versions prepare`. Pushes run the normal hooks, with your usual
-environment and credentials, so review script and dependency changes before
-pushing them. After a merge, run `bun run hooks:install` once the checkout is
-back on `main`.
+`@a2f0/agent-tool` package; do not edit them. `agent-tool.json` also holds the
+title policy, the required CI check, and the versioned packages; a change to
+one of those packages ships with a patch bump from `agent-tool versions prepare`.
+Pushes run the normal hooks with your usual environment and credentials, so
+review script and dependency changes before pushing them.
 
 After changing the `@a2f0/agent-tool` pin, run `bun run agents:sync` and commit
 the lockfile, skills, and `.agent-tool-skills.json` together. CI runs
 `bun run agents:check`, so drifted skills fail the required check.
 
 Use [the dependency upgrade workflow](docs/dependency-upgrades.md) when changing
-tool or package versions. Keep README focused on purpose, setup, and essential
-safe usage, with a short maintenance link. Reusable upgrade procedures and active
-constraints, override rationale, and removal conditions belong in that guide.
-Put each upgrade's version inventory, migrations, audit/test/preview results,
-and skipped groups in its PR, not README or an accumulating documentation
-journal. Attribute historical findings to their PR and recheck them before
-claiming current status; update or remove guidance as constraints change.
-
-## Shared workflow commands
-
-Branch naming, commit trust, binary-file checks, copied-hook installation, and
-validation receipts use the exact agent-tool pin and `agent-tool.json`. Full
-commitlint and repository-specific lint, Terraform, browser, native, and release
-checks retain their local implementation. Branch names use the configured commit
-types with `main` exempt and no length cap; pre-commit permits detached HEAD for
-rebases, while pre-push validates destination branches from Git's ref tuples.
-
-`hooks:install` preserves unknown hook files. Existing clones using the previous
-installer should inspect the three installed hook bodies before running
-`bun run hooks:install --adopt` once; replacements are backed up. Subsequent
-installs omit `--adopt`, and `bun run hooks:check` detects drift. Commit checks
-require a present, non-bad signature and reject coauthor trailers. They inspect
-new-to-remote commits across all pushed refs, excluding published tracking refs.
-
-The plans in `scripts/testing/` keep `check`, `check:fast`, `lint`, and `test`
-sequential and produce source-bound timing receipts. `bun run verify` runs the
-complete CI-equivalent local sequence, including every browser suite, builds,
-and mobile sync. Run these groups directly to retain their structured reports;
-use `agent-tool runs list --head <commit>` to find stored evidence.
+tool or package versions. That guide holds reusable upgrade procedures, active
+constraints, override rationale, and removal conditions; keep README to purpose,
+setup, and safe usage. Put each upgrade's version inventory, migrations,
+audit, test, and preview results, and skipped groups in its PR, not in an
+accumulating documentation journal. Attribute historical findings to their PR
+and recheck them before claiming current status.

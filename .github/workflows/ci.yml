@@ -31,6 +31,8 @@ jobs:
       - name: Set up TFLint
         uses: terraform-linters/setup-tflint@v6
 
+      # setup-ruby reads a version file only from working-directory, which has
+      # none; the Gemfile uses the root .ruby-version, so keep this in step.
       - name: Set up Ruby
         uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
         with:
@@ -64,15 +66,6 @@ jobs:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         run: bun run lint:branch-name "$BRANCH_NAME"
 
-      - name: Run checks
-        run: bun run check
-
-      - name: Run tests
-        run: bun run test
-        env:
-          FASTLANE_OPT_OUT_USAGE: "1"
-          FASTLANE_SKIP_UPDATE_CHECK: "1"
-
       - name: Set up Chrome for browser tests
         uses: browser-actions/setup-chrome@v2
         id: chrome
@@ -90,21 +83,17 @@ jobs:
           fi
           bun run --cwd packages/app-web browsers:install firefox webkit
 
-      - name: Test browser layout and service worker updates
-        run: |
-          bun run --cwd packages/app test:browser
-          bun run --cwd packages/app-web test:browser
-          bun run --cwd packages/app-capacitor test:browser
-          bun run --cwd packages/website test:browser
+      # scripts/testing/verify.json lists the checks, tests, browser suites,
+      # builds, and mobile sync, so local `bun run verify` matches this step.
+      - name: Check, test, build, and sync
+        run: bun run verify
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+          FASTLANE_OPT_OUT_USAGE: "1"
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
 
-      - name: Build applications
-        run: bun run build
-
-      - name: Build and sync mobile applications
+      - name: Require committed native projects to match the sync
         run: |
-          bun run mobile:sync
           native_paths=(packages/app-capacitor/ios packages/app-capacitor/android)
           test -z "$(git status --porcelain -- "${native_paths[@]}")" || {
             git status --short -- "${native_paths[@]}"
