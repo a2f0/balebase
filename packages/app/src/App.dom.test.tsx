@@ -7,16 +7,22 @@ import {
   setSystemTime,
 } from "bun:test";
 import { act } from "react";
-import { installDom } from "./testing/dom";
+import { holdTimers, installDom } from "./testing/dom";
 
 // Mounts the real app on an emailed reset link, so the session refreshes
 // around the reset and the sign-in after it run exactly as in the browser.
 const resetLink = "/reset-password?token=reset-token";
-// Registered before installDom's hooks, so it runs before the window closes:
-// Better Auth's session store unmounts a second after its last listener
-// leaves, and then detaches from window.
+// Better Auth's session store detaches from window a second (nanostores'
+// unmount delay) after its last listener leaves. Hold that second and let it
+// pass once the last test unmounts: these hooks, registered before
+// installDom's, run before the window closes.
+let storeUnmounts: ReturnType<typeof holdTimers>;
+beforeAll(() => {
+  storeUnmounts = holdTimers(1_000);
+});
 afterAll(async () => {
-  await new Promise((resolve) => setTimeout(resolve, 1_100));
+  await storeUnmounts.fire();
+  storeUnmounts.restore();
 });
 const {
   button,

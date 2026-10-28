@@ -54,9 +54,8 @@ it("guarded Back, Forward, and links ask first and keep history entries", async 
       const url = URL.createObjectURL(
         new Blob([code], { type: "text/javascript" }),
       );
-      const { addNavigationGuard, createWorkspaceNavigation } = await import(
-        url
-      );
+      const { addNavigationGuard, canNavigate, createWorkspaceNavigation } =
+        await import(url);
       URL.revokeObjectURL(url);
       const controller = createWorkspaceNavigation(
         window,
@@ -74,6 +73,7 @@ it("guarded Back, Forward, and links ask first and keep history entries", async 
             : addNavigationGuard(async () => answer);
       });
       Reflect.set(window, "navigation", controller);
+      Reflect.set(window, "canNavigate", canNavigate);
       Reflect.set(window, "navigationPops", 0);
       window.addEventListener("popstate", () =>
         Reflect.set(
@@ -133,17 +133,23 @@ it("guarded Back, Forward, and links ask first and keep history entries", async 
 
     // In-app navigation waits for the guards too.
     await setGuard(false);
-    await page.evaluate(() =>
+    const refused = await page.evaluate(async () => {
       (
         Reflect.get(window, "navigation") as {
           navigate: (path: string) => void;
         }
-      ).navigate("/library"),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(await page.evaluate(() => location.pathname)).toBe(
-      "/contracts/templates/t1",
-    );
+      ).navigate("/library");
+      // The move awaits the same pending answer, and its handler, registered
+      // first, has run by the time this await returns.
+      const allowed = await (
+        Reflect.get(window, "canNavigate") as () => Promise<boolean>
+      )();
+      return { allowed, pathname: location.pathname };
+    });
+    expect(refused).toEqual({
+      allowed: false,
+      pathname: "/contracts/templates/t1",
+    });
     await setGuard(true);
     await page.evaluate(() =>
       (

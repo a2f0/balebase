@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, expect } from "bun:test";
+import { afterAll, afterEach, beforeAll, expect, spyOn } from "bun:test";
 import { Window } from "happy-dom";
 import { act, type ReactNode } from "react";
 import type { Root } from "react-dom/client";
@@ -120,6 +120,52 @@ export function installDom({ globals, url }: DomOptions = {}) {
     settle,
     stubClipboard,
     window,
+  };
+}
+
+/**
+ * Holds every timer set for exactly `delay` milliseconds until `fire` runs
+ * them, as though that much time had passed; other timers run as usual.
+ * Dispose of it, or call `restore`, to put the real timers back.
+ */
+export function holdTimers(delay: number) {
+  const { clearTimeout: realClear, setTimeout: realSet } = globalThis;
+  const held = new Map<number, () => void>();
+  let lastId = 0;
+  const set = spyOn(globalThis, "setTimeout").mockImplementation(((
+    handler: TimerHandler,
+    timeout?: number,
+    ...args: unknown[]
+  ) => {
+    if (timeout !== delay || typeof handler !== "function")
+      return realSet(handler, timeout, ...args);
+    // Negative IDs never collide with a real timer's.
+    lastId -= 1;
+    held.set(lastId, () => handler(...args));
+    return lastId;
+  }) as unknown as typeof setTimeout);
+  const clear = spyOn(globalThis, "clearTimeout").mockImplementation(((
+    id?: number | Timer,
+  ) => {
+    if (typeof id === "number" && held.delete(id)) return;
+    realClear(id);
+  }) as typeof clearTimeout);
+  const restore = () => {
+    set.mockRestore();
+    clear.mockRestore();
+  };
+  return {
+    /** Runs the timers held so far, then settles. */
+    async fire() {
+      const due = [...held.values()];
+      held.clear();
+      await act(async () => {
+        for (const run of due) run();
+      });
+      await settle();
+    },
+    restore,
+    [Symbol.dispose]: restore,
   };
 }
 

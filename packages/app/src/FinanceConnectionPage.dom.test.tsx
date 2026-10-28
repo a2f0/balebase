@@ -3,7 +3,8 @@ import { DialogHost } from "@balebase/ui/react";
 import type { FinanceConnectionDetail } from "@balebase/validators/finance";
 import { act } from "react";
 import { FinanceConnectionPage } from "./FinanceConnectionPage";
-import { installDom } from "./testing/dom";
+import { syncPollMs } from "./financeConnectionActions";
+import { holdTimers, installDom } from "./testing/dom";
 
 const { button, click, mount, respond, settle, stubClipboard } = installDom({
   url: "http://localhost:5173/finance/connections/item-1",
@@ -170,6 +171,7 @@ describe("Finance connection page", () => {
 });
 
 it("keeps an accepted sync visible after navigation and polls its saved outcome", async () => {
+  using polls = holdTimers(syncPollMs);
   const job = {
     id: "sync-1",
     status: "queued" as "queued" | "running" | "succeeded",
@@ -217,19 +219,15 @@ it("keeps an accepted sync visible after navigation and polls its saved outcome"
   await mountPage();
   expect(container.textContent).toContain("Running");
   const loaded = detailRequests;
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 3150));
-  });
+  await polls.fire();
   expect(statusRequests).toBe(1);
   expect(detailRequests).toBe(loaded);
   finished = true;
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 3150));
-  });
+  await polls.fire();
   expect(container.textContent).toContain("Succeeded · 7 added");
   expect(button("Sync now").disabled).toBe(false);
   expect(starts).toBe(1);
-}, 10_000);
+});
 
 it("saves daily sync for the bank connection and preserves the setting on a failed save", async () => {
   let enabled = false;

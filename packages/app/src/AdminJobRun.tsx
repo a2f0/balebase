@@ -5,6 +5,9 @@ import { errorMessage } from "./errors";
 
 type Detail = Awaited<ReturnType<typeof api.adminJobs.detail>>;
 
+/** How long a queued or running job waits between reads of its output. */
+export const runPollMs = 5_000;
+
 function useRunDetail(runId: string, before: string) {
   const [detail, setDetail] = useState<Detail>();
   const [error, setError] = useState<string>();
@@ -39,7 +42,7 @@ function useRunDetail(runId: string, before: string) {
         })
         .finally(() => {
           if (active && !before && polling)
-            timer = setTimeout(() => void load(), 5000);
+            timer = setTimeout(() => void load(), runPollMs);
         });
     }
     void load();

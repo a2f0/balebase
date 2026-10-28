@@ -3,7 +3,7 @@ import type { FinanceData } from "@balebase/validators/finance";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./apiClient";
 import { errorMessage } from "./errors";
-import { syncPending } from "./financeConnectionActions";
+import { syncPending, syncPollMs } from "./financeConnectionActions";
 
 type CategoryRoute = Pick<FinanceFilters, "categorySlug" | "uncategorized">;
 
@@ -216,9 +216,9 @@ function useSyncPolling(
       } catch {
         // Keep the saved pending state and retry after temporary request failures.
       }
-      if (active) timer = setTimeout(() => void poll(), 3000);
+      if (active) timer = setTimeout(() => void poll(), syncPollMs);
     }
-    timer = setTimeout(() => void poll(), 3000);
+    timer = setTimeout(() => void poll(), syncPollMs);
     return () => {
       active = false;
       clearTimeout(timer);

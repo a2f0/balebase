@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setSystemTime } from "bun:test";
 import { Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
 import { billing } from "./billing";
@@ -15,7 +15,7 @@ import {
   purgeStripeWebhookReceipts,
 } from "./billingWebhook";
 import { testBindings } from "./testing/bindings";
-import { toD1 } from "./testing/d1";
+import { queryHooks, toD1 } from "./testing/d1";
 import { applyMigrations, createTestDatabase } from "./testing/database";
 import { type FetchCall, withFetch } from "./testing/http";
 import {
@@ -1432,6 +1432,20 @@ describe("billing", () => {
       releaseFirstRequest = resolve;
     });
     const quantities: number[] = [];
+    // The first sync claims the subscription's lock; the second's claim is
+    // refused, so it waits for the lock.
+    const hooks = queryHooks();
+    const secondSyncWaiting = Promise.withResolvers<void>();
+    let claims = 0;
+    hooks.after(
+      "INSERT INTO stripe_subscription_sync_locks",
+      () => {
+        claims += 1;
+        if (claims === 2) secondSyncWaiting.resolve();
+      },
+      { times: 2 },
+    );
+    const bindings = { ...fixture.bindings, DB: toD1(fixture.database, hooks) };
     await withFetch(
       {
         "POST https://api.stripe.com/v1/subscription_items/si_test": async (
@@ -1450,17 +1464,11 @@ describe("billing", () => {
       },
       async () => {
         try {
-          const firstSync = syncOrganizationSeats(
-            fixture.bindings,
-            organizationId,
-          );
+          const firstSync = syncOrganizationSeats(bindings, organizationId);
           await firstRequestStarted;
           addMember(fixture.database, "user-3", organizationId);
-          const secondSync = syncOrganizationSeats(
-            fixture.bindings,
-            organizationId,
-          );
-          await new Promise((resolve) => setTimeout(resolve, 5));
+          const secondSync = syncOrganizationSeats(bindings, organizationId);
+          await secondSyncWaiting.promise;
           releaseFirstRequest();
           expect(await Promise.all([firstSync, secondSync])).toEqual([
             true,
@@ -1961,15 +1969,20 @@ describe("billing", () => {
         // the marker nor moves the grace period forward.
         const staleUpdate = subscriptionEvent("evt_stale", 99, "active", 1);
         expect((await sendWebhook(fixture, staleUpdate)).status).toBe(200);
-        await Bun.sleep(2);
-        subscription = subscriptionEvent(
-          "evt_lapsed_again",
-          102,
-          "canceled",
-          1,
-        );
-        expect((await sendWebhook(fixture, subscription)).status).toBe(200);
-        expect(paidEndedAt()).toBe(lapsedAt);
+        // A minute later, so a rewritten marker could not match the first.
+        setSystemTime(new Date(Date.parse(String(lapsedAt)) + 60_000));
+        try {
+          subscription = subscriptionEvent(
+            "evt_lapsed_again",
+            102,
+            "canceled",
+            1,
+          );
+          expect((await sendWebhook(fixture, subscription)).status).toBe(200);
+          expect(paidEndedAt()).toBe(lapsedAt);
+        } finally {
+          setSystemTime();
+        }
 
         subscription = subscriptionEvent("evt_resubscribed", 103, "active", 1);
         expect((await sendWebhook(fixture, subscription)).status).toBe(200);

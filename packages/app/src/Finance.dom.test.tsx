@@ -5,7 +5,8 @@ import type {
 } from "@balebase/validators/finance";
 import { act } from "react";
 import { Finance } from "./Finance";
-import { installDom } from "./testing/dom";
+import { syncPollMs } from "./financeConnectionActions";
+import { holdTimers, installDom } from "./testing/dom";
 import { IntersectionObserverFixture } from "./testing/intersectionObserver";
 
 const {
@@ -585,6 +586,7 @@ describe("Finance filters", () => {
 });
 
 it("polls status without loading history until completion or discarding an in-flight page", async () => {
+  using polls = holdTimers(syncPollMs);
   const older = Promise.withResolvers<Response>();
   let firstPageRequests = 0;
   let statusRequests = 0;
@@ -622,9 +624,7 @@ it("polls status without loading history until completion or discarding an in-fl
   });
   await mountFinance();
   await click("Load more transactions");
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 3150));
-  });
+  await polls.fire();
   expect(firstPageRequests).toBe(1);
   await act(async () =>
     older.resolve(
@@ -636,15 +636,11 @@ it("polls status without loading history until completion or discarding an in-fl
     ),
   );
   expect(rowNames()).toEqual(["Coffee", "Supplies", "Older expense"]);
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 3150));
-  });
+  await polls.fire();
   expect(statusRequests).toBe(1);
   expect(firstPageRequests).toBe(1);
   finished = true;
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 3150));
-  });
+  await polls.fire();
   expect(firstPageRequests).toBe(2);
   expect(rowNames()).toEqual(["Coffee", "Supplies", "Older expense"]);
-}, 15_000);
+});

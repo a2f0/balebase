@@ -2,9 +2,11 @@ import { afterEach, expect, it, spyOn } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
 import { act } from "react";
+import { runPollMs } from "./AdminJobRun";
 import { AdminJobs } from "./AdminJobs";
-import { installDom } from "./testing/dom";
+import { holdTimers, installDom } from "./testing/dom";
 import { IntersectionObserverFixture } from "./testing/intersectionObserver";
+import { historyPollMs } from "./useJobHistory";
 
 const { button, mount, respond } = installDom({
   url: "http://localhost:5173/root/jobs",
@@ -103,6 +105,7 @@ it("times out a slow job output read and lets the user retry", async () => {
 });
 
 it("keeps saved job output visible while retrying a failed poll", async () => {
+  using polls = holdTimers(runPollMs);
   let detailRequests = 0;
   let finishRetry: ((response: Response) => void) | undefined;
   const response = (progress: number) =>
@@ -127,16 +130,14 @@ it("keeps saved job output visible while retrying a failed poll", async () => {
   await render();
   await act(async () => button("View run").click());
   expect(container.textContent).toContain('"progress": 1');
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 5200));
-  });
+  await polls.fire();
   expect(container.textContent).toContain("Connection interrupted");
   await act(async () => button("Retry loading output").click());
   expect(container.textContent).toContain('"progress": 1');
   expect(container.textContent).not.toContain("Loading job output…");
   await act(async () => finishRetry?.(response(2)));
   expect(container.textContent).toContain('"progress": 2');
-}, 15_000);
+});
 
 async function render() {
   const view = await mount(
@@ -487,7 +488,9 @@ it("retries automatic loading when a poll wins the race to load history", async 
   });
   try {
     await render();
-    const poll = timer.mock.calls.findLast(([, delay]) => delay === 5000)?.[0];
+    const poll = timer.mock.calls.findLast(
+      ([, delay]) => delay === historyPollMs,
+    )?.[0];
     if (typeof poll !== "function") throw new Error("Missing history refresh");
     await act(async () => {
       poll();
@@ -537,7 +540,7 @@ it("refreshes through the oldest loaded run when new jobs shift page boundaries"
       oldest?.querySelector<HTMLButtonElement>("button")?.click(),
     );
     const poll = timer.mock.calls.findLast(
-      ([, delay]) => delay === 10_000,
+      ([, delay]) => delay === 2 * historyPollMs,
     )?.[0];
     if (typeof poll !== "function") throw new Error("Missing history refresh");
     refreshed = true;
@@ -547,7 +550,9 @@ it("refreshes through the oldest loaded run when new jobs shift page boundaries"
     expect(container.querySelectorAll(".adminJobHistoryItem")).toHaveLength(4);
     expect(container.querySelectorAll(".adminJobHistoryItem")[3]).toBe(oldest);
     expect(container.textContent).toContain("Run ID: run-1");
-    expect(timer.mock.calls.some(([, delay]) => delay === 15_000)).toBe(true);
+    expect(
+      timer.mock.calls.some(([, delay]) => delay === 3 * historyPollMs),
+    ).toBe(true);
   } finally {
     timer.mockRestore();
   }

@@ -33,6 +33,7 @@ import {
   confirmDisconnect,
   syncNotice,
   syncPending,
+  syncPollMs,
 } from "./financeConnectionActions";
 import { formatImportedHistory, formatMoney } from "./financeFormat";
 import { countLabel, formatDateTime, formatLabel } from "./labels";
@@ -341,9 +342,9 @@ function useSyncStatusPolling(
       } catch (cause) {
         if (active) setError(errorMessage(cause, "Could not load connection."));
       }
-      if (active) timer = setTimeout(() => void poll(), 3000);
+      if (active) timer = setTimeout(() => void poll(), syncPollMs);
     }
-    timer = setTimeout(() => void poll(), 3000);
+    timer = setTimeout(() => void poll(), syncPollMs);
     return () => {
       active = false;
       clearTimeout(timer);
