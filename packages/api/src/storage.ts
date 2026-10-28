@@ -33,14 +33,29 @@ export async function readBodyWithLimit(
   let bytes = new Uint8Array(Math.min(maxBytes, initialBodyBufferBytes));
   let total = 0;
   const timeoutError = new BodyReadTimeoutError("body read deadline exceeded");
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<never>((_resolve, reject) => {
-    if (timeoutMilliseconds === undefined) return;
-    timeout = setTimeout(() => reject(timeoutError), timeoutMilliseconds);
-  });
+  let timedOut = false;
+  let failRead: ((cause: unknown) => void) | undefined;
+  const timeout =
+    timeoutMilliseconds === undefined
+      ? undefined
+      : setTimeout(() => {
+          timedOut = true;
+          failRead?.(timeoutError);
+        }, timeoutMilliseconds);
+  // Only the read in progress can be failed by the deadline. Racing every
+  // read against one pending deadline promise would retain a handler per
+  // chunk, so a body sent in tiny pieces could exhaust memory.
+  const read = () =>
+    new Promise<ReadableStreamReadResult<Uint8Array>>((resolve, reject) => {
+      if (timedOut) return reject(timeoutError);
+      failRead = reject;
+      reader.read().then(resolve, reject);
+    });
   try {
     while (true) {
-      const { done, value } = await Promise.race([reader.read(), deadline]);
+      const { done, value } = await (timeout === undefined
+        ? reader.read()
+        : read());
       if (done) return bytes.subarray(0, total);
       const end = total + value.byteLength;
       if (end > maxBytes) {

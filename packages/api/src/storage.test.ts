@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  BodyReadTimeoutError,
   contentDisposition,
   readBodyWithLimit,
   readBoundedRequest,
@@ -51,6 +52,48 @@ describe("bounded body reads", () => {
         ...new Uint8Array(300_000).fill(3),
       ]),
     );
+  });
+
+  it.each([undefined, 60_000])(
+    "holds nothing per chunk while a body arrives in tiny pieces (timeout %p)",
+    async (timeout) => {
+      const chunkCount = 200_000;
+      const chunk = new Uint8Array([7]);
+      let heapAtLastChunk = 0;
+      let pulled = 0;
+      Bun.gc(true);
+      const heapBefore = process.memoryUsage().heapUsed;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pulled += 1;
+          if (pulled > chunkCount) return controller.close();
+          if (pulled === chunkCount) {
+            Bun.gc(true);
+            heapAtLastChunk = process.memoryUsage().heapUsed;
+          }
+          controller.enqueue(chunk);
+        },
+      });
+      const bytes = await readBodyWithLimit(body, chunkCount, timeout);
+      expect(bytes?.byteLength).toBe(chunkCount);
+      // Per-chunk timeout handlers would retain tens of megabytes here.
+      expect(heapAtLastChunk - heapBefore).toBeLessThan(8 * 1024 * 1024);
+    },
+  );
+
+  it("cancels a body still arriving at its deadline", async () => {
+    let cancelled: unknown;
+    const body = new ReadableStream<Uint8Array>({
+      cancel(reason) {
+        cancelled = reason;
+      },
+      start(controller) {
+        controller.enqueue(new Uint8Array([1]));
+      },
+    });
+    const read = readBodyWithLimit(body, 10, 20);
+    await expect(read).rejects.toBeInstanceOf(BodyReadTimeoutError);
+    expect(cancelled).toBeInstanceOf(BodyReadTimeoutError);
   });
 
   it("refuses an advertised oversized body without reading it", async () => {
