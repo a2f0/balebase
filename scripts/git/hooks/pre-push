@@ -12,6 +12,13 @@ fi
 
 cd "$REPO_ROOT"
 
+# Git exports GIT_DIR and similar variables to hooks. Suites that build fixture
+# repositories would inherit them and run their Git commands against this
+# repository instead, so clear them; Git finds it again from REPO_ROOT.
+for git_variable in $(git rev-parse --local-env-vars); do
+  unset "$git_variable"
+done
+
 bun run hooks:check </dev/null
 
 push_remote=${1:-origin}

@@ -2,21 +2,19 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { gitFixtureEnv } from "./gitFixture";
 
 test("pre-push checks the pushed commits even when HEAD is different", async () => {
   const directory = await mkdtemp(resolve(tmpdir(), "balebase-pre-push-"));
   const root = resolve(import.meta.dir, "../..");
   const cli = resolve(root, "node_modules/.bin/agent-tool");
   const zero = "0".repeat(40);
-  const env = { ...process.env };
-  for (const key of Object.keys(env)) {
-    if (key.startsWith("GIT_")) delete env[key];
-  }
-  Object.assign(env, {
+  const env = {
+    ...gitFixtureEnv(),
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_TERMINAL_PROMPT: "0",
-  });
+  };
   const command = (args: string[], stdin?: string) =>
     Bun.spawnSync(args, {
       cwd: directory,
@@ -147,6 +145,74 @@ test("pre-push checks the pushed commits even when HEAD is different", async () 
     expect(unsigned.exitCode).not.toBe(0);
     expect(unsigned.stdout.toString() + unsigned.stderr.toString()).toContain(
       "Signature does not meet 'present' policy (N)",
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("pre-push runs suites outside the pushing worktree's repository", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "balebase-pre-push-"));
+  const repository = resolve(directory, "repository");
+  const worktree = resolve(directory, "worktree");
+  const remote = resolve(directory, "remote.git");
+  const hooks = resolve(repository, "scripts/git/hooks");
+  const env = {
+    ...gitFixtureEnv(),
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_TERMINAL_PROMPT: "0",
+  };
+  const git = (cwd: string, ...args: string[]) => {
+    const result = Bun.spawnSync(["git", ...args], {
+      cwd,
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (result.exitCode !== 0)
+      throw new Error(result.stdout.toString() + result.stderr.toString());
+    return result.stdout.toString().trim();
+  };
+  try {
+    await mkdir(hooks, { recursive: true });
+    await writeFile(
+      resolve(hooks, "pre-push"),
+      await readFile(resolve(import.meta.dir, "../git/hooks/pre-push")),
+      { mode: 0o755 },
+    );
+    // The suite's fixture leaves Git to find its repository from the working
+    // directory, so an inherited GIT_DIR would redirect it to this one.
+    await writeFile(
+      resolve(repository, "package.json"),
+      JSON.stringify({
+        scripts: {
+          "agent-tool": "true",
+          "hooks:check": "true",
+          "lint:branch-name": "true",
+          check: "true",
+          test: "mkdir suite && cd suite && git init -q && git -c user.name=Fixture -c user.email=fixture@example.invalid commit -q --allow-empty -m Fixture",
+        },
+      }),
+    );
+    git(directory, "init", "-q", "-b", "main", repository);
+    git(repository, "config", "user.name", "Hook fixture");
+    git(repository, "config", "user.email", "fixture@example.invalid");
+    git(repository, "config", "commit.gpgSign", "false");
+    git(repository, "config", "core.hooksPath", hooks);
+    git(repository, "add", ".");
+    git(repository, "commit", "-q", "-m", "chore: fixture base");
+    git(directory, "init", "-q", "--bare", remote);
+    git(repository, "remote", "add", "origin", remote);
+    git(repository, "worktree", "add", "-q", "-b", "feat/pushed", worktree);
+    git(worktree, "commit", "-q", "--allow-empty", "-m", "feat: pushed work");
+    const pushed = git(worktree, "rev-parse", "HEAD");
+    git(worktree, "push", "-q", "origin", "feat/pushed");
+    expect(git(remote, "rev-parse", "feat/pushed")).toBe(pushed);
+    expect(git(repository, "config", "--get", "core.bare")).toBe("false");
+    expect(git(worktree, "rev-parse", "HEAD")).toBe(pushed);
+    expect(git(resolve(worktree, "suite"), "log", "--format=%s")).toBe(
+      "Fixture",
     );
   } finally {
     await rm(directory, { recursive: true, force: true });

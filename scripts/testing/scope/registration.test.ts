@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { t } from "tar";
 import { register } from "../../dev/scope/register";
 import { seedCriteria, validateSuite } from "../../dev/scope/suites";
+import { gitFixtureEnv } from "../gitFixture";
 
 async function fixture() {
   const repository = await mkdtemp(join(tmpdir(), "scope-register-test-"));
@@ -22,6 +23,7 @@ async function fixture() {
     execFileSync("git", args, {
       cwd: repository,
       encoding: "utf8",
+      env: gitFixtureEnv(),
       stdio: ["ignore", "pipe", "pipe"],
     }).trim();
   git("init");
@@ -49,6 +51,72 @@ async function fixture() {
   await writeFile(join(directory, "config.json"), "previous configuration\n");
   await chmod(join(directory, "config.json"), 0o644);
   return { repository, directory, commit };
+}
+
+for (const workTree of [false, true]) {
+  test(`the fixture repository ignores a hook's GIT_DIR${workTree ? " and GIT_WORK_TREE" : ""}`, async () => {
+    const outside = await mkdtemp(join(tmpdir(), "scope-register-outside-"));
+    const checkout = join(outside, "checkout");
+    const linked = join(outside, "linked");
+    const git = (cwd: string, ...args: string[]) =>
+      execFileSync("git", args, {
+        cwd,
+        encoding: "utf8",
+        env: gitFixtureEnv(),
+        stdio: ["ignore", "pipe", "pipe"],
+      }).trim();
+    let context: Awaited<ReturnType<typeof fixture>> | undefined;
+    try {
+      git(outside, "init", "-q", checkout);
+      git(
+        checkout,
+        "-c",
+        "user.name=Outside",
+        "-c",
+        "user.email=outside@example.test",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "outside",
+      );
+      git(checkout, "worktree", "add", "-q", "-b", "linked", linked);
+      const head = git(linked, "rev-parse", "HEAD");
+      // A hook run from a linked worktree gets that worktree's Git directory.
+      const gitDir = git(linked, "rev-parse", "--absolute-git-dir");
+      const exported = workTree
+        ? { GIT_DIR: gitDir, GIT_WORK_TREE: linked }
+        : { GIT_DIR: gitDir };
+      const previous = Object.keys(exported).map(
+        (key) => [key, process.env[key]] as const,
+      );
+      Object.assign(process.env, exported);
+      try {
+        context = await fixture();
+        // Inherited, these variables send Git to the outside repository.
+        expect(
+          execFileSync("git", ["rev-parse", "--absolute-git-dir"], {
+            cwd: context.repository,
+            encoding: "utf8",
+          }).trim(),
+        ).toBe(gitDir);
+      } finally {
+        for (const [key, value] of previous) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      }
+      expect(git(checkout, "config", "--get", "core.bare")).toBe("false");
+      expect(git(linked, "rev-parse", "HEAD")).toBe(head);
+      expect(git(context.repository, "log", "--format=%s")).toBe("fixture");
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+      if (context)
+        await rm(context.repository, { recursive: true, force: true });
+    }
+  });
 }
 
 for (const existing of [false, true]) {
