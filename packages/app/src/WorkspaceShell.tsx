@@ -30,7 +30,7 @@ export interface WorkspaceUser {
   twoFactorEnabled?: boolean | null | undefined;
 }
 
-type WorkspacePage =
+export type WorkspacePage =
   | "account"
   | "activity"
   | "issues"
