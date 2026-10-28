@@ -443,16 +443,18 @@ it("opens offline work in the workspace shell without remounting through coverag
       const pathname = new URL(request.url).pathname;
       if (pathname === "/api/auth/get-session")
         return Response.json(
-          signedIn && {
-            user,
-            session: {
-              id: "session-user-1",
-              token: "fixture-user-1",
-              userId: user.id,
-              activeOrganizationId: "org-1",
-              expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-            },
-          },
+          signedIn
+            ? {
+                user,
+                session: {
+                  id: "session-user-1",
+                  token: "fixture-user-1",
+                  userId: user.id,
+                  activeOrganizationId: "org-1",
+                  expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+                },
+              }
+            : null,
         );
       if (pathname === "/api/organization-settings/organizations")
         return Response.json({
