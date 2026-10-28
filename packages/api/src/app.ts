@@ -15,7 +15,6 @@ import {
   type ApiEnv,
   requireApiKey,
   requireAuth,
-  requireAuthOrganizationSeat,
   requireBillingOrganization,
   requireOrganization,
   requireOrganizationPluginAccess,
@@ -73,7 +72,6 @@ app.use(
   "/api/auth/organization/*",
   requireAuth,
   requireOrganizationPluginAccess,
-  requireAuthOrganizationSeat,
 );
 app.post("/api/auth/organization/leave", async (context) => {
   const input = (await context.req.raw

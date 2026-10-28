@@ -396,6 +396,74 @@ describe("api", () => {
         .get(fixture.memberId, fixture.organizationId),
     ).toEqual({ count: 1 });
   });
+
+  it("names the missing seat on organization plugin routes but lets the member leave", async () => {
+    const fixture = await protectedOrganizationFixture();
+    for (const filename of [
+      "0032_create_billing.sql",
+      "0053_track_paid_billing_end.sql",
+    ]) {
+      fixture.database.exec(
+        await Bun.file(
+          new URL(`../migrations/${filename}`, import.meta.url),
+        ).text(),
+      );
+    }
+    // An earlier owner holds the Free plan's one seat.
+    fixture.database
+      .query(
+        `INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt)
+         VALUES ('seat-holder', 'Seat Holder', 'seat@example.com', 1,
+                 '2026-01-01', '2026-01-01')`,
+      )
+      .run();
+    fixture.database
+      .query(
+        `INSERT INTO member (id, organizationId, userId, role, createdAt)
+         VALUES ('seat-member', ?, 'seat-holder', 'owner', '2026-01-01')`,
+      )
+      .run(fixture.organizationId);
+    fixture.database
+      .query(
+        "UPDATE member SET createdAt = '2026-02-01', twoFactorRequired = 0 WHERE id = ?",
+      )
+      .run(fixture.memberId);
+    const request = (path: string, body?: Record<string, unknown>) =>
+      app.request(
+        path,
+        {
+          headers: {
+            "content-type": "application/json",
+            cookie: fixture.cookie,
+            origin: "https://app.test",
+          },
+          ...(body ? { body: JSON.stringify(body), method: "POST" } : {}),
+        },
+        fixture.bindings,
+        fixture.executionContext,
+      );
+    const members = `/api/auth/organization/list-members?organizationId=${fixture.organizationId}`;
+
+    const owner = await request(members);
+    expect(owner.status).toBe(403);
+    expect(await owner.json()).toMatchObject({ code: "UPGRADE_REQUIRED" });
+    fixture.database
+      .query("UPDATE member SET role = 'member' WHERE id = ?")
+      .run(fixture.memberId);
+    const member = await request(members);
+    expect(member.status).toBe(403);
+    expect(await member.json()).toMatchObject({ code: "SEAT_UNAVAILABLE" });
+
+    const leave = await request("/api/auth/organization/leave", {
+      organizationId: fixture.organizationId,
+    });
+    expect(leave.status).toBe(200);
+    expect(
+      fixture.database
+        .query("SELECT COUNT(*) AS count FROM member WHERE id = ?")
+        .get(fixture.memberId),
+    ).toEqual({ count: 0 });
+  });
 });
 
 function authBindings(
