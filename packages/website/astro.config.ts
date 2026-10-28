@@ -1,11 +1,12 @@
 import { writeFile } from "node:fs/promises";
+import { releaseTier } from "@balebase/diagnostics/config";
 import { defineConfig } from "astro/config";
-import { releaseTier, searchFiles } from "./src/search";
+import { searchFiles } from "./src/search";
 
 // The deploy scripts set the tier; pages read this validated value, so the
 // layout's robots meta and the files below always agree.
 const { PUBLIC_RELEASE_TIER } = process.env;
-const tier = releaseTier(PUBLIC_RELEASE_TIER);
+const tier = releaseTier("PUBLIC_RELEASE_TIER", PUBLIC_RELEASE_TIER);
 
 export default defineConfig({
   output: "static",

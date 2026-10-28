@@ -396,12 +396,13 @@ CT is initialized only by the production browser bundles at these exact origins:
 
 Both use site `balebase` and CT's default DNT/GPC behavior. The API checks the
 environment against its registered Origin. Update the CT registry before
-adding a hostname. The SDK is pinned in `app-web` and `website`; the shared
-React package and Capacitor bootstrap do not initialize tracking. The browser
-app deliberately keeps CT's generic `/` page so click records do not reveal
-workspace routes or workflows. Only the marketing tracker uses fixed public
-page names. Never pass record IDs, query parameters, user-derived labels, or
-dynamic `data-ct-app` values.
+adding a hostname. The SDK is pinned in `packages/diagnostics`, whose
+`clickTracking` module the web shell and website call with these origins; the
+shared React package and Capacitor bootstrap do not initialize tracking. The
+browser app deliberately keeps CT's generic `/` page so click records do not
+reveal workspace routes or workflows. Only the marketing tracker uses fixed
+public page names. Never pass record IDs, query parameters, user-derived
+labels, or dynamic `data-ct-app` values.
 
 Deploy CT's authenticated dashboard and data API before enabling these
 integrations. Both require a signed-in CT account provisioned through the CT
@@ -440,11 +441,11 @@ Workers and checks the staging URLs. It does not migrate or deploy the API,
 write Worker secrets, or apply Terraform.
 
 Verify the live bundles and privacy page on both tiers. Ordinary automated
-browser tests must send no CT events. The website browser suite checks both
-integrations with intercepted requests, so its privacy tests never write
-synthetic data to CT. Sign in to the dashboard with a provisioned CT account,
-then choose site `balebase` and the desired app and environment; the dashboard
-defaults to production. See
+browser tests must send no CT events. The website and web shell browser suites
+check the shared tracker and both bundles with intercepted requests, so their
+privacy tests never write synthetic data to CT. Sign in to the dashboard with a
+provisioned CT account, then choose site `balebase` and the desired app and
+environment; the dashboard defaults to production. See
 [click tracking](product.md#click-tracking) for data and retention details.
 
 ## Checkr communications
@@ -491,59 +492,50 @@ replace Checkr's report delivery or dispute process.
 ## Mobile builds and release setup
 
 The Capacitor shell, `packages/app-capacitor`, holds the iOS and Android
-projects and the Fastlane release lanes; its
-[README](../packages/app-capacitor/README.md) documents every lane and option.
-Production is `com.balebase.app` against `api.balebase.com`, and staging is
-`com.balebase.staging.app` ("Balebase Staging") against
-`api-staging.balebase.com`, selected by `NATIVE_RELEASE_TIER`.
-`bun run mobile:sync` always packages local assets, regenerates the brand
-images, and synchronizes native dependencies. Run it before an IDE build and
-after changing dependencies or app code. There is no hosted `server.url` or
-live-reload server in a release bundle.
+projects and the Fastlane release lanes. Its
+[README](../packages/app-capacitor/README.md#releases) is the reference for
+every lane and option, the [secrets files](../packages/app-capacitor/README.md#secrets),
+and how [build numbers](../packages/app-capacitor/README.md#build-numbers) are
+chosen. Production is `com.balebase.app` against `api.balebase.com`, and
+staging is `com.balebase.staging.app` ("Balebase Staging") against
+`api-staging.balebase.com`; `nativeReleaseTargets.json` defines both, and
+`NATIVE_RELEASE_TIER` selects one.
 
-Run on a simulator, emulator, or device with:
+`bun run mobile:sync` packages local assets, regenerates the brand images, and
+synchronizes native dependencies. Run it before an IDE build and after
+changing dependencies or app code. There is no hosted `server.url` or
+live-reload server in a release bundle. Run on a simulator, emulator, or
+device with:
 
 ```sh
 bun run mobile:run:ios --target <simulator-or-device-id>
 bun run mobile:run:android --target <emulator-or-device-id>
 ```
 
-Store builds go through the root wrappers, which hold the bundle to the tier's
-own HTTPS hosts and hand off to Fastlane:
+Store builds run from the repository root. `mobile:build:*` builds a signed
+artifact without uploading it; `mobile:upload:*` builds and uploads, using the
+store's next build number unless you choose one, and prints the number it
+used. Add `:staging` for the staging app:
 
 ```sh
 bun run mobile:upload:android # or mobile:upload:android:staging
 bun run mobile:build:ios      # or mobile:build:ios:staging
 ```
 
-Root `mobile:build:*`, `mobile:upload:*`, and `mobile:run:*` Bun scripts invoke
-the same entrypoints.
-
 ### Google Play internal testing
 
 The Play Console apps `com.balebase.app` and `com.balebase.staging.app` use
-Play App Signing. Each tier has its own upload key. To publish a signed bundle
-to the tier's internal testing track, run:
+Play App Signing, and each tier has its own upload key in its secrets folder.
+To publish a signed bundle to the tier's internal testing track, run:
 
 ```sh
 bun run mobile:upload:android           # or mobile:upload:android:staging
 ```
 
-Fastlane reads the following from `.secrets/<prod|staging>/`:
-
-- `balebase-upload.keystore`, a PKCS12 upload key with alias `upload`
-- `ANDROID_KEYSTORE_STORE_PASS` and `ANDROID_KEYSTORE_KEY_PASS` from `app.env`,
-  the store and key passwords; they are the only values a native release reads
-  from `app.env`
-- `google-play-service-account-admin.json`, the `tearleads-admin` Play
-  service account
-
-The upload uses the next Play version code and the `app-capacitor` package
-version as the version name, then rolls the release out to every internal
-tester. Testers must be on the app's internal testing list in Play Console.
-Promote a build to closed, open, or production tracks in Play Console. If an
-upload key is lost or leaked, request an upload key reset in Play Console under
-App integrity.
+The release rolls out to every internal tester; testers must be on the app's
+internal testing list in Play Console. Promote a build to closed, open, or
+production tracks in Play Console. If an upload key is lost or leaked,
+request an upload key reset in Play Console under App integrity.
 
 ### TestFlight
 
@@ -554,24 +546,16 @@ take builds from:
 bun run mobile:upload:ios               # or mobile:upload:ios:staging
 ```
 
-Fastlane reads the following from `.secrets/<prod|staging>/`:
-
-- `shared.env`, with `TEAM_ID`, `APP_STORE_CONNECT_KEY_ID`,
-  `APP_STORE_CONNECT_ISSUER_ID`, and the `MATCH_*` settings of the shared
-  `match` repository, copied from the account-level secrets
-- `AuthKey_<key-id>.p8`, the App Store Connect API key
-
 The build signs with the team's Apple Distribution certificate and the tier's
-`match AppStore <app ID>` profile, installed read-only from `match` into a
-temporary keychain. If a profile expires or the bundle ID's capabilities
-change, renew it with `bun run --cwd packages/app-capacitor ios:profiles`
-(`ios:profiles:staging` for staging; add `force:true` to regenerate it).
+`match AppStore <app ID>` profile. If a profile expires or the bundle ID's
+capabilities change, renew it with
+`bun run --cwd packages/app-capacitor ios:profiles` (`ios:profiles:staging`
+for staging; add `force:true` to regenerate it).
 
-The upload uses the next TestFlight build number and the `app-capacitor`
-package version as the marketing version. It returns once App Store Connect
-accepts the build. Processing takes several more minutes, and then testers in
-an internal TestFlight group with automatic distribution get it. External
-testing and App Store submission happen in App Store Connect.
+The upload returns once App Store Connect accepts the build. Processing takes
+several more minutes, and then testers in an internal TestFlight group with
+automatic distribution get it. External testing and App Store submission
+happen in App Store Connect.
 
 The App Store draft's icon comes from its selected build. Uploading to
 TestFlight alone does not select a build for that draft. After Apple finishes
@@ -586,9 +570,10 @@ This updates only a version in Prepare for Submission. It aligns an empty
 draft's version with the uploaded build, then selects that build; it refuses
 to rename a draft that already has a build. It does not submit for review or
 release the app. See Apple's [build selection guide](https://developer.apple.com/help/app-store-connect/manage-builds/choose-a-build-to-submit).
-Before selecting a replacement for a blank icon, rebuild and upload through
-the tier's upload wrapper, which regenerates and copies the brand artwork into
-the Xcode asset catalog. Check the processed build's icon in TestFlight.
+Before selecting a replacement for a blank icon, rebuild and upload with the
+tier's `mobile:upload:ios` script, which regenerates and copies the brand
+artwork into the Xcode asset catalog. Check the processed build's icon in
+TestFlight.
 
 ### Saved passwords
 
