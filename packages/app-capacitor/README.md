@@ -179,8 +179,8 @@ which then wins. Neither file may set the bundle's `VITE_*` hosts.
 | `shared.env` | `TEAM_ID`, `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `MATCH_GIT_URL`, `MATCH_GIT_BASIC_AUTHORIZATION`, `MATCH_PASSWORD` |
 | `app.env` | `ANDROID_KEYSTORE_STORE_PASS` and `ANDROID_KEYSTORE_KEY_PASS` for the tier's upload key |
 | `AuthKey_<APP_STORE_CONNECT_KEY_ID>.p8` | App Store Connect API key |
-| `google-play-service-account-admin.json` | Google Play publishing service account |
-| `balebase-upload.keystore` | Android upload key (alias `upload`), registered with the tier's Play app |
+| `google-play-service-account-admin.json` | Google Play publishing service account (`tearleads-admin`) |
+| `balebase-upload.keystore` | PKCS12 Android upload key (alias `upload`), registered with the tier's Play app |
 
 ### Build numbers
 
@@ -197,7 +197,8 @@ Set the final number with `build_number:<number>`, or with
 the lanes) on Android and `IOS_BUILD_NUMBER` or `APPLE_BUILD_NUMBER` on iOS.
 Take the store's next number with `next_google_play:true` or
 `next_testflight:true`; the `mobile:upload:*` scripts do that unless a number,
-PR, or date is chosen.
+PR, or date is chosen. `fastlane/lib/release_build_number.rb` applies these
+rules to both stores.
 
 ### Google Play
 
