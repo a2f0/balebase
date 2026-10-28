@@ -12,6 +12,7 @@ import { ApiDownload } from "./ApiDownload";
 import { api } from "./apiClient";
 import { boxStyle, ContractPages } from "./ContractDocument";
 import { fieldTypeLabel, initialsFor } from "./contractFields";
+import { formatCalendarDate } from "./labels";
 import { SignatureDialog } from "./SignatureDialog";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
@@ -119,6 +120,9 @@ function SigningSession({
 }) {
   const session = useSigningSession(token, view, onFinished);
   const { contract, recipient } = view;
+  const due = contract.dueDate
+    ? ` · due ${formatCalendarDate(contract.dueDate)}`
+    : "";
   return (
     <>
       <section className="signingIntro">
@@ -128,9 +132,8 @@ function SigningSession({
           <p className="signingMessage">{contract.message}</p>
         )}
         <p className="contractHint">
-          Signing as {recipient.name} ({recipient.email})
-          {contract.dueDate ? ` · due ${formatDate(contract.dueDate)}` : ""}.
-          Complete the highlighted fields, then finish.
+          Signing as {recipient.name} ({recipient.email}){due}. Complete the
+          highlighted fields, then finish.
         </p>
         <div>
           <ApiDownload
@@ -192,12 +195,12 @@ function SigningFieldBox({
     return <SigningImageField field={field} session={session} />;
   if (field.type === "text")
     return <SigningTextField field={field} session={session} />;
+  // The signed copy is stamped with the UTC date.
+  const today = formatCalendarDate(new Date().toISOString().slice(0, 10));
   return (
     <span className="contractField signingFieldFixed" style={boxStyle(field)}>
       <span className="signingFieldText">
-        {field.type === "name"
-          ? name
-          : formatDate(new Date().toISOString().slice(0, 10))}
+        {field.type === "name" ? name : today}
       </span>
     </span>
   );
@@ -365,12 +368,6 @@ async function fetchSigningDocument(token: string) {
   const response = await api.signing.document(token).catch(() => undefined);
   if (!response) throw new Error("The document could not be loaded.");
   return response.arrayBuffer();
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(`${value}T12:00:00`),
-  );
 }
 
 function askDeclineReason() {

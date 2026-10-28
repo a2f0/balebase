@@ -15,27 +15,24 @@ import type {
   ContractSummary as ContractListItem,
 } from "@balebase/validators/contracts";
 import { useCallback, useRef, useState } from "react";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import { ContractEditor } from "./ContractEditor";
-import {
-  ContractStatusBadge,
-  ContractSummary,
-  formatDate,
-} from "./ContractSummary";
+import { ContractStatusBadge, ContractSummary } from "./ContractSummary";
 import { ContractTemplates } from "./ContractTemplates";
 import {
   type ContractFilter,
   contractFilters,
   matchesFilter,
 } from "./contractFields";
-import { countLabel } from "./labels";
+import { countLabel, formatCalendarDate } from "./labels";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
 import {
   contractIdForPath,
   contractPath,
   contractTemplatePath,
-  handleNavigation,
+  isWithin,
 } from "./workspacePaths";
 
 export function Contracts({
@@ -45,10 +42,7 @@ export function Contracts({
   onNavigate: (pathname: string) => void;
   pathname: string;
 }) {
-  if (
-    pathname === contractTemplatePath() ||
-    pathname.startsWith(`${contractTemplatePath()}/`)
-  )
+  if (isWithin(pathname, contractTemplatePath()))
     return <ContractTemplates onNavigate={onNavigate} pathname={pathname} />;
   const contractId = contractIdForPath(pathname);
   // Keyed so each page starts fresh and ignores the other's late responses.
@@ -197,10 +191,10 @@ function ContractList({
           const path = contractPath(contract.id);
           return (
             <li key={contract.id}>
-              <a
+              <AppLink
                 className="row contractRow"
                 href={path}
-                onClick={(event) => handleNavigation(event, path, onNavigate)}
+                onNavigate={onNavigate}
               >
                 <span className="iconTile">
                   <Icon name="contract" size={20} />
@@ -212,7 +206,7 @@ function ContractList({
                   </span>
                 </span>
                 <ContractStatusBadge contract={contract} />
-              </a>
+              </AppLink>
             </li>
           );
         })}
@@ -287,7 +281,8 @@ function contractMeta(contract: ContractListItem) {
       ? `${contract.signedCount} of ${countLabel(contract.signerCount, "signer")} signed`
       : "No signers yet",
   ];
-  if (contract.dueDate) parts.push(`due ${formatDate(contract.dueDate)}`);
+  if (contract.dueDate)
+    parts.push(`due ${formatCalendarDate(contract.dueDate)}`);
   if (contract.senderName) parts.push(`from ${contract.senderName}`);
   return parts.join(" · ");
 }

@@ -3,106 +3,6 @@ export interface WorkspaceOrganization {
   name: string;
 }
 
-type OrganizationSettingsPage =
-  | "access"
-  | "api-keys"
-  | "billing"
-  | "general"
-  | "people";
-
-export function isOrganizationPath(pathname: string) {
-  return pathname === "/organization" || pathname.startsWith("/organization/");
-}
-
-export function isRootAdminPath(pathname: string) {
-  return (
-    pathname === "/root/users" ||
-    isAdminOrganizationPath(pathname) ||
-    isGlobalAuditsPath(pathname) ||
-    pathname === "/root/jobs"
-  );
-}
-
-/** Global Audits, or one global form being managed there. */
-export function globalAuditsPath(templateId?: string) {
-  return templateId
-    ? `/root/global-audits/${encodeURIComponent(templateId)}`
-    : "/root/global-audits";
-}
-
-export function isGlobalAuditsPath(pathname: string) {
-  return (
-    pathname === "/root/global-audits" ||
-    pathname.startsWith("/root/global-audits/")
-  );
-}
-
-export function globalAuditTemplateIdForPath(pathname: string) {
-  const segment = /^\/root\/global-audits\/([^/]+)\/?$/.exec(pathname)?.[1];
-  if (!segment) return undefined;
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return undefined;
-  }
-}
-
-function isAdminOrganizationPath(pathname: string) {
-  return (
-    pathname === "/root/organizations" ||
-    pathname.startsWith("/root/organizations/")
-  );
-}
-
-export function adminOrganizationIdForPath(pathname: string) {
-  const match = /^\/root\/organizations\/([^/]+)\/?$/.exec(pathname);
-  if (!match?.[1]) return undefined;
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return undefined;
-  }
-}
-
-export function organizationPathRequiresAccess(pathname: string) {
-  return (
-    !["/account", "/account/security", "/invite"].includes(pathname) &&
-    !isRootAdminPath(pathname)
-  );
-}
-
-/** The People list, or one member's page. */
-export function organizationPeoplePath(memberId?: string) {
-  return memberId
-    ? `/organization/people/${encodeURIComponent(memberId)}`
-    : "/organization/people";
-}
-
-export function organizationMemberIdForPath(pathname: string) {
-  const segment = /^\/organization\/people\/([^/]+)\/?$/.exec(pathname)?.[1];
-  if (!segment) return undefined;
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return undefined;
-  }
-}
-
-export function organizationSettingsPage(
-  pathname: string,
-): OrganizationSettingsPage {
-  if (
-    pathname === "/organization/people" ||
-    organizationMemberIdForPath(pathname)
-  ) {
-    return "people";
-  }
-  if (pathname === "/organization/access") return "access";
-  if (pathname === "/organization/api-keys") return "api-keys";
-  if (pathname === "/organization/billing") return "billing";
-  return "general";
-}
-
 const organizationInvitationRoles = ["member", "admin", "owner"] as const;
 
 export type OrganizationInvitationRole =
@@ -143,20 +43,20 @@ export function resolveActiveOrganizationId(
 }
 
 export function canManageOrganization(role: string | null | undefined) {
-  return hasOrganizationRole(role, "owner", "admin");
+  return hasRole(role, "owner", "admin");
 }
 
 export function canDeleteOrganization(role: string | null | undefined) {
-  return hasOrganizationRole(role, "owner");
+  return hasRole(role, "owner");
 }
 
 export function assignableOrganizationRoles(
   role: string | null | undefined,
 ): OrganizationInvitationRole[] {
-  if (hasOrganizationRole(role, "owner")) {
+  if (hasRole(role, "owner")) {
     return [...organizationInvitationRoles];
   }
-  if (hasOrganizationRole(role, "admin")) return ["member", "admin"];
+  if (hasRole(role, "admin")) return ["member", "admin"];
   return [];
 }
 
@@ -166,16 +66,13 @@ export function editableOrganizationRoles(
   memberRoles: string[],
 ): OrganizationInvitationRole[] {
   const assignableRoles = assignableOrganizationRoles(managerRole);
-  if (
-    hasOrganizationRole(memberRole, "owner") &&
-    !assignableRoles.includes("owner")
-  ) {
+  if (hasRole(memberRole, "owner") && !assignableRoles.includes("owner")) {
     return [];
   }
   const ownerCount = memberRoles.filter((role) =>
-    hasOrganizationRole(role, "owner"),
+    hasRole(role, "owner"),
   ).length;
-  if (hasOrganizationRole(memberRole, "owner") && ownerCount <= 1) {
+  if (hasRole(memberRole, "owner") && ownerCount <= 1) {
     return ["owner"];
   }
   return assignableRoles;
@@ -184,8 +81,8 @@ export function editableOrganizationRoles(
 export function organizationRoleValue(
   role: string,
 ): OrganizationInvitationRole {
-  if (hasOrganizationRole(role, "owner")) return "owner";
-  if (hasOrganizationRole(role, "admin")) return "admin";
+  if (hasRole(role, "owner")) return "owner";
+  if (hasRole(role, "admin")) return "admin";
   return "member";
 }
 
@@ -195,16 +92,28 @@ export function canLeaveOrganizationWithOwnerCount(
   hasAnotherOrganization: boolean,
 ) {
   if (!hasAnotherOrganization) return false;
-  if (!hasOrganizationRole(role, "owner")) return true;
+  if (!hasRole(role, "owner")) return true;
   return ownerCount > 1;
 }
 
-function hasOrganizationRole(
+/** The roles in a comma-separated role string such as "admin,owner". */
+function rolesOf(role: string | null | undefined) {
+  return (role ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+export function hasRole(
   role: string | null | undefined,
   ...expectedRoles: string[]
 ) {
-  return (
-    role?.split(",").some((value) => expectedRoles.includes(value.trim())) ??
-    false
-  );
+  return rolesOf(role).some((value) => expectedRoles.includes(value));
+}
+
+/** "Admin, Owner" for "admin,owner". */
+export function formatRoles(role: string | null | undefined) {
+  return rolesOf(role)
+    .map((value) => value.charAt(0).toUpperCase() + value.slice(1))
+    .join(", ");
 }

@@ -1,7 +1,6 @@
 import {
   Badge,
   Button,
-  ButtonLink,
   Card,
   EmptyState,
   LoadingState,
@@ -13,17 +12,17 @@ import {
 } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
 import { useCallback } from "react";
+import { AppButtonLink } from "./AppLink";
 import { TemplateStats, templateStatusTone } from "./AuditHome";
 import { AuditTemplateBuilder } from "./AuditTemplateBuilder";
 import { api } from "./apiClient";
 import { countLabel, formatLabel } from "./labels";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 import {
   globalAuditsPath,
   globalAuditTemplateIdForPath,
-} from "./organizationState";
-import { useAction } from "./useAction";
-import { useLoad } from "./useLoad";
-import { handleNavigation } from "./workspacePaths";
+} from "./workspacePaths";
 
 /**
  * Root admin's home for global forms: every organization can run or copy
@@ -151,14 +150,14 @@ function GlobalAuditRow({
         <TemplateStats template={template} />
       </span>
       <span className="rowActions auditTemplateRowActions">
-        <ButtonLink
+        <AppButtonLink
           href={href}
           icon="edit"
-          onClick={(event) => handleNavigation(event, href, onNavigate)}
+          onNavigate={onNavigate}
           size="sm"
         >
           Manage
-        </ButtonLink>
+        </AppButtonLink>
       </span>
     </li>
   );

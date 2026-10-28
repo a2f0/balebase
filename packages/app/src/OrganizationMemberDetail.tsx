@@ -3,19 +3,20 @@ import {
   Badge,
   Banner,
   Button,
-  ButtonLink,
   Card,
   EmptyState,
   LoadingState,
   Toast,
 } from "@balebase/ui/react";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
+import { AppButtonLink } from "./AppLink";
 import { EmployeeForms } from "./EmployeeForms";
+import { formatDate } from "./labels";
 import {
   MemberRoleControl,
   MemberTwoFactorControl,
   TwoFactorStatus,
-} from "./memberControls";
+} from "./MemberControls";
 import {
   organizationPeopleActions,
   removeOrganizationMember,
@@ -25,10 +26,9 @@ import {
   canManageOrganization,
   editableOrganizationRoles,
   type OrganizationInvitationRole,
-  organizationPeoplePath,
   type WorkspaceOrganization,
 } from "./organizationState";
-import { handleNavigation, myDocumentsPath } from "./workspacePaths";
+import { myDocumentsPath, organizationPeoplePath } from "./workspacePaths";
 
 /**
  * One member: who they are, their role and two-factor requirement, and, for
@@ -140,13 +140,9 @@ function MyDocumentsNotice({
   return (
     <Banner
       actions={
-        <ButtonLink
-          href={path}
-          onClick={(event) => handleNavigation(event, path, onNavigate)}
-          size="sm"
-        >
+        <AppButtonLink href={path} onNavigate={onNavigate} size="sm">
           Open My documents
-        </ButtonLink>
+        </AppButtonLink>
       }
       tone="info"
     >
@@ -163,15 +159,15 @@ function BackToPeople({
   const path = organizationPeoplePath();
   return (
     <div>
-      <ButtonLink
+      <AppButtonLink
         href={path}
         icon="arrowLeft"
-        onClick={(event) => handleNavigation(event, path, onNavigate)}
+        onNavigate={onNavigate}
         size="sm"
         variant="ghost"
       >
         All people
-      </ButtonLink>
+      </AppButtonLink>
     </div>
   );
 }
@@ -256,11 +252,5 @@ function MemberProfile({
         )}
       </dl>
     </Card>
-  );
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(value),
   );
 }

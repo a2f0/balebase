@@ -74,20 +74,6 @@ export function personalRequirement(
   return { badge: waitingBadge(requirement), group: "waiting" };
 }
 
-/** A YYYY-MM-DD due date, which names a calendar day rather than an instant. */
-export function formatDueDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeZone: "UTC",
-  }).format(new Date(`${value}T00:00:00Z`));
-}
-
-export function formatTimestamp(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(value),
-  );
-}
-
 /** Today's date where the person is, as the YYYY-MM-DD due dates use. */
 export function localDate(now = new Date()) {
   const month = String(now.getMonth() + 1).padStart(2, "0");

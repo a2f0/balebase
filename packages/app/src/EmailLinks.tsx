@@ -12,6 +12,7 @@ import type {
   InboundEmailLinkTarget,
 } from "@balebase/validators/inbox";
 import { type FormEvent, useEffect, useState } from "react";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import {
   describeEmailLink,
@@ -21,7 +22,7 @@ import { equipmentName, equipmentTypeLabel } from "./equipmentLabels";
 import { errorMessage } from "./errors";
 import { formatMoney } from "./financeFormat";
 import { useLoad } from "./useLoad";
-import { equipmentPath, handleNavigation, libraryPath } from "./workspacePaths";
+import { equipmentPath, libraryPath } from "./workspacePaths";
 
 type LinkTab = "equipment" | "folder" | "transaction";
 
@@ -151,14 +152,10 @@ function EmailLinkChip({
   const { icon, label, path } = describeEmailLink(link);
   return (
     <li className="emailLinkChip">
-      <a
-        className="emailLinkTarget"
-        href={path}
-        onClick={(event) => handleNavigation(event, path, onNavigate)}
-      >
+      <AppLink className="emailLinkTarget" href={path} onNavigate={onNavigate}>
         <Icon name={icon} size={16} />
         <span className="truncate">{label}</span>
-      </a>
+      </AppLink>
       {editable && (
         <Button
           aria-label={`Unlink ${label}`}

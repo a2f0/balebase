@@ -8,13 +8,6 @@ import {
   PageHeader,
 } from "@balebase/ui/react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { AccountSettings } from "./AccountSettings";
-import { Activity } from "./Activity";
-import { AdminGlobalAudits } from "./AdminGlobalAudits";
-import { AdminJobs } from "./AdminJobs";
-import { AdminOrganizations } from "./AdminOrganizations";
-import { AdminUsers } from "./AdminUsers";
-import { Audits } from "./Audits";
 import { type AuthenticationAction, AuthPage } from "./AuthPage";
 import {
   accountReturnPath,
@@ -25,52 +18,35 @@ import {
 import { useAccountSessions } from "./accountSessions";
 import { api } from "./apiClient";
 import { authClient } from "./authClient";
-import { Businesses } from "./Businesses";
-import { Contracts } from "./Contracts";
 import { authCallbackUrl } from "./config";
-import { Equipment } from "./Equipment";
-import { Finance } from "./Finance";
-import { FinanceAccountPage } from "./FinanceAccountPage";
-import { FinanceConnectionPage } from "./FinanceConnectionPage";
-import { FinanceTransactionPage } from "./FinanceTransactionPage";
-import { isFinancePath } from "./financePages";
-import { Inbox } from "./Inbox";
-import { Issues } from "./Issues";
 import { Library } from "./Library";
 import { useLinkedOrganization } from "./linkedOrganization";
-import { MyDocuments } from "./MyDocuments";
 import {
   guardWorkspaceChange,
   useDismissDialogsOnWorkspaceChange,
   useWorkspaceNavigation,
 } from "./navigationGuard";
 import { OrganizationGate } from "./OrganizationGate";
-import { OrganizationInvitation } from "./OrganizationInvitation";
-import { OrganizationSettings } from "./OrganizationSettings";
 import { useOfflineSlot } from "./offlineSlot";
 import { lockOfflineWorkspace } from "./offlineStore";
 import {
   createOrganizationSlug,
-  isGlobalAuditsPath,
-  isOrganizationPath,
-  isRootAdminPath,
-  organizationPathRequiresAccess,
+  hasRole,
   resolveActiveOrganizationId,
   type WorkspaceOrganization,
 } from "./organizationState";
 import { SigningPage } from "./SigningPage";
 import { useOfflineRoute } from "./useOfflineRoute";
 import { useOrganizationAccess } from "./useOrganizationAccess";
-import { hasRole, WorkspaceShell, type WorkspaceUser } from "./WorkspaceShell";
+import { WorkspaceShell, type WorkspaceUser } from "./WorkspaceShell";
 import {
-  decodeRecordId,
-  isBusinessesPath,
-  isContractsPath,
-  isEquipmentPath,
-  isMyDocumentsPath,
+  isRootAdminPath,
+  isWithin,
   movedWorkspacePath,
+  organizationPathRequiresAccess,
   signingTokenForPath,
 } from "./workspacePaths";
+import { workspaceRoute } from "./workspaceRoutes";
 
 export function App() {
   const { data: session, error, isPending, refetch } = authClient.useSession();
@@ -358,6 +334,7 @@ function AuthenticatedWorkspace({
     workspace.activeOrganizationId,
   );
   const addAccount = () => navigate(addAccountPath(currentLocation()));
+  const route = workspaceRoute(pathname);
   const hasWorkspace = workspace.organizations.length > 0;
   const showContent =
     hasWorkspace ||
@@ -367,7 +344,7 @@ function AuthenticatedWorkspace({
     <WorkspaceShell
       accountLoadError={accounts.loadError}
       accounts={accounts.accounts}
-      activePage={activePageFor(pathname)}
+      activePage={route.page}
       activeOrganizationId={workspace.activeOrganizationId}
       activeSessionToken={session.session.token}
       canAccessFinance={access.can("finance")}
@@ -392,20 +369,19 @@ function AuthenticatedWorkspace({
           signOut={guardWorkspaceChange(accounts.signOutActiveAccount)}
         >
           {showContent ? (
-            contentForPath(
-              pathname,
+            route.render({
+              access,
+              addAccount,
               library,
               navigate,
-              workspace,
-              addAccount,
-              access,
-              session.user.defaultOrganizationId,
-              Boolean(session.user.twoFactorEnabled),
-              async () => {
+              onSecurityChanged: async () => {
                 await onSessionChanged();
                 await access.refresh();
               },
-            )
+              pathname,
+              user: session.user,
+              workspace,
+            })
           ) : (
             <NoOrganization />
           )}
@@ -431,7 +407,7 @@ function blockedWorkspaceContent(
     return <LoadingScreen />;
   }
   if (
-    isFinancePath(pathname) &&
+    isWithin(pathname, "/finance") &&
     !access.twoFactorRequirement &&
     !access.seatRequirement &&
     !access.can("finance")
@@ -542,151 +518,6 @@ function useWorkspaceOrganizations(
   };
 }
 
-function contentForPath(
-  pathname: string,
-  library: ReactNode,
-  navigate: (pathname: string) => void,
-  workspace: ReturnType<typeof useWorkspaceOrganizations>,
-  addAccount: () => void,
-  access: ReturnType<typeof useOrganizationAccess>,
-  defaultOrganizationId: string | null | undefined,
-  twoFactorEnabled: boolean,
-  onSecurityChanged: () => Promise<unknown>,
-) {
-  if (isWithin(pathname, "/issues"))
-    return (
-      <Issues
-        pathname={pathname}
-        onNavigate={navigate}
-        canAccessFinance={access.can("finance")}
-      />
-    );
-  if (pathname === "/activity")
-    return (
-      <Activity
-        onNavigate={navigate}
-        canAccessFinance={access.can("finance")}
-      />
-    );
-  if (isWithin(pathname, "/audits")) {
-    return <Audits onNavigate={navigate} pathname={pathname} />;
-  }
-  if (isMyDocumentsPath(pathname)) {
-    return (
-      <MyDocuments
-        onNavigate={navigate}
-        organization={workspace.organizations.find(
-          ({ id }) => id === workspace.activeOrganizationId,
-        )}
-        pathname={pathname}
-      />
-    );
-  }
-  if (isFinancePath(pathname)) {
-    return financeContent(pathname, navigate);
-  }
-  if (isBusinessesPath(pathname)) {
-    return <Businesses onNavigate={navigate} pathname={pathname} />;
-  }
-  if (isContractsPath(pathname)) {
-    return <Contracts onNavigate={navigate} pathname={pathname} />;
-  }
-  if (isEquipmentPath(pathname)) {
-    return <Equipment onNavigate={navigate} pathname={pathname} />;
-  }
-  if (pathname === "/inbox") {
-    return (
-      <Inbox canAccessFinance={access.can("finance")} onNavigate={navigate} />
-    );
-  }
-  if (isRootAdminPath(pathname)) return rootAdminContent(pathname, navigate);
-  if (pathname === "/account" || pathname === "/account/security") {
-    return (
-      <AccountSettings
-        defaultOrganizationId={defaultOrganizationId}
-        onNavigate={navigate}
-        onSessionChanged={onSecurityChanged}
-        organizations={workspace.organizations}
-        pathname={pathname}
-        twoFactorEnabled={twoFactorEnabled}
-      />
-    );
-  }
-  if (isOrganizationPath(pathname)) {
-    return (
-      <OrganizationSettings
-        activeOrganizationId={workspace.activeOrganizationId}
-        accessError={access.loadError}
-        memberRole={access.memberRole}
-        onAccessChanged={access.refresh}
-        onNavigate={navigate}
-        onWorkspaceChanged={workspace.refresh}
-        organizations={workspace.organizations}
-        ownerCount={access.ownerCount}
-        pathname={pathname}
-      />
-    );
-  }
-  if (pathname === "/invite") {
-    return (
-      <OrganizationInvitation
-        invitationId={new URLSearchParams(window.location.search).get("id")}
-        onAccepted={workspace.refresh}
-        onNavigate={() => navigate("/organization")}
-        onUseAnotherAccount={addAccount}
-      />
-    );
-  }
-  return library;
-}
-
-function financeContent(pathname: string, navigate: (path: string) => void) {
-  if (pathname.startsWith("/finance/accounts/"))
-    return (
-      <FinanceAccountPage
-        key={pathname}
-        id={decodeRecordId(pathname.slice("/finance/accounts/".length))}
-        onNavigate={navigate}
-      />
-    );
-  if (pathname.startsWith("/finance/connections/"))
-    return (
-      <FinanceConnectionPage
-        key={pathname}
-        id={decodeRecordId(pathname.slice("/finance/connections/".length))}
-        onNavigate={navigate}
-      />
-    );
-  if (pathname.startsWith("/finance/transactions/"))
-    return (
-      <FinanceTransactionPage
-        key={pathname}
-        id={decodeRecordId(pathname.slice("/finance/transactions/".length))}
-        onNavigate={navigate}
-      />
-    );
-  return <Finance onNavigate={navigate} pathname={pathname} />;
-}
-
-function rootAdminContent(
-  pathname: string,
-  navigate: (pathname: string) => void,
-) {
-  if (pathname === "/root/jobs") return <AdminJobs />;
-  if (pathname === "/root/users") return <AdminUsers />;
-  if (isGlobalAuditsPath(pathname)) {
-    return <AdminGlobalAudits onNavigate={navigate} pathname={pathname} />;
-  }
-  return <AdminOrganizations onNavigate={navigate} pathname={pathname} />;
-}
-
-function rootAdminPage(pathname: string) {
-  if (pathname === "/root/jobs") return "rootJobs" as const;
-  if (pathname === "/root/users") return "rootUsers" as const;
-  if (isGlobalAuditsPath(pathname)) return "rootGlobalAudits" as const;
-  return "rootOrganizations" as const;
-}
-
 /**
  * The path to open, moving an older link to where it now lives. The address
  * bar is updated in place, so Back does not return to the old address.
@@ -702,35 +533,8 @@ function initialPathname() {
   return moved;
 }
 
-/** The page at `base`, or a page beneath it. */
-function isWithin(pathname: string, base: string) {
-  return pathname === base || pathname.startsWith(`${base}/`);
-}
-
 function currentLocation() {
   return `${window.location.pathname}${window.location.search}${window.location.hash}`;
-}
-
-function activePageFor(pathname: string) {
-  if (isWithin(pathname, "/issues")) return "issues" as const;
-  if (pathname === "/activity") return "activity" as const;
-  if (pathname === "/offline") return "offline" as const;
-  if (isWithin(pathname, "/audits")) {
-    return "audits" as const;
-  }
-  if (isMyDocumentsPath(pathname)) return "myDocuments" as const;
-  if (isFinancePath(pathname)) return "finance" as const;
-  if (isBusinessesPath(pathname)) return "businesses" as const;
-  if (isContractsPath(pathname)) return "contracts" as const;
-  if (isEquipmentPath(pathname)) return "equipment" as const;
-  if (pathname === "/inbox") return "inbox" as const;
-  if (isRootAdminPath(pathname)) return rootAdminPage(pathname);
-  if (pathname === "/account" || pathname === "/account/security") {
-    return "account" as const;
-  }
-  if (isOrganizationPath(pathname)) return "organization" as const;
-  if (pathname === "/invite") return "organization" as const;
-  return "library" as const;
 }
 
 function AdminAccessDenied({ onNavigate }: { onNavigate: () => void }) {

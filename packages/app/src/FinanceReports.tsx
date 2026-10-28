@@ -16,16 +16,16 @@ import type {
 import { useEffect, useState } from "react";
 import { api } from "./apiClient";
 import { errorMessage } from "./errors";
-import { formatMoney } from "./financeFormat";
 import {
   categoryShare,
-  financeOverviewPath,
   presetRange,
   type ReportPreset,
   type ReportRange,
   reportPresets,
-} from "./financePages";
-import { countLabel } from "./labels";
+} from "./expenseReport";
+import { formatMoney } from "./financeFormat";
+import { countLabel, formatCalendarDate } from "./labels";
+import { financeOverviewPath } from "./workspacePaths";
 
 export function FinanceReports({
   onNavigate,
@@ -341,14 +341,10 @@ function ReportFooter({
 }
 
 function rangeLabel(range: ReportRange) {
-  const format = (value: string) =>
-    new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-      new Date(`${value}T12:00:00`),
-    );
   if (range.from && range.to) {
-    return `${format(range.from)} – ${format(range.to)}`;
+    return `${formatCalendarDate(range.from)} – ${formatCalendarDate(range.to)}`;
   }
-  if (range.from) return `Since ${format(range.from)}`;
-  if (range.to) return `Through ${format(range.to)}`;
+  if (range.from) return `Since ${formatCalendarDate(range.from)}`;
+  if (range.to) return `Through ${formatCalendarDate(range.to)}`;
   return "All time";
 }

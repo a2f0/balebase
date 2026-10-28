@@ -5,7 +5,6 @@ import {
   type BusinessListState,
   businessListReducer,
   formatBusinessAddress,
-  formatBusinessDate,
   formatDuns,
   formatEin,
   initialBusinessListState,
@@ -55,20 +54,6 @@ describe("formatDuns", () => {
 
   it("leaves unexpected values visible", () => {
     expect(formatDuns("1234")).toBe("1234");
-  });
-});
-
-describe("formatBusinessDate", () => {
-  it("formats an ISO date without shifting time zones", () => {
-    const expected = new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeZone: "UTC",
-    }).format(new Date("2026-08-22T00:00:00.000Z"));
-    expect(formatBusinessDate("2026-08-22")).toBe(expected);
-  });
-
-  it("leaves unexpected values visible", () => {
-    expect(formatBusinessDate("unknown")).toBe("unknown");
   });
 });
 

@@ -64,6 +64,13 @@ Load with `useLoad`, mutate with `useAction`, and show errors with
 `errorMessage` from `src/errors.ts` or `ErrorToast`. Page cursor lists with
 `useCursorPages` and `InfiniteScroll`.
 
+Build paths with the `src/workspacePaths.ts` helpers, read a route's record
+ID with `recordIdForPath`, and link with `AppLink`. A new workspace section
+needs a route in `src/workspaceRoutes.tsx` and a page and sidebar item in
+`WorkspaceShell.tsx`. Format dates with `src/labels.ts`, using
+`formatCalendarDate` for YYYY-MM-DD days, and roles with `hasRole` and
+`formatRoles` from `src/organizationState.ts`.
+
 Use `Select` from `@balebase/ui/react` for form dropdowns, with `Field` or an
 associated label. Compact inline controls can use `aria-label`. `Select`
 applies the shared control styles and forwards native select

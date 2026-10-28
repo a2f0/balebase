@@ -28,18 +28,15 @@ import {
   useState,
 } from "react";
 import { ApiDownload } from "./ApiDownload";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import { LinkedEmailList } from "./LinkedEmailList";
-import { countLabel, formatBytes } from "./labels";
+import { countLabel, formatBytes, formatShortDate } from "./labels";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
 import { useMenuDismissal } from "./useMenuDismissal";
 import type { WorkspaceUser } from "./WorkspaceShell";
-import {
-  handleNavigation,
-  libraryFolderIdForPath,
-  libraryPath,
-} from "./workspacePaths";
+import { libraryFolderIdForPath, libraryPath } from "./workspacePaths";
 
 const maxFolderNameLength = 80;
 
@@ -436,11 +433,11 @@ function FolderGrid({
       {folders.map((folder) => {
         const path = libraryPath(folder.id);
         return (
-          <a
+          <AppLink
             className="card cardInteractive folderCard"
             href={path}
             key={folder.id}
-            onClick={(event) => handleNavigation(event, path, onNavigate)}
+            onNavigate={onNavigate}
           >
             <span className="iconTile">
               <Icon name="folder" size={20} />
@@ -453,7 +450,7 @@ function FolderGrid({
                   ` · ${countLabel(folder.emailCount, "email")}`}
               </span>
             </span>
-          </a>
+          </AppLink>
         );
       })}
     </div>
@@ -529,7 +526,7 @@ function FileCard({
         <div className="fileMeta">
           <strong className="truncate">{object.filename}</strong>
           <span>
-            {formatBytes(object.size)} · {formatDate(object.createdAt)}
+            {formatBytes(object.size)} · {formatShortDate(object.createdAt)}
           </span>
         </div>
       </ApiDownload>
@@ -709,13 +706,6 @@ function LibraryEmptyState({ onUpload }: { onUpload: () => void }) {
 function extensionFor(filename: string) {
   const extension = filename.split(".").pop();
   return extension && extension !== filename ? extension.slice(0, 4) : "file";
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    month: "short",
-  }).format(new Date(value));
 }
 
 function confirmFolderDeletion({ emailCount, fileCount, name }: LibraryFolder) {

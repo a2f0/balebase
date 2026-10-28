@@ -3,24 +3,20 @@ import {
   Badge,
   Banner,
   Button,
-  ButtonLink,
   Card,
   LoadingState,
   Toast,
 } from "@balebase/ui/react";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { useCallback } from "react";
+import { AppButtonLink } from "./AppLink";
 import { api } from "./apiClient";
 import { downloadScreeningConsent } from "./employeeFormDownloads";
-import {
-  formatTimestamp,
-  localDate,
-  personalRequirement,
-} from "./requirementStatus";
+import { formatDate } from "./labels";
+import { localDate, personalRequirement } from "./requirementStatus";
 import { ScreeningForm } from "./ScreeningForm";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
-import { handleNavigation } from "./workspacePaths";
 
 /** An emailed screening link remains useful after the person submits. */
 export function ScreeningRequest({
@@ -50,13 +46,9 @@ export function ScreeningRequest({
   const error = download.error ?? loaded.error;
   const busy = download.busy || loaded.loading;
   const backLink = (
-    <ButtonLink
-      href={back}
-      onClick={(event) => handleNavigation(event, back, onNavigate)}
-      size="sm"
-    >
+    <AppButtonLink href={back} onNavigate={onNavigate} size="sm">
       Back to My documents
-    </ButtonLink>
+    </AppButtonLink>
   );
   if (!requirement)
     return error ? (
@@ -110,7 +102,7 @@ export function ScreeningRequest({
         <p>{screeningProgress(requirement, organizationName)}</p>
         {requirement.completedAt && (
           <p className="muted">
-            Completed {formatTimestamp(requirement.completedAt)}.
+            Completed {formatDate(requirement.completedAt)}.
           </p>
         )}
         {requirement.checkrReportStatus && (

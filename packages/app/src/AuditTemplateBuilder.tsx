@@ -26,11 +26,11 @@ import { api } from "./apiClient";
 import { ErrorToast } from "./ErrorToast";
 import type { ErrorNotice } from "./errors";
 import { GlobalAuditControls } from "./GlobalAuditControls";
-import { countLabel } from "./labels";
-import { globalAuditsPath } from "./organizationState";
+import { countLabel, formatDate } from "./labels";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
 import { moveEntry, useReorderDrag } from "./useReorderDrag";
+import { auditTemplatePath, globalAuditsPath } from "./workspacePaths";
 
 interface BuilderProps {
   id: string;
@@ -144,7 +144,7 @@ function useTemplateBuilder({
             : `Version ${saved.version} saved.`,
       );
       if (saved.id !== id) {
-        onNavigate(`/audits/templates/${encodeURIComponent(saved.id)}`);
+        onNavigate(auditTemplatePath(saved.id));
       }
       const { versions } = await loadVersions(saved.id, manageGlobal);
       setData((current) => current && { ...current, versions });
@@ -412,7 +412,7 @@ function BuilderHeader({
             >
               {versions.map((version) => (
                 <option key={version.version} value={version.version}>
-                  v{version.version} · {formatVersionDate(version.createdAt)} ·{" "}
+                  v{version.version} · {formatDate(version.createdAt)} ·{" "}
                   {version.createdBy.name}
                 </option>
               ))}
@@ -869,10 +869,4 @@ function replaceById<T extends { id: string }>(items: T[], replacement: T) {
 
 function questionCount(sections: AuditTemplateSection[]) {
   return sections.reduce((count, section) => count + section.items.length, 0);
-}
-
-function formatVersionDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(value),
-  );
 }

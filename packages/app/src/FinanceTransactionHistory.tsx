@@ -19,13 +19,16 @@ import type {
 } from "@balebase/validators/finance";
 import type { LinkedEmail } from "@balebase/validators/inbox";
 import { type FormEvent, useState } from "react";
+import { AppLink } from "./AppLink";
 import { FinanceTransactionFilters } from "./FinanceTransactionFilters";
 import { formatMoney } from "./financeFormat";
-import { financeTransactionPath } from "./financePages";
 import { InfiniteScroll } from "./InfiniteScroll";
-import { transactionIssuePath } from "./issuePaths";
-import { formatLabel } from "./labels";
-import { handleNavigation, inboxEmailPath } from "./workspacePaths";
+import { formatCalendarDate, formatLabel } from "./labels";
+import {
+  financeTransactionPath,
+  inboxEmailPath,
+  transactionIssuePath,
+} from "./workspacePaths";
 
 interface AnnotationHandlers {
   busy: boolean;
@@ -271,22 +274,19 @@ export function FinanceTransactionRow({
         className="financeTransactionDate"
         dateTime={transaction.transactionDate}
       >
-        {formatDate(transaction.transactionDate)}
+        {formatCalendarDate(transaction.transactionDate, {
+          day: "numeric",
+          month: "short",
+        })}
       </time>
       <div className="rowMain financeTransactionMain">
-        <a
+        <AppLink
           className="rowTitle financeTransactionName"
           href={financeTransactionPath(transaction.id)}
-          onClick={(event) =>
-            handleNavigation(
-              event,
-              financeTransactionPath(transaction.id),
-              onNavigate,
-            )
-          }
+          onNavigate={onNavigate}
         >
           {title}
-        </a>
+        </AppLink>
         <span className="rowMeta financeTransactionMeta">
           {transactionMeta(transaction)}
         </span>
@@ -381,15 +381,15 @@ function LinkedEmailChips({
       {emails.map((email) => {
         const path = inboxEmailPath(email.id, email.status);
         return (
-          <a
+          <AppLink
             className="financeEmailChip"
             href={path}
             key={email.linkId}
-            onClick={(event) => handleNavigation(event, path, onNavigate)}
+            onNavigate={onNavigate}
           >
             <Icon name="mail" size={14} />
             <span className="truncate">{email.subject || "(no subject)"}</span>
-          </a>
+          </AppLink>
         );
       })}
     </span>
@@ -495,11 +495,4 @@ function hasAnnotation(transaction: FinanceTransaction) {
   return Boolean(
     annotation.note || annotation.labels.length || annotation.reviewed,
   );
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    month: "short",
-  }).format(new Date(`${value}T12:00:00`));
 }

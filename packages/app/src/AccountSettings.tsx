@@ -8,9 +8,10 @@ import {
   Select,
   Toast,
 } from "@balebase/ui/react";
-import { type FormEvent, type MouseEvent, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { AccountDeletion } from "./AccountDeletion";
 import { AccountSecurity } from "./AccountSecurity";
+import { AppLink } from "./AppLink";
 import { saveDefaultOrganizationPreference } from "./defaultOrganization";
 import type { WorkspaceOrganization } from "./organizationState";
 import { ThemeSwitcher } from "./ThemeSwitcher";
@@ -89,28 +90,15 @@ function AccountTab({
   onNavigate: (pathname: string) => void;
   path: string;
 }) {
-  function navigate(event: MouseEvent<HTMLAnchorElement>) {
-    if (
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
-      return;
-    }
-    event.preventDefault();
-    onNavigate(path);
-  }
   return (
-    <a
+    <AppLink
       aria-current={active ? "page" : undefined}
       className="tab"
       href={path}
-      onClick={navigate}
+      onNavigate={onNavigate}
     >
       {label}
-    </a>
+    </AppLink>
   );
 }
 
