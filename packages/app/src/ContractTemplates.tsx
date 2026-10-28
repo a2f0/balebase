@@ -299,6 +299,7 @@ function useTemplatePage(id: string, onNavigate: (pathname: string) => void) {
   const discard = async () => !dirty || (await confirmDiscardChanges());
   async function selectVersion(version: number) {
     if (!(await discard())) return;
+    deletion.setError(undefined);
     await versionLoad.run(async () => {
       showTemplate(await api.contractTemplates.get(id, version));
       setDirty(false);
@@ -318,6 +319,7 @@ function useTemplatePage(id: string, onNavigate: (pathname: string) => void) {
   }
   async function remove() {
     if (!(await confirmTemplateDeletion())) return;
+    versionLoad.setError(undefined);
     await deletion.run(async () => {
       await api.contractTemplates.delete(id);
       if (mounted.current) onNavigate(contractTemplatePath());
