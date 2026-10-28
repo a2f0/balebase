@@ -56,3 +56,16 @@ export const auditLimits = {
   sections: 50,
   sectionTitle: 200,
 } as const;
+
+export const contractLimits = {
+  /** Of a contract template. */
+  description: 2000,
+  fieldLabel: 100,
+  fields: 500,
+  message: 2000,
+  reminderDays: 30,
+  signerEmail: 254,
+  signerName: 120,
+  signers: 20,
+  title: 200,
+} as const;

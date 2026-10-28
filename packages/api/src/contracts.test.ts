@@ -426,6 +426,13 @@ describe("contracts", () => {
       (await fixture.json("DELETE", `/api/contracts/${voidedId}`)).status,
     ).toBe(409);
     fixture.emails.length = 0;
+    expect(
+      (
+        await fixture.json("POST", `/api/contracts/${voidedId}/void`, {
+          reason: 5,
+        })
+      ).body,
+    ).toEqual({ error: "A void reason must be text." });
     const voided = await fixture.json<{ contract: Contract }>(
       "POST",
       `/api/contracts/${voidedId}/void`,
@@ -1003,56 +1010,103 @@ describe("contract templates", () => {
     const template = await uploadTemplate(fixture);
     const path = `/api/contracts/templates/${template.id}`;
     const input = templateVersion(template);
-    for (const definition of [
-      { ...input.definition, roles: [] },
-      {
-        ...input.definition,
-        roles: [input.definition.roles[0], input.definition.roles[0]],
-      },
-      {
-        ...input.definition,
-        fields: [{ ...input.definition.fields[0], roleKey: "missing" }],
-      },
-      {
-        ...input.definition,
-        fields: [{ ...input.definition.fields[0], page: 3 }],
-      },
-      {
-        ...input.definition,
-        fields: [{ ...input.definition.fields[0], x: 0.99 }],
-      },
-    ])
+    const [role] = input.definition.roles;
+    const [field] = input.definition.fields;
+    for (const [definition, error] of [
+      [{ ...input.definition, roles: [] }, "Add at least one signer role."],
+      [
+        { ...input.definition, roles: [role, role] },
+        "Each signer needs a unique key.",
+      ],
+      [
+        {
+          ...input.definition,
+          roles: [role, { ...role, key: "other", label: " EMPLOYEE " }],
+        },
+        "Give each signer role a different label.",
+      ],
+      [
+        { ...input.definition, roles: [{ ...role, label: " " }] },
+        "Give every signer role a label.",
+      ],
+      [
+        { ...input.definition, fields: [{ ...field, roleKey: "missing" }] },
+        "Every field must belong to a signer.",
+      ],
+      [
+        { ...input.definition, fields: [{ ...field, page: 3 }] },
+        "A field is on a page the document doesn't have.",
+      ],
+      [
+        { ...input.definition, fields: [{ ...field, x: 0.99 }] },
+        "A field extends past the edge of its page.",
+      ],
+      [
+        { ...input.definition, fields: "none" },
+        "The template fields are invalid.",
+      ],
+      [
+        { ...input.definition, reminderIntervalDays: 31 },
+        "Reminders can repeat every 1 to 30 days.",
+      ],
+    ] as const)
       expect(
         (
           await fixture.json("POST", `${path}/versions`, {
             ...input,
             definition,
           })
-        ).status,
-      ).toBe(400);
+        ).body,
+      ).toEqual({ error });
+    for (const [change, error] of [
+      [{ sourceVersion: 0 }, "Choose a template version."],
+      [{ description: 1 }, "Keep the description to 2,000 characters."],
+      [{ name: " " }, "Give the contract a title of up to 200 characters."],
+    ] as const)
+      expect(
+        (
+          await fixture.json("POST", `${path}/versions`, {
+            ...input,
+            ...change,
+          })
+        ).body,
+      ).toEqual({ error });
     expect((await fixture.json("POST", `${path}/versions`, input)).status).toBe(
       201,
     );
     const mapping = roleMapping(2);
-    for (const recipients of [
-      [],
-      [mapping.recipients[0]],
-      [mapping.recipients[0], mapping.recipients[0]],
-      [{ ...mapping.recipients[0], name: "" }, mapping.recipients[1]],
-      [{ ...mapping.recipients[0], email: "invalid" }, mapping.recipients[1]],
+    const [employee, company] = mapping.recipients;
+    for (const [recipients, error] of [
+      [[], "Map every signer role to a person."],
+      [[employee], "Map every signer role to a person."],
+      [[employee, employee], "Map every signer role exactly once."],
+      [[{ ...employee, name: "" }, company], "Choose a name for Employee."],
       [
-        { ...mapping.recipients[0], email: "cai@example.com" },
-        mapping.recipients[1],
+        [{ ...employee, email: "invalid" }, company],
+        "Choose a valid email address for Employee.",
       ],
-    ])
+      [
+        [{ ...employee, email: "cai@example.com" }, company],
+        "cai@example.com is listed more than once.",
+      ],
+      [[1, company], "A signer is invalid."],
+    ] as const)
       expect(
         (
           await fixture.json("POST", `${path}/contracts`, {
             ...mapping,
             recipients,
           })
-        ).status,
-      ).toBe(400);
+        ).body,
+      ).toEqual({ error });
+    expect(
+      (
+        await fixture.json("POST", `${path}/contracts`, {
+          ...mapping,
+          version: "latest",
+        })
+      ).body,
+    ).toEqual({ error: "Choose a template version." });
     expect(
       fixture.database.query("SELECT COUNT(*) AS count FROM contracts").get(),
     ).toEqual({ count: 0 });

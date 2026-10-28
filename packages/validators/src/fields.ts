@@ -64,14 +64,18 @@ export type FormInput<Schema extends z.ZodType> = {
   >;
 };
 
-/** A real calendar day as YYYY-MM-DD. */
-export const CalendarDateSchema = z
-  .string()
-  .trim()
-  .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .refine((value) => {
-    const date = new Date(`${value}T00:00:00.000Z`);
-    return (
-      !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value
-    );
-  });
+/** A real calendar day as YYYY-MM-DD; `rule` is the message otherwise. */
+export function calendarDate(rule?: string) {
+  const error = rule === undefined ? {} : { error: rule };
+  return z
+    .string(error)
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, error)
+    .refine((value) => {
+      const date = new Date(`${value}T00:00:00.000Z`);
+      return (
+        !Number.isNaN(date.valueOf()) &&
+        date.toISOString().slice(0, 10) === value
+      );
+    }, error);
+}

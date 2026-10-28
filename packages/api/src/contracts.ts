@@ -8,7 +8,12 @@ import {
 } from "@balebase/validators/contracts";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "./authMiddleware";
-import { draftInput, draftStatements, validEmail } from "./contractDraft";
+import {
+  draftStatements,
+  fieldsOnDocument,
+  offPageError,
+  validEmail,
+} from "./contractDraft";
 import { sendVoided } from "./contractMail";
 import { InvalidPdfError, inspectPdf, sha256Hex } from "./contractPdf";
 import {
@@ -28,7 +33,7 @@ import {
 } from "./contractRecords";
 import { contractTemplates } from "./contractTemplates";
 import { normalizeFilename } from "./filenames";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 
 type ContractContext = Context<ApiEnv>;
 
@@ -200,11 +205,14 @@ contracts.put("/:id/draft", async (context) => {
   );
   if (!contract) return contractNotFound(context);
   if (contract.status !== "draft") return notDraft(context);
-  const draft = draftInput(
-    await context.req.json().catch(() => null),
-    contract.document_page_count,
+  const draft = await readBody(
+    context,
+    contractsRoutes.saveDraft,
+    "The contract draft is invalid.",
   );
-  if (typeof draft === "string") return context.json({ error: draft }, 400);
+  if (draft instanceof Response) return draft;
+  if (!fieldsOnDocument(draft.fields, contract.document_page_count))
+    return context.json({ error: offPageError }, 400);
   const database = context.env.DB;
   const saved = await database.batch(
     draftStatements(database, contract, draft, new Date().toISOString()),
@@ -334,13 +342,13 @@ contracts.post("/:id/void", async (context) => {
     context.req.param("id"),
   );
   if (!contract) return contractNotFound(context);
-  const input: unknown = await context.req.json().catch(() => null);
-  const reasonValue =
-    typeof input === "object" && input !== null
-      ? Reflect.get(input, "reason")
-      : "";
-  const reason =
-    typeof reasonValue === "string" ? reasonValue.trim().slice(0, 500) : "";
+  const input = await readBody(
+    context,
+    contractsRoutes.void,
+    "A void reason must be text.",
+  );
+  if (input instanceof Response) return input;
+  const { reason } = input;
   const now = new Date().toISOString();
   const voided = await database
     .prepare(

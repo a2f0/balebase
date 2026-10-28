@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CalendarDateSchema, optionalText, requiredText } from "./fields";
+import { calendarDate, optionalText, requiredText } from "./fields";
 import { route } from "./route";
 import { businessLimits } from "./rules";
 
@@ -41,7 +41,7 @@ const BusinessInputSchema = z.object({
       .regex(/^\d{2}-?\d{7}$/)
       .transform((value) => value.replace("-", "")),
   ),
-  incorporationDate: optionalText(CalendarDateSchema),
+  incorporationDate: optionalText(calendarDate()),
   name: requiredText(businessLimits.name),
   /** A two-letter state code, in either case; stored in capitals. */
   state: optionalText(

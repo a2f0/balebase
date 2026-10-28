@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import {
-  CalendarDateSchema,
+  calendarDate,
   type FormInput,
   optionalText,
   PersonSchema,
@@ -50,7 +50,7 @@ const EquipmentFieldsSchema = z.object({
   assigneeId: optionalText(z.string().trim().max(200)),
   make: requiredText(equipmentLimits.make),
   model: requiredText(equipmentLimits.model),
-  purchaseDate: optionalText(CalendarDateSchema),
+  purchaseDate: optionalText(calendarDate()),
   serialNumber: optionalText(
     z.string().trim().max(equipmentLimits.serialNumber),
   ),
