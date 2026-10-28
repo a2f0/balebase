@@ -4,6 +4,7 @@ import {
   maxIssueImages,
 } from "@balebase/validators/issueRules";
 import type { IssueInput } from "@balebase/validators/issues";
+import { progressFor } from "./auditProgress";
 import {
   changeOfflineWorkspace,
   type OfflineJob,
@@ -52,11 +53,7 @@ export function queueOfflineAudit(key: string, id: string) {
     const audit = workspace.audits.find((entry) => entry.id === id);
     if (!audit || audit.queued) return workspace;
     if (
-      !audit.template.definition.sections.every((section) =>
-        section.items.every(
-          (item) => !item.required || audit.responses[item.id]?.trim(),
-        ),
-      )
+      progressFor(audit.template.definition, audit.responses).requiredLeft > 0
     ) {
       throw new Error("Complete every required item first.");
     }
