@@ -152,7 +152,8 @@ bun run test:scope
 ```
 
 These offline tests exercise verdict completeness, dependency skips, run
-outcomes, artifact boundaries, session identity and credential handling. They
-are opt-in: `bun run test` and CI do not run them, and neither runs live
-evaluations. Run them after changing `scripts/dev/scope.sh` or
+outcomes, artifact boundaries, session identity and credential handling.
+`bun run verify`, and so CI, runs them; `bun run test` and the pre-push hook do
+not. Nothing runs live evaluations. Run them after changing
+`scripts/dev/scope.sh` or
 `scripts/dev/scope/`.

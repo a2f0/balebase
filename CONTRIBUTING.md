@@ -149,8 +149,9 @@ before its browser tests; CI installs them automatically.
 The `test:deploy` and `test:env` steps inside `bun run test` exercise local
 fixtures and command stubs. They do not deploy, contact a live service, or use
 real cloud credentials. Live verification, such as
-`bun run deploy:staging:verify`, and Scope assessments, including the
-`test:scope` tooling tests, are separate opt-in commands.
+`bun run deploy:staging:verify`, and Scope assessments are separate opt-in
+commands. The offline `test:scope` tooling tests run in `verify`, and so in CI,
+rather than in every `bun run test`.
 
 ## Keep changes readable
 
