@@ -29,18 +29,19 @@ import {
 } from "react";
 import { api } from "./apiClient";
 import { authClient } from "./authClient";
-import { type ErrorNotice, ErrorToast, errorNotice } from "./BillingLink";
 import {
   EmployeeForms,
   inRequirementScope,
   RequirementDraftEditor,
   type RequirementScope,
 } from "./EmployeeForms";
+import { ErrorToast } from "./ErrorToast";
 import {
   inviteWithRequirements,
   RequirementAssignmentError,
   type RequirementDraft,
 } from "./employeeOnboarding";
+import { errorMessage } from "./errors";
 import {
   MemberRoleControl,
   MemberTwoFactorControl,
@@ -60,6 +61,7 @@ import {
   organizationPeoplePath,
   type WorkspaceOrganization,
 } from "./organizationState";
+import { useAction } from "./useAction";
 import { useFocusWhenFolded } from "./useFocusWhenFolded";
 import { handleNavigation, myDocumentsPath } from "./workspacePaths";
 
@@ -280,10 +282,10 @@ function useRequirementSummary(data: OrganizationPeopleData | undefined) {
       }));
     } catch (cause) {
       if (request !== sequence.current) return;
-      const error =
-        cause instanceof Error
-          ? cause.message
-          : "Requested forms and checks could not be loaded.";
+      const error = errorMessage(
+        cause,
+        "Requested forms and checks could not be loaded.",
+      );
       setSummary((current) => ({ ...current, error }));
     }
   }, []);
@@ -452,8 +454,7 @@ function useInviteSubmission({
 }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<OrganizationInvitationRole>("member");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ErrorNotice>();
+  const { busy, failure, run } = useAction("Could not send this invitation.");
   const [requirements, setRequirements] = useState<RequirementDraft[]>([]);
   const [retry, setRetry] = useState<{ email: string; invitationId: string }>();
 
@@ -461,40 +462,36 @@ function useInviteSubmission({
     event.preventDefault();
     const invitedEmail = email.trim().toLowerCase();
     if (!invitedEmail) return;
-    setBusy(true);
-    setError(undefined);
     setRetry(undefined);
     onSubmitting();
-    try {
-      const assignedRole = await sendInvitationWithRequirements({
-        email: invitedEmail,
-        onInvited: () => setEmail(""),
-        onSent,
-        organizationId,
-        requirements,
-        role,
-      });
-      setRequirements([]);
-      onSuccess(
-        `Invitation sent to ${invitedEmail} with the ${assignedRole} role.`,
-      );
-    } catch (cause) {
-      // The invitation went out but its requests did not: keep the drafts
-      // and offer to send them to that invitation again.
-      if (cause instanceof RequirementAssignmentError && cause.invitationId) {
-        setRetry({ email: invitedEmail, invitationId: cause.invitationId });
+    await run(async () => {
+      try {
+        const assignedRole = await sendInvitationWithRequirements({
+          email: invitedEmail,
+          onInvited: () => setEmail(""),
+          onSent,
+          organizationId,
+          requirements,
+          role,
+        });
+        setRequirements([]);
+        onSuccess(
+          `Invitation sent to ${invitedEmail} with the ${assignedRole} role.`,
+        );
+      } catch (cause) {
+        // The invitation went out but its requests did not: keep the drafts
+        // and offer to send them to that invitation again.
+        if (cause instanceof RequirementAssignmentError && cause.invitationId) {
+          setRetry({ email: invitedEmail, invitationId: cause.invitationId });
+        }
+        throw cause;
       }
-      setError(errorNotice(cause, "Could not send this invitation."));
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function retryRequests() {
     if (!retry) return;
-    setBusy(true);
-    setError(undefined);
-    try {
+    await run(async () => {
       await api.employeeForms.create(
         { invitationId: retry.invitationId },
         requirements,
@@ -503,17 +500,13 @@ function useInviteSubmission({
       setRetry(undefined);
       await onSent();
       onSuccess(`Invitation sent to ${retry.email}, with its requested forms.`);
-    } catch (cause) {
-      setError(errorNotice(cause, "Could not request these forms."));
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   return {
     busy,
     email,
-    error,
+    error: failure,
     invite,
     requirements,
     retry,

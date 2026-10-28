@@ -16,10 +16,8 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type {
-  EquipmentDetail,
   EquipmentInput,
   EquipmentItem,
-  EquipmentListing,
   EquipmentMember,
 } from "@balebase/validators/equipment";
 import type { LinkedEmail } from "@balebase/validators/inbox";
@@ -43,6 +41,8 @@ import {
 } from "./equipmentLabels";
 import { LinkedEmailList } from "./LinkedEmailList";
 import { countLabel } from "./labels";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 import {
   equipmentIdForPath,
   equipmentPath,
@@ -71,45 +71,36 @@ export function Equipment({
 }
 
 function useEquipmentListing() {
-  const [listing, setListing] = useState<EquipmentListing>();
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
+  const loaded = useLoad(
+    useCallback(() => api.equipment.list(), []),
+    "Could not load equipment.",
+  );
+  const { setData } = loaded;
+  const action = useAction("Could not add the equipment.");
   const [adding, setAdding] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    api.equipment
-      .list()
-      .then((result) => {
-        if (active) setListing(result);
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(messageFrom(cause));
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  async function add(input: EquipmentInput) {
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      const created = await api.equipment.create(input);
-      setListing((current) =>
-        current
-          ? { ...current, equipment: [created, ...current.equipment] }
-          : current,
-      );
-      setAdding(false);
-      setNotice(`Added ${equipmentName(created)}.`);
-      return true;
-    } catch (cause) {
-      setError(messageFrom(cause));
-      return false;
-    }
-  }
-  return { add, adding, error, listing, notice, setAdding };
+  const add = (input: EquipmentInput) =>
+    action.run(
+      async () => {
+        const created = await api.equipment.create(input);
+        setData((current) =>
+          current
+            ? { ...current, equipment: [created, ...current.equipment] }
+            : current,
+        );
+        setAdding(false);
+        return created;
+      },
+      (created) => `Added ${equipmentName(created)}.`,
+    );
+  return {
+    add,
+    adding,
+    error: action.error ?? loaded.error,
+    listing: loaded.data,
+    notice: action.notice,
+    setAdding,
+  };
 }
 
 function EquipmentListPage({
@@ -353,69 +344,39 @@ function useEquipmentDetail(
   id: string,
   onNavigate: (pathname: string) => void,
 ) {
-  const [detail, setDetail] = useState<EquipmentDetail>();
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
+  const loaded = useLoad(
+    useCallback(() => api.equipment.get(id), [id]),
+    "Could not load the equipment.",
+  );
+  const { reload, setData } = loaded;
+  const action = useAction("Could not update the equipment.");
   const [editing, setEditing] = useState(false);
-  const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      setDetail(await api.equipment.get(id));
-    } catch (cause) {
-      setError(messageFrom(cause));
-    }
-  }, [id]);
-  useEffect(() => void load(), [load]);
-
-  async function save(changes: Partial<EquipmentInput>, message: string) {
-    setBusy(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
+  const save = (changes: Partial<EquipmentInput>, message: string) =>
+    action.run(async () => {
       const equipment = await api.equipment.update(id, changes);
-      setDetail((current) => (current ? { ...current, equipment } : current));
-      setNotice(message);
-      return true;
-    } catch (cause) {
-      setError(messageFrom(cause));
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }
+      setData((current) => (current ? { ...current, equipment } : current));
+    }, message);
 
   async function remove(item: EquipmentItem) {
     if (!(await confirmEquipmentDeletion(item))) return;
-    setBusy(true);
-    setError(undefined);
-    try {
+    await action.run(async () => {
       await api.equipment.delete(id);
       onNavigate(equipmentPath());
-    } catch (cause) {
-      setError(messageFrom(cause));
-      setBusy(false);
-    }
+    });
   }
 
-  async function unlink(email: LinkedEmail) {
-    setBusy(true);
-    setError(undefined);
-    try {
+  const unlink = (email: LinkedEmail) =>
+    action.run(async () => {
       await api.inbox.unlink(email.id, email.linkId);
-      await load();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
+      await reload();
+    });
   return {
-    busy,
-    detail,
+    busy: action.busy,
+    detail: loaded.data,
     editing,
-    error,
-    notice,
+    error: action.error ?? loaded.error,
+    notice: action.notice,
     remove,
     save,
     setEditing,
@@ -808,10 +769,6 @@ function EquipmentFields({
       </Field>
     </div>
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not load equipment.";
 }
 
 function confirmEquipmentDeletion(item: EquipmentItem) {

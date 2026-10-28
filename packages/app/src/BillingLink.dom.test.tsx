@@ -3,7 +3,8 @@ import { ApiError } from "@balebase/api-client";
 import { Window } from "happy-dom";
 import { act, type ReactNode } from "react";
 import type { Root } from "react-dom/client";
-import { ErrorToast, errorNotice } from "./BillingLink";
+import { ErrorToast } from "./ErrorToast";
+import { errorNotice } from "./errors";
 import {
   blockingSeatRequirement,
   OrganizationSeatRequired,

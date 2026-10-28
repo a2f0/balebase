@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { errorMessage } from "./errors";
 import {
   activeOfflineKey,
   type OfflineWorkspace,
@@ -25,11 +26,7 @@ export function useOfflineWorkspace() {
         }
       } catch (cause) {
         if (current)
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Offline storage is unavailable.",
-          );
+          setError(errorMessage(cause, "Offline storage is unavailable."));
       }
     };
     const sync = () => {
@@ -38,11 +35,7 @@ export function useOfflineWorkspace() {
       if (key)
         void syncOfflineWorkspace(key).catch((cause: unknown) => {
           if (current)
-            setError(
-              cause instanceof Error
-                ? cause.message
-                : "Could not sync offline work.",
-            );
+            setError(errorMessage(cause, "Could not sync offline work."));
         });
     };
     const refresh = () => {

@@ -15,11 +15,7 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
-import type {
-  Business,
-  BusinessDetail,
-  BusinessInput,
-} from "@balebase/validators/businesses";
+import type { Business, BusinessInput } from "@balebase/validators/businesses";
 import {
   type ComponentProps,
   type FormEvent,
@@ -42,8 +38,11 @@ import {
   formatEin,
   initialBusinessListState,
 } from "./businessState";
+import { errorMessage } from "./errors";
 import { countLabel } from "./labels";
+import { useClipboard } from "./useClipboard";
 import { useFocusWhenFolded } from "./useFocusWhenFolded";
+import { useLoad } from "./useLoad";
 import {
   businessIdForPath,
   businessPath,
@@ -94,18 +93,23 @@ function BusinessListPage({
     try {
       dispatch({ type: "loaded", data: await api.businesses.list() });
     } catch (cause) {
-      dispatch({ type: "loadFailed", message: messageFrom(cause) });
+      dispatch({
+        type: "loadFailed",
+        message: errorMessage(cause, "Could not load businesses."),
+      });
     }
   }, []);
   useEffect(() => void load(), [load]);
+  const { copyNotice, onCopy } = useIdentifierCopy();
 
   return (
     <BusinessListView
       {...state}
+      copyNotice={copyNotice}
       onAddingChange={(adding) =>
         dispatch({ type: adding ? "addOpened" : "addCancelled" })
       }
-      onCopied={(identifier) => dispatch({ type: "copied", identifier })}
+      onCopy={onCopy}
       onCreated={(business) => dispatch({ type: "created", business })}
       onDeleted={(id) => dispatch({ type: "deleted", id })}
       onError={(message) => dispatch({ type: "failed", message })}
@@ -116,8 +120,9 @@ function BusinessListPage({
 }
 
 interface BusinessListViewProps extends BusinessListState {
+  copyNotice: CopyNotice | undefined;
   onAddingChange: (adding: boolean) => void;
-  onCopied: (identifier: BusinessIdentifier) => void;
+  onCopy: CopyIdentifier;
   onCreated: (business: Business) => void;
   onDeleted: (id: string) => void;
   onError: (message: string) => void;
@@ -164,13 +169,14 @@ export function BusinessListView(props: BusinessListViewProps) {
 }
 
 function BusinessListBody({
+  copyNotice,
   data,
   error,
   formOpen,
   loading,
   notice,
   onAddingChange,
-  onCopied,
+  onCopy,
   onCreated,
   onDeleted,
   onError,
@@ -182,6 +188,7 @@ function BusinessListBody({
     <>
       {error && <Toast tone="danger">{error}</Toast>}
       {notice && <Toast tone="success">{notice}</Toast>}
+      {copyNotice && <Toast tone={copyNotice.tone}>{copyNotice.message}</Toast>}
       {loading && !data ? (
         <LoadingState label="Loading businesses…" />
       ) : data ? (
@@ -197,7 +204,7 @@ function BusinessListBody({
           <BusinessList
             businesses={data.businesses}
             canManage={data.canManage}
-            onCopied={onCopied}
+            onCopy={onCopy}
             onDeleted={onDeleted}
             onError={onError}
             onNavigate={onNavigate}
@@ -247,7 +254,7 @@ function BusinessCreateForm({
       setForm(emptyBusinessForm());
       onCreated(result.business);
     } catch (cause) {
-      onError(messageFrom(cause));
+      onError(errorMessage(cause, "Could not add the business."));
     } finally {
       setBusy(false);
     }
@@ -295,7 +302,7 @@ function BusinessList({
   businesses,
   canManage,
   onNavigate,
-  onCopied,
+  onCopy,
   onDeleted,
   onError,
   onUpdated,
@@ -303,7 +310,7 @@ function BusinessList({
   businesses: Business[];
   canManage: boolean;
   onNavigate: (pathname: string) => void;
-  onCopied: (identifier: BusinessIdentifier) => void;
+  onCopy: CopyIdentifier;
   onDeleted: (id: string) => void;
   onError: (message: string) => void;
   onUpdated: (business: Business) => void;
@@ -329,7 +336,7 @@ function BusinessList({
                 canManage={canManage}
                 key={business.id}
                 onNavigate={onNavigate}
-                onCopied={onCopied}
+                onCopy={onCopy}
                 onDeleted={onDeleted}
                 onError={onError}
                 onUpdated={onUpdated}
@@ -346,7 +353,7 @@ function BusinessRow({
   business,
   canManage,
   onNavigate,
-  onCopied,
+  onCopy,
   onDeleted,
   onError,
   onUpdated,
@@ -354,7 +361,7 @@ function BusinessRow({
   business: Business;
   canManage: boolean;
   onNavigate: (pathname: string) => void;
-  onCopied: (identifier: BusinessIdentifier) => void;
+  onCopy: CopyIdentifier;
   onDeleted: (id: string) => void;
   onError: (message: string) => void;
   onUpdated: (business: Business) => void;
@@ -369,7 +376,7 @@ function BusinessRow({
       await api.businesses.delete(business.id);
       onDeleted(business.id);
     } catch (cause) {
-      onError(messageFrom(cause));
+      onError(errorMessage(cause, "Could not delete the business."));
       setBusy(false);
     }
   }
@@ -389,11 +396,7 @@ function BusinessRow({
   }
 
   return (
-    <BusinessContextMenu
-      business={business}
-      onCopied={onCopied}
-      onError={onError}
-    >
+    <BusinessContextMenu business={business} onCopy={onCopy}>
       {(targetProps) => (
         <li className="row" {...targetProps}>
           <BusinessSummary business={business} onNavigate={onNavigate} />
@@ -427,13 +430,11 @@ function BusinessRow({
 function BusinessContextMenu({
   business,
   children,
-  onCopied,
-  onError,
+  onCopy,
 }: {
   business: Business;
   children: ComponentProps<typeof ContextMenu>["children"];
-  onCopied: (identifier: BusinessIdentifier) => void;
-  onError: (message: string) => void;
+  onCopy: CopyIdentifier;
 }) {
   return (
     <ContextMenu
@@ -443,9 +444,7 @@ function BusinessContextMenu({
         id: `copy-${id}`,
         label: `Copy ${identifier}`,
         onSelect: () => {
-          if (value) {
-            void copyIdentifier(identifier, value, { onCopied, onError });
-          }
+          if (value) onCopy(identifier, value);
         },
       }))}
       label={`Actions for ${business.name}`}
@@ -475,24 +474,19 @@ function businessIdentifiers(business: Business) {
   }[];
 }
 
+type CopyIdentifier = (identifier: BusinessIdentifier, value: string) => void;
+type CopyNotice = ReturnType<typeof useClipboard>["notice"];
+
 /** Copies an identifier from the row menu or the detail page alike. */
-async function copyIdentifier(
-  identifier: BusinessIdentifier,
-  value: string,
-  {
-    onCopied,
-    onError,
-  }: {
-    onCopied: (identifier: BusinessIdentifier) => void;
-    onError: (message: string) => void;
-  },
-) {
-  try {
-    await navigator.clipboard.writeText(value);
-    onCopied(identifier);
-  } catch {
-    onError(`Could not copy the ${identifier}. Please try again.`);
-  }
+function useIdentifierCopy() {
+  const { copy, notice } = useClipboard();
+  const onCopy: CopyIdentifier = (identifier, value) =>
+    void copy(
+      value,
+      copiedNotice(identifier),
+      `Could not copy the ${identifier}. Please try again.`,
+    );
+  return { copyNotice: notice, onCopy };
 }
 
 function BusinessSummary({
@@ -539,34 +533,26 @@ function BusinessDetailPage({
   id: string;
   onNavigate: (pathname: string) => void;
 }) {
-  const [detail, setDetail] = useState<BusinessDetail>();
+  const loaded = useLoad(
+    useCallback(() => api.businesses.get(id), [id]),
+    "Could not load the business.",
+  );
+  const detail = loaded.data;
   const [editing, setEditing] = useState(false);
-  const [error, setError] = useState<string>();
+  const [failure, setFailure] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const { copyNotice, onCopy } = useIdentifierCopy();
   const editButton = useFocusWhenFolded(editing);
   const business = detail?.business;
+  const error = failure ?? loaded.error;
   const announce = (message: string) => {
-    setError(undefined);
+    setFailure(undefined);
     setNotice(message);
   };
   const fail = (message: string) => {
     setNotice(undefined);
-    setError(message);
+    setFailure(message);
   };
-  useEffect(() => {
-    let active = true;
-    api.businesses
-      .get(id)
-      .then((result) => {
-        if (active) setDetail(result);
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(messageFrom(cause));
-      });
-    return () => {
-      active = false;
-    };
-  }, [id]);
 
   return (
     <Page>
@@ -593,6 +579,9 @@ function BusinessDetailPage({
       <PageBody>
         {error && <Toast tone="danger">{error}</Toast>}
         {notice && <Toast tone="success">{notice}</Toast>}
+        {copyNotice && (
+          <Toast tone={copyNotice.tone}>{copyNotice.message}</Toast>
+        )}
         {!business && !error && <LoadingState label="Loading business…" />}
         {business &&
           (editing ? (
@@ -601,7 +590,7 @@ function BusinessDetailPage({
               onCancel={() => setEditing(false)}
               onError={fail}
               onSaved={(updated) => {
-                setDetail((current) =>
+                loaded.setData((current) =>
                   current ? { ...current, business: updated } : current,
                 );
                 setEditing(false);
@@ -609,11 +598,7 @@ function BusinessDetailPage({
               }}
             />
           ) : (
-            <BusinessDetailCard
-              business={business}
-              onCopied={(identifier) => announce(copiedNotice(identifier))}
-              onError={fail}
-            />
+            <BusinessDetailCard business={business} onCopy={onCopy} />
           ))}
       </PageBody>
     </Page>
@@ -622,12 +607,10 @@ function BusinessDetailPage({
 
 function BusinessDetailCard({
   business,
-  onCopied,
-  onError,
+  onCopy,
 }: {
   business: Business;
-  onCopied: (identifier: BusinessIdentifier) => void;
-  onError: (message: string) => void;
+  onCopy: CopyIdentifier;
 }) {
   return (
     <PageSection title="Details">
@@ -647,12 +630,7 @@ function BusinessDetailCard({
                     aria-label={`Copy ${identifier}`}
                     icon="copy"
                     iconOnly
-                    onClick={() =>
-                      void copyIdentifier(identifier, value, {
-                        onCopied,
-                        onError,
-                      })
-                    }
+                    onClick={() => onCopy(identifier, value)}
                     size="sm"
                     variant="ghost"
                   />
@@ -708,7 +686,7 @@ function BusinessEditCard({
       );
       onSaved(result.business);
     } catch (cause) {
-      onError(messageFrom(cause));
+      onError(errorMessage(cause, "Could not save the business."));
       setBusy(false);
     }
   }
@@ -775,7 +753,7 @@ function BusinessEditRow({
       );
       onUpdated(result.business);
     } catch (cause) {
-      onError(messageFrom(cause));
+      onError(errorMessage(cause, "Could not save the business."));
       setBusy(false);
     }
   }
@@ -1012,10 +990,6 @@ function BusinessEmptyState({ title }: { title: string }) {
       Business details will appear here.
     </EmptyState>
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Something went wrong.";
 }
 
 function confirmBusinessDeletion(business: Business) {

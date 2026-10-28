@@ -6,7 +6,7 @@ import {
   PageHeader,
   Toast,
 } from "@balebase/ui/react";
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 import {
   blockingSeatRequirement,
   OrganizationSeatRequired,
@@ -16,6 +16,7 @@ import type {
   OrganizationTwoFactorRequirement,
 } from "./organizationAccessErrors";
 import { organizationPathRequiresAccess } from "./organizationState";
+import { useAction } from "./useAction";
 
 /**
  * Shows what the organization requires before its pages can load:
@@ -65,20 +66,9 @@ function OrganizationTwoFactorRequired({
   onSignOut: () => Promise<void>;
   requirement: "setup" | "verification";
 }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const { busy, error, run } = useAction("Could not sign out.");
   const needsSetup = requirement === "setup";
-
-  async function signOut() {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await onSignOut();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not sign out.");
-      setBusy(false);
-    }
-  }
+  const signOut = () => run(onSignOut);
 
   return (
     <Page narrow>

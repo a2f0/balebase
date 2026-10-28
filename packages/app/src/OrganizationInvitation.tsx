@@ -1,6 +1,9 @@
 import { Button, Card, Icon, LoadingState, Toast } from "@balebase/ui/react";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { authClient } from "./authClient";
+import { throwIfRefused } from "./errors";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 
 interface InvitationDetails {
   email: string;
@@ -22,61 +25,34 @@ export function OrganizationInvitation({
   onNavigate: () => void;
   onUseAnotherAccount: () => void;
 }) {
-  const [invitation, setInvitation] = useState<InvitationDetails>();
-  const [accepted, setAccepted] = useState(false);
-  const [busy, setBusy] = useState(true);
-  const [error, setError] = useState<string>();
-
-  useEffect(() => {
-    if (!invitationId) {
-      setError("This invitation link is missing its ID.");
-      setBusy(false);
-      return;
-    }
-    let active = true;
-    void authClient.organization
-      .getInvitation({ query: { id: invitationId } })
-      .then((result) => {
-        if (!active) return;
-        if (result.error) {
-          setError(
-            result.error.message ?? "This invitation is invalid or expired.",
-          );
-          return;
-        }
-        setInvitation(result.data as InvitationDetails);
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(messageFrom(cause));
-      })
-      .finally(() => {
-        if (active) setBusy(false);
+  const loaded = useLoad(
+    useCallback(async () => {
+      if (!invitationId)
+        throw new Error("This invitation link is missing its ID.");
+      const { data, error } = await authClient.organization.getInvitation({
+        query: { id: invitationId },
       });
-    return () => {
-      active = false;
-    };
-  }, [invitationId]);
+      throwIfRefused(error, "This invitation is invalid or expired.");
+      return data as InvitationDetails;
+    }, [invitationId]),
+    "Could not load this invitation.",
+  );
+  const invitation = loaded.data;
+  const acceptance = useAction("Could not accept this invitation.");
+  const [accepted, setAccepted] = useState(false);
+  const busy = loaded.loading || acceptance.busy;
+  const error = acceptance.error ?? loaded.error;
 
   async function accept() {
     if (!invitationId) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      const result = await authClient.organization.acceptInvitation({
+    await acceptance.run(async () => {
+      const { error } = await authClient.organization.acceptInvitation({
         invitationId,
       });
-      if (result.error) {
-        throw new Error(
-          result.error.message ?? "Could not accept this invitation.",
-        );
-      }
+      throwIfRefused(error, "Could not accept this invitation.");
       setAccepted(true);
       await onAccepted();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   return (
@@ -198,10 +174,4 @@ function formatDate(value: Date) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not load this invitation.";
 }

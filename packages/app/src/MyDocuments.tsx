@@ -18,13 +18,7 @@ import type {
   EmployeeRequirement,
   EmployeeRequirementKind,
 } from "@balebase/validators/employeeForms";
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useCallback, useRef } from "react";
 import { api } from "./apiClient";
 import {
   downloadEmployeeForm,
@@ -40,6 +34,8 @@ import {
   type StatusBadge,
 } from "./requirementStatus";
 import { ScreeningRequest, screeningProgress } from "./ScreeningRequest";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 import {
   handleNavigation,
   myDocumentsPath,
@@ -185,44 +181,34 @@ function Dashboard({
 }
 
 function useOwnRequirements() {
-  const [requirements, setRequirements] = useState<EmployeeRequirement[]>();
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const reload = useCallback(async () => {
-    setLoading(true);
-    try {
-      setRequirements(
-        (await api.employeeForms.list({ own: true })).requirements,
-      );
-      setError(undefined);
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-  useEffect(() => {
-    void reload();
-  }, [reload]);
+  const loaded = useLoad(
+    useCallback(
+      async () => (await api.employeeForms.list({ own: true })).requirements,
+      [],
+    ),
+    "Could not load your documents.",
+  );
+  const change = useAction("Could not update your documents.");
   const action: Action = async (work, success) => {
-    setBusy(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      await work();
-      await reload();
-      setNotice(success);
-    } catch (cause) {
-      const message = messageFrom(cause);
-      await reload();
-      setError(message);
-    } finally {
-      setBusy(false);
-    }
+    // Reload either way so a refused change shows what is stored, and stay
+    // busy until it has, so no action runs against stale requirements.
+    await change.run(async () => {
+      try {
+        return await work();
+      } finally {
+        await loaded.reload();
+      }
+    }, success);
   };
-  return { action, busy, error, loading, notice, reload, requirements };
+  return {
+    action,
+    busy: change.busy,
+    error: change.error ?? loaded.error,
+    loading: loaded.loading,
+    notice: change.notice,
+    reload: loaded.reload,
+    requirements: loaded.data,
+  };
 }
 
 function Summary({
@@ -510,10 +496,4 @@ function BackToMyDocuments({
       My documents
     </ButtonLink>
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not update your documents.";
 }

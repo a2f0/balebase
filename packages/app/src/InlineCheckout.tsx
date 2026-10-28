@@ -1,6 +1,7 @@
 import { Button, Card, Toast } from "@balebase/ui/react";
 import type { InlineCheckoutSession } from "@balebase/validators/billing";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { errorMessage } from "./errors";
 import {
   type CheckoutSummary,
   type MountedCheckout,
@@ -38,7 +39,7 @@ export function InlineCheckout({
         if (!signal.aborted) checkout.current = mounted;
       })
       .catch((cause: unknown) => {
-        if (!signal.aborted) setError(messageFrom(cause));
+        if (!signal.aborted) setError(errorMessage(cause, "Checkout failed."));
       });
     return () => {
       mounting.abort();
@@ -52,7 +53,9 @@ export function InlineCheckout({
     if (!mounted || submitting) return;
     setSubmitting(true);
     setError(undefined);
-    const failure = await mounted.confirm().catch(messageFrom);
+    const failure = await mounted
+      .confirm()
+      .catch((cause: unknown) => errorMessage(cause, "Checkout failed."));
     // Success navigates to the return URL, so only a failure resets the form.
     if (failure !== null) {
       setError(failure);
@@ -96,8 +99,4 @@ export function InlineCheckout({
 function checkoutDescription(summary: CheckoutSummary) {
   const renewal = summary.interval ? ` Renews every ${summary.interval}.` : "";
   return `${summary.dueToday} due today.${renewal}`;
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Checkout failed.";
 }

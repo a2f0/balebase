@@ -1,6 +1,7 @@
 import { Banner, Button, LoadingState, Toast } from "@balebase/ui/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 
 type Detail = Awaited<ReturnType<typeof api.adminJobs.detail>>;
 
@@ -33,9 +34,7 @@ function useRunDetail(runId: string, before: string) {
           setError(
             cause instanceof Error && cause.name === "TimeoutError"
               ? "Loading job output took too long. Try again."
-              : cause instanceof Error
-                ? cause.message
-                : "Could not load job output.",
+              : errorMessage(cause, "Could not load job output."),
           );
         })
         .finally(() => {

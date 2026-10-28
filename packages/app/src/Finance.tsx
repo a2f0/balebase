@@ -23,6 +23,7 @@ import {
 } from "react";
 import { api } from "./apiClient";
 import { websiteUrl } from "./config";
+import { errorMessage } from "./errors";
 import {
   FinanceAccounts,
   FinanceConnectionAlert,
@@ -44,6 +45,7 @@ import {
   financePages,
 } from "./financePages";
 import { selectFinanceAccount } from "./financeTransactions";
+import { useAction } from "./useAction";
 import {
   type FinanceListingState,
   initialFilters,
@@ -64,12 +66,12 @@ export function Finance({
   const { load, setData, onFiltersChange, ...listing } = useFinanceData(
     page === "overview" ? expenseCategoryFiltersFor(pathname) : null,
   );
-  const [working, setWorking] = useState(false);
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
+  const { error, notice, run, setError, setNotice, ...action } = useAction(
+    "Could not update finances.",
+  );
   const plaid = usePlaidConnect(load, setError, setNotice);
-  const actions = financeActions(load, setWorking, setError, setNotice);
-  const busy = working || plaid.busy;
+  const actions = financeActions(load, run);
+  const busy = action.busy || plaid.busy;
 
   return (
     <FinanceView
@@ -102,7 +104,7 @@ export function Finance({
  */
 function categorizeTransaction(
   setData: Dispatch<SetStateAction<FinanceData | undefined>>,
-  setError: Dispatch<SetStateAction<string | undefined>>,
+  setError: (message: string | undefined) => void,
 ) {
   return async (transaction: FinanceTransaction, categoryId: string | null) => {
     const previous = transaction.expenseCategoryId;
@@ -117,7 +119,7 @@ function categorizeTransaction(
       setData((current) =>
         withCategory(current, transaction.id, categoryId, previous),
       );
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not update finances."));
     }
   };
 }
@@ -148,21 +150,17 @@ function withCategory(
 
 function financeActions(
   load: () => Promise<void>,
-  setWorking: Dispatch<SetStateAction<boolean>>,
-  setError: Dispatch<SetStateAction<string | undefined>>,
-  setNotice: Dispatch<SetStateAction<string | undefined>>,
+  runAction: ReturnType<typeof useAction>["run"],
 ) {
   async function run(action: () => Promise<string>) {
-    setWorking(true);
-    setError(undefined);
-    try {
-      setNotice(await action());
-      await load();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setWorking(false);
-    }
+    await runAction(
+      async () => {
+        const notice = await action();
+        await load();
+        return notice;
+      },
+      (notice) => notice,
+    );
   }
   return {
     annotate: (
@@ -492,8 +490,8 @@ function FinanceSetupNotice() {
 
 function usePlaidConnect(
   load: () => Promise<void>,
-  setError: Dispatch<SetStateAction<string | undefined>>,
-  setNotice: Dispatch<SetStateAction<string | undefined>>,
+  setError: (message: string | undefined) => void,
+  setNotice: (message: string | undefined) => void,
 ) {
   const [busy, setBusy] = useState(false);
   const resumedOAuth = useRef(false);
@@ -514,7 +512,7 @@ function usePlaidConnect(
         await load();
         setNotice(syncNotice(result));
       } catch (cause) {
-        setError(messageFrom(cause));
+        setError(errorMessage(cause, "Could not update finances."));
         await load();
       } finally {
         setBusy(false);
@@ -536,7 +534,7 @@ function usePlaidConnect(
         setBusy(false);
       });
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not update finances."));
       setBusy(false);
     }
   };
@@ -547,7 +545,7 @@ function useOAuthResume(
   complete: (token: string, metadata: PlaidLinkMetadata) => Promise<void>,
   resumed: { current: boolean },
   setBusy: Dispatch<SetStateAction<boolean>>,
-  setError: Dispatch<SetStateAction<string | undefined>>,
+  setError: (message: string | undefined) => void,
 ) {
   useEffect(() => {
     if (!hasOAuthState() || resumed.current) return;
@@ -625,8 +623,4 @@ function clearOAuthState() {
   localStorage.removeItem(linkTokenStorageKey);
   if (hasOAuthState())
     window.history.replaceState(window.history.state, "", "/finance");
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not update finances.";
 }

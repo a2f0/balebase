@@ -12,7 +12,7 @@ import {
   PageSection,
 } from "@balebase/ui/react";
 import type { FinanceAccountDetail } from "@balebase/validators/finance";
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import { api } from "./apiClient";
 import { connectionTone } from "./FinanceAccounts";
 import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
@@ -25,6 +25,7 @@ import {
 } from "./financeFormat";
 import { financeConnectionPath, financeTransactionPath } from "./financePages";
 import { formatLabel } from "./labels";
+import { useLoad } from "./useLoad";
 import { handleNavigation } from "./workspacePaths";
 
 export function FinanceAccountPage({
@@ -34,7 +35,7 @@ export function FinanceAccountPage({
   id: string;
   onNavigate: (path: string) => void;
 }) {
-  const { data, error } = useAccount(id);
+  const { data, error, setData } = useAccount(id);
   return (
     <Page>
       <PageHeader
@@ -61,6 +62,15 @@ export function FinanceAccountPage({
             <FinanceSyncSettings
               id={data.connection.id}
               dailySync={data.connection.dailySync}
+              onSaved={(dailySync) =>
+                setData(
+                  (current) =>
+                    current && {
+                      ...current,
+                      connection: { ...current.connection, dailySync },
+                    },
+                )
+              }
               status={data.connection.status}
             />
             <RecentTransactions
@@ -180,27 +190,10 @@ function RecentTransactions({
 }
 
 function useAccount(id: string) {
-  const [data, setData] = useState<FinanceAccountDetail>();
-  const [error, setError] = useState<string>();
-  useEffect(() => {
-    let active = true;
-    void api.finance
-      .account(id)
-      .then((next) => {
-        if (active) setData(next);
-      })
-      .catch((cause: unknown) => {
-        if (active) {
-          setError(
-            cause instanceof Error ? cause.message : "Could not load account.",
-          );
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [id]);
-  return { data, error };
+  return useLoad(
+    useCallback(() => api.finance.account(id), [id]),
+    "Could not load account.",
+  );
 }
 
 function sourceFields({

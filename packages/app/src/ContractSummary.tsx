@@ -9,7 +9,6 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type { ContractDetail } from "@balebase/validators/contracts";
-import { useState } from "react";
 import { ApiDownload } from "./ApiDownload";
 import { api } from "./apiClient";
 import { boxStyle, ContractPages } from "./ContractDocument";
@@ -23,6 +22,7 @@ import {
   recipientTone,
   reminderOptions,
 } from "./contractFields";
+import { useAction } from "./useAction";
 import { contractPath } from "./workspacePaths";
 
 /** A contract that has been sent: its progress, actions, and history. */
@@ -96,43 +96,32 @@ function useSummaryActions(
   onChanged: (contract: ContractDetail | null) => void,
   onNavigate: (pathname: string) => void,
 ) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
-  async function run(action: () => Promise<string | undefined>) {
-    setBusy(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      setNotice(await action());
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Something went wrong.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
+  const { busy, error, notice, run } = useAction(
+    "Could not update the contract.",
+  );
   return {
     busy,
     error,
     notice,
     remind: () =>
-      run(async () => {
-        const result = await api.contracts.remind(contract.id);
-        onChanged(result.contract);
-        if (result.reminded === 0)
-          throw new Error("No reminder could be delivered. See Activity.");
-        return result.reminded === 1
-          ? "Reminder sent to 1 signer."
-          : `Reminders sent to ${result.reminded} signers.`;
-      }),
+      run(
+        async () => {
+          const result = await api.contracts.remind(contract.id);
+          onChanged(result.contract);
+          if (result.reminded === 0)
+            throw new Error("No reminder could be delivered. See Activity.");
+          return result.reminded;
+        },
+        (reminded) =>
+          reminded === 1
+            ? "Reminder sent to 1 signer."
+            : `Reminders sent to ${reminded} signers.`,
+      ),
     remove: async () => {
       if (!(await confirmContractDeletion(contract.title))) return;
       void run(async () => {
         await api.contracts.delete(contract.id);
         onNavigate(contractPath());
-        return undefined;
       });
     },
     voidIt: async () => {
@@ -140,8 +129,7 @@ function useSummaryActions(
       if (reason === null) return;
       void run(async () => {
         onChanged(await api.contracts.void(contract.id, reason));
-        return "Contract voided.";
-      });
+      }, "Contract voided.");
     },
   };
 }

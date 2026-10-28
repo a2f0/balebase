@@ -10,7 +10,7 @@ import type {
   ContractTemplate,
   TemplateDefinition,
 } from "@balebase/validators/contractTemplates";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { api } from "./apiClient";
 import { ContractPages } from "./ContractDocument";
 import {
@@ -23,27 +23,30 @@ import {
 import { type DraftInput, reminderOptions } from "./contractFields";
 import { countLabel } from "./labels";
 import { useUnsavedChanges } from "./unsavedChanges";
+import { useAction } from "./useAction";
 
 export function ContractTemplateEditor({
   template,
   onSaved,
+  dirty,
   onDirtyChange,
   onBusyChange,
   disabled = false,
 }: {
   template: ContractTemplate;
   onSaved: (template: ContractTemplate) => void;
+  /** Owned by the page, which guards version changes with it. */
+  dirty: boolean;
   onDirtyChange: (dirty: boolean) => void;
   onBusyChange: (busy: boolean) => void;
   disabled?: boolean;
 }) {
-  const editor = useTemplateEditor(
-    template,
-    onSaved,
-    onDirtyChange,
-    onBusyChange,
+  const editor = useTemplateEditor(template, onSaved, {
+    dirty,
     disabled,
-  );
+    onBusyChange,
+    onDirtyChange,
+  });
   return (
     <fieldset
       className="contractTemplateControls"
@@ -91,40 +94,42 @@ type Editor = ReturnType<typeof useTemplateEditor>;
 function useTemplateEditor(
   template: ContractTemplate,
   onSaved: (template: ContractTemplate) => void,
-  onDirtyChange: (dirty: boolean) => void,
-  onBusyChange: (busy: boolean) => void,
-  disabled: boolean,
+  {
+    dirty,
+    disabled,
+    onBusyChange,
+    onDirtyChange,
+  }: {
+    dirty: boolean;
+    disabled: boolean;
+    onBusyChange: (busy: boolean) => void;
+    onDirtyChange: (dirty: boolean) => void;
+  },
 ) {
   const [draft, setDraft] = useState(() => draftFrom(template));
   const [description, setDescription] = useState(template.description);
-  const [dirty, setDirty] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const saver = useAction("Could not save the template.");
   const saving = useRef(false);
-  const update = useCallback((change: (draft: DraftInput) => DraftInput) => {
-    if (saving.current) return;
-    setDraft(change);
-    setDirty(true);
-  }, []);
+  const update = useCallback(
+    (change: (draft: DraftInput) => DraftInput) => {
+      if (saving.current) return;
+      setDraft(change);
+      onDirtyChange(true);
+    },
+    [onDirtyChange],
+  );
   const editor = useContractFieldEditor(
     draft,
     update,
     template.document.pageCount,
   );
-  useEffect(() => {
-    onDirtyChange(dirty);
-  }, [dirty, onDirtyChange]);
-  useEffect(() => {
-    onBusyChange(busy);
-  }, [busy, onBusyChange]);
   useUnsavedChanges(dirty && !disabled);
 
   async function save() {
     if (saving.current) return;
     saving.current = true;
-    setBusy(true);
-    setError(undefined);
-    try {
+    onBusyChange(true);
+    await saver.run(async () => {
       const definition = definitionFrom(draft);
       const saved = await api.contractTemplates.saveVersion(template, {
         definition,
@@ -134,15 +139,9 @@ function useTemplateEditor(
       if (!saved) throw new Error("Contract template not found.");
       onDirtyChange(false);
       onSaved(saved);
-      setDirty(false);
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Could not save the template.",
-      );
-    } finally {
-      saving.current = false;
-      setBusy(false);
-    }
+    });
+    saving.current = false;
+    onBusyChange(false);
   }
   async function removeRole(key: string) {
     const count = draft.fields.filter(
@@ -158,15 +157,15 @@ function useTemplateEditor(
 
   return {
     ...editor,
-    busy,
+    busy: saver.busy,
     description,
     dirty,
-    error,
+    error: saver.error,
     removeRole,
     save,
     setDescription: (value: string) => {
       setDescription(value);
-      setDirty(true);
+      onDirtyChange(true);
     },
   };
 }

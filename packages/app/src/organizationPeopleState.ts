@@ -1,53 +1,38 @@
 import { confirmDialog } from "@balebase/ui/react";
-import type {
-  OrganizationMember,
-  OrganizationPeopleData,
-} from "@balebase/validators/organizationSettings";
-import { useCallback, useEffect, useState } from "react";
+import type { OrganizationMember } from "@balebase/validators/organizationSettings";
+import { useCallback } from "react";
 import { api } from "./apiClient";
 import { authClient } from "./authClient";
+import { throwIfRefused } from "./errors";
 import {
   type OrganizationInvitationRole,
   organizationRoleValue,
   type WorkspaceOrganization,
 } from "./organizationState";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 
 type OrganizationPeopleState = ReturnType<typeof useOrganizationPeopleData>;
 
 /** The organization's members and invitations, with action state. */
 export function useOrganizationPeopleData(organizationId: string) {
-  const [data, setData] = useState<OrganizationPeopleData>();
-  const [busy, setBusy] = useState(true);
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
-  const load = useCallback(async () => {
-    if (!organizationId) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      setData(await api.organizationSettings.people());
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(false);
-    }
-  }, [organizationId]);
-  useEffect(() => void load(), [load]);
-  const startAction = () => {
-    setBusy(true);
-    setError(undefined);
-    setNotice(undefined);
-  };
+  const loaded = useLoad(
+    useCallback(
+      async () =>
+        organizationId ? api.organizationSettings.people() : undefined,
+      [organizationId],
+    ),
+    "Could not load organization people.",
+  );
+  const action = useAction("Could not update organization people.");
   return {
-    busy,
-    data,
-    error,
-    load,
-    notice,
-    setBusy,
-    setError,
-    setNotice,
-    startAction,
+    busy: action.busy || loaded.loading,
+    data: loaded.data,
+    error: action.error ?? loaded.error,
+    load: loaded.reload,
+    notice: action.notice,
+    run: action.run,
+    setNotice: action.setNotice,
   };
 }
 
@@ -57,23 +42,13 @@ export function organizationPeopleActions(
   onAccessChanged: () => Promise<void>,
 ) {
   async function cancelInvitation(invitationId: string) {
-    state.startAction();
-    try {
-      const result = await authClient.organization.cancelInvitation({
+    await state.run(async () => {
+      const { error } = await authClient.organization.cancelInvitation({
         invitationId,
       });
-      if (result.error) {
-        throw new Error(
-          result.error.message ?? "Could not revoke this invitation.",
-        );
-      }
-      state.setNotice("Invitation revoked.");
+      throwIfRefused(error, "Could not revoke this invitation.");
       await state.load();
-    } catch (cause) {
-      state.setError(messageFrom(cause));
-    } finally {
-      state.setBusy(false);
-    }
+    }, "Invitation revoked.");
   }
 
   async function updateMemberRole(
@@ -81,25 +56,15 @@ export function organizationPeopleActions(
     role: OrganizationInvitationRole,
   ) {
     if (organizationRoleValue(member.role) === role) return;
-    state.startAction();
-    try {
-      const result = await authClient.organization.updateMemberRole({
+    await state.run(async () => {
+      const { error } = await authClient.organization.updateMemberRole({
         memberId: member.id,
         organizationId: organization.id,
         role,
       });
-      if (result.error) {
-        throw new Error(
-          result.error.message ?? "Could not update this member’s role.",
-        );
-      }
-      state.setNotice(`${member.user.name} is now an organization ${role}.`);
+      throwIfRefused(error, "Could not update this member’s role.");
       await Promise.all([state.load(), onAccessChanged()]);
-    } catch (cause) {
-      state.setError(messageFrom(cause));
-    } finally {
-      state.setBusy(false);
-    }
+    }, `${member.user.name} is now an organization ${role}.`);
   }
 
   async function updateTwoFactorRequirement(
@@ -107,23 +72,18 @@ export function organizationPeopleActions(
     required: boolean,
   ) {
     if (member.twoFactorRequired === required) return;
-    state.startAction();
-    try {
-      await api.organizationSettings.updateMemberTwoFactorRequirement(
-        member.id,
-        required,
-      );
-      state.setNotice(
-        required
-          ? `${member.user.name} must use two-factor authentication for this organization.`
-          : `${member.user.name} is no longer required to use two-factor authentication for this organization.`,
-      );
-      await Promise.all([state.load(), onAccessChanged()]);
-    } catch (cause) {
-      state.setError(messageFrom(cause));
-    } finally {
-      state.setBusy(false);
-    }
+    await state.run(
+      async () => {
+        await api.organizationSettings.updateMemberTwoFactorRequirement(
+          member.id,
+          required,
+        );
+        await Promise.all([state.load(), onAccessChanged()]);
+      },
+      required
+        ? `${member.user.name} must use two-factor authentication for this organization.`
+        : `${member.user.name} is no longer required to use two-factor authentication for this organization.`,
+    );
   }
 
   return {
@@ -141,26 +101,14 @@ export async function removeOrganizationMember(
   onAccessChanged: () => Promise<void>,
 ) {
   if (!(await confirmMemberRemoval(member, organization))) return false;
-  state.startAction();
-  try {
-    const result = await authClient.organization.removeMember({
+  return state.run(async () => {
+    const { error } = await authClient.organization.removeMember({
       memberIdOrEmail: member.id,
       organizationId: organization.id,
     });
-    if (result.error) {
-      throw new Error(
-        result.error.message ?? "Could not remove this organization member.",
-      );
-    }
-    state.setNotice(`${member.user.name} was removed from the organization.`);
+    throwIfRefused(error, "Could not remove this organization member.");
     await Promise.all([state.load(), onAccessChanged()]);
-    return true;
-  } catch (cause) {
-    state.setError(messageFrom(cause));
-    return false;
-  } finally {
-    state.setBusy(false);
-  }
+  }, `${member.user.name} was removed from the organization.`);
 }
 
 /** Members can hold several comma-separated roles, such as "admin,owner". */
@@ -171,12 +119,6 @@ export function formatRole(role: string) {
     .filter(Boolean)
     .map((value) => value.charAt(0).toUpperCase() + value.slice(1))
     .join(", ");
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not update organization people.";
 }
 
 function confirmMemberRemoval(

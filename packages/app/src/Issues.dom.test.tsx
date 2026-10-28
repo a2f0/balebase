@@ -210,10 +210,13 @@ describe("workspace issues, mounted", () => {
   it("resolves, reopens, and opens the exact source transaction; stale saves offer reload", async () => {
     let current = { ...issue };
     let stale = false;
+    let unavailable = false;
     const writes: Record<string, unknown>[] = [];
     const paths: string[] = [];
     respond((url, init) => {
       if (url.pathname === "/api/issues/issue-1") {
+        if (unavailable)
+          return Response.json({ error: "Unavailable." }, { status: 503 });
         if (init?.method === "PATCH") {
           const body = JSON.parse(String(init.body));
           writes.push(body);
@@ -264,6 +267,14 @@ describe("workspace issues, mounted", () => {
     await submit();
     expect(container.textContent).toContain("Reload issue");
     expect(container.querySelectorAll('[role="alert"]').length).toBe(1);
+    // A failed reload keeps the unsaved edits.
+    unavailable = true;
+    await click("Reload issue");
+    expect(container.querySelector("textarea")?.value).toBe(
+      "Unsaved investigation",
+    );
+    expect(container.textContent).toContain("Reload issue");
+    unavailable = false;
     stale = false;
     current = {
       ...current,

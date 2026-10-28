@@ -7,12 +7,12 @@ import type {
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   AnswerAttribution,
-  createIssueWithImages,
   FailedItemIssue,
   type FailIssueState,
   failIssueReducer,
   runStateReducer,
 } from "./AuditRunPage";
+import { createIssueWithImages } from "./auditIssueImages";
 
 const item: AuditTemplateItem = {
   id: "panel-labels",

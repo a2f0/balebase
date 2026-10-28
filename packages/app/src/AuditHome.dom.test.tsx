@@ -328,11 +328,10 @@ describe("deleted audits, mounted", () => {
     await click(view.layoutButton("Deleted"));
     await click(view.layoutButton("Active"));
     // The obsolete request no longer holds the fresh list's Load more busy.
-    expect(
-      [...document.querySelectorAll("button")].some(
-        (element) => element.textContent === "Load more audits",
-      ),
-    ).toBe(true);
+    const freshLoadMore = [...document.querySelectorAll("button")].find(
+      (element) => element.textContent === "Load more audits",
+    );
+    expect(freshLoadMore?.getAttribute("aria-busy")).toBeNull();
     await act(async () => releaseStalePage?.());
     await settle();
     expect(view.text()).toContain("Fresh");

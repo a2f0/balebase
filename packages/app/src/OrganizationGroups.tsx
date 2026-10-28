@@ -11,8 +11,10 @@ import {
 } from "@balebase/ui/react";
 import type { OrganizationGroup } from "@balebase/validators/organizationGroups";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useState } from "react";
 import { api } from "./apiClient";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 
 export function OrganizationAccessSettings({
   onAccessChanged,
@@ -21,30 +23,23 @@ export function OrganizationAccessSettings({
   onAccessChanged: () => Promise<void>;
   organizationId: string;
 }) {
-  const [data, setData] = useState<Awaited<
-    ReturnType<typeof api.organizationGroups.list>
-  > | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>();
-  const load = useCallback(async () => {
-    if (!organizationId) return;
-    setLoading(true);
-    setError(undefined);
-    try {
-      setData(await api.organizationGroups.list());
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setLoading(false);
-    }
-  }, [organizationId]);
-  useEffect(() => void load(), [load]);
+  const {
+    data,
+    error,
+    reload: load,
+  } = useLoad(
+    useCallback(
+      async () => (organizationId ? api.organizationGroups.list() : undefined),
+      [organizationId],
+    ),
+    "Could not load groups.",
+  );
 
   async function changed() {
     await Promise.all([load(), onAccessChanged()]);
   }
 
-  if (!data && loading) {
+  if (!data && !error) {
     return <LoadingState label="Loading access settings…" />;
   }
   if (!data) {
@@ -83,16 +78,13 @@ function OrganizationGroups({
   onChanged: () => Promise<void>;
 }) {
   const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const { busy, error, run } = useAction("Could not add the group.");
 
   async function create(event: FormEvent) {
     event.preventDefault();
     const nextName = name.trim();
     if (!nextName) return;
-    setBusy(true);
-    setError(undefined);
-    try {
+    await run(async () => {
       await api.organizationGroups.create({
         capabilities: [],
         name: nextName,
@@ -100,11 +92,7 @@ function OrganizationGroups({
       });
       setName("");
       await onChanged();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   return (
@@ -241,43 +229,38 @@ function useGroupEditor(
   );
   // Which action is running, so only its button shows progress.
   const [action, setAction] = useState<"delete" | "save">();
-  const busy = action !== undefined;
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
-  const start = (next: "delete" | "save") => {
+  const { busy, error, notice, run } = useAction("Could not update the group.");
+  const perform = async (
+    next: "delete" | "save",
+    work: () => Promise<void>,
+    success?: string,
+  ) => {
     setAction(next);
-    setError(undefined);
-    setNotice(undefined);
+    await run(work, success);
+    // A failed reload can leave this panel mounted; keep it usable.
+    setAction(undefined);
   };
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    start("save");
-    try {
-      await api.organizationGroups.update(group.id, {
-        capabilities: finance ? ["finance"] : [],
-        name: name.trim(),
-        userIds: [...memberIds],
-      });
-      setNotice("Group updated.");
-      await onChanged();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setAction(undefined);
-    }
+    await perform(
+      "save",
+      async () => {
+        await api.organizationGroups.update(group.id, {
+          capabilities: finance ? ["finance"] : [],
+          name: name.trim(),
+          userIds: [...memberIds],
+        });
+        await onChanged();
+      },
+      "Group updated.",
+    );
   };
   const remove = async () => {
     if (!(await confirmGroupDeletion(group.name))) return;
-    start("delete");
-    try {
+    await perform("delete", async () => {
       await api.organizationGroups.delete(group.id);
       await onChanged();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      // A failed reload can leave this panel mounted; keep it usable.
-      setAction(undefined);
-    }
+    });
   };
   const toggleMember = (userId: string) =>
     setMemberIds((current) => {
@@ -344,10 +327,6 @@ function GroupMemberPicker({
       </div>
     </fieldset>
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not update the group.";
 }
 
 function confirmGroupDeletion(name: string) {

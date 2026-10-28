@@ -1,5 +1,6 @@
 import { ApiError } from "@balebase/api-client";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 import {
   activeOfflineKey,
   changeOfflineWorkspace,
@@ -89,10 +90,10 @@ async function recordResult(key: string, id: string, cause?: unknown) {
       job.status = blocked ? "blocked" : "pending";
       job.retryAt =
         Date.now() + Math.min(300_000, 1000 * 2 ** Math.min(job.attempts, 9));
-      job.error =
-        cause instanceof Error
-          ? cause.message
-          : "Could not sync. Your work is saved on this device.";
+      job.error = errorMessage(
+        cause,
+        "Could not sync. Your work is saved on this device.",
+      );
     }
     return workspace;
   });

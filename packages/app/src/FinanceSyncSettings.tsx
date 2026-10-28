@@ -1,39 +1,24 @@
 import { Banner, Card, PageSection } from "@balebase/ui/react";
-import { useEffect, useState } from "react";
 import { api } from "./apiClient";
+import { useAction } from "./useAction";
 
 /** Plaid's cursor belongs to the connection, so all of its accounts share this setting. */
 export function FinanceSyncSettings({
   id,
   dailySync,
+  onSaved,
   status,
 }: {
   id: string;
   dailySync: boolean;
+  onSaved: (dailySync: boolean) => void;
   status: string;
 }) {
-  const [enabled, setEnabled] = useState(dailySync);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  useEffect(() => {
-    setEnabled(dailySync);
-  }, [dailySync]);
-  async function save(next: boolean) {
-    setBusy(true);
-    setError(undefined);
-    try {
-      const result = await api.finance.updateSyncSettings(id, next);
-      setEnabled(result.dailySync);
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Could not save sync settings.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
+  const { busy, error, run } = useAction("Could not save sync settings.");
+  const save = (next: boolean) =>
+    run(async () =>
+      onSaved((await api.finance.updateSyncSettings(id, next)).dailySync),
+    );
   return (
     <PageSection
       title="Automatic sync"
@@ -43,7 +28,7 @@ export function FinanceSyncSettings({
         <label className="check">
           <input
             type="checkbox"
-            checked={enabled}
+            checked={dailySync}
             disabled={busy || !["active", "error"].includes(status)}
             onChange={(event) => void save(event.currentTarget.checked)}
           />
