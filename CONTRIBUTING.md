@@ -177,6 +177,15 @@ that fail the test if they never run. Use `testBindings`, `testApp`, the
 `seed*` builders and `insertBilling` for rows, `requester` for JSON requests,
 and `withFetch` for outbound HTTP.
 
+App test names say where a test runs. In `packages/app/src`, `*.test.ts`
+checks plain logic and `*.test.tsx` renders on the server with
+`renderToStaticMarkup`. `*.dom.test.ts` and `*.dom.test.tsx` mount in
+happy-dom through `installDom` from `src/testing/dom.ts`, which also stubs
+`fetch` per test; other tests stub it with `installFetch` from
+`src/testing/fetch.ts`. `src/testFileNames.test.ts` fails when a file's name
+and environment disagree. Tests in `packages/app/browser` run in Chrome
+through `bun run --cwd packages/app test:browser`.
+
 `check:fast` runs Biome, Markdownlint, file-name checks, and all TypeScript
 checks. It needs only the installed JavaScript toolchain. It leaves dependency
 reachability, shell lint, and Terraform checks to `check`.
