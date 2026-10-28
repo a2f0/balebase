@@ -23,6 +23,7 @@ import {
   signingToken,
   signingTokenHash,
 } from "./contractTokens";
+import { trackedPut, uploadStillQueued } from "./storage";
 import type { Bindings } from "./types";
 
 export type ContractEnvironment = Pick<
@@ -426,19 +427,28 @@ async function completeContract(
   // A unique key per attempt: if two last signatures race, the loser's copy
   // is discarded rather than overwriting the winner's recorded hash.
   const finalKey = `organizations/${contract.organization_id}/contracts/${contract.id}/signed-${crypto.randomUUID()}.pdf`;
-  await environment.STORAGE.put(finalKey, signed, {
-    customMetadata: {
-      contractId: contract.id,
+  await trackedPut(
+    environment,
+    {
+      cleanupId: `contract-final-upload:${crypto.randomUUID()}`,
+      key: finalKey,
       organizationId: contract.organization_id,
     },
-    httpMetadata: { contentType: "application/pdf" },
-  });
+    signed,
+    {
+      customMetadata: {
+        contractId: contract.id,
+        organizationId: contract.organization_id,
+      },
+      httpMetadata: { contentType: "application/pdf" },
+    },
+  );
   const completed = await database
     .prepare(
       `UPDATE contracts
        SET status = 'completed', completed_at = ?, final_object_key = ?,
            final_sha256 = ?, updated_at = ?
-       WHERE id = ? AND status = 'sent'`,
+       WHERE id = ? AND status = 'sent' AND ${uploadStillQueued}`,
     )
     .bind(
       completedAt,
@@ -446,6 +456,7 @@ async function completeContract(
       await sha256Hex(signed),
       completedAt,
       contract.id,
+      finalKey,
     )
     .run();
   if (completed.meta.changes !== 1) {

@@ -29,7 +29,13 @@ import {
 import { contractTemplates } from "./contractTemplates";
 import { normalizeFilename } from "./filenames";
 import { respond } from "./respond";
-import { readBoundedForm, storedDownload } from "./storage";
+import {
+  readBoundedForm,
+  storedDownload,
+  trackedPut,
+  uploadExpired,
+  uploadStillQueued,
+} from "./storage";
 
 type ContractContext = Context<ApiEnv>;
 
@@ -116,18 +122,24 @@ contracts.post("/", async (context) => {
   const title = suppliedTitle || filename.replace(/\.pdf$/i, "") || "Contract";
   const objectKey = `organizations/${organizationId}/contracts/${id}/original.pdf`;
   const now = new Date().toISOString();
-  await context.env.STORAGE.put(objectKey, bytes, {
-    customMetadata: { contractId: id, organizationId },
-    httpMetadata: { contentType: "application/pdf" },
-  });
+  await trackedPut(
+    context.env,
+    { cleanupId: `contract-upload:${id}`, key: objectKey, organizationId },
+    bytes,
+    {
+      customMetadata: { contractId: id, organizationId },
+      httpMetadata: { contentType: "application/pdf" },
+    },
+  );
+  let created: D1Result[];
   try {
-    await context.env.DB.batch([
+    created = await context.env.DB.batch([
       context.env.DB.prepare(
         `INSERT INTO contracts
            (id, organization_id, title, document_object_key,
             document_filename, document_size, document_sha256,
             document_page_count, created_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${uploadStillQueued}`,
       ).bind(
         id,
         organizationId,
@@ -140,16 +152,24 @@ contracts.post("/", async (context) => {
         userId,
         now,
         now,
+        objectKey,
       ),
-      eventStatement(context.env.DB, {
-        actorUserId: userId,
-        contractId: id,
-        type: "created",
-      }),
+      eventStatement(
+        context.env.DB,
+        { actorUserId: userId, contractId: id, type: "created" },
+        {
+          bindings: [id],
+          sql: "EXISTS (SELECT 1 FROM contracts WHERE id = ?)",
+        },
+      ),
     ]);
   } catch (cause) {
     await context.env.STORAGE.delete(objectKey);
     throw cause;
+  }
+  if (created[0]?.meta.changes !== 1) {
+    await context.env.STORAGE.delete(objectKey);
+    return context.json({ error: uploadExpired }, 409);
   }
   return respond(
     context,

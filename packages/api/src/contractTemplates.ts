@@ -16,7 +16,13 @@ import {
 } from "./contractTemplateDefinition";
 import { normalizeFilename } from "./filenames";
 import { respond } from "./respond";
-import { readBoundedForm, storedDownload } from "./storage";
+import {
+  readBoundedForm,
+  storedDownload,
+  trackedPut,
+  uploadExpired,
+  uploadStillQueued,
+} from "./storage";
 
 type TemplateContext = Context<ApiEnv>;
 interface VersionRow {
@@ -83,18 +89,32 @@ contractTemplates.post("/", async (context) => {
     roles: [{ key: crypto.randomUUID(), label: "Signer", routingOrder: 1 }],
     signingOrder: "parallel",
   };
-  await storeDocument(context, objectKey, document);
+  await trackedPut(
+    context.env,
+    {
+      cleanupId: `contract-template-upload:${versionId}`,
+      key: objectKey,
+      organizationId,
+    },
+    document.bytes,
+    {
+      customMetadata: { organizationId },
+      httpMetadata: { contentType: "application/pdf" },
+    },
+  );
+  let created: D1Result[];
   try {
-    await context.env.DB.batch([
+    created = await context.env.DB.batch([
       context.env.DB.prepare(
         `INSERT INTO contract_templates (id, organization_id, current_version, created_at, updated_at)
-         VALUES (?, ?, 1, ?, ?)`,
-      ).bind(id, organizationId, now, now),
+         SELECT ?, ?, 1, ?, ? WHERE ${uploadStillQueued}`,
+      ).bind(id, organizationId, now, now, objectKey),
       context.env.DB.prepare(
         `INSERT INTO contract_template_versions
           (id, template_id, version, name, definition_json, document_object_key,
            document_filename, document_size, document_sha256, document_page_count, created_by, created_at)
-         VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         SELECT ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?
+         WHERE EXISTS (SELECT 1 FROM contract_templates WHERE id = ?)`,
       ).bind(
         versionId,
         id,
@@ -108,17 +128,22 @@ contractTemplates.post("/", async (context) => {
         document.pageCount,
         context.get("authSession").user.id,
         now,
+        id,
       ),
     ]);
   } catch (cause) {
     await context.env.STORAGE.delete(objectKey);
     throw cause;
   }
-  const created = await findVersion(context, id);
+  if (created[0]?.meta.changes !== 1) {
+    await context.env.STORAGE.delete(objectKey);
+    return context.json({ error: uploadExpired }, 409);
+  }
+  const template = await findVersion(context, id);
   return respond(
     context,
     contractTemplatesRoutes.upload,
-    { template: created && toDetail(created) },
+    { template: template && toDetail(template) },
     201,
   );
 });
@@ -277,10 +302,15 @@ contractTemplates.post("/:id/contracts", async (context) => {
   const id = crypto.randomUUID();
   const objectKey = `organizations/${organizationId}/contracts/${id}/original.pdf`;
   const now = new Date().toISOString();
-  await context.env.STORAGE.put(objectKey, await object.arrayBuffer(), {
-    customMetadata: { contractId: id, organizationId },
-    httpMetadata: { contentType: "application/pdf" },
-  });
+  await trackedPut(
+    context.env,
+    { cleanupId: `contract-upload:${id}`, key: objectKey, organizationId },
+    await object.arrayBuffer(),
+    {
+      customMetadata: { contractId: id, organizationId },
+      httpMetadata: { contentType: "application/pdf" },
+    },
+  );
   try {
     const result = await context.env.DB.batch([
       context.env.DB.prepare(
@@ -290,7 +320,8 @@ contractTemplates.post("/:id/contracts", async (context) => {
            template_version_id, template_name, template_version)
          SELECT ?, ?, ?, ?, document_filename, document_size, document_sha256,
            document_page_count, ?, ?, ?, id, name, version
-         FROM contract_template_versions WHERE id = ?`,
+         FROM contract_template_versions
+         WHERE id = ? AND ${uploadStillQueued}`,
       ).bind(
         id,
         organizationId,
@@ -300,6 +331,7 @@ contractTemplates.post("/:id/contracts", async (context) => {
         now,
         now,
         source.id,
+        objectKey,
       ),
       ...draftStatements(
         context.env.DB,
@@ -395,17 +427,6 @@ async function readDocument(file: unknown): Promise<DocumentInput | string> {
     if (cause instanceof InvalidPdfError) return cause.message;
     throw cause;
   }
-}
-
-function storeDocument(
-  context: TemplateContext,
-  key: string,
-  document: DocumentInput,
-) {
-  return context.env.STORAGE.put(key, document.bytes, {
-    customMetadata: { organizationId: context.get("organizationId") },
-    httpMetadata: { contentType: "application/pdf" },
-  });
 }
 
 function positiveInteger(value: string) {

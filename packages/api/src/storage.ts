@@ -1,3 +1,5 @@
+import type { Bindings } from "./types";
+
 /** Thrown when a body is still arriving at its read deadline. */
 export class BodyReadTimeoutError extends Error {}
 
@@ -147,3 +149,50 @@ export async function readBoundedForm(request: Request, maxFileBytes: number) {
     .formData()
     .catch(() => null);
 }
+
+interface TrackedUpload {
+  /** The cleanup record's ID, unique to this upload. */
+  cleanupId: string;
+  key: string;
+  organizationId: string;
+}
+
+/**
+ * Writes an object that a D1 row will reference, queueing its key for the
+ * deleted-object cleanup first so a write that fails or loses its response
+ * never leaves untracked bytes. The referencing row claims the key: its write
+ * must hold `uploadStillQueued`, and a trigger then deletes the record.
+ */
+export async function trackedPut(
+  environment: Pick<Bindings, "DB" | "STORAGE">,
+  upload: TrackedUpload,
+  value: Parameters<R2Bucket["put"]>[1],
+  options: R2PutOptions,
+) {
+  await environment.DB.prepare(
+    `INSERT INTO deleted_object_cleanup
+       (id, organization_id, object_key, deleted_at, cleanup_token,
+        cleanup_claimed_at)
+     VALUES (?, ?, ?, ?, NULL, NULL)`,
+  )
+    .bind(
+      upload.cleanupId,
+      upload.organizationId,
+      upload.key,
+      new Date().toISOString(),
+    )
+    .run();
+  await environment.STORAGE.put(upload.key, value, options);
+}
+
+/**
+ * Holds, with the upload's key bound, while the cleanup has not claimed the
+ * upload, so a slow write never links bytes the cleanup is deleting.
+ */
+export const uploadStillQueued = `EXISTS (
+  SELECT 1 FROM deleted_object_cleanup
+  WHERE object_key = ? AND cleanup_token IS NULL
+)`;
+
+export const uploadExpired =
+  "The upload took too long to save. Please try again.";

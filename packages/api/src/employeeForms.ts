@@ -32,7 +32,12 @@ import {
 } from "./screeningDisclosures";
 import { sendScreeningRequest } from "./screeningMail";
 import { isUsStateCode, parseScreeningSubmission } from "./screeningSubmission";
-import { readBoundedForm, storedDownload } from "./storage";
+import {
+  readBoundedForm,
+  storedDownload,
+  trackedPut,
+  uploadStillQueued,
+} from "./storage";
 import type { Bindings } from "./types";
 import { respondToUnexpectedError } from "./unexpectedError";
 
@@ -292,33 +297,24 @@ employeeForms.post("/:id/document", async (context) => {
   }
   const key = `organizations/${context.get("organizationId")}/employee-forms/${row.id}/${crypto.randomUUID()}`;
   const filename = normalizeFilename(file.name, "form", 200);
-  await context.env.DB.prepare(
-    `INSERT INTO deleted_object_cleanup
-       (id, organization_id, object_key, deleted_at, cleanup_token,
-        cleanup_claimed_at)
-     VALUES (?, ?, ?, ?, NULL, NULL)`,
-  )
-    .bind(
-      `employee-form-upload:${crypto.randomUUID()}`,
-      context.get("organizationId"),
-      key,
-      new Date().toISOString(),
-    )
-    .run();
   try {
-    await context.env.STORAGE.put(key, file, {
-      httpMetadata: { contentType: file.type },
-    });
+    await trackedPut(
+      context.env,
+      {
+        cleanupId: `employee-form-upload:${crypto.randomUUID()}`,
+        key,
+        organizationId: context.get("organizationId"),
+      },
+      file,
+      { httpMetadata: { contentType: file.type } },
+    );
     const updated = await context.env.DB.prepare(
       `UPDATE employee_requirements
        SET document_key = ?, document_filename = ?, document_size = ?,
            document_revision = document_revision + 1,
            status = 'submitted', completed_at = NULL, updated_at = ?
        WHERE id = ? AND organization_id = ? AND document_key IS ?
-         AND EXISTS (
-           SELECT 1 FROM deleted_object_cleanup
-           WHERE object_key = ? AND cleanup_token IS NULL
-         )
+         AND ${uploadStillQueued}
          AND (? = 1 OR EXISTS (
            SELECT 1 FROM member WHERE member.id = employee_requirements.member_id
              AND member.organizationId = ? AND member.userId = ?

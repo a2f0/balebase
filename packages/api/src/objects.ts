@@ -4,8 +4,14 @@ import type { ApiEnv } from "./authMiddleware";
 import { maxFilenameBytes, normalizeFilename } from "./filenames";
 import { findLibraryFolder } from "./libraryFolders";
 import { respond } from "./respond";
-import { readBoundedForm, storedDownload } from "./storage";
-import type { StoredObjectRow } from "./types";
+import {
+  readBoundedForm,
+  storedDownload,
+  trackedPut,
+  uploadExpired,
+  uploadStillQueued,
+} from "./storage";
+import type { Bindings, StoredObjectRow } from "./types";
 import { toStoredObject } from "./types";
 
 const objects = new Hono<ApiEnv>();
@@ -82,33 +88,17 @@ objects.post("/", async (context) => {
   const contentType = file.type || "application/octet-stream";
   const createdAt = new Date().toISOString();
 
-  await context.env.STORAGE.put(objectKey, file, {
-    httpMetadata: { contentType },
-    customMetadata: { filename, organizationId },
+  const stored = await storeLibraryObject(context.env, file, {
+    content_type: contentType,
+    created_at: createdAt,
+    filename,
+    folder_id: folderId,
+    id,
+    object_key: objectKey,
+    organization_id: organizationId,
+    size: file.size,
   });
-
-  try {
-    await context.env.DB.prepare(
-      `INSERT INTO objects
-       (id, organization_id, object_key, filename, content_type, size,
-        created_at, kind, folder_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'library', ?)`,
-    )
-      .bind(
-        id,
-        organizationId,
-        objectKey,
-        filename,
-        contentType,
-        file.size,
-        createdAt,
-        folderId,
-      )
-      .run();
-  } catch (error) {
-    await context.env.STORAGE.delete(objectKey);
-    throw error;
-  }
+  if (!stored) return context.json({ error: uploadExpired }, 409);
 
   return respond(
     context,
@@ -199,6 +189,55 @@ objects.delete("/:id", async (context) => {
 
   return context.body(null, 204);
 });
+
+async function storeLibraryObject(
+  environment: Pick<Bindings, "DB" | "STORAGE">,
+  file: File,
+  row: StoredObjectRow & { organization_id: string },
+) {
+  await trackedPut(
+    environment,
+    {
+      cleanupId: `library-upload:${row.id}`,
+      key: row.object_key,
+      organizationId: row.organization_id,
+    },
+    file,
+    {
+      httpMetadata: { contentType: row.content_type },
+      customMetadata: {
+        filename: row.filename,
+        organizationId: row.organization_id,
+      },
+    },
+  );
+  try {
+    const inserted = await environment.DB.prepare(
+      `INSERT INTO objects
+       (id, organization_id, object_key, filename, content_type, size,
+        created_at, kind, folder_id)
+       SELECT ?, ?, ?, ?, ?, ?, ?, 'library', ? WHERE ${uploadStillQueued}`,
+    )
+      .bind(
+        row.id,
+        row.organization_id,
+        row.object_key,
+        row.filename,
+        row.content_type,
+        row.size,
+        row.created_at,
+        row.folder_id,
+        row.object_key,
+      )
+      .run();
+    if (inserted.meta.changes) return true;
+  } catch (error) {
+    await environment.STORAGE.delete(row.object_key);
+    throw error;
+  }
+  await environment.STORAGE.delete(row.object_key);
+  return false;
+}
 
 async function findObject(
   database: D1Database,
