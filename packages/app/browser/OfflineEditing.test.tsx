@@ -388,7 +388,8 @@ for (const { path, kind } of [
   }, 30_000);
 }
 
-it("opens offline work in the workspace shell and keeps it there through a coverage loss", async () => {
+it("opens offline work in the workspace shell without remounting through coverage and session loss", async () => {
+  let signedIn = true;
   const user = {
     id: "user-1",
     name: "Inspector",
@@ -420,20 +421,39 @@ it("opens offline work in the workspace shell and keeps it there through a cover
       expect(await page.$eval(title, (field) => field.value)).toBe(
         "Shell draft",
       );
+      signedIn = false;
+      await page.setOfflineMode(false);
+      await page.evaluate(() => window.offlineAppTest.refreshSession());
+      await page.waitForFunction(
+        () =>
+          document.getElementById("session-state")?.textContent ===
+          "signed-out",
+        { polling: 100 },
+      );
+      await page.waitForFunction(
+        (selector) => !document.querySelector(selector),
+        { polling: 100 },
+        current,
+      );
+      expect(await page.$eval(title, (field) => field.value)).toBe(
+        "Shell draft",
+      );
     },
     (request) => {
       const pathname = new URL(request.url).pathname;
       if (pathname === "/api/auth/get-session")
-        return Response.json({
-          user,
-          session: {
-            id: "session-user-1",
-            token: "fixture-user-1",
-            userId: user.id,
-            activeOrganizationId: "org-1",
-            expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+        return Response.json(
+          signedIn && {
+            user,
+            session: {
+              id: "session-user-1",
+              token: "fixture-user-1",
+              userId: user.id,
+              activeOrganizationId: "org-1",
+              expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+            },
           },
-        });
+        );
       if (pathname === "/api/organization-settings/organizations")
         return Response.json({
           organizations: [{ id: "org-1", name: "Test team" }],

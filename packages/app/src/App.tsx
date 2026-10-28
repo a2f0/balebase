@@ -47,6 +47,7 @@ import {
 import { OrganizationGate } from "./OrganizationGate";
 import { OrganizationInvitation } from "./OrganizationInvitation";
 import { OrganizationSettings } from "./OrganizationSettings";
+import { useOfflineSlot } from "./offlineSlot";
 import { lockOfflineWorkspace } from "./offlineStore";
 import {
   createOrganizationSlug,
@@ -107,55 +108,65 @@ export function App() {
     }
   }, [verification.shouldClear]);
 
-  // Signers open these from emailed links, signed in or not.
-  const signingToken = signingTokenForPath(pathname);
-  if (signingToken) return <SigningPage token={signingToken} />;
+  const offline = useOfflineSlot(offlineRoute?.page);
+  return (
+    <>
+      {routeContent()}
+      {offline.portal}
+    </>
+  );
 
-  if (offlineRoute?.standalone) return offlineRoute.page;
+  function routeContent() {
+    // Signers open these from emailed links, signed in or not.
+    const signingToken = signingTokenForPath(pathname);
+    if (signingToken) return <SigningPage token={signingToken} />;
 
-  // The sign-in page stays through background refetches; see useSessionRefetch.
-  const background = sessionRefetch.background && !session;
-  if (isPending && !background) {
-    return <LoadingScreen />;
-  }
+    if (offlineRoute?.standalone) return offline.slot;
 
-  if (error && !isResetPage && !background) {
-    return <SessionError onRetry={() => void refetch()} />;
-  }
+    // The sign-in page stays through background refetches; see useSessionRefetch.
+    const background = sessionRefetch.background && !session;
+    if (isPending && !background) {
+      return <LoadingScreen />;
+    }
 
-  if (isAddAccountPage || isResetPage || !session) {
+    if (error && !isResetPage && !background) {
+      return <SessionError onRetry={() => void refetch()} />;
+    }
+
+    if (isAddAccountPage || isResetPage || !session) {
+      return (
+        <AuthenticationRoute
+          activeSessionToken={session?.session.token}
+          addingAccount={isAddAccountPage}
+          leaveResetPage={(destination) => {
+            // Replace, not push: Back must not return to the spent reset link.
+            window.history.replaceState(window.history.state, "", destination);
+            setPathname(destination);
+          }}
+          navigate={navigate}
+          pathname={pathname}
+          refetchSession={sessionRefetch.request}
+          resettingPassword={isResetPage}
+          sessionPresent={Boolean(session)}
+          verification={verification}
+        />
+      );
+    }
+
     return (
-      <AuthenticationRoute
-        activeSessionToken={session?.session.token}
-        addingAccount={isAddAccountPage}
-        leaveResetPage={(destination) => {
-          // Replace, not push: Back must not return to the spent reset link.
-          window.history.replaceState(window.history.state, "", destination);
-          setPathname(destination);
-        }}
+      <AuthenticatedWorkspace
+        accounts={accounts}
+        access={access}
         navigate={navigate}
+        offlinePage={offline.slot}
         pathname={pathname}
-        refetchSession={sessionRefetch.request}
-        resettingPassword={isResetPage}
-        sessionPresent={Boolean(session)}
-        verification={verification}
+        onSessionChanged={() => refetch()}
+        session={session}
+        verificationNotice={verification.notice}
+        workspace={workspace}
       />
     );
   }
-
-  return (
-    <AuthenticatedWorkspace
-      accounts={accounts}
-      access={access}
-      navigate={navigate}
-      offlinePage={offlineRoute?.page}
-      pathname={pathname}
-      onSessionChanged={() => refetch()}
-      session={session}
-      verificationNotice={verification.notice}
-      workspace={workspace}
-    />
-  );
 }
 
 /**
@@ -330,7 +341,7 @@ function AuthenticatedWorkspace({
     session,
     workspace,
   );
-  // Offline work checks its own access, and a loading screen would remount it.
+  // Keep in-progress offline work visible while access loads.
   if (blocked && !offlinePage) return blocked;
   const library = (
     <Library
@@ -372,6 +383,7 @@ function AuthenticatedWorkspace({
       organizations={workspace.organizations}
       user={session.user}
     >
+      {/* Offline work checks its own access. */}
       {offlinePage ?? (
         <OrganizationGate
           access={access}

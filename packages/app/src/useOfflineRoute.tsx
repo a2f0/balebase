@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { OfflineWorkspacePage } from "./OfflineWorkspacePage";
 import {
   activeOfflineKey,
@@ -20,8 +20,8 @@ interface Workspace {
 }
 
 /**
- * The offline page for this path, if any. It opens in the workspace shell when
- * signed in and connected, and stands alone otherwise.
+ * The offline page for this path, if any. It opens in the workspace shell
+ * while signed in, and stands alone otherwise.
  */
 export function useOfflineRoute(
   session: OfflineSession | null | undefined,
@@ -83,12 +83,12 @@ export function useOfflineRoute(
     if (fallback && pathname !== "/offline") navigate("/offline");
   }, [fallback, pathname, navigate]);
   const page = offlinePage();
-  const standalone = useOpenedLayout(
-    Boolean(page),
-    fallback || !session || Boolean(sessionError),
+  return (
+    page && {
+      page,
+      standalone: !session || Boolean(sessionError),
+    }
   );
-  // Only the shell needs a session.
-  return page && { page, standalone: standalone || !session };
 
   function offlinePage() {
     if (excluded) return undefined;
@@ -110,17 +110,6 @@ export function useOfflineRoute(
       />
     );
   }
-}
-
-/**
- * The page keeps the layout it opened with until the person leaves it, so
- * losing or regaining coverage never remounts an in-progress local editor.
- */
-function useOpenedLayout(shown: boolean, standalone: boolean) {
-  const [opened, setOpened] = useState<boolean>();
-  if (shown && opened === undefined) setOpened(standalone);
-  if (!shown && opened !== undefined) setOpened(undefined);
-  return opened ?? standalone;
 }
 
 function matchingWorkspace(
