@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
+import { optionalText, requiredText } from "./fields";
 import { LinkedEmailSchema } from "./inbox";
 import { route } from "./route";
+import { financeLimits } from "./rules";
 
 const FinanceSyncStatusSchema = z.enum([
   "queued",
@@ -243,7 +245,19 @@ const FinanceListingQuerySchema = z.object({
   year: z.string().optional(),
 });
 
-const CategoryNameSchema = z.object({ name: z.string() });
+const categoryNameRule = `Category names need 1 to ${financeLimits.categoryName} characters.`;
+
+/** A category name, trimmed and with runs of whitespace collapsed. */
+const CategoryNameSchema = z.object(
+  {
+    name: z
+      .string({ error: categoryNameRule })
+      .overwrite((name) => name.trim().replace(/\s+/g, " "))
+      .min(1, categoryNameRule)
+      .max(financeLimits.categoryName, categoryNameRule),
+  },
+  { error: categoryNameRule },
+);
 const CategoriesResponseSchema = z.object({
   categories: z.array(ExpenseCategorySchema),
 });
@@ -264,9 +278,9 @@ export const financeRoutes = {
     method: "POST",
     path: "/api/finance/exchange",
     body: z.object({
-      institutionId: z.string().nullable().optional(),
-      institutionName: z.string().nullable().optional(),
-      publicToken: z.string(),
+      institutionId: optionalText(z.string().trim().max(100)),
+      institutionName: optionalText(z.string().trim().max(200)),
+      publicToken: requiredText(1000),
     }),
     response: z.object({ connectionId: z.string() }),
   }),
@@ -349,13 +363,21 @@ export const financeRoutes = {
   updateTransactionAnnotation: route({
     method: "PATCH",
     path: "/api/finance/transactions/:id/annotation",
-    body: FinanceTransactionAnnotationSchema,
+    body: z.object({
+      /** Trimmed, without blanks or repeats. */
+      labels: z
+        .array(z.string().trim().max(financeLimits.annotationLabel))
+        .max(financeLimits.annotationLabels)
+        .transform((labels) => [...new Set(labels.filter(Boolean))]),
+      note: z.string().max(financeLimits.annotationNote).trim(),
+      reviewed: z.boolean(),
+    }),
     response: z.object({ annotation: FinanceTransactionAnnotationSchema }),
   }),
   setTransactionCategory: route({
     method: "PUT",
     path: "/api/finance/transactions/:id/category",
-    body: z.object({ categoryId: z.string().nullable() }),
+    body: z.object({ categoryId: z.string().min(1).max(100).nullable() }),
     response: z.object({ expenseCategoryId: z.string().nullable() }),
   }),
   listCategories: route({

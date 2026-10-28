@@ -27,3 +27,10 @@ export const apiKeyAccessLevels = ["read", "write"] as const;
 export const apiKeyExpirationDays = [30, 90, 365] as const;
 
 export const apiKeyNameMaxLength = 100;
+
+export const financeLimits = {
+  annotationLabel: 50,
+  annotationLabels: 12,
+  annotationNote: 2000,
+  categoryName: 60,
+} as const;

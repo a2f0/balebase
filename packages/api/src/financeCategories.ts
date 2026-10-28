@@ -2,9 +2,10 @@ import {
   type ExpenseCategory,
   financeRoutes,
 } from "@balebase/validators/finance";
+import { financeLimits } from "@balebase/validators/rules";
 import { activityBatch } from "./activity";
 import type { FinanceContext } from "./financeContext";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 
 interface CategoryRow {
   id: string;
@@ -13,7 +14,7 @@ interface CategoryRow {
   transaction_count: number;
 }
 
-const maxCategoryNameLength = 60;
+const invalidName = `Category names need 1 to ${financeLimits.categoryName} characters.`;
 
 /** Client routes use this slug for expenses without a category. */
 const uncategorizedSlug = "uncategorized";
@@ -71,8 +72,13 @@ export async function listCategories(context: FinanceContext) {
 }
 
 export async function createCategory(context: FinanceContext) {
-  const name = await categoryName(context);
-  if (!name) return invalidName(context);
+  const input = await readBody(
+    context,
+    financeRoutes.createCategory,
+    invalidName,
+  );
+  if (input instanceof Response) return input;
+  const { name } = input;
   const organizationId = context.get("organizationId");
   if (await nameTaken(context.env.DB, organizationId, name)) {
     return duplicateName(context);
@@ -105,8 +111,13 @@ export async function createCategory(context: FinanceContext) {
 
 export async function renameCategory(context: FinanceContext) {
   const id = context.req.param("id");
-  const name = await categoryName(context);
-  if (!name) return invalidName(context);
+  const input = await readBody(
+    context,
+    financeRoutes.renameCategory,
+    invalidName,
+  );
+  if (input instanceof Response) return input;
+  const { name } = input;
   const organizationId = context.get("organizationId");
   if (!id || !(await findCategory(context.env.DB, organizationId, id))) {
     return categoryNotFound(context);
@@ -204,12 +215,14 @@ async function missingDefaultInserts(
 
 /** Sets or clears a transaction's single expense category. */
 export async function assignTransactionCategory(context: FinanceContext) {
-  const transactionId = context.req.param("id");
-  const input: unknown = await context.req.json().catch(() => null);
-  const categoryId = categoryIdFrom(input);
-  if (!transactionId || categoryId === undefined) {
-    return context.json({ error: "A category or null is required." }, 400);
-  }
+  const transactionId = context.req.param("id") ?? "";
+  const input = await readBody(
+    context,
+    financeRoutes.setTransactionCategory,
+    "A category or null is required.",
+  );
+  if (input instanceof Response) return input;
+  const { categoryId } = input;
   const organizationId = context.get("organizationId");
   const database = context.env.DB;
   const transaction = await database
@@ -340,27 +353,6 @@ async function writeWithSlug(
   }
 }
 
-async function categoryName(context: FinanceContext) {
-  const input: unknown = await context.req.json().catch(() => null);
-  if (typeof input !== "object" || input === null) return null;
-  const name = Reflect.get(input, "name");
-  if (typeof name !== "string") return null;
-  const trimmed = name.trim().replace(/\s+/g, " ");
-  return trimmed && trimmed.length <= maxCategoryNameLength ? trimmed : null;
-}
-
-/** A category id, null to clear, or undefined when the input is invalid. */
-function categoryIdFrom(input: unknown) {
-  if (typeof input !== "object" || input === null) return undefined;
-  const categoryId = Reflect.get(input, "categoryId");
-  if (categoryId === null) return null;
-  return typeof categoryId === "string" &&
-    categoryId.length > 0 &&
-    categoryId.length <= 100
-    ? categoryId
-    : undefined;
-}
-
 function toCategory(row: CategoryRow): ExpenseCategory {
   return {
     id: row.id,
@@ -368,15 +360,6 @@ function toCategory(row: CategoryRow): ExpenseCategory {
     slug: row.slug,
     transactionCount: row.transaction_count,
   };
-}
-
-function invalidName(context: FinanceContext) {
-  return context.json(
-    {
-      error: `Category names need 1 to ${maxCategoryNameLength} characters.`,
-    },
-    400,
-  );
 }
 
 function duplicateName(context: FinanceContext) {
