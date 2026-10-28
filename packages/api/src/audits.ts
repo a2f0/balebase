@@ -44,7 +44,6 @@ import {
   storedDefinition,
   type TemplateRow,
   type TemplateSaveInput,
-  templateSaveInput,
   templateSelect,
   toTemplate,
 } from "./auditTemplates";
@@ -58,7 +57,6 @@ import {
   issueUpdate,
   toIssue,
 } from "./issueRecords";
-import { isRecord, validText } from "./jsonInput";
 import { readBody, respond } from "./respond";
 
 const audits = new Hono<ApiEnv>();
@@ -87,14 +85,12 @@ audits.get("/templates", async (context) => {
 });
 
 audits.post("/templates", async (context) => {
-  const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord<"name" | "scope">(body) || !validText(body.name, 200)) {
-    return context.json({ error: "A template name is required." }, 400);
-  }
-  // Global templates are created through Global Audits.
-  if (body.scope !== undefined && body.scope !== "organization") {
-    return context.json({ error: "Template scope is invalid." }, 400);
-  }
+  const body = await readBody(
+    context,
+    auditsRoutes.createTemplate,
+    "A template name is required.",
+  );
+  if (body instanceof Response) return body;
   const organizationId = context.get("organizationId");
   const templateLimit = await organizationTemplateLimit(
     context.env.DB,
@@ -104,7 +100,7 @@ audits.post("/templates", async (context) => {
   );
   const template = await createTemplate(context.env.DB, {
     actor: requestActor(context),
-    name: body.name.trim(),
+    name: body.name,
     organizationId,
     templateLimit,
   });
@@ -134,8 +130,12 @@ audits.post("/templates/:id/copies", async (context) => {
   if (source?.scope !== "global") {
     return context.json({ error: "Global template not found." }, 404);
   }
-  const input = templateSaveInput(await context.req.json().catch(() => null));
-  if (typeof input === "string") return context.json({ error: input }, 400);
+  const input = await readBody(
+    context,
+    auditsRoutes.copyTemplate,
+    "The template definition is invalid.",
+  );
+  if (input instanceof Response) return input;
   if (
     input.expectedCurrentVersion !== undefined &&
     input.expectedCurrentVersion !== source.current_version
@@ -255,8 +255,12 @@ audits.put("/templates/:id", async (context) => {
       403,
     );
   }
-  const input = templateSaveInput(await context.req.json().catch(() => null));
-  if (typeof input === "string") return context.json({ error: input }, 400);
+  const input = await readBody(
+    context,
+    auditsRoutes.updateTemplate,
+    "The template definition is invalid.",
+  );
+  if (input instanceof Response) return input;
   const saved = await saveTemplateVersion(
     context.env.DB,
     organizationId,
@@ -417,19 +421,12 @@ audits.patch("/runs/:id", async (context) => {
   if (!audit) return context.json({ error: "Audit not found." }, 404);
   if (audit.deleted_at)
     return context.json({ error: discardedAuditError }, 409);
-  const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord<"expectedRevision" | "responses" | "status">(body))
-    return context.json({ error: "Invalid audit update." }, 400);
-  if (
-    typeof body.expectedRevision !== "number" ||
-    !Number.isSafeInteger(body.expectedRevision) ||
-    body.expectedRevision < 0
-  ) {
-    return context.json(
-      { error: "A valid audit revision is required. Reload it before saving." },
-      400,
-    );
-  }
+  const body = await readBody(
+    context,
+    auditsRoutes.saveRun,
+    "Invalid audit update.",
+  );
+  if (body instanceof Response) return body;
   if (body.expectedRevision !== audit.revision) {
     return context.json(
       { error: "This audit has changed. Reload it before saving." },
@@ -441,9 +438,6 @@ audits.patch("/runs/:id", async (context) => {
   if (!responses)
     return context.json({ error: "Invalid audit responses." }, 400);
   const status = body.status ?? audit.status;
-  if (status !== "completed" && status !== "in_progress") {
-    return context.json({ error: "Invalid audit status." }, 400);
-  }
   if (status === "completed" && !allRequiredAnswered(definition, responses)) {
     return context.json({ error: "Complete every required item first." }, 400);
   }

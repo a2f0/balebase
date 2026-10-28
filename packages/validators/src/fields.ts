@@ -7,9 +7,13 @@ export const PersonSchema = z.object({
   name: z.string(),
 });
 
-/** Text with something visible in it, trimmed, at most `max` characters. */
-export function requiredText(max: number) {
-  return z.string().trim().min(1).max(max);
+/**
+ * Text with something visible in it, trimmed, at most `max` characters.
+ * `rule`, when given, is the message for any text that breaks it.
+ */
+export function requiredText(max: number, rule?: string) {
+  const error = rule === undefined ? {} : { error: rule };
+  return z.string(error).trim().min(1, error).max(max, error);
 }
 
 /**

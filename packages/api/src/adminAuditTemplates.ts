@@ -11,13 +11,11 @@ import {
   staleTemplateError,
   storedDefinition,
   type TemplateRow,
-  templateSaveInput,
   templateSelect,
   toTemplate,
 } from "./auditTemplates";
 import type { ApiEnv } from "./authMiddleware";
-import { isRecord, validText } from "./jsonInput";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 
 /**
  * Global audit templates, shared by every organization. Platform admins
@@ -39,13 +37,15 @@ adminAuditTemplates.get("/", async (context) => {
 });
 
 adminAuditTemplates.post("/", async (context) => {
-  const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord<"name">(body) || !validText(body.name, 200)) {
-    return context.json({ error: "A template name is required." }, 400);
-  }
+  const body = await readBody(
+    context,
+    adminAuditTemplatesRoutes.create,
+    "A template name is required.",
+  );
+  if (body instanceof Response) return body;
   const template = await createTemplate(context.env.DB, {
     actor: requestActor(context),
-    name: body.name.trim(),
+    name: body.name,
     organizationId: null,
     templateLimit: null,
   });
@@ -125,17 +125,13 @@ adminAuditTemplates.put("/:id", async (context) => {
     context.req.param("id"),
   );
   if (!current) return context.json({ error: "Template not found." }, 404);
-  const body: unknown = await context.req.json().catch(() => null);
-  const input = templateSaveInput(body);
-  if (typeof input === "string") return context.json({ error: input }, 400);
-  const status = isRecord<"status">(body) ? body.status : undefined;
-  if (
-    status !== undefined &&
-    status !== "published" &&
-    status !== "unpublished"
-  ) {
-    return context.json({ error: "Template status is invalid." }, 400);
-  }
+  const body = await readBody(
+    context,
+    adminAuditTemplatesRoutes.update,
+    "The template definition is invalid.",
+  );
+  if (body instanceof Response) return body;
+  const { status, ...input } = body;
   if (status === "unpublished" && current.status !== "published") {
     return context.json(
       { error: "Only published forms can be unpublished." },
@@ -173,16 +169,12 @@ adminAuditTemplates.delete("/:id", async (context) => {
       409,
     );
   }
-  const body: unknown = await context.req.json().catch(() => null);
-  if (
-    !isRecord<"expectedCurrentVersion">(body) ||
-    !Number.isSafeInteger(body.expectedCurrentVersion)
-  ) {
-    return context.json(
-      { error: "The current template version is required." },
-      400,
-    );
-  }
+  const body = await readBody(
+    context,
+    adminAuditTemplatesRoutes.discard,
+    "The current template version is required.",
+  );
+  if (body instanceof Response) return body;
   const saved = await saveTemplateVersion(
     context.env.DB,
     null,

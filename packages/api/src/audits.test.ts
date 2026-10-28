@@ -2808,6 +2808,96 @@ describe("audit discarding", () => {
   });
 });
 
+describe("audit request rules", () => {
+  it("keeps each rule's message for template and answer saves", async () => {
+    const fixture = createFixture();
+    const admin = { role: "admin" };
+    const { auditId, templateId } = await createActivityAudit(fixture);
+    const template = await jsonRequest<TemplateResponse>(
+      fixture,
+      `/templates/${templateId}`,
+      "GET",
+    );
+    const { definition, name } = template.body.template;
+    const shared = await jsonRequest<TemplateResponse>(
+      fixture,
+      "/admin/audit-templates",
+      "POST",
+      { name: "Shared form" },
+      admin,
+    );
+    const sharedId = shared.body.template.id;
+    const longPrompt = structuredClone(definition);
+    const firstItem = longPrompt.sections[0]?.items[0];
+    if (firstItem) firstItem.prompt = "x".repeat(501);
+    const cases: Array<[string, string, unknown, string, TestIdentity?]> = [
+      ["POST", "/templates", { name: " " }, "A template name is required."],
+      [
+        "POST",
+        "/templates",
+        { name: "Form", scope: "global" },
+        "Template scope is invalid.",
+      ],
+      [
+        "PUT",
+        `/templates/${templateId}`,
+        { definition: longPrompt, name },
+        "The template definition is invalid.",
+      ],
+      [
+        "PUT",
+        `/templates/${templateId}`,
+        { definition: { ...definition, sections: [] }, name },
+        "The template definition is invalid.",
+      ],
+      [
+        "PUT",
+        `/templates/${templateId}`,
+        { definition, description: "x".repeat(2001), name },
+        "Descriptions are limited to 2,000 characters.",
+      ],
+      [
+        "PATCH",
+        `/runs/${auditId}`,
+        { expectedRevision: -1, responses: {} },
+        "A valid audit revision is required. Reload it before saving.",
+      ],
+      [
+        "PATCH",
+        `/runs/${auditId}`,
+        { expectedRevision: 0, responses: { check: 1 } },
+        "Invalid audit responses.",
+      ],
+      [
+        "PATCH",
+        `/runs/${auditId}`,
+        { expectedRevision: 0, responses: {}, status: "done" },
+        "Invalid audit status.",
+      ],
+      [
+        "PUT",
+        `/admin/audit-templates/${sharedId}`,
+        { definition, name, status: "draft" },
+        "Template status is invalid.",
+        admin,
+      ],
+      [
+        "DELETE",
+        `/admin/audit-templates/${sharedId}`,
+        {},
+        "The current template version is required.",
+        admin,
+      ],
+    ];
+    for (const [method, path, body, error, identity] of cases) {
+      expect({
+        path,
+        response: await jsonRequest(fixture, path, method, body, identity),
+      }).toMatchObject({ path, response: { body: { error }, status: 400 } });
+    }
+  });
+});
+
 describe("audit issue writes", () => {
   it("rejects an unknown priority instead of defaulting it", async () => {
     const fixture = createFixture();

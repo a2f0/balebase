@@ -48,7 +48,11 @@ export const adminAuditTemplatesRoutes = {
     path: "/api/admin/audit-templates/:id",
     body: AuditTemplateSaveSchema.extend({
       /** Publishes or unpublishes the form; its status is kept otherwise. */
-      status: z.enum(["published", "unpublished"]).optional(),
+      status: z
+        .enum(["published", "unpublished"], {
+          error: "Template status is invalid.",
+        })
+        .optional(),
     }),
     response: AuditTemplateResponseSchema,
   }),
@@ -56,7 +60,10 @@ export const adminAuditTemplatesRoutes = {
   discard: route({
     method: "DELETE",
     path: "/api/admin/audit-templates/:id",
-    body: z.object({ expectedCurrentVersion: z.number() }),
+    body: z.object(
+      { expectedCurrentVersion: z.int() },
+      { error: "The current template version is required." },
+    ),
     response: z.object({ discarded: z.literal(true) }),
   }),
 };

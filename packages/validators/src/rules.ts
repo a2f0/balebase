@@ -45,3 +45,14 @@ export const libraryFolderNameMaxLength = 80;
 export const issuePriorities = ["low", "medium", "high", "critical"] as const;
 
 export const issueLimits = { description: 2000, title: 300 } as const;
+
+export const auditLimits = {
+  answer: 2000,
+  description: 2000,
+  itemId: 100,
+  itemsPerSection: 100,
+  name: 200,
+  prompt: 500,
+  sections: 50,
+  sectionTitle: 200,
+} as const;

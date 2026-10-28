@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { parseAuditDefinition } from "./auditDefinition";
+import { AuditDefinitionSchema } from "@balebase/validators/audits";
 import {
   residentialCoreStarter,
   residentialLibraryStats,
@@ -9,9 +9,9 @@ import {
 describe("residential audit library", () => {
   it("keeps every control attributable and structurally valid", () => {
     expect(validateResidentialLibrary()).toEqual([]);
-    expect(parseAuditDefinition(residentialCoreStarter.definition)).toEqual(
-      residentialCoreStarter.definition,
-    );
+    expect(
+      AuditDefinitionSchema.parse(residentialCoreStarter.definition),
+    ).toEqual(residentialCoreStarter.definition);
   });
 
   it("ships a substantial cross-trade residential baseline", () => {

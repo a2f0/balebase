@@ -4,27 +4,38 @@ import {
   ActivityPageSchema,
   ActivityQuerySchema,
 } from "./activity";
-import { optionalText } from "./fields";
+import { optionalText, requiredText } from "./fields";
 import { IssueSchema, NewIssueSchema } from "./issues";
 import { route } from "./route";
+import { auditLimits } from "./rules";
+
+/** Kept exactly as sent, since answers and issues refer to it. */
+const DefinitionIdSchema = z
+  .string()
+  .max(auditLimits.itemId)
+  .refine((id) => id.trim() !== "");
 
 const AuditTemplateItemSchema = z.object({
-  id: z.string(),
-  prompt: z.string(),
+  id: DefinitionIdSchema,
+  prompt: requiredText(auditLimits.prompt),
   required: z.boolean(),
   responseType: z.enum(["check", "text"]),
 });
 export type AuditTemplateItem = z.infer<typeof AuditTemplateItemSchema>;
 
 const AuditTemplateSectionSchema = z.object({
-  id: z.string(),
-  items: z.array(AuditTemplateItemSchema),
-  title: z.string(),
+  id: DefinitionIdSchema,
+  items: z.array(AuditTemplateItemSchema).max(auditLimits.itemsPerSection),
+  title: requiredText(auditLimits.sectionTitle),
 });
 export type AuditTemplateSection = z.infer<typeof AuditTemplateSectionSchema>;
 
-const AuditDefinitionSchema = z.object({
-  sections: z.array(AuditTemplateSectionSchema),
+/** A checklist, as saved and as served. */
+export const AuditDefinitionSchema = z.object({
+  sections: z
+    .array(AuditTemplateSectionSchema)
+    .min(1)
+    .max(auditLimits.sections),
   version: z.literal(1),
 });
 export type AuditDefinition = z.infer<typeof AuditDefinitionSchema>;
@@ -73,19 +84,45 @@ export const AuditTemplateListSchema = z.object({
 export const AuditTemplateVersionListSchema = z.object({
   versions: z.array(AuditTemplateVersionSchema),
 });
-export const AuditTemplateCreateSchema = z.object({ name: z.string() });
+const templateNameRule = "A template name is required.";
+const TemplateNameSchema = requiredText(auditLimits.name, templateNameRule);
 
-/** A template's next version, from the editor's copy of it. */
-export const AuditTemplateSaveSchema = z.object({
-  definition: AuditDefinitionSchema,
-  description: z.string().optional(),
-  /** The version the edit started from; a newer one makes the save stale. */
-  expectedCurrentVersion: z.number().optional(),
-  name: z.string(),
-});
+export const AuditTemplateCreateSchema = z.object(
+  { name: TemplateNameSchema },
+  { error: templateNameRule },
+);
+
+/**
+ * A template's next version, from the editor's copy of it. A request that
+ * breaks a rule without a message of its own has an invalid definition.
+ */
+export const AuditTemplateSaveSchema = z.object(
+  {
+    name: TemplateNameSchema,
+    definition: AuditDefinitionSchema,
+    description: z
+      .string()
+      .trim()
+      .max(
+        auditLimits.description,
+        "Descriptions are limited to 2,000 characters.",
+      )
+      .nullish()
+      .transform((description) => description ?? ""),
+    /** The version the edit started from; a newer one makes the save stale. */
+    expectedCurrentVersion: z
+      .int({ error: "The template version is invalid." })
+      .min(1, "The template version is invalid.")
+      .optional(),
+  },
+  { error: templateNameRule },
+);
 
 const AuditStatusSchema = z.enum(["completed", "in_progress"]);
 export type AuditStatus = z.infer<typeof AuditStatusSchema>;
+
+const auditRevisionRule =
+  "A valid audit revision is required. Reload it before saving.";
 
 /** Active audits, or in-progress audits someone discarded. */
 const AuditRunViewSchema = z.enum(["active", "deleted"]);
@@ -204,7 +241,9 @@ export const auditsRoutes = {
     path: "/api/audits/templates",
     // Global templates are created through Global Audits.
     body: AuditTemplateCreateSchema.extend({
-      scope: z.literal("organization").optional(),
+      scope: z
+        .literal("organization", { error: "Template scope is invalid." })
+        .optional(),
     }),
     response: AuditTemplateResponseSchema,
   }),
@@ -272,13 +311,27 @@ export const auditsRoutes = {
   saveRun: route({
     method: "PATCH",
     path: "/api/audits/runs/:id",
-    body: z.object({
-      /** The revision the answers were edited from. */
-      expectedRevision: z.number(),
-      responses: z.record(z.string(), z.string()),
-      /** Unchanged unless given. */
-      status: AuditStatusSchema.optional(),
-    }),
+    // The API checks each answer against the audit's own checklist.
+    body: z.object(
+      {
+        /** The revision the answers were edited from. */
+        expectedRevision: z
+          .int({ error: auditRevisionRule })
+          .min(0, auditRevisionRule),
+        responses: z.record(
+          z.string(),
+          z
+            .string({ error: "Invalid audit responses." })
+            .max(auditLimits.answer, "Invalid audit responses."),
+          { error: "Invalid audit responses." },
+        ),
+        /** Unchanged unless given. */
+        status: z
+          .enum(AuditStatusSchema.options, { error: "Invalid audit status." })
+          .optional(),
+      },
+      { error: "Invalid audit update." },
+    ),
     response: z.object({ status: AuditStatusSchema, updatedAt: z.string() }),
   }),
   createIssue: route({
