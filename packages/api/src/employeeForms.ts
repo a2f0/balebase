@@ -32,6 +32,12 @@ import {
 } from "./screeningDisclosures";
 import { sendScreeningRequest } from "./screeningMail";
 import { parseScreeningSubmission } from "./screeningSubmission";
+import {
+  readBoundedForm,
+  storedDownload,
+  trackedPut,
+  uploadStillQueued,
+} from "./storage";
 import type { Bindings } from "./types";
 import { respondToUnexpectedError } from "./unexpectedError";
 
@@ -67,7 +73,6 @@ interface RequirementRow {
 
 const employeeForms = new Hono<ApiEnv>();
 const maxDocumentBytes = 10 * 1024 * 1024;
-const maxMultipartBytes = maxDocumentBytes + 256 * 1024;
 const documentTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
 
 employeeForms.get("/", async (context) => {
@@ -268,10 +273,11 @@ employeeForms.post("/:id/document", async (context) => {
   if (row.kind !== "form") {
     return context.json({ error: "Only forms accept documents." }, 400);
   }
-  const file = await readBoundedDocumentFile(context.req.raw);
-  if (file === "too_large") {
+  const form = await readBoundedForm(context.req.raw, maxDocumentBytes);
+  if (form === "too_large") {
     return context.json({ error: "Files must be 10 MB or smaller." }, 413);
   }
+  const file = form?.get("file");
   if (!(file instanceof File) || !documentTypes.has(file.type)) {
     return context.json({ error: "Choose a PDF, JPEG, or PNG file." }, 400);
   }
@@ -280,33 +286,24 @@ employeeForms.post("/:id/document", async (context) => {
   }
   const key = `organizations/${context.get("organizationId")}/employee-forms/${row.id}/${crypto.randomUUID()}`;
   const filename = normalizeFilename(file.name, "form", 200);
-  await context.env.DB.prepare(
-    `INSERT INTO deleted_object_cleanup
-       (id, organization_id, object_key, deleted_at, cleanup_token,
-        cleanup_claimed_at)
-     VALUES (?, ?, ?, ?, NULL, NULL)`,
-  )
-    .bind(
-      `employee-form-upload:${crypto.randomUUID()}`,
-      context.get("organizationId"),
-      key,
-      new Date().toISOString(),
-    )
-    .run();
   try {
-    await context.env.STORAGE.put(key, file, {
-      httpMetadata: { contentType: file.type },
-    });
+    await trackedPut(
+      context.env,
+      {
+        cleanupId: `employee-form-upload:${crypto.randomUUID()}`,
+        key,
+        organizationId: context.get("organizationId"),
+      },
+      file,
+      { httpMetadata: { contentType: file.type } },
+    );
     const updated = await context.env.DB.prepare(
       `UPDATE employee_requirements
        SET document_key = ?, document_filename = ?, document_size = ?,
            document_revision = document_revision + 1,
            status = 'submitted', completed_at = NULL, updated_at = ?
        WHERE id = ? AND organization_id = ? AND document_key IS ?
-         AND EXISTS (
-           SELECT 1 FROM deleted_object_cleanup
-           WHERE object_key = ? AND cleanup_token IS NULL
-         )
+         AND ${uploadStillQueued}
          AND (? = 1 OR EXISTS (
            SELECT 1 FROM member WHERE member.id = employee_requirements.member_id
              AND member.organizationId = ? AND member.userId = ?
@@ -355,39 +352,6 @@ employeeForms.post("/:id/document", async (context) => {
   });
 });
 
-async function readBoundedDocumentFile(request: Request) {
-  const contentType = request.headers.get("content-type");
-  if (!contentType?.startsWith("multipart/form-data") || !request.body) {
-    return null;
-  }
-  const advertisedLength = Number(request.headers.get("content-length"));
-  if (advertisedLength > maxMultipartBytes) return "too_large";
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      totalBytes += value.byteLength;
-      if (totalBytes > maxMultipartBytes) {
-        await reader.cancel();
-        return "too_large";
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const parsed = await new Response(new Blob(chunks), {
-    headers: { "Content-Type": contentType },
-  })
-    .formData()
-    .catch(() => null);
-  const file = parsed?.get("file");
-  return file instanceof File ? file : null;
-}
-
 employeeForms.get("/:id/document", async (context) => {
   const row = await findRequirement(context);
   if (
@@ -397,18 +361,15 @@ employeeForms.get("/:id/document", async (context) => {
   ) {
     return context.json({ error: "Document not found." }, 404);
   }
-  const object = await context.env.STORAGE.get(row.document_key);
-  if (!object) return context.json({ error: "Document not found." }, 404);
-  const headers = new Headers();
-  object.writeHttpMetadata(headers);
-  headers.set("Cache-Control", "private, no-store");
-  headers.set("X-Document-Revision", String(row.document_revision));
-  headers.set("X-Content-Type-Options", "nosniff");
-  headers.set(
-    "Content-Disposition",
-    `attachment; filename="document"; filename*=UTF-8''${encodeURIComponent(row.document_filename ?? "document")}`,
-  );
-  return new Response(object.body, { headers });
+  const download = await storedDownload(context.env.STORAGE, row.document_key, {
+    fallbackFilename: "document",
+    filename: row.document_filename ?? "document",
+    headers: {
+      "cache-control": "private, no-store",
+      "x-document-revision": String(row.document_revision),
+    },
+  });
+  return download ?? context.json({ error: "Document not found." }, 404);
 });
 
 employeeForms.post("/:id/checkr/request", requireManager(), async (context) => {
@@ -619,19 +580,16 @@ employeeForms.get("/:id/checkr/consent", async (context) => {
   )
     .bind(row.checkr_consent_id, context.get("organizationId"), row.id)
     .first<{ document_key: string }>();
-  const object = consent
-    ? await context.env.STORAGE.get(consent.document_key)
-    : null;
-  if (!object) return context.json({ error: "Authorization not found." }, 404);
-  return new Response(object.body, {
-    headers: {
-      "Cache-Control": "private, no-store",
-      "Content-Disposition":
-        'attachment; filename="background-check-authorization.pdf"',
-      "Content-Type": "application/pdf",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
+  const download =
+    consent &&
+    (await storedDownload(context.env.STORAGE, consent.document_key, {
+      fallbackFilename: "background-check-authorization.pdf",
+      headers: {
+        "cache-control": "private, no-store",
+        "content-type": "application/pdf",
+      },
+    }));
+  return download || context.json({ error: "Authorization not found." }, 404);
 });
 
 employeeForms.onError((error, context) => {

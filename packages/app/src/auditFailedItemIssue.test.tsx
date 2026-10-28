@@ -10,8 +10,8 @@ import {
   FailedItemIssue,
   type FailIssueState,
   failIssueReducer,
-  runStateReducer,
-} from "./AuditRunPage";
+} from "./AuditChecklist";
+import { runStateReducer } from "./AuditRunPage";
 import { createIssueWithImages } from "./auditIssueImages";
 
 const item: AuditTemplateItem = {

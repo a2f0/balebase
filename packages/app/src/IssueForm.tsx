@@ -1,10 +1,11 @@
 import { Banner, Button, Field, Select } from "@balebase/ui/react";
 import type { Person } from "@balebase/validators/fields";
+import { issueLimits, issuePriorities } from "@balebase/validators/issueRules";
 import type { IssueInput } from "@balebase/validators/issues";
-import { issueLimits } from "@balebase/validators/rules";
 import { type FormEvent, useCallback, useState } from "react";
 import { api } from "./apiClient";
 import { errorMessage } from "./errors";
+import { formatLabel } from "./labels";
 import { useLoad } from "./useLoad";
 
 const emptyIssue: IssueInput = {
@@ -66,66 +67,12 @@ export function IssueForm({
       {error && <Banner tone="danger">{error}</Banner>}
       {memberError && <Banner>{memberError}</Banner>}
       <fieldset className="issueFields" disabled={disabled || busy}>
-        <Field label="Title">
-          <input
-            className="input"
-            required
-            maxLength={issueLimits.title}
-            value={input.title}
-            onChange={(event) =>
-              update({ ...input, title: event.target.value })
-            }
-          />
-        </Field>
-        <Field label="Description">
-          <textarea
-            className="textarea"
-            maxLength={issueLimits.description}
-            rows={4}
-            value={input.description}
-            onChange={(event) =>
-              update({ ...input, description: event.target.value })
-            }
-          />
-        </Field>
-        <div className="formGrid">
-          <Field label="Priority">
-            <Select
-              value={input.priority}
-              onChange={(event) =>
-                update({
-                  ...input,
-                  priority: event.target.value as IssueInput["priority"],
-                })
-              }
-            >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
-            </Select>
-          </Field>
-          <Field label="Assignee">
-            <Select
-              disabled={Boolean(memberError)}
-              value={input.assignedTo ?? ""}
-              onChange={(event) =>
-                update({ ...input, assignedTo: event.target.value || null })
-              }
-            >
-              <option value="">Unassigned</option>
-              {input.assignedTo &&
-                !members.some((member) => member.id === input.assignedTo) && (
-                  <option value={input.assignedTo}>Current assignee</option>
-                )}
-              {members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name || member.email}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
+        <IssueFields
+          input={input}
+          members={members}
+          membersUnavailable={Boolean(memberError)}
+          onChange={update}
+        />
         <div>
           <Button
             busy={busy}
@@ -138,6 +85,88 @@ export function IssueForm({
         </div>
       </fieldset>
     </form>
+  );
+}
+
+/** The fields every issue form shares, including the audit run's. */
+export function IssueFields({
+  input,
+  members,
+  membersUnavailable = false,
+  onChange,
+}: {
+  input: IssueInput;
+  members: Person[];
+  membersUnavailable?: boolean;
+  onChange: (input: IssueInput) => void;
+}) {
+  return (
+    <>
+      <Field label="Title">
+        <input
+          className="input"
+          maxLength={issueLimits.title}
+          onChange={(event) =>
+            onChange({ ...input, title: event.target.value })
+          }
+          required
+          value={input.title}
+        />
+      </Field>
+      <Field label="Description" optional>
+        <textarea
+          className="textarea"
+          maxLength={issueLimits.description}
+          onChange={(event) =>
+            onChange({ ...input, description: event.target.value })
+          }
+          placeholder="Describe the problem, evidence, and expected follow-up."
+          rows={4}
+          value={input.description}
+        />
+      </Field>
+      <div className="formRow">
+        <Field label="Priority">
+          <Select
+            onChange={(event) =>
+              onChange({
+                ...input,
+                priority: event.target.value as IssueInput["priority"],
+              })
+            }
+            value={input.priority}
+          >
+            {issuePriorities.map((priority) => (
+              <option key={priority} value={priority}>
+                {formatLabel(priority)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Assignee">
+          <Select
+            disabled={membersUnavailable}
+            onChange={(event) =>
+              onChange({ ...input, assignedTo: event.target.value || null })
+            }
+            value={input.assignedTo ?? ""}
+          >
+            <option value="">Unassigned</option>
+            {input.assignedTo &&
+              !members.some((member) => member.id === input.assignedTo) && (
+                <option value={input.assignedTo}>Current assignee</option>
+              )}
+            {members.map((member) => (
+              <option key={member.id} value={member.id}>
+                {member.name
+                  ? `${member.name} · ${member.email}`
+                  : member.email}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+    </>
   );
 }
 

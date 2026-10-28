@@ -1,5 +1,6 @@
 // Request rules as plain values. The contract's schemas are built from them,
-// and the app imports them for its form limits without pulling in zod.
+// and the app imports them for its form limits without pulling in zod. Issue
+// rules live in issueRules.ts.
 
 /** The types offered for new equipment. Adding one needs no migration. */
 export const equipmentTypes = ["computer", "cell_phone", "monitor"] as const;
@@ -41,10 +42,6 @@ export const organizationCapabilities = ["finance"] as const;
 export const groupLimits = { members: 100, name: 100 } as const;
 
 export const libraryFolderNameMaxLength = 80;
-
-export const issuePriorities = ["low", "medium", "high", "critical"] as const;
-
-export const issueLimits = { description: 2000, title: 300 } as const;
 
 export const auditLimits = {
   answer: 2000,

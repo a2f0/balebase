@@ -6,8 +6,8 @@ import {
   PersonSchema,
   requiredText,
 } from "./fields";
+import { issueLimits, issuePriorities } from "./issueRules";
 import { route } from "./route";
-import { issueLimits, issuePriorities } from "./rules";
 
 const IssueTargetTypeSchema = z.enum([
   "audit_run",

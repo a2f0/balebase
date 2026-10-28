@@ -1,9 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import { purgeDeletedObjects } from "./deletedObjectCleanup";
 import { objects } from "./objects";
 import { memoryStorage, testBindings } from "./testing/bindings";
 import { toD1 } from "./testing/d1";
 import { applyMigrations, createTestDatabase } from "./testing/database";
-import { requester } from "./testing/http";
+import { requester, streamedUpload } from "./testing/http";
 import { seedMember, seedOrganization, seedUser } from "./testing/seed";
 import { testApp } from "./testing/session";
 
@@ -119,7 +120,109 @@ describe("organization uploads", () => {
   });
 });
 
-function createFixture() {
+describe("upload cleanup", () => {
+  it("queues an upload for cleanup before writing it", async () => {
+    const queuedAtPut: boolean[] = [];
+    let loseResponse = true;
+    const fixture = createFixture({
+      afterPut: () => {
+        if (!loseResponse) return;
+        loseResponse = false;
+        throw new Error("The storage response was lost.");
+      },
+      beforePut: (key) => {
+        queuedAtPut.push(queuedForCleanup(fixture.database, key));
+      },
+    });
+    const upload = (name: string) => {
+      const form = new FormData();
+      form.set("file", new File([name], name));
+      return fixture.first<ObjectResponse>("POST", "/", form);
+    };
+
+    expect((await upload("lost.txt")).status).toBe(500);
+    const lostKey = [...fixture.stored.keys()].find((key) =>
+      key.endsWith("/lost.txt"),
+    );
+    expect(lostKey).toBeDefined();
+    expect(queuedForCleanup(fixture.database, lostKey ?? "")).toBe(true);
+
+    const kept = await upload("kept.txt");
+    expect(kept.status).toBe(201);
+    expect(queuedAtPut).toEqual([true, true]);
+    expect(queuedForCleanup(fixture.database, kept.body.object.objectKey)).toBe(
+      false,
+    );
+
+    const later = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    await purgeDeletedObjects(fixture.bindings, {
+      abandonedClaimedBefore: later,
+      deletedBefore: later,
+    });
+    expect(fixture.stored.has(lostKey ?? "")).toBe(false);
+    expect(fixture.stored.has(kept.body.object.objectKey)).toBe(true);
+  });
+
+  it("does not link an upload the cleanup has claimed", async () => {
+    const fixture = createFixture({
+      afterPut: (key) => {
+        fixture.database
+          .query(
+            `UPDATE deleted_object_cleanup
+             SET cleanup_token = 'purge', cleanup_claimed_at = ?
+             WHERE object_key = ?`,
+          )
+          .run(new Date().toISOString(), key);
+      },
+    });
+    const form = new FormData();
+    form.set("file", new File(["slow"], "slow.txt"));
+    const upload = await fixture.first("POST", "/", form);
+    expect(upload.status).toBe(409);
+    expect(
+      fixture.database
+        .query("SELECT COUNT(*) AS count FROM objects WHERE filename = ?")
+        .get("slow.txt"),
+    ).toEqual({ count: 0 });
+    expect(
+      [...fixture.stored.keys()].some((key) => key.endsWith("/slow.txt")),
+    ).toBe(false);
+  });
+});
+
+describe("upload limits", () => {
+  it("refuses an oversized upload while it streams", async () => {
+    const fixture = createFixture();
+    const fileBytes = 64 * 1024 * 1024;
+    const upload = streamedUpload(fileBytes);
+    const response = await fixture.first(
+      "POST",
+      "/",
+      upload.body,
+      upload.headers,
+    );
+    expect(response.status).toBe(413);
+    expect(upload.progress.cancelled).toBe(true);
+    expect(upload.progress.sentBytes).toBeLessThan(fileBytes);
+    expect(fixture.stored.size).toBe(2);
+  });
+});
+
+function queuedForCleanup(
+  database: ReturnType<typeof createTestDatabase>,
+  key: string,
+) {
+  return (
+    database
+      .query(
+        `SELECT 1 FROM deleted_object_cleanup
+         WHERE object_key = ? AND cleanup_token IS NULL`,
+      )
+      .get(key) !== null
+  );
+}
+
+function createFixture(storageHooks?: Parameters<typeof memoryStorage>[1]) {
   // Uploads from before organizations existed belong to their owner's.
   const database = createTestDatabase({ before: "0004" });
   seedUser(database, {
@@ -166,6 +269,7 @@ function createFixture() {
       ["uploads/legacy-object/legacy.txt", new TextEncoder().encode("legacy")],
       ["audit-images/evidence.png", new Uint8Array(8)],
     ]),
+    storageHooks,
   );
   const bindings = testBindings({ DB: toD1(database), STORAGE: bucket });
   const appFor = (organizationId: string) =>
@@ -174,6 +278,7 @@ function createFixture() {
       bindings,
     );
   return {
+    bindings,
     database,
     first: appFor("org_user-1"),
     second: appFor("organization-2"),

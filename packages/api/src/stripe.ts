@@ -94,7 +94,7 @@ function stripeErrorMessage(value: unknown) {
 }
 
 export async function verifyStripeWebhook(
-  payload: ArrayBuffer,
+  payload: Uint8Array,
   signatureHeader: string | undefined,
   secret: string | undefined,
   nowSeconds = Math.floor(Date.now() / 1000),
@@ -114,7 +114,7 @@ export async function verifyStripeWebhook(
   const prefix = new TextEncoder().encode(`${signature.timestamp}.`);
   const bytes = new Uint8Array(prefix.byteLength + payload.byteLength);
   bytes.set(prefix);
-  bytes.set(new Uint8Array(payload), prefix.byteLength);
+  bytes.set(payload, prefix.byteLength);
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),

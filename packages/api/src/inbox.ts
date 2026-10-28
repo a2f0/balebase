@@ -14,6 +14,7 @@ import {
   listEmailLinks,
 } from "./inboundEmailLinks";
 import { respond } from "./respond";
+import { storedDownload } from "./storage";
 
 const inbox = new Hono<ApiEnv>();
 
@@ -145,20 +146,18 @@ inbox.get("/:emailId/attachments/:attachmentId", async (context) => {
     return context.json({ error: "Attachment not found." }, 404);
   }
 
-  const object = await context.env.STORAGE.get(attachment.object_key);
-  if (!object) {
-    return context.json({ error: "Attachment content not found." }, 404);
-  }
-
-  const headers = new Headers();
-  object.writeHttpMetadata(headers);
-  headers.set("content-type", attachment.content_type);
-  headers.set(
-    "content-disposition",
-    attachmentDisposition(attachment.filename),
+  const download = await storedDownload(
+    context.env.STORAGE,
+    attachment.object_key,
+    {
+      fallbackFilename: "download",
+      filename: attachment.filename,
+      headers: { "content-type": attachment.content_type },
+    },
   );
-  headers.set("etag", object.httpEtag);
-  return new Response(object.body, { headers });
+  return (
+    download ?? context.json({ error: "Attachment content not found." }, 404)
+  );
 });
 
 inbox.delete("/:id", async (context) => {
@@ -333,11 +332,6 @@ function toAttachment(row: InboundEmailAttachmentRow): InboundEmailAttachment {
     id: row.id,
     size: row.size,
   };
-}
-
-function attachmentDisposition(filename: string) {
-  const encodedFilename = encodeURIComponent(filename).replaceAll("'", "%27");
-  return `attachment; filename="download"; filename*=UTF-8''${encodedFilename}`;
 }
 
 export { inbox };
