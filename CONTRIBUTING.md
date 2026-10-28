@@ -161,10 +161,10 @@ The web shell's service worker update suite uses Playwright's Chromium, Firefox,
 and WebKit engines. Run `bun run --cwd packages/app-web browsers:install` once
 before its browser tests; CI installs them automatically.
 
-The `test:staging`, `test:env`, and `test:scope` steps inside `bun run test`
-exercise local fixtures and command stubs. They do not deploy, contact a live
-staging service, use real cloud/agent credentials, or require Scope containers.
-Live staging verification and Scope assessments are separate opt-in commands.
+The `test:staging` and `test:env` steps inside `bun run test` exercise local
+fixtures and command stubs. They do not deploy, contact a live staging service,
+or use real cloud credentials. Live staging verification and Scope assessments,
+including the `test:scope` tooling tests, are separate opt-in commands.
 
 ## Keep changes readable
 
@@ -201,8 +201,8 @@ Use the [Scope guide](docs/scope.md) for the local CLI/container setup,
 Claude worker, calibrated Codex judge, and versioned agent-readiness tasks.
 The assessment measures repository discoverability against committed snapshots;
 its inspection tasks do not establish clean-bootstrap or implementation success.
-See the [assessment report](docs/agent-readiness.md) for the measured baseline,
-fixes, and comparison.
+See the [assessment summary](docs/agent-readiness.md) for the last measured
+result.
 
 ## Editor setup
 

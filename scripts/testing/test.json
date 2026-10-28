@@ -14,10 +14,6 @@
       "command": ["bun", "--bun", "run", "test:env"]
     },
     {
-      "label": "test:scope",
-      "command": ["bun", "--bun", "run", "test:scope"]
-    },
-    {
       "label": "test:markdownlint",
       "command": ["bun", "--bun", "run", "test:markdownlint"]
     },
