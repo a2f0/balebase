@@ -172,31 +172,21 @@ app.all(
   },
 );
 
-app.get("/api/admin", requireAuth, requireRole("admin"), (context) =>
+// Mount every admin router below /api/admin so this guard covers it.
+app.use("/api/admin/*", requireAuth, requireRole("admin"));
+app.get("/api/admin", (context) =>
   respond(context, sessionRoutes.admin, {
     user: context.get("authSession").user,
   }),
 );
+app.route("/api/admin/jobs", adminJobs);
+app.route("/api/admin/audit-templates", adminAuditTemplates);
+app.route("/api/admin/organizations", adminOrganizations);
+app.route("/api/admin/users", adminUsers);
 
 app.use("/api/account-settings/*", requireAuth);
 app.route("/api/account-settings", accountSettings);
 app.route("/api/account-settings/deletion", userDeletion);
-
-app.use("/api/admin/jobs", requireAuth);
-app.use("/api/admin/jobs/*", requireAuth);
-app.route("/api/admin/jobs", adminJobs);
-
-app.use("/api/admin/audit-templates", requireAuth, requireRole("admin"));
-app.use("/api/admin/audit-templates/*", requireAuth, requireRole("admin"));
-app.route("/api/admin/audit-templates", adminAuditTemplates);
-
-app.use("/api/admin/organizations", requireAuth, requireRole("admin"));
-app.use("/api/admin/organizations/*", requireAuth, requireRole("admin"));
-app.route("/api/admin/organizations", adminOrganizations);
-
-app.use("/api/admin/users", requireAuth);
-app.use("/api/admin/users/*", requireAuth);
-app.route("/api/admin/users", adminUsers);
 
 app.use("/api/audits", requireAuth, requireOrganization);
 app.use("/api/audits/*", requireAuth, requireOrganization);

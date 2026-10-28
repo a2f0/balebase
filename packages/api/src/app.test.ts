@@ -224,24 +224,32 @@ describe("api", () => {
     expect(response.status).toBe(401);
   });
 
-  it("requires platform admin access even for an organization owner", async () => {
+  it("requires platform admin access on every admin route, even for an organization owner", async () => {
     const fixture = await protectedOrganizationFixture();
-    for (const [path, method] of [
-      [`/api/admin/organizations/${fixture.organizationId}`, "GET"],
-      ["/api/admin/users", "GET"],
-      ["/api/admin/users/user-id/deletion", "POST"],
-      ["/api/admin/users/user-id/deletion", "DELETE"],
-      ["/api/admin/audit-templates", "GET"],
-      ["/api/admin/audit-templates", "POST"],
-      ["/api/admin/audit-templates/nfpa70e_global", "PUT"],
-    ] as const) {
+    const adminRoutes = app.routes.filter(
+      ({ method, path }) =>
+        method !== "ALL" && /^\/api\/admin(?:\/|$)/.test(path),
+    );
+    expect(adminRoutes.map(({ path }) => path.split("/")[3])).toEqual(
+      expect.arrayContaining([
+        undefined,
+        "audit-templates",
+        "jobs",
+        "organizations",
+        "users",
+      ]),
+    );
+    for (const { method, path } of adminRoutes) {
+      const url = path.replaceAll(/:\w+/g, fixture.organizationId);
+      const signedOut = await app.request(url, { method }, authBindings());
+      expect([method, path, signedOut.status]).toEqual([method, path, 401]);
       const response = await app.request(
-        path,
+        url,
         { headers: { cookie: fixture.cookie }, method },
         fixture.bindings,
         fixture.executionContext,
       );
-      expect(response.status).toBe(403);
+      expect([method, path, response.status]).toEqual([method, path, 403]);
       const body: unknown = await response.json();
       expect(body).toEqual({
         error: "Insufficient permissions.",

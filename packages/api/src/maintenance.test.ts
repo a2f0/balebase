@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { adminJobs } from "./adminJobs";
 import { adminUsers } from "./adminUsers";
 import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
+import { type AuthVariables, requireRole } from "./authMiddleware";
 import { purgeDeletedObjects } from "./deletedObjectCleanup";
 import { claimJob, recoverJobs } from "./jobRuns";
 import { consumeJobs } from "./jobWorker";
@@ -115,6 +115,8 @@ async function fixture(role = "admin", impersonatedBy?: string) {
     } as unknown as AuthSession);
     await next();
   });
+  app.use("/jobs/*", requireRole("admin"));
+  app.use("/users/*", requireRole("admin"));
   app.route("/jobs", adminJobs);
   app.route("/deletion", userDeletion);
   app.route("/users", adminUsers);
