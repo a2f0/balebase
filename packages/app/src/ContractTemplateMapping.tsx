@@ -1,5 +1,6 @@
 import { Button, Card, Field, Toast } from "@balebase/ui/react";
 import type { ContractTemplate } from "@balebase/validators/contractTemplates";
+import { contractLimits } from "@balebase/validators/rules";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./apiClient";
 import { boxStyle, ContractPages } from "./ContractDocument";
@@ -143,7 +144,7 @@ function MappingForm({
         <input
           className="input"
           disabled={busy}
-          maxLength={200}
+          maxLength={contractLimits.title}
           onChange={(event) => setTitle(event.target.value)}
           required
           value={title}
@@ -208,7 +209,7 @@ function MappingRole({
         <input
           autoComplete="name"
           className="input"
-          maxLength={120}
+          maxLength={contractLimits.signerName}
           onChange={(event) => change("name", event.target.value)}
           required
           value={recipient?.name ?? ""}
@@ -218,7 +219,7 @@ function MappingRole({
         <input
           autoComplete="email"
           className="input"
-          maxLength={254}
+          maxLength={contractLimits.signerEmail}
           onChange={(event) => change("email", event.target.value)}
           required
           type="email"

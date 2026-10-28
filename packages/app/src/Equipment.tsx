@@ -22,7 +22,7 @@ import type {
 import type { Person } from "@balebase/validators/fields";
 import type { LinkedEmail } from "@balebase/validators/inbox";
 
-import { isEquipmentType } from "@balebase/validators/rules";
+import { equipmentLimits, isEquipmentType } from "@balebase/validators/rules";
 
 import {
   type FormEvent,
@@ -733,7 +733,7 @@ function EquipmentFields({
       <Field label="Make">
         <input
           className="input"
-          maxLength={80}
+          maxLength={equipmentLimits.make}
           onChange={(event) => set("make", event.target.value)}
           placeholder="Apple"
           required
@@ -743,7 +743,7 @@ function EquipmentFields({
       <Field label="Model">
         <input
           className="input"
-          maxLength={120}
+          maxLength={equipmentLimits.model}
           onChange={(event) => set("model", event.target.value)}
           placeholder="MacBook Pro 14-inch"
           required
@@ -754,7 +754,7 @@ function EquipmentFields({
         <input
           autoCapitalize="characters"
           className="input mono"
-          maxLength={100}
+          maxLength={equipmentLimits.serialNumber}
           onChange={(event) => set("serialNumber", event.target.value)}
           spellCheck={false}
           value={form.serialNumber ?? ""}

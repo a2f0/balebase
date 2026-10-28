@@ -16,6 +16,7 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type { Business, BusinessInput } from "@balebase/validators/businesses";
+import { businessLimits } from "@balebase/validators/rules";
 import {
   type ComponentProps,
   type FormEvent,
@@ -811,7 +812,7 @@ function BusinessFields({
             autoComplete="organization"
             className={input}
             disabled={disabled}
-            maxLength={120}
+            maxLength={businessLimits.name}
             onChange={(event) => set("name", event.target.value)}
             placeholder="Acme, Inc."
             ref={nameField}
@@ -888,7 +889,7 @@ function BusinessAddressFields({
           autoComplete="street-address"
           className={input}
           disabled={disabled}
-          maxLength={240}
+          maxLength={businessLimits.streetAddress}
           onChange={(event) => set("streetAddress", event.target.value)}
           placeholder="123 Main Street"
           type="text"
@@ -900,7 +901,7 @@ function BusinessAddressFields({
           autoComplete="address-level2"
           className={input}
           disabled={disabled}
-          maxLength={100}
+          maxLength={businessLimits.city}
           onChange={(event) => set("city", event.target.value)}
           placeholder="New York"
           type="text"

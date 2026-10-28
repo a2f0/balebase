@@ -10,12 +10,11 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type { ExpenseCategory } from "@balebase/validators/finance";
+import { financeLimits } from "@balebase/validators/rules";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "./apiClient";
 import { countLabel } from "./labels";
 import { useAction } from "./useAction";
-
-const maxNameLength = 60;
 
 export function FinanceCategories({
   categories,
@@ -138,7 +137,7 @@ function AddCategoryForm({
       <Field label="Category name">
         <input
           className="input"
-          maxLength={maxNameLength}
+          maxLength={financeLimits.categoryName}
           onChange={(event) => setName(event.target.value)}
           placeholder="Office supplies"
           required
@@ -313,7 +312,7 @@ function RenameCategoryRow({
         <Field className="financeCategoryRenameField" label="Category name">
           <input
             className="input inputSm"
-            maxLength={maxNameLength}
+            maxLength={financeLimits.categoryName}
             onChange={(event) => setName(event.target.value)}
             ref={input}
             required

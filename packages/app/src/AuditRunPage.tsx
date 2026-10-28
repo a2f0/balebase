@@ -25,6 +25,7 @@ import type {
   AuditTemplateSection,
 } from "@balebase/validators/audits";
 import type { Person } from "@balebase/validators/fields";
+import { auditLimits, issueLimits } from "@balebase/validators/rules";
 import {
   useCallback,
   useEffect,
@@ -535,7 +536,7 @@ function AuditQuestion({
         <textarea
           aria-labelledby={promptId}
           className="textarea runAnswer"
-          maxLength={2000}
+          maxLength={auditLimits.answer}
           onChange={(event) => onChange(event.target.value)}
           placeholder="Enter response"
           rows={3}
@@ -926,7 +927,7 @@ function IssueDraftFields({
       <Field label="Title">
         <input
           className="input"
-          maxLength={300}
+          maxLength={issueLimits.title}
           onChange={(event) => draft.setTitle(event.target.value)}
           value={draft.title}
         />
@@ -934,7 +935,7 @@ function IssueDraftFields({
       <Field label="Description" optional>
         <textarea
           className="textarea"
-          maxLength={2000}
+          maxLength={issueLimits.description}
           onChange={(event) => draft.setDescription(event.target.value)}
           placeholder="Describe the problem, evidence, and expected follow-up."
           rows={3}

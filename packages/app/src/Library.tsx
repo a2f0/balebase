@@ -20,6 +20,7 @@ import type {
   LibraryFolderDetail,
 } from "@balebase/validators/libraryFolders";
 import type { StoredObject } from "@balebase/validators/objects";
+import { libraryFolderNameMaxLength } from "@balebase/validators/rules";
 import {
   type FormEvent,
   useCallback,
@@ -37,8 +38,6 @@ import { useLoad } from "./useLoad";
 import { useMenuDismissal } from "./useMenuDismissal";
 import type { WorkspaceUser } from "./WorkspaceShell";
 import { libraryFolderIdForPath, libraryPath } from "./workspacePaths";
-
-const maxFolderNameLength = 80;
 
 interface LibraryProps {
   initialNotice?: string | undefined;
@@ -623,7 +622,7 @@ function FolderNameForm({
       <Field label="Folder name">
         <input
           className="input"
-          maxLength={maxFolderNameLength}
+          maxLength={libraryFolderNameMaxLength}
           onChange={(event) => setName(event.target.value)}
           placeholder="Tax returns"
           ref={input}

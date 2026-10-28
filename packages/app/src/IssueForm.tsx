@@ -1,6 +1,7 @@
 import { Banner, Button, Field, Select } from "@balebase/ui/react";
 import type { Person } from "@balebase/validators/fields";
 import type { IssueInput } from "@balebase/validators/issues";
+import { issueLimits } from "@balebase/validators/rules";
 import { type FormEvent, useCallback, useState } from "react";
 import { api } from "./apiClient";
 import { errorMessage } from "./errors";
@@ -69,7 +70,7 @@ export function IssueForm({
           <input
             className="input"
             required
-            maxLength={300}
+            maxLength={issueLimits.title}
             value={input.title}
             onChange={(event) =>
               update({ ...input, title: event.target.value })
@@ -79,7 +80,7 @@ export function IssueForm({
         <Field label="Description">
           <textarea
             className="textarea"
-            maxLength={2000}
+            maxLength={issueLimits.description}
             rows={4}
             value={input.description}
             onChange={(event) =>

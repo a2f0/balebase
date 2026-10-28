@@ -20,6 +20,7 @@ import type {
   AuditTemplateSection,
   AuditTemplateVersion,
 } from "@balebase/validators/audits";
+import { auditLimits } from "@balebase/validators/rules";
 import { type ReactNode, useCallback, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
 import { api } from "./apiClient";
@@ -471,7 +472,7 @@ function TemplateDetails({
         <Field label="Checklist name">
           <input
             className="input"
-            maxLength={200}
+            maxLength={auditLimits.name}
             onChange={(event) =>
               update({ ...template, name: event.target.value })
             }
@@ -482,7 +483,7 @@ function TemplateDetails({
         <Field label="Description" optional>
           <textarea
             className="textarea auditDescriptionInput"
-            maxLength={2000}
+            maxLength={auditLimits.description}
             onChange={(event) =>
               update({ ...template, description: event.target.value })
             }
@@ -542,7 +543,7 @@ function SectionEditor({
         <input
           aria-label={`Section ${index + 1} title`}
           className="input auditSectionTitle"
-          maxLength={200}
+          maxLength={auditLimits.sectionTitle}
           onChange={(event) =>
             onChange({ ...section, title: event.target.value })
           }
@@ -642,7 +643,7 @@ function QuestionEditor({
       <textarea
         aria-label={`Question ${index + 1}`}
         className="textarea auditQuestionPrompt"
-        maxLength={500}
+        maxLength={auditLimits.prompt}
         onChange={(event) => onChange({ ...item, prompt: event.target.value })}
         rows={2}
         value={item.prompt}

@@ -10,6 +10,7 @@ import type {
   ContractTemplate,
   TemplateDefinition,
 } from "@balebase/validators/contractTemplates";
+import { contractLimits } from "@balebase/validators/rules";
 import { useCallback, useRef, useState } from "react";
 import { api } from "./apiClient";
 import { ContractPages } from "./ContractDocument";
@@ -195,7 +196,7 @@ function TemplateDetails({ editor }: { editor: Editor }) {
         <Field label="Template name">
           <input
             className="input"
-            maxLength={200}
+            maxLength={contractLimits.title}
             onChange={(event) =>
               update((current) => ({
                 ...current,
@@ -208,7 +209,7 @@ function TemplateDetails({ editor }: { editor: Editor }) {
         <Field label="Description" optional>
           <textarea
             className="textarea"
-            maxLength={2000}
+            maxLength={contractLimits.description}
             onChange={(event) => {
               setDescription(event.target.value);
             }}
@@ -223,7 +224,7 @@ function TemplateDetails({ editor }: { editor: Editor }) {
         >
           <textarea
             className="textarea"
-            maxLength={2000}
+            maxLength={contractLimits.message}
             onChange={(event) =>
               update((current) => ({
                 ...current,
@@ -264,7 +265,7 @@ function TemplateRoles({ editor }: { editor: Editor }) {
     <Card
       actions={
         <Button
-          disabled={draft.recipients.length >= 20}
+          disabled={draft.recipients.length >= contractLimits.signers}
           icon="add"
           onClick={() =>
             update((current) => ({
@@ -341,7 +342,7 @@ function TemplateRoleRow({
       <Field label={`Role ${index + 1}`}>
         <input
           className="input"
-          maxLength={120}
+          maxLength={contractLimits.signerName}
           onChange={(event) =>
             update((current) => ({
               ...current,

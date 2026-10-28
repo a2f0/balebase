@@ -11,6 +11,7 @@ import {
 } from "@balebase/ui/react";
 import type { OrganizationGroup } from "@balebase/validators/organizationGroups";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
+import { groupLimits } from "@balebase/validators/rules";
 import { type FormEvent, useCallback, useState } from "react";
 import { api } from "./apiClient";
 import { useAction } from "./useAction";
@@ -107,7 +108,7 @@ function OrganizationGroups({
             <input
               className="input"
               disabled={busy}
-              maxLength={100}
+              maxLength={groupLimits.name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Operations"
               type="text"
@@ -165,7 +166,7 @@ function GroupEditor({
             <input
               className="input"
               disabled={editor.busy}
-              maxLength={100}
+              maxLength={groupLimits.name}
               onChange={(event) => editor.setName(event.target.value)}
               required
               type="text"
