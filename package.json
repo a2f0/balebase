@@ -65,6 +65,7 @@
     "terraform:staging:plan": "bash terraform/scripts/run.sh staging plan",
     "test": "OPENSSL_CONF=/dev/null agent-tool run-group scripts/testing/test.json",
     "test:deploy": "bash scripts/testing/testDeployStaging.sh && bun test scripts/testing/stagingFrontends.test.ts scripts/testing/verifyDeployment.test.ts",
+    "test:docs": "bun test scripts/testing/docScripts.test.ts",
     "test:env": "bash scripts/testing/testCloudflareEnv.sh",
     "test:hooks": "bun test scripts/testing/prePush.test.ts",
     "test:images": "bun test scripts/testing/brandImages.test.ts",
