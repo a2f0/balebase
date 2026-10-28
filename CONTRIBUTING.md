@@ -91,6 +91,17 @@ exactly the contract's routes. To add a route, define it in the area's
 validators file, send its response with `respond`, and add an endpoint and
 method to the area's client.
 
+Request rules live in the contract too. `packages/validators/src/rules.ts`
+holds limits and allowed values as plain constants without zod, so the app
+imports them for its form limits and options. Route body schemas are built
+from those constants and the shared field schemas in `fields.ts`, such as
+`requiredText`, `optionalText`, and `calendarDate`, and carry the message for
+each rule they enforce. A handler reads its body with
+`readBody(context, route, message)` from `respond.ts`, which answers 400 with
+the first broken rule's message. Only checks that need the database, such as
+whether a record exists, an assignee is still a member, or a version is
+current, stay in the API.
+
 Cursor-paginated API lists use `packages/api/src/cursorPagination.ts`. Query one
 extra row in a stable order, then use `cursorPage` to trim the page and derive
 its continuation from the last visible row. Date-based lists sort by the date
@@ -103,7 +114,8 @@ from `authMiddleware.ts`. Gate owner- and admin-only routes with
 `requireManager()`, or branch on `canManage(context)`, from
 `organizationMembers.ts`. Mount platform admin routers below `/api/admin`,
 where `app.ts` applies the one `requireAuth` and `requireRole("admin")` guard.
-Read untrusted JSON with `isRecord` and `validText` from `jsonInput.ts`, and
+Read untrusted JSON that no contract schema covers yet with `isRecord` and
+`validText` from `jsonInput.ts`, and
 send mail with `sendMail` from `mailSender.ts`, which names the sender with
 `productName`.
 
