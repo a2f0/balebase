@@ -6,12 +6,7 @@ import { Hono } from "hono";
 import { activityBatch } from "./activity";
 import { findIssueImages } from "./auditIssueImageRecords";
 import { uploadAuditIssueImage } from "./auditIssueImages";
-import {
-  ensureStarterTemplates,
-  type TemplateRow,
-  templateSelect,
-  toTemplate,
-} from "./auditTemplates";
+import { type TemplateRow, templateSelect, toTemplate } from "./auditTemplates";
 import type { IssueContext, IssueEnv } from "./issueRecords";
 import { offlineStatements } from "./offlineRecords";
 import { listMemberDirectory } from "./organizationMembers";
@@ -39,7 +34,6 @@ offline.get("/forms", async (context) => {
       },
       403,
     );
-  await ensureStarterTemplates(context.env.DB);
   const templates = await context.env.DB.prepare(`${templateSelect}
     WHERE (family.scope = 'global' AND version.status = 'published') OR family.organization_id = ?
     ORDER BY family.updated_at DESC`)

@@ -545,10 +545,14 @@ describe("workspace issues", () => {
         `INSERT INTO audit_issue_images (id, issue_id, object_id, uploaded_by, slot, created_at) VALUES ('attachment', 'legacy', 'image', 'user-1', 1, ?)`,
       )
       .run(now);
-    const events = f.db.query("SELECT * FROM activity_events").all();
+    // Migration 0075 adds the starter templates and their creation events.
+    const auditHistory = f.db.query(
+      "SELECT * FROM activity_events WHERE root_type <> 'audit_template'",
+    );
+    const events = auditHistory.all();
     applyMigrations(f.db, { from: "0062" });
     expect(f.db.query("PRAGMA foreign_key_check").all()).toEqual([]);
-    expect(f.db.query("SELECT * FROM activity_events").all()).toEqual(events);
+    expect(auditHistory.all()).toEqual(events);
     expect(
       f.db
         .query("SELECT deletion_pending FROM objects WHERE id = 'image'")

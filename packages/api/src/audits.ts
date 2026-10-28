@@ -39,7 +39,6 @@ import {
 } from "./auditRunRecords";
 import {
   createTemplate,
-  ensureStarterTemplates,
   findTemplate,
   listTemplateVersions,
   positiveInteger,
@@ -89,7 +88,6 @@ interface MemberRow {
 const auditRunPageSize = 100;
 audits.get("/templates", async (context) => {
   const organizationId = context.get("organizationId");
-  await ensureStarterTemplates(context.env.DB);
   const result = await context.env.DB.prepare(
     `${templateSelect}
      WHERE (family.scope = 'global' AND version.status = 'published')

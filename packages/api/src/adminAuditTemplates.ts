@@ -4,7 +4,6 @@ import { findActivity, requestActor } from "./activity";
 import { isRecord, validText } from "./auditDefinition";
 import {
   createTemplate,
-  ensureStarterTemplates,
   findTemplate,
   listTemplateVersions,
   positiveInteger,
@@ -31,7 +30,6 @@ const adminAuditTemplates = new Hono<{
 }>();
 
 adminAuditTemplates.get("/", async (context) => {
-  await ensureStarterTemplates(context.env.DB);
   const result = await context.env.DB.prepare(
     `${templateSelect}
      WHERE family.scope = 'global' AND version.status != 'discarded'

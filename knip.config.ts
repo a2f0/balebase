@@ -53,6 +53,7 @@ const packageWorkspaces: Record<string, PackageWorkspace> = {
   "packages/*": defaultPackage,
   "packages/api": {
     ...defaultPackage,
+    project: [...defaultPackage.project, "scripts/**/*.ts"],
     production: [
       ...defaultPackage.production,
       "!src/contractTestSetup.ts",

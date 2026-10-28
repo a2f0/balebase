@@ -26,6 +26,7 @@ Every workspace lives under `packages/`, and infrastructure lives in
 | Request and response schemas for every route | `packages/validators/src` |
 | Typed client for those routes | `packages/api-client/src` |
 | Database schema | `packages/api/migrations` |
+| Built-in audit templates and their seed migrations | `packages/api/auditLibrary`, [residential audit library](docs/residential-audit-library.md) |
 | Application screens and the host interface each shell fills in | `packages/app/src` |
 | Web shell and its Worker | `packages/app-web` |
 | Native shell, mobile projects, and Fastlane lanes | [`packages/app-capacitor`](packages/app-capacitor/README.md), `scripts/release/*Release.sh`, `scripts/dev/run*.sh`, `scripts/lib/nativeRelease.sh` |
