@@ -42,6 +42,7 @@ import { PlaidApiError, type PlaidRequest, plaidRequest } from "./plaid";
 import { decryptToken, encryptToken } from "./plaidCrypto";
 import { respond } from "./respond";
 import type { Bindings } from "./types";
+import { respondToUnexpectedError } from "./unexpectedError";
 
 const transactionPageSize = 250;
 
@@ -154,8 +155,7 @@ export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
       const status = error.status === 503 ? 503 : 502;
       return context.json({ code: error.code, error: error.message }, status);
     }
-    console.error(error);
-    return context.json({ error: "Unexpected finance error." }, 500);
+    return respondToUnexpectedError(error, context);
   });
   return finance;
 }
