@@ -1,7 +1,9 @@
 import { Banner, Button, Field, Select } from "@balebase/ui/react";
 import type { IssueInput, IssueMember } from "@balebase/validators/issues";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useState } from "react";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
+import { useLoad } from "./useLoad";
 
 const emptyIssue: IssueInput = {
   title: "",
@@ -31,9 +33,14 @@ export function IssueForm({
   const { members, memberError } = useIssueMembers(offlineMembers);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    onDirtyChange?.(JSON.stringify(input) !== JSON.stringify(initial));
-  }, [initial, input, onDirtyChange]);
+  function update(next: IssueInput) {
+    setInput(next);
+    onDirtyChange?.(
+      (Object.keys(next) as (keyof IssueInput)[]).some(
+        (key) => next[key] !== initial[key],
+      ),
+    );
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(undefined);
@@ -41,8 +48,7 @@ export function IssueForm({
     try {
       await onSave(input);
     } catch (cause) {
-      const message =
-        cause instanceof Error ? cause.message : "Could not save issue.";
+      const message = errorMessage(cause, "Could not save issue.");
       if (onError) onError(message);
       else setError(message);
     } finally {
@@ -65,7 +71,7 @@ export function IssueForm({
             maxLength={300}
             value={input.title}
             onChange={(event) =>
-              setInput({ ...input, title: event.target.value })
+              update({ ...input, title: event.target.value })
             }
           />
         </Field>
@@ -76,7 +82,7 @@ export function IssueForm({
             rows={4}
             value={input.description}
             onChange={(event) =>
-              setInput({ ...input, description: event.target.value })
+              update({ ...input, description: event.target.value })
             }
           />
         </Field>
@@ -85,7 +91,7 @@ export function IssueForm({
             <Select
               value={input.priority}
               onChange={(event) =>
-                setInput({
+                update({
                   ...input,
                   priority: event.target.value as IssueInput["priority"],
                 })
@@ -102,7 +108,7 @@ export function IssueForm({
               disabled={Boolean(memberError)}
               value={input.assignedTo ?? ""}
               onChange={(event) =>
-                setInput({ ...input, assignedTo: event.target.value || null })
+                update({ ...input, assignedTo: event.target.value || null })
               }
             >
               <option value="">Unassigned</option>
@@ -134,28 +140,18 @@ export function IssueForm({
 }
 
 function useIssueMembers(offlineMembers: IssueMember[] | undefined) {
-  const [members, setMembers] = useState<IssueMember[]>([]);
-  const [memberError, setMemberError] = useState<string>();
-  useEffect(() => {
-    if (offlineMembers) {
-      setMembers(offlineMembers);
-      return;
-    }
-    let active = true;
-    void api.issues
-      .members()
-      .then((data) => {
-        if (active) setMembers(data.members);
-      })
-      .catch(() => {
-        if (active)
-          setMemberError(
-            "Could not load assignees. You can save now and assign this issue later.",
-          );
-      });
-    return () => {
-      active = false;
-    };
-  }, [offlineMembers]);
-  return { members, memberError };
+  const online = !offlineMembers;
+  const { data, error } = useLoad(
+    useCallback(
+      async () => (online ? (await api.issues.members()).members : []),
+      [online],
+    ),
+    "Could not load assignees.",
+  );
+  return {
+    members: offlineMembers ?? data ?? [],
+    memberError:
+      error &&
+      "Could not load assignees. You can save now and assign this issue later.",
+  };
 }

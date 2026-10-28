@@ -15,7 +15,6 @@ import {
   type Dispatch,
   type SetStateAction,
   useCallback,
-  useEffect,
   useState,
 } from "react";
 import { AdminDeletionMenu } from "./AdminDeletionMenu";
@@ -24,6 +23,8 @@ import { formatDate, Identity } from "./adminDisplay";
 import { api } from "./apiClient";
 import { countLabel } from "./labels";
 import { adminOrganizationIdForPath } from "./organizationState";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 
 interface AdminOrganizationAction {
   organizationId: string;
@@ -64,37 +65,27 @@ function AdminOrganizationList({
 }: {
   onNavigate: (pathname: string) => void;
 }) {
-  const [organizations, setOrganizations] = useState<AdminOrganization[]>();
-  const [busy, setBusy] = useState(true);
-  const [error, setError] = useState<string>();
+  const {
+    data: organizations,
+    error,
+    loading: busy,
+    reload,
+    setData: setOrganizations,
+  } = useLoad(
+    useCallback(() => api.adminOrganizations.list(), []),
+    "Could not load organizations.",
+  );
   const lifecycle = useAdminOrganizationLifecycle(setOrganizations);
-
-  const loadOrganizations = useCallback(async () => {
-    setBusy(true);
-    setError(undefined);
+  const loadOrganizations = () => {
     setOrganizations(undefined);
-    try {
-      setOrganizations(await api.adminOrganizations.list());
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadOrganizations();
-  }, [loadOrganizations]);
+    void reload();
+  };
 
   return (
     <Page>
       <PageHeader
         actions={
-          <Button
-            busy={busy}
-            icon="refresh"
-            onClick={() => void loadOrganizations()}
-          >
+          <Button busy={busy} icon="refresh" onClick={loadOrganizations}>
             {busy ? "Loading…" : "Refresh"}
           </Button>
         }
@@ -123,67 +114,61 @@ function useAdminOrganizationLifecycle(
   setOrganizations: Dispatch<SetStateAction<AdminOrganization[] | undefined>>,
 ) {
   const [action, setAction] = useState<AdminOrganizationAction>();
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
+  const { error, notice, run } = useAction(
+    "Could not update the organization.",
+  );
+
+  async function update(
+    next: AdminOrganizationAction,
+    change: () => Promise<Partial<AdminOrganization>>,
+    success: string,
+  ) {
+    setAction(next);
+    await run(async () => {
+      const changed = await change();
+      setOrganizations((current) =>
+        current?.map((item) =>
+          item.id === next.organizationId ? { ...item, ...changed } : item,
+        ),
+      );
+    }, success);
+    setAction(undefined);
+  }
 
   const markForDeletion = async (organization: AdminOrganization) => {
     if (!(await confirmMarkForDeletion(organization))) return;
-
-    setAction({ organizationId: organization.id, type: "delete" });
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      const deletion = await api.adminOrganizations.markForDeletion(
-        organization.id,
-      );
-      setOrganizations((current) =>
-        current?.map((item) =>
-          item.id === organization.id
-            ? {
-                ...item,
-                deletedAt: deletion.deletedAt,
-                deletedByEmail: deletion.deletedByEmail,
-                deletedByName: deletion.deletedByName,
-                deletedByUserId: deletion.deletedByUserId,
-              }
-            : item,
-        ),
-      );
-      setNotice(`${organization.name} was marked for deletion.`);
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setAction(undefined);
-    }
+    await update(
+      { organizationId: organization.id, type: "delete" },
+      async () => {
+        const deletion = await api.adminOrganizations.markForDeletion(
+          organization.id,
+        );
+        return {
+          deletedAt: deletion.deletedAt,
+          deletedByEmail: deletion.deletedByEmail,
+          deletedByName: deletion.deletedByName,
+          deletedByUserId: deletion.deletedByUserId,
+        };
+      },
+      `${organization.name} was marked for deletion.`,
+    );
   };
 
   const restore = async (organization: AdminOrganization) => {
     if (!(await confirmRestore(organization))) return;
-
-    setAction({ organizationId: organization.id, type: "restore" });
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      await api.adminOrganizations.restore(organization.id);
-      setOrganizations((current) =>
-        current?.map((item) =>
-          item.id === organization.id
-            ? {
-                ...item,
-                deletedAt: null,
-                deletedByEmail: null,
-                deletedByName: null,
-                deletedByUserId: null,
-              }
-            : item,
-        ),
-      );
-      setNotice(`${organization.name} was restored.`);
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setAction(undefined);
-    }
+    await update(
+      { organizationId: organization.id, type: "restore" },
+      async () => {
+        await api.adminOrganizations.restore(organization.id);
+        return {
+          deletedAt: null,
+          deletedByEmail: null,
+          deletedByName: null,
+          deletedByUserId: null,
+        };
+      },
+      `${organization.name} was restored.`,
+    );
   };
 
   return { action, error, markForDeletion, notice, restore };
@@ -414,12 +399,6 @@ function OrganizationActionMenu({
       pending={pending}
     />
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not load organizations.";
 }
 
 function confirmMarkForDeletion(organization: AdminOrganization) {

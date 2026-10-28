@@ -7,6 +7,7 @@ import {
   Select,
 } from "@balebase/ui/react";
 import { useEffect, useRef, useState } from "react";
+import { errorMessage } from "./errors";
 import { guardWorkspaceChange } from "./navigationGuard";
 import { OfflineIssueCreator, OfflineIssueList } from "./OfflineIssues";
 import type { OfflineAudit, OfflineWorkspace } from "./offlineStore";
@@ -173,9 +174,10 @@ function useOfflineAnswers(audit: OfflineAudit, key: string) {
       await write(itemId, edit);
     } catch (cause) {
       setError(
-        cause instanceof Error
-          ? cause.message
-          : "Answer not saved. Check device storage and retry.",
+        errorMessage(
+          cause,
+          "Answer not saved. Check device storage and retry.",
+        ),
       );
     } finally {
       setPending((count) => count - 1);
@@ -192,9 +194,7 @@ function useOfflineAnswers(audit: OfflineAudit, key: string) {
       if (complete) await queueOfflineAudit(key, audit.id);
       setError(undefined);
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Could not queue audit.",
-      );
+      setError(errorMessage(cause, "Could not queue audit."));
     } finally {
       setSealing(false);
       setPending((count) => count - 1);

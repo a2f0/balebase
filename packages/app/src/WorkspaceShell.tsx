@@ -20,6 +20,7 @@ import type { AccountSession } from "./accountSessions";
 import type { WorkspaceOrganization } from "./organizationState";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { readSidebarWidth } from "./sidebarWidth";
+import { useAction } from "./useAction";
 
 export interface WorkspaceUser {
   email: string;
@@ -350,8 +351,7 @@ function OrganizationSwitcher({
   onOrganizationCreate: (name: string) => Promise<void>;
   organizations: WorkspaceOrganization[];
 }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const { busy, error, run } = useAction("Could not switch organizations.");
   if (organizations.length === 0 || !activeOrganizationId) {
     return (
       <div className="organizationSwitcher">
@@ -374,27 +374,11 @@ function OrganizationSwitcher({
     if (organizationId === "create") {
       const name = (await askOrganizationName())?.trim();
       if (!name) return;
-      setBusy(true);
-      setError(undefined);
-      try {
-        await onOrganizationCreate(name);
-      } catch (cause) {
-        setError(messageFrom(cause));
-      } finally {
-        setBusy(false);
-      }
+      await run(() => onOrganizationCreate(name));
       return;
     }
     if (organizationId === activeOrganizationId) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      await onOrganizationChange(organizationId);
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(false);
-    }
+    await run(() => onOrganizationChange(organizationId));
   }
 
   return (
@@ -446,12 +430,6 @@ export function hasRole(
   return (
     roles?.split(",").some((role) => role.trim() === expectedRole) ?? false
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not switch organizations.";
 }
 
 function askOrganizationName() {

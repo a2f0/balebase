@@ -3,7 +3,7 @@ import type {
   EmployeeRequirementKind,
   EmployeeRequirementStatus,
 } from "@balebase/validators/employeeForms";
-import { UpgradeRequiredError } from "./BillingLink";
+import { errorMessage, UpgradeRequiredError } from "./errors";
 
 /** A request being drafted, with an ID that keys it until it is sent. */
 export interface RequirementDraft extends EmployeeRequirementInput {
@@ -78,7 +78,7 @@ export async function inviteWithRequirements<TRole extends string>({
       await assign(invitationId, requirements);
     }
   } catch (cause) {
-    const message = cause instanceof Error ? cause.message : "Unknown error.";
+    const message = errorMessage(cause, "Unknown error.");
     throw new RequirementAssignmentError(
       `Invitation sent, but requirements could not be assigned: ${message}`,
       invitationId,

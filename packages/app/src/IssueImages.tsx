@@ -1,26 +1,19 @@
 import { Banner, PageSection } from "@balebase/ui/react";
-import type { AuditIssueImage } from "@balebase/validators/audits";
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import { ApiImage } from "./ApiImage";
 import { api } from "./apiClient";
+import { useLoad } from "./useLoad";
 
 export function IssueImages({ issueId }: { issueId: string }) {
-  const [images, setImages] = useState<AuditIssueImage[]>([]);
-  const [error, setError] = useState<string>();
-  useEffect(() => {
-    let active = true;
-    void api.offline
-      .images(issueId)
-      .then((data) => {
-        if (active) setImages(data.images);
-      })
-      .catch(() => {
-        if (active) setError("Could not load issue photos.");
-      });
-    return () => {
-      active = false;
-    };
-  }, [issueId]);
+  const loaded = useLoad(
+    useCallback(
+      async () => (await api.offline.images(issueId)).images,
+      [issueId],
+    ),
+    "Could not load issue photos.",
+  );
+  const images = loaded.data ?? [];
+  const error = loaded.error && "Could not load issue photos.";
   if (!images.length && !error) return null;
   return (
     <PageSection title="Photos">

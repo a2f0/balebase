@@ -10,10 +10,9 @@ import {
 import type {
   ActivityActor,
   ActivityEvent,
-  ActivityPage,
   ActivityResourceType,
 } from "@balebase/validators/activity";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback } from "react";
 import { assigneeLabel, textValue } from "./activityLabels";
 import { type ActivitySource, listActivity } from "./activitySource";
 import {
@@ -21,9 +20,11 @@ import {
   equipmentActivitySummary,
 } from "./equipmentActivity";
 import { financeConnectionPath, financeTransactionPath } from "./financePages";
+import { InfiniteScroll } from "./InfiniteScroll";
 import { issuePath } from "./issuePaths";
 import { organizationPeoplePath } from "./organizationState";
 import { RecordActivityDetails } from "./recordActivity";
+import { useCursorPages } from "./useCursorPages";
 import { equipmentPath } from "./workspacePaths";
 
 const actionLabels: Record<string, string> = {
@@ -73,35 +74,37 @@ export function ActivityFeed({
   resourceType?: ActivityResourceType | undefined;
   source?: ActivitySource;
 }) {
-  const { busy, error, loadMore, page, refresh } = useActivityPage(
-    source,
-    refreshKey,
-    resourceType,
-  );
+  const { error, items, loadMore, loadingMore, nextCursor, reload } =
+    useActivityPage(source, refreshKey, resourceType);
   return (
     <PageSection
       className={compact ? "activityFeedCompact" : undefined}
       actions={
-        <Button onClick={refresh} size="sm">
+        <Button onClick={reload} size="sm">
           Refresh activity
         </Button>
       }
       title={compact ? "Recent activity" : "Activity"}
     >
       {error && <Banner tone="danger">{error}</Banner>}
-      {page ? (
+      {items ? (
         <ActivityList
           compact={compact}
-          events={page.events}
+          events={items}
           onNavigate={source ? undefined : onNavigate}
         />
       ) : (
         !error && <LoadingState label="Loading activity…" />
       )}
-      {page?.nextCursor && (
-        <Button busy={busy} onClick={() => void loadMore()} size="sm">
+      {items && nextCursor && (
+        <InfiniteScroll
+          autoLoad={!error}
+          busy={loadingMore}
+          cursor={nextCursor}
+          onLoadMore={loadMore}
+        >
           Load more activity
-        </Button>
+        </InfiniteScroll>
       )}
     </PageSection>
   );
@@ -112,67 +115,20 @@ function useActivityPage(
   refreshKey: unknown,
   resourceType: ActivityResourceType | undefined,
 ) {
-  const [page, setPage] = useState<ActivityPage>();
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const [reload, setReload] = useState(0);
-  const generation = useRef(0);
   const sourceId = source?.id;
   const sourceType = source?.type;
-  const requestKey = useMemo(
-    () => ({
-      refreshKey,
-      reload,
-      resourceType,
-      source:
+  const fetchPage = useCallback(
+    async (cursor?: string) => {
+      const page = await listActivity(
         sourceId && sourceType ? { id: sourceId, type: sourceType } : undefined,
-    }),
-    [sourceId, sourceType, refreshKey, reload, resourceType],
+        cursor,
+        resourceType,
+      );
+      return { items: page.events, nextCursor: page.nextCursor };
+    },
+    [sourceId, sourceType, resourceType],
   );
-  useEffect(() => {
-    const current = ++generation.current;
-    setPage(undefined);
-    setError(undefined);
-    setBusy(false);
-    void listActivity(requestKey.source, undefined, requestKey.resourceType)
-      .then((next) => {
-        if (generation.current === current) setPage(next);
-      })
-      .catch((cause: unknown) => {
-        if (generation.current === current) setError(messageFrom(cause));
-      });
-    return () => {
-      generation.current += 1;
-    };
-  }, [requestKey]);
-
-  async function loadMore() {
-    if (!page?.nextCursor || busy) return;
-    const current = generation.current;
-    setBusy(true);
-    setError(undefined);
-    try {
-      const next = await listActivity(source, page.nextCursor, resourceType);
-      if (generation.current === current) {
-        setPage((previous) => ({
-          events: [...(previous?.events ?? []), ...next.events],
-          nextCursor: next.nextCursor,
-        }));
-      }
-    } catch (cause) {
-      if (generation.current === current) setError(messageFrom(cause));
-    } finally {
-      if (generation.current === current) setBusy(false);
-    }
-  }
-
-  return {
-    busy,
-    error,
-    loadMore,
-    page,
-    refresh: () => setReload((value) => value + 1),
-  };
+  return useCursorPages(fetchPage, "Could not load activity.", refreshKey);
 }
 
 function ActivityList({
@@ -545,8 +501,4 @@ export function formatActivityTime(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not load activity.";
 }

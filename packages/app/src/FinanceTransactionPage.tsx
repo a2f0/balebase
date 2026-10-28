@@ -10,18 +10,18 @@ import {
   PageSection,
 } from "@balebase/ui/react";
 import type {
-  ExpenseCategory,
   FinanceTransaction,
   FinanceTransactionAnnotation,
-  FinanceTransactionSource,
 } from "@balebase/validators/finance";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
 import { api } from "./apiClient";
 import { FinanceTransactionRow } from "./FinanceTransactionHistory";
 import { FinanceTransactionSourceData } from "./FinanceTransactionSourceData";
 import { IssueList } from "./IssueList";
 import { transactionIssuePath } from "./issuePaths";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 
 export function FinanceTransactionPage({
   id,
@@ -30,16 +30,8 @@ export function FinanceTransactionPage({
   id: string;
   onNavigate: (path: string) => void;
 }) {
-  const {
-    data,
-    error,
-    busy,
-    expanded,
-    setExpanded,
-    refresh,
-    annotate,
-    categorize,
-  } = useTransaction(id);
+  const { data, error, busy, expanded, setExpanded, annotate, categorize } =
+    useTransaction(id);
   const filters = useMemo<IssueFilters>(
     () => ({ status: "all", type: "finance_transaction", targetId: id, q: "" }),
     [id],
@@ -98,7 +90,7 @@ export function FinanceTransactionPage({
             </PageSection>
             <ActivityFeed
               source={{ type: "finance_transaction", id }}
-              refreshKey={refresh}
+              refreshKey={data.transaction}
             />
           </>
         )}
@@ -106,90 +98,48 @@ export function FinanceTransactionPage({
     </Page>
   );
 }
-function message(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not load transaction.";
-}
-
 function useTransaction(id: string) {
-  const [data, setData] = useState<{
-    transaction: FinanceTransaction;
-    categories: ExpenseCategory[];
-    source: FinanceTransactionSource;
-  }>();
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const loaded = useLoad(
+    useCallback(() => api.finance.transaction(id), [id]),
+    "Could not load transaction.",
+  );
+  const { setData } = loaded;
+  const action = useAction("Could not update the transaction.");
   const [expanded, setExpanded] = useState<string>();
-  const [refresh, setRefresh] = useState(0);
-  useEffect(() => {
-    let active = true;
-    void api.finance
-      .transaction(id)
-      .then((next) => {
-        if (active) setData(next);
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(message(cause));
-      });
-    return () => {
-      active = false;
-    };
-  }, [id]);
+  const updateTransaction = (change: Partial<FinanceTransaction>) =>
+    setData(
+      (current) =>
+        current && {
+          ...current,
+          transaction: { ...current.transaction, ...change },
+        },
+    );
   async function annotate(
     _: FinanceTransaction,
     input: FinanceTransactionAnnotation,
   ) {
-    setBusy(true);
-    setError(undefined);
-    try {
+    await action.run(async () => {
       const { annotation } = await api.finance.updateTransactionAnnotation(
         id,
         input,
       );
-      setData(
-        (current) =>
-          current && {
-            ...current,
-            transaction: { ...current.transaction, annotation },
-          },
-      );
+      updateTransaction({ annotation });
       setExpanded(undefined);
-      setRefresh((value) => value + 1);
-    } catch (cause) {
-      setError(message(cause));
-    } finally {
-      setBusy(false);
-    }
+    });
   }
   async function categorize(_: FinanceTransaction, categoryId: string | null) {
-    setBusy(true);
-    setError(undefined);
-    try {
+    await action.run(async () => {
       await api.finance.setTransactionCategory(id, categoryId);
-      setData(
-        (current) =>
-          current && {
-            ...current,
-            transaction: {
-              ...current.transaction,
-              expenseCategoryId: categoryId,
-            },
-          },
-      );
-      setRefresh((value) => value + 1);
-    } catch (cause) {
-      setError(message(cause));
-    } finally {
-      setBusy(false);
-    }
+      updateTransaction({ expenseCategoryId: categoryId });
+    });
   }
 
   return {
-    data,
-    error,
-    busy,
+    data: loaded.data,
+    error: action.error ?? loaded.error,
+    busy: action.busy,
     expanded,
     setExpanded,
-    refresh,
     annotate,
     categorize,
   };

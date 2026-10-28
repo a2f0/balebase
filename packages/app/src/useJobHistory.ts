@@ -1,6 +1,7 @@
 import type { JobRun } from "@balebase/validators/adminJobs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 
 type History = Awaited<ReturnType<typeof api.adminJobs.runs>>;
 type Query = Parameters<typeof api.adminJobs.runs>[0];
@@ -69,7 +70,7 @@ function historyLoader(
       }
     } catch (cause) {
       if (!active) return true;
-      const message = historyError(cause);
+      const message = errorMessage(cause, "Could not load job history.");
       publish(cursor ? { loadMoreError: message } : { error: message });
     } finally {
       busy = false;
@@ -129,8 +130,4 @@ function newerThan(run: JobRun | undefined, boundary: JobRun) {
 
 function uniqueRuns(runs: JobRun[]) {
   return [...new Map(runs.map((run) => [run.runId, run])).values()];
-}
-
-function historyError(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not load job history.";
 }

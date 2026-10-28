@@ -19,7 +19,9 @@ import {
 import { AuthFields, type AuthMode } from "./AuthFields";
 import { authClient } from "./authClient";
 import { authCallbackUrl, websiteUrl } from "./config";
+import { throwIfRefused } from "./errors";
 import { nativeHost } from "./host";
+import { useAction } from "./useAction";
 import { useSavedSignIn } from "./useSavedSignIn";
 
 export type AuthenticationAction = "sign-in" | "sign-up";
@@ -238,21 +240,25 @@ function useAuthPageState({
 }
 
 function useAuthAction(initialError: string | undefined) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(initialError);
-  async function runWhileBusy(action: () => Promise<void> | void) {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await action();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(false);
-    }
+  const action = useAction("Something went wrong.");
+  // An error the page opened with, such as an expired link, lasts until the
+  // next action.
+  const [openingError, setOpeningError] = useState(initialError);
+  function setError(message: string | undefined) {
+    setOpeningError(undefined);
+    action.setError(message);
+  }
+  async function runWhileBusy(work: () => Promise<void> | void) {
+    setOpeningError(undefined);
+    await action.run(async () => work());
   }
 
-  return { busy, error, setError, runWhileBusy };
+  return {
+    busy: action.busy,
+    error: action.error ?? openingError,
+    setError,
+    runWhileBusy,
+  };
 }
 
 interface CredentialAuthPageProps {
@@ -483,7 +489,7 @@ async function performAuthAction(
     const result = await authClient.signIn.email(
       passwordSignInInput(input.email, input.password),
     );
-    throwForAuthError(result.error);
+    throwIfRefused(result.error, "Authentication failed.");
     if (requiresTwoFactor(result.data)) {
       return { twoFactorRequired: true };
     }
@@ -503,11 +509,11 @@ async function performAuthAction(
       password: input.password,
       termsAccepted: true,
     });
-    throwForAuthError(result.error);
+    throwIfRefused(result.error, "Authentication failed.");
     const signInResult = await authClient.signIn.email(
       passwordSignInInput(input.email, input.password),
     );
-    throwForAuthError(signInResult.error);
+    throwIfRefused(signInResult.error, "Authentication failed.");
     offerToSavePassword(input.email, input.password);
     await input.onAuthenticated("sign-up");
     return {
@@ -521,7 +527,7 @@ async function performAuthAction(
       email: input.email,
       redirectTo: authCallbackUrl("/reset-password"),
     });
-    throwForAuthError(result.error);
+    throwIfRefused(result.error, "Authentication failed.");
     return { notice: "If that account exists, a reset link is on its way." };
   }
 
@@ -533,7 +539,7 @@ async function performAuthAction(
     newPassword: input.password,
     token: input.resetToken,
   });
-  throwForAuthError(result.error);
+  throwIfRefused(result.error, "Authentication failed.");
   await input.onLeaveReset();
   return {
     nextMode: "sign-in" as const,
@@ -564,16 +570,13 @@ function TwoFactorChallenge({
   variant: AuthVariant;
 }) {
   const [backupCode, setBackupCode] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const { busy, error, run, setError } = useAction("Something went wrong.");
   const [code, setCode] = useState("");
-  const [error, setError] = useState<string>();
   const [trustDevice, setTrustDevice] = useState(false);
 
   async function verify(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
-    setError(undefined);
-    try {
+    await run(async () => {
       const result = backupCode
         ? await authClient.twoFactor.verifyBackupCode({
             code: code.trim(),
@@ -583,13 +586,9 @@ function TwoFactorChallenge({
             code: code.replace(/\D/g, ""),
             trustDevice,
           });
-      throwForAuthError(result.error);
+      throwIfRefused(result.error, "Authentication failed.");
       await onVerified();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   function chooseBackupCode(nextBackupCode: boolean) {
@@ -849,12 +848,6 @@ function descriptionFor(mode: AuthMode, variant: AuthVariant) {
   return "Sign in with the email and password attached to your account.";
 }
 
-function throwForAuthError(error: { message?: string | undefined } | null) {
-  if (error) {
-    throw new Error(error.message ?? "Authentication failed.");
-  }
-}
-
 export function requiresTwoFactor(data: unknown) {
   return (
     typeof data === "object" &&
@@ -866,8 +859,4 @@ export function requiresTwoFactor(data: unknown) {
 
 export function passwordSignInInput(email: string, password: string) {
   return { email, fetchOptions: deferredSessionRefresh, password };
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Something went wrong.";
 }

@@ -16,10 +16,12 @@ import type {
   ApiKeyAccess,
   ApiKeyExpiration,
 } from "@balebase/validators/apiKeys";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useState } from "react";
 import { api } from "./apiClient";
 import { McpConfiguration } from "./McpConfiguration";
+import { useAction } from "./useAction";
 import { useClipboard } from "./useClipboard";
+import { useLoad } from "./useLoad";
 
 interface CreatedKey {
   apiKey: ApiKey;
@@ -60,19 +62,19 @@ export function OrganizationApiKeys({
 }: {
   organizationId: string;
 }) {
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>();
-  const [loadError, setLoadError] = useState<string>();
+  const {
+    data: apiKeys,
+    error: loadError,
+    reload: load,
+    setData: setApiKeys,
+  } = useLoad(
+    useCallback(
+      async () => (organizationId ? api.apiKeys.list() : undefined),
+      [organizationId],
+    ),
+    "Could not load API keys. Please try again.",
+  );
   const [created, setCreated] = useState<CreatedKey>();
-  const load = useCallback(async () => {
-    if (!organizationId) return;
-    setLoadError(undefined);
-    try {
-      setApiKeys(await api.apiKeys.list());
-    } catch (cause) {
-      setLoadError(messageFrom(cause));
-    }
-  }, [organizationId]);
-  useEffect(() => void load(), [load]);
 
   if (!apiKeys) {
     return loadError ? (
@@ -120,26 +122,22 @@ function CreateApiKeyCard({
   const [name, setName] = useState("");
   const [access, setAccess] = useState<ApiKeyAccess>("read");
   const [expiration, setExpiration] = useState("90");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const { busy, error, run } = useAction(
+    "Could not create the API key. Please try again.",
+  );
 
   async function create(event: FormEvent) {
     event.preventDefault();
     if (!name.trim()) return;
-    setBusy(true);
-    setError(undefined);
-    try {
+    await run(async () =>
       onCreated(
         await api.apiKeys.create({
           access,
           expiresInDays: expirationDays(expiration),
           name: name.trim(),
         }),
-      );
-    } catch (cause) {
-      setError(messageFrom(cause));
-      setBusy(false);
-    }
+      ),
+    );
   }
 
   return (
@@ -257,20 +255,16 @@ function ApiKeyList({
   onRevoked: (apiKey: ApiKey) => void;
 }) {
   const [revokingId, setRevokingId] = useState<string>();
-  const [error, setError] = useState<string>();
+  const { error, run } = useAction(
+    "Could not revoke the API key. Please try again.",
+  );
   const usable = apiKeys.filter(({ status }) => status === "active").length;
 
   async function revoke(apiKey: ApiKey) {
     if (!(await confirmRevoke(apiKey.name))) return;
     setRevokingId(apiKey.id);
-    setError(undefined);
-    try {
-      onRevoked(await api.apiKeys.revoke(apiKey.id));
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setRevokingId(undefined);
-    }
+    await run(async () => onRevoked(await api.apiKeys.revoke(apiKey.id)));
+    setRevokingId(undefined);
   }
 
   return (
@@ -397,10 +391,4 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
     new Date(value),
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not update API keys. Please try again.";
 }

@@ -1,33 +1,29 @@
 import { Button, Card, confirmDialog, Toast } from "@balebase/ui/react";
-import { useEffect, useState } from "react";
 import { api } from "./apiClient";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
+
+const loadRequestedAt = async () =>
+  (await api.accountSettings.deletion()).requestedAt;
 
 export function AccountDeletion() {
-  const [requestedAt, setRequestedAt] = useState<string | null>();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  useEffect(() => {
-    void api.accountSettings
-      .deletion()
-      .then((body) => setRequestedAt(body.requestedAt))
-      .catch((cause: unknown) => setError(messageFrom(cause)));
-  }, []);
+  const loaded = useLoad(
+    loadRequestedAt,
+    "Could not load the deletion request.",
+  );
+  const requestedAt = loaded.data;
+  const action = useAction("Could not update the deletion request.");
+  const { busy } = action;
+  const error = action.error ?? loaded.error;
 
   async function update() {
     if (!requestedAt && !(await confirmDeletionRequest())) return;
-    setBusy(true);
-    setError(undefined);
-    try {
+    await action.run(async () => {
       await (requestedAt
         ? api.accountSettings.cancelDeletion()
         : api.accountSettings.requestDeletion());
-      const body = await api.accountSettings.deletion();
-      setRequestedAt(body.requestedAt);
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(false);
-    }
+      loaded.setData(await loadRequestedAt());
+    });
   }
 
   return (
@@ -57,12 +53,6 @@ export function AccountDeletion() {
       </Button>
     </Card>
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not load the deletion request.";
 }
 
 function confirmDeletionRequest() {

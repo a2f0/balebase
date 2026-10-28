@@ -23,9 +23,13 @@ import { ApiDownload } from "./ApiDownload";
 import { AttachmentPreviewTile } from "./AttachmentPreview";
 import { api } from "./apiClient";
 import { EmailLinks } from "./EmailLinks";
+import { errorMessage } from "./errors";
 import { selectEmailId } from "./inboxSelection";
 import { countLabel, formatBytes } from "./labels";
 import { previewKindFor } from "./previewKind";
+import { useAction } from "./useAction";
+import { useClipboard } from "./useClipboard";
+import { useLoad } from "./useLoad";
 
 interface InboxContext {
   canAccessFinance: boolean;
@@ -64,9 +68,7 @@ function useInboxMessages(folder: InboxFolder) {
   const [emails, setEmails] = useState<InboundEmailSummary[]>([]);
   const [inboundAddress, setInboundAddress] = useState<string>();
   const [selectedId, setSelectedId] = useState<string>();
-  const [detail, setDetail] = useState<InboundEmailDetail>();
   const [loadingList, setLoadingList] = useState(true);
-  const [loadingMessage, setLoadingMessage] = useState(false);
   const [error, setError] = useState<string>();
   const { openedByLink, pending } = useLinkedEmailId();
   const listRequest = useRef(0);
@@ -87,7 +89,8 @@ function useInboxMessages(folder: InboxFolder) {
         selectEmailId(nextEmails, current, requested, openedByLink),
       );
     } catch (cause) {
-      if (request === listRequest.current) setError(messageFrom(cause));
+      if (request === listRequest.current)
+        setError(errorMessage(cause, "Could not load the inbox."));
     } finally {
       if (request === listRequest.current) setLoadingList(false);
     }
@@ -96,48 +99,29 @@ function useInboxMessages(folder: InboxFolder) {
   useEffect(() => {
     setEmails([]);
     setSelectedId(undefined);
-    setDetail(undefined);
     void refresh();
     return () => {
       listRequest.current += 1;
     };
   }, [refresh]);
 
-  useEffect(() => {
-    if (!selectedId) {
-      setDetail(undefined);
-      setLoadingMessage(false);
-      return;
-    }
-    let active = true;
-    setError(undefined);
-    setLoadingMessage(true);
-    setDetail(undefined);
-    api.inbox
-      .get(selectedId, folder)
-      .then((email) => {
-        if (active) setDetail(email);
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(messageFrom(cause));
-      })
-      .finally(() => {
-        if (active) setLoadingMessage(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [folder, selectedId]);
+  const message = useLoad(
+    useCallback(
+      async () => (selectedId ? api.inbox.get(selectedId, folder) : undefined),
+      [folder, selectedId],
+    ),
+    "Could not load the email.",
+  );
   return {
-    detail,
+    detail: message.data,
     emails,
-    error,
+    error: error ?? message.error,
     inboundAddress,
     loadingList,
-    loadingMessage,
+    loadingMessage: Boolean(selectedId) && message.loading,
     refresh,
     selectedId,
-    setDetail,
+    setDetail: message.setData,
     setSelectedId,
   };
 }
@@ -161,22 +145,21 @@ function useLinkedEmailId() {
 
 function useInboxActions(messages: ReturnType<typeof useInboxMessages>) {
   const [workingId, setWorkingId] = useState<string>();
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
+  const action = useAction("Could not update the email.");
+  const clipboard = useClipboard();
   const clear = () => {
-    setError(undefined);
-    setNotice(undefined);
+    action.setError(undefined);
+    action.setNotice(undefined);
   };
 
   async function copyAddress() {
     if (!messages.inboundAddress) return;
     clear();
-    try {
-      await navigator.clipboard.writeText(messages.inboundAddress);
-      setNotice("Inbound email address copied.");
-    } catch {
-      setError("Could not copy the email address. Please try again.");
-    }
+    await clipboard.copy(
+      messages.inboundAddress,
+      "Inbound email address copied.",
+      "Could not copy the email address. Please try again.",
+    );
   }
 
   async function moveToTrash(email: InboundEmailDetail) {
@@ -196,31 +179,25 @@ function useInboxActions(messages: ReturnType<typeof useInboxMessages>) {
 
   async function runAction(
     id: string,
-    action: (emailId: string) => Promise<unknown>,
+    change: (emailId: string) => Promise<unknown>,
     successNotice: string,
   ) {
     setWorkingId(id);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      await action(id);
+    await action.run(async () => {
+      await change(id);
       messages.setSelectedId(undefined);
-      messages.setDetail(undefined);
-      setNotice(successNotice);
       await messages.refresh();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setWorkingId(undefined);
-    }
+    }, successNotice);
+    setWorkingId(undefined);
   }
   return {
     archive,
     clear,
     copyAddress,
-    error,
+    copyNotice: clipboard.notice,
+    error: action.error,
     moveToTrash,
-    notice,
+    notice: action.notice,
     restore,
     workingId,
   };
@@ -248,6 +225,11 @@ function InboxView({
       <PageBody>
         {error && <Toast tone="danger">{error}</Toast>}
         {actions.notice && <Toast tone="success">{actions.notice}</Toast>}
+        {actions.copyNotice && (
+          <Toast tone={actions.copyNotice.tone}>
+            {actions.copyNotice.message}
+          </Toast>
+        )}
         <div className="stack">
           <InboxToolbar
             address={messages.inboundAddress}
@@ -772,10 +754,6 @@ function formatDateTime(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not load the inbox.";
 }
 
 function confirmMoveToTrash(subject: string) {

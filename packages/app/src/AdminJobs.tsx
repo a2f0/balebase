@@ -9,37 +9,30 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { AdminJobHistory } from "./AdminJobHistory";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
+import { useLoad } from "./useLoad";
 
 export function AdminJobs() {
-  const [jobs, setJobs] = useState<JobDefinition[]>();
+  const loaded = useLoad(
+    useCallback(() => api.adminJobs.list(), []),
+    "Could not load jobs.",
+  );
+  const jobs = loaded.data;
   const [busy, setBusy] = useState<string>();
-  const [error, setError] = useState<string>();
+  const [failure, setFailure] = useState<string>();
+  const error = failure ?? loaded.error;
   const [startedRun, setStartedRun] = useState<{
     run: JobRun;
     request: number;
   }>();
-  useEffect(() => {
-    let active = true;
-    void api.adminJobs
-      .list()
-      .then((result) => {
-        if (active) setJobs(result);
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(messageFrom(cause));
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   async function trigger(job: JobDefinition) {
     if (!(await confirmJobRun(job))) return;
     setBusy(job.id);
-    setError(undefined);
+    setFailure(undefined);
     try {
       const run = await api.adminJobs.run(job.id);
       setStartedRun((previous) => ({
@@ -47,7 +40,9 @@ export function AdminJobs() {
         request: (previous?.request ?? 0) + 1,
       }));
     } catch (cause) {
-      setError(`${messageFrom(cause)} Check recent runs before trying again.`);
+      setFailure(
+        `${errorMessage(cause, "Could not start the job.")} Check recent runs before trying again.`,
+      );
     } finally {
       setBusy(undefined);
     }
@@ -102,12 +97,6 @@ export function AdminJobs() {
       </PageBody>
     </Page>
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not complete the request.";
 }
 
 function confirmJobRun(job: JobDefinition) {

@@ -13,6 +13,7 @@ import type { IssueMember } from "@balebase/validators/issues";
 import type { OfflineScope } from "@balebase/validators/offline";
 import { useEffect, useState } from "react";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 import { guardWorkspaceChange } from "./navigationGuard";
 import { OfflineAuditEditor } from "./OfflineAuditEditor";
 import { OfflineIssueCreator, OfflineIssueList } from "./OfflineIssues";
@@ -25,6 +26,7 @@ import {
   offlineScopeKey,
 } from "./offlineStore";
 import { retryOfflineWork, startOfflineAudit } from "./offlineWork";
+import { useAction } from "./useAction";
 
 export interface OfflineIdentity {
   scope: OfflineScope;
@@ -48,7 +50,7 @@ export function OfflineWorkspacePage({
   const [auditId, setAuditId] = useState<string>();
   const [creatingIssue, setCreatingIssue] = useState(false);
   const [epoch] = useState(offlineAccessEpoch);
-  const { error, setError, run } = useOfflineActions();
+  const { error, setError, run } = useAction("Could not save offline work.");
   const audit = workspace?.audits.find((entry) => entry.id === auditId);
   return (
     <Page>
@@ -171,21 +173,6 @@ function OfflineAuditList({
   );
 }
 
-function useOfflineActions() {
-  const [error, setError] = useState<string>();
-  const run = async (action: () => Promise<unknown>) => {
-    setError(undefined);
-    try {
-      await action();
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Could not save offline work.",
-      );
-    }
-  };
-  return { error, setError, run };
-}
-
 function DownloadedChecklists({
   workspace,
   onStart,
@@ -288,10 +275,7 @@ function OfflineDownloads({
         setTemplates(data.templates);
       })
       .catch((cause: unknown) => {
-        if (active)
-          onError(
-            cause instanceof Error ? cause.message : "Could not load forms.",
-          );
+        if (active) onError(errorMessage(cause, "Could not load forms."));
       });
     return () => {
       active = false;
@@ -325,9 +309,7 @@ function OfflineDownloads({
       activateOfflineWorkspace(key, epoch);
       await navigator.storage?.persist?.().catch(() => false);
     } catch (cause) {
-      onError(
-        cause instanceof Error ? cause.message : "Could not download the form.",
-      );
+      onError(errorMessage(cause, "Could not download the form."));
     } finally {
       setBusy(false);
     }

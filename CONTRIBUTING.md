@@ -60,6 +60,10 @@ In the app, a screen such as `Finance.tsx` owns loading and mutations.
 `financeFormat.ts` formats amounts. Follow those concrete responsibilities
 when a screen needs to be split.
 
+Load with `useLoad`, mutate with `useAction`, and show errors with
+`errorMessage` from `src/errors.ts` or `ErrorToast`. Page cursor lists with
+`useCursorPages` and `InfiniteScroll`.
+
 Use `Select` from `@balebase/ui/react` for form dropdowns, with `Field` or an
 associated label. Compact inline controls can use `aria-label`. `Select`
 applies the shared control styles and forwards native select

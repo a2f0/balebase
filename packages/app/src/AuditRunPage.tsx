@@ -1,4 +1,3 @@
-import { ApiError } from "@balebase/api-client";
 import {
   Badge,
   type BadgeTone,
@@ -19,7 +18,6 @@ import type {
   AuditDefinition,
   AuditDetail,
   AuditIssue,
-  AuditIssueInput,
   AuditIssuePriority,
   AuditIssueUpdate,
   AuditPerson,
@@ -27,7 +25,14 @@ import type {
   AuditTemplateItem,
   AuditTemplateSection,
 } from "@balebase/validators/audits";
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityFeed,
   ApiKeyAttribution,
@@ -42,16 +47,18 @@ import {
   RunOverview,
 } from "./AuditRunHeader";
 import { api } from "./apiClient";
+import {
+  acceptedImageTypes,
+  appendIssueImageSelection,
+  createIssueWithImages,
+  issueImageSelectionKey,
+  maxIssueImages,
+  uploadIssueImagesSequentially,
+  validateImageFiles,
+} from "./auditIssueImages";
+import { errorMessage } from "./errors";
 import { countLabel, formatLabel } from "./labels";
-
-const acceptedImageTypes = [
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-];
-const maxIssueImages = 10;
-const maxIssueImageBytes = 10 * 1024 * 1024;
+import { useAction } from "./useAction";
 
 const checkResponses = ["pass", "fail", "na"] as const;
 
@@ -126,22 +133,29 @@ export function runStateReducer(state: RunState, action: RunAction): RunState {
   }
 }
 
-export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
+/**
+ * The run and its unsaved answers. The reducer keeps those answers across
+ * issue refreshes, so this guards its own requests instead of using useLoad.
+ */
+function useAuditRun(id: string) {
   const [{ detail, responses }, dispatch] = useReducer(runStateReducer, {
     detail: undefined,
     responses: {},
   });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
+  const [loadError, setLoadError] = useState<string>();
+  const latest = useRef(0);
 
   const fetchRun = useCallback(
     async (type: "issuesRefreshed" | "loaded") => {
+      const request = ++latest.current;
       try {
-        dispatch({ detail: await api.audits.getRun(id), type });
-        if (type === "loaded") setError(undefined);
+        const next = await api.audits.getRun(id);
+        if (request !== latest.current) return;
+        dispatch({ detail: next, type });
+        if (type === "loaded") setLoadError(undefined);
       } catch (cause) {
-        setError(messageFrom(cause));
+        if (request === latest.current)
+          setLoadError(errorMessage(cause, "Could not load the audit."));
       }
     },
     [id],
@@ -152,22 +166,27 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
     [fetchRun],
   );
 
-  useEffect(() => void load(), [load]);
+  useEffect(() => {
+    void load();
+    return () => {
+      latest.current += 1;
+    };
+  }, [load]);
+  return { detail, dispatch, load, loadError, refreshIssues, responses };
+}
+
+export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
+  const { detail, dispatch, load, loadError, refreshIssues, responses } =
+    useAuditRun(id);
+  const { busy, notice, run, ...action } = useAction("Could not update audit.");
+  const error = action.error ?? loadError;
 
   /** Runs a change, then reloads the audit so the page shows what was stored. */
   async function perform(change: () => Promise<unknown>, success: string) {
-    setBusy(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
+    await run(async () => {
       await change();
       await load();
-      setNotice(success);
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(false);
-    }
+    }, success);
   }
 
   async function save(status: "completed" | "in_progress") {
@@ -212,7 +231,13 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
         {notice && <Toast tone="success">{notice}</Toast>}
         <RunOverview audit={detail.audit} busy={busy} onDiscard={discard} />
         {error && (
-          <Button onClick={() => void load()} size="sm">
+          <Button
+            onClick={() => {
+              action.setError(undefined);
+              void load();
+            }}
+            size="sm"
+          >
             Reload audit
           </Button>
         )}
@@ -852,13 +877,12 @@ function useIssueDraft(auditId: string, item: AuditTemplateItem | undefined) {
   const [priority, setPriority] = useState<AuditIssuePriority>("medium");
   const [assignedTo, setAssignedTo] = useState("");
   const [images, setImages] = useState<File[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const { busy, error, run, setError } = useAction(
+    "Could not create the issue.",
+  );
 
   async function submit(onCreated: (warning?: string) => Promise<void>) {
-    setBusy(true);
-    setError(undefined);
-    try {
+    await run(async () => {
       const warning = await createIssueWithImages(
         auditId,
         {
@@ -871,10 +895,7 @@ function useIssueDraft(auditId: string, item: AuditTemplateItem | undefined) {
         images,
       );
       await onCreated(warning);
-    } catch (cause) {
-      setError(messageFrom(cause));
-      setBusy(false);
-    }
+    });
   }
 
   return {
@@ -1198,6 +1219,7 @@ function useIssueCardActions({
 }) {
   const [busy, setBusy] = useState(false);
 
+  // Errors go to the run page's single toast rather than useAction's state.
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
     onError(undefined);
@@ -1205,7 +1227,7 @@ function useIssueCardActions({
       await action();
       await onChange();
     } catch (cause) {
-      onError(messageFrom(cause));
+      onError(errorMessage(cause, "Could not update the issue."));
     } finally {
       setBusy(false);
     }
@@ -1226,7 +1248,8 @@ function useIssueCardActions({
           issue.id,
           selected,
         );
-        if (failure !== undefined) onError(messageFrom(failure));
+        if (failure !== undefined)
+          onError(errorMessage(failure, "Could not update audit."));
       });
     },
     busy,
@@ -1235,90 +1258,6 @@ function useIssueCardActions({
     update: (update: AuditIssueUpdate) =>
       run(() => api.audits.updateIssue(issue.id, update)),
   };
-}
-
-type IssueImageUploader = (issueId: string, file: File) => Promise<unknown>;
-
-/**
- * Creates the issue, then attaches its images. Returns a warning when some
- * images could not be attached; the issue exists either way.
- */
-export async function createIssueWithImages(
-  auditId: string,
-  issue: AuditIssueInput,
-  images: File[],
-  create = api.audits.createIssue,
-  upload: IssueImageUploader = api.audits.uploadIssueImage,
-) {
-  const { issueId } = await create(auditId, issue);
-  const failedUploads = (
-    await uploadIssueImagesSequentially(issueId, images, upload)
-  ).length;
-  return failedUploads > 0
-    ? `${failedUploads} image${failedUploads === 1 ? "" : "s"} could not be attached. The issue was created.`
-    : undefined;
-}
-
-type WaitForRetry = (milliseconds: number) => Promise<void>;
-
-const maxIssueImageUploadRetries = 9;
-const maxIssueImageRetryDelay = 10_000;
-
-export async function uploadIssueImagesSequentially(
-  issueId: string,
-  files: File[],
-  upload: IssueImageUploader = api.audits.uploadIssueImage,
-  wait: WaitForRetry = waitForRetry,
-) {
-  const failures: unknown[] = [];
-  // Keep at most one decoded upload in a Worker isolate for this browser. A
-  // user can select ten 10 MB files, so firing them all at once can exhaust the
-  // isolate's shared memory before image normalization completes.
-  for (const file of files) {
-    let retryAttempt = 0;
-    while (true) {
-      try {
-        await upload(issueId, file);
-        break;
-      } catch (retryCause) {
-        const retryDelay = issueImageRetryDelay(retryCause, retryAttempt);
-        if (
-          retryDelay === undefined ||
-          retryAttempt >= maxIssueImageUploadRetries
-        ) {
-          failures.push(retryCause);
-          break;
-        }
-        retryAttempt += 1;
-        await wait(retryDelay);
-      }
-    }
-  }
-  return failures;
-}
-
-function issueImageRetryDelay(cause: unknown, retryAttempt: number) {
-  if (!(cause instanceof ApiError) || cause.status !== 429) {
-    return undefined;
-  }
-  const header = cause.response.headers.get("retry-after");
-  if (header === null) return undefined;
-  const seconds = /^\d+$/.test(header) ? Number(header) : undefined;
-  const milliseconds =
-    seconds === undefined ? Date.parse(header) - Date.now() : seconds * 1_000;
-  if (!Number.isFinite(milliseconds)) return undefined;
-  const exponentialDelay = Math.min(
-    1_000 * 2 ** retryAttempt,
-    maxIssueImageRetryDelay,
-  );
-  return Math.min(
-    Math.max(milliseconds, exponentialDelay),
-    maxIssueImageRetryDelay,
-  );
-}
-
-function waitForRetry(milliseconds: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function IssueImages({
@@ -1486,60 +1425,8 @@ function isAnswered(response: string | undefined) {
   return Boolean(response?.trim());
 }
 
-function validateImageFiles(files: File[], availableSlots: number) {
-  if (files.length > availableSlots) {
-    return `You can attach ${Math.max(availableSlots, 0)} more image${availableSlots === 1 ? "" : "s"}.`;
-  }
-  if (
-    files.some(
-      (file) =>
-        file.type && !acceptedImageTypes.includes(file.type.toLowerCase()),
-    )
-  ) {
-    return "Images must be JPEG, PNG, GIF, or WebP files.";
-  }
-  if (files.some((file) => file.size > maxIssueImageBytes)) {
-    return "Images must be 10 MB or smaller.";
-  }
-  return files;
-}
-
-export function appendIssueImageSelection(
-  existingFiles: File[],
-  selectedFiles: File[],
-) {
-  const identities = new Set(existingFiles.map(issueImageSelectionKey));
-  const additions = selectedFiles.filter((file) => {
-    const identity = issueImageSelectionKey(file);
-    if (identities.has(identity)) return false;
-    identities.add(identity);
-    return true;
-  });
-  const validated = validateImageFiles(
-    additions,
-    maxIssueImages - existingFiles.length,
-  );
-  return typeof validated === "string"
-    ? validated
-    : [...existingFiles, ...validated];
-}
-
-function issueImageSelectionKey(file: File) {
-  return JSON.stringify([
-    file.name,
-    file.size,
-    file.lastModified,
-    file.type,
-    file.webkitRelativePath,
-  ]);
-}
-
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
     new Date(value),
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not update audit.";
 }

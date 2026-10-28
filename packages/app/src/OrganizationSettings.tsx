@@ -11,9 +11,10 @@ import {
   PageHeader,
   Toast,
 } from "@balebase/ui/react";
-import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
+import { type FormEvent, type MouseEvent, useState } from "react";
 import { api } from "./apiClient";
 import { authClient } from "./authClient";
+import { throwIfRefused } from "./errors";
 import { OrganizationApiKeys } from "./OrganizationApiKeys";
 import { OrganizationBilling } from "./OrganizationBilling";
 import { OrganizationAccessSettings } from "./OrganizationGroups";
@@ -28,6 +29,7 @@ import {
   organizationSettingsPage,
   type WorkspaceOrganization,
 } from "./organizationState";
+import { useAction } from "./useAction";
 
 type OrganizationGeneralAction = "delete" | "leave" | "save";
 
@@ -298,73 +300,70 @@ function useOrganizationGeneralActions(
   onWorkspaceChanged: () => Promise<void>,
   onNavigate: (pathname: string) => void,
 ) {
-  const [name, setName] = useState(organization.name);
+  // Follows the saved name until the person edits it.
+  const [draft, setDraft] = useState<string>();
+  const name = draft ?? organization.name;
   const [action, setAction] = useState<OrganizationGeneralAction>();
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
-  useEffect(() => setName(organization.name), [organization.name]);
-  const start = (nextAction: OrganizationGeneralAction) => {
-    setAction(nextAction);
-    setError(undefined);
-    setNotice(undefined);
-  };
+  const { error, notice, run } = useAction(
+    "Could not update your organization.",
+  );
+  async function perform(
+    next: OrganizationGeneralAction,
+    work: () => Promise<void>,
+    success?: string,
+  ) {
+    setAction(next);
+    const done = await run(work, success);
+    setAction(undefined);
+    return done;
+  }
   const save = async (event: FormEvent) => {
     event.preventDefault();
     const nextName = name.trim();
     if (!nextName || nextName === organization.name) return;
-    start("save");
-    try {
-      const result = await authClient.organization.update({
-        data: { name: nextName },
-        organizationId: organization.id,
-      });
-      if (result.error) {
-        throw new Error(
-          result.error.message ?? "Could not update your organization.",
-        );
-      }
-      setNotice("Organization name updated.");
-      await onWorkspaceChanged();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setAction(undefined);
-    }
+    const saved = await perform(
+      "save",
+      async () => {
+        const { error } = await authClient.organization.update({
+          data: { name: nextName },
+          organizationId: organization.id,
+        });
+        throwIfRefused(error, "Could not update your organization.");
+        await onWorkspaceChanged();
+      },
+      "Organization name updated.",
+    );
+    if (saved) setDraft(undefined);
   };
   const leave = async () => {
     if (!canLeave) return;
     if (!(await confirmLeave(organization.name))) return;
-    start("leave");
-    try {
-      const result = await authClient.organization.leave({
+    await perform("leave", async () => {
+      const { error } = await authClient.organization.leave({
         organizationId: organization.id,
       });
-      if (result.error) {
-        throw new Error(
-          result.error.message ?? "Could not leave this organization.",
-        );
-      }
+      throwIfRefused(error, "Could not leave this organization.");
       await onWorkspaceChanged();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setAction(undefined);
-    }
+    });
   };
   const remove = async () => {
     if (!(await confirmOrganizationDeletion(organization.name))) return;
-    start("delete");
-    try {
+    await perform("delete", async () => {
       await api.organizationSettings.deleteCurrent();
       await onWorkspaceChanged();
       onNavigate("/");
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setAction(undefined);
-    }
+    });
   };
-  return { action, error, leave, name, notice, remove, save, setName };
+  return {
+    action,
+    error,
+    leave,
+    name,
+    notice,
+    remove,
+    save,
+    setName: setDraft,
+  };
 }
 
 function OrganizationDetailsCard({
@@ -531,12 +530,6 @@ function handleNavigation(
   }
   event.preventDefault();
   onNavigate(pathname);
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not update your organization.";
 }
 
 function confirmLeave(name: string) {

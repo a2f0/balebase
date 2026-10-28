@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { authClient } from "./authClient";
+import { throwIfRefused } from "./errors";
 import { lockOfflineWorkspace } from "./offlineStore";
 
 export interface AccountSession {
@@ -74,7 +75,7 @@ export function useAccountSessions(
     const result = await authClient.multiSession.setActive({
       sessionToken: token,
     });
-    throwForAccountError(result.error, "Could not switch accounts.");
+    throwIfRefused(result.error, "Could not switch accounts.");
     lockOfflineWorkspace();
     await refetchSession();
   }
@@ -87,9 +88,9 @@ export function useAccountSessions(
     });
     if (isInvalidMultiSessionToken(result.error)) {
       const fallback = await authClient.signOut();
-      throwForAccountError(fallback.error, "Could not sign out.");
+      throwIfRefused(fallback.error, "Could not sign out.");
     } else {
-      throwForAccountError(result.error, "Could not sign out.");
+      throwIfRefused(result.error, "Could not sign out.");
     }
     // Invalidate preparations started while revocation was still in flight.
     lockOfflineWorkspace();
@@ -112,11 +113,4 @@ export function isInvalidMultiSessionToken(error: unknown) {
     "code" in error &&
     error.code === "INVALID_SESSION_TOKEN"
   );
-}
-
-function throwForAccountError(
-  error: { message?: string | undefined } | null,
-  fallback: string,
-) {
-  if (error) throw new Error(error.message ?? fallback);
 }

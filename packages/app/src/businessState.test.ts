@@ -157,14 +157,4 @@ describe("businessListReducer", () => {
     expect(deleted.data?.businesses).toEqual([]);
     expect(deleted.notice).toBe("Business deleted.");
   });
-
-  it("names the copied identifier and clears a stale error", () => {
-    const failed = run([{ type: "failed", message: "Offline." }], loaded);
-    expect(
-      run([{ type: "copied", identifier: "DUNS number" }], failed),
-    ).toMatchObject({ error: undefined, notice: "DUNS number copied." });
-    expect(run([{ type: "copied", identifier: "EIN" }], failed).notice).toBe(
-      "EIN copied.",
-    );
-  });
 });

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { ApiError } from "@balebase/api-client";
 import type { AuditTemplate } from "@balebase/validators/audits";
+import { listActivity } from "./activitySource";
+import { api } from "./apiClient";
 import {
   appendIssueImageSelection,
   uploadIssueImagesSequentially,
-} from "./AuditRunPage";
-import { listActivity } from "./activitySource";
-import { api } from "./apiClient";
+} from "./auditIssueImages";
 import { apiUrl } from "./config";
 
 describe("audit template API", () => {
