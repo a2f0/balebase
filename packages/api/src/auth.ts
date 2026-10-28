@@ -12,11 +12,8 @@ import {
   organization,
   twoFactor,
 } from "better-auth/plugins";
-import {
-  organizationInvitationLimit,
-  organizationSeatLimit,
-  syncOrganizationSeats,
-} from "./billing";
+import { organizationPlanLimits } from "./billingEntitlements";
+import { syncOrganizationSeats } from "./billingSeats";
 import {
   assignAcceptedInvitationRequirements,
   assignRenewedInvitationRequirements,
@@ -205,20 +202,10 @@ function configuredOrganizationPlugin(env: Bindings, waitUntil: WaitUntil) {
     cancelPendingInvitationsOnReInvite: true,
     disableOrganizationDeletion: true,
     invitationExpiresIn: 60 * 60 * 48,
-    invitationLimit: ({ organization }) =>
-      organizationInvitationLimit(
-        env.DB,
-        organization.id,
-        env.STRIPE_PRO_PRICE_ID,
-        env.STRIPE_PRO_LEGACY_PRICE_IDS,
-      ),
-    membershipLimit: (_user, organization) =>
-      organizationSeatLimit(
-        env.DB,
-        organization.id,
-        env.STRIPE_PRO_PRICE_ID,
-        env.STRIPE_PRO_LEGACY_PRICE_IDS,
-      ),
+    invitationLimit: async ({ organization }) =>
+      (await organizationPlanLimits(env, organization.id)).invitations,
+    membershipLimit: async (_user, organization) =>
+      (await organizationPlanLimits(env, organization.id)).seats,
     organizationHooks: {
       afterCreateInvitation: async ({ invitation, organization }) => {
         await assignRenewedInvitationRequirements(

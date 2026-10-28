@@ -4,11 +4,19 @@ import type { ApiEnv } from "./authMiddleware";
 import { maxFilenameBytes, normalizeFilename } from "./filenames";
 import { findLibraryFolder } from "./libraryFolders";
 import { respond } from "./respond";
-import type { StoredObjectRow } from "./types";
+import {
+  readBoundedForm,
+  storedDownload,
+  trackedPut,
+  uploadExpired,
+  uploadStillQueued,
+} from "./storage";
+import type { Bindings, StoredObjectRow } from "./types";
 import { toStoredObject } from "./types";
 
 const objects = new Hono<ApiEnv>();
 const maxUploadBytes = 25 * 1024 * 1024;
+const uploadTooLarge = "Files must be 25 MB or smaller.";
 const maxR2ObjectKeyBytes = 1_024;
 
 // Lists one folder's documents, or the documents at the library root.
@@ -37,20 +45,21 @@ objects.get("/", async (context) => {
 });
 
 objects.post("/", async (context) => {
-  const body = (await context.req.parseBody()) as {
-    file?: File | string;
-    folderId?: File | string;
-  };
-  const file = body.file;
+  const form = await readBoundedForm(context.req.raw, maxUploadBytes);
+  if (form === "too_large") {
+    return context.json({ error: uploadTooLarge }, 413);
+  }
+  const file = form?.get("file");
+  const folderField = form?.get("folderId");
   const folderId =
-    typeof body.folderId === "string" && body.folderId ? body.folderId : null;
+    typeof folderField === "string" && folderField ? folderField : null;
 
   if (!(file instanceof File)) {
     return context.json({ error: "A multipart file field is required." }, 400);
   }
 
   if (file.size > maxUploadBytes) {
-    return context.json({ error: "Files must be 25 MB or smaller." }, 413);
+    return context.json({ error: uploadTooLarge }, 413);
   }
 
   const id = crypto.randomUUID();
@@ -79,33 +88,17 @@ objects.post("/", async (context) => {
   const contentType = file.type || "application/octet-stream";
   const createdAt = new Date().toISOString();
 
-  await context.env.STORAGE.put(objectKey, file, {
-    httpMetadata: { contentType },
-    customMetadata: { filename, organizationId },
+  const stored = await storeLibraryObject(context.env, file, {
+    content_type: contentType,
+    created_at: createdAt,
+    filename,
+    folder_id: folderId,
+    id,
+    object_key: objectKey,
+    organization_id: organizationId,
+    size: file.size,
   });
-
-  try {
-    await context.env.DB.prepare(
-      `INSERT INTO objects
-       (id, organization_id, object_key, filename, content_type, size,
-        created_at, kind, folder_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'library', ?)`,
-    )
-      .bind(
-        id,
-        organizationId,
-        objectKey,
-        filename,
-        contentType,
-        file.size,
-        createdAt,
-        folderId,
-      )
-      .run();
-  } catch (error) {
-    await context.env.STORAGE.delete(objectKey);
-    throw error;
-  }
+  if (!stored) return context.json({ error: uploadExpired }, 409);
 
   return respond(
     context,
@@ -135,23 +128,11 @@ objects.get("/:id", async (context) => {
     return context.json({ error: "Object not found." }, 404);
   }
 
-  const object = await context.env.STORAGE.get(row.object_key);
-  if (!object) {
-    return context.json({ error: "Object data not found." }, 404);
-  }
-
-  const headers = new Headers();
-  object.writeHttpMetadata(headers);
-  const encodedFilename = encodeURIComponent(row.filename).replaceAll(
-    "'",
-    "%27",
-  );
-  headers.set(
-    "content-disposition",
-    `attachment; filename="download"; filename*=UTF-8''${encodedFilename}`,
-  );
-  headers.set("etag", object.httpEtag);
-  return new Response(object.body, { headers });
+  const download = await storedDownload(context.env.STORAGE, row.object_key, {
+    fallbackFilename: "download",
+    filename: row.filename,
+  });
+  return download ?? context.json({ error: "Object data not found." }, 404);
 });
 
 // Moves a document into a folder, or back to the library root with null.
@@ -208,6 +189,55 @@ objects.delete("/:id", async (context) => {
 
   return context.body(null, 204);
 });
+
+async function storeLibraryObject(
+  environment: Pick<Bindings, "DB" | "STORAGE">,
+  file: File,
+  row: StoredObjectRow & { organization_id: string },
+) {
+  await trackedPut(
+    environment,
+    {
+      cleanupId: `library-upload:${row.id}`,
+      key: row.object_key,
+      organizationId: row.organization_id,
+    },
+    file,
+    {
+      httpMetadata: { contentType: row.content_type },
+      customMetadata: {
+        filename: row.filename,
+        organizationId: row.organization_id,
+      },
+    },
+  );
+  try {
+    const inserted = await environment.DB.prepare(
+      `INSERT INTO objects
+       (id, organization_id, object_key, filename, content_type, size,
+        created_at, kind, folder_id)
+       SELECT ?, ?, ?, ?, ?, ?, ?, 'library', ? WHERE ${uploadStillQueued}`,
+    )
+      .bind(
+        row.id,
+        row.organization_id,
+        row.object_key,
+        row.filename,
+        row.content_type,
+        row.size,
+        row.created_at,
+        row.folder_id,
+        row.object_key,
+      )
+      .run();
+    if (inserted.meta.changes) return true;
+  } catch (error) {
+    await environment.STORAGE.delete(row.object_key);
+    throw error;
+  }
+  await environment.STORAGE.delete(row.object_key);
+  return false;
+}
 
 async function findObject(
   database: D1Database,

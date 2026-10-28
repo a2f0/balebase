@@ -33,10 +33,17 @@ function unavailable<T extends object>(name: string) {
   });
 }
 
-/** An R2 bucket backed by a map, for routes that store and serve objects. */
+/**
+ * An R2 bucket backed by a map, for routes that store and serve objects.
+ * `afterPut` runs once the bytes are stored; throwing from it models a write
+ * that landed but whose response was lost.
+ */
 export function memoryStorage(
   stored = new Map<string, Uint8Array>(),
-  hooks: { beforePut?: (key: string) => void | Promise<void> } = {},
+  hooks: {
+    afterPut?: (key: string) => void | Promise<void>;
+    beforePut?: (key: string) => void | Promise<void>;
+  } = {},
 ) {
   const bucket = {
     delete: async (keys: string | string[]) => {
@@ -61,6 +68,7 @@ export function memoryStorage(
     put: async (key: string, value: unknown) => {
       await hooks.beforePut?.(key);
       stored.set(key, await toBytes(value));
+      await hooks.afterPut?.(key);
       return { key };
     },
   };

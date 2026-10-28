@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { passwordSignInInput, requiresTwoFactor } from "./AuthPage";
+import { passwordSignInInput, requiresTwoFactor } from "./authActions";
 
 describe("MFA sign-in response", () => {
   it("continues to the second factor only for an explicit MFA redirect", () => {

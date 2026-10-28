@@ -1,5 +1,10 @@
 import type { AuditTemplate } from "@balebase/validators/audits";
+import {
+  issueImageProblem,
+  maxIssueImages,
+} from "@balebase/validators/issueRules";
 import type { IssueInput } from "@balebase/validators/issues";
+import { progressFor } from "./auditProgress";
 import {
   changeOfflineWorkspace,
   type OfflineJob,
@@ -48,11 +53,7 @@ export function queueOfflineAudit(key: string, id: string) {
     const audit = workspace.audits.find((entry) => entry.id === id);
     if (!audit || audit.queued) return workspace;
     if (
-      !audit.template.definition.sections.every((section) =>
-        section.items.every(
-          (item) => !item.required || audit.responses[item.id]?.trim(),
-        ),
-      )
+      progressFor(audit.template.definition, audit.responses).requiredLeft > 0
     ) {
       throw new Error("Complete every required item first.");
     }
@@ -82,19 +83,8 @@ export async function createOfflineIssue(
   target?: { auditId: string; itemId: string },
 ) {
   if (!input.title.trim()) throw new Error("Enter an issue title.");
-  if (files.length > 10) throw new Error("Issues are limited to ten images.");
-  if (
-    files.some(
-      (file) =>
-        !["image/jpeg", "image/png", "image/webp", "image/gif"].includes(
-          file.type,
-        ) ||
-        file.size > 10 * 1024 * 1024 ||
-        !file.size,
-    )
-  ) {
-    throw new Error("Choose JPEG, PNG, GIF, or WebP images up to 10 MB each.");
-  }
+  const imageProblem = issueImageProblem(files, maxIssueImages);
+  if (imageProblem) throw new Error(imageProblem);
   const id = crypto.randomUUID();
   const images = files.map((file) => ({
     id: crypto.randomUUID(),

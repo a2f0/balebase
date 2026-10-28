@@ -95,13 +95,14 @@ class TestStatement {
       string,
       unknown
     >[];
-    const meta = this.database
-      .query("SELECT changes() AS changes, last_insert_rowid() AS last_row_id")
-      .get() as { changes: number; last_row_id: number };
-    // changes() keeps the previous write's count across reads.
-    if (totalChanges(this.database) === before) meta.changes = 0;
+    const { last_row_id } = this.database
+      .query("SELECT last_insert_rowid() AS last_row_id")
+      .get() as { last_row_id: number };
+    // D1 counts rows that triggers write, so a guarded write is checked
+    // against zero rather than one.
+    const changes = totalChanges(this.database) - before;
     return {
-      meta: { ...meta, changed_db: meta.changes > 0, duration: 0 },
+      meta: { changed_db: changes > 0, changes, duration: 0, last_row_id },
       results,
       success: true,
     };

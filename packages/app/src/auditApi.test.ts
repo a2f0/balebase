@@ -216,6 +216,22 @@ describe("audit issue API", () => {
     );
   });
 
+  it("selects untyped images for the API to check, but not empty ones", () => {
+    const untyped = new File([new Uint8Array([1])], "photo");
+    const uppercase = new File([new Uint8Array([2])], "photo.png", {
+      type: "IMAGE/PNG",
+    });
+    expect(appendIssueImageSelection([], [untyped, uppercase])).toEqual([
+      untyped,
+      uppercase,
+    ]);
+
+    const empty = new File([], "empty.png", { type: "image/png" });
+    expect(appendIssueImageSelection([untyped], [empty])).toBe(
+      "Images must not be empty.",
+    );
+  });
+
   it("updates assignees and uploads and removes images", async () => {
     const originalFetch = globalThis.fetch;
     const requests: Array<{

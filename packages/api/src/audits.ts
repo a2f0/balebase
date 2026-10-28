@@ -47,7 +47,10 @@ import {
   toTemplate,
 } from "./auditTemplates";
 import type { ApiEnv } from "./authMiddleware";
-import { freeFormTemplateLimit, organizationTemplateLimit } from "./billing";
+import {
+  freeFormTemplateLimit,
+  organizationPlanLimits,
+} from "./billingEntitlements";
 import { cursorPage, decodeCursor, encodeCursor } from "./cursorPagination";
 import type { IssueField } from "./issueRecords";
 import { isRecord, validText } from "./jsonInput";
@@ -104,11 +107,9 @@ audits.post("/templates", async (context) => {
     return context.json({ error: "Template scope is invalid." }, 400);
   }
   const organizationId = context.get("organizationId");
-  const templateLimit = await organizationTemplateLimit(
-    context.env.DB,
+  const { formTemplates: templateLimit } = await organizationPlanLimits(
+    context.env,
     organizationId,
-    context.env.STRIPE_PRO_PRICE_ID,
-    context.env.STRIPE_PRO_LEGACY_PRICE_IDS,
   );
   const template = await createTemplate(context.env.DB, {
     actor: requestActor(context),
@@ -156,12 +157,8 @@ audits.post("/templates/:id/copies", async (context) => {
     requestActor(context),
     input,
     new Date().toISOString(),
-    await organizationTemplateLimit(
-      context.env.DB,
-      context.get("organizationId"),
-      context.env.STRIPE_PRO_PRICE_ID,
-      context.env.STRIPE_PRO_LEGACY_PRICE_IDS,
-    ),
+    (await organizationPlanLimits(context.env, context.get("organizationId")))
+      .formTemplates,
   );
   if (!saved) {
     return context.json(

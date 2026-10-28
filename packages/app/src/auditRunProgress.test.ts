@@ -3,7 +3,7 @@ import type {
   AuditDefinition,
   AuditTemplateItem,
 } from "@balebase/validators/audits";
-import { progressFor } from "./AuditRunPage";
+import { progressFor } from "./auditProgress";
 
 function item(id: string, required: boolean): AuditTemplateItem {
   return { id, prompt: `Question ${id}`, required, responseType: "check" };
