@@ -15,8 +15,15 @@ import type {
   FinanceConnectionAccount,
   FinanceConnectionDetail,
 } from "@balebase/validators/finance";
-import { useEffect, useState } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 import { connectionTone } from "./FinanceAccounts";
 import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
 import { FinanceSyncSettings } from "./FinanceSyncSettings";
@@ -33,6 +40,8 @@ import {
 } from "./financeFormat";
 import { financeAccountPath } from "./financePages";
 import { countLabel, formatLabel } from "./labels";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 import { handleNavigation } from "./workspacePaths";
 
 type Connection = FinanceConnectionDetail["connection"];
@@ -44,7 +53,10 @@ export function FinanceConnectionPage({
   id: string;
   onNavigate: (path: string) => void;
 }) {
-  const { actions, busy, data, error, notice } = useConnection(id, onNavigate);
+  const { actions, busy, data, error, notice, setData } = useConnection(
+    id,
+    onNavigate,
+  );
   return (
     <Page>
       <PageHeader
@@ -75,6 +87,15 @@ export function FinanceConnectionPage({
             <FinanceSyncSettings
               id={id}
               dailySync={data.connection.dailySync}
+              onSaved={(dailySync) =>
+                setData(
+                  (current) =>
+                    current && {
+                      ...current,
+                      connection: { ...current.connection, dailySync },
+                    },
+                )
+              }
               status={data.connection.status}
             />
             <ConnectionAccounts
@@ -255,83 +276,30 @@ function ConnectionAccounts({
 }
 
 function useConnection(id: string, onNavigate: (path: string) => void) {
-  const [data, setData] = useState<FinanceConnectionDetail>();
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const pending = syncPending(data?.connection.syncJob?.status);
-  useEffect(() => {
-    let active = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    async function load() {
-      try {
-        const next = await api.finance.connection(id);
-        if (active) {
-          setData(next);
-          setError(undefined);
-        }
-      } catch (cause) {
-        if (active) setError(message(cause));
-      }
-    }
-    async function poll() {
-      try {
-        const next = await api.finance.syncStatus(id);
-        if (!active) return;
-        if (syncPending(next.connection.syncJob?.status)) {
-          setData(
-            (current) =>
-              current && {
-                ...current,
-                connection: { ...current.connection, ...next.connection },
-              },
-          );
-          setError(undefined);
-        } else {
-          // Refresh account balances and history only when the job finishes.
-          await load();
-        }
-      } catch (cause) {
-        if (active) setError(message(cause));
-      }
-      if (active) timer = setTimeout(() => void poll(), 3000);
-    }
-    if (pending) timer = setTimeout(() => void poll(), 3000);
-    else void load();
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [id, pending]);
-  async function run(action: () => Promise<string>) {
-    setBusy(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      setNotice(await action());
-    } catch (cause) {
-      setError(message(cause));
-    }
+  const loaded = useLoad(
+    useCallback(() => api.finance.connection(id), [id]),
+    "Could not load connection.",
+  );
+  const { data, reload, setData } = loaded;
+  const pollError = useSyncStatusPolling(
+    id,
+    syncPending(data?.connection.syncJob?.status),
+    setData,
+    reload,
+  );
+  const action = useAction("Could not update the connection.");
+  async function run(work: () => Promise<string>) {
+    await action.run(work, (notice) => notice);
     // A failed sync records the connection's error, so reload either way.
-    try {
-      setData(await api.finance.connection(id));
-    } catch (cause) {
-      setError((current) => current ?? message(cause));
-    }
-    setBusy(false);
+    await reload();
   }
   const actions = {
     deleteData: async () => {
       if (!data || !(await confirmDataDeletion(data.connection))) return;
-      setBusy(true);
-      setError(undefined);
-      try {
+      await action.run(async () => {
         await api.finance.deleteConnectionData(id);
         onNavigate("/finance/connections");
-      } catch (cause) {
-        setError(message(cause));
-        setBusy(false);
-      }
+      });
     },
     disconnect: async () => {
       if (!data || !(await confirmDisconnect(data.connection))) return;
@@ -342,7 +310,56 @@ function useConnection(id: string, onNavigate: (path: string) => void) {
     },
     sync: () => run(async () => syncNotice(await api.finance.startSync(id))),
   };
-  return { actions, busy, data, error, notice };
+  return {
+    actions,
+    busy: action.busy || loaded.loading,
+    data,
+    error: action.error ?? pollError ?? loaded.error,
+    notice: action.notice,
+    setData,
+  };
+}
+
+/** Polls a running sync; balances and history reload once it finishes. */
+function useSyncStatusPolling(
+  id: string,
+  pending: boolean,
+  setData: Dispatch<SetStateAction<FinanceConnectionDetail | undefined>>,
+  reload: () => Promise<void>,
+) {
+  const [error, setError] = useState<string>();
+  useEffect(() => {
+    if (!pending) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function poll() {
+      try {
+        const next = await api.finance.syncStatus(id);
+        if (!active) return;
+        setError(undefined);
+        if (syncPending(next.connection.syncJob?.status)) {
+          setData(
+            (current) =>
+              current && {
+                ...current,
+                connection: { ...current.connection, ...next.connection },
+              },
+          );
+        } else {
+          await reload();
+        }
+      } catch (cause) {
+        if (active) setError(errorMessage(cause, "Could not load connection."));
+      }
+      if (active) timer = setTimeout(() => void poll(), 3000);
+    }
+    timer = setTimeout(() => void poll(), 3000);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [id, pending, reload, setData]);
+  return error;
 }
 
 function sourceFields({
@@ -375,8 +392,4 @@ function accountMeta(account: FinanceConnectionAccount) {
   ]
     .filter(Boolean)
     .join(" · ");
-}
-
-function message(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not load connection.";
 }

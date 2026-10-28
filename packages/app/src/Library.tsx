@@ -29,6 +29,7 @@ import {
 } from "react";
 import { ApiDownload } from "./ApiDownload";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 import { LinkedEmailList } from "./LinkedEmailList";
 import { countLabel, formatBytes } from "./labels";
 import { useMenuDismissal } from "./useMenuDismissal";
@@ -171,7 +172,8 @@ function useLibraryData(folderId: string | undefined) {
       setObjects(nextObjects);
       setDetail(nextDetail);
     } catch (cause) {
-      if (requestId === requestSequence.current) setError(messageFrom(cause));
+      if (requestId === requestSequence.current)
+        setError(errorMessage(cause, "Something went wrong."));
     }
   }, [folderId]);
 
@@ -213,7 +215,7 @@ function useLibraryActions(
       await refresh();
       return true;
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Something went wrong."));
       return false;
     } finally {
       setBusy(false);
@@ -230,7 +232,7 @@ function useLibraryActions(
         await api.libraryFolders.delete(detail.folder.id);
         onNavigate(libraryPath());
       } catch (cause) {
-        setError(messageFrom(cause));
+        setError(errorMessage(cause, "Something went wrong."));
       } finally {
         setBusy(false);
       }
@@ -694,7 +696,7 @@ function VerificationStatus({
       await onResend();
       setNotice("Verification email sent. Check your inbox.");
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Something went wrong."));
     } finally {
       setBusy(false);
     }
@@ -754,10 +756,6 @@ function formatDate(value: string) {
     day: "numeric",
     month: "short",
   }).format(new Date(value));
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Something went wrong.";
 }
 
 function confirmFolderDeletion({ emailCount, fileCount, name }: LibraryFolder) {

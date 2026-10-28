@@ -7,36 +7,25 @@ import {
   promptDialog,
 } from "@balebase/ui/react";
 import type { SigningField, SigningView } from "@balebase/validators/signing";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { ApiDownload } from "./ApiDownload";
 import { api } from "./apiClient";
 import { boxStyle, ContractPages } from "./ContractDocument";
 import { fieldTypeLabel, initialsFor } from "./contractFields";
 import { SignatureDialog } from "./SignatureDialog";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 
 /** The page a signer opens from their emailed link; needs no account. */
 export function SigningPage({ token }: { token: string }) {
-  const [view, setView] = useState<SigningView>();
-  const [error, setError] = useState<string>();
-  useEffect(() => {
-    let active = true;
-    api.signing
-      .get(token)
-      .then((result) => {
-        if (active) setView(result);
-      })
-      .catch((cause: unknown) => {
-        if (active)
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "This link could not be opened.",
-          );
-      });
-    return () => {
-      active = false;
-    };
-  }, [token]);
+  const {
+    data: view,
+    error,
+    setData: setView,
+  } = useLoad(
+    useCallback(() => api.signing.get(token), [token]),
+    "This link could not be opened.",
+  );
   return (
     <div className="signingShell">
       <header className="signingTopBar">
@@ -77,8 +66,7 @@ function useSigningSession(
   const [values, setValues] = useState<Record<string, string>>({});
   const [consent, setConsent] = useState(false);
   const [dialog, setDialog] = useState<"initials" | "signature" | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const action = useAction("Could not complete signing.");
   const remaining = view.fields.filter((field) => {
     if (field.type === "signature") return !signature;
     if (field.type === "initials") return !initials;
@@ -87,35 +75,25 @@ function useSigningSession(
     return false;
   }).length;
 
-  async function run(action: () => Promise<void>) {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await action();
+  const finishWith = (work: () => Promise<unknown>) =>
+    action.run(async () => {
+      await work();
       onFinished(await api.signing.get(token));
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Something went wrong.",
-      );
-      setBusy(false);
-    }
-  }
+    });
   return {
-    busy,
+    busy: action.busy,
     consent,
     decline: async () => {
       const reason = await askDeclineReason();
       if (reason === null) return;
-      void run(async () => {
-        await api.signing.decline(token, reason);
-      });
+      void finishWith(() => api.signing.decline(token, reason));
     },
     dialog,
-    error,
+    error: action.error,
     finish: () =>
-      run(async () => {
-        await api.signing.sign(token, { consent, initials, signature, values });
-      }),
+      finishWith(() =>
+        api.signing.sign(token, { consent, initials, signature, values }),
+      ),
     initials,
     remaining,
     setConsent,

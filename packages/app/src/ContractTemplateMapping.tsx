@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "./apiClient";
 import { boxStyle, ContractPages } from "./ContractDocument";
 import { fieldTypeLabel, localDate, recipientTone } from "./contractFields";
+import { useAction } from "./useAction";
 
 export function ContractTemplateMapping({
   template,
@@ -76,26 +77,20 @@ function useRoleMapping(
       roleKey: role.key,
     })),
   );
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const creator = useAction("Could not create the contract.");
   const creating = useRef(false);
   const mounted = useRef(true);
-  useEffect(() => {
-    onBusyChange(busy);
-  }, [busy, onBusyChange]);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      onBusyChange(false);
     };
-  }, [onBusyChange]);
+  }, []);
   async function create() {
     if (creating.current) return;
     creating.current = true;
-    setBusy(true);
-    setError(undefined);
-    try {
+    onBusyChange(true);
+    const created = await creator.run(async () => {
       const id = await api.contractTemplates.createContract(template.id, {
         dueDate: dueDate || null,
         recipients,
@@ -103,22 +98,17 @@ function useRoleMapping(
         version: template.version,
       });
       if (mounted.current) onCreated(id);
-    } catch (cause) {
-      if (!mounted.current) return;
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Could not create the contract.",
-      );
-      creating.current = false;
-      setBusy(false);
-    }
+    });
+    // A created contract keeps the page busy while it opens.
+    if (created) return;
+    creating.current = false;
+    onBusyChange(false);
   }
   return {
-    busy,
+    busy: creator.busy,
     create,
     dueDate,
-    error,
+    error: creator.error,
     recipients,
     setDueDate,
     setRecipients,

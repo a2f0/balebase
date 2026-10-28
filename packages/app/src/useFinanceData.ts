@@ -1,7 +1,8 @@
 import type { FinanceFilters } from "@balebase/api-client";
 import type { FinanceData } from "@balebase/validators/finance";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 import { syncPending } from "./financeConnectionActions";
 
 type CategoryRoute = Pick<FinanceFilters, "categorySlug" | "uncategorized">;
@@ -57,7 +58,7 @@ export function useFinanceData(route: CategoryRoute | null) {
       setData((current) => mergeFinancePage(current, next, cursor));
     } catch (cause) {
       if (id === requestId.current) {
-        setRequestError(financeLoadMessage(cause));
+        setRequestError(errorMessage(cause, "Could not load finances."));
       }
     } finally {
       if (id === requestId.current) {
@@ -180,22 +181,22 @@ function mergeTransactions(
   ];
 }
 
-function financeLoadMessage(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not load finances.";
-}
-
 function useSyncPolling(
   data: FinanceData | undefined,
   load: () => Promise<void>,
   busy: boolean,
 ) {
-  const pendingIds = JSON.stringify(
-    data?.connections
-      .filter((connection) => syncPending(connection.syncStatus))
-      .map((connection) => connection.id) ?? [],
+  const connections = data?.connections;
+  // Connections keep their identity until the next load, so polling restarts
+  // only when fresh data arrives.
+  const ids = useMemo(
+    () =>
+      connections
+        ?.filter((connection) => syncPending(connection.syncStatus))
+        .map((connection) => connection.id) ?? [],
+    [connections],
   );
   useEffect(() => {
-    const ids = JSON.parse(pendingIds) as string[];
     if (!ids.length || busy) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
@@ -222,5 +223,5 @@ function useSyncPolling(
       active = false;
       clearTimeout(timer);
     };
-  }, [pendingIds, load, busy]);
+  }, [ids, load, busy]);
 }

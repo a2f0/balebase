@@ -6,13 +6,11 @@ import {
   Select,
   Toast,
 } from "@balebase/ui/react";
-import type { EquipmentItem } from "@balebase/validators/equipment";
 import type { FinanceTransactionMatch } from "@balebase/validators/finance";
 import type {
   InboundEmailLink,
   InboundEmailLinkTarget,
 } from "@balebase/validators/inbox";
-import type { LibraryFolder } from "@balebase/validators/libraryFolders";
 import { type FormEvent, useEffect, useState } from "react";
 import { api } from "./apiClient";
 import {
@@ -20,7 +18,9 @@ import {
   formatTransactionDate,
 } from "./emailLinkDescription";
 import { equipmentName, equipmentTypeLabel } from "./equipmentLabels";
+import { errorMessage } from "./errors";
 import { formatMoney } from "./financeFormat";
+import { useLoad } from "./useLoad";
 import { equipmentPath, handleNavigation, libraryPath } from "./workspacePaths";
 
 type LinkTab = "equipment" | "folder" | "transaction";
@@ -59,7 +59,7 @@ export function EmailLinks({
       ]);
       setAdding(false);
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not update links."));
     }
   }
 
@@ -70,7 +70,7 @@ export function EmailLinks({
       await api.inbox.unlink(emailId, link.id);
       onChange((current) => current.filter(({ id }) => id !== link.id));
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not update links."));
     } finally {
       setWorkingId(undefined);
     }
@@ -224,15 +224,10 @@ function AddLinkPanel({
           Cancel
         </Button>
       </div>
-      {tab === "folder" && (
-        <FolderPicker
-          linkedIds={linkedIds}
-          onLink={onLink}
-          onNavigate={onNavigate}
-        />
-      )}
-      {tab === "equipment" && (
-        <EquipmentPicker
+      {tab !== "transaction" && (
+        <TargetPicker
+          key={tab}
+          kind={tab === "folder" ? folderPicker : equipmentPicker}
           linkedIds={linkedIds}
           onLink={onLink}
           onNavigate={onNavigate}
@@ -245,142 +240,97 @@ function AddLinkPanel({
   );
 }
 
-function EquipmentPicker({
-  linkedIds,
-  onLink,
-  onNavigate,
-}: {
-  linkedIds: Set<string>;
-  onLink: (target: InboundEmailLinkTarget) => Promise<void>;
-  onNavigate: (pathname: string) => void;
-}) {
-  const [equipment, setEquipment] = useState<EquipmentItem[]>();
-  const [equipmentId, setEquipmentId] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string>();
-  useEffect(() => {
-    let active = true;
-    api.equipment
-      .list()
-      .then((listing) => {
-        if (active) setEquipment(listing.equipment);
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(messageFrom(cause));
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-  const available = equipment?.filter(({ id }) => !linkedIds.has(id)) ?? [];
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!equipmentId) return;
-    setSaving(true);
-    await onLink({ targetId: equipmentId, targetType: "equipment" });
-    setSaving(false);
-  }
-
-  if (error) return <p className="fieldError">{error}</p>;
-  if (!equipment) return <p className="emailLinksEmpty">Loading equipment…</p>;
-  if (available.length === 0) {
-    return (
-      <div className="emailLinkPickerEmpty">
-        <p className="emailLinksEmpty">
-          {equipment.length
-            ? "This email is already linked to all of your equipment."
-            : "Your organization hasn’t added any equipment yet."}
-        </p>
-        <Button
-          icon="equipment"
-          onClick={() => onNavigate(equipmentPath())}
-          size="sm"
-        >
-          Open Equipment
-        </Button>
-      </div>
-    );
-  }
-  return (
-    <form
-      className="emailLinkFolderForm"
-      onSubmit={(event) => void submit(event)}
-    >
-      <Select
-        aria-label="Equipment"
-        className="inputSm"
-        onChange={(event) => setEquipmentId(event.target.value)}
-        value={equipmentId}
-      >
-        <option value="">Choose equipment…</option>
-        {available.map((item) => (
-          <option key={item.id} value={item.id}>
-            {equipmentTypeLabel(item.type)}: {equipmentName(item)}
-            {item.serialNumber ? ` · ${item.serialNumber}` : ""}
-            {item.assignee ? ` (${item.assignee.name})` : ""}
-          </option>
-        ))}
-      </Select>
-      <Button
-        busy={saving}
-        disabled={!equipmentId}
-        icon="link"
-        size="sm"
-        type="submit"
-        variant="primary"
-      >
-        Link
-      </Button>
-    </form>
-  );
+interface PickerKind {
+  allLinked: string;
+  empty: string;
+  icon: IconName;
+  label: string;
+  load: () => Promise<{ id: string; label: string }[]>;
+  loadFailed: string;
+  loading: string;
+  open: string;
+  path: () => string;
+  placeholder: string;
+  targetType: "equipment" | "library_folder";
 }
 
-function FolderPicker({
+const equipmentPicker: PickerKind = {
+  allLinked: "This email is already linked to all of your equipment.",
+  empty: "Your organization hasn’t added any equipment yet.",
+  icon: "equipment",
+  label: "Equipment",
+  load: async () =>
+    (await api.equipment.list()).equipment.map((item) => ({
+      id: item.id,
+      label: `${equipmentTypeLabel(item.type)}: ${equipmentName(item)}${
+        item.serialNumber ? ` · ${item.serialNumber}` : ""
+      }${item.assignee ? ` (${item.assignee.name})` : ""}`,
+    })),
+  loadFailed: "Could not load equipment.",
+  loading: "Loading equipment…",
+  open: "Open Equipment",
+  path: equipmentPath,
+  placeholder: "Choose equipment…",
+  targetType: "equipment",
+};
+
+const folderPicker: PickerKind = {
+  allLinked: "This email is already linked to every folder.",
+  empty: "Your library doesn’t have any folders yet.",
+  icon: "folderAdd",
+  label: "Folder",
+  load: async () =>
+    (await api.libraryFolders.list()).map(({ id, name }) => ({
+      id,
+      label: name,
+    })),
+  loadFailed: "Could not load folders.",
+  loading: "Loading folders…",
+  open: "Open the Library",
+  path: libraryPath,
+  placeholder: "Choose a folder…",
+  targetType: "library_folder",
+};
+
+/** Links the email to one equipment item or library folder. */
+function TargetPicker({
+  kind,
   linkedIds,
   onLink,
   onNavigate,
 }: {
+  kind: PickerKind;
   linkedIds: Set<string>;
   onLink: (target: InboundEmailLinkTarget) => Promise<void>;
   onNavigate: (pathname: string) => void;
 }) {
-  const [folders, setFolders] = useState<LibraryFolder[]>();
-  const [folderId, setFolderId] = useState("");
+  const { data: options, error } = useLoad(kind.load, kind.loadFailed);
+  const [targetId, setTargetId] = useState("");
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string>();
-  useEffect(() => {
-    api.libraryFolders
-      .list()
-      .then(setFolders)
-      .catch((cause: unknown) => setError(messageFrom(cause)));
-  }, []);
-  const available = folders?.filter(({ id }) => !linkedIds.has(id)) ?? [];
+  const available = options?.filter(({ id }) => !linkedIds.has(id)) ?? [];
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!folderId) return;
+    if (!targetId) return;
     setSaving(true);
-    await onLink({ targetId: folderId, targetType: "library_folder" });
+    await onLink({ targetId, targetType: kind.targetType });
     setSaving(false);
   }
 
   if (error) return <p className="fieldError">{error}</p>;
-  if (!folders) return <p className="emailLinksEmpty">Loading folders…</p>;
+  if (!options) return <p className="emailLinksEmpty">{kind.loading}</p>;
   if (available.length === 0) {
     return (
       <div className="emailLinkPickerEmpty">
         <p className="emailLinksEmpty">
-          {folders.length
-            ? "This email is already linked to every folder."
-            : "Your library doesn’t have any folders yet."}
+          {options.length ? kind.allLinked : kind.empty}
         </p>
         <Button
-          icon="folderAdd"
-          onClick={() => onNavigate(libraryPath())}
+          icon={kind.icon}
+          onClick={() => onNavigate(kind.path())}
           size="sm"
         >
-          Open the Library
+          {kind.open}
         </Button>
       </div>
     );
@@ -391,21 +341,21 @@ function FolderPicker({
       onSubmit={(event) => void submit(event)}
     >
       <Select
-        aria-label="Folder"
+        aria-label={kind.label}
         className="inputSm"
-        onChange={(event) => setFolderId(event.target.value)}
-        value={folderId}
+        onChange={(event) => setTargetId(event.target.value)}
+        value={targetId}
       >
-        <option value="">Choose a folder…</option>
-        {available.map((folder) => (
-          <option key={folder.id} value={folder.id}>
-            {folder.name}
+        <option value="">{kind.placeholder}</option>
+        {available.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.label}
           </option>
         ))}
       </Select>
       <Button
         busy={saving}
-        disabled={!folderId}
+        disabled={!targetId}
         icon="link"
         size="sm"
         type="submit"
@@ -439,7 +389,8 @@ function TransactionPicker({
           setMatches(results);
         })
         .catch((cause: unknown) => {
-          if (active) setError(messageFrom(cause));
+          if (active)
+            setError(errorMessage(cause, "Could not search transactions."));
         });
     }, 250);
     return () => {
@@ -512,8 +463,4 @@ function TransactionPicker({
       )}
     </div>
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not update links.";
 }

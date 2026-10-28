@@ -1,6 +1,7 @@
 import type { OrganizationCapability } from "@balebase/validators/organizationGroups";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 import {
   type OrganizationSeatRequirement,
   type OrganizationTwoFactorRequirement,
@@ -60,11 +61,7 @@ export function useOrganizationAccess(
           ? { organizationId, seat, twoFactor, userId }
           : undefined,
       );
-      setLoadError(
-        cause instanceof Error
-          ? cause.message
-          : "Could not load organization access.",
-      );
+      setLoadError(errorMessage(cause, "Could not load organization access."));
       setState({
         capabilities: [],
         memberRole: "",

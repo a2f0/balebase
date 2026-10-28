@@ -27,13 +27,16 @@ const acme: Business = {
   zip: null,
 };
 
-function renderState(state: BusinessListState) {
+function renderState(state: BusinessListState, copied = false) {
   const noop = () => {};
   return renderToStaticMarkup(
     <BusinessListView
       {...state}
+      copyNotice={
+        copied ? { message: "EIN copied.", tone: "success" } : undefined
+      }
       onAddingChange={noop}
-      onCopied={noop}
+      onCopy={noop}
       onCreated={noop}
       onDeleted={noop}
       onError={noop}
@@ -60,9 +63,7 @@ it("business notification layout stays at the bottom without moving content", as
     data: { businesses: [{ ...acme, ein: "123456789" }], canManage: true },
   });
   const before = renderState(state);
-  const after = renderState(
-    businessListReducer(state, { type: "copied", identifier: "EIN" }),
-  );
+  const after = renderState(state, true);
   const styleRoot = fileURLToPath(
     new URL("../../ui/src/styles/", import.meta.url),
   );

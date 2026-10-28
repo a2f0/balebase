@@ -17,6 +17,7 @@ import {
 } from "react";
 import { AccountControl } from "./AccountControl";
 import type { AccountSession } from "./accountSessions";
+import { errorMessage } from "./errors";
 import type { WorkspaceOrganization } from "./organizationState";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { readSidebarWidth } from "./sidebarWidth";
@@ -379,7 +380,7 @@ function OrganizationSwitcher({
       try {
         await onOrganizationCreate(name);
       } catch (cause) {
-        setError(messageFrom(cause));
+        setError(errorMessage(cause, "Could not switch organizations."));
       } finally {
         setBusy(false);
       }
@@ -391,7 +392,7 @@ function OrganizationSwitcher({
     try {
       await onOrganizationChange(organizationId);
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not switch organizations."));
     } finally {
       setBusy(false);
     }
@@ -446,12 +447,6 @@ export function hasRole(
   return (
     roles?.split(",").some((role) => role.trim() === expectedRole) ?? false
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not switch organizations.";
 }
 
 function askOrganizationName() {

@@ -31,8 +31,9 @@ function renderState(state: BusinessListState) {
   return renderToStaticMarkup(
     <BusinessListView
       {...state}
+      copyNotice={undefined}
       onAddingChange={noop}
-      onCopied={noop}
+      onCopy={noop}
       onCreated={noop}
       onDeleted={noop}
       onError={noop}

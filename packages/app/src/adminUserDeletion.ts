@@ -3,6 +3,7 @@ import { confirmDialog } from "@balebase/ui/react";
 import type { AdminUser } from "@balebase/validators/adminUsers";
 import { useState } from "react";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 
 export function useAdminUserDeletion(reload: () => Promise<void>) {
   const [userId, setUserId] = useState<string>();
@@ -24,11 +25,7 @@ export function useAdminUserDeletion(reload: () => Promise<void>) {
       }
       await reload();
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Could not update user deletion.",
-      );
+      setError(errorMessage(cause, "Could not update user deletion."));
       if (cause instanceof ApiError && cause.status === 409) await reload();
     } finally {
       setUserId(undefined);

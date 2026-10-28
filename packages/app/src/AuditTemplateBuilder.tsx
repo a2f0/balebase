@@ -23,7 +23,8 @@ import type {
 import { type ReactNode, useEffect, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
 import { api } from "./apiClient";
-import { type ErrorNotice, ErrorToast, errorNotice } from "./BillingLink";
+import { ErrorToast } from "./ErrorToast";
+import { type ErrorNotice, errorNotice } from "./errors";
 import { GlobalAuditControls } from "./GlobalAuditControls";
 import { countLabel } from "./labels";
 import { globalAuditsPath } from "./organizationState";

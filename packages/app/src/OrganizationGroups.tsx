@@ -13,6 +13,7 @@ import type { OrganizationGroup } from "@balebase/validators/organizationGroups"
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 
 export function OrganizationAccessSettings({
   onAccessChanged,
@@ -33,7 +34,7 @@ export function OrganizationAccessSettings({
     try {
       setData(await api.organizationGroups.list());
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not update the group."));
     } finally {
       setLoading(false);
     }
@@ -101,7 +102,7 @@ function OrganizationGroups({
       setName("");
       await onChanged();
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not update the group."));
     } finally {
       setBusy(false);
     }
@@ -261,7 +262,7 @@ function useGroupEditor(
       setNotice("Group updated.");
       await onChanged();
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not update the group."));
     } finally {
       setAction(undefined);
     }
@@ -273,7 +274,7 @@ function useGroupEditor(
       await api.organizationGroups.delete(group.id);
       await onChanged();
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not update the group."));
     } finally {
       // A failed reload can leave this panel mounted; keep it usable.
       setAction(undefined);
@@ -344,10 +345,6 @@ function GroupMemberPicker({
       </div>
     </fieldset>
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not update the group.";
 }
 
 function confirmGroupDeletion(name: string) {

@@ -18,6 +18,7 @@ import type { OrganizationMember } from "@balebase/validators/organizationSettin
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatDate, Identity } from "./adminDisplay";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 import { countLabel } from "./labels";
 
 export function AdminOrganizationDetails({
@@ -39,11 +40,7 @@ export function AdminOrganizationDetails({
       if (requestId === requestSequence.current) setDetail(result);
     } catch (cause) {
       if (requestId === requestSequence.current) {
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Could not load organization details.",
-        );
+        setError(errorMessage(cause, "Could not load organization details."));
       }
     }
   }, [organizationId]);

@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { TemplateStats, templateStatusTone } from "./AuditHome";
 import { AuditTemplateBuilder } from "./AuditTemplateBuilder";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 import { countLabel, formatLabel } from "./labels";
 import {
   globalAuditsPath,
@@ -61,7 +62,7 @@ function GlobalAuditList({
       .list()
       .then(({ templates }) => setTemplates(templates))
       .catch((cause: unknown) =>
-        setError(messageFrom(cause, "Could not load global forms.")),
+        setError(errorMessage(cause, "Could not load global forms.")),
       );
   }, []);
 
@@ -73,7 +74,7 @@ function GlobalAuditList({
         await api.adminAuditTemplates.create("Untitled checklist");
       onNavigate(globalAuditsPath(template.id));
     } catch (cause) {
-      setError(messageFrom(cause, "Could not create the global form."));
+      setError(errorMessage(cause, "Could not create the global form."));
       setBusy(false);
     }
   }
@@ -166,8 +167,4 @@ function GlobalAuditRow({
       </span>
     </li>
   );
-}
-
-function messageFrom(cause: unknown, fallback: string) {
-  return cause instanceof Error ? cause.message : fallback;
 }

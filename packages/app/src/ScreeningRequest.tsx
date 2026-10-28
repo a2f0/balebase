@@ -9,7 +9,7 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { api } from "./apiClient";
 import { downloadScreeningConsent } from "./employeeFormDownloads";
 import {
@@ -18,6 +18,8 @@ import {
   personalRequirement,
 } from "./requirementStatus";
 import { ScreeningForm } from "./ScreeningForm";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 import { handleNavigation } from "./workspacePaths";
 
 /** An emailed screening link remains useful after the person submits. */
@@ -32,38 +34,21 @@ export function ScreeningRequest({
   organizationName: string;
   requirementId: string;
 }) {
-  const [requirement, setRequirement] = useState<EmployeeRequirement>();
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const load = useCallback(async () => {
-    const { requirements } = await api.employeeForms.list({ own: true });
-    const current = requirements.find(
-      (item) => item.id === requirementId && item.kind === "background_check",
-    );
-    if (!current) throw new Error("Background check not found.");
-    return current;
-  }, [requirementId]);
-  useEffect(() => {
-    let active = true;
-    load().then(
-      (current) => active && setRequirement(current),
-      (cause: unknown) => active && setError(messageFrom(cause)),
-    );
-    return () => {
-      active = false;
-    };
-  }, [load]);
-  async function act(work: () => Promise<unknown>) {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await work();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const loaded = useLoad(
+    useCallback(async () => {
+      const { requirements } = await api.employeeForms.list({ own: true });
+      const current = requirements.find(
+        (item) => item.id === requirementId && item.kind === "background_check",
+      );
+      if (!current) throw new Error("Background check not found.");
+      return current;
+    }, [requirementId]),
+    "Could not load your background check.",
+  );
+  const download = useAction("Could not download your authorization.");
+  const requirement = loaded.data;
+  const error = download.error ?? loaded.error;
+  const busy = download.busy || loaded.loading;
   const backLink = (
     <ButtonLink
       href={back}
@@ -96,17 +81,16 @@ export function ScreeningRequest({
         title={requirement.title}
         actions={
           <>
-            <Button
-              disabled={busy}
-              onClick={() => void act(async () => setRequirement(await load()))}
-            >
+            <Button disabled={busy} onClick={() => void loaded.reload()}>
               Refresh status
             </Button>
             {requirement.hasCheckrConsent && (
               <Button
                 disabled={busy}
                 onClick={() =>
-                  void act(() => downloadScreeningConsent(requirementId))
+                  void download.run(() =>
+                    downloadScreeningConsent(requirementId),
+                  )
                 }
                 variant="ghost"
               >
@@ -162,10 +146,4 @@ export function screeningProgress(
   if (status)
     return "Checkr is preparing your report and contacts you if it needs anything. You can return here to check its status.";
   return `${organizationName} sends you this check when it’s ready.`;
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not load your background check.";
 }

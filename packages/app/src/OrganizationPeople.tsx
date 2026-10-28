@@ -29,18 +29,19 @@ import {
 } from "react";
 import { api } from "./apiClient";
 import { authClient } from "./authClient";
-import { type ErrorNotice, ErrorToast, errorNotice } from "./BillingLink";
 import {
   EmployeeForms,
   inRequirementScope,
   RequirementDraftEditor,
   type RequirementScope,
 } from "./EmployeeForms";
+import { ErrorToast } from "./ErrorToast";
 import {
   inviteWithRequirements,
   RequirementAssignmentError,
   type RequirementDraft,
 } from "./employeeOnboarding";
+import { type ErrorNotice, errorMessage, errorNotice } from "./errors";
 import {
   MemberRoleControl,
   MemberTwoFactorControl,
@@ -280,10 +281,10 @@ function useRequirementSummary(data: OrganizationPeopleData | undefined) {
       }));
     } catch (cause) {
       if (request !== sequence.current) return;
-      const error =
-        cause instanceof Error
-          ? cause.message
-          : "Requested forms and checks could not be loaded.";
+      const error = errorMessage(
+        cause,
+        "Requested forms and checks could not be loaded.",
+      );
       setSummary((current) => ({ ...current, error }));
     }
   }, []);

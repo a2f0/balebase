@@ -15,6 +15,7 @@ import type {
 } from "@balebase/validators/finance";
 import { useEffect, useState } from "react";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 import { formatMoney } from "./financeFormat";
 import {
   categoryShare,
@@ -78,9 +79,7 @@ function useExpenseReport(range: ReportRange, invalid: boolean) {
       })
       .catch((cause: unknown) => {
         if (current) {
-          setError(
-            cause instanceof Error ? cause.message : "Could not load report.",
-          );
+          setError(errorMessage(cause, "Could not load report."));
         }
       });
     return () => {

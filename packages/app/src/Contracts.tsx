@@ -14,7 +14,7 @@ import type {
   ContractDetail,
   ContractSummary as ContractListItem,
 } from "@balebase/validators/contracts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { api } from "./apiClient";
 import { ContractEditor } from "./ContractEditor";
 import {
@@ -29,6 +29,8 @@ import {
   matchesFilter,
 } from "./contractFields";
 import { countLabel } from "./labels";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 import {
   contractIdForPath,
   contractPath,
@@ -58,37 +60,23 @@ export function Contracts({
 }
 
 function useContractList(onNavigate: (pathname: string) => void) {
-  const [contracts, setContracts] = useState<ContractListItem[]>();
-  const [error, setError] = useState<string>();
-  const [uploading, setUploading] = useState(false);
-  useEffect(() => {
-    let active = true;
-    api.contracts
-      .list()
-      .then((result) => {
-        if (active) setContracts(result);
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(messageFrom(cause));
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  async function upload(file: File) {
-    setUploading(true);
-    setError(undefined);
-    try {
+  const list = useLoad(
+    useCallback(() => api.contracts.list(), []),
+    "Could not load contracts.",
+  );
+  const uploader = useAction("Could not upload the contract.");
+  const upload = (file: File) =>
+    uploader.run(async () => {
       const created = await api.contracts.upload(file);
       if (!created) throw new Error("Contract not found.");
       onNavigate(contractPath(created.id));
-    } catch (cause) {
-      setError(messageFrom(cause));
-      setUploading(false);
-    }
-  }
-  return { contracts, error, upload, uploading };
+    });
+  return {
+    contracts: list.data,
+    error: uploader.error ?? list.error,
+    upload,
+    uploading: uploader.busy,
+  };
 }
 
 function ContractListPage({
@@ -241,16 +229,14 @@ function ContractPage({
   onNavigate: (pathname: string) => void;
 }) {
   // Null when a change answers that the contract was deleted meanwhile.
-  const [contract, setContract] = useState<ContractDetail | null>();
-  const [error, setError] = useState<string>();
-  const load = useCallback(async () => {
-    try {
-      setContract(await api.contracts.get(id));
-    } catch (cause) {
-      setError(messageFrom(cause));
-    }
-  }, [id]);
-  useEffect(() => void load(), [load]);
+  const {
+    data: contract,
+    error,
+    setData: setContract,
+  } = useLoad<ContractDetail | null>(
+    useCallback(() => api.contracts.get(id), [id]),
+    "Could not load the contract.",
+  );
   return (
     <Page className="contractPageLayout">
       <PageHeader
@@ -304,8 +290,4 @@ function contractMeta(contract: ContractListItem) {
   if (contract.dueDate) parts.push(`due ${formatDate(contract.dueDate)}`);
   if (contract.senderName) parts.push(`from ${contract.senderName}`);
   return parts.join(" · ");
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not load contracts.";
 }

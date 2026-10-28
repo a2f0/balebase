@@ -18,6 +18,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./apiClient";
 import { openCurrentBillingSession } from "./billingSession";
+import { errorMessage } from "./errors";
 import { InlineCheckout } from "./InlineCheckout";
 import { countLabel, formatLabel } from "./labels";
 
@@ -74,7 +75,7 @@ export function OrganizationBilling({
       if (nextStatus.checkout === "complete") void planChanged.current();
     } catch (cause) {
       if (sequence === loadSequence.current) {
-        setError(messageFrom(cause));
+        setError(errorMessage(cause, "Could not load billing."));
       }
     }
   }, [organizationId]);
@@ -161,7 +162,7 @@ function createBillingAction(
       );
     } catch (cause) {
       if (sequence === actionSequence.current) {
-        setError(messageFrom(cause));
+        setError(errorMessage(cause, "Could not load billing."));
         setBusy(false);
       }
     }
@@ -353,8 +354,4 @@ function formatDate(value: string) {
     month: "long",
     year: "numeric",
   }).format(new Date(value));
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not load billing.";
 }

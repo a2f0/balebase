@@ -9,7 +9,10 @@ import {
 import { QRCodeSVG } from "qrcode.react";
 import { type FormEvent, useState } from "react";
 import { authClient } from "./authClient";
+import { throwIfRefused } from "./errors";
 import { saveFile } from "./saveFile";
+import { useAction } from "./useAction";
+import { useClipboard } from "./useClipboard";
 
 interface TotpSetup {
   backupCodes: string[];
@@ -25,18 +28,24 @@ export function AccountSecurity({
   onSecurityChanged: () => Promise<unknown>;
   twoFactorEnabled: boolean;
 }) {
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
-  const enrollment = useMfaEnrollment({
-    onSecurityChanged,
-    setError,
-    setNotice,
-  });
+  const { error, notice, run, setNotice } = useAction(
+    "Could not update account security.",
+  );
+  const [action, setAction] = useState<SecurityAction>();
+  async function perform(
+    next: SecurityAction,
+    work: () => Promise<unknown>,
+    success?: string,
+  ) {
+    setAction(next);
+    await run(work, success);
+    setAction(undefined);
+  }
+  const workflow = { action, onSecurityChanged, perform, setNotice };
+  const enrollment = useMfaEnrollment(workflow);
   const maintenance = useMfaMaintenance({
+    ...workflow,
     onRecoveryCodes: enrollment.showRecoveryCodes,
-    onSecurityChanged,
-    setError,
-    setNotice,
   });
   return (
     <AccountSecurityPage
@@ -50,55 +59,40 @@ export function AccountSecurity({
 }
 
 function useMfaEnrollment({
+  action,
   onSecurityChanged,
-  setError,
+  perform,
   setNotice,
 }: SecurityWorkflowOptions) {
   const [acknowledged, setAcknowledged] = useState(false);
-  const [action, setAction] = useState<SecurityAction>();
   const [code, setCode] = useState("");
   const [enablePassword, setEnablePassword] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>();
   const [setup, setSetup] = useState<TotpSetup>();
 
-  function start(nextAction: "enable" | "verify") {
-    setAction(nextAction);
-    setError(undefined);
-    setNotice(undefined);
-  }
-
   async function beginEnrollment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    start("enable");
-    try {
+    await perform("enable", async () => {
       setSetup(await enableTotp(enablePassword));
       setEnablePassword("");
       setCode("");
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setAction(undefined);
-    }
+    });
   }
 
   async function verifyEnrollment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!setup) return;
-    start("verify");
-    try {
-      await verifyTotp(code);
-      setRecoveryCodes(setup.backupCodes);
-      setSetup(undefined);
-      setCode("");
-      setNotice(
-        "MFA is enabled and your other sessions were signed out. Save these recovery codes before you continue.",
-      );
-      await onSecurityChanged();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setAction(undefined);
-    }
+    await perform(
+      "verify",
+      async () => {
+        await verifyTotp(code);
+        setRecoveryCodes(setup.backupCodes);
+        setSetup(undefined);
+        setCode("");
+        await onSecurityChanged();
+      },
+      "MFA is enabled and your other sessions were signed out. Save these recovery codes before you continue.",
+    );
   }
 
   function finishRecoveryCodes() {
@@ -130,50 +124,39 @@ function useMfaEnrollment({
 }
 
 function useMfaMaintenance({
+  action,
   onRecoveryCodes,
   onSecurityChanged,
-  setError,
-  setNotice,
+  perform,
 }: SecurityWorkflowOptions & { onRecoveryCodes: (codes: string[]) => void }) {
-  const [action, setAction] = useState<SecurityAction>();
   const [disablePassword, setDisablePassword] = useState("");
   const [regeneratePassword, setRegeneratePassword] = useState("");
-
-  async function run(
-    nextAction: "disable" | "regenerate",
-    operation: () => Promise<void>,
-  ) {
-    setAction(nextAction);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      await operation();
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setAction(undefined);
-    }
-  }
 
   async function regenerateCodes(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!(await confirmRegeneration())) return;
-    await run("regenerate", async () => {
-      onRecoveryCodes(await generateRecoveryCodes(regeneratePassword));
-      setRegeneratePassword("");
-      setNotice("New recovery codes generated. Your old codes no longer work.");
-    });
+    await perform(
+      "regenerate",
+      async () => {
+        onRecoveryCodes(await generateRecoveryCodes(regeneratePassword));
+        setRegeneratePassword("");
+      },
+      "New recovery codes generated. Your old codes no longer work.",
+    );
   }
 
   async function disable(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!(await confirmDisable())) return;
-    await run("disable", async () => {
-      await disableTotp(disablePassword);
-      setDisablePassword("");
-      setNotice("MFA disabled.");
-      await onSecurityChanged();
-    });
+    await perform(
+      "disable",
+      async () => {
+        await disableTotp(disablePassword);
+        setDisablePassword("");
+        await onSecurityChanged();
+      },
+      "MFA disabled.",
+    );
   }
 
   return {
@@ -188,8 +171,13 @@ function useMfaMaintenance({
 }
 
 interface SecurityWorkflowOptions {
+  action: SecurityAction | undefined;
   onSecurityChanged: () => Promise<unknown>;
-  setError: (error: string | undefined) => void;
+  perform: (
+    action: SecurityAction,
+    work: () => Promise<unknown>,
+    success?: string,
+  ) => Promise<void>;
   setNotice: (notice: string | undefined) => void;
 }
 
@@ -424,23 +412,16 @@ function RecoveryCodesCard({
   onAcknowledged: (acknowledged: boolean) => void;
   onDone: () => void;
 }) {
-  const [copyNotice, setCopyNotice] = useState<{
-    message: string;
-    tone: "danger" | "success";
-  }>();
-
-  async function copyCodes() {
-    setCopyNotice(undefined);
-    try {
-      await navigator.clipboard.writeText(recoveryCodesText(codes));
-      setCopyNotice({ message: "Copied.", tone: "success" });
-    } catch {
-      setCopyNotice({
-        message: "Copy failed. Download or save the codes manually.",
-        tone: "danger",
-      });
-    }
-  }
+  const { copy, notice: copyNotice } = useClipboard();
+  const [downloadFailed, setDownloadFailed] = useState(false);
+  const copyCodes = () => {
+    setDownloadFailed(false);
+    return copy(
+      recoveryCodesText(codes),
+      "Copied.",
+      "Copy failed. Download or save the codes manually.",
+    );
+  };
 
   return (
     <Card
@@ -475,20 +456,23 @@ function RecoveryCodesCard({
         <Button
           icon="download"
           onClick={() =>
-            void downloadRecoveryCodes(codes).catch(() =>
-              setCopyNotice({
-                tone: "danger",
-                message:
-                  "Could not save recovery codes. Try copying them instead.",
-              }),
+            void downloadRecoveryCodes(codes).then(
+              () => setDownloadFailed(false),
+              () => setDownloadFailed(true),
             )
           }
           size="sm"
         >
           Download
         </Button>
-        {copyNotice && (
-          <Toast tone={copyNotice.tone}>{copyNotice.message}</Toast>
+        {downloadFailed ? (
+          <Toast tone="danger">
+            Could not save recovery codes. Try copying them instead.
+          </Toast>
+        ) : (
+          copyNotice && (
+            <Toast tone={copyNotice.tone}>{copyNotice.message}</Toast>
+          )
         )}
       </div>
     </Card>
@@ -598,7 +582,7 @@ async function enableTotp(password: string): Promise<TotpSetup> {
     method: "totp",
     password,
   });
-  throwForSecurityError(result.error, "Could not start MFA setup.");
+  throwIfRefused(result.error, "Could not start MFA setup.");
   if (result.data?.method !== "totp" || !("totpURI" in result.data)) {
     throw new Error("The authenticator setup details were not returned.");
   }
@@ -612,9 +596,9 @@ async function verifyTotp(code: string) {
   const result = await authClient.twoFactor.verifyTotp({
     code: code.replace(/\D/g, ""),
   });
-  throwForSecurityError(result.error, "Could not verify that code.");
+  throwIfRefused(result.error, "Could not verify that code.");
   const revoked = await authClient.revokeOtherSessions();
-  throwForSecurityError(
+  throwIfRefused(
     revoked.error,
     "MFA is enabled, but other sessions could not be signed out.",
   );
@@ -622,13 +606,13 @@ async function verifyTotp(code: string) {
 
 async function generateRecoveryCodes(password: string) {
   const result = await authClient.twoFactor.generateBackupCodes({ password });
-  throwForSecurityError(result.error, "Could not generate new recovery codes.");
+  throwIfRefused(result.error, "Could not generate new recovery codes.");
   return result.data?.backupCodes ?? [];
 }
 
 async function disableTotp(password: string) {
   const result = await authClient.twoFactor.disable({ password });
-  throwForSecurityError(result.error, "Could not disable MFA.");
+  throwIfRefused(result.error, "Could not disable MFA.");
 }
 
 function confirmRegeneration() {
@@ -670,17 +654,4 @@ function downloadRecoveryCodes(codes: string[]) {
     new Blob([recoveryCodesText(codes)], { type: "text/plain" }),
     "balebase-mfa-recovery-codes.txt",
   );
-}
-
-function throwForSecurityError(
-  error: { message?: string | undefined } | null,
-  fallback: string,
-) {
-  if (error) throw new Error(error.message ?? fallback);
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not update account security.";
 }

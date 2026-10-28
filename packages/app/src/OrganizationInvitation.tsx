@@ -1,6 +1,7 @@
 import { Button, Card, Icon, LoadingState, Toast } from "@balebase/ui/react";
 import { useEffect, useState } from "react";
 import { authClient } from "./authClient";
+import { errorMessage } from "./errors";
 
 interface InvitationDetails {
   email: string;
@@ -47,7 +48,8 @@ export function OrganizationInvitation({
         setInvitation(result.data as InvitationDetails);
       })
       .catch((cause: unknown) => {
-        if (active) setError(messageFrom(cause));
+        if (active)
+          setError(errorMessage(cause, "Could not load this invitation."));
       })
       .finally(() => {
         if (active) setBusy(false);
@@ -73,7 +75,7 @@ export function OrganizationInvitation({
       setAccepted(true);
       await onAccepted();
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not load this invitation."));
     } finally {
       setBusy(false);
     }
@@ -198,10 +200,4 @@ function formatDate(value: Date) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not load this invitation.";
 }

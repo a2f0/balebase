@@ -42,6 +42,7 @@ import {
   RunOverview,
 } from "./AuditRunHeader";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 import { countLabel, formatLabel } from "./labels";
 
 const acceptedImageTypes = [
@@ -141,7 +142,7 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
         dispatch({ detail: await api.audits.getRun(id), type });
         if (type === "loaded") setError(undefined);
       } catch (cause) {
-        setError(messageFrom(cause));
+        setError(errorMessage(cause, "Could not update audit."));
       }
     },
     [id],
@@ -164,7 +165,7 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
       await load();
       setNotice(success);
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not update audit."));
     } finally {
       setBusy(false);
     }
@@ -872,7 +873,7 @@ function useIssueDraft(auditId: string, item: AuditTemplateItem | undefined) {
       );
       await onCreated(warning);
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not update audit."));
       setBusy(false);
     }
   }
@@ -1205,7 +1206,7 @@ function useIssueCardActions({
       await action();
       await onChange();
     } catch (cause) {
-      onError(messageFrom(cause));
+      onError(errorMessage(cause, "Could not update audit."));
     } finally {
       setBusy(false);
     }
@@ -1226,7 +1227,8 @@ function useIssueCardActions({
           issue.id,
           selected,
         );
-        if (failure !== undefined) onError(messageFrom(failure));
+        if (failure !== undefined)
+          onError(errorMessage(failure, "Could not update audit."));
       });
     },
     busy,
@@ -1538,8 +1540,4 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
     new Date(value),
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not update audit.";
 }

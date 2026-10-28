@@ -14,6 +14,7 @@ import {
 import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
 import { api } from "./apiClient";
 import { authClient } from "./authClient";
+import { errorMessage } from "./errors";
 import { OrganizationApiKeys } from "./OrganizationApiKeys";
 import { OrganizationBilling } from "./OrganizationBilling";
 import { OrganizationAccessSettings } from "./OrganizationGroups";
@@ -326,7 +327,7 @@ function useOrganizationGeneralActions(
       setNotice("Organization name updated.");
       await onWorkspaceChanged();
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not update your organization."));
     } finally {
       setAction(undefined);
     }
@@ -346,7 +347,7 @@ function useOrganizationGeneralActions(
       }
       await onWorkspaceChanged();
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not update your organization."));
     } finally {
       setAction(undefined);
     }
@@ -359,7 +360,7 @@ function useOrganizationGeneralActions(
       await onWorkspaceChanged();
       onNavigate("/");
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not update your organization."));
     } finally {
       setAction(undefined);
     }
@@ -531,12 +532,6 @@ function handleNavigation(
   }
   event.preventDefault();
   onNavigate(pathname);
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not update your organization.";
 }
 
 function confirmLeave(name: string) {

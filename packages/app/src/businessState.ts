@@ -57,7 +57,6 @@ export type BusinessListEvent =
   | { type: "created"; business: Business }
   | { type: "updated"; business: Business }
   | { type: "deleted"; id: string }
-  | { type: "copied"; identifier: BusinessIdentifier }
   | { type: "failed"; message: string };
 
 export const initialBusinessListState: BusinessListState = {
@@ -129,11 +128,5 @@ export function businessListReducer(
       );
     case "failed":
       return { ...state, error: event.message, notice: undefined };
-    case "copied":
-      return {
-        ...state,
-        error: undefined,
-        notice: copiedNotice(event.identifier),
-      };
   }
 }

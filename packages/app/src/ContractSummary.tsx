@@ -23,6 +23,7 @@ import {
   recipientTone,
   reminderOptions,
 } from "./contractFields";
+import { errorMessage } from "./errors";
 import { contractPath } from "./workspacePaths";
 
 /** A contract that has been sent: its progress, actions, and history. */
@@ -106,9 +107,7 @@ function useSummaryActions(
     try {
       setNotice(await action());
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Something went wrong.",
-      );
+      setError(errorMessage(cause, "Something went wrong."));
     } finally {
       setBusy(false);
     }

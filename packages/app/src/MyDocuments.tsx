@@ -30,6 +30,7 @@ import {
   downloadEmployeeForm,
   downloadScreeningConsent,
 } from "./employeeFormDownloads";
+import { errorMessage } from "./errors";
 import type { WorkspaceOrganization } from "./organizationState";
 import {
   formatDueDate,
@@ -198,7 +199,7 @@ function useOwnRequirements() {
       );
       setError(undefined);
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not update your documents."));
     } finally {
       setLoading(false);
     }
@@ -215,7 +216,7 @@ function useOwnRequirements() {
       await reload();
       setNotice(success);
     } catch (cause) {
-      const message = messageFrom(cause);
+      const message = errorMessage(cause, "Could not update your documents.");
       await reload();
       setError(message);
     } finally {
@@ -510,10 +511,4 @@ function BackToMyDocuments({
       My documents
     </ButtonLink>
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not update your documents.";
 }

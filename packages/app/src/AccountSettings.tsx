@@ -12,6 +12,7 @@ import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
 import { AccountDeletion } from "./AccountDeletion";
 import { AccountSecurity } from "./AccountSecurity";
 import { saveDefaultOrganizationPreference } from "./defaultOrganization";
+import { errorMessage } from "./errors";
 import type { WorkspaceOrganization } from "./organizationState";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 
@@ -143,9 +144,7 @@ function AccountGeneral({
       setNotice("Default organization saved.");
     } catch (cause) {
       setError(
-        cause instanceof Error
-          ? cause.message
-          : "Could not save your default organization.",
+        errorMessage(cause, "Could not save your default organization."),
       );
     } finally {
       setSaving(false);

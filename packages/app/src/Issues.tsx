@@ -12,14 +12,16 @@ import {
   Select,
 } from "@balebase/ui/react";
 import type { Issue, IssueInput } from "@balebase/validators/issues";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 import { financeTransactionPath } from "./financePages";
 import { IssueForm } from "./IssueForm";
 import { IssueImages } from "./IssueImages";
 import { IssueList } from "./IssueList";
 import { issuePath } from "./issuePaths";
+import { useLoad } from "./useLoad";
 import { decodeRecordId } from "./workspacePaths";
 
 export function Issues({
@@ -148,23 +150,14 @@ function NewIssue({
   onNavigate: (path: string) => void;
   transactionId?: string;
 }) {
-  const [label, setLabel] = useState<string>();
-  const [error, setError] = useState<string>();
-  useEffect(() => {
-    if (!transactionId) return;
-    let active = true;
-    void api.finance
-      .transaction(transactionId)
-      .then(({ transaction }) => {
-        if (active) setLabel(transaction.merchantName ?? transaction.name);
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(message(cause));
-      });
-    return () => {
-      active = false;
-    };
-  }, [transactionId]);
+  const { data: label, error } = useLoad(
+    useCallback(async () => {
+      if (!transactionId) return undefined;
+      const { transaction } = await api.finance.transaction(transactionId);
+      return transaction.merchantName ?? transaction.name;
+    }, [transactionId]),
+    "Could not load the transaction.",
+  );
   async function save(input: IssueInput) {
     const { issueId } = await api.issues.create(
       input,
@@ -216,30 +209,22 @@ function IssueDetail({
   id: string;
   onNavigate: (path: string) => void;
 }) {
-  const [issue, setIssue] = useState<Issue>();
-  const [error, setError] = useState<string>();
-  const [reload, setReload] = useState(0);
+  const loaded = useLoad(
+    useCallback(() => api.issues.get(id), [id]),
+    "Could not load issue.",
+  );
+  const { setData } = loaded;
+  const issue = loaded.data?.issue;
+  const [failure, setFailure] = useState<string>();
+  const error = failure ?? loaded.error;
+  // A reload replaces edits in the form with what was stored.
   const [formVersion, setFormVersion] = useState(0);
   const [busy, setBusy] = useState(false);
-  const request = useMemo(() => ({ id, reload }), [id, reload]);
-  useEffect(() => {
-    let active = true;
-    setError(undefined);
-    void api.issues
-      .get(request.id)
-      .then((data) => {
-        if (active) {
-          setIssue(data.issue);
-          setFormVersion((value) => value + 1);
-        }
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(message(cause));
-      });
-    return () => {
-      active = false;
-    };
-  }, [request]);
+  async function reload() {
+    setFailure(undefined);
+    await loaded.reload();
+    setFormVersion((value) => value + 1);
+  }
   async function save(
     input: Partial<IssueInput> & { status?: Issue["status"] },
   ) {
@@ -250,8 +235,8 @@ function IssueDetail({
         ...input,
         expectedRevision: issue.revision,
       });
-      setIssue(data.issue);
-      setError(undefined);
+      setData(data);
+      setFailure(undefined);
     } finally {
       setBusy(false);
     }
@@ -270,9 +255,7 @@ function IssueDetail({
           <Banner
             tone="danger"
             actions={
-              <Button onClick={() => setReload((value) => value + 1)}>
-                Reload issue
-              </Button>
+              <Button onClick={() => void reload()}>Reload issue</Button>
             }
           >
             {error}
@@ -291,7 +274,9 @@ function IssueDetail({
                   onClick={() =>
                     void save({
                       status: issue.status === "open" ? "resolved" : "open",
-                    }).catch((cause: unknown) => setError(message(cause)))
+                    }).catch((cause: unknown) =>
+                      setFailure(errorMessage(cause, "Could not save issue.")),
+                    )
                   }
                 >
                   {issue.status === "open" ? "Resolve issue" : "Reopen issue"}
@@ -308,7 +293,7 @@ function IssueDetail({
                     assignedTo: issue.assignedTo?.id ?? null,
                   }}
                   onSave={save}
-                  onError={setError}
+                  onError={setFailure}
                   label="Save changes"
                   disabled={busy || !issue.target.available}
                 />
@@ -365,7 +350,4 @@ function IssueSource({
       {source.label}
     </Banner>
   );
-}
-function message(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not load issue.";
 }

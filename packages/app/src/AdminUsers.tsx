@@ -17,6 +17,7 @@ import { formatDate, Identity } from "./adminDisplay";
 import { useAdminUserDeletion } from "./adminUserDeletion";
 import { adminUserListQuery, adminUserPageSize } from "./adminUserList";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 import { countLabel } from "./labels";
 
 interface UserListing {
@@ -38,7 +39,7 @@ export function AdminUsers() {
       try {
         setListing(await api.adminUsers.list(adminUserListQuery(page)));
       } catch (cause) {
-        setError(messageFrom(cause));
+        setError(errorMessage(cause, "Could not load users."));
       } finally {
         setBusy(false);
       }
@@ -290,8 +291,4 @@ function statusFor(user: AdminUser): { label: string; tone: BadgeTone } {
 
 function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not load users.";
 }

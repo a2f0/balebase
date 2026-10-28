@@ -13,6 +13,7 @@ import type { ExpenseCategory } from "@balebase/validators/finance";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "./apiClient";
 import { countLabel } from "./labels";
+import { useAction } from "./useAction";
 
 const maxNameLength = 60;
 
@@ -25,9 +26,8 @@ export function FinanceCategories({
   onChanged: () => Promise<void>;
   onShowTransactions: (category: ExpenseCategory) => void;
 }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
+  const action = useAction("Could not save the category.");
+  const { busy, error, notice } = action;
   const addDefaults = () =>
     run(async () => {
       const before = categories?.length ?? 0;
@@ -39,22 +39,15 @@ export function FinanceCategories({
         : "All common categories are already here.";
     });
 
-  async function run(action: () => Promise<string>) {
-    setBusy(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      const message = await action();
-      await onChanged();
-      setNotice(message);
-      return true;
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save.");
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }
+  const run = (change: () => Promise<string>) =>
+    action.run(
+      async () => {
+        const message = await change();
+        await onChanged();
+        return message;
+      },
+      (message) => message,
+    );
 
   return (
     <>

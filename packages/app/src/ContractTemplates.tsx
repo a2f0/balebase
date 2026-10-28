@@ -17,12 +17,14 @@ import type {
   ContractTemplateSummary,
   TemplateVersion,
 } from "@balebase/validators/contractTemplates";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./apiClient";
 import { formatDate } from "./ContractSummary";
 import { ContractTemplateEditor } from "./ContractTemplateEditor";
 import { ContractTemplateMapping } from "./ContractTemplateMapping";
 import { confirmDiscardChanges } from "./unsavedChanges";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 import {
   contractPath,
   contractTemplateIdForPath,
@@ -50,43 +52,26 @@ function TemplateList({
 }: {
   onNavigate: (pathname: string) => void;
 }) {
-  const [templates, setTemplates] = useState<ContractTemplateSummary[]>();
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const list = useLoad(
+    useCallback(() => api.contractTemplates.list(), []),
+    "Could not load contract templates.",
+  );
+  const templates = list.data;
+  const uploader = useAction("Could not upload the template.");
+  const error = uploader.error ?? list.error;
+  const busy = uploader.busy;
   const fileInput = useRef<HTMLInputElement>(null);
   const uploading = useRef(false);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    let active = true;
-    api.contractTemplates
-      .list()
-      .then((result) => {
-        if (active) setTemplates(result);
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(messageFrom(cause));
-      });
-    return () => {
-      active = false;
-      mounted.current = false;
-    };
-  }, []);
+  const mounted = useMounted();
   async function upload(file: File) {
     if (uploading.current) return;
     uploading.current = true;
-    setBusy(true);
-    setError(undefined);
-    try {
+    const uploaded = await uploader.run(async () => {
       const template = await api.contractTemplates.upload(file);
       if (!template) throw new Error("Contract template not found.");
       if (mounted.current) onNavigate(contractTemplatePath(template.id));
-    } catch (cause) {
-      if (!mounted.current) return;
-      setError(messageFrom(cause));
-      setBusy(false);
-      uploading.current = false;
-    }
+    });
+    if (!uploaded) uploading.current = false;
   }
   const choose = () => fileInput.current?.click();
   return (
@@ -199,6 +184,7 @@ function TemplatePage({
     error,
     notice,
     setNotice,
+    dirty,
     setDirty,
     mapping,
     setMapping,
@@ -262,6 +248,7 @@ function TemplatePage({
           />
         ) : (
           <ContractTemplateEditor
+            dirty={dirty}
             disabled={deleting}
             key={`${id}:${template.version}`}
             onBusyChange={setWorking}
@@ -275,95 +262,79 @@ function TemplatePage({
   );
 }
 
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not load contract templates.";
+/** Lets a late response skip navigation once the user has left. */
+function useMounted() {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  return mounted;
 }
 
 type TemplatePageState = ReturnType<typeof useTemplatePage>;
 function useTemplatePage(id: string, onNavigate: (pathname: string) => void) {
-  const [template, setTemplate] = useState<ContractTemplate>();
-  const [versions, setVersions] = useState<TemplateVersion[]>([]);
-  const [error, setError] = useState<string>();
+  const loaded = useLoad(
+    useCallback(async () => {
+      const [template, versions] = await Promise.all([
+        api.contractTemplates.get(id),
+        api.contractTemplates.versions(id),
+      ]);
+      return { template, versions };
+    }, [id]),
+    "Could not load the contract template.",
+  );
+  const { setData } = loaded;
   const [notice, setNotice] = useState<string>();
   const [dirty, setDirty] = useState(false);
   const [mapping, setMapping] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [working, setWorking] = useState(false);
-  const generation = useRef(0);
-  useEffect(() => {
-    let active = true;
-    Promise.all([
-      api.contractTemplates.get(id),
-      api.contractTemplates.versions(id),
-    ])
-      .then(([loaded, history]) => {
-        if (active) {
-          setTemplate(loaded);
-          setVersions(history);
-        }
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(messageFrom(cause));
-      });
-    return () => {
-      active = false;
-      generation.current += 1;
-    };
-  }, [id]);
+  const versionLoad = useAction("Could not load the template version.");
+  const deletion = useAction("Could not delete the template.");
+  const mounted = useMounted();
+  const showTemplate = (template: ContractTemplate) =>
+    setData((current) => current && { ...current, template });
   const discard = async () => !dirty || (await confirmDiscardChanges());
   async function selectVersion(version: number) {
     if (!(await discard())) return;
-    const request = ++generation.current;
-    setLoading(true);
-    setError(undefined);
-    try {
-      const loaded = await api.contractTemplates.get(id, version);
-      if (generation.current === request) {
-        setTemplate(loaded);
-        setDirty(false);
-        setMapping(false);
-      }
-    } catch (cause) {
-      if (generation.current === request) setError(messageFrom(cause));
-    } finally {
-      if (generation.current === request) setLoading(false);
-    }
+    await versionLoad.run(async () => {
+      showTemplate(await api.contractTemplates.get(id, version));
+      setDirty(false);
+      setMapping(false);
+    });
   }
   function saved(value: ContractTemplate) {
-    setTemplate(value);
+    setData(
+      (current) =>
+        current && {
+          template: value,
+          versions: [versionSummary(value), ...current.versions],
+        },
+    );
     setDirty(false);
     setNotice(`Version ${value.version} saved.`);
-    setVersions((current) => [versionSummary(value), ...current]);
   }
   async function remove() {
     if (!(await confirmTemplateDeletion())) return;
-    const request = generation.current;
-    setDeleting(true);
-    setError(undefined);
-    try {
+    await deletion.run(async () => {
       await api.contractTemplates.delete(id);
-      if (generation.current === request) onNavigate(contractTemplatePath());
-    } catch (cause) {
-      if (generation.current !== request) return;
-      setError(messageFrom(cause));
-      setDeleting(false);
-    }
+      if (mounted.current) onNavigate(contractTemplatePath());
+    });
   }
   return {
-    template,
-    versions,
-    error,
+    template: loaded.data?.template,
+    versions: loaded.data?.versions ?? [],
+    error: deletion.error ?? versionLoad.error ?? loaded.error,
     notice,
     setNotice,
     dirty,
     setDirty,
     mapping,
     setMapping,
-    loading,
-    deleting,
+    loading: versionLoad.busy,
+    deleting: deletion.busy,
     discard,
     selectVersion,
     saved,

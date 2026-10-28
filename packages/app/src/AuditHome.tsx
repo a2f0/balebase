@@ -11,6 +11,7 @@ import {
   PageBody,
   PageHeader,
   PageSection,
+  Toast,
 } from "@balebase/ui/react";
 import type {
   AuditRunView,
@@ -18,38 +19,35 @@ import type {
   AuditTemplate,
   AuditTemplateScope,
 } from "@balebase/validators/audits";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "./apiClient";
 import {
   type AuditTemplateView,
   readAuditTemplateView,
   storeAuditTemplateView,
 } from "./auditTemplateView";
-import { type ErrorNotice, ErrorToast, errorNotice } from "./BillingLink";
+import { ErrorToast } from "./ErrorToast";
+import { type ErrorNotice, errorNotice } from "./errors";
+import { InfiniteScroll } from "./InfiniteScroll";
 import { countLabel, formatLabel } from "./labels";
+import { useCursorPages } from "./useCursorPages";
+import { useLoad } from "./useLoad";
 
 export function AuditHome({
   onNavigate,
 }: {
   onNavigate: (pathname: string) => void;
 }) {
-  const [templates, setTemplates] = useState<AuditTemplate[]>();
+  const templates = useLoad(
+    useCallback(async () => (await api.audits.listTemplates()).templates, []),
+    "Could not load audits.",
+  );
   const [busy, setBusy] = useState(false);
   const [templateView, setTemplateView] = useState(() =>
     readAuditTemplateView(),
   );
   const [error, setError] = useState<ErrorNotice>();
-  const runList = useAuditRunList(setError);
-
-  const loadTemplates = useCallback(async () => {
-    try {
-      setTemplates((await api.audits.listTemplates()).templates);
-    } catch (cause) {
-      setError(errorNotice(cause, "Could not load audits."));
-    }
-  }, []);
-
-  useEffect(() => void loadTemplates(), [loadTemplates]);
+  const runList = useAuditRunList();
 
   async function createTemplate() {
     setBusy(true);
@@ -86,6 +84,7 @@ export function AuditHome({
       <AuditHomeHeader busy={busy} onCreate={createTemplate} />
       <PageBody>
         <ErrorToast error={error} onNavigate={onNavigate} />
+        {templates.error && <Toast tone="danger">{templates.error}</Toast>}
         <Button icon="download" onClick={() => onNavigate("/offline")}>
           Download forms for offline work
         </Button>
@@ -94,16 +93,17 @@ export function AuditHome({
           onBegin={beginAudit}
           onEdit={(id) => onNavigate(`/audits/templates/${id}`)}
           onViewChange={changeTemplateView}
-          templates={templates}
+          templates={templates.data}
           view={templateView}
         />
         <AuditHistory
-          hasMore={runList.hasMore}
+          error={runList.error}
           loadingMore={runList.loadingMore}
+          nextCursor={runList.nextCursor}
           onLoadMore={runList.loadMore}
           onOpen={(id) => onNavigate(`/audits/runs/${id}`)}
           onViewChange={runList.changeView}
-          runs={runList.runs}
+          runs={runList.items}
           view={runList.view}
         />
       </PageBody>
@@ -115,17 +115,12 @@ export function AuditHome({
  * Active or deleted audit runs, paged. `?view=deleted` opens the deleted list
  * once (Back from a discarded audit) and then leaves the address.
  */
-function useAuditRunList(setError: (error: ErrorNotice | undefined) => void) {
+function useAuditRunList() {
   const [view, setView] = useState<AuditRunView>(() =>
     new URLSearchParams(window.location.search).get("view") === "deleted"
       ? "deleted"
       : "active",
   );
-  // Each list load starts a generation; older pages are dropped on arrival.
-  const generation = useRef(0);
-  const [runs, setRuns] = useState<AuditSummary[]>();
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     if (window.location.search) {
@@ -133,54 +128,16 @@ function useAuditRunList(setError: (error: ErrorNotice | undefined) => void) {
     }
   }, []);
 
-  // A newer view's list replaces an older one still in flight.
-  useEffect(() => {
-    generation.current += 1;
-    let current = true;
-    setError(undefined);
-    setRuns(undefined);
-    setNextCursor(null);
-    setLoadingMore(false);
-    api.audits.listRuns(undefined, view).then(
-      (page) => {
-        if (!current) return;
-        setRuns(page.audits);
-        setNextCursor(page.nextCursor);
-      },
-      (cause: unknown) => {
-        if (current) setError(errorNotice(cause, "Could not load audits."));
-      },
-    );
-    return () => {
-      current = false;
-    };
-  }, [setError, view]);
-
-  async function loadMore() {
-    if (!nextCursor) return;
-    const started = generation.current;
-    setLoadingMore(true);
-    setError(undefined);
-    try {
-      const page = await api.audits.listRuns(nextCursor, view);
-      if (generation.current !== started) return;
-      setRuns((current) => [...(current ?? []), ...page.audits]);
-      setNextCursor(page.nextCursor);
-    } catch (cause) {
-      if (generation.current === started) {
-        setError(errorNotice(cause, "Could not load audits."));
-      }
-    } finally {
-      if (generation.current === started) setLoadingMore(false);
-    }
-  }
-
+  const fetchPage = useCallback(
+    async (cursor?: string) => {
+      const page = await api.audits.listRuns(cursor, view);
+      return { items: page.audits, nextCursor: page.nextCursor };
+    },
+    [view],
+  );
   return {
+    ...useCursorPages(fetchPage, "Could not load audits."),
     changeView: setView,
-    hasMore: Boolean(nextCursor),
-    loadingMore,
-    loadMore,
-    runs,
     view,
   };
 }
@@ -475,22 +432,25 @@ const runViews: { icon: IconName; label: string; view: AuditRunView }[] = [
 ];
 
 function AuditHistory({
-  hasMore,
+  error,
   loadingMore,
+  nextCursor,
   onLoadMore,
   onOpen,
   onViewChange,
   runs,
   view,
 }: {
-  hasMore: boolean;
+  error: string | undefined;
   loadingMore: boolean;
-  onLoadMore: () => Promise<void>;
+  nextCursor: string | null;
+  onLoadMore: () => Promise<boolean>;
   onOpen: (id: string) => void;
   onViewChange: (view: AuditRunView) => void;
   runs: AuditSummary[] | undefined;
   view: AuditRunView;
 }) {
+  const hasMore = Boolean(nextCursor);
   return (
     <PageSection
       actions={
@@ -519,19 +479,21 @@ function AuditHistory({
       }
       title={view === "deleted" ? "Deleted audits" : "Recent audits"}
     >
+      {error && <Toast tone="danger">{error}</Toast>}
       {runs?.length ? (
         <Card
           className="auditRunCard"
           flush
           footer={
-            hasMore && (
-              <Button
+            nextCursor && (
+              <InfiniteScroll
+                autoLoad={!error}
                 busy={loadingMore}
-                onClick={() => void onLoadMore()}
-                size="sm"
+                cursor={nextCursor}
+                onLoadMore={onLoadMore}
               >
-                {loadingMore ? "Loading…" : "Load more audits"}
-              </Button>
+                Load more audits
+              </InfiniteScroll>
             )
           }
         >
@@ -550,7 +512,7 @@ function AuditHistory({
           Start one from a checklist above.
         </EmptyState>
       ) : (
-        <LoadingState label="Loading audits…" />
+        !error && <LoadingState label="Loading audits…" />
       )}
     </PageSection>
   );

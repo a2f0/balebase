@@ -7,6 +7,7 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import { type ReactNode, useState } from "react";
+import { errorMessage } from "./errors";
 import {
   blockingSeatRequirement,
   OrganizationSeatRequired,
@@ -75,7 +76,7 @@ function OrganizationTwoFactorRequired({
     try {
       await onSignOut();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not sign out.");
+      setError(errorMessage(cause, "Could not sign out."));
       setBusy(false);
     }
   }

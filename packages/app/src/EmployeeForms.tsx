@@ -12,7 +12,7 @@ import type {
   EmployeeRequirementKind,
   EmployeeRequirementStatus,
 } from "@balebase/validators/employeeForms";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useState } from "react";
 import { api } from "./apiClient";
 import {
   downloadEmployeeForm,
@@ -29,6 +29,8 @@ import {
   isClosedReportStatus,
   requirementBadge,
 } from "./requirementStatus";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 
 const options: Array<{ kind: EmployeeRequirementKind; title: string }> = [
   { kind: "form", title: "W-4" },
@@ -163,50 +165,27 @@ export function inRequirementScope(
  * every other control. People complete their own in My documents.
  */
 export function EmployeeForms({ scope }: { scope: RequirementScope }) {
-  // Compared by value, so a new scope object for the same people is no change.
-  const scopeKey = JSON.stringify(scope);
-  const [requirements, setRequirements] = useState<EmployeeRequirement[]>();
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const current = JSON.parse(scopeKey) as RequirementScope;
-      const { requirements: all } = await api.employeeForms.list();
-      setRequirements(all.filter((item) => inRequirementScope(current, item)));
-      setError(undefined);
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setLoading(false);
-    }
-  }, [scopeKey]);
-  useEffect(() => {
-    setRequirements(undefined);
-    void load();
-  }, [load]);
+  // The list covers every scope, so a new scope only filters it again.
+  const loaded = useLoad(
+    useCallback(async () => (await api.employeeForms.list()).requirements, []),
+    "Could not load requirements.",
+  );
+  const requirements = loaded.data?.filter((item) =>
+    inRequirementScope(scope, item),
+  );
+  const loading = loaded.loading;
+  const change = useAction("Could not update requirements.");
+  const { busy, notice } = change;
+  const error = change.error ?? loaded.error;
+  const load = loaded.reload;
 
   async function action<T>(
     work: () => Promise<T>,
     success: string | ((result: T) => string),
   ) {
-    setBusy(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      const result = await work();
-      await load();
-      setNotice(typeof success === "string" ? success : success(result));
-    } catch (cause) {
-      const message = messageFrom(cause);
-      setRequirements(undefined);
-      await load();
-      setError(message);
-    } finally {
-      setBusy(false);
-    }
+    await change.run(work, success);
+    // Reload either way so a refused change shows what is stored.
+    await load();
   }
 
   return (
@@ -719,10 +698,4 @@ function formatCheckrResult(result: string) {
   return result
     .replaceAll("_", " ")
     .replace(/^./, (letter) => letter.toUpperCase());
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not update requirements.";
 }

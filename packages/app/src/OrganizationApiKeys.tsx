@@ -18,6 +18,7 @@ import type {
 } from "@balebase/validators/apiKeys";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 import { McpConfiguration } from "./McpConfiguration";
 import { useClipboard } from "./useClipboard";
 
@@ -69,7 +70,9 @@ export function OrganizationApiKeys({
     try {
       setApiKeys(await api.apiKeys.list());
     } catch (cause) {
-      setLoadError(messageFrom(cause));
+      setLoadError(
+        errorMessage(cause, "Could not update API keys. Please try again."),
+      );
     }
   }, [organizationId]);
   useEffect(() => void load(), [load]);
@@ -137,7 +140,9 @@ function CreateApiKeyCard({
         }),
       );
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(
+        errorMessage(cause, "Could not update API keys. Please try again."),
+      );
       setBusy(false);
     }
   }
@@ -267,7 +272,9 @@ function ApiKeyList({
     try {
       onRevoked(await api.apiKeys.revoke(apiKey.id));
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(
+        errorMessage(cause, "Could not update API keys. Please try again."),
+      );
     } finally {
       setRevokingId(undefined);
     }
@@ -397,10 +404,4 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
     new Date(value),
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not update API keys. Please try again.";
 }

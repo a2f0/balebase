@@ -3,7 +3,9 @@ import { useId, useRef, useState } from "react";
 import { version as appVersion } from "../package.json";
 import type { AccountSession } from "./accountSessions";
 import { useApiVersion } from "./apiVersion";
+import { errorMessage } from "./errors";
 import { ThemeSwitcher } from "./ThemeSwitcher";
+import { useAction } from "./useAction";
 import { useMenuDismissal } from "./useMenuDismissal";
 
 interface AccountControlProps {
@@ -29,24 +31,18 @@ export function AccountControl({
   onSwitchAccount,
   user,
 }: AccountControlProps) {
+  const action = useAction("Could not update accounts.");
+  const { error, setError } = action;
   const [busy, setBusy] = useState<string>();
-  const [error, setError] = useState<string>();
   const [open, setOpen] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   useMenuDismissal(open, menu, trigger, () => setOpen(false));
 
-  async function run(action: () => Promise<void>, busyKey: string) {
+  async function run(work: () => Promise<void>, busyKey: string) {
     setBusy(busyKey);
-    setError(undefined);
-    try {
-      await action();
-      setOpen(false);
-    } catch (cause) {
-      setError(messageFrom(cause));
-    } finally {
-      setBusy(undefined);
-    }
+    if (await action.run(work)) setOpen(false);
+    setBusy(undefined);
   }
 
   function toggleMenu() {
@@ -54,7 +50,9 @@ export function AccountControl({
     setError(undefined);
     setOpen(nextOpen);
     if (nextOpen) {
-      void onRefreshAccounts().catch((cause) => setError(messageFrom(cause)));
+      void onRefreshAccounts().catch((cause) =>
+        setError(errorMessage(cause, "Could not load your accounts.")),
+      );
     }
   }
 
@@ -199,8 +197,4 @@ function AppVersions() {
       {apiVersion === null ? "version unknown" : `v${apiVersion}`}
     </p>
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error ? cause.message : "Could not update accounts.";
 }

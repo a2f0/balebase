@@ -12,6 +12,7 @@ import type { ScreeningForm as ScreeningFormData } from "@balebase/validators/em
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { api } from "./apiClient";
 import { downloadScreeningConsent } from "./employeeFormDownloads";
+import { errorMessage } from "./errors";
 import {
   DetailFields,
   emptyDetails,
@@ -67,11 +68,7 @@ export function ScreeningForm({
       (loaded) => current && setForm(loaded),
       (cause: unknown) =>
         current &&
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Could not load the background check.",
-        ),
+        setError(errorMessage(cause, "Could not load the background check.")),
     );
     return () => {
       current = false;
@@ -147,7 +144,7 @@ function ScreeningSteps({
       );
       setSubmitted(true);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not submit.");
+      setError(errorMessage(cause, "Could not submit."));
     } finally {
       setBusy(false);
     }
@@ -565,9 +562,10 @@ function Submitted({
               void downloadScreeningConsent(requirementId).catch(
                 (cause: unknown) =>
                   setError(
-                    cause instanceof Error
-                      ? cause.message
-                      : "Could not download the authorization.",
+                    errorMessage(
+                      cause,
+                      "Could not download the authorization.",
+                    ),
                   ),
               )
             }

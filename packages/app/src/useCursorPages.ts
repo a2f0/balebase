@@ -1,0 +1,68 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { errorMessage } from "./errors";
+
+interface CursorPage<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
+/**
+ * A cursor-paginated list for `InfiniteScroll`. The first page reloads when
+ * `fetchPage` changes identity (pass a `useCallback`) or `refreshKey`
+ * changes; later pages append. A page requested before the newest first page
+ * is dropped when it arrives.
+ */
+export function useCursorPages<T>(
+  fetchPage: (cursor?: string) => Promise<CursorPage<T>>,
+  fallback: string,
+  refreshKey?: unknown,
+) {
+  const [items, setItems] = useState<T[]>();
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [error, setError] = useState<string>();
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [reloads, setReloads] = useState(0);
+  const latest = useRef(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey and reloads restart the list without changing how a page is fetched.
+  useEffect(() => {
+    const request = ++latest.current;
+    setItems(undefined);
+    setNextCursor(null);
+    setError(undefined);
+    setLoadingMore(false);
+    fetchPage().then(
+      (page) => {
+        if (request !== latest.current) return;
+        setItems(page.items);
+        setNextCursor(page.nextCursor);
+      },
+      (cause: unknown) => {
+        if (request === latest.current) setError(errorMessage(cause, fallback));
+      },
+    );
+    return () => {
+      latest.current += 1;
+    };
+  }, [fallback, fetchPage, refreshKey, reloads]);
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor) return false;
+    const request = latest.current;
+    setLoadingMore(true);
+    setError(undefined);
+    try {
+      const page = await fetchPage(nextCursor);
+      if (request !== latest.current) return true;
+      setItems((current) => [...(current ?? []), ...page.items]);
+      setNextCursor(page.nextCursor);
+    } catch (cause) {
+      if (request === latest.current) setError(errorMessage(cause, fallback));
+    } finally {
+      if (request === latest.current) setLoadingMore(false);
+    }
+    return true;
+  }, [fallback, fetchPage, nextCursor]);
+
+  const reload = useCallback(() => setReloads((count) => count + 1), []);
+  return { error, items, loadMore, loadingMore, nextCursor, reload };
+}

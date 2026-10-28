@@ -20,6 +20,7 @@ import {
   recipientTone,
   reminderOptions,
 } from "./contractFields";
+import { errorMessage } from "./errors";
 
 type Editor = ReturnType<typeof useDraftEditor>;
 
@@ -136,7 +137,7 @@ function useDraftSaving({
     try {
       await action();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save.");
+      setError(errorMessage(cause, "Could not save."));
     } finally {
       setBusy(false);
     }

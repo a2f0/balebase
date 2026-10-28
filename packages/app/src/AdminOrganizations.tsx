@@ -22,6 +22,7 @@ import { AdminDeletionMenu } from "./AdminDeletionMenu";
 import { AdminOrganizationDetails } from "./AdminOrganizationDetails";
 import { formatDate, Identity } from "./adminDisplay";
 import { api } from "./apiClient";
+import { errorMessage } from "./errors";
 import { countLabel } from "./labels";
 import { adminOrganizationIdForPath } from "./organizationState";
 
@@ -76,7 +77,7 @@ function AdminOrganizationList({
     try {
       setOrganizations(await api.adminOrganizations.list());
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not load organizations."));
     } finally {
       setBusy(false);
     }
@@ -151,7 +152,7 @@ function useAdminOrganizationLifecycle(
       );
       setNotice(`${organization.name} was marked for deletion.`);
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not load organizations."));
     } finally {
       setAction(undefined);
     }
@@ -180,7 +181,7 @@ function useAdminOrganizationLifecycle(
       );
       setNotice(`${organization.name} was restored.`);
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(errorMessage(cause, "Could not load organizations."));
     } finally {
       setAction(undefined);
     }
@@ -414,12 +415,6 @@ function OrganizationActionMenu({
       pending={pending}
     />
   );
-}
-
-function messageFrom(cause: unknown) {
-  return cause instanceof Error
-    ? cause.message
-    : "Could not load organizations.";
 }
 
 function confirmMarkForDeletion(organization: AdminOrganization) {
