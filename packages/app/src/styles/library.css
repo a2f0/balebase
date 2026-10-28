@@ -12,17 +12,6 @@
   text-decoration: none;
 }
 
-.folderCardIcon {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: var(--radius-md);
-  color: var(--color-green-deep);
-  background: var(--color-lime-wash);
-}
-
 .folderCardText {
   display: grid;
   gap: var(--space-0-5);

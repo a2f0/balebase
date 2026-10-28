@@ -6,10 +6,6 @@
   align-content: start;
 }
 
-.stackXs {
-  --stack-gap: var(--space-1);
-}
-
 .stackSm {
   --stack-gap: var(--space-2);
 }
@@ -22,10 +18,6 @@
   --stack-gap: var(--space-6);
 }
 
-.stackXl {
-  --stack-gap: var(--space-10);
-}
-
 .cluster {
   display: flex;
   flex-wrap: wrap;
@@ -36,6 +28,19 @@
 
 .clusterBetween {
   justify-content: space-between;
+}
+
+/*
+ * Unlike .cluster, action groups keep their automatic minimum width and a
+ * fixed gap, even inside a region that sets --cluster-gap.
+ */
+.cardActions,
+.rowActions,
+.pageActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .gridAuto {
@@ -81,6 +86,17 @@
   vertical-align: middle;
 }
 
+.iconTile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-md);
+  color: var(--color-green-deep);
+  background: var(--color-lime-wash);
+}
+
 /* Cards. */
 .card {
   min-width: 0;
@@ -119,13 +135,6 @@
   color: var(--color-text-muted);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
-}
-
-.cardActions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 .cardBody {
@@ -227,13 +236,6 @@
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
   overflow-wrap: anywhere;
-}
-
-.rowActions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 button.row,
@@ -954,13 +956,6 @@ a.row:focus-visible {
   color: var(--color-text-muted);
   font-size: var(--text-md);
   line-height: var(--leading-normal);
-}
-
-.pageActions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 .pageHeader:has(.pageTabs) .pageHeaderInner {
