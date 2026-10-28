@@ -129,30 +129,35 @@ export function installDom({ globals, url }: DomOptions = {}) {
  * Dispose of it, or call `restore`, to put the real timers back.
  */
 export function holdTimers(delay: number) {
-  const { clearTimeout: realClear, setTimeout: realSet } = globalThis;
   const held = new Map<number, () => void>();
   let lastId = 0;
-  const set = spyOn(globalThis, "setTimeout").mockImplementation(((
-    handler: TimerHandler,
-    timeout?: number,
-    ...args: unknown[]
-  ) => {
-    if (timeout !== delay || typeof handler !== "function")
-      return realSet(handler, timeout, ...args);
-    // Negative IDs never collide with a real timer's.
-    lastId -= 1;
-    held.set(lastId, () => handler(...args));
-    return lastId;
-  }) as unknown as typeof setTimeout);
-  const clear = spyOn(globalThis, "clearTimeout").mockImplementation(((
-    id?: number | Timer,
-  ) => {
-    if (typeof id === "number" && held.delete(id)) return;
-    realClear(id);
-  }) as typeof clearTimeout);
+  // An installed DOM window keeps timers of its own, apart from Bun's.
+  const hosts: (typeof globalThis)[] = [globalThis];
+  if (globalThis.window && globalThis.window !== globalThis)
+    hosts.push(globalThis.window);
+  const spies = hosts.flatMap((host) => {
+    const { clearTimeout: realClear, setTimeout: realSet } = host;
+    return [
+      spyOn(host, "setTimeout").mockImplementation(((
+        handler: TimerHandler,
+        timeout?: number,
+        ...args: unknown[]
+      ) => {
+        if (timeout !== delay || typeof handler !== "function")
+          return Reflect.apply(realSet, host, [handler, timeout, ...args]);
+        // Negative IDs never collide with a real timer's.
+        lastId -= 1;
+        held.set(lastId, () => handler(...args));
+        return lastId;
+      }) as unknown as typeof setTimeout),
+      spyOn(host, "clearTimeout").mockImplementation(((id?: number | Timer) => {
+        if (typeof id === "number" && held.delete(id)) return;
+        Reflect.apply(realClear, host, [id]);
+      }) as typeof clearTimeout),
+    ];
+  });
   const restore = () => {
-    set.mockRestore();
-    clear.mockRestore();
+    for (const spy of spies) spy.mockRestore();
   };
   return {
     /** Runs the timers held so far, then settles. */

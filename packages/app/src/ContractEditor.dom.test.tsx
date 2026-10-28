@@ -1,51 +1,22 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { ContractDetail } from "@balebase/validators/contracts";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
+import { autosaveDelayMs } from "./ContractEditor";
 import { Contracts } from "./Contracts";
 import { canNavigate } from "./navigationGuard";
+import { holdTimers, installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/contracts/c1" });
-const domGlobals = {
-  document: dom.document,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
-  window: dom,
-};
-const savedGlobals = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
-const mounted: { container: HTMLElement; root: Root }[] = [];
+const { button, click, fill, mount, respond, settle } = installDom({
+  url: "http://localhost:5173/contracts/c1",
+});
 
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    savedGlobals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
+// Holds the autosave so only leaving saves an edit, however slow the run.
+let autosave: ReturnType<typeof holdTimers>;
+beforeEach(() => {
+  autosave = holdTimers(autosaveDelayMs);
 });
-afterAll(async () => {
-  for (const [key, descriptor] of savedGlobals) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
-afterEach(async () => {
-  for (const { container, root } of mounted.splice(0)) {
-    await act(async () => root.unmount());
-    container.remove();
-  }
-  globalThis.fetch = originalFetch;
-});
+afterEach(() => autosave.restore());
 
 const draft: ContractDetail = {
   completedAt: null,
@@ -79,8 +50,7 @@ const draft: ContractDetail = {
 /** Serves the draft; each draft save answers with the next queued outcome. */
 function stubApi(saves: ("fail" | "save")[]) {
   const saved: string[] = [];
-  globalThis.fetch = (async (input, init) => {
-    const url = String(input);
+  respond(async (url, init) => {
     if (init?.method === "PUT") {
       const { title } = JSON.parse(String(init.body)) as { title: string };
       if (saves.shift() === "fail")
@@ -91,33 +61,22 @@ function stubApi(saves: ("fail" | "save")[]) {
       saved.push(title);
       return Response.json({ contract: { ...draft, title } });
     }
-    if (url.endsWith("/document")) return new Response(null, { status: 404 });
+    if (url.pathname.endsWith("/document"))
+      return new Response(null, { status: 404 });
     return Response.json({ contract: draft });
-  }) as typeof fetch;
+  });
   return saved;
 }
 
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
-
-async function mount() {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  mounted.push({ container, root });
-  await act(async () =>
-    root.render(
-      <>
-        <Contracts onNavigate={() => {}} pathname="/contracts/c1" />
-        <DialogHost />
-      </>,
-    ),
+async function mountEditor() {
+  const view = await mount(
+    <>
+      <Contracts onNavigate={() => {}} pathname="/contracts/c1" />
+      <DialogHost />
+    </>,
   );
   await settle();
-  return container;
+  return view;
 }
 
 function titleField(container: HTMLElement) {
@@ -129,18 +88,9 @@ function titleField(container: HTMLElement) {
   return input as HTMLInputElement;
 }
 
-/** Types before the autosave delay passes, so only leaving saves the edit. */
+/** Types an edit the held autosave never saves, so only leaving does. */
 async function retitle(container: HTMLElement, title: string) {
-  const input = titleField(container);
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(
-      dom.HTMLInputElement.prototype,
-      "value",
-    )?.set?.call(input, title);
-    input.dispatchEvent(
-      new dom.Event("input", { bubbles: true }) as unknown as Event,
-    );
-  });
+  await fill(titleField(container), title);
 }
 
 /**
@@ -157,19 +107,15 @@ async function leave() {
 }
 
 async function answer(label: string) {
-  const choice = [
-    ...(document.querySelector("dialog[open]")?.querySelectorAll("button") ??
-      []),
-  ].find((element) => element.textContent?.trim() === label);
-  expect(choice).toBeTruthy();
-  await act(async () => choice?.click());
-  await settle();
+  const dialog = document.querySelector("dialog[open]");
+  if (!dialog) throw new Error("No open dialog");
+  await click(button(label, dialog));
 }
 
 describe("leaving a contract draft", () => {
   it("saves edits the autosave has not reached before leaving", async () => {
     const saved = stubApi(["save"]);
-    const container = await mount();
+    const { container } = await mountEditor();
     await retitle(container, "Lease 2027");
     const question = await leave();
     expect(document.querySelector("dialog[open]")).toBeNull();
@@ -180,7 +126,7 @@ describe("leaving a contract draft", () => {
   it("also saves edits made while the leaving save is in flight", async () => {
     const saved: string[] = [];
     let release = () => {};
-    globalThis.fetch = (async (input, init) => {
+    respond(async (url, init) => {
       if (init?.method === "PUT") {
         const { title } = JSON.parse(String(init.body)) as { title: string };
         if (saved.length === 0)
@@ -190,11 +136,11 @@ describe("leaving a contract draft", () => {
         saved.push(title);
         return Response.json({ contract: { ...draft, title } });
       }
-      if (String(input).endsWith("/document"))
+      if (url.pathname.endsWith("/document"))
         return new Response(null, { status: 404 });
       return Response.json({ contract: draft });
-    }) as typeof fetch;
-    const container = await mount();
+    });
+    const { container } = await mountEditor();
     await retitle(container, "Lease 2027");
     const question = await leave();
     await retitle(container, "Lease 2028");
@@ -206,7 +152,7 @@ describe("leaving a contract draft", () => {
 
   it("shows a failed save and keeps the page until the edits are discarded", async () => {
     const saved = stubApi(["fail", "fail", "save"]);
-    const container = await mount();
+    const { container, unmount } = await mountEditor();
     await retitle(container, "Lease 2027");
 
     const kept = await leave();
@@ -224,10 +170,7 @@ describe("leaving a contract draft", () => {
     await answer("Discard changes");
     expect(await discarded.allowed).toBe(true);
     // Discarded edits are not saved behind the person's back on the way out.
-    for (const page of mounted.splice(0)) {
-      await act(async () => page.root.unmount());
-      page.container.remove();
-    }
+    await unmount();
     await settle();
     expect(saved).toEqual([]);
   });

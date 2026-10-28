@@ -28,7 +28,7 @@ import { useAction } from "./useAction";
 type Editor = ReturnType<typeof useDraftEditor>;
 
 /** How long after the last edit a draft saves itself. */
-const autosaveDelayMs = 1200;
+export const autosaveDelayMs = 1200;
 
 /** Prepares a draft: details, signers, and fields placed on the document. */
 export function ContractEditor({
