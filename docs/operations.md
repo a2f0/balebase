@@ -233,19 +233,6 @@ After deployment, enable daily sync on a Sandbox connection, start a manual sync
 close the page, then reopen it and verify the completed status. Confirm only one
 job per opted-in connection and UTC day and verify failures can be retried.
 
-## Shared issues migration
-
-The API 0.1.32 release requires `0062_create_issues.sql` and
-`0063_record_finance_annotations.sql`. The deployment scripts apply migrations
-before deploying the API. Migration 0062 preserves audit issue IDs, attachments,
-and history while replacing `audit_issues` with the shared `issues` table.
-The previous Worker cannot read or write audit issues after that replacement:
-expect audit requests to fail during the migration-to-Worker deployment window.
-Schedule this release accordingly and finish the API deployment promptly.
-If deployment fails after migration, retry deploying the new API; rolling the
-Worker back alone does not restore the old schema. Keep the normal D1 recovery
-point available if a full schema-and-Worker rollback is needed.
-
 ## Deploy production
 
 The full deployment checks the repository, applies D1 migrations, deploys the
@@ -276,6 +263,9 @@ bun run deploy:domains  # preflight and attach custom domains
 bun run deploy:email:verify # verify inbound MX records and Worker route
 bun run deploy:verify   # check all production URLs
 ```
+
+`DEPLOY_TIER=staging` selects staging for `deploy:verify` and
+`deploy:email:verify`; `bun run deploy:staging:verify` is the shortcut.
 
 ## Deploy staging
 
