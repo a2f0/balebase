@@ -3,9 +3,7 @@ import { type Context, Hono } from "hono";
 import { sendDeclined } from "./contractMail";
 import { isEmbeddablePng } from "./contractPdf";
 import {
-  advanceContract,
   type ContractRow,
-  decodePngDataUrl,
   eventStatement,
   type FieldRow,
   findContractById,
@@ -19,7 +17,9 @@ import {
   signingToken,
   signingTokenHash,
 } from "./contractTokens";
+import { advanceContract, decodePngDataUrl } from "./contractWorkflow";
 import { respond } from "./respond";
+import { storedDownload } from "./storage";
 import type { Bindings } from "./types";
 
 /** Public routes a signer reaches through their emailed link; no account. */
@@ -373,18 +373,17 @@ async function pdfResponse(
   key: string,
   filename: string,
 ) {
-  const object = await context.env.STORAGE.get(key);
-  if (!object)
-    return context.json({ error: "The document file is missing." }, 404);
-  const encoded = encodeURIComponent(filename).replaceAll("'", "%27");
-  return new Response(object.body, {
+  const download = await storedDownload(context.env.STORAGE, key, {
+    fallbackFilename: "contract.pdf",
+    filename,
     headers: {
       "cache-control": "private, no-store",
-      "content-disposition": `attachment; filename="contract.pdf"; filename*=UTF-8''${encoded}`,
       "content-type": "application/pdf",
-      "x-content-type-options": "nosniff",
     },
   });
+  return (
+    download ?? context.json({ error: "The document file is missing." }, 404)
+  );
 }
 
 function linkNotFound(context: SigningContext) {

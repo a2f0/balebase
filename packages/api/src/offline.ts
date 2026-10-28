@@ -5,7 +5,7 @@ import {
 import { Hono } from "hono";
 import { activityBatch } from "./activity";
 import { findIssueImages } from "./auditIssueImageRecords";
-import { uploadAuditIssueImage } from "./auditIssueImages";
+import { uploadAuditIssueImage } from "./auditIssueImageUploads";
 import { type TemplateRow, templateSelect, toTemplate } from "./auditTemplates";
 import type { ApiEnv } from "./authMiddleware";
 import type { IssueContext } from "./issueRecords";

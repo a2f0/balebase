@@ -10,6 +10,7 @@ import { buildScreeningConsentPdf } from "./screeningConsentPdf";
 import type { ScreeningDisclosures } from "./screeningDisclosures";
 import { sendPendingScreeningNotifications } from "./screeningNotifications";
 import type { ScreeningSubmission } from "./screeningSubmission";
+import { trackedPut } from "./storage";
 import type { Bindings } from "./types";
 
 // A canceled report frees the screening to be requested again.
@@ -739,24 +740,16 @@ async function recordConsent(
     disclosures,
   );
   const key = `organizations/${subject.organizationId}/screening-consents/${subject.requirementId}/${id}.pdf`;
-  // Queued for cleanup until the consent row claims it, so a write that fails
-  // or loses its response never leaves an untracked PDF.
-  await env.DB.prepare(
-    `INSERT INTO deleted_object_cleanup
-       (id, organization_id, object_key, deleted_at, cleanup_token,
-        cleanup_claimed_at)
-     VALUES (?, ?, ?, ?, NULL, NULL)`,
-  )
-    .bind(
-      `screening-consent-upload:${id}`,
-      subject.organizationId,
+  await trackedPut(
+    env,
+    {
+      cleanupId: `screening-consent-upload:${id}`,
       key,
-      signedAt,
-    )
-    .run();
-  await env.STORAGE.put(key, pdf, {
-    httpMetadata: { contentType: "application/pdf" },
-  });
+      organizationId: subject.organizationId,
+    },
+    pdf,
+    { httpMetadata: { contentType: "application/pdf" } },
+  );
   await env.DB.prepare(
     `INSERT INTO employee_screening_consents
      (id, organization_id, requirement_id, user_id, signature_name,

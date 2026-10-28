@@ -54,11 +54,7 @@ const packageWorkspaces: Record<string, PackageWorkspace> = {
   "packages/api": {
     ...defaultPackage,
     project: [...defaultPackage.project, "scripts/**/*.ts"],
-    production: [
-      ...defaultPackage.production,
-      "!src/contractTestSetup.ts",
-      "!src/testing/**",
-    ],
+    production: [...defaultPackage.production, "!src/testing/**"],
   },
   "packages/app": {
     entry: ["browser/**/*.test.tsx"],

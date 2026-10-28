@@ -1,10 +1,9 @@
+import { findContractById, listRecipients } from "./contractRecords";
 import {
   advanceContract,
   type ContractEnvironment,
-  findContractById,
-  listRecipients,
   notifyRecipients,
-} from "./contractRecords";
+} from "./contractWorkflow";
 
 const reminderBatchSize = 50;
 const resumeBatchSize = 5;

@@ -11,7 +11,7 @@ import {
 } from "./apiKeys";
 import type { AuthSession } from "./auth";
 import { createAuth } from "./auth";
-import { organizationUserHasSeat } from "./billing";
+import { organizationUserHasSeat } from "./billingEntitlements";
 import { isRecord } from "./jsonInput";
 import { isOrganizationOwner } from "./organizationMembers";
 import type { Bindings } from "./types";
@@ -238,11 +238,9 @@ async function filterTeamsRequiringAccess(
     }
     if (
       await organizationUserHasSeat(
-        context.env.DB,
+        context.env,
         membership.organizationId,
         session.user.id,
-        context.env.STRIPE_PRO_PRICE_ID,
-        context.env.STRIPE_PRO_LEGACY_PRICE_IDS,
       )
     ) {
       allowedOrganizationIds.add(membership.organizationId);
@@ -334,11 +332,9 @@ async function authorizeOrganization(
   if (
     requiresSeat(membership.role) &&
     !(await organizationUserHasSeat(
-      context.env.DB,
+      context.env,
       membership.organizationId,
       session.user.id,
-      context.env.STRIPE_PRO_PRICE_ID,
-      context.env.STRIPE_PRO_LEGACY_PRICE_IDS,
     ))
   ) {
     const owner = isOrganizationOwner(membership.role);
