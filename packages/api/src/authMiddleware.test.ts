@@ -1,14 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import { Hono } from "hono";
-import type { AuthSession } from "./auth";
 import {
-  type AuthVariables,
   requireAuthOrganizationSeat,
   requireBillingOrganization,
   requireOrganization,
   requireOrganizationPluginAccess,
 } from "./authMiddleware";
-import type { Bindings } from "./types";
+import { testBindings } from "./testing/bindings";
+import { testApp } from "./testing/session";
 
 describe("organization middleware", () => {
   it("uses the session's one active organization", async () => {
@@ -96,9 +94,9 @@ describe("organization middleware", () => {
   });
 
   it("blocks an unseated member from organization auth data but permits switching", async () => {
-    const bindings = {
+    const bindings = testBindings({
       DB: membershipDatabase(["active-org"], [], [], "owner-id"),
-    } as Bindings;
+    });
     const protectedResponse = await authOrganizationApp().request(
       "/api/auth/organization/list-members?organizationId=active-org",
       undefined,
@@ -118,7 +116,7 @@ describe("organization middleware", () => {
   });
 
   it("rejects organization selectors that conflict with a canonical resource", async () => {
-    const bindings = {
+    const bindings = testBindings({
       DB: membershipDatabase(
         ["active-org", "unseated-org"],
         [],
@@ -126,7 +124,7 @@ describe("organization middleware", () => {
         "owner-id",
         { invitation: { "invite-unseated": "unseated-org" } },
       ),
-    } as Bindings;
+    });
     const response = await authOrganizationApp().request(
       "/api/auth/organization/cancel-invitation?organizationId=active-org",
       {
@@ -143,9 +141,9 @@ describe("organization middleware", () => {
   });
 
   it("lets a verified member leave without a Free-plan seat", async () => {
-    const bindings = {
+    const bindings = testBindings({
       DB: membershipDatabase(["active-org"], [], ["active-org"], "owner-id"),
-    } as Bindings;
+    });
     const response = await combinedAuthOrganizationApp().request(
       "/api/auth/organization/leave",
       {
@@ -218,24 +216,20 @@ describe("organization middleware", () => {
 });
 
 function seatTestApp(role: string, twoFactorState: TwoFactorState = {}) {
-  const app = new Hono<{
-    Bindings: Bindings;
-    Variables: AuthVariables;
-  }>();
-  app.use("*", async (context, next) => {
-    context.set("authSession", {
+  const app = testApp(
+    {},
+    {
       session: {
         activeOrganizationId: "active-org",
         twoFactorVerified: twoFactorState.twoFactorVerified ?? false,
       },
       user: {
         defaultOrganizationId: null,
-        id: "user-id",
         twoFactorEnabled: twoFactorState.twoFactorEnabled ?? false,
       },
-    } as unknown as AuthSession);
-    await next();
-  });
+      userId: "user-id",
+    },
+  );
   app.use("/billing", requireBillingOrganization);
   app.use("/audits", requireOrganization);
   app.get("*", (context) =>
@@ -244,7 +238,7 @@ function seatTestApp(role: string, twoFactorState: TwoFactorState = {}) {
       organizationRole: context.get("organizationRole"),
     }),
   );
-  const bindings = {
+  const bindings = testBindings({
     DB: membershipDatabase(
       ["active-org"],
       [],
@@ -253,49 +247,33 @@ function seatTestApp(role: string, twoFactorState: TwoFactorState = {}) {
       {},
       role,
     ),
-  } as Bindings;
+  });
   return (path: string) => app.request(path, undefined, bindings);
 }
 
 function authOrganizationApp() {
-  const app = new Hono<{
-    Bindings: Bindings;
-    Variables: AuthVariables;
-  }>();
-  app.use("*", async (context, next) => {
-    context.set("authSession", {
+  const app = testApp(
+    {},
+    {
       session: { activeOrganizationId: "active-org" },
-      user: {
-        defaultOrganizationId: "active-org",
-        id: "user-id",
-      },
-    } as unknown as AuthSession);
-    await next();
-  });
+      user: { defaultOrganizationId: "active-org" },
+      userId: "user-id",
+    },
+  );
   app.use("*", requireAuthOrganizationSeat);
   app.all("*", (context) => context.json({ ok: true }));
   return app;
 }
 
 function combinedAuthOrganizationApp() {
-  const app = new Hono<{
-    Bindings: Bindings;
-    Variables: AuthVariables;
-  }>();
-  app.use("*", async (context, next) => {
-    context.set("authSession", {
-      session: {
-        activeOrganizationId: "active-org",
-        twoFactorVerified: true,
-      },
-      user: {
-        defaultOrganizationId: "active-org",
-        id: "user-id",
-        twoFactorEnabled: true,
-      },
-    } as unknown as AuthSession);
-    await next();
-  });
+  const app = testApp(
+    {},
+    {
+      session: { activeOrganizationId: "active-org", twoFactorVerified: true },
+      user: { defaultOrganizationId: "active-org", twoFactorEnabled: true },
+      userId: "user-id",
+    },
+  );
   app.use("*", requireOrganizationPluginAccess, requireAuthOrganizationSeat);
   app.all("*", (context) => context.json({ ok: true }));
   return app;
@@ -519,29 +497,25 @@ interface TwoFactorState {
   twoFactorVerified?: boolean;
 }
 
-function testApp(
+function organizationApp(
   activeOrganizationId: string | null,
   defaultOrganizationId: string | null,
   twoFactorState: TwoFactorState,
 ) {
-  const app = new Hono<{
-    Bindings: Bindings;
-    Variables: AuthVariables;
-  }>();
-  app.use("*", async (context, next) => {
-    context.set("authSession", {
+  const app = testApp(
+    {},
+    {
       session: {
         activeOrganizationId,
         twoFactorVerified: twoFactorState.twoFactorVerified ?? false,
       },
       user: {
         defaultOrganizationId,
-        id: "user-id",
         twoFactorEnabled: twoFactorState.twoFactorEnabled ?? false,
       },
-    } as unknown as AuthSession);
-    await next();
-  });
+      userId: "user-id",
+    },
+  );
   app.use("*", requireOrganization);
   app.get("/", (context) =>
     context.json({
@@ -559,18 +533,22 @@ function requestOrganization(
   deletedMemberships: string[] = [],
   twoFactorState: TwoFactorState = {},
 ) {
-  return testApp(
+  return organizationApp(
     activeOrganizationId,
     defaultOrganizationId,
     twoFactorState,
-  ).request("/", undefined, {
-    DB: membershipDatabase(
-      memberships,
-      deletedMemberships,
-      twoFactorState.twoFactorRequired ? memberships : [],
-      twoFactorState.freeSeatUserId ?? "user-id",
-    ),
-  } as Bindings);
+  ).request(
+    "/",
+    undefined,
+    testBindings({
+      DB: membershipDatabase(
+        memberships,
+        deletedMemberships,
+        twoFactorState.twoFactorRequired ? memberships : [],
+        twoFactorState.freeSeatUserId ?? "user-id",
+      ),
+    }),
+  );
 }
 
 function pluginRequest(
@@ -584,25 +562,17 @@ function pluginRequest(
   activeTeamId: string | null = null,
   freeSeatUserIds: string | Record<string, string> = "user-id",
 ) {
-  const app = new Hono<{
-    Bindings: Bindings;
-    Variables: AuthVariables;
-  }>();
-  app.use("*", async (context, next) => {
-    context.set("authSession", {
-      session: {
-        activeOrganizationId,
-        activeTeamId,
-        twoFactorVerified: false,
-      },
+  const app = testApp(
+    {},
+    {
+      session: { activeOrganizationId, activeTeamId, twoFactorVerified: false },
       user: {
         defaultOrganizationId: activeOrganizationId,
-        id: "user-id",
         twoFactorEnabled: false,
       },
-    } as unknown as AuthSession);
-    await next();
-  });
+      userId: "user-id",
+    },
+  );
   app.use(
     "/api/auth/organization/*",
     requireOrganizationPluginAccess,
@@ -622,7 +592,7 @@ function pluginRequest(
           method: "POST",
         }
       : undefined,
-    {
+    testBindings({
       DB: membershipDatabase(
         memberships,
         [],
@@ -630,7 +600,7 @@ function pluginRequest(
         freeSeatUserIds,
         resourceOrganizations,
       ),
-    } as Bindings,
+    }),
   );
 }
 

@@ -1,7 +1,6 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import { Hono } from "hono";
-import type { AuthSession } from "./auth";
 import type { AuthVariables } from "./authMiddleware";
 import { verifyCheckrWebhook } from "./checkr";
 import { recoverCheckrAttempt } from "./checkrScreening";
@@ -22,6 +21,11 @@ import {
   summaryOfRightsUrl,
 } from "./screeningDisclosures";
 import { sendPendingScreeningNotifications } from "./screeningNotifications";
+import { testBindings } from "./testing/bindings";
+import { queryHooks, toD1 } from "./testing/d1";
+import { applyMigrations, createTestDatabase } from "./testing/database";
+import { seedAccount, seedMember, seedOrganization } from "./testing/seed";
+import { testApp } from "./testing/session";
 import type { Bindings } from "./types";
 
 const orgId = "org_owner";
@@ -150,7 +154,7 @@ describe("employee forms", () => {
 
   it("rejects an invitation accepted during requirement assignment", async () => {
     const fixture = await createFixture();
-    fixture.beforeBatch(() => {
+    fixture.hooks.before("INSERT INTO employee_requirements", () => {
       fixture.database
         .query("UPDATE invitation SET status = 'accepted' WHERE id = 'invite'")
         .run();
@@ -254,14 +258,12 @@ describe("employee forms", () => {
       "background_check",
       "Background check",
     );
-    fixture.beforeRun((query) => {
-      if (query.includes("SET status = COALESCE")) {
-        fixture.database
-          .query(
-            "UPDATE employee_requirements SET status = 'complete' WHERE id = ?",
-          )
-          .run(checkId);
-      }
+    fixture.beforeRun("SET status = COALESCE", () => {
+      fixture.database
+        .query(
+          "UPDATE employee_requirements SET status = 'complete' WHERE id = ?",
+        )
+        .run(checkId);
     });
     const dueDate = await fixture.app("owner", "owner").request(`/${checkId}`, {
       body: JSON.stringify({ dueDate: "2026-10-10" }),
@@ -284,14 +286,12 @@ describe("employee forms", () => {
       body: form,
       method: "POST",
     });
-    fixture.beforeRun((query) => {
-      if (query.includes("SET status = COALESCE")) {
-        fixture.database
-          .query(
-            "UPDATE employee_requirements SET document_key = 'new-key', document_revision = document_revision + 1 WHERE id = ?",
-          )
-          .run(formId);
-      }
+    fixture.beforeRun("SET status = COALESCE", () => {
+      fixture.database
+        .query(
+          "UPDATE employee_requirements SET document_key = 'new-key', document_revision = document_revision + 1 WHERE id = ?",
+        )
+        .run(formId);
     });
     const review = await fixture.app("owner", "owner").request(`/${formId}`, {
       body: JSON.stringify({ status: "complete", documentRevision: 1 }),
@@ -336,14 +336,12 @@ describe("employee forms", () => {
         "UPDATE employee_requirements SET checkr_start_nonce = NULL WHERE id = ?",
       )
       .run(id);
-    fixture.beforeRun((query) => {
-      if (query.includes("SET status = COALESCE")) {
-        fixture.database
-          .query(
-            "UPDATE employee_requirements SET checkr_start_nonce = 'raced' WHERE id = ?",
-          )
-          .run(id);
-      }
+    fixture.beforeRun("SET status = COALESCE", () => {
+      fixture.database
+        .query(
+          "UPDATE employee_requirements SET checkr_start_nonce = 'raced' WHERE id = ?",
+        )
+        .run(id);
     });
     const raced = await fixture.app("owner", "owner").request(`/${id}`, {
       body: JSON.stringify({ status: "complete" }),
@@ -500,9 +498,13 @@ describe("employee forms", () => {
   it("keeps a form when the database commits but its response is lost", async () => {
     const fixture = await createFixture();
     const id = await createRequirement(fixture, "form", "W-4");
-    fixture.afterRun(() => {
-      throw new Error("D1 response lost.");
-    });
+    fixture.hooks.after(
+      "SET document_key = ?",
+      () => {
+        throw new Error("D1 response lost.");
+      },
+      { method: "run" },
+    );
     const form = new FormData();
     form.set(
       "file",
@@ -527,7 +529,7 @@ describe("employee forms", () => {
   it("does not link a form after cleanup claims its upload", async () => {
     const fixture = await createFixture();
     const id = await createRequirement(fixture, "form", "W-4");
-    fixture.beforeDocumentUpdate(() => {
+    fixture.beforeRun("SET document_key = ?", () => {
       fixture.database
         .query(
           "UPDATE deleted_object_cleanup SET cleanup_token = 'worker' WHERE id LIKE 'employee-form-upload:%'",
@@ -1748,11 +1750,13 @@ describe("employee forms", () => {
       const fixture = await createFixture();
       const id = await requestedScreening(fixture);
       const checkr = mockCheckr(checkrResponses);
-      fixture.beforeFirst((query) => {
-        if (query.includes("SET checkr_start_nonce = COALESCE")) {
+      fixture.hooks.before(
+        "SET checkr_start_nonce = COALESCE",
+        () => {
           fixture.database.query(change).run();
-        }
-      });
+        },
+        { method: "first" },
+      );
       try {
         const raced = await submitScreening(fixture, id, homerSubmission());
         expect(raced.status).toBe(409);
@@ -2046,18 +2050,17 @@ describe("employee forms", () => {
   it("keeps a completed screening when an older refresh finishes last", async () => {
     const fixture = await createFixture();
     const id = await orderedScreening(fixture);
-    fixture.beforeRun((query) => {
-      if (
-        query.includes("checkr_refresh_revision = checkr_refresh_revision + 1")
-      ) {
+    fixture.beforeRun(
+      "checkr_refresh_revision = checkr_refresh_revision + 1",
+      () => {
         fixture.database
           .query(`UPDATE employee_requirements
                   SET status = 'complete', checkr_result = 'clear',
                       checkr_refresh_revision = checkr_refresh_revision + 1
                   WHERE id = ?`)
           .run(id);
-      }
-    });
+      },
+    );
     const checkr = mockCheckr(() =>
       Response.json({ id: "report-1", result: null, status: "pending" }),
     );
@@ -2373,13 +2376,15 @@ describe("employee forms", () => {
         "UPDATE employee_requirements SET status = 'complete', checkr_report_status = 'complete' WHERE id = ?",
       )
       .run(second);
-    fixture.beforeFirst((query) => {
-      if (query.includes("notification.claim_token")) {
+    fixture.hooks.before(
+      "notification.claim_token",
+      () => {
         fixture.database.exec(
           "DELETE FROM member WHERE id = 'employee-member'",
         );
-      }
-    });
+      },
+      { method: "first" },
+    );
     await sendPendingScreeningNotifications(fixture.bindings);
     expect(fixture.emails).toHaveLength(1);
   });
@@ -2467,14 +2472,14 @@ describe("employee forms", () => {
   });
 
   it("does not backfill notifications for reports completed before deployment", async () => {
-    const fixture = await createFixture(false);
+    const fixture = await createFixture({ before: "0068" });
     const id = await orderedScreening(fixture);
     fixture.database
       .query(
         "UPDATE employee_requirements SET status = 'complete', checkr_report_status = 'complete' WHERE id = ?",
       )
       .run(id);
-    await migration(fixture.database, "0068_notify_screening_completion.sql");
+    applyMigrations(fixture.database, { from: "0068" });
     const checkr = mockCheckr(() =>
       Response.json({ id: "report-1", result: "clear", status: "complete" }),
     );
@@ -2524,9 +2529,8 @@ describe("employee forms", () => {
 
   it("reports queue access failures separately from attempted email failures", async () => {
     const fixture = await createFixture();
-    fixture.beforeRun((query) => {
-      if (query.includes("SET abandoned_at"))
-        throw new Error("Queue unavailable");
+    fixture.beforeRun("SET abandoned_at", () => {
+      throw new Error("Queue unavailable");
     });
     expect(await sendPendingScreeningNotifications(fixture.bindings)).toEqual({
       sent: 0,
@@ -2739,24 +2743,8 @@ describe("employee forms", () => {
   });
 
   it("keeps hosted reports, stops on open invitations, and resets closed ones when migrating", async () => {
-    const database = new Database(":memory:");
-    await migration(database, "0003_create_auth.sql");
-    await migration(database, "0004_create_organizations.sql");
-    database.exec(`CREATE TABLE deleted_object_cleanup (
-      id TEXT PRIMARY KEY, organization_id TEXT, object_key TEXT UNIQUE,
-      deleted_at TEXT, cleanup_token TEXT, cleanup_claimed_at TEXT)`);
-    for (const file of [
-      "0041_create_employee_requirements.sql",
-      "0042_add_checkr_screenings.sql",
-      "0043_queue_employee_document_cleanup.sql",
-      "0044_guard_employee_screenings.sql",
-      "0045_track_employee_form_uploads.sql",
-      "0046_version_employee_screening_refresh.sql",
-      "0047_bind_employee_screening_attempt.sql",
-      "0052_track_checkr_refreshes.sql",
-    ]) {
-      await migration(database, file);
-    }
+    const database = createTestDatabase({ before: "0067" });
+    seedOrganization(database, { id: orgId });
     const insert = database.query(`INSERT INTO employee_requirements
       (id, organization_id, target_email, kind, title, due_date, status,
        created_at, updated_at, checkr_candidate_id, checkr_invitation_id,
@@ -3023,18 +3011,10 @@ function beforeCheckrRefreshWrite(
   fixture: Awaited<ReturnType<typeof createFixture>>,
   action: () => void,
 ) {
-  const arm = () => {
-    fixture.beforeRun((query) => {
-      if (
-        query.includes("checkr_refresh_revision = checkr_refresh_revision + 1")
-      ) {
-        action();
-      } else {
-        arm();
-      }
-    });
-  };
-  arm();
+  fixture.beforeRun(
+    "checkr_refresh_revision = checkr_refresh_revision + 1",
+    action,
+  );
 }
 
 function withoutCheckrKey(bindings: Bindings): Bindings {
@@ -3108,49 +3088,31 @@ function jsonPost(body: unknown): RequestInit {
   };
 }
 
-async function createFixture(withNotifications = true) {
-  const database = new Database(":memory:");
-  database.exec("PRAGMA foreign_keys = ON");
-  await migration(database, "0003_create_auth.sql");
-  for (const id of ["owner", "employee", "invitee", "other"]) {
-    database
-      .query(`INSERT INTO user
-      (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-      VALUES (?, ?, ?, 1, ?, ?, 'user', 0)`)
-      .run(id, id, `${id}@example.com`, now(), now());
-  }
-  await migration(database, "0004_create_organizations.sql");
-  await migration(database, "0011_soft_delete_organizations.sql");
-  database
-    .query("UPDATE organization SET name = 'Acme' WHERE id = ?")
-    .run(orgId);
-  database
-    .query(`INSERT INTO member (id, organizationId, userId, role, createdAt)
-    VALUES ('employee-member', ?, 'employee', 'member', ?)`)
-    .run(orgId, now());
-  database
-    .query(`INSERT INTO member (id, organizationId, userId, role, createdAt)
-    VALUES ('other-member', 'org_other', 'invitee', 'member', ?)`)
-    .run(now());
+async function createFixture(migrations: { before?: string } = {}) {
+  const database = createTestDatabase(migrations);
+  for (const id of ["owner", "employee", "invitee", "other"])
+    seedAccount(database, {
+      createdAt: now(),
+      id,
+      ...(id === "owner" ? { organizationName: "Acme" } : {}),
+    });
+  seedMember(database, {
+    createdAt: now(),
+    id: "employee-member",
+    organizationId: orgId,
+    userId: "employee",
+  });
+  seedMember(database, {
+    createdAt: now(),
+    id: "other-member",
+    organizationId: "org_other",
+    userId: "invitee",
+  });
   database
     .query(`INSERT INTO invitation
     (id, organizationId, email, role, status, expiresAt, createdAt, inviterId)
     VALUES ('invite', ?, 'invitee@example.com', 'member', 'pending', ?, ?, 'owner')`)
     .run(orgId, "2026-10-01", now());
-  database.exec(`CREATE TABLE deleted_object_cleanup (
-    id TEXT PRIMARY KEY, organization_id TEXT, object_key TEXT UNIQUE,
-    deleted_at TEXT, cleanup_token TEXT, cleanup_claimed_at TEXT)`);
-  await migration(database, "0041_create_employee_requirements.sql");
-  await migration(database, "0042_add_checkr_screenings.sql");
-  await migration(database, "0043_queue_employee_document_cleanup.sql");
-  await migration(database, "0044_guard_employee_screenings.sql");
-  await migration(database, "0045_track_employee_form_uploads.sql");
-  await migration(database, "0046_version_employee_screening_refresh.sql");
-  await migration(database, "0047_bind_employee_screening_attempt.sql");
-  await migration(database, "0052_track_checkr_refreshes.sql");
-  await migration(database, "0067_self_host_checkr_screenings.sql");
-  if (withNotifications)
-    await migration(database, "0068_notify_screening_completion.sql");
   const files = new Map<string, File>();
   const emails: Array<{
     html: string;
@@ -3160,29 +3122,16 @@ async function createFixture(withNotifications = true) {
     to: { email: string; name: string };
   }> = [];
   const storageState = { failPutAfterWrite: false, failDelete: false };
-  const hooks: {
-    beforeBatch: (() => void) | undefined;
-    beforeFirst: ((query: string) => void) | undefined;
-    beforeRun: ((query: string) => void) | undefined;
-    afterRun: (() => void) | undefined;
-    beforeDocumentUpdate: (() => void) | undefined;
-  } = {
-    beforeBatch: undefined,
-    beforeFirst: undefined,
-    beforeRun: undefined,
-    afterRun: undefined,
-    beforeDocumentUpdate: undefined,
-  };
-  const bindings = {
+  const hooks = queryHooks();
+  const bindings = testBindings({
     AUTH_EMAIL_FROM: "no-reply@balebase.test",
-    BETTER_AUTH_SECRET: "test-secret",
     CORS_ORIGIN: "https://app.balebase.test",
     DB: toD1(database, hooks),
     EMAIL: {
       send: async (message: (typeof emails)[number]) => {
         emails.push(message);
       },
-    },
+    } as unknown as SendEmail,
     STORAGE: {
       put: async (key: string, file: File | Uint8Array) => {
         files.set(
@@ -3210,22 +3159,24 @@ async function createFixture(withNotifications = true) {
             }
           : null;
       },
-    },
-  } as unknown as Bindings;
+    } as unknown as R2Bucket,
+  });
   return {
     app: (
       userId: string,
       role: string,
       via: { apiKey?: boolean; impersonatedBy?: string } = {},
     ) => {
-      const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-      app.use("*", async (context, next) => {
-        context.set("organizationId", orgId);
-        context.set("organizationRole", role);
-        context.set("authSession", {
+      const app = testApp(
+        {},
+        {
+          organizationId: orgId,
+          organizationRole: role,
           session: { impersonatedBy: via.impersonatedBy ?? null },
-          user: { id: userId },
-        } as AuthSession);
+          userId,
+        },
+      );
+      app.use("*", async (context, next) => {
         if (via.apiKey) {
           context.set("apiKey", {
             access: "write",
@@ -3240,85 +3191,15 @@ async function createFixture(withNotifications = true) {
       };
     },
     bindings,
-    beforeBatch: (callback: () => void) => {
-      hooks.beforeBatch = callback;
-    },
-    beforeFirst: (callback: (query: string) => void) => {
-      hooks.beforeFirst = callback;
-    },
-    beforeRun: (callback: (query: string) => void) => {
-      hooks.beforeRun = callback;
-    },
-    afterRun: (callback: () => void) => {
-      hooks.afterRun = callback;
-    },
-    beforeDocumentUpdate: (callback: () => void) => {
-      hooks.beforeDocumentUpdate = callback;
-    },
+    /** Runs `action` before the next `run()` of a statement containing `sql`. */
+    beforeRun: (sql: string, action: () => void) =>
+      hooks.before(sql, action, { method: "run" }),
     database,
     emails,
     files,
+    hooks,
     storageState,
   };
-}
-
-function toD1(
-  database: Database,
-  hooks: {
-    beforeBatch: (() => void) | undefined;
-    beforeFirst: ((query: string) => void) | undefined;
-    beforeRun: ((query: string) => void) | undefined;
-    afterRun: (() => void) | undefined;
-    beforeDocumentUpdate: (() => void) | undefined;
-  },
-) {
-  return {
-    batch: async (statements: Array<{ execute: () => unknown }>) => {
-      const callback = hooks.beforeBatch;
-      hooks.beforeBatch = undefined;
-      callback?.();
-      return statements.map((statement) => statement.execute());
-    },
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const statement = {
-        all: async () => ({ results: database.query(query).all(...values) }),
-        bind: (...next: SQLQueryBindings[]) => {
-          values = next;
-          return statement;
-        },
-        execute: () => {
-          const result = database.query(query).run(...values);
-          return { meta: { changes: result.changes } };
-        },
-        first: async () => {
-          hooks.beforeFirst?.(query);
-          return database.query(query).get(...values);
-        },
-        run: async () => {
-          if (
-            query.includes("SET document_key = ?") &&
-            hooks.beforeDocumentUpdate
-          ) {
-            const before = hooks.beforeDocumentUpdate;
-            hooks.beforeDocumentUpdate = undefined;
-            before();
-          }
-          const callback = hooks.beforeRun;
-          hooks.beforeRun = undefined;
-          callback?.(query);
-          const result = database.query(query).run(...values);
-          if (query.includes("SET document_key = ?") && hooks.afterRun) {
-            const after = hooks.afterRun;
-            hooks.afterRun = undefined;
-            after();
-          }
-          return { meta: { changes: result.changes } };
-        },
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
 }
 
 /**
@@ -3351,14 +3232,6 @@ async function migrationInTransaction(database: Database, filename: string) {
     database.run("ROLLBACK");
     throw cause;
   }
-}
-
-async function migration(database: Database, filename: string) {
-  database.exec(
-    await Bun.file(
-      new URL(`../migrations/${filename}`, import.meta.url),
-    ).text(),
-  );
 }
 
 function now() {

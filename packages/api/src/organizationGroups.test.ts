@@ -1,22 +1,24 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { Hono } from "hono";
-import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
 import { organizationGroups, requireCapability } from "./organizationGroups";
 import { organizationSettings } from "./organizationSettings";
+import { testBindings } from "./testing/bindings";
+import { toD1 } from "./testing/d1";
+import { createTestDatabase } from "./testing/database";
+import { requester } from "./testing/http";
+import { seedAccount, seedUser } from "./testing/seed";
+import { testApp } from "./testing/session";
 import type { Bindings } from "./types";
 
 const organizationId = "org_owner-user";
 
 describe("organization groups", () => {
   it("lets organization managers grant and revoke Finance access", async () => {
-    const fixture = await createFixture();
-    const owner = testApp(fixture.bindings, "owner-user");
-    const member = testApp(fixture.bindings, "member-user");
+    const fixture = createFixture();
+    const owner = groupsApp(fixture.bindings, "owner-user");
+    const member = groupsApp(fixture.bindings, "member-user");
 
-    const listed = await jsonRequest<GroupListing>(owner, "/", "GET");
-    expect(listed.response.status).toBe(200);
+    const listed = await owner<GroupListing>("GET", "/");
+    expect(listed.status).toBe(200);
     expect(listed.body.groups).toMatchObject([
       {
         capabilities: ["finance"],
@@ -31,62 +33,53 @@ describe("organization groups", () => {
     const groupId = listed.body.groups[0]?.id;
     expect(groupId).toBeString();
 
-    const memberAccess = await jsonRequest<AccessListing>(
-      member,
-      "/access",
-      "GET",
-    );
+    const memberAccess = await member<AccessListing>("GET", "/access");
     expect(memberAccess.body.capabilities).toEqual([]);
     expect(memberAccess.body.memberRole).toBe("member");
     expect(memberAccess.body.ownerCount).toBe(1);
-    expect((await jsonRequest(member, "/", "GET")).response.status).toBe(403);
+    expect((await member("GET", "/")).status).toBe(403);
     expect((await financeRequest(fixture.bindings, "member-user")).status).toBe(
       403,
     );
 
-    const granted = await jsonRequest(owner, `/${groupId}`, "PATCH", {
+    const granted = await owner("PATCH", `/${groupId}`, {
       capabilities: ["finance"],
       name: "Finance",
       userIds: ["owner-user", "member-user"],
     });
-    expect(granted.response.status).toBe(200);
+    expect(granted.status).toBe(200);
     expect(
-      (await jsonRequest<AccessListing>(member, "/access", "GET")).body
-        .capabilities,
+      (await member<AccessListing>("GET", "/access")).body.capabilities,
     ).toEqual(["finance"]);
     expect((await financeRequest(fixture.bindings, "member-user")).status).toBe(
       200,
     );
 
-    const invalidMember = await jsonRequest(owner, `/${groupId}`, "PATCH", {
+    const invalidMember = await owner("PATCH", `/${groupId}`, {
       capabilities: ["finance"],
       name: "Finance",
       userIds: ["outside-user"],
     });
-    expect(invalidMember.response.status).toBe(400);
+    expect(invalidMember.status).toBe(400);
 
-    const revoked = await jsonRequest(owner, `/${groupId}`, "PATCH", {
+    const revoked = await owner("PATCH", `/${groupId}`, {
       capabilities: ["finance"],
       name: "Finance",
       userIds: ["owner-user"],
     });
-    expect(revoked.response.status).toBe(200);
+    expect(revoked.status).toBe(200);
     expect((await financeRequest(fixture.bindings, "member-user")).status).toBe(
       403,
     );
   });
 
   it("aggregates members and manager-only pending invitations", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const owner = settingsApp(fixture.bindings, "owner-user");
     const member = settingsApp(fixture.bindings, "member-user");
 
-    const ownerListing = await jsonRequest<PeopleListing>(
-      owner,
-      "/people",
-      "GET",
-    );
-    expect(ownerListing.response.status).toBe(200);
+    const ownerListing = await owner<PeopleListing>("GET", "/people");
+    expect(ownerListing.status).toBe(200);
     expect(ownerListing.body.memberRole).toBe("owner");
     expect(ownerListing.body.members.map(({ user }) => user.id)).toEqual([
       "member-user",
@@ -96,12 +89,8 @@ describe("organization groups", () => {
       { email: "invited@example.com", role: "admin", status: "pending" },
     ]);
 
-    const memberListing = await jsonRequest<PeopleListing>(
-      member,
-      "/people",
-      "GET",
-    );
-    expect(memberListing.response.status).toBe(200);
+    const memberListing = await member<PeopleListing>("GET", "/people");
+    expect(memberListing.status).toBe(200);
     expect(memberListing.body.memberRole).toBe("member");
     expect(memberListing.body.members).toHaveLength(2);
     expect(memberListing.body.invitations).toEqual([]);
@@ -113,28 +102,24 @@ describe("organization groups", () => {
   });
 
   it("creates and deletes arbitrary organization groups", async () => {
-    const fixture = await createFixture();
-    const owner = testApp(fixture.bindings, "owner-user");
-    const created = await jsonRequest<{ id: string }>(owner, "/", "POST", {
+    const fixture = createFixture();
+    const owner = groupsApp(fixture.bindings, "owner-user");
+    const created = await owner<{ id: string }>("POST", "/", {
       capabilities: [],
       name: "Operations",
       userIds: ["member-user"],
     });
-    expect(created.response.status).toBe(201);
-    expect(
-      (await jsonRequest<GroupListing>(owner, "/", "GET")).body.groups,
-    ).toContainEqual(
+    expect(created.status).toBe(201);
+    expect((await owner<GroupListing>("GET", "/")).body.groups).toContainEqual(
       expect.objectContaining({
         memberUserIds: ["member-user"],
         name: "Operations",
       }),
     );
-    const deleted = await owner.request(`/${created.body.id}`, {
-      method: "DELETE",
-    });
+    const deleted = await owner("DELETE", `/${created.body.id}`);
     expect(deleted.status).toBe(204);
     expect(
-      (await jsonRequest<GroupListing>(owner, "/", "GET")).body.groups,
+      (await owner<GroupListing>("GET", "/")).body.groups,
     ).not.toContainEqual(expect.objectContaining({ name: "Operations" }));
   });
 });
@@ -175,13 +160,23 @@ interface PeopleListing {
   members: MemberListing[];
 }
 
-async function createFixture() {
-  const database = new Database(":memory:");
-  await applyMigration(database, "0003_create_auth.sql");
-  insertUser(database, "owner-user", "owner@example.com");
-  await applyMigration(database, "0004_create_organizations.sql");
-  insertUser(database, "member-user", "member@example.com");
-  insertUser(database, "outside-user", "outside@example.com");
+function createFixture() {
+  const database = createTestDatabase();
+  seedAccount(database, {
+    createdAt: now(),
+    email: "owner@example.com",
+    id: "owner-user",
+  });
+  seedUser(database, {
+    createdAt: now(),
+    email: "member@example.com",
+    id: "member-user",
+  });
+  seedUser(database, {
+    createdAt: now(),
+    email: "outside@example.com",
+    id: "outside-user",
+  });
   database
     .query(
       `INSERT INTO "member"
@@ -203,123 +198,36 @@ async function createFixture() {
       now(),
       "owner-user",
     );
-  await applyMigration(database, "0010_create_organization_groups.sql");
-  await applyMigration(database, "0020_add_two_factor_authentication.sql");
-  await applyMigration(database, "0031_require_member_two_factor.sql");
-  await applyMigration(database, "0055_track_user_last_active.sql");
-  return { bindings: bindingsFor(database), database };
+  return { bindings: testBindings({ DB: toD1(database) }), database };
 }
 
-function insertUser(database: Database, id: string, email: string) {
-  database
-    .query(
-      `INSERT INTO "user"
-       ("id", "name", "email", "emailVerified", "createdAt", "updatedAt",
-        "role", "banned") VALUES (?, ?, ?, 1, ?, ?, 'user', 0)`,
-    )
-    .run(id, id, email, now(), now());
-}
-
-function testApp(bindings: Bindings, userId: string) {
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-  app.use("*", sessionMiddleware(userId));
-  app.route("/", organizationGroups);
+function identity(userId: string) {
   return {
-    request: (path: string, init?: RequestInit) =>
-      app.request(path, init, bindings),
+    organizationId,
+    organizationRole: userId === "owner-user" ? "owner" : "member",
+    userId,
   };
+}
+
+function groupsApp(bindings: Bindings, userId: string) {
+  return requester(
+    testApp({ "/": organizationGroups }, identity(userId)),
+    bindings,
+  );
 }
 
 function settingsApp(bindings: Bindings, userId: string) {
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-  app.use("*", sessionMiddleware(userId));
-  app.route("/", organizationSettings);
-  return {
-    request: (path: string, init?: RequestInit) =>
-      app.request(path, init, bindings),
-  };
+  return requester(
+    testApp({ "/": organizationSettings }, identity(userId)),
+    bindings,
+  );
 }
 
-function financeRequest(bindings: Bindings, userId: string) {
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-  app.use("*", sessionMiddleware(userId));
+async function financeRequest(bindings: Bindings, userId: string) {
+  const app = testApp({}, identity(userId));
   app.use("/finance", requireCapability("finance"));
   app.get("/finance", (context) => context.json({ ok: true }));
-  return app.request("/finance", undefined, bindings);
-}
-
-function sessionMiddleware(userId: string) {
-  return async (
-    context: {
-      set: (
-        key: keyof AuthVariables,
-        value: AuthVariables[keyof AuthVariables],
-      ) => void;
-    },
-    next: () => Promise<void>,
-  ) => {
-    context.set("organizationId", organizationId);
-    context.set(
-      "organizationRole",
-      userId === "owner-user" ? "owner" : "member",
-    );
-    context.set("authSession", {
-      user: { defaultOrganizationId: organizationId, id: userId, role: "user" },
-    } as AuthSession);
-    await next();
-  };
-}
-
-async function jsonRequest<T = unknown>(
-  app: ReturnType<typeof testApp>,
-  path: string,
-  method: string,
-  body?: unknown,
-) {
-  const init: RequestInit = {
-    headers: { "content-type": "application/json" },
-    method,
-  };
-  if (body !== undefined) init.body = JSON.stringify(body);
-  const response = await app.request(path, init);
-  return { body: (await response.json()) as T, response };
-}
-
-function bindingsFor(database: Database) {
-  return { DB: toD1(database) } as Bindings;
-}
-
-interface TestStatement {
-  execute: () => unknown;
-}
-
-function toD1(database: Database) {
-  return {
-    batch: async (statements: TestStatement[]) =>
-      statements.map((statement) => statement.execute()),
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const statement = {
-        all: async () => ({ results: database.query(query).all(...values) }),
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        execute: () => database.query(query).run(...values),
-        first: async () => database.query(query).get(...values),
-        run: async () => database.query(query).run(...values),
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
-}
-
-async function applyMigration(database: Database, filename: string) {
-  database.exec(
-    await Bun.file(
-      new URL(`../migrations/${filename}`, import.meta.url),
-    ).text(),
-  );
+  return requester(app, bindings)("GET", "/finance");
 }
 
 function now() {

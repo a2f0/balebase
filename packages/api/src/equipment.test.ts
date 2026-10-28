@@ -1,13 +1,14 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
+import type { Database, SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { readdir } from "node:fs/promises";
-import { Hono } from "hono";
 import { activity } from "./activity";
-import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
 import { equipment } from "./equipment";
 import { inbox } from "./inbox";
-import type { Bindings } from "./types";
+import { testBindings } from "./testing/bindings";
+import { toD1 } from "./testing/d1";
+import { applyMigrations, createTestDatabase } from "./testing/database";
+import { requester } from "./testing/http";
+import { seedMember, seedOrganization, seedUser } from "./testing/seed";
+import { testApp } from "./testing/session";
 
 const timestamp = "2026-09-20T12:00:00.000Z";
 const rawEmail = [
@@ -50,7 +51,7 @@ const laptop = {
 
 describe("equipment", () => {
   it("lets managers add, edit, assign, and remove equipment", async () => {
-    const { as } = await createFixture();
+    const { as } = createFixture();
     const owner = as("owner-user", "owner");
 
     const created = await owner.json<{ equipment: Equipment }>(
@@ -112,7 +113,7 @@ describe("equipment", () => {
   });
 
   it("rejects invalid details and assignees outside the organization", async () => {
-    const { as } = await createFixture();
+    const { as } = createFixture();
     const owner = as("owner-user", "owner");
     for (const change of [
       { type: "tablet" },
@@ -163,7 +164,7 @@ describe("equipment", () => {
   });
 
   it("updates only the fields sent, and keeps a type no longer offered", async () => {
-    const { as, database } = await createFixture();
+    const { as, database } = createFixture();
     const owner = as("owner-user", "owner");
     // A pager assigned to someone who has since left, as if removed mid-edit.
     database
@@ -225,7 +226,7 @@ describe("equipment", () => {
   });
 
   it("lets members view but not change equipment, within their organization", async () => {
-    const { as } = await createFixture();
+    const { as } = createFixture();
     const owner = as("owner-user", "owner");
     const member = as("member-user", "member");
     const created = await owner.json<{ equipment: Equipment }>(
@@ -261,7 +262,7 @@ describe("equipment", () => {
   });
 
   it("unassigns equipment when its assignee leaves the organization", async () => {
-    const { as, database } = await createFixture();
+    const { as, database } = createFixture();
     const owner = as("owner-user", "owner");
     const created = await owner.json<{ equipment: Equipment }>(
       "POST",
@@ -277,7 +278,7 @@ describe("equipment", () => {
   });
 
   it("records who added, changed, assigned, and deleted equipment", async () => {
-    const { as, database } = await createFixture();
+    const { as, database } = createFixture();
     const owner = as("owner-user", "owner");
     const member = as("member-user", "member");
     const created = await owner.json<{ equipment: Equipment }>(
@@ -427,7 +428,7 @@ describe("equipment", () => {
   });
 
   it("attaches emails and receipts to equipment", async () => {
-    const { as, database } = await createFixture();
+    const { as, database } = createFixture();
     const owner = as("owner-user", "owner");
     const member = as("member-user", "member");
     const created = await owner.json<{ equipment: Equipment }>(
@@ -505,9 +506,7 @@ describe("equipment", () => {
 
 describe("equipment link migration", () => {
   it("keeps existing email links when the link table is rebuilt", async () => {
-    const database = new Database(":memory:");
-    database.exec("PRAGMA foreign_keys = ON");
-    await applyMigrations(database, (filename) => filename < "0037");
+    const database = createTestDatabase({ before: "0037" });
     seed(database);
     // Inserted out of id order with equal timestamps, so only rowid order
     // keeps them in the order they were linked.
@@ -525,7 +524,7 @@ describe("equipment link migration", () => {
         )
         .run(id, targetType, targetId, timestamp);
     }
-    await applyMigrations(database, (filename) => filename >= "0037");
+    applyMigrations(database, { from: "0037" });
 
     expect(
       database
@@ -560,91 +559,53 @@ describe("equipment link migration", () => {
   });
 });
 
-async function createFixture() {
-  const database = new Database(":memory:");
-  database.exec("PRAGMA foreign_keys = ON");
-  await applyMigrations(database, () => true);
+function createFixture() {
+  const database = createTestDatabase();
   seed(database);
   const raw = new TextEncoder().encode(rawEmail);
-  const bindings = {
-    AUTH_EMAIL_FROM: "security@auth.balebase.com",
-    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-    BETTER_AUTH_URL: "https://api.test",
-    CORS_ORIGIN: "https://app.test",
+  const bindings = testBindings({
     DB: toD1(database),
-    EMAIL: {} as SendEmail,
-    IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
     STORAGE: {
       get: async () => ({ arrayBuffer: async () => raw.slice().buffer }),
     } as unknown as R2Bucket,
-  } satisfies Bindings;
-
-  function as(userId: string, role: string) {
-    const app = testApp(userId, role);
-    return {
-      json: async <T = unknown>(
-        method: string,
-        path: string,
-        body?: unknown,
-      ) => {
-        const init: RequestInit = { method };
-        if (body !== undefined && method !== "GET") {
-          init.body = JSON.stringify(body);
-          init.headers = { "content-type": "application/json" };
-        }
-        const response = await app.request(path, init, bindings);
-        const text = await response.text();
-        return {
-          body: (text ? JSON.parse(text) : null) as T,
-          status: response.status,
-        };
-      },
-    };
-  }
+  });
+  const routes = {
+    "/api/activity": activity,
+    "/api/equipment": equipment,
+    "/api/inbox": inbox,
+  };
+  const as = (userId: string, role: string) => ({
+    json: requester(
+      testApp(routes, {
+        organizationId: "org-1",
+        organizationRole: role,
+        userId,
+      }),
+      bindings,
+    ),
+  });
   return { as, database };
 }
 
 function seed(database: Database) {
   const run = (query: string, ...values: SQLQueryBindings[]) =>
     database.query(query).run(...values);
-  for (const id of ["owner-user", "member-user", "other-user"]) {
-    run(
-      `INSERT INTO user
-       (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-       VALUES (?, ?, ?, 1, ?, ?, 'user', 0)`,
-      id,
-      id,
-      `${id}@example.com`,
-      timestamp,
-      timestamp,
-    );
-  }
-  for (const id of ["org-1", "org-2"]) {
-    run(
-      `INSERT INTO organization (id, name, slug, createdAt)
-       VALUES (?, ?, ?, ?)`,
-      id,
-      id,
-      id,
-      timestamp,
-    );
-  }
+  for (const id of ["owner-user", "member-user", "other-user"])
+    seedUser(database, { createdAt: timestamp, id });
+  for (const id of ["org-1", "org-2"])
+    seedOrganization(database, { createdAt: timestamp, id });
   for (const [id, organizationId, userId, role] of [
     ["member-owner", "org-1", "owner-user", "owner"],
     ["member-member", "org-1", "member-user", "member"],
     ["member-other", "org-2", "other-user", "owner"],
-  ] as const) {
-    run(
-      `INSERT INTO member (id, organizationId, userId, role, createdAt)
-       VALUES (?, ?, ?, ?, ?)`,
+  ] as const)
+    seedMember(database, {
+      createdAt: timestamp,
       id,
       organizationId,
-      userId,
       role,
-      timestamp,
-    );
-  }
+      userId,
+    });
   run(
     `INSERT INTO inbound_emails
      (id, organization_id, envelope_from, envelope_to, subject,
@@ -674,64 +635,4 @@ function seed(database: Database) {
       timestamp,
     );
   }
-}
-
-function testApp(userId: string, role: string) {
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-  app.use("*", async (context, next) => {
-    context.set("organizationId", "org-1");
-    context.set("organizationRole", role);
-    context.set("authSession", {
-      session: { activeOrganizationId: "org-1" },
-      user: { id: userId, role: "user" },
-    } as unknown as AuthSession);
-    await next();
-  });
-  app.route("/api/activity", activity);
-  app.route("/api/equipment", equipment);
-  app.route("/api/inbox", inbox);
-  return app;
-}
-
-async function applyMigrations(
-  database: Database,
-  include: (filename: string) => boolean,
-) {
-  const directory = `${import.meta.dir}/../migrations`;
-  for (const filename of (await readdir(directory)).sort()) {
-    if (!include(filename)) continue;
-    database.exec(await Bun.file(`${directory}/${filename}`).text());
-  }
-}
-
-interface TestStatement {
-  execute: () => unknown;
-}
-
-function toD1(database: Database) {
-  return {
-    batch: async (statements: TestStatement[]) =>
-      statements.map((statement) => statement.execute()),
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const run = () => {
-        const result = database.query(query).run(...values);
-        return { meta: { changes: result.changes }, success: true };
-      };
-      const statement = {
-        all: async () => ({
-          results: database.query(query).all(...values),
-          success: true,
-        }),
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        execute: () => run(),
-        first: async () => database.query(query).get(...values),
-        run: async () => run(),
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
 }

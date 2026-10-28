@@ -1,7 +1,6 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import { Hono } from "hono";
-import type { AuthSession } from "./auth";
 import type { AuthVariables } from "./authMiddleware";
 import {
   billing,
@@ -13,6 +12,18 @@ import {
   syncOrganizationSeats,
 } from "./billing";
 import { purgeExpiredFreeAuditRuns } from "./billingRetention";
+import { testBindings } from "./testing/bindings";
+import { toD1 } from "./testing/d1";
+import { applyMigrations, createTestDatabase } from "./testing/database";
+import { type FetchCall, withFetch } from "./testing/http";
+import {
+  insertBilling,
+  seedAccount,
+  seedMember,
+  seedOrganization,
+  seedUser,
+} from "./testing/seed";
+import { testApp } from "./testing/session";
 import type { Bindings } from "./types";
 
 const organizationId = "org_user-1";
@@ -20,21 +31,15 @@ const proPriceId = "price_pro_test";
 
 describe("billing", () => {
   it("requires billing access to confirm a Checkout session", async () => {
-    const fixture = await createFixture("member");
+    const fixture = createFixture("member");
     expect(
-      (
-        await fixture.app.request(
-          "/?session_id=cs_completed",
-          undefined,
-          fixture.bindings,
-        )
-      ).status,
+      (await fixture.request("/?session_id=cs_completed", undefined)).status,
     ).toBe(403);
   });
 
   it("reports Free entitlements and creates per-seat Checkout", async () => {
-    const fixture = await createFixture();
-    const summary = await fixture.app.request("/", undefined, fixture.bindings);
+    const fixture = createFixture();
+    const summary = await fixture.request("/", undefined);
     expect(summary.status).toBe(200);
     expect(await summary.json()).toMatchObject({
       current: { formTemplates: 0, members: 1 },
@@ -44,61 +49,57 @@ describe("billing", () => {
       seats: 1,
     });
 
-    const originalFetch = globalThis.fetch;
     const checkoutRequests: URLSearchParams[] = [];
-    globalThis.fetch = (async (_input, init) => {
-      checkoutRequests.push(new URLSearchParams(String(init?.body)));
-      return Response.json({
-        client_reference_id: organizationId,
-        expires_at: Math.floor(Date.now() / 1_000) + 1_800,
-        id: "cs_live_test",
-        status: "open",
-        url: "https://checkout.stripe.test/session",
-      });
-    }) as typeof fetch;
-    try {
-      const response = await fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        fixture.bindings,
-      );
-      expect(response.status).toBe(200);
-      const checkoutBody: unknown = await response.json();
-      expect(checkoutBody).toEqual({
-        url: "https://checkout.stripe.test/session",
-      });
-      expect(checkoutRequests[0]?.get("line_items[0][price]")).toBe(proPriceId);
-      expect(checkoutRequests[0]?.get("line_items[0][quantity]")).toBe("1");
-      expect(checkoutRequests[0]?.get("client_reference_id")).toBe(
-        organizationId,
-      );
-      expect(
-        checkoutRequests[0]?.get(
-          "subscription_data[metadata][organization_id]",
-        ),
-      ).toBe(organizationId);
-      const repeated = await fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        fixture.bindings,
-      );
-      const repeatedBody: unknown = await repeated.json();
-      expect(repeatedBody).toEqual({
-        url: "https://checkout.stripe.test/session",
-      });
-      expect(checkoutRequests).toHaveLength(1);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    await withFetch(
+      {
+        "POST https://api.stripe.com/v1/checkout/sessions": async (
+          call: FetchCall,
+        ) => {
+          checkoutRequests.push(new URLSearchParams(call.body));
+          return Response.json({
+            client_reference_id: organizationId,
+            expires_at: Math.floor(Date.now() / 1_000) + 1_800,
+            id: "cs_live_test",
+            status: "open",
+            url: "https://checkout.stripe.test/session",
+          });
+        },
+      },
+      async () => {
+        const response = await fixture.request("/checkout", { method: "POST" });
+        expect(response.status).toBe(200);
+        const checkoutBody: unknown = await response.json();
+        expect(checkoutBody).toEqual({
+          url: "https://checkout.stripe.test/session",
+        });
+        expect(checkoutRequests[0]?.get("line_items[0][price]")).toBe(
+          proPriceId,
+        );
+        expect(checkoutRequests[0]?.get("line_items[0][quantity]")).toBe("1");
+        expect(checkoutRequests[0]?.get("client_reference_id")).toBe(
+          organizationId,
+        );
+        expect(
+          checkoutRequests[0]?.get(
+            "subscription_data[metadata][organization_id]",
+          ),
+        ).toBe(organizationId);
+        const repeated = await fixture.request("/checkout", { method: "POST" });
+        const repeatedBody: unknown = await repeated.json();
+        expect(repeatedBody).toEqual({
+          url: "https://checkout.stripe.test/session",
+        });
+        expect(checkoutRequests).toHaveLength(1);
+      },
+    );
   });
 
   it("creates and resumes inline Checkout with a publishable key", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const bindings = {
       ...fixture.bindings,
       STRIPE_PUBLISHABLE_KEY: "pk_live_test",
     };
-    const originalFetch = globalThis.fetch;
     const requests: Array<{
       body: URLSearchParams;
       method: string;
@@ -112,151 +113,158 @@ describe("billing", () => {
       status: "open",
       url: null,
     };
-    globalThis.fetch = (async (input, init) => {
+    const stripe = async (call: FetchCall) => {
       requests.push({
-        body: new URLSearchParams(String(init?.body ?? "")),
-        method: init?.method ?? "GET",
-        url: String(input),
+        body: new URLSearchParams(call.body),
+        method: call.method,
+        url: call.url,
       });
       return Response.json(session);
-    }) as typeof fetch;
-    try {
-      const response = await fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        bindings,
-      );
-      expect(response.status).toBe(200);
-      const createdBody: unknown = await response.json();
-      expect(createdBody).toEqual({
-        clientSecret: "cs_inline_test_secret_123",
-        publishableKey: "pk_live_test",
-      });
-      const created = requests[0]?.body;
-      expect(created?.get("ui_mode")).toBe("elements");
-      expect(created?.get("return_url")).toBe(
-        "https://app.balebase.test/organization/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}",
-      );
-      expect(created?.get("customer_email")).toBe("user-1@example.com");
-      expect(created?.has("success_url")).toBe(false);
-      expect(created?.has("cancel_url")).toBe(false);
-      expect(
-        fixture.database
-          .query(
-            `SELECT pending_checkout_session_id, pending_checkout_url
+    };
+    await withFetch(
+      {
+        "POST https://api.stripe.com/v1/checkout/sessions": stripe,
+        "GET https://api.stripe.com/v1/checkout/sessions/cs_inline_test":
+          stripe,
+      },
+      async () => {
+        const response = await fixture.app.request(
+          "/checkout",
+          { method: "POST" },
+          bindings,
+        );
+        expect(response.status).toBe(200);
+        const createdBody: unknown = await response.json();
+        expect(createdBody).toEqual({
+          clientSecret: "cs_inline_test_secret_123",
+          publishableKey: "pk_live_test",
+        });
+        const created = requests[0]?.body;
+        expect(created?.get("ui_mode")).toBe("elements");
+        expect(created?.get("return_url")).toBe(
+          "https://app.balebase.test/organization/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}",
+        );
+        expect(created?.get("customer_email")).toBe("user-1@example.com");
+        expect(created?.has("success_url")).toBe(false);
+        expect(created?.has("cancel_url")).toBe(false);
+        expect(
+          fixture.database
+            .query(
+              `SELECT pending_checkout_session_id, pending_checkout_url
              FROM organization_billing`,
-          )
-          .get(),
-      ).toEqual({
-        pending_checkout_session_id: "cs_inline_test",
-        pending_checkout_url: null,
-      });
+            )
+            .get(),
+        ).toEqual({
+          pending_checkout_session_id: "cs_inline_test",
+          pending_checkout_url: null,
+        });
 
-      const resumed = await fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        bindings,
-      );
-      expect(resumed.status).toBe(200);
-      const resumedBody: unknown = await resumed.json();
-      expect(resumedBody).toEqual({
-        clientSecret: "cs_inline_test_secret_123",
-        publishableKey: "pk_live_test",
-      });
-      expect(requests.map(({ method, url }) => `${method} ${url}`)).toEqual([
-        "POST https://api.stripe.com/v1/checkout/sessions",
-        "GET https://api.stripe.com/v1/checkout/sessions/cs_inline_test",
-      ]);
+        const resumed = await fixture.app.request(
+          "/checkout",
+          { method: "POST" },
+          bindings,
+        );
+        expect(resumed.status).toBe(200);
+        const resumedBody: unknown = await resumed.json();
+        expect(resumedBody).toEqual({
+          clientSecret: "cs_inline_test_secret_123",
+          publishableKey: "pk_live_test",
+        });
+        expect(requests.map(({ method, url }) => `${method} ${url}`)).toEqual([
+          "POST https://api.stripe.com/v1/checkout/sessions",
+          "GET https://api.stripe.com/v1/checkout/sessions/cs_inline_test",
+        ]);
 
-      session.status = "complete";
-      const finished = await fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        bindings,
-      );
-      expect(finished.status).toBe(409);
-      expect(requests).toHaveLength(3);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+        session.status = "complete";
+        const finished = await fixture.app.request(
+          "/checkout",
+          { method: "POST" },
+          bindings,
+        );
+        expect(finished.status).toBe(409);
+        expect(requests).toHaveLength(3);
+      },
+    );
   });
 
   it("reports a Checkout return without payment as incomplete", async () => {
-    const fixture = await createFixture();
-    const originalFetch = globalThis.fetch;
+    const fixture = createFixture();
     let reference = organizationId;
-    globalThis.fetch = (async () =>
-      Response.json({
-        client_reference_id: reference,
-        id: "cs_returned_open",
-        status: "open",
-        subscription: null,
-      })) as unknown as typeof fetch;
-    try {
-      const returned = await fixture.app.request(
-        "/?session_id=cs_returned_open",
-        undefined,
-        fixture.bindings,
-      );
-      expect(returned.status).toBe(200);
-      expect(await returned.json()).toMatchObject({
-        checkout: "incomplete",
-        plan: "free",
-      });
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/checkout/sessions/cs_returned_open?expand%5B%5D=subscription":
+          async () =>
+            Response.json({
+              client_reference_id: reference,
+              id: "cs_returned_open",
+              status: "open",
+              subscription: null,
+            }),
+      },
+      async () => {
+        const returned = await fixture.request(
+          "/?session_id=cs_returned_open",
+          undefined,
+        );
+        expect(returned.status).toBe(200);
+        expect(await returned.json()).toMatchObject({
+          checkout: "incomplete",
+          plan: "free",
+        });
 
-      reference = "org_other";
-      const foreign = await fixture.app.request(
-        "/?session_id=cs_returned_open",
-        undefined,
-        fixture.bindings,
-      );
-      expect(foreign.status).toBe(409);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+        reference = "org_other";
+        const foreign = await fixture.request(
+          "/?session_id=cs_returned_open",
+          undefined,
+        );
+        expect(foreign.status).toBe(409);
+      },
+    );
   });
 
   it("keeps hosted Checkout when the publishable key mode differs", async () => {
-    const fixture = await createFixture();
-    const originalFetch = globalThis.fetch;
+    const fixture = createFixture();
     const checkoutRequests: URLSearchParams[] = [];
-    globalThis.fetch = (async (_input, init) => {
-      checkoutRequests.push(new URLSearchParams(String(init?.body)));
-      return Response.json({
-        client_reference_id: organizationId,
-        expires_at: Math.floor(Date.now() / 1_000) + 1_800,
-        id: "cs_hosted_test",
-        status: "open",
-        url: "https://checkout.stripe.test/hosted",
-      });
-    }) as typeof fetch;
-    try {
-      const response = await fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        { ...fixture.bindings, STRIPE_PUBLISHABLE_KEY: "pk_test_other" },
-      );
-      const hostedBody: unknown = await response.json();
-      expect(hostedBody).toEqual({
-        url: "https://checkout.stripe.test/hosted",
-      });
-      expect(checkoutRequests[0]?.has("ui_mode")).toBe(false);
-      expect(checkoutRequests[0]?.has("customer_email")).toBe(false);
-      expect(checkoutRequests[0]?.get("success_url")).toContain(
-        "checkout=success",
-      );
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    await withFetch(
+      {
+        "POST https://api.stripe.com/v1/checkout/sessions": async (
+          call: FetchCall,
+        ) => {
+          checkoutRequests.push(new URLSearchParams(call.body));
+          return Response.json({
+            client_reference_id: organizationId,
+            expires_at: Math.floor(Date.now() / 1_000) + 1_800,
+            id: "cs_hosted_test",
+            status: "open",
+            url: "https://checkout.stripe.test/hosted",
+          });
+        },
+      },
+      async () => {
+        const response = await fixture.app.request(
+          "/checkout",
+          { method: "POST" },
+          { ...fixture.bindings, STRIPE_PUBLISHABLE_KEY: "pk_test_other" },
+        );
+        const hostedBody: unknown = await response.json();
+        expect(hostedBody).toEqual({
+          url: "https://checkout.stripe.test/hosted",
+        });
+        expect(checkoutRequests[0]?.has("ui_mode")).toBe(false);
+        expect(checkoutRequests[0]?.has("customer_email")).toBe(false);
+        expect(checkoutRequests[0]?.get("success_url")).toContain(
+          "checkout=success",
+        );
+      },
+    );
   });
 
   it("reconciles an expired local Checkout before replacing it", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     insertStalePendingCheckout(fixture.database, "cs_completed_at_expiry");
-    const originalFetch = globalThis.fetch;
     const requests: string[] = [];
-    globalThis.fetch = (async (input) => {
-      const url = String(input);
+    const stripe = async (call: FetchCall) => {
+      const url = call.url;
       requests.push(url);
       if (url.endsWith("/v1/checkout/sessions/cs_completed_at_expiry")) {
         return Response.json({
@@ -278,85 +286,78 @@ describe("billing", () => {
         );
       }
       throw new Error(`Unexpected Stripe request: ${url}`);
-    }) as typeof fetch;
-
-    try {
-      const response = await fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        fixture.bindings,
-      );
-      expect(response.status).toBe(409);
-      expect((await response.json()) as unknown).toEqual({
-        error: "This organization already has a Pro subscription.",
-      });
-      expect(requests).toEqual([
-        "https://api.stripe.com/v1/checkout/sessions/cs_completed_at_expiry",
-        "https://api.stripe.com/v1/subscriptions/sub_completed_at_expiry",
-      ]);
-      expect(
-        fixture.database
-          .query(
-            `SELECT pending_checkout_session_id, stripe_subscription_id,
+    };
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/checkout/sessions/cs_completed_at_expiry":
+          stripe,
+        "GET https://api.stripe.com/v1/subscriptions/sub_completed_at_expiry":
+          stripe,
+      },
+      async () => {
+        const response = await fixture.request("/checkout", { method: "POST" });
+        expect(response.status).toBe(409);
+        expect((await response.json()) as unknown).toEqual({
+          error: "This organization already has a Pro subscription.",
+        });
+        expect(requests).toEqual([
+          "https://api.stripe.com/v1/checkout/sessions/cs_completed_at_expiry",
+          "https://api.stripe.com/v1/subscriptions/sub_completed_at_expiry",
+        ]);
+        expect(
+          fixture.database
+            .query(
+              `SELECT pending_checkout_session_id, stripe_subscription_id,
                     stripe_status
              FROM organization_billing WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({
-        pending_checkout_session_id: null,
-        stripe_status: "active",
-        stripe_subscription_id: "sub_completed_at_expiry",
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+            )
+            .get(organizationId),
+        ).toEqual({
+          pending_checkout_session_id: null,
+          stripe_status: "active",
+          stripe_subscription_id: "sub_completed_at_expiry",
+        });
+      },
+    );
   });
 
   it("reclaims a stale deletion lease before creating Checkout", async () => {
-    const fixture = await createFixture();
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, checkout_disabled_at,
-          checkout_disabled_expires_at, updated_at)
-         VALUES (?, 'interrupted-worker', 1, ?)`,
-      )
-      .run(organizationId, new Date().toISOString());
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (_input, _init) =>
-      Response.json({
-        client_reference_id: organizationId,
-        expires_at: Math.floor(Date.now() / 1_000) + 1_800,
-        id: "cs_after_interrupted_deletion",
-        status: "open",
-        url: "https://checkout.stripe.test/recovered",
-      })) as typeof fetch;
-    try {
-      const response = await fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        fixture.bindings,
-      );
-      expect(response.status).toBe(200);
-      expect(
-        fixture.database
-          .query(
-            `SELECT checkout_disabled_at, checkout_disabled_expires_at
+    const fixture = createFixture();
+    insertBilling(fixture.database, organizationId, {
+      checkout_disabled_at: "interrupted-worker",
+      checkout_disabled_expires_at: 1,
+    });
+    await withFetch(
+      {
+        "POST https://api.stripe.com/v1/checkout/sessions": async () =>
+          Response.json({
+            client_reference_id: organizationId,
+            expires_at: Math.floor(Date.now() / 1_000) + 1_800,
+            id: "cs_after_interrupted_deletion",
+            status: "open",
+            url: "https://checkout.stripe.test/recovered",
+          }),
+      },
+      async () => {
+        const response = await fixture.request("/checkout", { method: "POST" });
+        expect(response.status).toBe(200);
+        expect(
+          fixture.database
+            .query(
+              `SELECT checkout_disabled_at, checkout_disabled_expires_at
              FROM organization_billing WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({
-        checkout_disabled_at: null,
-        checkout_disabled_expires_at: null,
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+            )
+            .get(organizationId),
+        ).toEqual({
+          checkout_disabled_at: null,
+          checkout_disabled_expires_at: null,
+        });
+      },
+    );
   });
 
   it("allows only the database claimant to create Checkout", async () => {
-    const fixture = await createFixture();
-    const originalFetch = globalThis.fetch;
+    const fixture = createFixture();
     const idempotencyKeys: string[] = [];
     let markRequestStarted = () => {};
     let releaseRequest = () => {};
@@ -366,74 +367,63 @@ describe("billing", () => {
     const requestReleased = new Promise<void>((resolve) => {
       releaseRequest = resolve;
     });
-    globalThis.fetch = (async (_input, init) => {
-      idempotencyKeys.push(
-        new Headers(init?.headers).get("Idempotency-Key") ?? "",
-      );
-      markRequestStarted();
-      await requestReleased;
-      const parameters = new URLSearchParams(String(init?.body));
-      return Response.json({
-        expires_at: Number(parameters.get("expires_at")),
-        id: "cs_concurrent_test",
-        status: "open",
-        url: "https://checkout.stripe.test/concurrent",
-      });
-    }) as typeof fetch;
-    try {
-      const winner = fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        fixture.bindings,
-      );
-      await requestStarted;
-      const repeated = fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        fixture.bindings,
-      );
-      expect((await repeated).status).toBe(409);
-      releaseRequest();
-      expect((await winner).status).toBe(200);
-      expect(idempotencyKeys).toHaveLength(1);
-      expect(
-        fixture.database
-          .query(
-            `SELECT pending_checkout_session_id FROM organization_billing
+    await withFetch(
+      {
+        "POST https://api.stripe.com/v1/checkout/sessions": async (
+          call: FetchCall,
+        ) => {
+          idempotencyKeys.push(call.headers.get("Idempotency-Key") ?? "");
+          markRequestStarted();
+          await requestReleased;
+          const parameters = new URLSearchParams(call.body);
+          return Response.json({
+            expires_at: Number(parameters.get("expires_at")),
+            id: "cs_concurrent_test",
+            status: "open",
+            url: "https://checkout.stripe.test/concurrent",
+          });
+        },
+      },
+      async () => {
+        try {
+          const winner = fixture.request("/checkout", { method: "POST" });
+          await requestStarted;
+          const repeated = fixture.request("/checkout", { method: "POST" });
+          expect((await repeated).status).toBe(409);
+          releaseRequest();
+          expect((await winner).status).toBe(200);
+          expect(idempotencyKeys).toHaveLength(1);
+          expect(
+            fixture.database
+              .query(
+                `SELECT pending_checkout_session_id FROM organization_billing
              WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({ pending_checkout_session_id: "cs_concurrent_test" });
-    } finally {
-      releaseRequest();
-      globalThis.fetch = originalFetch;
-    }
+              )
+              .get(organizationId),
+          ).toEqual({ pending_checkout_session_id: "cs_concurrent_test" });
+        } finally {
+          releaseRequest();
+        }
+      },
+    );
   });
 
   it("reconciles an indeterminate Checkout through its webhook", async () => {
-    const fixture = await createFixture();
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_customer_id, updated_at)
-         VALUES (?, 'cus_original', ?)`,
-      )
-      .run(organizationId, new Date().toISOString());
-    const originalFetch = globalThis.fetch;
-    const originalConsoleError = console.error;
+    const fixture = createFixture();
+    insertBilling(fixture.database, organizationId, {
+      stripe_customer_id: "cus_original",
+    });
     const customers: Array<string | null> = [];
     const idempotencyKeys: string[] = [];
     const checkoutClaimIds: Array<string | null> = [];
     const subscriptionClaimIds: Array<string | null> = [];
     let requestCount = 0;
-    globalThis.fetch = (async (input, init) => {
-      const url = String(input);
+    const stripe = async (call: FetchCall) => {
+      const url = call.url;
       if (url.endsWith("/v1/checkout/sessions")) {
         requestCount += 1;
-        idempotencyKeys.push(
-          new Headers(init?.headers).get("Idempotency-Key") ?? "",
-        );
-        const parameters = new URLSearchParams(String(init?.body));
+        idempotencyKeys.push(call.headers.get("Idempotency-Key") ?? "");
+        const parameters = new URLSearchParams(call.body);
         customers.push(parameters.get("customer"));
         checkoutClaimIds.push(parameters.get("metadata[checkout_claim_id]"));
         subscriptionClaimIds.push(
@@ -456,198 +446,177 @@ describe("billing", () => {
         );
       }
       throw new Error(`Unexpected Stripe request: ${url}`);
-    }) as typeof fetch;
-    console.error = () => {};
-    try {
-      const failed = await fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        fixture.bindings,
-      );
-      expect(failed.status).toBe(502);
-      const claim = fixture.database
-        .query(
-          `SELECT checkout_claim_id, checkout_claim_price_id
+    };
+    await withFetch(
+      {
+        "POST https://api.stripe.com/v1/checkout/sessions": stripe,
+        "GET https://api.stripe.com/v1/subscriptions/sub_indeterminate": stripe,
+      },
+      async () => {
+        const failed = await fixture.request("/checkout", { method: "POST" });
+        expect(failed.status).toBe(502);
+        const claim = fixture.database
+          .query(
+            `SELECT checkout_claim_id, checkout_claim_price_id
            FROM organization_billing WHERE organization_id = ?`,
-        )
-        .get(organizationId) as {
-        checkout_claim_id: string;
-        checkout_claim_price_id: string;
-      };
-      const claimId = claim.checkout_claim_id;
-      expect(typeof claimId).toBe("string");
-      expect(claim.checkout_claim_price_id).toBe(proPriceId);
-      expect(checkoutClaimIds).toEqual([claimId]);
-      expect(subscriptionClaimIds).toEqual([claimId]);
-
-      const retried = await fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        fixture.bindings,
-      );
-      expect(retried.status).toBe(409);
-      expect(requestCount).toBe(1);
-
-      const subscriptionCreated = subscriptionEvent(
-        "evt_indeterminate_subscription",
-        100,
-        "active",
-        1,
-        "sub_indeterminate",
-      );
-      expect((await sendWebhook(fixture, subscriptionCreated)).status).toBe(
-        200,
-      );
-      expect(
-        fixture.database
-          .query(
-            `SELECT checkout_claim_id, stripe_subscription_id
-             FROM organization_billing WHERE organization_id = ?`,
           )
-          .get(organizationId),
-      ).toEqual({
-        checkout_claim_id: claimId,
-        stripe_subscription_id: "sub_indeterminate",
-      });
+          .get(organizationId) as {
+          checkout_claim_id: string;
+          checkout_claim_price_id: string;
+        };
+        const claimId = claim.checkout_claim_id;
+        expect(typeof claimId).toBe("string");
+        expect(claim.checkout_claim_price_id).toBe(proPriceId);
+        expect(checkoutClaimIds).toEqual([claimId]);
+        expect(subscriptionClaimIds).toEqual([claimId]);
 
-      const completed = {
-        created: 101,
-        data: {
-          object: {
-            client_reference_id: organizationId,
-            id: "cs_indeterminate",
-            metadata: {
-              checkout_claim_id: claimId,
-              organization_id: organizationId,
+        const retried = await fixture.request("/checkout", { method: "POST" });
+        expect(retried.status).toBe(409);
+        expect(requestCount).toBe(1);
+
+        const subscriptionCreated = subscriptionEvent(
+          "evt_indeterminate_subscription",
+          100,
+          "active",
+          1,
+          "sub_indeterminate",
+        );
+        expect((await sendWebhook(fixture, subscriptionCreated)).status).toBe(
+          200,
+        );
+        expect(
+          fixture.database
+            .query(
+              `SELECT checkout_claim_id, stripe_subscription_id
+             FROM organization_billing WHERE organization_id = ?`,
+            )
+            .get(organizationId),
+        ).toEqual({
+          checkout_claim_id: claimId,
+          stripe_subscription_id: "sub_indeterminate",
+        });
+
+        const completed = {
+          created: 101,
+          data: {
+            object: {
+              client_reference_id: organizationId,
+              id: "cs_indeterminate",
+              metadata: {
+                checkout_claim_id: claimId,
+                organization_id: organizationId,
+              },
+              subscription: "sub_indeterminate",
             },
-            subscription: "sub_indeterminate",
           },
-        },
-        id: "evt_indeterminate_checkout",
-        type: "checkout.session.completed",
-      };
-      console.error = originalConsoleError;
-      expect((await sendWebhook(fixture, completed)).status).toBe(200);
-      expect(
-        fixture.database
-          .query(
-            `SELECT checkout_claim_id, pending_checkout_session_id,
+          id: "evt_indeterminate_checkout",
+          type: "checkout.session.completed",
+        };
+        expect((await sendWebhook(fixture, completed)).status).toBe(200);
+        expect(
+          fixture.database
+            .query(
+              `SELECT checkout_claim_id, pending_checkout_session_id,
                     stripe_status, stripe_subscription_id
              FROM organization_billing WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({
-        checkout_claim_id: null,
-        pending_checkout_session_id: null,
-        stripe_status: "active",
-        stripe_subscription_id: "sub_indeterminate",
-      });
-      expect(idempotencyKeys).toHaveLength(1);
-      expect(customers).toEqual(["cus_original"]);
-    } finally {
-      console.error = originalConsoleError;
-      globalThis.fetch = originalFetch;
-    }
+            )
+            .get(organizationId),
+        ).toEqual({
+          checkout_claim_id: null,
+          pending_checkout_session_id: null,
+          stripe_status: "active",
+          stripe_subscription_id: "sub_indeterminate",
+        });
+        expect(idempotencyKeys).toHaveLength(1);
+        expect(customers).toEqual(["cus_original"]);
+      },
+      { captureErrors: true },
+    );
   });
 
   it("releases a Checkout claim after a definitive Stripe rejection", async () => {
-    const fixture = await createFixture();
-    const originalFetch = globalThis.fetch;
-    const originalConsoleError = console.error;
+    const fixture = createFixture();
     const idempotencyKeys: string[] = [];
     let requestCount = 0;
-    globalThis.fetch = (async (_input, init) => {
-      requestCount += 1;
-      idempotencyKeys.push(
-        new Headers(init?.headers).get("Idempotency-Key") ?? "",
-      );
-      if (requestCount === 1) {
-        return Response.json(
-          { error: { message: "Invalid Stripe price" } },
-          { status: 400 },
-        );
-      }
-      return Response.json({
-        expires_at: Math.floor(Date.now() / 1_000) + 1_800,
-        id: "cs_retry_success",
-        status: "open",
-        url: "https://checkout.stripe.test/retry",
-      });
-    }) as typeof fetch;
-    console.error = () => {};
-    try {
-      const rejected = await fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        fixture.bindings,
-      );
-      expect(rejected.status).toBe(502);
-      expect(
-        fixture.database
-          .query(
-            `SELECT checkout_claim_id FROM organization_billing
+    await withFetch(
+      {
+        "POST https://api.stripe.com/v1/checkout/sessions": async (
+          call: FetchCall,
+        ) => {
+          requestCount += 1;
+          idempotencyKeys.push(call.headers.get("Idempotency-Key") ?? "");
+          if (requestCount === 1) {
+            return Response.json(
+              { error: { message: "Invalid Stripe price" } },
+              { status: 400 },
+            );
+          }
+          return Response.json({
+            expires_at: Math.floor(Date.now() / 1_000) + 1_800,
+            id: "cs_retry_success",
+            status: "open",
+            url: "https://checkout.stripe.test/retry",
+          });
+        },
+      },
+      async () => {
+        const rejected = await fixture.request("/checkout", { method: "POST" });
+        expect(rejected.status).toBe(502);
+        expect(
+          fixture.database
+            .query(
+              `SELECT checkout_claim_id FROM organization_billing
              WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({ checkout_claim_id: null });
-      const retried = await fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        fixture.bindings,
-      );
-      expect(retried.status).toBe(200);
-      expect(new Set(idempotencyKeys).size).toBe(2);
-    } finally {
-      console.error = originalConsoleError;
-      globalThis.fetch = originalFetch;
-    }
+            )
+            .get(organizationId),
+        ).toEqual({ checkout_claim_id: null });
+        const retried = await fixture.request("/checkout", { method: "POST" });
+        expect(retried.status).toBe(200);
+        expect(new Set(idempotencyKeys).size).toBe(2);
+      },
+      { captureErrors: true },
+    );
   });
 
   it("rejects malformed successful Stripe responses", async () => {
-    const fixture = await createFixture();
-    const originalFetch = globalThis.fetch;
-    const originalConsoleError = console.error;
+    const fixture = createFixture();
     let responseBody: Record<string, unknown> = {
       id: "not-a-checkout-session",
     };
-    globalThis.fetch = (async (_input, _init) =>
-      Response.json(responseBody)) as typeof fetch;
-    console.error = () => {};
-    try {
-      const response = await fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        fixture.bindings,
-      );
-      expect(response.status).toBe(502);
-      expect((await response.json()) as unknown).toEqual({
-        error: "Stripe returned a malformed Checkout session ID.",
-      });
+    await withFetch(
+      {
+        "POST https://api.stripe.com/v1/checkout/sessions": async () =>
+          Response.json(responseBody),
+      },
+      async () => {
+        const response = await fixture.request("/checkout", { method: "POST" });
+        expect(response.status).toBe(502);
+        expect((await response.json()) as unknown).toEqual({
+          error: "Stripe returned a malformed Checkout session ID.",
+        });
 
-      responseBody = {
-        expires_at: Math.floor(Date.now() / 1_000) + 1_800,
-        id: "cs_missing_url",
-        status: "open",
-      };
-      const missingUrlFixture = await createFixture();
-      const missingUrl = await missingUrlFixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        missingUrlFixture.bindings,
-      );
-      expect(missingUrl.status).toBe(502);
-      expect((await missingUrl.json()) as unknown).toEqual({
-        error: "Stripe did not return a checkout URL.",
-      });
-    } finally {
-      console.error = originalConsoleError;
-      globalThis.fetch = originalFetch;
-    }
+        responseBody = {
+          expires_at: Math.floor(Date.now() / 1_000) + 1_800,
+          id: "cs_missing_url",
+          status: "open",
+        };
+        const missingUrlFixture = createFixture();
+        const missingUrl = await missingUrlFixture.app.request(
+          "/checkout",
+          { method: "POST" },
+          missingUrlFixture.bindings,
+        );
+        expect(missingUrl.status).toBe(502);
+        expect((await missingUrl.json()) as unknown).toEqual({
+          error: "Stripe did not return a checkout URL.",
+        });
+      },
+      { captureErrors: true },
+    );
   });
 
   it("invalidates an in-flight Checkout before organization deletion", async () => {
-    const fixture = await createFixture();
-    const originalFetch = globalThis.fetch;
+    const fixture = createFixture();
     let markCheckoutStarted = () => {};
     let releaseCheckout = () => {};
     const checkoutStarted = new Promise<void>((resolve) => {
@@ -657,8 +626,8 @@ describe("billing", () => {
       releaseCheckout = resolve;
     });
     const requests: string[] = [];
-    globalThis.fetch = (async (input) => {
-      const url = String(input);
+    const stripe = async (call: FetchCall) => {
+      const url = call.url;
       requests.push(url);
       if (url.endsWith("/v1/checkout/sessions")) {
         markCheckoutStarted();
@@ -674,109 +643,106 @@ describe("billing", () => {
         return Response.json({ id: "cs_in_flight", status: "expired" });
       }
       throw new Error(`Unexpected Stripe request: ${url}`);
-    }) as typeof fetch;
-    try {
-      const checkoutResponse = fixture.app.request(
-        "/checkout",
-        { method: "POST" },
-        fixture.bindings,
-      );
-      await checkoutStarted;
-      expect(
-        await cancelOrganizationSubscription(fixture.bindings, organizationId),
-      ).toMatchObject({ canceled: false, checkoutGuard: expect.any(String) });
-      releaseCheckout();
-      expect((await checkoutResponse).status).toBe(409);
-      expect(requests).toEqual([
-        "https://api.stripe.com/v1/checkout/sessions",
-        "https://api.stripe.com/v1/checkout/sessions/cs_in_flight/expire",
-      ]);
-      expect(
-        fixture.database
-          .query(
-            `SELECT checkout_disabled_at, pending_checkout_session_id
+    };
+    await withFetch(
+      {
+        "POST https://api.stripe.com/v1/checkout/sessions": stripe,
+        "POST https://api.stripe.com/v1/checkout/sessions/cs_in_flight/expire":
+          stripe,
+      },
+      async () => {
+        try {
+          const checkoutResponse = fixture.request("/checkout", {
+            method: "POST",
+          });
+          await checkoutStarted;
+          expect(
+            await cancelOrganizationSubscription(
+              fixture.bindings,
+              organizationId,
+            ),
+          ).toMatchObject({
+            canceled: false,
+            checkoutGuard: expect.any(String),
+          });
+          releaseCheckout();
+          expect((await checkoutResponse).status).toBe(409);
+          expect(requests).toEqual([
+            "https://api.stripe.com/v1/checkout/sessions",
+            "https://api.stripe.com/v1/checkout/sessions/cs_in_flight/expire",
+          ]);
+          expect(
+            fixture.database
+              .query(
+                `SELECT checkout_disabled_at, pending_checkout_session_id
              FROM organization_billing WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toMatchObject({
-        checkout_disabled_at: expect.any(String),
-        pending_checkout_session_id: null,
-      });
-    } finally {
-      releaseCheckout();
-      globalThis.fetch = originalFetch;
-    }
+              )
+              .get(organizationId),
+          ).toMatchObject({
+            checkout_disabled_at: expect.any(String),
+            pending_checkout_session_id: null,
+          });
+        } finally {
+          releaseCheckout();
+        }
+      },
+    );
   });
 
   it("skips terminal subscriptions during organization deletion", async () => {
-    const fixture = await createFixture();
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_subscription_id, stripe_status, updated_at)
-         VALUES (?, 'sub_incomplete_expired', 'incomplete_expired', ?)`,
-      )
-      .run(organizationId, new Date().toISOString());
-    const originalFetch = globalThis.fetch;
-    let requestedStripe = false;
-    globalThis.fetch = (async (_input): Promise<Response> => {
-      requestedStripe = true;
-      throw new Error("Terminal subscriptions must not reach Stripe.");
-    }) as typeof fetch;
-    try {
+    const fixture = createFixture();
+    insertBilling(fixture.database, organizationId, {
+      stripe_status: "incomplete_expired",
+      stripe_subscription_id: "sub_incomplete_expired",
+    });
+    // No routes: any Stripe request fails the test.
+    await withFetch({}, async ({ requests }) => {
       expect(
         await cancelOrganizationSubscription(fixture.bindings, organizationId),
       ).toMatchObject({ canceled: false, checkoutGuard: expect.any(String) });
-      expect(requestedStripe).toBe(false);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+      expect(requests).toEqual([]);
+    });
   });
 
   it("fails closed when Stripe cannot find a subscription to cancel", async () => {
-    const fixture = await createFixture();
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_subscription_id,
-          stripe_subscription_item_id, stripe_price_id, stripe_status,
-          updated_at)
-         VALUES (?, 'sub_wrong_account', 'si_wrong_account', ?, 'active', ?)`,
-      )
-      .run(organizationId, proPriceId, new Date().toISOString());
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (_input, _init) =>
-      Response.json(
-        { error: { message: "No such subscription" } },
-        { status: 404 },
-      )) as typeof fetch;
-    try {
-      await expect(
-        cancelOrganizationSubscription(fixture.bindings, organizationId),
-      ).rejects.toThrow("No such subscription");
-      expect(
-        fixture.database
-          .query(
-            `SELECT checkout_disabled_at, stripe_status
+    const fixture = createFixture();
+    insertBilling(fixture.database, organizationId, {
+      stripe_price_id: proPriceId,
+      stripe_status: "active",
+      stripe_subscription_id: "sub_wrong_account",
+      stripe_subscription_item_id: "si_wrong_account",
+    });
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_wrong_account":
+          async () =>
+            Response.json(
+              { error: { message: "No such subscription" } },
+              { status: 404 },
+            ),
+      },
+      async () => {
+        await expect(
+          cancelOrganizationSubscription(fixture.bindings, organizationId),
+        ).rejects.toThrow("No such subscription");
+        expect(
+          fixture.database
+            .query(
+              `SELECT checkout_disabled_at, stripe_status
              FROM organization_billing WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({ checkout_disabled_at: null, stripe_status: "active" });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+            )
+            .get(organizationId),
+        ).toEqual({ checkout_disabled_at: null, stripe_status: "active" });
+      },
+    );
   });
 
   it("reclaims a stale deletion lease after an interrupted worker", async () => {
-    const fixture = await createFixture();
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, checkout_disabled_at,
-          checkout_disabled_expires_at, updated_at)
-         VALUES (?, 'interrupted-worker', 1, ?)`,
-      )
-      .run(organizationId, new Date().toISOString());
+    const fixture = createFixture();
+    insertBilling(fixture.database, organizationId, {
+      checkout_disabled_at: "interrupted-worker",
+      checkout_disabled_expires_at: 1,
+    });
 
     const result = await cancelOrganizationSubscription(
       fixture.bindings,
@@ -801,16 +767,13 @@ describe("billing", () => {
   });
 
   it("keeps concurrent organization deletions request-owned", async () => {
-    const fixture = await createFixture();
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_subscription_id,
-          stripe_subscription_item_id, stripe_price_id, stripe_status,
-          updated_at)
-         VALUES (?, 'sub_delete_race', 'si_sub_delete_race', ?, 'active', ?)`,
-      )
-      .run(organizationId, proPriceId, new Date().toISOString());
+    const fixture = createFixture();
+    insertBilling(fixture.database, organizationId, {
+      stripe_price_id: proPriceId,
+      stripe_status: "active",
+      stripe_subscription_id: "sub_delete_race",
+      stripe_subscription_item_id: "si_sub_delete_race",
+    });
     let markCancellationStarted = () => {};
     let releaseCancellation = () => {};
     const cancellationStarted = new Promise<void>((resolve) => {
@@ -820,119 +783,121 @@ describe("billing", () => {
       releaseCancellation = resolve;
     });
     let requestCount = 0;
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (_input) => {
-      requestCount += 1;
-      markCancellationStarted();
-      await cancellationReleased;
-      return Response.json(
-        subscriptionEvent(
-          "unused_delete_race",
-          100,
-          "canceled",
-          1,
-          "sub_delete_race",
-        ).data.object,
-      );
-    }) as typeof fetch;
-    try {
-      const winner = cancelOrganizationSubscription(
-        fixture.bindings,
-        organizationId,
-      );
-      await cancellationStarted;
-      await expect(
-        cancelOrganizationSubscription(fixture.bindings, organizationId),
-      ).rejects.toThrow("Organization deletion is already in progress.");
-      releaseCancellation();
-      const result = await winner;
-      expect(requestCount).toBe(1);
-      expect(
-        fixture.database
-          .query(
-            `SELECT checkout_disabled_at FROM organization_billing
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_delete_race":
+          async () => {
+            requestCount += 1;
+            markCancellationStarted();
+            await cancellationReleased;
+            return Response.json(
+              subscriptionEvent(
+                "unused_delete_race",
+                100,
+                "canceled",
+                1,
+                "sub_delete_race",
+              ).data.object,
+            );
+          },
+      },
+      async () => {
+        try {
+          const winner = cancelOrganizationSubscription(
+            fixture.bindings,
+            organizationId,
+          );
+          await cancellationStarted;
+          await expect(
+            cancelOrganizationSubscription(fixture.bindings, organizationId),
+          ).rejects.toThrow("Organization deletion is already in progress.");
+          releaseCancellation();
+          const result = await winner;
+          expect(requestCount).toBe(1);
+          expect(
+            fixture.database
+              .query(
+                `SELECT checkout_disabled_at FROM organization_billing
              WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({ checkout_disabled_at: result.checkoutGuard });
-    } finally {
-      releaseCancellation();
-      globalThis.fetch = originalFetch;
-    }
+              )
+              .get(organizationId),
+          ).toEqual({ checkout_disabled_at: result.checkoutGuard });
+        } finally {
+          releaseCancellation();
+        }
+      },
+    );
   });
 
   it("uses signed, idempotent, ordered webhooks as the entitlement source", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const active = subscriptionEvent("evt_active", 100, "active", 3);
     let currentSubscription = active.data.object;
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (_input, _init) =>
-      Response.json(currentSubscription)) as typeof fetch;
-    try {
-      const first = await sendWebhook(fixture, active);
-      expect(first.status).toBe(200);
-      expect((await first.json()) as unknown).toEqual({ received: true });
-      expect((await sendWebhook(fixture, active)).status).toBe(200);
-      expect(
-        fixture.database
-          .query(
-            `SELECT stripe_status, seat_quantity, stripe_event_created
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
+          Response.json(currentSubscription),
+      },
+      async () => {
+        const first = await sendWebhook(fixture, active);
+        expect(first.status).toBe(200);
+        expect((await first.json()) as unknown).toEqual({ received: true });
+        expect((await sendWebhook(fixture, active)).status).toBe(200);
+        expect(
+          fixture.database
+            .query(
+              `SELECT stripe_status, seat_quantity, stripe_event_created
              FROM organization_billing WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({
-        seat_quantity: 3,
-        stripe_event_created: 100,
-        stripe_status: "active",
-      });
-      expect(
-        fixture.database
-          .query("SELECT COUNT(*) AS count FROM stripe_webhook_events")
-          .get(),
-      ).toEqual({ count: 1 });
+            )
+            .get(organizationId),
+        ).toEqual({
+          seat_quantity: 3,
+          stripe_event_created: 100,
+          stripe_status: "active",
+        });
+        expect(
+          fixture.database
+            .query("SELECT COUNT(*) AS count FROM stripe_webhook_events")
+            .get(),
+        ).toEqual({ count: 1 });
 
-      await sendWebhook(
-        fixture,
-        subscriptionEvent("evt_old", 99, "canceled", 3),
-      );
-      expect(
-        fixture.database
-          .query(
-            `SELECT stripe_status FROM organization_billing
+        await sendWebhook(
+          fixture,
+          subscriptionEvent("evt_old", 99, "canceled", 3),
+        );
+        expect(
+          fixture.database
+            .query(
+              `SELECT stripe_status FROM organization_billing
              WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({ stripe_status: "active" });
+            )
+            .get(organizationId),
+        ).toEqual({ stripe_status: "active" });
 
-      await sendWebhook(
-        fixture,
-        subscriptionEvent("evt_same_second_stale", 100, "canceled", 3),
-      );
-      expect(
-        fixture.database
-          .query(
-            `SELECT stripe_status FROM organization_billing
+        await sendWebhook(
+          fixture,
+          subscriptionEvent("evt_same_second_stale", 100, "canceled", 3),
+        );
+        expect(
+          fixture.database
+            .query(
+              `SELECT stripe_status FROM organization_billing
              WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({ stripe_status: "active" });
+            )
+            .get(organizationId),
+        ).toEqual({ stripe_status: "active" });
 
-      const canceled = subscriptionEvent("evt_canceled", 101, "canceled", 3);
-      currentSubscription = canceled.data.object;
-      await sendWebhook(fixture, canceled);
-      const summary = await fixture.app.request(
-        "/",
-        undefined,
-        fixture.bindings,
-      );
-      expect(await summary.json()).toMatchObject({ plan: "free" });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+        const canceled = subscriptionEvent("evt_canceled", 101, "canceled", 3);
+        currentSubscription = canceled.data.object;
+        await sendWebhook(fixture, canceled);
+        const summary = await fixture.request("/", undefined);
+        expect(await summary.json()).toMatchObject({ plan: "free" });
+      },
+    );
   });
 
   it("prunes Stripe webhook receipts outside the replay window", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     fixture.database.exec(
       `INSERT INTO stripe_webhook_events
        (id, event_type, stripe_created, received_at, processed_at)
@@ -954,7 +919,7 @@ describe("billing", () => {
   });
 
   it("rejects missing, invalid, and stale webhook signatures", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const event = subscriptionEvent("evt_bad_signature", 100, "active", 1);
     const payload = JSON.stringify(event);
     const timestamp = Math.floor(Date.now() / 1_000);
@@ -995,7 +960,7 @@ describe("billing", () => {
   });
 
   it("stops reading oversized webhook payloads", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     let canceled = false;
     const body = new ReadableStream<Uint8Array>({
       cancel: () => {
@@ -1016,7 +981,7 @@ describe("billing", () => {
   });
 
   it("only lets verified Checkout replace the current subscription", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const current = subscriptionEvent(
       "evt_current_subscription",
       100,
@@ -1064,9 +1029,8 @@ describe("billing", () => {
     };
     let stripeSubscription = current.data.object;
     const requests: Array<{ method: string; url: string }> = [];
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input, init) => {
-      const request = { method: init?.method ?? "GET", url: String(input) };
+    const stripe = async (call: FetchCall) => {
+      const request = { method: call.method, url: call.url };
       requests.push(request);
       if (request.method === "DELETE") {
         const canceled = request.url.endsWith("/sub_current")
@@ -1075,55 +1039,62 @@ describe("billing", () => {
         return Response.json({ ...canceled, status: "canceled" });
       }
       return Response.json(stripeSubscription);
-    }) as typeof fetch;
-    try {
-      expect((await sendWebhook(fixture, current)).status).toBe(200);
-      reserveCheckout(fixture.database, "cs_checkout");
-      stripeSubscription = checkoutSubscription.data.object;
-      expect((await sendWebhook(fixture, checkout)).status).toBe(200);
-      stripeSubscription = oldSubscription.data.object;
-      expect((await sendWebhook(fixture, oldCheckout)).status).toBe(200);
-      expect(
-        fixture.database
-          .query(
-            `SELECT paid_ended_at, stripe_status, stripe_subscription_id
+    };
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/subscriptions/sub_current": stripe,
+        "GET https://api.stripe.com/v1/subscriptions/sub_checkout": stripe,
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_current": stripe,
+        "GET https://api.stripe.com/v1/subscriptions/sub_old": stripe,
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_old": stripe,
+      },
+      async () => {
+        expect((await sendWebhook(fixture, current)).status).toBe(200);
+        reserveCheckout(fixture.database, "cs_checkout");
+        stripeSubscription = checkoutSubscription.data.object;
+        expect((await sendWebhook(fixture, checkout)).status).toBe(200);
+        stripeSubscription = oldSubscription.data.object;
+        expect((await sendWebhook(fixture, oldCheckout)).status).toBe(200);
+        expect(
+          fixture.database
+            .query(
+              `SELECT paid_ended_at, stripe_status, stripe_subscription_id
              FROM organization_billing WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({
-        paid_ended_at: null,
-        stripe_status: "active",
-        stripe_subscription_id: "sub_checkout",
-      });
-      expect(requests).toEqual([
-        {
-          method: "GET",
-          url: "https://api.stripe.com/v1/subscriptions/sub_current",
-        },
-        {
-          method: "GET",
-          url: "https://api.stripe.com/v1/subscriptions/sub_checkout",
-        },
-        {
-          method: "DELETE",
-          url: "https://api.stripe.com/v1/subscriptions/sub_current",
-        },
-        {
-          method: "GET",
-          url: "https://api.stripe.com/v1/subscriptions/sub_old",
-        },
-        {
-          method: "DELETE",
-          url: "https://api.stripe.com/v1/subscriptions/sub_old",
-        },
-      ]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+            )
+            .get(organizationId),
+        ).toEqual({
+          paid_ended_at: null,
+          stripe_status: "active",
+          stripe_subscription_id: "sub_checkout",
+        });
+        expect(requests).toEqual([
+          {
+            method: "GET",
+            url: "https://api.stripe.com/v1/subscriptions/sub_current",
+          },
+          {
+            method: "GET",
+            url: "https://api.stripe.com/v1/subscriptions/sub_checkout",
+          },
+          {
+            method: "DELETE",
+            url: "https://api.stripe.com/v1/subscriptions/sub_current",
+          },
+          {
+            method: "GET",
+            url: "https://api.stripe.com/v1/subscriptions/sub_old",
+          },
+          {
+            method: "DELETE",
+            url: "https://api.stripe.com/v1/subscriptions/sub_old",
+          },
+        ]);
+      },
+    );
   });
 
   it("waits for a Checkout webhook before confirming its subscription", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     insertStalePendingCheckout(fixture.database, "cs_sync_race");
     const subscription = subscriptionEvent(
       "unused_sync_race",
@@ -1157,9 +1128,8 @@ describe("billing", () => {
       releaseSubscriptionFetch = resolve;
     });
     let subscriptionFetchCount = 0;
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input) => {
-      const url = new URL(String(input));
+    const stripe = async (call: FetchCall) => {
+      const url = new URL(call.url);
       if (url.pathname.endsWith("/v1/checkout/sessions/cs_sync_race")) {
         markCheckoutFetched();
         return Response.json({
@@ -1176,33 +1146,40 @@ describe("billing", () => {
         return Response.json(subscription);
       }
       throw new Error(`Unexpected Stripe request: ${url.href}`);
-    }) as typeof fetch;
-    try {
-      const webhookResponse = sendWebhook(fixture, checkout);
-      await subscriptionFetchStarted;
-      const confirmationResponse = fixture.app.request(
-        "/?session_id=cs_sync_race",
-        undefined,
-        fixture.bindings,
-      );
-      await checkoutFetched;
-      releaseSubscriptionFetch();
-      expect((await webhookResponse).status).toBe(200);
-      const confirmation = await confirmationResponse;
-      expect(confirmation.status).toBe(200);
-      expect(await confirmation.json()).toMatchObject({
-        checkout: "complete",
-        plan: "pro",
-      });
-      expect(subscriptionFetchCount).toBe(1);
-    } finally {
-      releaseSubscriptionFetch();
-      globalThis.fetch = originalFetch;
-    }
+    };
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/subscriptions/sub_sync_race": stripe,
+        "GET https://api.stripe.com/v1/checkout/sessions/cs_sync_race?expand%5B%5D=subscription":
+          stripe,
+      },
+      async () => {
+        try {
+          const webhookResponse = sendWebhook(fixture, checkout);
+          await subscriptionFetchStarted;
+          const confirmationResponse = fixture.request(
+            "/?session_id=cs_sync_race",
+            undefined,
+          );
+          await checkoutFetched;
+          releaseSubscriptionFetch();
+          expect((await webhookResponse).status).toBe(200);
+          const confirmation = await confirmationResponse;
+          expect(confirmation.status).toBe(200);
+          expect(await confirmation.json()).toMatchObject({
+            checkout: "complete",
+            plan: "pro",
+          });
+          expect(subscriptionFetchCount).toBe(1);
+        } finally {
+          releaseSubscriptionFetch();
+        }
+      },
+    );
   });
 
   it("keeps the current subscription for an invalid Checkout price", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const current = subscriptionEvent(
       "evt_price_current",
       100,
@@ -1232,52 +1209,57 @@ describe("billing", () => {
     };
     let stripeSubscription = current.data.object;
     const requests: Array<{ method: string; url: string }> = [];
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input, init) => {
-      const request = { method: init?.method ?? "GET", url: String(input) };
+    const stripe = async (call: FetchCall) => {
+      const request = { method: call.method, url: call.url };
       requests.push(request);
       if (request.method === "DELETE") {
         return Response.json({ ...invalid.data.object, status: "canceled" });
       }
       return Response.json(stripeSubscription);
-    }) as typeof fetch;
-    try {
-      expect((await sendWebhook(fixture, current)).status).toBe(200);
-      reserveCheckout(fixture.database, "cs_price_invalid");
-      stripeSubscription = invalid.data.object;
-      expect((await sendWebhook(fixture, checkout)).status).toBe(200);
-      expect(
-        fixture.database
-          .query(
-            `SELECT pending_checkout_session_id, stripe_subscription_id
+    };
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/subscriptions/sub_price_current": stripe,
+        "GET https://api.stripe.com/v1/subscriptions/sub_price_invalid": stripe,
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_price_invalid":
+          stripe,
+      },
+      async () => {
+        expect((await sendWebhook(fixture, current)).status).toBe(200);
+        reserveCheckout(fixture.database, "cs_price_invalid");
+        stripeSubscription = invalid.data.object;
+        expect((await sendWebhook(fixture, checkout)).status).toBe(200);
+        expect(
+          fixture.database
+            .query(
+              `SELECT pending_checkout_session_id, stripe_subscription_id
              FROM organization_billing WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({
-        pending_checkout_session_id: null,
-        stripe_subscription_id: "sub_price_current",
-      });
-      expect(requests).toEqual([
-        {
-          method: "GET",
-          url: "https://api.stripe.com/v1/subscriptions/sub_price_current",
-        },
-        {
-          method: "GET",
-          url: "https://api.stripe.com/v1/subscriptions/sub_price_invalid",
-        },
-        {
-          method: "DELETE",
-          url: "https://api.stripe.com/v1/subscriptions/sub_price_invalid",
-        },
-      ]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+            )
+            .get(organizationId),
+        ).toEqual({
+          pending_checkout_session_id: null,
+          stripe_subscription_id: "sub_price_current",
+        });
+        expect(requests).toEqual([
+          {
+            method: "GET",
+            url: "https://api.stripe.com/v1/subscriptions/sub_price_current",
+          },
+          {
+            method: "GET",
+            url: "https://api.stripe.com/v1/subscriptions/sub_price_invalid",
+          },
+          {
+            method: "DELETE",
+            url: "https://api.stripe.com/v1/subscriptions/sub_price_invalid",
+          },
+        ]);
+      },
+    );
   });
 
   it("asks Stripe to retry a duplicate webhook still in progress", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const event = subscriptionEvent(
       "evt_duplicate_processing",
       100,
@@ -1293,33 +1275,37 @@ describe("billing", () => {
       releaseFetch = resolve;
     });
     let fetchCount = 0;
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (_input, _init) => {
-      fetchCount += 1;
-      markFetchStarted();
-      await fetchReleased;
-      return Response.json(event.data.object);
-    }) as typeof fetch;
-    try {
-      const firstResponse = sendWebhook(fixture, event);
-      await fetchStarted;
-      const duplicateResponse = await sendWebhook(fixture, event);
-      expect(duplicateResponse.status).toBe(503);
-      expect((await duplicateResponse.json()) as unknown).toEqual({
-        error: "Webhook event is already being processed.",
-      });
-      releaseFetch();
-      expect((await firstResponse).status).toBe(200);
-      expect((await sendWebhook(fixture, event)).status).toBe(200);
-      expect(fetchCount).toBe(1);
-    } finally {
-      releaseFetch();
-      globalThis.fetch = originalFetch;
-    }
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () => {
+          fetchCount += 1;
+          markFetchStarted();
+          await fetchReleased;
+          return Response.json(event.data.object);
+        },
+      },
+      async () => {
+        try {
+          const firstResponse = sendWebhook(fixture, event);
+          await fetchStarted;
+          const duplicateResponse = await sendWebhook(fixture, event);
+          expect(duplicateResponse.status).toBe(503);
+          expect((await duplicateResponse.json()) as unknown).toEqual({
+            error: "Webhook event is already being processed.",
+          });
+          releaseFetch();
+          expect((await firstResponse).status).toBe(200);
+          expect((await sendWebhook(fixture, event)).status).toBe(200);
+          expect(fetchCount).toBe(1);
+        } finally {
+          releaseFetch();
+        }
+      },
+    );
   });
 
   it("serializes concurrent same-second subscription refreshes", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const active = subscriptionEvent("evt_concurrent_active", 100, "active", 1);
     const canceled = subscriptionEvent(
       "evt_concurrent_canceled",
@@ -1337,97 +1323,104 @@ describe("billing", () => {
       releaseFirstFetch = resolve;
     });
     let fetchCount = 0;
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (_input, _init) => {
-      fetchCount += 1;
-      const snapshot = currentSubscription;
-      if (fetchCount === 1) {
-        markFirstFetchStarted();
-        await firstFetchReleased;
-      }
-      return Response.json(snapshot);
-    }) as typeof fetch;
-    try {
-      const firstResponse = sendWebhook(fixture, active);
-      await firstFetchStarted;
-      currentSubscription = canceled.data.object;
-      const concurrentResponse = await sendWebhook(fixture, canceled);
-      expect(concurrentResponse.status).toBe(500);
-      releaseFirstFetch();
-      expect((await firstResponse).status).toBe(200);
-      expect((await sendWebhook(fixture, canceled)).status).toBe(200);
-      expect(
-        (
-          await sendWebhook(
-            fixture,
-            subscriptionEvent("evt_same_second_retry", 100, "active", 1),
-          )
-        ).status,
-      ).toBe(200);
-      expect(
-        fixture.database
-          .query(
-            `SELECT stripe_status FROM organization_billing
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () => {
+          fetchCount += 1;
+          const snapshot = currentSubscription;
+          if (fetchCount === 1) {
+            markFirstFetchStarted();
+            await firstFetchReleased;
+          }
+          return Response.json(snapshot);
+        },
+      },
+      async () => {
+        try {
+          const firstResponse = sendWebhook(fixture, active);
+          await firstFetchStarted;
+          currentSubscription = canceled.data.object;
+          const concurrentResponse = await sendWebhook(fixture, canceled);
+          expect(concurrentResponse.status).toBe(500);
+          releaseFirstFetch();
+          expect((await firstResponse).status).toBe(200);
+          expect((await sendWebhook(fixture, canceled)).status).toBe(200);
+          expect(
+            (
+              await sendWebhook(
+                fixture,
+                subscriptionEvent("evt_same_second_retry", 100, "active", 1),
+              )
+            ).status,
+          ).toBe(200);
+          expect(
+            fixture.database
+              .query(
+                `SELECT stripe_status FROM organization_billing
              WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({ stripe_status: "canceled" });
-    } finally {
-      releaseFirstFetch();
-      globalThis.fetch = originalFetch;
-    }
+              )
+              .get(organizationId),
+          ).toEqual({ stripe_status: "canceled" });
+        } finally {
+          releaseFirstFetch();
+        }
+      },
+    );
   });
 
   it("synchronizes Stripe quantity to active organization members", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     addMember(fixture.database, "user-2", organizationId);
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_customer_id, stripe_subscription_id,
-          stripe_subscription_item_id, stripe_price_id, stripe_status,
-          seat_quantity, stripe_event_created, updated_at)
-         VALUES (?, 'cus_test', 'sub_test', 'si_test', ?, 'active', 1, 1, ?)`,
-      )
-      .run(organizationId, proPriceId, new Date().toISOString());
-    const originalFetch = globalThis.fetch;
+    insertBilling(fixture.database, organizationId, {
+      seat_quantity: 1,
+      stripe_customer_id: "cus_test",
+      stripe_event_created: 1,
+      stripe_price_id: proPriceId,
+      stripe_status: "active",
+      stripe_subscription_id: "sub_test",
+      stripe_subscription_item_id: "si_test",
+    });
     const quantities: string[] = [];
-    globalThis.fetch = (async (input, init) => {
-      expect(String(input)).toContain("/v1/subscription_items/si_test");
-      const quantity = new URLSearchParams(String(init?.body)).get("quantity");
-      if (quantity) quantities.push(quantity);
-      return Response.json({ id: "si_test", quantity: 2 });
-    }) as typeof fetch;
-    try {
-      expect(
-        await syncOrganizationSeats(fixture.bindings, organizationId),
-      ).toBe(true);
-      expect(quantities).toEqual(["2"]);
-      expect(
-        fixture.database
-          .query(
-            `SELECT seat_quantity FROM organization_billing
+    await withFetch(
+      {
+        "POST https://api.stripe.com/v1/subscription_items/si_test": async (
+          call: FetchCall,
+        ) => {
+          expect(call.url).toContain("/v1/subscription_items/si_test");
+          const quantity = new URLSearchParams(call.body).get("quantity");
+          if (quantity) quantities.push(quantity);
+          return Response.json({ id: "si_test", quantity: 2 });
+        },
+      },
+      async () => {
+        expect(
+          await syncOrganizationSeats(fixture.bindings, organizationId),
+        ).toBe(true);
+        expect(quantities).toEqual(["2"]);
+        expect(
+          fixture.database
+            .query(
+              `SELECT seat_quantity FROM organization_billing
              WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({ seat_quantity: 2 });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+            )
+            .get(organizationId),
+        ).toEqual({ seat_quantity: 2 });
+      },
+    );
   });
 
   it("serializes concurrent seat changes to the final member count", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     addMember(fixture.database, "user-2", organizationId);
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_customer_id, stripe_subscription_id,
-          stripe_subscription_item_id, stripe_price_id, stripe_status,
-          seat_quantity, stripe_event_created, updated_at)
-         VALUES (?, 'cus_test', 'sub_test', 'si_test', ?, 'active', 1, 1, ?)`,
-      )
-      .run(organizationId, proPriceId, new Date().toISOString());
+    insertBilling(fixture.database, organizationId, {
+      seat_quantity: 1,
+      stripe_customer_id: "cus_test",
+      stripe_event_created: 1,
+      stripe_price_id: proPriceId,
+      stripe_status: "active",
+      stripe_subscription_id: "sub_test",
+      stripe_subscription_item_id: "si_test",
+    });
     let markFirstRequestStarted = () => {};
     let releaseFirstRequest = () => {};
     const firstRequestStarted = new Promise<void>((resolve) => {
@@ -1437,213 +1430,227 @@ describe("billing", () => {
       releaseFirstRequest = resolve;
     });
     const quantities: number[] = [];
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (_input, init) => {
-      const quantity = Number(
-        new URLSearchParams(String(init?.body)).get("quantity"),
-      );
-      quantities.push(quantity);
-      if (quantities.length === 1) {
-        markFirstRequestStarted();
-        await firstRequestReleased;
-      }
-      return Response.json({ id: "si_test", quantity });
-    }) as typeof fetch;
-    try {
-      const firstSync = syncOrganizationSeats(fixture.bindings, organizationId);
-      await firstRequestStarted;
-      addMember(fixture.database, "user-3", organizationId);
-      const secondSync = syncOrganizationSeats(
-        fixture.bindings,
-        organizationId,
-      );
-      await new Promise((resolve) => setTimeout(resolve, 5));
-      releaseFirstRequest();
-      expect(await Promise.all([firstSync, secondSync])).toEqual([true, true]);
-      expect(quantities).toEqual([2, 3]);
-      expect(
-        fixture.database
-          .query(
-            `SELECT seat_quantity FROM organization_billing
+    await withFetch(
+      {
+        "POST https://api.stripe.com/v1/subscription_items/si_test": async (
+          call: FetchCall,
+        ) => {
+          const quantity = Number(
+            new URLSearchParams(call.body).get("quantity"),
+          );
+          quantities.push(quantity);
+          if (quantities.length === 1) {
+            markFirstRequestStarted();
+            await firstRequestReleased;
+          }
+          return Response.json({ id: "si_test", quantity });
+        },
+      },
+      async () => {
+        try {
+          const firstSync = syncOrganizationSeats(
+            fixture.bindings,
+            organizationId,
+          );
+          await firstRequestStarted;
+          addMember(fixture.database, "user-3", organizationId);
+          const secondSync = syncOrganizationSeats(
+            fixture.bindings,
+            organizationId,
+          );
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          releaseFirstRequest();
+          expect(await Promise.all([firstSync, secondSync])).toEqual([
+            true,
+            true,
+          ]);
+          expect(quantities).toEqual([2, 3]);
+          expect(
+            fixture.database
+              .query(
+                `SELECT seat_quantity FROM organization_billing
              WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({ seat_quantity: 3 });
-    } finally {
-      releaseFirstRequest();
-      globalThis.fetch = originalFetch;
-    }
+              )
+              .get(organizationId),
+          ).toEqual({ seat_quantity: 3 });
+        } finally {
+          releaseFirstRequest();
+        }
+      },
+    );
   });
 
   it("rotates a bounded batch of subscription reconciliations", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const now = new Date().toISOString();
     for (let index = 0; index < 30; index += 1) {
       const target =
         index < 3 ? `org_user-${index + 1}` : `org_reconcile-${index}`;
       if (index >= 3) {
         const userId = `reconcile-${index}`;
-        insertUser(fixture.database, userId);
-        fixture.database
-          .query(
-            `INSERT INTO organization (id, name, slug, createdAt)
-             VALUES (?, ?, ?, ?)`,
-          )
-          .run(target, `Reconcile ${index}`, `reconcile-${index}`, now);
+        seedUser(fixture.database, { createdAt: now, id: userId });
+        seedOrganization(fixture.database, {
+          createdAt: now,
+          id: target,
+          name: `Reconcile ${index}`,
+          slug: `reconcile-${index}`,
+        });
         addMember(fixture.database, userId, target);
       }
-      fixture.database
-        .query(
-          `INSERT INTO organization_billing
-           (organization_id, stripe_subscription_item_id, stripe_price_id,
-            stripe_status, seat_quantity, stripe_event_created, updated_at)
-           VALUES (?, ?, ?, 'active', 1, 1, ?)`,
-        )
-        .run(target, `si_${index}`, proPriceId, now);
+      insertBilling(fixture.database, target, {
+        seat_quantity: 1,
+        stripe_event_created: 1,
+        stripe_price_id: proPriceId,
+        stripe_status: "active",
+        stripe_subscription_item_id: `si_${index}`,
+        updated_at: now,
+      });
     }
 
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input) => {
-      const id = String(input).split("/").at(-1);
-      return Response.json({ id, quantity: 1 });
-    }) as typeof fetch;
-    try {
-      await reconcileSubscriptionSeats(fixture.bindings);
-      expect(reconciledCount(fixture.database)).toEqual({ count: 25 });
-      await reconcileSubscriptionSeats(fixture.bindings);
-      expect(reconciledCount(fixture.database)).toEqual({ count: 30 });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/subscription_items/si_*": async (
+          call: FetchCall,
+        ) => {
+          const id = call.url.split("/").at(-1);
+          return Response.json({ id, quantity: 1 });
+        },
+      },
+      async () => {
+        await reconcileSubscriptionSeats(fixture.bindings);
+        expect(reconciledCount(fixture.database)).toEqual({ count: 25 });
+        await reconcileSubscriptionSeats(fixture.bindings);
+        expect(reconciledCount(fixture.database)).toEqual({ count: 30 });
+      },
+    );
   });
 
   it("repairs Stripe seat drift even when the cached quantity matches", async () => {
-    const fixture = await createFixture();
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_subscription_item_id, stripe_price_id,
-          stripe_status, seat_quantity, stripe_event_created, updated_at)
-         VALUES (?, 'si_drift', ?, 'active', 1, 1, ?)`,
-      )
-      .run(organizationId, proPriceId, new Date().toISOString());
-    const originalFetch = globalThis.fetch;
+    const fixture = createFixture();
+    insertBilling(fixture.database, organizationId, {
+      seat_quantity: 1,
+      stripe_event_created: 1,
+      stripe_price_id: proPriceId,
+      stripe_status: "active",
+      stripe_subscription_item_id: "si_drift",
+    });
     const requests: Array<{ method: string; quantity: string | null }> = [];
-    globalThis.fetch = (async (_input, init) => {
+    const stripe = async (call: FetchCall) => {
       requests.push({
-        method: init?.method ?? "GET",
-        quantity: new URLSearchParams(String(init?.body ?? "")).get("quantity"),
+        method: call.method,
+        quantity: new URLSearchParams(call.body).get("quantity"),
       });
       return Response.json({
         id: "si_drift",
-        quantity: init?.method === "POST" ? 1 : 2,
+        quantity: call.method === "POST" ? 1 : 2,
       });
-    }) as typeof fetch;
-    try {
-      await reconcileSubscriptionSeats(fixture.bindings);
-      expect(requests).toEqual([
-        { method: "GET", quantity: null },
-        { method: "POST", quantity: "1" },
-      ]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    };
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/subscription_items/si_drift": stripe,
+        "POST https://api.stripe.com/v1/subscription_items/si_drift": stripe,
+      },
+      async () => {
+        await reconcileSubscriptionSeats(fixture.bindings);
+        expect(requests).toEqual([
+          { method: "GET", quantity: null },
+          { method: "POST", quantity: "1" },
+        ]);
+      },
+    );
   });
 
   it("rotates failed stale Checkout reconciliations beyond the batch", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const sessions = new Map<string, string>();
-    const insertOrganization = fixture.database.query(
-      `INSERT INTO organization (id, name, slug, createdAt)
-       VALUES (?, 'Pending Checkout', ?, ?)`,
-    );
-    const insertBilling = fixture.database.query(
-      `INSERT INTO organization_billing
-       (organization_id, pending_checkout_session_id, pending_checkout_url,
-        pending_checkout_expires_at, updated_at)
-       VALUES (?, ?, 'https://checkout.stripe.test/stale', 1, ?)`,
-    );
     for (let index = 0; index < 26; index += 1) {
       const suffix = index === 25 ? "z" : index.toString().padStart(2, "0");
       const target = `org_pending_${suffix}`;
       const sessionId = `cs_pending_${suffix}`;
       const now = new Date().toISOString();
-      insertOrganization.run(target, `pending-${suffix}`, now);
-      insertBilling.run(target, sessionId, now);
+      seedOrganization(fixture.database, {
+        createdAt: now,
+        id: target,
+        name: "Pending Checkout",
+        slug: `pending-${suffix}`,
+      });
+      insertBilling(fixture.database, target, {
+        pending_checkout_expires_at: 1,
+        pending_checkout_session_id: sessionId,
+        pending_checkout_url: "https://checkout.stripe.test/stale",
+        updated_at: now,
+      });
       sessions.set(sessionId, target);
     }
-    const originalFetch = globalThis.fetch;
-    const originalConsoleError = console.error;
     const requests: string[] = [];
-    globalThis.fetch = (async (input) => {
-      const sessionId = String(input).split("/").at(-1) ?? "";
-      requests.push(sessionId);
-      const target = sessions.get(sessionId);
-      if (!target) throw new Error(`Unexpected Checkout session: ${sessionId}`);
-      if (sessionId !== "cs_pending_z") {
-        return Response.json(
-          { error: { message: "Stripe is unavailable" } },
-          { status: 500 },
-        );
-      }
-      return Response.json({
-        client_reference_id: target,
-        id: sessionId,
-        status: "expired",
-        subscription: null,
-      });
-    }) as typeof fetch;
-    console.error = () => {};
-
-    try {
-      await reconcilePendingCheckoutEntitlements(fixture.bindings, 100);
-      expect(requests).toHaveLength(25);
-      expect(requests).not.toContain("cs_pending_z");
-      expect(
-        fixture.database
-          .query(
-            `SELECT COUNT(*) AS count FROM organization_billing
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/checkout/sessions/cs_pending_*": async (
+          call: FetchCall,
+        ) => {
+          const sessionId = call.url.split("/").at(-1) ?? "";
+          requests.push(sessionId);
+          const target = sessions.get(sessionId);
+          if (!target)
+            throw new Error(`Unexpected Checkout session: ${sessionId}`);
+          if (sessionId !== "cs_pending_z") {
+            return Response.json(
+              { error: { message: "Stripe is unavailable" } },
+              { status: 500 },
+            );
+          }
+          return Response.json({
+            client_reference_id: target,
+            id: sessionId,
+            status: "expired",
+            subscription: null,
+          });
+        },
+      },
+      async () => {
+        await reconcilePendingCheckoutEntitlements(fixture.bindings, 100);
+        expect(requests).toHaveLength(25);
+        expect(requests).not.toContain("cs_pending_z");
+        expect(
+          fixture.database
+            .query(
+              `SELECT COUNT(*) AS count FROM organization_billing
              WHERE pending_checkout_retry_at = 400`,
-          )
-          .get(),
-      ).toEqual({ count: 25 });
+            )
+            .get(),
+        ).toEqual({ count: 25 });
 
-      await reconcilePendingCheckoutEntitlements(fixture.bindings, 100);
-      expect(requests.at(-1)).toBe("cs_pending_z");
-      expect(
-        fixture.database
-          .query(
-            `SELECT pending_checkout_session_id
+        await reconcilePendingCheckoutEntitlements(fixture.bindings, 100);
+        expect(requests.at(-1)).toBe("cs_pending_z");
+        expect(
+          fixture.database
+            .query(
+              `SELECT pending_checkout_session_id
              FROM organization_billing WHERE organization_id = 'org_pending_z'`,
-          )
-          .get(),
-      ).toEqual({ pending_checkout_session_id: null });
-    } finally {
-      console.error = originalConsoleError;
-      globalThis.fetch = originalFetch;
-    }
+            )
+            .get(),
+        ).toEqual({ pending_checkout_session_id: null });
+      },
+      { captureErrors: true },
+    );
   });
 
   it("purges old Free audit history without touching Pro history", async () => {
-    const fixture = await createFixture();
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_subscription_id,
-          stripe_subscription_item_id, stripe_price_id, stripe_status,
-          seat_quantity, stripe_event_created, updated_at)
-         VALUES ('org_user-2', 'sub_retention_pro', 'si_retention_pro', ?,
-                 'active', 1, 1, ?)`,
-      )
-      .run(proPriceId, new Date().toISOString());
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_price_id, stripe_status, seat_quantity,
-          stripe_event_created, updated_at)
-         VALUES ('org_user-3', 'price_other', 'active', 1, 1, ?)`,
-      )
-      .run(new Date().toISOString());
+    const fixture = createFixture();
+    insertBilling(fixture.database, "org_user-2", {
+      seat_quantity: 1,
+      stripe_event_created: 1,
+      stripe_price_id: proPriceId,
+      stripe_status: "active",
+      stripe_subscription_id: "sub_retention_pro",
+      stripe_subscription_item_id: "si_retention_pro",
+    });
+    insertBilling(fixture.database, "org_user-3", {
+      seat_quantity: 1,
+      stripe_event_created: 1,
+      stripe_price_id: "price_other",
+      stripe_status: "active",
+    });
     insertAudit(fixture.database, "free-old", organizationId, "2026-06-01");
     insertAudit(fixture.database, "free-recent", organizationId, "2026-08-20");
     insertAudit(fixture.database, "pro-old", "org_user-2", "2026-06-01");
@@ -1667,15 +1674,13 @@ describe("billing", () => {
   });
 
   it("retains Pro history when a paid row is missing its subscription id", async () => {
-    const fixture = await createFixture();
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_price_id, stripe_status, seat_quantity,
-          stripe_event_created, updated_at)
-         VALUES (?, ?, 'active', 1, 1, ?)`,
-      )
-      .run(organizationId, proPriceId, new Date().toISOString());
+    const fixture = createFixture();
+    insertBilling(fixture.database, organizationId, {
+      seat_quantity: 1,
+      stripe_event_created: 1,
+      stripe_price_id: proPriceId,
+      stripe_status: "active",
+    });
     insertAudit(
       fixture.database,
       "partial-pro-row-old",
@@ -1683,7 +1688,7 @@ describe("billing", () => {
       "2026-06-01",
     );
 
-    const summary = await fixture.app.request("/", undefined, fixture.bindings);
+    const summary = await fixture.request("/", undefined);
     expect(await summary.json()).toMatchObject({ plan: "pro" });
     expect(
       await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
@@ -1694,17 +1699,15 @@ describe("billing", () => {
   });
 
   it("retains history for an unresolved active Stripe price", async () => {
-    const fixture = await createFixture();
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_subscription_id,
-          stripe_subscription_item_id, stripe_price_id, stripe_status,
-          seat_quantity, stripe_event_created, updated_at)
-         VALUES (?, 'sub_unknown_price', 'si_unknown_price',
-                 'price_unknown', 'active', 1, 1, ?)`,
-      )
-      .run(organizationId, new Date().toISOString());
+    const fixture = createFixture();
+    insertBilling(fixture.database, organizationId, {
+      seat_quantity: 1,
+      stripe_event_created: 1,
+      stripe_price_id: "price_unknown",
+      stripe_status: "active",
+      stripe_subscription_id: "sub_unknown_price",
+      stripe_subscription_item_id: "si_unknown_price",
+    });
     insertAudit(
       fixture.database,
       "unknown-price-old",
@@ -1712,7 +1715,7 @@ describe("billing", () => {
       "2026-06-01",
     );
 
-    const summary = await fixture.app.request("/", undefined, fixture.bindings);
+    const summary = await fixture.request("/", undefined);
     expect(await summary.json()).toMatchObject({ plan: "free" });
     expect(
       await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
@@ -1723,98 +1726,96 @@ describe("billing", () => {
   });
 
   it("keeps Pro history after the configured price rotates", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     let subscription = subscriptionEvent(
       "evt_before_price_rotation",
       100,
       "active",
       1,
     );
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (_input) =>
-      Response.json(subscription.data.object)) as typeof fetch;
-    try {
-      expect((await sendWebhook(fixture, subscription)).status).toBe(200);
-      fixture.bindings.STRIPE_PRO_LEGACY_PRICE_IDS = proPriceId;
-      fixture.bindings.STRIPE_PRO_PRICE_ID = "price_rotated";
-      subscription = subscriptionEvent(
-        "evt_after_price_rotation",
-        101,
-        "active",
-        1,
-      );
-      expect((await sendWebhook(fixture, subscription)).status).toBe(200);
-      insertAudit(
-        fixture.database,
-        "rotated-price-pro-old",
-        organizationId,
-        "2026-06-01",
-      );
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
+          Response.json(subscription.data.object),
+      },
+      async () => {
+        expect((await sendWebhook(fixture, subscription)).status).toBe(200);
+        fixture.bindings.STRIPE_PRO_LEGACY_PRICE_IDS = proPriceId;
+        fixture.bindings.STRIPE_PRO_PRICE_ID = "price_rotated";
+        subscription = subscriptionEvent(
+          "evt_after_price_rotation",
+          101,
+          "active",
+          1,
+        );
+        expect((await sendWebhook(fixture, subscription)).status).toBe(200);
+        insertAudit(
+          fixture.database,
+          "rotated-price-pro-old",
+          organizationId,
+          "2026-06-01",
+        );
 
-      expect(
-        await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
-      ).toBe(0);
-      expect(
-        fixture.database
-          .query(
-            `SELECT stripe_price_id, stripe_subscription_item_id
+        expect(
+          await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+        ).toBe(0);
+        expect(
+          fixture.database
+            .query(
+              `SELECT stripe_price_id, stripe_subscription_item_id
              FROM organization_billing WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({
-        stripe_price_id: proPriceId,
-        stripe_subscription_item_id: "si_test",
-      });
-      expect(
-        await (
-          await fixture.app.request("/", undefined, fixture.bindings)
-        ).json(),
-      ).toMatchObject({ plan: "pro" });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+            )
+            .get(organizationId),
+        ).toEqual({
+          stripe_price_id: proPriceId,
+          stripe_subscription_item_id: "si_test",
+        });
+        expect(
+          await (await fixture.request("/", undefined)).json(),
+        ).toMatchObject({ plan: "pro" });
+      },
+    );
   });
 
   it("clears a Pro item after its price leaves the allowlist", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     let subscription = subscriptionEvent("evt_allowed_price", 100, "active", 1);
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (_input) =>
-      Response.json(subscription.data.object)) as typeof fetch;
-    try {
-      expect((await sendWebhook(fixture, subscription)).status).toBe(200);
-      subscription = subscriptionEvent(
-        "evt_removed_price",
-        101,
-        "active",
-        1,
-        "sub_test",
-        "price_removed",
-      );
-      expect((await sendWebhook(fixture, subscription)).status).toBe(200);
-      expect(
-        fixture.database
-          .query(
-            `SELECT stripe_price_id, stripe_subscription_item_id
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
+          Response.json(subscription.data.object),
+      },
+      async () => {
+        expect((await sendWebhook(fixture, subscription)).status).toBe(200);
+        subscription = subscriptionEvent(
+          "evt_removed_price",
+          101,
+          "active",
+          1,
+          "sub_test",
+          "price_removed",
+        );
+        expect((await sendWebhook(fixture, subscription)).status).toBe(200);
+        expect(
+          fixture.database
+            .query(
+              `SELECT stripe_price_id, stripe_subscription_item_id
              FROM organization_billing WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({
-        stripe_price_id: null,
-        stripe_subscription_item_id: null,
-      });
-      expect(
-        await (
-          await fixture.app.request("/", undefined, fixture.bindings)
-        ).json(),
-      ).toMatchObject({ plan: "free" });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+            )
+            .get(organizationId),
+        ).toEqual({
+          stripe_price_id: null,
+          stripe_subscription_item_id: null,
+        });
+        expect(
+          await (await fixture.request("/", undefined)).json(),
+        ).toMatchObject({ plan: "free" });
+      },
+    );
   });
 
   it("caps expired Free audit cleanup per invocation", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     for (let index = 0; index < 605; index += 1) {
       insertAudit(
         fixture.database,
@@ -1835,16 +1836,12 @@ describe("billing", () => {
   });
 
   it("keeps history while Checkout entitlement is unresolved", async () => {
-    const fixture = await createFixture();
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, pending_checkout_session_id,
-          pending_checkout_url, pending_checkout_expires_at, updated_at)
-         VALUES (?, 'cs_retention_race',
-                 'https://checkout.stripe.test/retention-race', 2000000000, ?)`,
-      )
-      .run(organizationId, new Date().toISOString());
+    const fixture = createFixture();
+    insertBilling(fixture.database, organizationId, {
+      pending_checkout_expires_at: 2_000_000_000,
+      pending_checkout_session_id: "cs_retention_race",
+      pending_checkout_url: "https://checkout.stripe.test/retention-race",
+    });
     insertAudit(
       fixture.database,
       "pending-checkout-old",
@@ -1861,15 +1858,12 @@ describe("billing", () => {
   });
 
   it("keeps history while Checkout creation is in flight", async () => {
-    const fixture = await createFixture();
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, checkout_claim_id, checkout_claim_quantity,
-          checkout_claim_expires_at, updated_at)
-         VALUES (?, 'claim_retention_race', 1, 2000000000, ?)`,
-      )
-      .run(organizationId, new Date().toISOString());
+    const fixture = createFixture();
+    insertBilling(fixture.database, organizationId, {
+      checkout_claim_expires_at: 2_000_000_000,
+      checkout_claim_id: "claim_retention_race",
+      checkout_claim_quantity: 1,
+    });
     insertAudit(
       fixture.database,
       "checkout-claim-old",
@@ -1892,22 +1886,16 @@ describe("billing", () => {
   });
 
   it("keeps lapsed paid history until the grace period ends", async () => {
-    const fixture = await createFixture();
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_subscription_id, stripe_status,
-          paid_ended_at, updated_at)
-         VALUES (?, 'sub_lapsed', 'canceled', '2026-08-01T00:00:00.000Z', ?)`,
-      )
-      .run(organizationId, new Date().toISOString());
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_subscription_id, stripe_status, updated_at)
-         VALUES ('org_user-2', 'sub_never_paid', 'incomplete_expired', ?)`,
-      )
-      .run(new Date().toISOString());
+    const fixture = createFixture();
+    insertBilling(fixture.database, organizationId, {
+      paid_ended_at: "2026-08-01T00:00:00.000Z",
+      stripe_status: "canceled",
+      stripe_subscription_id: "sub_lapsed",
+    });
+    insertBilling(fixture.database, "org_user-2", {
+      stripe_status: "incomplete_expired",
+      stripe_subscription_id: "sub_never_paid",
+    });
     insertAudit(fixture.database, "lapsed-old", organizationId, "2026-06-01");
     insertAudit(fixture.database, "never-paid-old", "org_user-2", "2026-06-01");
     insertAudit(fixture.database, "no-billing-old", "org_user-3", "2026-06-01");
@@ -1933,11 +1921,8 @@ describe("billing", () => {
   });
 
   it("starts the grace period when a paid subscription lapses", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     let subscription = subscriptionEvent("evt_paid", 100, "active", 1);
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (_input) =>
-      Response.json(subscription.data.object)) as typeof fetch;
     const paidEndedAt = () =>
       (
         fixture.database
@@ -1947,38 +1932,52 @@ describe("billing", () => {
           )
           .get(organizationId) as { paid_ended_at: string | null }
       ).paid_ended_at;
-    try {
-      expect((await sendWebhook(fixture, subscription)).status).toBe(200);
-      expect(paidEndedAt()).toBeNull();
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
+          Response.json(subscription.data.object),
+      },
+      async () => {
+        expect((await sendWebhook(fixture, subscription)).status).toBe(200);
+        expect(paidEndedAt()).toBeNull();
 
-      const beforeLapse = new Date().toISOString();
-      subscription = subscriptionEvent("evt_lapsed", 101, "canceled", 1);
-      expect((await sendWebhook(fixture, subscription)).status).toBe(200);
-      const lapsedAt = paidEndedAt();
-      expect(lapsedAt).not.toBeNull();
-      expect(String(lapsedAt) >= beforeLapse).toBe(true);
-      insertAudit(fixture.database, "lapsed-old", organizationId, "2026-06-01");
-      expect(await purgeExpiredFreeAuditRuns(fixture.bindings)).toBe(0);
+        const beforeLapse = new Date().toISOString();
+        subscription = subscriptionEvent("evt_lapsed", 101, "canceled", 1);
+        expect((await sendWebhook(fixture, subscription)).status).toBe(200);
+        const lapsedAt = paidEndedAt();
+        expect(lapsedAt).not.toBeNull();
+        expect(String(lapsedAt) >= beforeLapse).toBe(true);
+        insertAudit(
+          fixture.database,
+          "lapsed-old",
+          organizationId,
+          "2026-06-01",
+        );
+        expect(await purgeExpiredFreeAuditRuns(fixture.bindings)).toBe(0);
 
-      // A stale event refetches Stripe's current state, so it neither clears
-      // the marker nor moves the grace period forward.
-      const staleUpdate = subscriptionEvent("evt_stale", 99, "active", 1);
-      expect((await sendWebhook(fixture, staleUpdate)).status).toBe(200);
-      await Bun.sleep(2);
-      subscription = subscriptionEvent("evt_lapsed_again", 102, "canceled", 1);
-      expect((await sendWebhook(fixture, subscription)).status).toBe(200);
-      expect(paidEndedAt()).toBe(lapsedAt);
+        // A stale event refetches Stripe's current state, so it neither clears
+        // the marker nor moves the grace period forward.
+        const staleUpdate = subscriptionEvent("evt_stale", 99, "active", 1);
+        expect((await sendWebhook(fixture, staleUpdate)).status).toBe(200);
+        await Bun.sleep(2);
+        subscription = subscriptionEvent(
+          "evt_lapsed_again",
+          102,
+          "canceled",
+          1,
+        );
+        expect((await sendWebhook(fixture, subscription)).status).toBe(200);
+        expect(paidEndedAt()).toBe(lapsedAt);
 
-      subscription = subscriptionEvent("evt_resubscribed", 103, "active", 1);
-      expect((await sendWebhook(fixture, subscription)).status).toBe(200);
-      expect(paidEndedAt()).toBeNull();
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+        subscription = subscriptionEvent("evt_resubscribed", 103, "active", 1);
+        expect((await sendWebhook(fixture, subscription)).status).toBe(200);
+        expect(paidEndedAt()).toBeNull();
+      },
+    );
   });
 
   it("ends the grace period when Checkout starts a new subscription", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     let subscription = subscriptionEvent(
       "evt_before_lapse",
       100,
@@ -1986,9 +1985,7 @@ describe("billing", () => {
       1,
       "sub_lapsed",
     );
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (_input) =>
-      Response.json(subscription.data.object)) as typeof fetch;
+    const stripe = async () => Response.json(subscription.data.object);
     const billingRow = () =>
       fixture.database
         .query(
@@ -1997,65 +1994,67 @@ describe("billing", () => {
            FROM organization_billing WHERE organization_id = ?`,
         )
         .get(organizationId);
-    try {
-      expect((await sendWebhook(fixture, subscription)).status).toBe(200);
-      subscription = subscriptionEvent(
-        "evt_lapse",
-        101,
-        "canceled",
-        1,
-        "sub_lapsed",
-      );
-      expect((await sendWebhook(fixture, subscription)).status).toBe(200);
-      expect(billingRow()).toEqual({
-        in_grace: 1,
-        stripe_status: "canceled",
-        stripe_subscription_id: "sub_lapsed",
-      });
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/subscriptions/sub_lapsed": stripe,
+        "GET https://api.stripe.com/v1/subscriptions/sub_resubscribed": stripe,
+      },
+      async () => {
+        expect((await sendWebhook(fixture, subscription)).status).toBe(200);
+        subscription = subscriptionEvent(
+          "evt_lapse",
+          101,
+          "canceled",
+          1,
+          "sub_lapsed",
+        );
+        expect((await sendWebhook(fixture, subscription)).status).toBe(200);
+        expect(billingRow()).toEqual({
+          in_grace: 1,
+          stripe_status: "canceled",
+          stripe_subscription_id: "sub_lapsed",
+        });
 
-      reserveCheckout(fixture.database, "cs_resubscribe");
-      subscription = subscriptionEvent(
-        "unused_resubscribe",
-        102,
-        "active",
-        1,
-        "sub_resubscribed",
-      );
-      const checkout = {
-        created: 102,
-        data: {
-          object: {
-            client_reference_id: organizationId,
-            id: "cs_resubscribe",
-            subscription: "sub_resubscribed",
+        reserveCheckout(fixture.database, "cs_resubscribe");
+        subscription = subscriptionEvent(
+          "unused_resubscribe",
+          102,
+          "active",
+          1,
+          "sub_resubscribed",
+        );
+        const checkout = {
+          created: 102,
+          data: {
+            object: {
+              client_reference_id: organizationId,
+              id: "cs_resubscribe",
+              subscription: "sub_resubscribed",
+            },
           },
-        },
-        id: "evt_resubscribe_checkout",
-        type: "checkout.session.completed",
-      };
-      expect((await sendWebhook(fixture, checkout)).status).toBe(200);
-      expect(billingRow()).toEqual({
-        in_grace: 0,
-        stripe_status: "active",
-        stripe_subscription_id: "sub_resubscribed",
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+          id: "evt_resubscribe_checkout",
+          type: "checkout.session.completed",
+        };
+        expect((await sendWebhook(fixture, checkout)).status).toBe(200);
+        expect(billingRow()).toEqual({
+          in_grace: 0,
+          stripe_status: "active",
+          stripe_subscription_id: "sub_resubscribed",
+        });
+      },
+    );
   });
 
   it("ignores a replaced subscription's lapse for the grace period", async () => {
-    const fixture = await createFixture();
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_customer_id, stripe_subscription_id,
-          stripe_subscription_item_id, stripe_price_id, stripe_status,
-          stripe_event_created, updated_at)
-         VALUES (?, 'cus_test', 'sub_current', 'si_sub_current', ?, 'active',
-                 100, ?)`,
-      )
-      .run(organizationId, proPriceId, new Date().toISOString());
+    const fixture = createFixture();
+    insertBilling(fixture.database, organizationId, {
+      stripe_customer_id: "cus_test",
+      stripe_event_created: 100,
+      stripe_price_id: proPriceId,
+      stripe_status: "active",
+      stripe_subscription_id: "sub_current",
+      stripe_subscription_item_id: "si_sub_current",
+    });
     const replaced = subscriptionEvent(
       "evt_replaced_lapse",
       101,
@@ -2063,51 +2062,46 @@ describe("billing", () => {
       1,
       "sub_replaced",
     );
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (_input) =>
-      Response.json(replaced.data.object)) as typeof fetch;
-    try {
-      expect((await sendWebhook(fixture, replaced)).status).toBe(200);
-      expect(
-        fixture.database
-          .query(
-            `SELECT stripe_subscription_id, stripe_status, paid_ended_at
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/subscriptions/sub_replaced": async () =>
+          Response.json(replaced.data.object),
+      },
+      async () => {
+        expect((await sendWebhook(fixture, replaced)).status).toBe(200);
+        expect(
+          fixture.database
+            .query(
+              `SELECT stripe_subscription_id, stripe_status, paid_ended_at
              FROM organization_billing WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({
-        paid_ended_at: null,
-        stripe_status: "active",
-        stripe_subscription_id: "sub_current",
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+            )
+            .get(organizationId),
+        ).toEqual({
+          paid_ended_at: null,
+          stripe_status: "active",
+          stripe_subscription_id: "sub_current",
+        });
+      },
+    );
   });
 
   it("backfills a grace period for organizations that already lapsed", async () => {
-    const database = new Database(":memory:");
-    await applyMigration(database, "0003_create_auth.sql");
-    for (const id of ["user-1", "user-2", "user-3"]) insertUser(database, id);
-    await applyMigration(database, "0004_create_organizations.sql");
-    await applyMigration(database, "0011_soft_delete_organizations.sql");
-    await applyMigration(database, "0032_create_billing.sql");
+    const database = createTestDatabase({ before: "0053" });
+    for (const id of ["user-1", "user-2", "user-3"])
+      seedAccount(database, { id });
     const now = new Date().toISOString();
-    database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_subscription_id, stripe_status, updated_at)
-         VALUES ('org_user-1', 'sub_canceled', 'canceled', ?),
-                ('org_user-2', 'sub_active', 'active', ?)`,
-      )
-      .run(now, now);
-    database
-      .query(
-        `INSERT INTO organization_billing (organization_id, updated_at)
-         VALUES ('org_user-3', ?)`,
-      )
-      .run(now);
-    await applyMigration(database, "0053_track_paid_billing_end.sql");
+    insertBilling(database, "org_user-1", {
+      stripe_status: "canceled",
+      stripe_subscription_id: "sub_canceled",
+      updated_at: now,
+    });
+    insertBilling(database, "org_user-2", {
+      stripe_status: "active",
+      stripe_subscription_id: "sub_active",
+      updated_at: now,
+    });
+    insertBilling(database, "org_user-3", { updated_at: now });
+    applyMigrations(database, { from: "0053" });
 
     const rows = database
       .query(
@@ -2124,15 +2118,12 @@ describe("billing", () => {
   });
 
   it("keeps history while organization deletion is in flight", async () => {
-    const fixture = await createFixture();
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_status, checkout_disabled_at,
-          checkout_disabled_expires_at, updated_at)
-         VALUES (?, 'canceled', 'deletion-in-flight', 2000000000, ?)`,
-      )
-      .run(organizationId, new Date().toISOString());
+    const fixture = createFixture();
+    insertBilling(fixture.database, organizationId, {
+      checkout_disabled_at: "deletion-in-flight",
+      checkout_disabled_expires_at: 2_000_000_000,
+      stripe_status: "canceled",
+    });
     insertAudit(
       fixture.database,
       "deletion-in-flight-old",
@@ -2149,7 +2140,7 @@ describe("billing", () => {
   });
 
   it("reconciles a completed stale Checkout before retention", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     insertStalePendingCheckout(fixture.database, "cs_retention_complete");
     insertAudit(
       fixture.database,
@@ -2157,9 +2148,8 @@ describe("billing", () => {
       organizationId,
       "2026-06-01",
     );
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input) => {
-      const url = String(input);
+    const stripe = async (call: FetchCall) => {
+      const url = call.url;
       if (url.endsWith("/v1/checkout/sessions/cs_retention_complete")) {
         return Response.json({
           client_reference_id: organizationId,
@@ -2180,34 +2170,40 @@ describe("billing", () => {
         );
       }
       throw new Error(`Unexpected Stripe request: ${url}`);
-    }) as typeof fetch;
-    try {
-      expect(
-        await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
-      ).toBe(0);
-      expect(
-        fixture.database
-          .query(
-            `SELECT pending_checkout_session_id, stripe_price_id,
+    };
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/checkout/sessions/cs_retention_complete":
+          stripe,
+        "GET https://api.stripe.com/v1/subscriptions/sub_retention_complete":
+          stripe,
+      },
+      async () => {
+        expect(
+          await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+        ).toBe(0);
+        expect(
+          fixture.database
+            .query(
+              `SELECT pending_checkout_session_id, stripe_price_id,
                     stripe_status
              FROM organization_billing WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({
-        pending_checkout_session_id: null,
-        stripe_price_id: proPriceId,
-        stripe_status: "active",
-      });
-      expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([
-        { id: "completed-checkout-old" },
-      ]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+            )
+            .get(organizationId),
+        ).toEqual({
+          pending_checkout_session_id: null,
+          stripe_price_id: proPriceId,
+          stripe_status: "active",
+        });
+        expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([
+          { id: "completed-checkout-old" },
+        ]);
+      },
+    );
   });
 
   it("clears an expired stale Checkout before retention", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     insertStalePendingCheckout(fixture.database, "cs_retention_expired");
     insertAudit(
       fixture.database,
@@ -2215,33 +2211,35 @@ describe("billing", () => {
       organizationId,
       "2026-06-01",
     );
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (_input) =>
-      Response.json({
-        client_reference_id: organizationId,
-        id: "cs_retention_expired",
-        status: "expired",
-        subscription: null,
-      })) as typeof fetch;
-    try {
-      expect(
-        await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
-      ).toBe(1);
-      expect(
-        fixture.database
-          .query(
-            `SELECT pending_checkout_session_id
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/checkout/sessions/cs_retention_expired":
+          async () =>
+            Response.json({
+              client_reference_id: organizationId,
+              id: "cs_retention_expired",
+              status: "expired",
+              subscription: null,
+            }),
+      },
+      async () => {
+        expect(
+          await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+        ).toBe(1);
+        expect(
+          fixture.database
+            .query(
+              `SELECT pending_checkout_session_id
              FROM organization_billing WHERE organization_id = ?`,
-          )
-          .get(organizationId),
-      ).toEqual({ pending_checkout_session_id: null });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+            )
+            .get(organizationId),
+        ).toEqual({ pending_checkout_session_id: null });
+      },
+    );
   });
 
   it("expires an abandoned stale Checkout before retention", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     insertStalePendingCheckout(fixture.database, "cs_retention_abandoned");
     insertAudit(
       fixture.database,
@@ -2249,10 +2247,9 @@ describe("billing", () => {
       organizationId,
       "2026-06-01",
     );
-    const originalFetch = globalThis.fetch;
     const requests: string[] = [];
-    globalThis.fetch = (async (input) => {
-      const url = String(input);
+    const stripe = async (call: FetchCall) => {
+      const url = call.url;
       requests.push(url);
       return Response.json({
         client_reference_id: organizationId,
@@ -2261,22 +2258,28 @@ describe("billing", () => {
         status: requests.length === 1 ? "open" : "expired",
         subscription: null,
       });
-    }) as typeof fetch;
-    try {
-      expect(
-        await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
-      ).toBe(1);
-      expect(requests).toEqual([
-        "https://api.stripe.com/v1/checkout/sessions/cs_retention_abandoned",
-        "https://api.stripe.com/v1/checkout/sessions/cs_retention_abandoned/expire",
-      ]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    };
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/checkout/sessions/cs_retention_abandoned":
+          stripe,
+        "POST https://api.stripe.com/v1/checkout/sessions/cs_retention_abandoned/expire":
+          stripe,
+      },
+      async () => {
+        expect(
+          await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+        ).toBe(1);
+        expect(requests).toEqual([
+          "https://api.stripe.com/v1/checkout/sessions/cs_retention_abandoned",
+          "https://api.stripe.com/v1/checkout/sessions/cs_retention_abandoned/expire",
+        ]);
+      },
+    );
   });
 
   it("isolates failed Checkout reconciliation during retention", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     insertStalePendingCheckout(fixture.database, "cs_retention_failed");
     insertAudit(
       fixture.database,
@@ -2285,29 +2288,29 @@ describe("billing", () => {
       "2026-06-01",
     );
     insertAudit(fixture.database, "other-free-old", "org_user-2", "2026-06-01");
-    const originalFetch = globalThis.fetch;
-    const originalConsoleError = console.error;
-    globalThis.fetch = (async (_input) =>
-      Response.json(
-        { error: { message: "Stripe is unavailable" } },
-        { status: 500 },
-      )) as typeof fetch;
-    console.error = () => {};
-    try {
-      expect(
-        await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
-      ).toBe(1);
-      expect(
-        fixture.database.query("SELECT id FROM audits ORDER BY id").all(),
-      ).toEqual([{ id: "failed-checkout-old" }]);
-    } finally {
-      console.error = originalConsoleError;
-      globalThis.fetch = originalFetch;
-    }
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/checkout/sessions/cs_retention_failed":
+          async () =>
+            Response.json(
+              { error: { message: "Stripe is unavailable" } },
+              { status: 500 },
+            ),
+      },
+      async () => {
+        expect(
+          await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+        ).toBe(1);
+        expect(
+          fixture.database.query("SELECT id FROM audits ORDER BY id").all(),
+        ).toEqual([{ id: "failed-checkout-old" }]);
+      },
+      { captureErrors: true },
+    );
   });
 
   it("fails closed when retention billing configuration is missing", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     insertAudit(fixture.database, "must-retain", organizationId, "2026-06-01");
     const { STRIPE_PRO_PRICE_ID: _priceId, ...missingPriceBindings } =
       fixture.bindings;
@@ -2322,7 +2325,7 @@ describe("billing", () => {
   });
 
   it("keeps old audit runs that are still in progress", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     insertAudit(fixture.database, "active-old", organizationId, "2026-06-01");
     fixture.database
       .query(
@@ -2339,45 +2342,40 @@ describe("billing", () => {
   });
 });
 
-async function createFixture(organizationRole = "owner") {
-  const database = new Database(":memory:");
-  database.exec("PRAGMA foreign_keys = ON");
-  await applyMigration(database, "0003_create_auth.sql");
-  for (const id of ["user-1", "user-2", "user-3"]) insertUser(database, id);
-  await applyMigration(database, "0004_create_organizations.sql");
-  await applyMigration(database, "0005_create_audits.sql");
-  await applyMigration(database, "0011_soft_delete_organizations.sql");
-  await applyMigration(database, "0022_version_audit_templates.sql");
-  await applyMigration(database, "0032_create_billing.sql");
-  await applyMigration(database, "0053_track_paid_billing_end.sql");
-  const bindings = {
+function createFixture(organizationRole = "owner") {
+  const database = createTestDatabase();
+  for (const id of ["user-1", "user-2", "user-3"])
+    seedAccount(database, { createdAt: new Date().toISOString(), id });
+  const bindings = testBindings({
     AUTH_EMAIL_FROM: "security@auth.balebase.test",
-    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
     BETTER_AUTH_URL: "https://api.balebase.test",
     CORS_ORIGIN: "https://app.balebase.test",
     DB: toD1(database),
-    EMAIL: {} as SendEmail,
-    IMAGES: {} as ImagesBinding,
     INBOUND_EMAIL_DOMAIN: "inbox.balebase.test",
-    STORAGE: {} as R2Bucket,
     STRIPE_PRO_LEGACY_PRICE_IDS: "",
     STRIPE_PRO_PRICE_ID: proPriceId,
     STRIPE_SECRET_KEY: "sk_live_test",
     STRIPE_WEBHOOK_SECRET: "whsec_test",
-  } satisfies Bindings;
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-  app.use("*", async (context, next) => {
-    context.set("organizationId", organizationId);
-    context.set("organizationRole", organizationRole);
-    context.set("authSession", {
-      user: { email: "user-1@example.com", id: "user-1", role: "user" },
-    } as AuthSession);
-    await next();
   });
-  app.route("/", billing);
+  const app = testApp(
+    { "/": billing },
+    {
+      email: "user-1@example.com",
+      organizationId,
+      organizationRole,
+      userId: "user-1",
+    },
+  );
   const webhook = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
   webhook.post("/", handleStripeWebhook);
-  return { app, bindings, database, webhook };
+  return {
+    app,
+    bindings,
+    database,
+    request: (path: string, init?: RequestInit) =>
+      app.request(path, init, bindings),
+    webhook,
+  };
 }
 
 function subscriptionEvent(
@@ -2467,29 +2465,12 @@ async function webhookSignature(
   return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function insertUser(database: Database, id: string) {
-  database
-    .query(
-      `INSERT INTO user
-       (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-       VALUES (?, ?, ?, 1, ?, ?, 'user', 0)`,
-    )
-    .run(
-      id,
-      id,
-      `${id}@example.com`,
-      new Date().toISOString(),
-      new Date().toISOString(),
-    );
-}
-
 function addMember(database: Database, userId: string, target: string) {
-  database
-    .query(
-      `INSERT INTO member (id, organizationId, userId, role, createdAt)
-       VALUES (?, ?, ?, 'member', ?)`,
-    )
-    .run(crypto.randomUUID(), target, userId, new Date().toISOString());
+  seedMember(database, {
+    createdAt: new Date().toISOString(),
+    organizationId: target,
+    userId,
+  });
 }
 
 function insertAudit(
@@ -2522,14 +2503,11 @@ function reserveCheckout(database: Database, sessionId: string) {
 }
 
 function insertStalePendingCheckout(database: Database, sessionId: string) {
-  database
-    .query(
-      `INSERT INTO organization_billing
-       (organization_id, pending_checkout_session_id, pending_checkout_url,
-        pending_checkout_expires_at, updated_at)
-       VALUES (?, ?, 'https://checkout.stripe.test/stale', 1, ?)`,
-    )
-    .run(organizationId, sessionId, new Date().toISOString());
+  insertBilling(database, organizationId, {
+    pending_checkout_expires_at: 1,
+    pending_checkout_session_id: sessionId,
+    pending_checkout_url: "https://checkout.stripe.test/stale",
+  });
 }
 
 function reconciledCount(database: Database) {
@@ -2539,43 +2517,4 @@ function reconciledCount(database: Database) {
        WHERE last_reconciled_at IS NOT NULL`,
     )
     .get();
-}
-
-interface TestStatement {
-  execute: () => unknown;
-}
-
-function toD1(database: Database) {
-  return {
-    batch: async (statements: TestStatement[]) =>
-      statements.map((statement) => statement.execute()),
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const statement = {
-        all: async () => ({ results: database.query(query).all(...values) }),
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        execute: () => {
-          const result = database.query(query).run(...values);
-          return { meta: { changes: result.changes } };
-        },
-        first: async <T>() => database.query(query).get(...values) as T | null,
-        run: async () => {
-          const result = database.query(query).run(...values);
-          return { meta: { changes: result.changes } };
-        },
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
-}
-
-async function applyMigration(database: Database, filename: string) {
-  database.exec(
-    await Bun.file(
-      new URL(`../migrations/${filename}`, import.meta.url),
-    ).text(),
-  );
 }

@@ -1,12 +1,13 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { readdir } from "node:fs/promises";
-import { Hono } from "hono";
-import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
 import { libraryFolders } from "./libraryFolders";
 import { objects } from "./objects";
-import type { Bindings } from "./types";
+import { memoryStorage, testBindings } from "./testing/bindings";
+import { toD1 } from "./testing/d1";
+import { createTestDatabase } from "./testing/database";
+import { requester } from "./testing/http";
+import { seedOrganization, seedUser } from "./testing/seed";
+import { testApp } from "./testing/session";
 
 const timestamp = "2026-09-20T12:00:00.000Z";
 
@@ -25,7 +26,7 @@ interface StoredObject {
 
 describe("library folders", () => {
   it("creates, renames, and lists organization folders", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
 
     const created = await fixture.json<{ folder: Folder }>(
       "POST",
@@ -107,7 +108,7 @@ describe("library folders", () => {
   });
 
   it("uploads into folders and moves documents between them", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const folder = await fixture.json<{ folder: Folder }>(
       "POST",
       "/api/library/folders",
@@ -186,7 +187,7 @@ describe("library folders", () => {
   });
 
   it("returns documents to the root and drops email links on delete", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const folder = await fixture.json<{ folder: Folder }>(
       "POST",
       "/api/library/folders",
@@ -227,46 +228,21 @@ describe("library folders", () => {
   });
 });
 
-async function createFixture() {
-  const database = new Database(":memory:");
-  database.exec("PRAGMA foreign_keys = ON");
-  await applyMigrations(database);
+function createFixture() {
+  const database = createTestDatabase();
   seed(database);
-  const stored = new Map<string, Uint8Array>();
-  const bindings = {
-    AUTH_EMAIL_FROM: "security@auth.balebase.com",
-    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-    BETTER_AUTH_URL: "https://api.test",
-    CORS_ORIGIN: "https://app.test",
-    DB: toD1(database),
-    EMAIL: {} as SendEmail,
-    IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
-    STORAGE: storageFor(stored),
-  } satisfies Bindings;
+  const { bucket, stored } = memoryStorage();
+  const bindings = testBindings({ DB: toD1(database), STORAGE: bucket });
 
   function client(organizationId: string) {
-    const app = testApp(organizationId);
-    const request = (path: string, init?: RequestInit) =>
-      app.request(path, init, bindings);
-    const json = async <T = unknown>(
-      method: string,
-      path: string,
-      body?: unknown,
-    ) => {
-      const init: RequestInit = { method };
-      if (body !== undefined) {
-        init.body = JSON.stringify(body);
-        init.headers = { "content-type": "application/json" };
-      }
-      const response = await request(path, init);
-      const text = await response.text();
-      return {
-        body: (text ? JSON.parse(text) : null) as T,
-        status: response.status,
-      };
-    };
-    return { json, request };
+    const json = requester(
+      testApp(
+        { "/api/library/folders": libraryFolders, "/api/objects": objects },
+        { organizationId },
+      ),
+      bindings,
+    );
+    return { json };
   }
 
   const primary = client("org-1");
@@ -283,18 +259,15 @@ async function createFixture() {
       return listing.body.objects.map(({ filename }) => filename);
     },
     stored,
-    upload: async (filename: string, folderId?: string) => {
+    upload: (filename: string, folderId?: string) => {
       const form = new FormData();
       form.set("file", new File(["contents"], filename));
       if (folderId) form.set("folderId", folderId);
-      const response = await primary.request("/api/objects", {
-        body: form,
-        method: "POST",
-      });
-      return {
-        body: (await response.json()) as { object: StoredObject },
-        status: response.status,
-      };
+      return primary.json<{ object: StoredObject }>(
+        "POST",
+        "/api/objects",
+        form,
+      );
     },
   };
 }
@@ -304,19 +277,8 @@ function seed(database: Database) {
     ["user-1", "org-1"],
     ["user-2", "org-2"],
   ] as const) {
-    database
-      .query(
-        `INSERT INTO user
-         (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-         VALUES (?, ?, ?, 1, ?, ?, 'user', 0)`,
-      )
-      .run(id, id, `${id}@example.com`, timestamp, timestamp);
-    database
-      .query(
-        `INSERT INTO organization (id, name, slug, createdAt)
-         VALUES (?, ?, ?, ?)`,
-      )
-      .run(organizationId, organizationId, organizationId, timestamp);
+    seedUser(database, { createdAt: timestamp, id });
+    seedOrganization(database, { createdAt: timestamp, id: organizationId });
   }
   database
     .query(
@@ -334,65 +296,4 @@ function seed(database: Database) {
                'upload@inbox.balebase.com', 'Lease', 'raw/email-1', 1, ?)`,
     )
     .run(timestamp);
-}
-
-function testApp(organizationId: string) {
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-  app.use("*", async (context, next) => {
-    context.set("organizationId", organizationId);
-    context.set("authSession", {
-      user: { id: "user-1", role: "user" },
-    } as unknown as AuthSession);
-    await next();
-  });
-  app.route("/api/library/folders", libraryFolders);
-  app.route("/api/objects", objects);
-  return app;
-}
-
-async function applyMigrations(database: Database) {
-  const directory = `${import.meta.dir}/../migrations`;
-  for (const filename of (await readdir(directory)).sort()) {
-    database.exec(await Bun.file(`${directory}/${filename}`).text());
-  }
-}
-
-interface TestStatement {
-  execute: () => unknown;
-}
-
-function toD1(database: Database) {
-  return {
-    batch: async (statements: TestStatement[]) =>
-      statements.map((statement) => statement.execute()),
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const statement = {
-        all: async () => ({
-          results: database.query(query).all(...values),
-          success: true,
-        }),
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        execute: () => database.query(query).run(...values),
-        first: async () => database.query(query).get(...values),
-        run: async () => {
-          const result = database.query(query).run(...values);
-          return { meta: { changes: result.changes }, success: true };
-        },
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
-}
-
-function storageFor(stored: Map<string, Uint8Array>) {
-  return {
-    delete: async (key: string) => stored.delete(key),
-    put: async (key: string, value: Blob) => {
-      stored.set(key, new Uint8Array(await value.arrayBuffer()));
-    },
-  } as unknown as R2Bucket;
 }

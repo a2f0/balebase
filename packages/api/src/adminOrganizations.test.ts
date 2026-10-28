@@ -1,9 +1,12 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { Hono } from "hono";
 import { adminOrganizations } from "./adminOrganizations";
-import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
+import { testBindings } from "./testing/bindings";
+import { toD1 } from "./testing/d1";
+import { createTestDatabase } from "./testing/database";
+import { withFetch } from "./testing/http";
+import { insertBilling, seedAccount, seedMember } from "./testing/seed";
+import { testApp } from "./testing/session";
 import type { Bindings } from "./types";
 
 const proPriceId = "price_pro_test";
@@ -19,7 +22,7 @@ interface OrganizationDetailResponse {
 
 describe("admin organizations", () => {
   it("opens another organization's people and checks without joining it", async () => {
-    const database = await createDetailFixture();
+    const database = createDetailFixture();
     database
       .query(
         "DELETE FROM member WHERE userId = 'user-1' AND organizationId = ?",
@@ -28,7 +31,7 @@ describe("admin organizations", () => {
     database
       .query("UPDATE user SET lastActiveAt = ? WHERE id = 'member-user'")
       .run("2026-10-15T08:30:00.000Z");
-    const response = await testApp(database).request(
+    const response = await adminApp(database).request(
       `/${targetOrganizationId}`,
     );
     expect(response.status).toBe(200);
@@ -87,8 +90,8 @@ describe("admin organizations", () => {
   });
 
   it("uses the production Checkr dashboard for production reports", async () => {
-    const database = await createDetailFixture();
-    const response = await testApp(database, "production").request(
+    const database = createDetailFixture();
+    const response = await adminApp(database, "production").request(
       `/${targetOrganizationId}`,
     );
     expect(response.status).toBe(200);
@@ -99,14 +102,14 @@ describe("admin organizations", () => {
   });
 
   it("keeps an unstarted check viewable after its member is removed", async () => {
-    const database = await createDetailFixture();
+    const database = createDetailFixture();
     database
       .query(
         "UPDATE employee_requirements SET checkr_report_id = NULL, checkr_result = NULL, checkr_report_status = NULL, status = 'pending', completed_at = NULL WHERE id = 'background-check'",
       )
       .run();
     database.query("DELETE FROM member WHERE id = 'member_member-user'").run();
-    const response = await testApp(database).request(
+    const response = await adminApp(database).request(
       `/${targetOrganizationId}`,
     );
     expect(response.status).toBe(200);
@@ -121,81 +124,24 @@ describe("admin organizations", () => {
   });
 
   it("returns not found for an unknown organization detail page", async () => {
-    const database = await createDeletionFixture();
-    const response = await testApp(database).request("/missing");
+    const database = createDeletionFixture();
+    const response = await adminApp(database).request("/missing");
     expect(response.status).toBe(404);
     const body: unknown = await response.json();
     expect(body).toEqual({ error: "Organization not found." });
   });
 
   it("lists organizations with their owners and member counts", async () => {
-    const database = new Database(":memory:");
-    database.exec(
-      await Bun.file(
-        new URL("../migrations/0003_create_auth.sql", import.meta.url),
-      ).text(),
-    );
-    database
-      .query(
-        `INSERT INTO user
-         (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        "user-1",
-        "Example Person",
-        "person@example.com",
-        false,
-        "2026-08-18T12:00:00.000Z",
-        "2026-08-18T12:00:00.000Z",
-        "admin",
-        false,
-      );
-    database.exec(
-      await Bun.file(
-        new URL("../migrations/0004_create_organizations.sql", import.meta.url),
-      ).text(),
-    );
-    database.exec(
-      await Bun.file(
-        new URL(
-          "../migrations/0010_create_organization_groups.sql",
-          import.meta.url,
-        ),
-      ).text(),
-    );
-    database.exec(
-      await Bun.file(
-        new URL(
-          "../migrations/0011_soft_delete_organizations.sql",
-          import.meta.url,
-        ),
-      ).text(),
-    );
-    database.exec(
-      await Bun.file(
-        new URL(
-          "../migrations/0013_track_organization_deletion_actor.sql",
-          import.meta.url,
-        ),
-      ).text(),
-    );
-    database.exec(
-      await Bun.file(
-        new URL(
-          "../migrations/0014_restore_organization_defaults.sql",
-          import.meta.url,
-        ),
-      ).text(),
-    );
+    const database = createTestDatabase();
+    seedAccount(database, {
+      email: "person@example.com",
+      emailVerified: false,
+      id: "user-1",
+      name: "Example Person",
+      role: "admin",
+    });
 
-    database.exec(
-      await Bun.file(
-        new URL("../migrations/0007_create_finance.sql", import.meta.url),
-      ).text(),
-    );
-
-    const response = await testApp(database).request("/");
+    const response = await adminApp(database).request("/");
 
     expect(response.status).toBe(200);
     const body: unknown = await response.json();
@@ -220,7 +166,7 @@ describe("admin organizations", () => {
   });
 
   it("counts connected Plaid items per organization independently of accounts and members", async () => {
-    const database = await createDetailFixture();
+    const database = createDetailFixture();
     const now = "2026-10-17T12:00:00.000Z";
     for (const [id, organizationId, status] of [
       ["active-item", targetOrganizationId, "active"],
@@ -247,7 +193,7 @@ describe("admin organizations", () => {
         )
         .run(id, targetOrganizationId, id, id, now);
     }
-    const app = testApp(database);
+    const app = adminApp(database);
     const list = await app.request("/");
     expect(list.status).toBe(200);
     const body = (await list.json()) as {
@@ -279,8 +225,8 @@ describe("admin organizations", () => {
   });
 
   it("marks an organization for deletion and records the admin", async () => {
-    const database = await createDeletionFixture();
-    const response = await testApp(database).request("/org_member-user", {
+    const database = createDeletionFixture();
+    const response = await adminApp(database).request("/org_member-user", {
       method: "DELETE",
     });
 
@@ -312,7 +258,7 @@ describe("admin organizations", () => {
       deletedByUserId: "user-1",
     });
 
-    const listing = await testApp(database).request("/");
+    const listing = await adminApp(database).request("/");
     const listingBody = (await listing.json()) as {
       organizations: Array<Record<string, unknown>>;
     };
@@ -326,8 +272,8 @@ describe("admin organizations", () => {
   });
 
   it("returns not found without creating billing for an unknown organization", async () => {
-    const database = await createDeletionFixture();
-    const response = await testApp(database).request("/org_missing", {
+    const database = createDeletionFixture();
+    const response = await adminApp(database).request("/org_missing", {
       method: "DELETE",
     });
 
@@ -343,75 +289,72 @@ describe("admin organizations", () => {
   });
 
   it("cancels paid billing before an admin deletes the organization", async () => {
-    const database = await createDeletionFixture();
+    const database = createDeletionFixture();
     insertPaidBilling(database);
-    const originalFetch = globalThis.fetch;
-    const requests: Array<{ method: string; url: string }> = [];
-    globalThis.fetch = (async (input, init) => {
-      requests.push({ method: init?.method ?? "GET", url: String(input) });
-      return Response.json(canceledSubscription());
-    }) as typeof fetch;
-    try {
-      const response = await testApp(database).request(
-        `/${targetOrganizationId}`,
-        { method: "DELETE" },
-      );
-      expect(response.status).toBe(200);
-      expect(requests).toEqual([
-        {
-          method: "DELETE",
-          url: "https://api.stripe.com/v1/subscriptions/sub_admin_test",
-        },
-      ]);
-      expect(
-        database
-          .query(
-            `SELECT organization.deletedAt, organization_billing.stripe_status
-             FROM organization
-             JOIN organization_billing
-               ON organization_billing.organization_id = organization.id
-             WHERE organization.id = ?`,
-          )
-          .get(targetOrganizationId),
-      ).toMatchObject({
-        deletedAt: expect.any(String),
-        stripe_status: "canceled",
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
+          Response.json(canceledSubscription()),
+      },
+      async ({ requests }) => {
+        const response = await adminApp(database).request(
+          `/${targetOrganizationId}`,
+          { method: "DELETE" },
+        );
+        expect(response.status).toBe(200);
+        expect(requests.map(({ method, url }) => ({ method, url }))).toEqual([
+          {
+            method: "DELETE",
+            url: "https://api.stripe.com/v1/subscriptions/sub_admin_test",
+          },
+        ]);
+        expect(
+          database
+            .query(
+              `SELECT organization.deletedAt, organization_billing.stripe_status
+               FROM organization
+               JOIN organization_billing
+                 ON organization_billing.organization_id = organization.id
+               WHERE organization.id = ?`,
+            )
+            .get(targetOrganizationId),
+        ).toMatchObject({
+          deletedAt: expect.any(String),
+          stripe_status: "canceled",
+        });
+      },
+    );
   });
 
   it("keeps a paid organization when admin cancellation fails", async () => {
-    const database = await createDeletionFixture();
+    const database = createDeletionFixture();
     insertPaidBilling(database);
-    const originalFetch = globalThis.fetch;
-    const originalConsoleError = console.error;
-    globalThis.fetch = (async (_input, _init) =>
-      Response.json(
-        { error: { message: "Stripe unavailable" } },
-        { status: 503 },
-      )) as typeof fetch;
-    console.error = () => {};
-    try {
-      const response = await testApp(database).request(
-        `/${targetOrganizationId}`,
-        { method: "DELETE" },
-      );
-      expect(response.status).toBe(502);
-      expect(
-        database
-          .query("SELECT deletedAt FROM organization WHERE id = ?")
-          .get(targetOrganizationId),
-      ).toEqual({ deletedAt: null });
-    } finally {
-      console.error = originalConsoleError;
-      globalThis.fetch = originalFetch;
-    }
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
+          Response.json(
+            { error: { message: "Stripe unavailable" } },
+            { status: 503 },
+          ),
+      },
+      async () => {
+        const response = await adminApp(database).request(
+          `/${targetOrganizationId}`,
+          { method: "DELETE" },
+        );
+        expect(response.status).toBe(502);
+        expect(
+          database
+            .query("SELECT deletedAt FROM organization WHERE id = ?")
+            .get(targetOrganizationId),
+        ).toEqual({ deletedAt: null });
+      },
+      { captureErrors: true },
+    );
   });
 
   it("re-enables checkout when deletion storage fails after cancellation", async () => {
-    const database = await createDeletionFixture();
+    const database = createDeletionFixture();
     insertPaidBilling(database);
     database.exec(
       `CREATE TRIGGER fail_admin_organization_deletion
@@ -421,43 +364,42 @@ describe("admin organizations", () => {
          SELECT RAISE(ABORT, 'forced organization deletion failure');
        END`,
     );
-    const originalFetch = globalThis.fetch;
-    const originalConsoleError = console.error;
-    globalThis.fetch = (async (_input, _init) =>
-      Response.json(canceledSubscription())) as typeof fetch;
-    console.error = () => {};
-    try {
-      const response = await testApp(database).request(
-        `/${targetOrganizationId}`,
-        { method: "DELETE" },
-      );
-      expect(response.status).toBe(500);
-      expect(
-        database
-          .query(
-            `SELECT organization.deletedAt,
-                    organization_billing.checkout_disabled_at,
-                    organization_billing.stripe_status
-             FROM organization
-             JOIN organization_billing
-               ON organization_billing.organization_id = organization.id
-             WHERE organization.id = ?`,
-          )
-          .get(targetOrganizationId),
-      ).toEqual({
-        checkout_disabled_at: null,
-        deletedAt: null,
-        stripe_status: "canceled",
-      });
-    } finally {
-      console.error = originalConsoleError;
-      globalThis.fetch = originalFetch;
-    }
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
+          Response.json(canceledSubscription()),
+      },
+      async () => {
+        const response = await adminApp(database).request(
+          `/${targetOrganizationId}`,
+          { method: "DELETE" },
+        );
+        expect(response.status).toBe(500);
+        expect(
+          database
+            .query(
+              `SELECT organization.deletedAt,
+                      organization_billing.checkout_disabled_at,
+                      organization_billing.stripe_status
+               FROM organization
+               JOIN organization_billing
+                 ON organization_billing.organization_id = organization.id
+               WHERE organization.id = ?`,
+            )
+            .get(targetOrganizationId),
+        ).toEqual({
+          checkout_disabled_at: null,
+          deletedAt: null,
+          stripe_status: "canceled",
+        });
+      },
+      { captureErrors: true },
+    );
   });
 
   it("restores a deleted organization without overriding other defaults", async () => {
-    const database = await createDeletionFixture();
-    const deletion = await testApp(database).request("/org_member-user", {
+    const database = createDeletionFixture();
+    const deletion = await adminApp(database).request("/org_member-user", {
       method: "DELETE",
     });
     expect(deletion.status).toBe(200);
@@ -478,7 +420,7 @@ describe("admin organizations", () => {
         .get(),
     ).toEqual({ activeOrganizationId: null });
 
-    const response = await testApp(database).request(
+    const response = await adminApp(database).request(
       "/org_member-user/restore",
       { method: "POST" },
     );
@@ -531,7 +473,7 @@ describe("admin organizations", () => {
         .get(),
     ).toEqual({ defaultOrganizationId: "org_user-1" });
 
-    const repeated = await testApp(database).request(
+    const repeated = await adminApp(database).request(
       "/org_member-user/restore",
       { method: "POST" },
     );
@@ -543,7 +485,7 @@ describe("admin organizations", () => {
          WHERE organization_id = 'org_member-user'`,
       )
       .run();
-    const concurrent = await testApp(database).request(
+    const concurrent = await adminApp(database).request(
       "/org_member-user/restore",
       { method: "POST" },
     );
@@ -559,65 +501,24 @@ describe("admin organizations", () => {
   });
 });
 
-async function createDeletionFixture() {
-  const database = new Database(":memory:");
-  database.exec("PRAGMA foreign_keys = ON");
-  database.exec(
-    await Bun.file(
-      new URL("../migrations/0003_create_auth.sql", import.meta.url),
-    ).text(),
-  );
-  for (const user of [
-    ["user-1", "Example Person", "person@example.com", "admin"],
-    ["member-user", "Member Person", "member@example.com", "user"],
-  ]) {
-    database
-      .query(
-        `INSERT INTO user
-         (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-         VALUES (?, ?, ?, 1, ?, ?, ?, 0)`,
-      )
-      .run(
-        user[0] ?? "",
-        user[1] ?? "",
-        user[2] ?? "",
-        "2026-08-18T12:00:00.000Z",
-        "2026-08-18T12:00:00.000Z",
-        user[3] ?? "user",
-      );
-  }
-  database.exec(
-    await Bun.file(
-      new URL("../migrations/0004_create_organizations.sql", import.meta.url),
-    ).text(),
-  );
-  database
-    .query(
-      `INSERT INTO member
-       (id, organizationId, userId, role, createdAt)
-       VALUES (?, ?, ?, 'member', ?)`,
-    )
-    .run(
-      "admin-target-membership",
-      "org_member-user",
-      "user-1",
-      "2026-08-18T12:00:00.000Z",
-    );
-  for (const migration of [
-    "0007_create_finance.sql",
-    "0010_create_organization_groups.sql",
-    "0011_soft_delete_organizations.sql",
-    "0013_track_organization_deletion_actor.sql",
-    "0014_restore_organization_defaults.sql",
-    "0032_create_billing.sql",
-    "0053_track_paid_billing_end.sql",
-  ]) {
-    database.exec(
-      await Bun.file(
-        new URL(`../migrations/${migration}`, import.meta.url),
-      ).text(),
-    );
-  }
+function createDeletionFixture() {
+  const database = createTestDatabase();
+  seedAccount(database, {
+    email: "person@example.com",
+    id: "user-1",
+    name: "Example Person",
+    role: "admin",
+  });
+  seedAccount(database, {
+    email: "member@example.com",
+    id: "member-user",
+    name: "Member Person",
+  });
+  seedMember(database, {
+    id: "admin-target-membership",
+    organizationId: "org_member-user",
+    userId: "user-1",
+  });
   database
     .query(
       `INSERT INTO session
@@ -638,26 +539,8 @@ async function createDeletionFixture() {
   return database;
 }
 
-async function createDetailFixture() {
-  const database = await createDeletionFixture();
-  for (const filename of [
-    "0020_add_two_factor_authentication.sql",
-    "0031_require_member_two_factor.sql",
-    "0041_create_employee_requirements.sql",
-    "0042_add_checkr_screenings.sql",
-    "0044_guard_employee_screenings.sql",
-    "0046_version_employee_screening_refresh.sql",
-    "0047_bind_employee_screening_attempt.sql",
-    "0052_track_checkr_refreshes.sql",
-    "0055_track_user_last_active.sql",
-    "0067_self_host_checkr_screenings.sql",
-  ]) {
-    database.exec(
-      await Bun.file(
-        new URL(`../migrations/${filename}`, import.meta.url),
-      ).text(),
-    );
-  }
+function createDetailFixture() {
+  const database = createDeletionFixture();
   database
     .query(
       `INSERT INTO employee_requirements
@@ -681,61 +564,43 @@ async function createDetailFixture() {
   return database;
 }
 
-function testApp(
+function adminApp(
   database: Database,
   checkrEnv: Bindings["CHECKR_ENV"] = "staging",
 ) {
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-  app.use("*", async (context, next) => {
-    context.set("authSession", {
-      user: {
-        email: "person@example.com",
-        id: "user-1",
-        name: "Example Person",
-        role: "admin",
-      },
-    } as AuthSession);
-    await next();
-  });
-  app.route("/", adminOrganizations);
-  return {
-    request: (path: string, init?: RequestInit) =>
-      app.request(path, init, {
-        ...bindingsFor(database),
-        CHECKR_ENV: checkrEnv,
-      }),
-  };
-}
-
-function bindingsFor(database: Database): Bindings {
-  return {
-    AUTH_EMAIL_FROM: "security@auth.balebase.com",
-    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-    BETTER_AUTH_URL: "https://api.test",
-    CORS_ORIGIN: "https://app.test",
+  const app = testApp(
+    { "/": adminOrganizations },
+    {
+      email: "person@example.com",
+      name: "Example Person",
+      role: "admin",
+      userId: "user-1",
+    },
+  );
+  const bindings = testBindings({
+    CHECKR_ENV: checkrEnv,
     DB: toD1(database),
-    EMAIL: {} as SendEmail,
-    IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
-    STORAGE: {} as R2Bucket,
     STRIPE_PRO_PRICE_ID: proPriceId,
     STRIPE_SECRET_KEY: "sk_live_test",
+  });
+  return {
+    request: (path: string, init?: RequestInit) =>
+      app.request(path, init, bindings),
   };
 }
 
 function insertPaidBilling(database: Database) {
-  database
-    .query(
-      `INSERT INTO organization_billing
-       (organization_id, stripe_customer_id, stripe_subscription_id,
-        stripe_subscription_item_id, stripe_price_id, stripe_status,
-        seat_quantity, stripe_event_created, updated_at)
-       VALUES (?, 'cus_admin_test', 'sub_admin_test', 'si_admin_test', ?,
-               'active', 1, 1, ?)`,
-    )
-    .run(targetOrganizationId, proPriceId, "2026-08-26T12:00:00.000Z");
+  insertBilling(database, targetOrganizationId, {
+    seat_quantity: 1,
+    stripe_customer_id: "cus_admin_test",
+    stripe_event_created: 1,
+    stripe_price_id: proPriceId,
+    stripe_status: "active",
+    stripe_subscription_id: "sub_admin_test",
+    stripe_subscription_item_id: "si_admin_test",
+    updated_at: "2026-08-26T12:00:00.000Z",
+  });
 }
-
 function canceledSubscription() {
   return {
     cancel_at_period_end: false,
@@ -753,38 +618,4 @@ function canceledSubscription() {
     metadata: { organization_id: targetOrganizationId },
     status: "canceled",
   };
-}
-
-function toD1(database: Database) {
-  return {
-    batch: async (statements: { execute: () => unknown }[]) =>
-      statements.map((statement) => statement.execute()),
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const statement = {
-        all: async () => ({
-          results: database.query(query).all(...values),
-          success: true,
-        }),
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        execute: () => {
-          const result = database.query(query).run(...values);
-          return {
-            meta: { changes: result.changes },
-            results: [],
-            success: true,
-          };
-        },
-        first: async () => database.query(query).get(...values),
-        run: async () => {
-          const result = database.query(query).run(...values);
-          return { meta: { changes: result.changes } };
-        },
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
 }

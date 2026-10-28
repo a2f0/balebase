@@ -1,10 +1,6 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { readdir } from "node:fs/promises";
-import { Hono } from "hono";
 import { degrees, PDFDocument } from "pdf-lib";
-import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
 import {
   resumeStalledContracts,
   sendContractReminders,
@@ -12,7 +8,12 @@ import {
 import { contracts } from "./contracts";
 import type { TemplateDefinition } from "./contractTemplateDefinition";
 import { signing } from "./signing";
-import type { Bindings } from "./types";
+import { memoryStorage, testBindings } from "./testing/bindings";
+import { queryHooks, toD1 } from "./testing/d1";
+import { createTestDatabase } from "./testing/database";
+import { requester } from "./testing/http";
+import { seedOrganization, seedUser } from "./testing/seed";
+import { testApp, withTestSession } from "./testing/session";
 
 const timestamp = "2026-09-20T12:00:00.000Z";
 const png = `data:image/png;base64,${"iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAEUlEQVR4nGNgYGD4z8DAwMAAAA0ABQHsHwEAAAAASUVORK5CYII="}`;
@@ -112,7 +113,7 @@ function draft(overrides: Record<string, unknown> = {}) {
 
 describe("contracts", () => {
   it("uploads a PDF and validates drafts before sending", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     expect(
       (await fixture.upload(new TextEncoder().encode("not a pdf"), "notes.txt"))
         .status,
@@ -201,7 +202,7 @@ describe("contracts", () => {
   });
 
   it("collects parallel signatures and completes with a stamped PDF", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const id = await fixture.prepare(draft());
     const sent = await fixture.json<{ contract: Contract }>(
       "POST",
@@ -346,7 +347,7 @@ describe("contracts", () => {
   });
 
   it("routes sequential signers one at a time", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const id = await fixture.prepare(draft({ signingOrder: "sequential" }));
     await fixture.json("POST", `/api/contracts/${id}/send`);
     expect(fixture.emails.map(({ to }) => to.email)).toEqual([
@@ -380,7 +381,7 @@ describe("contracts", () => {
   });
 
   it("records declines, voids, and deletions", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const declinedId = await fixture.prepare(draft());
     await fixture.json("POST", `/api/contracts/${declinedId}/send`);
     const samToken = tokenFrom(fixture.emails[0]);
@@ -465,7 +466,7 @@ describe("contracts", () => {
   });
 
   it("reminds signers on their contract's schedule and on request", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const id = await fixture.prepare(draft({ reminderIntervalDays: 2 }));
     await fixture.json("POST", `/api/contracts/${id}/send`);
     const samToken = tokenFrom(fixture.emails[0]);
@@ -516,7 +517,7 @@ describe("contracts", () => {
   });
 
   it("finishes a contract whose completion failed after the last signature", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const id = await fixture.prepare(solo());
     await fixture.json("POST", `/api/contracts/${id}/send`);
     const token = tokenFrom(fixture.emails[0]);
@@ -545,7 +546,7 @@ describe("contracts", () => {
   });
 
   it("gives up on a contract that keeps failing to complete", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const id = await fixture.prepare(solo());
     await fixture.json("POST", `/api/contracts/${id}/send`);
     fixture.storage.failWrites = true;
@@ -569,16 +570,14 @@ describe("contracts", () => {
   });
 
   it("refuses a send when the draft changes while it is validated", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const id = await fixture.prepare(draft());
     // A save from another tab lands between validation and the send.
-    fixture.onQuery = (query) => {
-      if (query.includes("SET status = 'sent'")) {
-        fixture.database
-          .query("UPDATE contracts SET revision = revision + 1 WHERE id = ?")
-          .run(id);
-      }
-    };
+    fixture.hooks.before("SET status = 'sent'", () => {
+      fixture.database
+        .query("UPDATE contracts SET revision = revision + 1 WHERE id = ?")
+        .run(id);
+    });
     const raced = await fixture.json<{ error: string }>(
       "POST",
       `/api/contracts/${id}/send`,
@@ -590,7 +589,7 @@ describe("contracts", () => {
   });
 
   it("rejects adopted images that could not be stamped", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const id = await fixture.prepare(solo());
     await fixture.json("POST", `/api/contracts/${id}/send`);
     const token = tokenFrom(fixture.emails[0]);
@@ -612,7 +611,7 @@ describe("contracts", () => {
   });
 
   it("retires signing links when the auth secret rotates", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const id = await fixture.prepare(solo());
     await fixture.json("POST", `/api/contracts/${id}/send`);
     const original = tokenFrom(fixture.emails[0]);
@@ -642,7 +641,7 @@ describe("contracts", () => {
   });
 
   it("stops contract activity when its organization is deleted", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const id = await fixture.prepare(draft());
     await fixture.json("POST", `/api/contracts/${id}/send`);
     const token = tokenFrom(fixture.emails[0]);
@@ -672,7 +671,7 @@ describe("contracts", () => {
   });
 
   it("keeps contracts and signing links within their organization", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const id = await fixture.prepare(draft());
     const outsider = fixture.as("other-user", "org-2");
     for (const [method, path] of [
@@ -717,99 +716,63 @@ function tokenFrom(email: SentEmail | undefined) {
   return token;
 }
 
-async function createFixture() {
-  const database = new Database(":memory:");
-  database.exec("PRAGMA foreign_keys = ON");
-  const directory = `${import.meta.dir}/../migrations`;
-  for (const filename of (await readdir(directory)).sort()) {
-    database.exec(await Bun.file(`${directory}/${filename}`).text());
-  }
+function createFixture() {
+  const database = createTestDatabase();
   seed(database);
   const emails: SentEmail[] = [];
-  const stored = new Map<string, Uint8Array>();
   const storage = { failWrites: false };
-  const bindings = {
-    AUTH_EMAIL_FROM: "security@auth.balebase.com",
-    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-    BETTER_AUTH_URL: "https://api.test",
-    CORS_ORIGIN: "https://app.test",
-    DB: toD1(database, (query) => fixture.onQuery?.(query)),
+  const { bucket, stored } = memoryStorage(new Map(), {
+    beforePut: () => {
+      if (storage.failWrites) throw new Error("Storage is unavailable.");
+    },
+  });
+  const hooks = queryHooks();
+  const bindings = testBindings({
+    DB: toD1(database, hooks),
     EMAIL: {
       send: async (message: SentEmail) => {
         emails.push(message);
         return { messageId: `message-${emails.length}` };
       },
     } as unknown as SendEmail,
-    IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
-    STORAGE: storageFor(stored, storage),
-  } satisfies Bindings;
+    STORAGE: bucket,
+  });
 
   function as(userId: string, organizationId: string) {
-    const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-    app.use("/api/contracts/*", async (context, next) => {
-      context.set("organizationId", organizationId);
-      context.set("organizationRole", "member");
-      context.set("authSession", {
-        user: { id: userId, role: "user" },
-      } as unknown as AuthSession);
-      await next();
+    const session = withTestSession({
+      organizationId,
+      organizationRole: "member",
+      userId,
     });
-    app.use("/api/contracts", async (context, next) => {
-      context.set("organizationId", organizationId);
-      context.set("organizationRole", "member");
-      context.set("authSession", {
-        user: { id: userId, role: "user" },
-      } as unknown as AuthSession);
-      await next();
-    });
+    // Signing links are public, so only the contract routes are signed in.
+    const app = testApp({});
+    app.use("/api/contracts/*", session);
+    app.use("/api/contracts", session);
     app.route("/api/contracts", contracts);
     app.route("/api/signing", signing);
     const request = (path: string, init?: RequestInit) =>
       app.request(path, init, bindings);
-    const json = async <T = unknown>(
-      method: string,
-      path: string,
-      body?: unknown,
-    ) => {
-      const init: RequestInit = { method };
-      if (body !== undefined && method !== "GET") {
-        init.body = JSON.stringify(body);
-        init.headers = {
-          "cf-connecting-ip": "203.0.113.7",
-          "content-type": "application/json",
-        };
-      }
-      const response = await request(path, init);
-      const text = await response.text();
-      return {
-        body: (text ? JSON.parse(text) : null) as T,
-        status: response.status,
-      };
-    };
-    const upload = async (bytes: Uint8Array, filename: string) => {
+    const send = requester(app, bindings);
+    const json = <T = unknown>(method: string, path: string, body?: unknown) =>
+      body === undefined || method === "GET"
+        ? send<T>(method, path)
+        : send<T>(method, path, body, { "cf-connecting-ip": "203.0.113.7" });
+    const upload = (bytes: Uint8Array, filename: string) => {
       const form = new FormData();
       form.set("file", new File([bytes], filename));
-      const response = await request("/api/contracts", {
-        body: form,
-        method: "POST",
-      });
-      return {
-        body: (await response.json()) as { contract: Contract },
-        status: response.status,
-      };
+      return send<{ contract: Contract }>("POST", "/api/contracts", form);
     };
     return { json, request, upload };
   }
 
   const owner = as("owner-user", "org-1");
-  const fixture: { onQuery?: (query: string) => void } = {};
-  return Object.assign(fixture, {
+  return {
     ...owner,
     as,
     bindings,
     database,
     emails,
+    hooks,
     storage,
     prepare: async (body: ReturnType<typeof draft>) => {
       const created = await owner.upload(
@@ -826,38 +789,20 @@ async function createFixture() {
       return created.body.contract.id;
     },
     stored,
-  });
+  };
 }
 
 function seed(database: Database) {
-  const run = (query: string, ...values: SQLQueryBindings[]) =>
-    database.query(query).run(...values);
   for (const [id, name, email] of [
     ["owner-user", "Olivia Owner", "owner@example.com"],
     ["other-user", "Oscar Other", "other@example.com"],
-  ]) {
-    run(
-      `INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-       VALUES (?, ?, ?, 1, ?, ?, 'user', 0)`,
-      id ?? "",
-      name ?? "",
-      email ?? "",
-      timestamp,
-      timestamp,
-    );
-  }
+  ] as const)
+    seedUser(database, { createdAt: timestamp, email, id, name });
   for (const [id, name] of [
     ["org-1", "Acme, Inc."],
     ["org-2", "Other Co"],
-  ]) {
-    run(
-      `INSERT INTO organization (id, name, slug, createdAt) VALUES (?, ?, ?, ?)`,
-      id ?? "",
-      name ?? "",
-      id ?? "",
-      timestamp,
-    );
-  }
+  ] as const)
+    seedOrganization(database, { createdAt: timestamp, id, name });
 }
 
 async function samplePdf() {
@@ -865,71 +810,6 @@ async function samplePdf() {
   document.addPage([612, 792]);
   document.addPage([612, 792]).setRotation(degrees(90));
   return document.save();
-}
-
-interface TestStatement {
-  execute: () => { changes: number };
-}
-
-/** A D1 stand-in; `onQuery` runs before each statement executes. */
-function toD1(database: Database, onQuery: (query: string) => void) {
-  return {
-    // D1 runs a batch as one transaction.
-    batch: async (statements: TestStatement[]) =>
-      database.transaction(() =>
-        statements.map((statement) => ({
-          meta: { changes: statement.execute().changes },
-        })),
-      )(),
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const statement = {
-        all: async () => ({
-          results: database.query(query).all(...values),
-          success: true,
-        }),
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        execute: () => {
-          onQuery(query);
-          return database.query(query).run(...values);
-        },
-        first: async () => database.query(query).get(...values),
-        run: async () => {
-          onQuery(query);
-          const result = database.query(query).run(...values);
-          return { meta: { changes: result.changes }, success: true };
-        },
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
-}
-
-function storageFor(
-  stored: Map<string, Uint8Array>,
-  state: { failWrites: boolean },
-) {
-  return {
-    delete: async (key: string) => stored.delete(key),
-    get: async (key: string) => {
-      const content = stored.get(key);
-      if (!content) return null;
-      return {
-        arrayBuffer: async () => content.slice().buffer,
-        body: new Blob([content]).stream(),
-      };
-    },
-    put: async (key: string, value: Uint8Array | ArrayBuffer) => {
-      if (state.failWrites) throw new Error("Storage is unavailable.");
-      stored.set(
-        key,
-        new Uint8Array(value instanceof Uint8Array ? value : value),
-      );
-    },
-  } as unknown as R2Bucket;
 }
 
 interface Template {
@@ -991,7 +871,7 @@ function roleMapping(version: number) {
 
 describe("contract templates", () => {
   it("keeps versions immutable and maps every field through a role into an independent draft", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const first = await uploadTemplate(fixture);
     const path = `/api/contracts/templates/${first.id}`;
     const saved = await fixture.json<{ template: Template }>(
@@ -1092,7 +972,7 @@ describe("contract templates", () => {
   });
 
   it("rejects stale saves and preserves the winner's version", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const template = await uploadTemplate(fixture);
     const path = `/api/contracts/templates/${template.id}`;
     const input = templateVersion(template);
@@ -1118,7 +998,7 @@ describe("contract templates", () => {
   });
 
   it("validates roles, boxes, and complete unique mappings without saving people in templates", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const template = await uploadTemplate(fixture);
     const path = `/api/contracts/templates/${template.id}`;
     const input = templateVersion(template);
@@ -1179,7 +1059,7 @@ describe("contract templates", () => {
   });
 
   it("scopes every template route to the active organization", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const template = await uploadTemplate(fixture);
     const outsider = fixture.as("other-user", "org-2");
     const path = `/api/contracts/templates/${template.id}`;
@@ -1209,14 +1089,13 @@ describe("contract templates", () => {
   });
 
   it("rolls back a failed copy and handles deletion while a contract is being created", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const template = await uploadTemplate(fixture);
     const path = `/api/contracts/templates/${template.id}`;
     await fixture.json("POST", `${path}/versions`, templateVersion(template));
-    fixture.onQuery = (query) => {
-      if (query.includes("INSERT INTO contract_fields"))
-        throw new Error("Database unavailable");
-    };
+    fixture.hooks.before("INSERT INTO contract_fields", () => {
+      throw new Error("Database unavailable");
+    });
     expect(
       (
         await fixture.request(`${path}/contracts`, {
@@ -1230,13 +1109,11 @@ describe("contract templates", () => {
     expect(
       fixture.database.query("SELECT COUNT(*) AS count FROM contracts").get(),
     ).toEqual({ count: 0 });
-    fixture.onQuery = (query) => {
-      if (!query.includes("INSERT INTO contracts")) return;
-      delete fixture.onQuery;
+    fixture.hooks.before("INSERT INTO contracts", () => {
       fixture.database
         .query("DELETE FROM contract_templates WHERE id = ?")
         .run(template.id);
-    };
+    });
     expect(
       (await fixture.json("POST", `${path}/contracts`, roleMapping(2))).status,
     ).toBe(404);
@@ -1247,7 +1124,7 @@ describe("contract templates", () => {
   });
 
   it("queues template PDFs when an organization is purged", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const template = await uploadTemplate(fixture);
     await fixture.json(
       "POST",

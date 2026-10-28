@@ -1,12 +1,13 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { afterEach, expect, it } from "bun:test";
-import { readdir } from "node:fs/promises";
 import type { OfflineOperation } from "@balebase/validators/offline";
-import { Hono } from "hono";
-import type { AuthSession } from "./auth";
-import type { IssueEnv } from "./issueRecords";
 import { offline } from "./offline";
-import type { Bindings } from "./types";
+import { testBindings } from "./testing/bindings";
+import { toD1 } from "./testing/d1";
+import { createTestDatabase } from "./testing/database";
+import { requester } from "./testing/http";
+import { seedAccount } from "./testing/seed";
+import { testApp } from "./testing/session";
 
 const databases: Database[] = [];
 const scope = { organizationId: "org_user-1", userId: "user-1" };
@@ -27,7 +28,7 @@ afterEach(() => {
 });
 
 it("syncs the exact downloaded version once, including answer and completion history", async () => {
-  const f = await fixture();
+  const f = fixture();
   const operation = audit();
   const results = await Promise.all([f.apply(operation), f.apply(operation)]);
   expect(results.map((result) => result.status).sort()).toEqual([200, 201]);
@@ -63,7 +64,7 @@ it("syncs the exact downloaded version once, including answer and completion his
 });
 
 it("requires the parent audit before its issue and does not duplicate issues on retry", async () => {
-  const f = await fixture();
+  const f = fixture();
   const parent = audit();
   const issue: OfflineOperation = {
     id: crypto.randomUUID(),
@@ -89,7 +90,7 @@ it("requires the parent audit before its issue and does not duplicate issues on 
 });
 
 it("rejects wrong account and organization, invalid answers, and inaccessible templates without receipts", async () => {
-  const f = await fixture();
+  const f = fixture();
   expect((await f.apply(audit(), { ...scope, userId: "user-2" })).status).toBe(
     403,
   );
@@ -109,18 +110,13 @@ it("rejects wrong account and organization, invalid answers, and inaccessible te
   expect(f.db.query("SELECT id FROM offline_operations").all()).toEqual([]);
   expect(f.db.query("SELECT id FROM audits").all()).toEqual([]);
   expect(
-    (
-      await f.app.request(
-        "/forms?userId=user-2&organizationId=org_user-1",
-        {},
-        f.env,
-      )
-    ).status,
+    (await f.request("GET", "/forms?userId=user-2&organizationId=org_user-1"))
+      .status,
   ).toBe(403);
 });
 
 it("rolls back receipts and domain writes if history fails, then retries successfully", async () => {
-  const f = await fixture();
+  const f = fixture();
   const operation = audit();
   f.db.exec(
     "CREATE TRIGGER fail_history BEFORE INSERT ON activity_events WHEN NEW.action = 'audit.completed' BEGIN SELECT RAISE(ABORT, 'history unavailable'); END",
@@ -133,7 +129,7 @@ it("rolls back receipts and domain writes if history fails, then retries success
 });
 
 it("creates standalone issues and rejects former assignees", async () => {
-  const f = await fixture();
+  const f = fixture();
   const issue: OfflineOperation = {
     type: "issue",
     id: crypto.randomUUID(),
@@ -150,7 +146,7 @@ it("creates standalone issues and rejects former assignees", async () => {
 });
 
 it("keeps device-reported audit times separate from server history time", async () => {
-  const f = await fixture();
+  const f = fixture();
   const operation = {
     ...audit(),
     startedAt: "2026-10-01T12:00:00.000Z",
@@ -187,27 +183,11 @@ function audit(): Extract<OfflineOperation, { type: "audit" }> {
   };
 }
 
-async function fixture() {
-  const db = new Database(":memory:");
+function fixture() {
+  const db = createTestDatabase();
   databases.push(db);
-  db.exec("PRAGMA foreign_keys = ON");
-  db.exec(
-    await Bun.file(
-      `${import.meta.dir}/../migrations/0003_create_auth.sql`,
-    ).text(),
-  );
   for (const id of ["user-1", "user-2"])
-    db.query(
-      "INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt, role, banned) VALUES (?, ?, ?, 1, '2026-10-01', '2026-10-01', 'user', 0)",
-    ).run(id, id, `${id}@example.com`);
-  for (const file of (
-    await readdir(`${import.meta.dir}/../migrations`)
-  ).sort()) {
-    if (file.endsWith(".sql") && file !== "0003_create_auth.sql")
-      db.exec(
-        await Bun.file(`${import.meta.dir}/../migrations/${file}`).text(),
-      );
-  }
+    seedAccount(db, { createdAt: "2026-10-01", id });
   db.exec(
     "INSERT INTO audit_template_families (id, scope, organization_id, current_version, created_by, created_at, updated_at) VALUES ('form', 'organization', 'org_user-1', 2, 'user-1', '2026-10-01', '2026-10-01')",
   );
@@ -220,57 +200,12 @@ async function fixture() {
       version === 1 ? "Downloaded" : "New name",
       JSON.stringify(definition),
     );
-  const app = new Hono<IssueEnv>();
-  app.use("*", async (context, next) => {
-    context.set("organizationId", scope.organizationId);
-    context.set("authSession", { user: { id: scope.userId } } as AuthSession);
-    await next();
-  });
-  app.route("/", offline);
-  const env = { DB: toD1(db) } as Bindings;
+  const app = testApp({ "/": offline }, scope);
+  const request = requester(app, testBindings({ DB: toD1(db) }));
   return {
     db,
-    app,
-    env,
+    request,
     apply: (operation: OfflineOperation, identity = scope) =>
-      app.request(
-        "/operations",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ...identity, operation }),
-        },
-        env,
-      ),
+      request("POST", "/operations", { ...identity, operation }),
   };
-}
-
-function toD1(db: Database) {
-  return {
-    batch: async (statements: { execute: () => unknown }[]) =>
-      db.transaction(() =>
-        statements.map((statement) => statement.execute()),
-      )(),
-    prepare: (sql: string) => {
-      let values: SQLQueryBindings[] = [];
-      const execute = () => ({
-        success: true,
-        meta: { changes: db.query(sql).run(...values).changes },
-      });
-      const statement = {
-        bind: (...args: SQLQueryBindings[]) => {
-          values = args;
-          return statement;
-        },
-        first: async () => db.query(sql).get(...values),
-        all: async () => ({
-          results: db.query(sql).all(...values),
-          success: true,
-        }),
-        run: async () => execute(),
-        execute,
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
 }

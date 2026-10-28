@@ -1,10 +1,10 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { Hono } from "hono";
-import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
 import { inbox } from "./inbox";
-import type { Bindings } from "./types";
+import { memoryStorage, testBindings } from "./testing/bindings";
+import { toD1 } from "./testing/d1";
+import { applyMigrations, createTestDatabase } from "./testing/database";
+import { seedUser } from "./testing/seed";
+import { testApp } from "./testing/session";
 
 const organizationId = "org_owner-user";
 const otherOrganizationId = "org_other-user";
@@ -302,14 +302,11 @@ describe("inbox", () => {
 });
 
 async function createFixture(fixtureRawEmail = rawEmail) {
-  const database = new Database(":memory:");
-  database.exec("PRAGMA foreign_keys = ON");
-  await applyMigration(database, "0002_create_inbound_emails.sql");
-  await applyMigration(database, "0003_create_auth.sql");
-  insertUser(database, "owner-user");
-  insertUser(database, "other-user");
-  await applyMigration(database, "0004_create_organizations.sql");
-  database.exec('ALTER TABLE organization ADD COLUMN "deletedAt" DATE');
+  // Mail received before organizations existed belongs to Tearleads, LLC.
+  const database = createTestDatabase({ before: "0004" });
+  seedUser(database, { id: "owner-user" });
+  seedUser(database, { id: "other-user" });
+  applyMigrations(database, { before: "0012", from: "0004" });
   database
     .query("UPDATE organization SET name = 'Tearleads, LLC' WHERE id = ?")
     .run(organizationId);
@@ -348,10 +345,7 @@ async function createFixture(fixtureRawEmail = rawEmail) {
       null,
       "2026-08-18T12:00:00.000Z",
     );
-  await applyMigration(
-    database,
-    "0012_scope_inbound_emails_to_organizations.sql",
-  );
+  applyMigrations(database, { from: "0012" });
   database
     .query(
       `INSERT INTO inbound_emails
@@ -388,21 +382,6 @@ async function createFixture(fixtureRawEmail = rawEmail) {
       null,
       "2026-08-19T12:00:00.000Z",
     );
-  await applyMigration(database, "0016_soft_delete_inbound_emails.sql");
-  for (const migration of [
-    "0001_create_objects.sql",
-    "0006_scope_objects_to_organizations.sql",
-    "0025_classify_objects.sql",
-    "0007_create_finance.sql",
-    "0009_retain_finance_history.sql",
-    "0035_create_library_folders.sql",
-    "0036_create_inbound_email_links.sql",
-    "0037_create_equipment.sql",
-    "0038_link_inbound_emails_to_equipment.sql",
-    "0054_archive_inbound_emails.sql",
-  ]) {
-    await applyMigration(database, migration);
-  }
 
   const objects = new Map([
     [rawObjectKey, new TextEncoder().encode(fixtureRawEmail)],
@@ -410,91 +389,17 @@ async function createFixture(fixtureRawEmail = rawEmail) {
     [otherRawObjectKey, new TextEncoder().encode(fixtureRawEmail)],
     [otherAttachmentObjectKey, new TextEncoder().encode("other attachment")],
   ]);
-  const bindings = {
-    AUTH_EMAIL_FROM: "security@auth.balebase.com",
-    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-    BETTER_AUTH_URL: "https://api.test",
-    CORS_ORIGIN: "https://app.test",
+  const bindings = testBindings({
     DB: toD1(database),
-    EMAIL: {} as SendEmail,
-    IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
-    STORAGE: createStorage(objects),
-  } satisfies Bindings;
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-  app.use("*", async (context, next) => {
-    context.set("organizationId", organizationId);
-    context.set("organizationRole", "member");
-    context.set("authSession", {
-      session: { activeOrganizationId: organizationId },
-      user: { id: "owner-user", role: "user" },
-    } as unknown as AuthSession);
-    await next();
+    STORAGE: memoryStorage(objects).bucket,
   });
-  app.route("/", inbox);
+  const app = testApp(
+    { "/": inbox },
+    { organizationId, organizationRole: "member", userId: "owner-user" },
+  );
   return {
     database,
     request: (path: string, init?: RequestInit) =>
       app.request(path, init, bindings),
   };
-}
-
-function insertUser(database: Database, id: string) {
-  const timestamp = "2026-08-18T12:00:00.000Z";
-  database
-    .query(
-      `INSERT INTO user
-       (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-       VALUES (?, ?, ?, 1, ?, ?, 'user', 0)`,
-    )
-    .run(id, id, `${id}@example.com`, timestamp, timestamp);
-}
-
-async function applyMigration(database: Database, filename: string) {
-  database.exec(
-    await Bun.file(
-      new URL(`../migrations/${filename}`, import.meta.url),
-    ).text(),
-  );
-}
-
-function toD1(database: Database) {
-  return {
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const statement = {
-        all: async () => ({
-          results: database.query(query).all(...values),
-          success: true,
-        }),
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        first: async () => database.query(query).get(...values),
-        run: async () => {
-          const result = database.query(query).run(...values);
-          return { meta: { changes: result.changes }, success: true };
-        },
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
-}
-
-function createStorage(objects: Map<string, Uint8Array>) {
-  return {
-    get: async (key: string) => {
-      const content = objects.get(key);
-      if (!content) return null;
-      return {
-        arrayBuffer: async () => content.slice().buffer,
-        body: new Blob([content]).stream(),
-        httpEtag: '"test-etag"',
-        writeHttpMetadata: (headers: Headers) => {
-          headers.set("content-type", "application/octet-stream");
-        },
-      };
-    },
-  } as unknown as R2Bucket;
 }
