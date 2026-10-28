@@ -3,7 +3,7 @@ import { objects } from "./objects";
 import { memoryStorage, testBindings } from "./testing/bindings";
 import { toD1 } from "./testing/d1";
 import { applyMigrations, createTestDatabase } from "./testing/database";
-import { requester } from "./testing/http";
+import { requester, streamedUpload } from "./testing/http";
 import { seedMember, seedOrganization, seedUser } from "./testing/seed";
 import { testApp } from "./testing/session";
 
@@ -116,6 +116,24 @@ describe("organization uploads", () => {
         .query("SELECT id FROM deleted_object_cleanup WHERE id = ?")
         .get(uploadBody.object.id),
     ).toBeNull();
+  });
+});
+
+describe("upload limits", () => {
+  it("refuses an oversized upload while it streams", async () => {
+    const fixture = createFixture();
+    const fileBytes = 64 * 1024 * 1024;
+    const upload = streamedUpload(fileBytes);
+    const response = await fixture.first(
+      "POST",
+      "/",
+      upload.body,
+      upload.headers,
+    );
+    expect(response.status).toBe(413);
+    expect(upload.progress.cancelled).toBe(true);
+    expect(upload.progress.sentBytes).toBeLessThan(fileBytes);
+    expect(fixture.stored.size).toBe(2);
   });
 });
 

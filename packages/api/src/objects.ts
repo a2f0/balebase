@@ -4,11 +4,13 @@ import type { ApiEnv } from "./authMiddleware";
 import { maxFilenameBytes, normalizeFilename } from "./filenames";
 import { findLibraryFolder } from "./libraryFolders";
 import { respond } from "./respond";
+import { readBoundedForm } from "./storage";
 import type { StoredObjectRow } from "./types";
 import { toStoredObject } from "./types";
 
 const objects = new Hono<ApiEnv>();
 const maxUploadBytes = 25 * 1024 * 1024;
+const uploadTooLarge = "Files must be 25 MB or smaller.";
 const maxR2ObjectKeyBytes = 1_024;
 
 // Lists one folder's documents, or the documents at the library root.
@@ -37,20 +39,21 @@ objects.get("/", async (context) => {
 });
 
 objects.post("/", async (context) => {
-  const body = (await context.req.parseBody()) as {
-    file?: File | string;
-    folderId?: File | string;
-  };
-  const file = body.file;
+  const form = await readBoundedForm(context.req.raw, maxUploadBytes);
+  if (form === "too_large") {
+    return context.json({ error: uploadTooLarge }, 413);
+  }
+  const file = form?.get("file");
+  const folderField = form?.get("folderId");
   const folderId =
-    typeof body.folderId === "string" && body.folderId ? body.folderId : null;
+    typeof folderField === "string" && folderField ? folderField : null;
 
   if (!(file instanceof File)) {
     return context.json({ error: "A multipart file field is required." }, 400);
   }
 
   if (file.size > maxUploadBytes) {
-    return context.json({ error: "Files must be 25 MB or smaller." }, 413);
+    return context.json({ error: uploadTooLarge }, 413);
   }
 
   const id = crypto.randomUUID();

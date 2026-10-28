@@ -12,7 +12,7 @@ import { signing } from "./signing";
 import { memoryStorage, testBindings } from "./testing/bindings";
 import { queryHooks, toD1 } from "./testing/d1";
 import { createTestDatabase } from "./testing/database";
-import { requester } from "./testing/http";
+import { requester, streamedUpload } from "./testing/http";
 import { seedOrganization, seedUser } from "./testing/seed";
 import { type ApiTestEnv, withTestSession } from "./testing/session";
 
@@ -589,6 +589,21 @@ describe("contracts", () => {
     expect(fixture.emails).toEqual([]);
   });
 
+  it("refuses an oversized contract while it streams", async () => {
+    const fixture = await createFixture();
+    const fileBytes = 32 * 1024 * 1024;
+    const upload = streamedUpload(fileBytes);
+    const response = await fixture.request("/api/contracts", {
+      body: upload.body,
+      headers: upload.headers,
+      method: "POST",
+    });
+    expect(response.status).toBe(413);
+    expect(upload.progress.cancelled).toBe(true);
+    expect(upload.progress.sentBytes).toBeLessThan(fileBytes);
+    expect(fixture.stored.size).toBe(0);
+  });
+
   it("rejects adopted images that could not be stamped", async () => {
     const fixture = createFixture();
     const id = await fixture.prepare(solo());
@@ -1057,6 +1072,24 @@ describe("contract templates", () => {
       fixture.database.query("SELECT COUNT(*) AS count FROM contracts").get(),
     ).toEqual({ count: 0 });
     expect(fixture.stored.size).toBe(1);
+  });
+
+  it("refuses an oversized template while it streams", async () => {
+    const fixture = await createFixture();
+    const fileBytes = 32 * 1024 * 1024;
+    const upload = streamedUpload(fileBytes);
+    const response = await fixture.request("/api/contracts/templates", {
+      body: upload.body,
+      headers: upload.headers,
+      method: "POST",
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Contract templates must be 10 MB or smaller.",
+    });
+    expect(upload.progress.cancelled).toBe(true);
+    expect(upload.progress.sentBytes).toBeLessThan(fileBytes);
+    expect(fixture.stored.size).toBe(0);
   });
 
   it("scopes every template route to the active organization", async () => {

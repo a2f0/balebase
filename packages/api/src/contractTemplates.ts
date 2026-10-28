@@ -16,6 +16,7 @@ import {
 } from "./contractTemplateDefinition";
 import { normalizeFilename } from "./filenames";
 import { respond } from "./respond";
+import { readBoundedForm } from "./storage";
 
 type TemplateContext = Context<ApiEnv>;
 interface VersionRow {
@@ -42,6 +43,8 @@ interface DocumentInput {
 }
 
 const contractTemplates = new Hono<ApiEnv>();
+const maxDocumentBytes = 10 * 1024 * 1024;
+const documentTooLarge = "Contract templates must be 10 MB or smaller.";
 
 contractTemplates.get("/", async (context) => {
   const result = await context.env.DB.prepare(
@@ -61,8 +64,11 @@ contractTemplates.get("/", async (context) => {
 });
 
 contractTemplates.post("/", async (context) => {
-  const form = (await context.req.parseBody()) as { file?: File | string };
-  const document = await readDocument(form.file);
+  const form = await readBoundedForm(context.req.raw, maxDocumentBytes);
+  const document =
+    form === "too_large"
+      ? documentTooLarge
+      : await readDocument(form?.get("file"));
   if (typeof document === "string")
     return context.json({ error: document }, 400);
   const organizationId = context.get("organizationId");
@@ -377,8 +383,7 @@ function toDetail(row: VersionRow): ContractTemplate {
 
 async function readDocument(file: unknown): Promise<DocumentInput | string> {
   if (!(file instanceof File)) return "Choose a PDF to upload.";
-  if (file.size > 10 * 1024 * 1024)
-    return "Contract templates must be 10 MB or smaller.";
+  if (file.size > maxDocumentBytes) return documentTooLarge;
   const bytes = new Uint8Array(await file.arrayBuffer());
   try {
     const { pageCount } = await inspectPdf(bytes);

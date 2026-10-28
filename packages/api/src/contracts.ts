@@ -29,12 +29,14 @@ import {
 import { contractTemplates } from "./contractTemplates";
 import { normalizeFilename } from "./filenames";
 import { respond } from "./respond";
+import { readBoundedForm } from "./storage";
 
 type ContractContext = Context<ApiEnv>;
 
 // Stamping holds the document in memory several times over, so this stays
 // well inside a Worker's memory limit.
 const maxDocumentBytes = 10 * 1024 * 1024;
+const documentTooLarge = "Contracts must be 10 MB or smaller.";
 const manualReminderGapMs = 60 * 60 * 1000;
 
 interface SummaryRow {
@@ -80,17 +82,18 @@ contracts.get("/", async (context) => {
 
 // Uploads a PDF as a new draft.
 contracts.post("/", async (context) => {
-  const body = (await context.req.parseBody()) as {
-    file?: File | string;
-    title?: File | string;
-  };
-  const file = body.file;
+  const form = await readBoundedForm(context.req.raw, maxDocumentBytes);
+  if (form === "too_large") {
+    return context.json({ error: documentTooLarge }, 413);
+  }
+  const file = form?.get("file");
   if (!(file instanceof File)) {
     return context.json({ error: "Choose a PDF to upload." }, 400);
   }
   if (file.size > maxDocumentBytes) {
-    return context.json({ error: "Contracts must be 10 MB or smaller." }, 413);
+    return context.json({ error: documentTooLarge }, 413);
   }
+  const titleField = form?.get("title");
   const bytes = new Uint8Array(await file.arrayBuffer());
   let pageCount: number;
   try {
@@ -109,7 +112,7 @@ contracts.post("/", async (context) => {
     "contract.pdf",
   );
   const suppliedTitle =
-    typeof body.title === "string" ? body.title.trim().slice(0, 200) : "";
+    typeof titleField === "string" ? titleField.trim().slice(0, 200) : "";
   const title = suppliedTitle || filename.replace(/\.pdf$/i, "") || "Contract";
   const objectKey = `organizations/${organizationId}/contracts/${id}/original.pdf`;
   const now = new Date().toISOString();

@@ -23,6 +23,7 @@ import { sendPendingScreeningNotifications } from "./screeningNotifications";
 import { testBindings } from "./testing/bindings";
 import { queryHooks, toD1 } from "./testing/d1";
 import { applyMigrations, createTestDatabase } from "./testing/database";
+import { streamedUpload } from "./testing/http";
 import { seedAccount, seedMember, seedOrganization } from "./testing/seed";
 import { testApp } from "./testing/session";
 import type { Bindings } from "./types";
@@ -565,6 +566,24 @@ describe("employee forms", () => {
       .app("employee", "member")
       .request(`/${id}/document`, { body: form, method: "POST" });
     expect(upload.status).toBe(413);
+    expect(fixture.files.size).toBe(0);
+  });
+
+  it("refuses an oversized document while it streams", async () => {
+    const fixture = await createFixture();
+    const id = await createRequirement(fixture, "form", "W-4");
+    const fileBytes = 32 * 1024 * 1024;
+    const upload = streamedUpload(fileBytes);
+    const response = await fixture
+      .app("employee", "member")
+      .request(`/${id}/document`, {
+        body: upload.body,
+        headers: upload.headers,
+        method: "POST",
+      });
+    expect(response.status).toBe(413);
+    expect(upload.progress.cancelled).toBe(true);
+    expect(upload.progress.sentBytes).toBeLessThan(fileBytes);
     expect(fixture.files.size).toBe(0);
   });
 

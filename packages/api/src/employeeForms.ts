@@ -32,6 +32,7 @@ import {
 } from "./screeningDisclosures";
 import { sendScreeningRequest } from "./screeningMail";
 import { isUsStateCode, parseScreeningSubmission } from "./screeningSubmission";
+import { readBoundedForm } from "./storage";
 import type { Bindings } from "./types";
 import { respondToUnexpectedError } from "./unexpectedError";
 
@@ -67,7 +68,6 @@ interface RequirementRow {
 
 const employeeForms = new Hono<ApiEnv>();
 const maxDocumentBytes = 10 * 1024 * 1024;
-const maxMultipartBytes = maxDocumentBytes + 256 * 1024;
 const documentTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
 
 employeeForms.get("/", async (context) => {
@@ -279,10 +279,11 @@ employeeForms.post("/:id/document", async (context) => {
   if (row.kind !== "form") {
     return context.json({ error: "Only forms accept documents." }, 400);
   }
-  const file = await readBoundedDocumentFile(context.req.raw);
-  if (file === "too_large") {
+  const form = await readBoundedForm(context.req.raw, maxDocumentBytes);
+  if (form === "too_large") {
     return context.json({ error: "Files must be 10 MB or smaller." }, 413);
   }
+  const file = form?.get("file");
   if (!(file instanceof File) || !documentTypes.has(file.type)) {
     return context.json({ error: "Choose a PDF, JPEG, or PNG file." }, 400);
   }
@@ -365,39 +366,6 @@ employeeForms.post("/:id/document", async (context) => {
     status: "submitted",
   });
 });
-
-async function readBoundedDocumentFile(request: Request) {
-  const contentType = request.headers.get("content-type");
-  if (!contentType?.startsWith("multipart/form-data") || !request.body) {
-    return null;
-  }
-  const advertisedLength = Number(request.headers.get("content-length"));
-  if (advertisedLength > maxMultipartBytes) return "too_large";
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      totalBytes += value.byteLength;
-      if (totalBytes > maxMultipartBytes) {
-        await reader.cancel();
-        return "too_large";
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const parsed = await new Response(new Blob(chunks), {
-    headers: { "Content-Type": contentType },
-  })
-    .formData()
-    .catch(() => null);
-  const file = parsed?.get("file");
-  return file instanceof File ? file : null;
-}
 
 employeeForms.get("/:id/document", async (context) => {
   const row = await findRequirement(context);

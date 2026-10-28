@@ -4,6 +4,7 @@ import {
   refreshSubscription,
   type SubscriptionEnvironment,
 } from "./billingSubscriptions";
+import { readBoundedRequest } from "./storage";
 import { StripeConfigurationError, verifyStripeWebhook } from "./stripe";
 import {
   optionalExpandableId,
@@ -14,7 +15,6 @@ import {
   validEvent,
 } from "./stripePayload";
 import type { Bindings } from "./types";
-import { readWebhookPayload } from "./webhookPayload";
 
 const maxStripeWebhookBytes = 256 * 1024;
 const webhookClaimTimeoutMilliseconds = 5 * 60 * 1000;
@@ -22,7 +22,7 @@ const stripeWebhookReceiptCleanupLimit = 500;
 const stripeWebhookReceiptRetentionDays = 31;
 
 export async function handleStripeWebhook(context: Context<ApiEnv>) {
-  const payload = await readWebhookPayload(
+  const payload = await readBoundedRequest(
     context.req.raw,
     maxStripeWebhookBytes,
   );
