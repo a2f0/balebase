@@ -118,13 +118,13 @@ describe("useLoad", () => {
         useLoad(load, "Could not load."),
       { load },
     );
-    let reloaded: Promise<void> | undefined;
+    let reloaded: Promise<boolean> | undefined;
     await act(async () => {
       reloaded = hook.current().reload();
     });
     await act(async () => responses[1]?.resolve("fresh"));
     await act(async () => responses[0]?.resolve("stale"));
-    await reloaded;
+    expect(await reloaded).toBe(true);
     expect(hook.current().data).toBe("fresh");
   });
 

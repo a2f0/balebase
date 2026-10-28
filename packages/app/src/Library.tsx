@@ -175,7 +175,7 @@ function useLibraryData(folderId: string | undefined) {
 
 function useLibraryActions(
   folderId: string | undefined,
-  refresh: () => Promise<void>,
+  refresh: () => Promise<unknown>,
   onNavigate: (pathname: string) => void,
 ) {
   const action = useAction("Could not update the library.");

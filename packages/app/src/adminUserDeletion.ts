@@ -5,7 +5,7 @@ import { useState } from "react";
 import { api } from "./apiClient";
 import { useAction } from "./useAction";
 
-export function useAdminUserDeletion(reload: () => Promise<void>) {
+export function useAdminUserDeletion(reload: () => Promise<unknown>) {
   const [userId, setUserId] = useState<string>();
   const { error, notice, run } = useAction("Could not update user deletion.");
 

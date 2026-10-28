@@ -325,7 +325,7 @@ function useSyncStatusPolling(
   id: string,
   pending: boolean,
   setData: Dispatch<SetStateAction<FinanceConnectionDetail | undefined>>,
-  reload: () => Promise<void>,
+  reload: () => Promise<unknown>,
 ) {
   const [error, setError] = useState<string>();
   useEffect(() => {
