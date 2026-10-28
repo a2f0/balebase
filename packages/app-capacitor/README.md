@@ -140,8 +140,9 @@ it, a lane picks the next number as described under
 [build numbers](#build-numbers).
 
 Run the `build_release` and `upload_release` lanes from the repository root
-with `bun run mobile:build:<platform>` and `bun run mobile:upload:<platform>`,
-adding `:staging` for the staging app. Each runs
+with `bun run mobile:build:ios`, `bun run mobile:build:android`,
+`bun run mobile:upload:ios`, or `bun run mobile:upload:android`, adding
+`:staging` for the staging app. Each runs
 `scripts/lib/nativeRelease.sh <platform> <build|upload> <tier>`, which sets
 `NATIVE_RELEASE_TIER`, restores the Gradle wrapper on a fresh checkout, and
 passes its arguments to the lane. Uploads default to the store's next build
