@@ -1094,9 +1094,11 @@ describe("contract templates", () => {
     const template = await uploadTemplate(fixture);
     const path = `/api/contracts/templates/${template.id}`;
     await fixture.json("POST", `${path}/versions`, templateVersion(template));
-    fixture.hooks.before("INSERT INTO contract_fields", () => {
-      throw new Error("Database unavailable");
-    });
+    // Fail inside the batch, after the contract row is written, so only a
+    // rollback leaves no contract behind.
+    fixture.database.exec(`CREATE TEMP TRIGGER fail_contract_fields
+      BEFORE INSERT ON contract_fields
+      BEGIN SELECT RAISE(ABORT, 'Database unavailable'); END`);
     expect(
       (
         await fixture.request(`${path}/contracts`, {
@@ -1106,6 +1108,7 @@ describe("contract templates", () => {
         })
       ).status,
     ).toBe(500);
+    fixture.database.exec("DROP TRIGGER fail_contract_fields");
     expect(fixture.stored.size).toBe(1);
     expect(
       fixture.database.query("SELECT COUNT(*) AS count FROM contracts").get(),
