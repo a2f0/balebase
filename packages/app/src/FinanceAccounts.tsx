@@ -17,9 +17,8 @@ import type {
 } from "@balebase/validators/finance";
 import { syncPending } from "./financeConnectionActions";
 import { formatMoney } from "./financeFormat";
-import { financeConnectionPath } from "./financePages";
 import { countLabel, formatLabel } from "./labels";
-import { handleNavigation } from "./workspacePaths";
+import { financeConnectionPath, handleNavigation } from "./workspacePaths";
 
 interface ConnectionHandlers {
   busy: boolean;

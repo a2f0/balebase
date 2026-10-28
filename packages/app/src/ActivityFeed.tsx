@@ -19,13 +19,18 @@ import {
   EquipmentActivityDetails,
   equipmentActivitySummary,
 } from "./equipmentActivity";
-import { financeConnectionPath, financeTransactionPath } from "./financePages";
 import { InfiniteScroll } from "./InfiniteScroll";
-import { issuePath } from "./issuePaths";
-import { organizationPeoplePath } from "./organizationState";
 import { RecordActivityDetails } from "./recordActivity";
 import { useCursorPages } from "./useCursorPages";
-import { equipmentPath } from "./workspacePaths";
+import {
+  auditRunPath,
+  auditTemplatePath,
+  equipmentPath,
+  financeConnectionPath,
+  financeTransactionPath,
+  issuePath,
+  organizationPeoplePath,
+} from "./workspacePaths";
 
 const actionLabels: Record<string, string> = {
   "finance.daily_sync_changed": "changed daily sync",
@@ -441,10 +446,9 @@ function activityPath(event: ActivityEvent) {
   }
   if (event.root.type === "organization_member")
     return organizationPeoplePath(event.root.id);
-  if (event.root.type === "audit_run")
-    return `/audits/runs/${encodeURIComponent(event.root.id)}`;
+  if (event.root.type === "audit_run") return auditRunPath(event.root.id);
   if (event.root.type === "audit_template")
-    return `/audits/templates/${encodeURIComponent(event.root.id)}`;
+    return auditTemplatePath(event.root.id);
   return undefined;
 }
 

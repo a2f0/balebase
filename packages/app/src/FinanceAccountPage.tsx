@@ -23,10 +23,13 @@ import {
   formatImportedHistory,
   formatMoney,
 } from "./financeFormat";
-import { financeConnectionPath, financeTransactionPath } from "./financePages";
 import { formatLabel } from "./labels";
 import { useLoad } from "./useLoad";
-import { handleNavigation } from "./workspacePaths";
+import {
+  financeConnectionPath,
+  financeTransactionPath,
+  handleNavigation,
+} from "./workspacePaths";
 
 export function FinanceAccountPage({
   id,

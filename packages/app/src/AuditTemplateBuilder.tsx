@@ -27,10 +27,10 @@ import { ErrorToast } from "./ErrorToast";
 import type { ErrorNotice } from "./errors";
 import { GlobalAuditControls } from "./GlobalAuditControls";
 import { countLabel } from "./labels";
-import { globalAuditsPath } from "./organizationState";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
 import { moveEntry, useReorderDrag } from "./useReorderDrag";
+import { auditTemplatePath, globalAuditsPath } from "./workspacePaths";
 
 interface BuilderProps {
   id: string;
@@ -144,7 +144,7 @@ function useTemplateBuilder({
             : `Version ${saved.version} saved.`,
       );
       if (saved.id !== id) {
-        onNavigate(`/audits/templates/${encodeURIComponent(saved.id)}`);
+        onNavigate(auditTemplatePath(saved.id));
       }
       const { versions } = await loadVersions(saved.id, manageGlobal);
       setData((current) => current && { ...current, versions });

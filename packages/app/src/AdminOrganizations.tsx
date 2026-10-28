@@ -22,9 +22,12 @@ import { AdminOrganizationDetails } from "./AdminOrganizationDetails";
 import { formatDate, Identity } from "./adminDisplay";
 import { api } from "./apiClient";
 import { countLabel } from "./labels";
-import { adminOrganizationIdForPath } from "./organizationState";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
+import {
+  adminOrganizationIdForPath,
+  adminOrganizationPath,
+} from "./workspacePaths";
 
 interface AdminOrganizationAction {
   organizationId: string;
@@ -43,7 +46,7 @@ interface OrganizationTableActions extends OrganizationActions {
 
 export function AdminOrganizations({
   onNavigate,
-  pathname = "/root/organizations",
+  pathname = adminOrganizationPath(),
 }: {
   onNavigate: (pathname: string) => void;
   pathname?: string | undefined;
@@ -281,7 +284,7 @@ function OrganizationTableRow({
         <div className="adminIdentityText adminOrganization">
           <a
             className="adminOrganizationName adminOrganizationLink"
-            href={`/root/organizations/${encodeURIComponent(organization.id)}`}
+            href={adminOrganizationPath(organization.id)}
             onClick={(event) => {
               if (
                 event.button !== 0 ||
@@ -293,9 +296,7 @@ function OrganizationTableRow({
                 return;
               }
               event.preventDefault();
-              onNavigate(
-                `/root/organizations/${encodeURIComponent(organization.id)}`,
-              );
+              onNavigate(adminOrganizationPath(organization.id));
             }}
           >
             {organization.name}

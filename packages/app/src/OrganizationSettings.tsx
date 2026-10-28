@@ -25,11 +25,13 @@ import {
   canDeleteOrganization,
   canLeaveOrganizationWithOwnerCount,
   canManageOrganization,
-  organizationMemberIdForPath,
-  organizationSettingsPage,
   type WorkspaceOrganization,
 } from "./organizationState";
 import { useAction } from "./useAction";
+import {
+  organizationMemberIdForPath,
+  organizationSettingsPage,
+} from "./workspacePaths";
 
 type OrganizationGeneralAction = "delete" | "leave" | "save";
 

@@ -33,7 +33,6 @@ import { Finance } from "./Finance";
 import { FinanceAccountPage } from "./FinanceAccountPage";
 import { FinanceConnectionPage } from "./FinanceConnectionPage";
 import { FinanceTransactionPage } from "./FinanceTransactionPage";
-import { isFinancePath } from "./financePages";
 import { Inbox } from "./Inbox";
 import { Issues } from "./Issues";
 import { Library } from "./Library";
@@ -51,10 +50,6 @@ import { useOfflineSlot } from "./offlineSlot";
 import { lockOfflineWorkspace } from "./offlineStore";
 import {
   createOrganizationSlug,
-  isGlobalAuditsPath,
-  isOrganizationPath,
-  isRootAdminPath,
-  organizationPathRequiresAccess,
   resolveActiveOrganizationId,
   type WorkspaceOrganization,
 } from "./organizationState";
@@ -63,12 +58,12 @@ import { useOfflineRoute } from "./useOfflineRoute";
 import { useOrganizationAccess } from "./useOrganizationAccess";
 import { hasRole, WorkspaceShell, type WorkspaceUser } from "./WorkspaceShell";
 import {
-  decodeRecordId,
-  isBusinessesPath,
-  isContractsPath,
-  isEquipmentPath,
-  isMyDocumentsPath,
+  globalAuditsPath,
+  isRootAdminPath,
+  isWithin,
   movedWorkspacePath,
+  organizationPathRequiresAccess,
+  recordIdForPath,
   signingTokenForPath,
 } from "./workspacePaths";
 
@@ -431,7 +426,7 @@ function blockedWorkspaceContent(
     return <LoadingScreen />;
   }
   if (
-    isFinancePath(pathname) &&
+    isWithin(pathname, "/finance") &&
     !access.twoFactorRequirement &&
     !access.seatRequirement &&
     !access.can("finance")
@@ -571,7 +566,7 @@ function contentForPath(
   if (isWithin(pathname, "/audits")) {
     return <Audits onNavigate={navigate} pathname={pathname} />;
   }
-  if (isMyDocumentsPath(pathname)) {
+  if (isWithin(pathname, "/me")) {
     return (
       <MyDocuments
         onNavigate={navigate}
@@ -582,16 +577,16 @@ function contentForPath(
       />
     );
   }
-  if (isFinancePath(pathname)) {
+  if (isWithin(pathname, "/finance")) {
     return financeContent(pathname, navigate);
   }
-  if (isBusinessesPath(pathname)) {
+  if (isWithin(pathname, "/businesses")) {
     return <Businesses onNavigate={navigate} pathname={pathname} />;
   }
-  if (isContractsPath(pathname)) {
+  if (isWithin(pathname, "/contracts")) {
     return <Contracts onNavigate={navigate} pathname={pathname} />;
   }
-  if (isEquipmentPath(pathname)) {
+  if (isWithin(pathname, "/equipment")) {
     return <Equipment onNavigate={navigate} pathname={pathname} />;
   }
   if (pathname === "/inbox") {
@@ -612,7 +607,7 @@ function contentForPath(
       />
     );
   }
-  if (isOrganizationPath(pathname)) {
+  if (isWithin(pathname, "/organization")) {
     return (
       <OrganizationSettings
         activeOrganizationId={workspace.activeOrganizationId}
@@ -641,27 +636,26 @@ function contentForPath(
 }
 
 function financeContent(pathname: string, navigate: (path: string) => void) {
-  if (pathname.startsWith("/finance/accounts/"))
+  const accountId = recordIdForPath(pathname, "/finance/accounts");
+  if (accountId)
     return (
-      <FinanceAccountPage
-        key={pathname}
-        id={decodeRecordId(pathname.slice("/finance/accounts/".length))}
-        onNavigate={navigate}
-      />
+      <FinanceAccountPage key={pathname} id={accountId} onNavigate={navigate} />
     );
-  if (pathname.startsWith("/finance/connections/"))
+  const connectionId = recordIdForPath(pathname, "/finance/connections");
+  if (connectionId)
     return (
       <FinanceConnectionPage
         key={pathname}
-        id={decodeRecordId(pathname.slice("/finance/connections/".length))}
+        id={connectionId}
         onNavigate={navigate}
       />
     );
-  if (pathname.startsWith("/finance/transactions/"))
+  const transactionId = recordIdForPath(pathname, "/finance/transactions");
+  if (transactionId)
     return (
       <FinanceTransactionPage
         key={pathname}
-        id={decodeRecordId(pathname.slice("/finance/transactions/".length))}
+        id={transactionId}
         onNavigate={navigate}
       />
     );
@@ -674,7 +668,7 @@ function rootAdminContent(
 ) {
   if (pathname === "/root/jobs") return <AdminJobs />;
   if (pathname === "/root/users") return <AdminUsers />;
-  if (isGlobalAuditsPath(pathname)) {
+  if (isWithin(pathname, globalAuditsPath())) {
     return <AdminGlobalAudits onNavigate={navigate} pathname={pathname} />;
   }
   return <AdminOrganizations onNavigate={navigate} pathname={pathname} />;
@@ -683,7 +677,8 @@ function rootAdminContent(
 function rootAdminPage(pathname: string) {
   if (pathname === "/root/jobs") return "rootJobs" as const;
   if (pathname === "/root/users") return "rootUsers" as const;
-  if (isGlobalAuditsPath(pathname)) return "rootGlobalAudits" as const;
+  if (isWithin(pathname, globalAuditsPath()))
+    return "rootGlobalAudits" as const;
   return "rootOrganizations" as const;
 }
 
@@ -702,11 +697,6 @@ function initialPathname() {
   return moved;
 }
 
-/** The page at `base`, or a page beneath it. */
-function isWithin(pathname: string, base: string) {
-  return pathname === base || pathname.startsWith(`${base}/`);
-}
-
 function currentLocation() {
   return `${window.location.pathname}${window.location.search}${window.location.hash}`;
 }
@@ -718,17 +708,17 @@ function activePageFor(pathname: string) {
   if (isWithin(pathname, "/audits")) {
     return "audits" as const;
   }
-  if (isMyDocumentsPath(pathname)) return "myDocuments" as const;
-  if (isFinancePath(pathname)) return "finance" as const;
-  if (isBusinessesPath(pathname)) return "businesses" as const;
-  if (isContractsPath(pathname)) return "contracts" as const;
-  if (isEquipmentPath(pathname)) return "equipment" as const;
+  if (isWithin(pathname, "/me")) return "myDocuments" as const;
+  if (isWithin(pathname, "/finance")) return "finance" as const;
+  if (isWithin(pathname, "/businesses")) return "businesses" as const;
+  if (isWithin(pathname, "/contracts")) return "contracts" as const;
+  if (isWithin(pathname, "/equipment")) return "equipment" as const;
   if (pathname === "/inbox") return "inbox" as const;
   if (isRootAdminPath(pathname)) return rootAdminPage(pathname);
   if (pathname === "/account" || pathname === "/account/security") {
     return "account" as const;
   }
-  if (isOrganizationPath(pathname)) return "organization" as const;
+  if (isWithin(pathname, "/organization")) return "organization" as const;
   if (pathname === "/invite") return "organization" as const;
   return "library" as const;
 }

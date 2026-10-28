@@ -38,11 +38,10 @@ import {
   formatImportedHistory,
   formatMoney,
 } from "./financeFormat";
-import { financeAccountPath } from "./financePages";
 import { countLabel, formatLabel } from "./labels";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
-import { handleNavigation } from "./workspacePaths";
+import { financeAccountPath, handleNavigation } from "./workspacePaths";
 
 type Connection = FinanceConnectionDetail["connection"];
 

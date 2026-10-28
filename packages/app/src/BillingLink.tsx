@@ -1,7 +1,5 @@
 import { ButtonLink } from "@balebase/ui/react";
-import { handleNavigation } from "./workspacePaths";
-
-export const billingPath = "/organization/billing";
+import { billingPath, handleNavigation } from "./workspacePaths";
 
 /** Opens Billing in place; a modified click opens it in a new tab. */
 export function BillingLink({

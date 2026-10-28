@@ -1,65 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { formatMoney } from "./financeFormat";
-import {
-  categoryShare,
-  expenseCategoryFiltersFor,
-  financeAccountPath,
-  financeConnectionPath,
-  financeOverviewPath,
-  financePageFor,
-  isFinancePath,
-  presetRange,
-} from "./financePages";
-
-describe("finance pages", () => {
-  it("routes finance paths to their tabs", () => {
-    expect(isFinancePath("/finance")).toBe(true);
-    expect(isFinancePath("/finance/reports")).toBe(true);
-    expect(isFinancePath("/financed")).toBe(false);
-    expect(financePageFor("/finance")).toBe("overview");
-    expect(financePageFor("/finance/reports")).toBe("reports");
-    expect(financePageFor("/finance/categories")).toBe("categories");
-    expect(financePageFor("/finance/connections")).toBe("connections");
-    expect(financePageFor("/finance/unknown")).toBe("overview");
-    expect(financePageFor("/finance/expenses/category/meals")).toBe("overview");
-  });
-
-  it("links to connection and account pages by raw id", () => {
-    expect(financeConnectionPath("item/1")).toBe(
-      "/finance/connections/item%2F1",
-    );
-    expect(financeAccountPath("account/1")).toBe(
-      "/finance/accounts/account%2F1",
-    );
-  });
-
-  it("maps expense category paths to and from their filters", () => {
-    const none = { categorySlug: null, uncategorized: false };
-    const uncategorized = { categorySlug: null, uncategorized: true };
-    const meals = { categorySlug: "meals-2", uncategorized: false };
-    expect(financeOverviewPath(none)).toBe("/finance");
-    expect(financeOverviewPath(uncategorized)).toBe(
-      "/finance/expenses/category/uncategorized",
-    );
-    expect(financeOverviewPath(meals)).toBe(
-      "/finance/expenses/category/meals-2",
-    );
-    for (const filters of [none, uncategorized, meals]) {
-      expect(expenseCategoryFiltersFor(financeOverviewPath(filters))).toEqual(
-        filters,
-      );
-    }
-    expect(expenseCategoryFiltersFor("/finance/expenses/category/")).toEqual(
-      none,
-    );
-    expect(
-      expenseCategoryFiltersFor("/finance/expenses/category/caf%C3%A9"),
-    ).toEqual({ categorySlug: "café", uncategorized: false });
-    expect(expenseCategoryFiltersFor("/finance/expenses/category/%E0")).toEqual(
-      { categorySlug: "%E0", uncategorized: false },
-    );
-  });
-});
+import { categoryShare, presetRange } from "./financePages";
 
 describe("expense report ranges", () => {
   const today = new Date(2026, 8, 22);

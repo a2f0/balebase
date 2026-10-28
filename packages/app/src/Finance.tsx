@@ -37,13 +37,6 @@ import {
   confirmDisconnect,
   syncNotice,
 } from "./financeConnectionActions";
-import {
-  expenseCategoryFiltersFor,
-  type FinancePage,
-  financeOverviewPath,
-  financePageFor,
-  financePages,
-} from "./financePages";
 import { selectFinanceAccount } from "./financeTransactions";
 import { useAction } from "./useAction";
 import {
@@ -51,7 +44,14 @@ import {
   initialFilters,
   useFinanceData,
 } from "./useFinanceData";
-import { handleNavigation } from "./workspacePaths";
+import {
+  expenseCategoryFiltersFor,
+  type FinancePage,
+  financeOverviewPath,
+  financePageFor,
+  financePages,
+  handleNavigation,
+} from "./workspacePaths";
 
 const linkTokenStorageKey = "balebase.plaid.linkToken";
 

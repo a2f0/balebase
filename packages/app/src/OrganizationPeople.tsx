@@ -58,12 +58,15 @@ import {
   canManageOrganization,
   editableOrganizationRoles,
   type OrganizationInvitationRole,
-  organizationPeoplePath,
   type WorkspaceOrganization,
 } from "./organizationState";
 import { useAction } from "./useAction";
 import { useFocusWhenFolded } from "./useFocusWhenFolded";
-import { handleNavigation, myDocumentsPath } from "./workspacePaths";
+import {
+  handleNavigation,
+  myDocumentsPath,
+  organizationPeoplePath,
+} from "./workspacePaths";
 
 /**
  * The first invitation is sent from an open form. Once anyone else has joined

@@ -20,6 +20,7 @@ import { formatDate, Identity } from "./adminDisplay";
 import { api } from "./apiClient";
 import { countLabel } from "./labels";
 import { useLoad } from "./useLoad";
+import { adminOrganizationPath } from "./workspacePaths";
 
 export function AdminOrganizationDetails({
   onNavigate,
@@ -50,7 +51,7 @@ export function AdminOrganizationDetails({
         }
         back={
           <Button
-            onClick={() => onNavigate("/root/organizations")}
+            onClick={() => onNavigate(adminOrganizationPath())}
             size="sm"
             variant="link"
           >

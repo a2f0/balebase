@@ -4,6 +4,7 @@ import { IssueForm } from "./IssueForm";
 import { type OfflineWorkspace, offlineImage } from "./offlineStore";
 import { createOfflineIssue } from "./offlineWork";
 import { useUnsavedChanges } from "./unsavedChanges";
+import { issuePath } from "./workspacePaths";
 
 export function OfflineIssueCreator({
   workspace,
@@ -86,9 +87,7 @@ export function OfflineIssueList({
             </div>
             {workspace.jobs.find((job) => job.id === issue.operation.id)
               ?.status === "synced" && (
-              <Button
-                onClick={() => onNavigate(`/issues/${issue.operation.id}`)}
-              >
+              <Button onClick={() => onNavigate(issuePath(issue.operation.id))}>
                 Open synced issue
               </Button>
             )}

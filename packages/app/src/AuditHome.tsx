@@ -32,6 +32,7 @@ import { countLabel, formatLabel } from "./labels";
 import { useAction } from "./useAction";
 import { useCursorPages } from "./useCursorPages";
 import { useLoad } from "./useLoad";
+import { auditRunPath, auditTemplatePath } from "./workspacePaths";
 
 export function AuditHome({
   onNavigate,
@@ -56,7 +57,7 @@ export function AuditHome({
     await creating.run(async () => {
       const { template } =
         await api.audits.createTemplate("Untitled checklist");
-      onNavigate(`/audits/templates/${template.id}`);
+      onNavigate(auditTemplatePath(template.id));
     });
   }
 
@@ -64,7 +65,7 @@ export function AuditHome({
     creating.setError(undefined);
     await starting.run(async () => {
       const { auditId } = await api.audits.start(templateId);
-      onNavigate(`/audits/runs/${auditId}`);
+      onNavigate(auditRunPath(auditId));
     });
   }
 
@@ -85,7 +86,7 @@ export function AuditHome({
         <TemplateLibrary
           busy={busy}
           onBegin={beginAudit}
-          onEdit={(id) => onNavigate(`/audits/templates/${id}`)}
+          onEdit={(id) => onNavigate(auditTemplatePath(id))}
           onViewChange={changeTemplateView}
           templates={templates.data}
           view={templateView}
@@ -95,7 +96,7 @@ export function AuditHome({
           loadingMore={runList.loadingMore}
           nextCursor={runList.nextCursor}
           onLoadMore={runList.loadMore}
-          onOpen={(id) => onNavigate(`/audits/runs/${id}`)}
+          onOpen={(id) => onNavigate(auditRunPath(id))}
           onViewChange={runList.changeView}
           runs={runList.items}
           view={runList.view}

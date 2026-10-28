@@ -25,10 +25,13 @@ import {
   canManageOrganization,
   editableOrganizationRoles,
   type OrganizationInvitationRole,
-  organizationPeoplePath,
   type WorkspaceOrganization,
 } from "./organizationState";
-import { handleNavigation, myDocumentsPath } from "./workspacePaths";
+import {
+  handleNavigation,
+  myDocumentsPath,
+  organizationPeoplePath,
+} from "./workspacePaths";
 
 /**
  * One member: who they are, their role and two-factor requirement, and, for

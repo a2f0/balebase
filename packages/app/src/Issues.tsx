@@ -16,13 +16,16 @@ import { useCallback, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
 import { api } from "./apiClient";
 import { errorMessage } from "./errors";
-import { financeTransactionPath } from "./financePages";
 import { IssueForm } from "./IssueForm";
 import { IssueImages } from "./IssueImages";
 import { IssueList } from "./IssueList";
-import { issuePath } from "./issuePaths";
 import { useLoad } from "./useLoad";
-import { decodeRecordId } from "./workspacePaths";
+import {
+  auditRunPath,
+  financeTransactionPath,
+  issuePath,
+  recordIdForPath,
+} from "./workspacePaths";
 
 export function Issues({
   pathname,
@@ -33,26 +36,18 @@ export function Issues({
   onNavigate: (path: string) => void;
   canAccessFinance: boolean;
 }) {
-  if (pathname === "/issues/new")
-    return <NewIssue key={pathname} onNavigate={onNavigate} />;
-  const transaction = /^\/issues\/new\/transactions\/([^/]+)$/.exec(pathname);
-  if (transaction)
+  const transactionId = recordIdForPath(pathname, "/issues/new/transactions");
+  if (transactionId)
     return (
       <NewIssue
         key={pathname}
-        transactionId={decodeRecordId(transaction[1] ?? "")}
+        transactionId={transactionId}
         onNavigate={onNavigate}
       />
     );
-  const match = /^\/issues\/([^/]+)$/.exec(pathname);
-  if (match)
-    return (
-      <IssueDetail
-        key={pathname}
-        id={decodeRecordId(match[1] ?? "")}
-        onNavigate={onNavigate}
-      />
-    );
+  const id = recordIdForPath(pathname, "/issues");
+  if (id === "new") return <NewIssue key={pathname} onNavigate={onNavigate} />;
+  if (id) return <IssueDetail key={pathname} id={id} onNavigate={onNavigate} />;
   return (
     <IssuesIndex canAccessFinance={canAccessFinance} onNavigate={onNavigate} />
   );
@@ -339,7 +334,7 @@ function IssueSource({
   const path =
     source.type === "finance_transaction"
       ? financeTransactionPath(source.id)
-      : `/audits/runs/${encodeURIComponent(source.id)}`;
+      : auditRunPath(source.id);
   return (
     <Banner
       icon={source.type === "finance_transaction" ? "finance" : "audits"}

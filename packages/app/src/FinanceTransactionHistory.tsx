@@ -21,11 +21,14 @@ import type { LinkedEmail } from "@balebase/validators/inbox";
 import { type FormEvent, useState } from "react";
 import { FinanceTransactionFilters } from "./FinanceTransactionFilters";
 import { formatMoney } from "./financeFormat";
-import { financeTransactionPath } from "./financePages";
 import { InfiniteScroll } from "./InfiniteScroll";
-import { transactionIssuePath } from "./issuePaths";
 import { formatLabel } from "./labels";
-import { handleNavigation, inboxEmailPath } from "./workspacePaths";
+import {
+  financeTransactionPath,
+  handleNavigation,
+  inboxEmailPath,
+  transactionIssuePath,
+} from "./workspacePaths";
 
 interface AnnotationHandlers {
   busy: boolean;

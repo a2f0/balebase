@@ -36,6 +36,7 @@ import {
   contractPath,
   contractTemplatePath,
   handleNavigation,
+  isWithin,
 } from "./workspacePaths";
 
 export function Contracts({
@@ -45,10 +46,7 @@ export function Contracts({
   onNavigate: (pathname: string) => void;
   pathname: string;
 }) {
-  if (
-    pathname === contractTemplatePath() ||
-    pathname.startsWith(`${contractTemplatePath()}/`)
-  )
+  if (isWithin(pathname, contractTemplatePath()))
     return <ContractTemplates onNavigate={onNavigate} pathname={pathname} />;
   const contractId = contractIdForPath(pathname);
   // Keyed so each page starts fresh and ignores the other's late responses.

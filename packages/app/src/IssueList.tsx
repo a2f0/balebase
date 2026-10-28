@@ -10,10 +10,9 @@ import {
 import { useCallback } from "react";
 import { api } from "./apiClient";
 import { InfiniteScroll } from "./InfiniteScroll";
-import { issuePath } from "./issuePaths";
 import { formatLabel } from "./labels";
 import { useCursorPages } from "./useCursorPages";
-import { handleNavigation } from "./workspacePaths";
+import { handleNavigation, issuePath } from "./workspacePaths";
 
 export function IssueList({
   filters,

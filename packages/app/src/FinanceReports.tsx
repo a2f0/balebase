@@ -19,13 +19,13 @@ import { errorMessage } from "./errors";
 import { formatMoney } from "./financeFormat";
 import {
   categoryShare,
-  financeOverviewPath,
   presetRange,
   type ReportPreset,
   type ReportRange,
   reportPresets,
 } from "./financePages";
 import { countLabel } from "./labels";
+import { financeOverviewPath } from "./workspacePaths";
 
 export function FinanceReports({
   onNavigate,

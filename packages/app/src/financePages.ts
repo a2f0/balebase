@@ -1,65 +1,3 @@
-import type { FinanceFilters } from "@balebase/api-client";
-import { decodeRecordId } from "./workspacePaths";
-
-export type FinancePage = "categories" | "connections" | "overview" | "reports";
-
-export const financePages: {
-  label: string;
-  page: FinancePage;
-  path: string;
-}[] = [
-  { label: "Overview", page: "overview", path: "/finance" },
-  { label: "Reports", page: "reports", path: "/finance/reports" },
-  { label: "Categories", page: "categories", path: "/finance/categories" },
-  { label: "Connections", page: "connections", path: "/finance/connections" },
-];
-
-export function isFinancePath(pathname: string) {
-  return pathname === "/finance" || pathname.startsWith("/finance/");
-}
-
-/** Expense category paths and unknown finance subpaths show the overview. */
-export function financePageFor(pathname: string): FinancePage {
-  return (
-    financePages.find(({ path }) => path !== "/finance" && path === pathname)
-      ?.page ?? "overview"
-  );
-}
-
-const expenseCategoryPrefix = "/finance/expenses/category/";
-/** The API never gives a category this slug. */
-const uncategorizedSlug = "uncategorized";
-
-type ExpenseCategoryFilters = Pick<
-  FinanceFilters,
-  "categorySlug" | "uncategorized"
->;
-
-/** The overview path that bookmarks a category or the uncategorized bucket. */
-export function financeOverviewPath({
-  categorySlug,
-  uncategorized,
-}: ExpenseCategoryFilters) {
-  if (uncategorized) return `${expenseCategoryPrefix}${uncategorizedSlug}`;
-  if (categorySlug) {
-    return `${expenseCategoryPrefix}${encodeURIComponent(categorySlug)}`;
-  }
-  return "/finance";
-}
-
-/** The category filters an overview path selects; plain /finance selects none. */
-export function expenseCategoryFiltersFor(
-  pathname: string,
-): ExpenseCategoryFilters {
-  const slug = pathname.startsWith(expenseCategoryPrefix)
-    ? decodeRecordId(pathname.slice(expenseCategoryPrefix.length))
-    : "";
-  if (slug === uncategorizedSlug) {
-    return { categorySlug: null, uncategorized: true };
-  }
-  return { categorySlug: slug || null, uncategorized: false };
-}
-
 export type ReportPreset =
   | "all-time"
   | "custom"
@@ -118,16 +56,4 @@ function isoDate(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${date.getFullYear()}-${month}-${day}`;
-}
-
-export function financeAccountPath(id: string) {
-  return `/finance/accounts/${encodeURIComponent(id)}`;
-}
-
-export function financeConnectionPath(id: string) {
-  return `/finance/connections/${encodeURIComponent(id)}`;
-}
-
-export function financeTransactionPath(id: string) {
-  return `/finance/transactions/${encodeURIComponent(id)}`;
 }
