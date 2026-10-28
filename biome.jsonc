@@ -88,23 +88,7 @@
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
-                "maxLines": 945,
-                "skipBlankLines": true
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "includes": ["packages/api/src/audits.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noExcessiveLinesPerFile": {
-              "level": "error",
-              "options": {
-                "maxLines": 819,
+                "maxLines": 864,
                 "skipBlankLines": true
               }
             }
@@ -120,7 +104,7 @@
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
-                "maxLines": 2388,
+                "maxLines": 2117,
                 "skipBlankLines": true
               }
             }
@@ -136,7 +120,7 @@
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
-                "maxLines": 1202,
+                "maxLines": 842,
                 "skipBlankLines": true
               }
             }
@@ -168,7 +152,7 @@
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
-                "maxLines": 1519,
+                "maxLines": 1202,
                 "skipBlankLines": true
               }
             }
@@ -184,39 +168,7 @@
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
-                "maxLines": 988,
-                "skipBlankLines": true
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "includes": ["packages/app/src/Equipment.tsx"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noExcessiveLinesPerFile": {
-              "level": "error",
-              "options": {
-                "maxLines": 808,
-                "skipBlankLines": true
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "includes": ["packages/app/src/OrganizationPeople.tsx"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noExcessiveLinesPerFile": {
-              "level": "error",
-              "options": {
-                "maxLines": 824,
+                "maxLines": 819,
                 "skipBlankLines": true
               }
             }
