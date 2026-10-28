@@ -19,6 +19,7 @@ import { OrganizationBilling } from "./OrganizationBilling";
 import { OrganizationAccessSettings } from "./OrganizationGroups";
 import { OrganizationMemberDetail } from "./OrganizationMemberDetail";
 import { OrganizationPeople } from "./OrganizationPeople";
+import { formatRole } from "./organizationPeopleState";
 import {
   canDeleteOrganization,
   canLeaveOrganizationWithOwnerCount,
@@ -530,15 +531,6 @@ function handleNavigation(
   }
   event.preventDefault();
   onNavigate(pathname);
-}
-
-function formatRole(role: string) {
-  return role
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .map((value) => value.charAt(0).toUpperCase() + value.slice(1))
-    .join(", ");
 }
 
 function messageFrom(cause: unknown) {

@@ -66,8 +66,8 @@ export async function dispatchJob(env: Bindings, jobId: string) {
   try {
     // The existing wire field is named jobId; it identifies a run, not its job type.
     await env.FINANCE_SYNC_QUEUE.send({ jobId });
-  } catch {
-    console.error({ event: "job_dispatch_failed", jobId });
+  } catch (error) {
+    console.error({ event: "job_dispatch_failed", jobId }, error);
     // D1 is the outbox. The five-minute scheduler retries delivery.
   }
 }

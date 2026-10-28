@@ -78,7 +78,8 @@ Capacitor CLI's `xcode@3.0.1` requires UUID 7. Its exact-parent override
 selects the patched CommonJS-compatible 11.1.1 release for
 [GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq).
 Xcode's only UUID call is `v4()` without arguments; the advisory affects other
-UUID methods with caller-provided buffers. `bun run test:xcode` loads UUID through
+UUID methods with caller-provided buffers.
+`packages/app-capacitor/tests/xcodeUuidOverride.test.ts` loads UUID through
 the installed Capacitor CLI's Xcode dependency and checks project ID generation,
 parse/add/write/reparse behavior, and output-buffer bounds. It runs in the normal
 test and CI gate without requiring Xcode. Also run mobile sync and an unsigned

@@ -163,8 +163,14 @@ export async function removeOrganizationMember(
   }
 }
 
+/** Members can hold several comma-separated roles, such as "admin,owner". */
 export function formatRole(role: string) {
-  return role.charAt(0).toUpperCase() + role.slice(1);
+  return role
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => value.charAt(0).toUpperCase() + value.slice(1))
+    .join(", ");
 }
 
 function messageFrom(cause: unknown) {

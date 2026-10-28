@@ -25,7 +25,6 @@ import { billing, handleStripeWebhook, syncOrganizationSeats } from "./billing";
 import { businesses } from "./businesses";
 import { handleCheckrWebhook } from "./checkrSync";
 import { contracts } from "./contracts";
-import { captureApiError } from "./diagnostics";
 import { employeeForms } from "./employeeForms";
 import { equipment } from "./equipment";
 import { finance } from "./finance";
@@ -40,6 +39,7 @@ import { organizationSettings } from "./organizationSettings";
 import { respond } from "./respond";
 import { signing } from "./signing";
 import type { Bindings } from "./types";
+import { respondToUnexpectedError } from "./unexpectedError";
 import { userDeletion } from "./userDeletion";
 
 const apiVersionHeader = "API-Version";
@@ -286,16 +286,6 @@ app.route("/api/objects", objects);
 
 app.notFound((context) => context.json({ error: "Not found." }, 404));
 
-app.onError((error, context) => {
-  console.error(error);
-  // Local tests have no execution context; a release Worker always does.
-  const report = captureApiError(error, "request-error");
-  try {
-    context.executionCtx.waitUntil(report);
-  } catch {
-    void report;
-  }
-  return context.json({ error: "Unexpected server error." }, 500);
-});
+app.onError(respondToUnexpectedError);
 
 export { app };

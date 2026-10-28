@@ -33,6 +33,35 @@ test("production Worker entrypoints report failures without changing their behav
         await Promise.all(pending);
         expect(reports.at(-1)).toEqual({ error: requestError, source: "request-error" });
       });
+      test("routers with their own error handlers still report unexpected errors", async () => {
+        const { Hono } = await import("hono");
+        const { createFinanceRouter } = await import(${JSON.stringify(resolve(import.meta.dir, "finance.ts"))});
+        const { employeeForms } = await import(${JSON.stringify(resolve(import.meta.dir, "employeeForms.ts"))});
+        const plaidError = new TypeError("Plaid transport failure");
+        const databaseError = new Error("database unavailable");
+        const routes = new Hono();
+        routes.use("*", async (context, next) => {
+          context.set("organizationId", "org-1");
+          context.set("organizationRole", "owner");
+          context.set("authSession", { session: { activeOrganizationId: "org-1" }, user: { id: "user-1", role: "user" } });
+          await next();
+        });
+        routes.route("/finance", createFinanceRouter(async () => { throw plaidError; }));
+        routes.route("/employee-forms", employeeForms);
+        const cases = [
+          [new Request("https://example.com/finance/link-token", { method: "POST" }), { PLAID_TOKEN_ENCRYPTION_KEY: "key" }, plaidError],
+          [new Request("https://example.com/employee-forms"), { DB: { prepare() { throw databaseError; } } }, databaseError],
+        ];
+        for (const [request, env, error] of cases) {
+          const pending = [];
+          const response = await routes.fetch(request, env, { waitUntil: (promise) => pending.push(promise) });
+          expect(response.status).toBe(500);
+          expect(await response.json()).toEqual({ error: "Unexpected server error." });
+          expect(pending).toHaveLength(1);
+          await Promise.all(pending);
+          expect(reports.at(-1)).toEqual({ error, source: "request-error" });
+        }
+      });
       test("email failure is reported and rethrown", async () => {
         await expect(worker.email({}, {})).rejects.toBe(emailError);
         expect(reports.at(-1)).toEqual({ error: emailError, source: "email-error" });

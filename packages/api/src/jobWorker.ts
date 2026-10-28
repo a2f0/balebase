@@ -23,11 +23,11 @@ export async function consumeJobs(
         await runMaintenanceJob(env.DB, job, task);
       }
       message.ack();
-    } catch {
-      console.error({
-        event: "job_delivery_failed",
-        jobId: message.body.jobId,
-      });
+    } catch (error) {
+      console.error(
+        { event: "job_delivery_failed", jobId: message.body.jobId },
+        error,
+      );
       message.retry({ delaySeconds: 60 });
     }
   }

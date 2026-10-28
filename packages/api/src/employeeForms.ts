@@ -32,6 +32,7 @@ import {
 import { sendScreeningRequest } from "./screeningMail";
 import { isUsStateCode, parseScreeningSubmission } from "./screeningSubmission";
 import type { Bindings } from "./types";
+import { respondToUnexpectedError } from "./unexpectedError";
 
 interface RequirementRow {
   id: string;
@@ -664,11 +665,11 @@ employeeForms.get("/:id/checkr/consent", async (context) => {
 });
 
 employeeForms.onError((error, context) => {
-  console.error(error);
   if (error instanceof CheckrRequestError) {
+    console.error(error);
     return context.json({ error: error.message }, 502);
   }
-  return context.json({ error: "Unexpected server error." }, 500);
+  return respondToUnexpectedError(error, context);
 });
 
 interface ScreeningSubjectRow {
