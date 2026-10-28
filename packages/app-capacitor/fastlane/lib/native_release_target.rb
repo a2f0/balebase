@@ -1,46 +1,27 @@
 # frozen_string_literal: true
 
 require 'dotenv'
+require 'json'
 require 'uri'
 
-NATIVE_RELEASE_TARGETS = {
-  'production' => {
-    android_build_variant: 'release',
-    api_host: 'api.balebase.com',
-    app_host: 'app.balebase.com',
-    app_identifier: 'com.balebase.app',
-    capacitor_sync_script: 'cap:sync:release',
-    ios_archive_name: 'Balebase.xcarchive',
-    ios_configuration: 'Release',
-    ios_ipa_name: 'Balebase.ipa',
-    ios_output_directory: 'output',
-    ios_scheme: 'App',
-    secrets_tier: 'prod'
-  }.freeze,
-  'staging' => {
-    android_build_variant: 'staging',
-    api_host: 'api-staging.balebase.com',
-    app_host: 'app-staging.balebase.com',
-    app_identifier: 'com.balebase.staging.app',
-    capacitor_sync_script: 'cap:sync:staging',
-    ios_archive_name: 'Balebase-Staging.xcarchive',
-    ios_configuration: 'Release-Staging',
-    ios_ipa_name: 'Balebase-Staging.ipa',
-    ios_output_directory: 'output/staging',
-    ios_scheme: 'App-Staging',
-    secrets_tier: 'staging'
-  }.freeze
-}.freeze
+NATIVE_PACKAGE_DIR = File.expand_path('../..', __dir__)
+NATIVE_REPO_ROOT = File.expand_path('../..', NATIVE_PACKAGE_DIR)
 
-NATIVE_RELEASE_TIER = ENV.fetch('NATIVE_RELEASE_TIER', 'production').strip.downcase
+# nativeReleaseTargets.json defines each store tier once, for the Capacitor and
+# Vite configs and Gradle as well. Its camelCase keys become snake_case symbols.
+NATIVE_RELEASE_TARGETS_CONFIG = JSON.parse(File.read(File.join(NATIVE_PACKAGE_DIR, 'nativeReleaseTargets.json')))
+NATIVE_RELEASE_TARGETS = NATIVE_RELEASE_TARGETS_CONFIG.fetch('tiers').transform_values do |target|
+  target.to_h { |key, value| [key.gsub(/[A-Z]/) { "_#{it.downcase}" }.to_sym, value.freeze] }.freeze
+end.freeze
+
+NATIVE_RELEASE_DEFAULT_TIER = NATIVE_RELEASE_TARGETS_CONFIG.fetch('defaultTier')
+NATIVE_RELEASE_TIER = ENV.fetch('NATIVE_RELEASE_TIER', NATIVE_RELEASE_DEFAULT_TIER).strip.downcase
 NATIVE_RELEASE_TARGET = NATIVE_RELEASE_TARGETS.fetch(NATIVE_RELEASE_TIER) do
   raise "Unknown NATIVE_RELEASE_TIER=#{NATIVE_RELEASE_TIER.inspect}. " \
         "Expected #{NATIVE_RELEASE_TARGETS.keys.join(' or ')}."
 end
 NATIVE_APP_IDENTIFIER = NATIVE_RELEASE_TARGET.fetch(:app_identifier)
 NATIVE_CAPACITOR_SYNC_SCRIPT = NATIVE_RELEASE_TARGET.fetch(:capacitor_sync_script)
-NATIVE_PACKAGE_DIR = File.expand_path('../..', __dir__)
-NATIVE_REPO_ROOT = File.expand_path('../..', NATIVE_PACKAGE_DIR)
 
 def native_release_tier_secrets_dir(tier)
   File.join(NATIVE_REPO_ROOT, '.secrets', NATIVE_RELEASE_TARGETS.fetch(tier).fetch(:secrets_tier))

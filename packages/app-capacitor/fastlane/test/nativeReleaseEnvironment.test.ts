@@ -116,41 +116,51 @@ describe("native release environments", () => {
     });
   });
 
-  test("validates service URLs after dotenv and explicit values resolve", async () => {
-    await expect(
-      readNativeReleaseEnvironment("", "", {
-        VITE_API_URL: "https://api-staging.balebase.com/v1",
-        VITE_APP_URL: "https://app-staging.balebase.com",
-      }),
-    ).resolves.toMatchObject(stagingTarget);
+  // Both tiers apply the same rules, each to its own hosts.
+  for (const [tier, own, other] of [
+    ["production", "", "-staging"],
+    ["staging", "-staging", ""],
+  ] as const) {
+    test(`validates ${tier} service URLs after dotenv and explicit values resolve`, async () => {
+      const read = (environment: Record<string, string>) =>
+        readNativeReleaseEnvironment("", "", environment, tier);
 
-    await expect(
-      readNativeReleaseEnvironment("", "", {
-        VITE_API_URL: "https://api.balebase.com",
-      }),
-    ).rejects.toThrow(
-      "VITE_API_URL must use api-staging.balebase.com for a staging release.",
-    );
+      await expect(
+        read({
+          VITE_API_URL: `https://API${own}.balebase.com./v1`,
+          VITE_APP_URL: `https://app${own}.balebase.com`,
+        }),
+      ).resolves.toMatchObject({
+        environment: {
+          VITE_API_URL: `https://API${own}.balebase.com./v1`,
+          VITE_APP_URL: `https://app${own}.balebase.com`,
+        },
+      });
 
-    await expect(
-      readNativeReleaseEnvironment(
-        "",
-        "",
-        { VITE_APP_URL: "https://app-staging.balebase.com" },
-        null,
-      ),
-    ).rejects.toThrow(
-      "VITE_APP_URL must use app.balebase.com for a production release.",
-    );
-
-    await expect(
-      readNativeReleaseEnvironment("", "", {
-        VITE_APP_URL: "http://app-staging.balebase.com",
-      }),
-    ).rejects.toThrow("VITE_APP_URL must use the https scheme.");
-
-    await expect(
-      readNativeReleaseEnvironment("", "", { VITE_API_URL: "https://" }),
-    ).rejects.toThrow("VITE_API_URL must be an absolute URL with a host.");
-  });
+      for (const [environment, message] of [
+        [
+          { VITE_API_URL: `https://api${other}.balebase.com` },
+          `VITE_API_URL must use api${own}.balebase.com for a ${tier} release.`,
+        ],
+        [
+          { VITE_APP_URL: `https://app${other}.balebase.com` },
+          `VITE_APP_URL must use app${own}.balebase.com for a ${tier} release.`,
+        ],
+        [
+          { VITE_API_URL: "https://localhost:8787" },
+          `VITE_API_URL must use api${own}.balebase.com for a ${tier} release.`,
+        ],
+        [
+          { VITE_APP_URL: `http://app${own}.balebase.com` },
+          "VITE_APP_URL must use the https scheme.",
+        ],
+        [
+          { VITE_API_URL: "https://" },
+          "VITE_API_URL must be an absolute URL with a host.",
+        ],
+      ] as const) {
+        await expect(read(environment)).rejects.toThrow(message);
+      }
+    });
+  }
 });
