@@ -8,8 +8,6 @@ import type {
 import { type ActivityActor, activityBatch } from "./activity";
 import { parseAuditDefinition } from "./auditDefinition";
 import { isRecord, validText } from "./jsonInput";
-import { nfpa70eStarter } from "./nfpa70eStarter";
-import { residentialCoreStarter } from "./residentialAuditLibrary";
 
 export interface TemplateRow {
   created_at: string;
@@ -72,7 +70,8 @@ export const templateSelect = `
 export const staleTemplateError =
   "This template has a newer version. Reload it before saving.";
 
-const auditLibraryActor = {
+/** Created by migration 0033; attributed with the built-in templates. */
+export const auditLibraryActor = {
   email: "audit-library@system.invalid",
   id: "system:audit-library",
   name: "Stealth audit library",
@@ -242,54 +241,6 @@ export async function listTemplateVersions(
   return result.results.map(toTemplateVersion);
 }
 
-export async function ensureStarterTemplates(database: D1Database) {
-  const starters = [
-    { id: "nfpa70e_global", ...nfpa70eStarter },
-    residentialCoreStarter,
-  ];
-  const seeded = await database
-    .prepare(
-      `SELECT COUNT(*) AS count
-       FROM audit_template_families AS family
-       JOIN audit_template_versions AS version
-         ON version.template_id = family.id AND version.version = 1
-       WHERE family.id IN (?, ?)`,
-    )
-    .bind(...starters.map(({ id }) => id))
-    .first<{ count: number }>();
-  if (Number(seeded?.count) === starters.length) return;
-
-  const now = new Date().toISOString();
-  await database.batch(
-    starters.flatMap((starter) => [
-      database
-        .prepare(
-          `INSERT OR IGNORE INTO audit_template_families
-           (id, scope, organization_id, current_version, created_by,
-            created_at, updated_at)
-           VALUES (?, 'global', NULL, 1, ?, ?, ?)`,
-        )
-        .bind(starter.id, auditLibraryActor.id, now, now),
-      database
-        .prepare(
-          `INSERT OR IGNORE INTO audit_template_versions
-           (id, template_id, version, name, description, definition, status,
-            created_by, created_at)
-           VALUES (?, ?, 1, ?, ?, ?, 'published', ?, ?)`,
-        )
-        .bind(
-          `${starter.id}:v1`,
-          starter.id,
-          starter.name,
-          starter.description,
-          JSON.stringify(starter.definition),
-          auditLibraryActor.id,
-          now,
-        ),
-    ]),
-  );
-}
-
 /**
  * A global template, or one of the organization's own. With no organization,
  * only global templates match.
@@ -300,7 +251,6 @@ export async function findTemplate(
   id: string,
   version?: number,
 ) {
-  await ensureStarterTemplates(database);
   const current = await loadTemplate(database, organizationId, id);
   if (
     !current ||
