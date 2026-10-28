@@ -1,5 +1,5 @@
 import type { JobOutput } from "@balebase/validators/adminJobs";
-import { purgePendingAuditIssueImages } from "./auditIssueImages";
+import { purgePendingAuditIssueImages } from "./auditIssueImageCleanup";
 import { purgeExpiredFreeAuditRuns } from "./billingRetention";
 import { reconcileSubscriptionSeats } from "./billingSeats";
 import { purgeStripeWebhookReceipts } from "./billingWebhook";

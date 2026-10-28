@@ -5,7 +5,7 @@ import {
 import { Hono } from "hono";
 import { activityBatch } from "./activity";
 import { findIssueImages } from "./auditIssueImageRecords";
-import { uploadAuditIssueImage } from "./auditIssueImages";
+import { uploadAuditIssueImage } from "./auditIssueImageUploads";
 import {
   ensureStarterTemplates,
   type TemplateRow,
