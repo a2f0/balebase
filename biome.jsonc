@@ -81,22 +81,6 @@
     // Existing large files may shrink, but should not grow. Remove an override
     // once its file fits the default budget; extract responsibilities to get there.
     {
-      "includes": ["packages/api/src/residentialAuditLibrary.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noExcessiveLinesPerFile": {
-              "level": "error",
-              "options": {
-                "maxLines": 3135,
-                "skipBlankLines": true
-              }
-            }
-          }
-        }
-      }
-    },
-    {
       "includes": ["packages/app/src/AuditRunPage.tsx"],
       "linter": {
         "rules": {

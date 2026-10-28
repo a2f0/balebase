@@ -26,6 +26,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import {
   type BusinessIdentifier,
@@ -33,21 +34,16 @@ import {
   businessListReducer,
   copiedNotice,
   formatBusinessAddress,
-  formatBusinessDate,
   formatDuns,
   formatEin,
   initialBusinessListState,
 } from "./businessState";
 import { errorMessage } from "./errors";
-import { countLabel } from "./labels";
+import { countLabel, formatCalendarDate } from "./labels";
 import { useClipboard } from "./useClipboard";
 import { useFocusWhenFolded } from "./useFocusWhenFolded";
 import { useLoad } from "./useLoad";
-import {
-  businessIdForPath,
-  businessPath,
-  handleNavigation,
-} from "./workspacePaths";
+import { businessIdForPath, businessPath } from "./workspacePaths";
 
 interface BusinessFormState {
   city: string;
@@ -502,17 +498,15 @@ function BusinessSummary({
   if (business.duns) facts.push(`DUNS ${formatDuns(business.duns)}`);
   if (business.incorporationDate) {
     facts.push(
-      `Incorporated ${formatBusinessDate(business.incorporationDate)}`,
+      `Incorporated ${formatCalendarDate(business.incorporationDate)}`,
     );
   }
   const address = formatBusinessAddress(business);
   return (
-    <a
+    <AppLink
       className="businessSummary businessSummaryLink"
       href={businessPath(business.id)}
-      onClick={(event) =>
-        handleNavigation(event, businessPath(business.id), onNavigate)
-      }
+      onNavigate={onNavigate}
     >
       <span aria-hidden="true" className="businessMark">
         <Icon name="businesses" size={18} />
@@ -522,7 +516,7 @@ function BusinessSummary({
         <span className="rowMeta tabular">{facts.join(" · ")}</span>
         {address && <span className="rowMeta">{address}</span>}
       </div>
-    </a>
+    </AppLink>
   );
 }
 
@@ -642,7 +636,7 @@ function BusinessDetailCard({
             <dt>Incorporation date</dt>
             <dd>
               {business.incorporationDate
-                ? formatBusinessDate(business.incorporationDate)
+                ? formatCalendarDate(business.incorporationDate)
                 : "Not provided"}
             </dd>
           </div>

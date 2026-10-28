@@ -1,0 +1,117 @@
+{
+  "id": "nfpa70e_global",
+  "version": 1,
+  "publishedAt": "2026-10-28T00:00:00.000Z",
+  "name": "NFPA 70E readiness checklist",
+  "description": "A customizable readiness review based on high-level electrical safety themes. This is not an official NFPA checklist, certification, or substitute for the complete standard and qualified professional judgment.",
+  "sections": [
+    {
+      "id": "program",
+      "title": "Electrical safety program",
+      "controls": [
+        {
+          "id": "program-1",
+          "prompt": "A documented electrical safety program is available to affected workers."
+        },
+        {
+          "id": "program-2",
+          "prompt": "Electrical safety responsibilities are assigned and understood."
+        },
+        {
+          "id": "program-3",
+          "prompt": "The program considers the condition of maintenance of electrical equipment."
+        }
+      ]
+    },
+    {
+      "id": "training",
+      "title": "Training and qualification",
+      "controls": [
+        {
+          "id": "training-1",
+          "prompt": "Workers are qualified for the specific equipment and tasks they perform."
+        },
+        {
+          "id": "training-2",
+          "prompt": "Electrical safety and emergency response training records are current."
+        },
+        {
+          "id": "training-3",
+          "prompt": "Unqualified workers receive training appropriate to their electrical exposure."
+        }
+      ]
+    },
+    {
+      "id": "planning",
+      "title": "Risk assessment and job planning",
+      "controls": [
+        {
+          "id": "planning-1",
+          "prompt": "Job planning identifies potential shock and arc-flash hazards."
+        },
+        {
+          "id": "planning-2",
+          "prompt": "Required shock and arc-flash risk assessments are documented and current."
+        },
+        {
+          "id": "planning-3",
+          "prompt": "Energized work is justified and permitted only when applicable requirements are met."
+        }
+      ]
+    },
+    {
+      "id": "safe-condition",
+      "title": "Electrically safe work condition",
+      "controls": [
+        {
+          "id": "safe-condition-1",
+          "prompt": "A documented policy prioritizes establishing an electrically safe work condition."
+        },
+        {
+          "id": "safe-condition-2",
+          "prompt": "Lockout/tagout and absence-of-voltage verification procedures are followed."
+        },
+        {
+          "id": "safe-condition-3",
+          "prompt": "Test instruments are suitable, inspected, and used by qualified people."
+        }
+      ]
+    },
+    {
+      "id": "protection",
+      "title": "PPE, tools, and work area",
+      "controls": [
+        {
+          "id": "protection-1",
+          "prompt": "Task-specific PPE is selected from the documented hazard assessment."
+        },
+        {
+          "id": "protection-2",
+          "prompt": "Protective equipment and insulated tools are inspected and maintained."
+        },
+        {
+          "id": "protection-3",
+          "prompt": "Required labels, signs, barriers, and boundaries are current and legible."
+        }
+      ]
+    },
+    {
+      "id": "review",
+      "title": "Maintenance and continuous improvement",
+      "controls": [
+        {
+          "id": "review-1",
+          "prompt": "Electrical equipment is maintained in a condition appropriate for safe operation."
+        },
+        {
+          "id": "review-2",
+          "prompt": "The electrical safety program is periodically audited."
+        },
+        {
+          "id": "review-3",
+          "prompt": "Deficiencies and corrective actions are documented and tracked to closure."
+        }
+      ]
+    }
+  ]
+}

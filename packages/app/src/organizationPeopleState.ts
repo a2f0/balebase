@@ -111,16 +111,6 @@ export async function removeOrganizationMember(
   }, `${member.user.name} was removed from the organization.`);
 }
 
-/** Members can hold several comma-separated roles, such as "admin,owner". */
-export function formatRole(role: string) {
-  return role
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .map((value) => value.charAt(0).toUpperCase() + value.slice(1))
-    .join(", ");
-}
-
 function confirmMemberRemoval(
   member: OrganizationMember,
   organization: WorkspaceOrganization,

@@ -23,12 +23,8 @@ import {
   type RequirementDraft,
   reviewRevisionForStatus,
 } from "./employeeOnboarding";
-import {
-  formatDueDate,
-  formatTimestamp,
-  isClosedReportStatus,
-  requirementBadge,
-} from "./requirementStatus";
+import { formatCalendarDate, formatDate } from "./labels";
+import { isClosedReportStatus, requirementBadge } from "./requirementStatus";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
 
@@ -121,7 +117,7 @@ export function RequirementDraftEditor({
           {drafts.map((draft, index) => (
             <li key={draft.id}>
               <span>
-                {draft.title} · Due {formatDueDate(draft.dueDate)}
+                {draft.title} · Due {formatCalendarDate(draft.dueDate)}
               </span>
               <Button
                 aria-label={`Remove ${draft.title}`}
@@ -313,7 +309,7 @@ function RequirementItem({
           )}
           <span className="rowMeta">
             {" "}
-            · Due {formatDueDate(requirement.dueDate)}
+            · Due {formatCalendarDate(requirement.dueDate)}
           </span>
         </div>
         <Badge tone={badge.tone}>{badge.label}</Badge>
@@ -556,9 +552,7 @@ function CheckrResult({
         Checkr result: {formatCheckrResult(result)}
       </Badge>
       {completedAt && (
-        <span className="rowMeta">
-          Completed {formatTimestamp(completedAt)}
-        </span>
+        <span className="rowMeta">Completed {formatDate(completedAt)}</span>
       )}
       {result === "consider" && (
         <p className="rowMeta">

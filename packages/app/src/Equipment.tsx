@@ -30,6 +30,7 @@ import {
   useState,
 } from "react";
 import { ActivityFeed } from "./ActivityFeed";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import { type AssigneeFilter, filterEquipment } from "./equipmentFilters";
 import {
@@ -37,17 +38,12 @@ import {
   equipmentName,
   equipmentTypeIcon,
   equipmentTypeLabel,
-  formatPurchaseDate,
 } from "./equipmentLabels";
 import { LinkedEmailList } from "./LinkedEmailList";
-import { countLabel } from "./labels";
+import { countLabel, formatCalendarDate } from "./labels";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
-import {
-  equipmentIdForPath,
-  equipmentPath,
-  handleNavigation,
-} from "./workspacePaths";
+import { equipmentIdForPath, equipmentPath } from "./workspacePaths";
 
 export function Equipment({
   onNavigate,
@@ -291,10 +287,10 @@ function EquipmentList({
           const path = equipmentPath(item.id);
           return (
             <li key={item.id}>
-              <a
+              <AppLink
                 className="row equipmentRow"
                 href={path}
-                onClick={(event) => handleNavigation(event, path, onNavigate)}
+                onNavigate={onNavigate}
               >
                 <span className="iconTile">
                   <Icon name={equipmentTypeIcon(item.type)} size={20} />
@@ -317,7 +313,7 @@ function EquipmentList({
                   </span>
                 )}
                 <Assignee member={item.assignee} />
-              </a>
+              </AppLink>
             </li>
           );
         })}
@@ -554,7 +550,7 @@ function EquipmentDetails({
           <dt>Purchase date</dt>
           <dd className={item.purchaseDate ? undefined : "equipmentMissing"}>
             {item.purchaseDate
-              ? formatPurchaseDate(item.purchaseDate)
+              ? formatCalendarDate(item.purchaseDate)
               : "Not recorded"}
           </dd>
           <dt>Assigned to</dt>

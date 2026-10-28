@@ -1,7 +1,7 @@
 import { Badge, Select } from "@balebase/ui/react";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
-import { formatRole } from "./organizationPeopleState";
 import {
+  formatRoles,
   type OrganizationInvitationRole,
   organizationRoleValue,
 } from "./organizationState";
@@ -64,7 +64,7 @@ export function MemberRoleControl({
   roles: OrganizationInvitationRole[];
 }) {
   const role = organizationRoleValue(member.role);
-  if (roles.length <= 1) return <Badge>{formatRole(role)}</Badge>;
+  if (roles.length <= 1) return <Badge>{formatRoles(role)}</Badge>;
   return (
     <Select
       aria-label={`Role for ${member.user.name}`}
@@ -77,7 +77,7 @@ export function MemberRoleControl({
     >
       {roles.map((assignableRole) => (
         <option key={assignableRole} value={assignableRole}>
-          {formatRole(assignableRole)}
+          {formatRoles(assignableRole)}
         </option>
       ))}
     </Select>

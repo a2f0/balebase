@@ -22,6 +22,7 @@ import {
   recipientTone,
   reminderOptions,
 } from "./contractFields";
+import { formatCalendarDate, formatDateTime } from "./labels";
 import { useAction } from "./useAction";
 import { contractPath } from "./workspacePaths";
 
@@ -172,7 +173,7 @@ function StatusBanner({ contract }: { contract: ContractDetail }) {
       tone={isOverdue(contract) ? "warning" : "info"}
     >
       {signed} of {contract.recipients.length} signed
-      {contract.dueDate ? ` · due ${formatDate(contract.dueDate)}` : ""}
+      {contract.dueDate ? ` · due ${formatCalendarDate(contract.dueDate)}` : ""}
       {" · "}
       {reminderOptions.find(
         ({ value }) => value === contract.reminderIntervalDays,
@@ -314,19 +315,6 @@ export function ContractStatusBadge({
       {status.label}
     </Badge>
   );
-}
-
-export function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(`${value}T12:00:00`),
-  );
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
 }
 
 function askVoidReason(title: string) {

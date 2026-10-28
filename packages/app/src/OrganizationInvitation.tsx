@@ -2,6 +2,7 @@ import { Button, Card, Icon, LoadingState, Toast } from "@balebase/ui/react";
 import { useCallback, useState } from "react";
 import { authClient } from "./authClient";
 import { throwIfRefused } from "./errors";
+import { formatDateTime } from "./labels";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
 
@@ -125,7 +126,7 @@ function InvitationStatus({
           <dt>Invited email</dt>
           <dd>{invitation.email}</dd>
           <dt>Expires</dt>
-          <dd>{formatDate(invitation.expiresAt)}</dd>
+          <dd>{formatDateTime(invitation.expiresAt)}</dd>
         </dl>
         <Button block busy={busy} onClick={onAccept} variant="primary">
           {busy ? "Joining…" : "Accept invitation"}
@@ -167,11 +168,4 @@ function WrongAccount({
 
 function isRecipientMismatch(message: string) {
   return message.toLowerCase().includes("not the recipient");
-}
-
-function formatDate(value: Date) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
 }

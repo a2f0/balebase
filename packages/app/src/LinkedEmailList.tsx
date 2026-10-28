@@ -6,8 +6,9 @@ import {
   PageSection,
 } from "@balebase/ui/react";
 import type { LinkedEmail } from "@balebase/validators/inbox";
+import { AppLink } from "./AppLink";
 import { countLabel } from "./labels";
-import { handleNavigation, inboxEmailPath } from "./workspacePaths";
+import { inboxEmailPath } from "./workspacePaths";
 
 /**
  * Inbox messages linked to a record, each opening the message in the Inbox
@@ -53,12 +54,10 @@ export function LinkedEmailList({
               return (
                 <li className="row linkedEmail" key={email.linkId}>
                   <Icon className="linkedEmailIcon" name="mail" />
-                  <a
+                  <AppLink
                     className="rowMain linkedEmailLink"
                     href={path}
-                    onClick={(event) =>
-                      handleNavigation(event, path, onNavigate)
-                    }
+                    onNavigate={onNavigate}
                   >
                     <span className="rowTitle truncate">{subject}</span>
                     <span className="rowMeta truncate">
@@ -66,7 +65,7 @@ export function LinkedEmailList({
                       {email.attachmentCount > 0 &&
                         ` · ${countLabel(email.attachmentCount, "attachment")}`}
                     </span>
-                  </a>
+                  </AppLink>
                   <div className="rowActions">
                     <Button
                       aria-label={`Unlink ${subject}`}

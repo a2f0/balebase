@@ -11,7 +11,8 @@ import {
   PageHeader,
   Toast,
 } from "@balebase/ui/react";
-import { type FormEvent, type MouseEvent, useState } from "react";
+import { type FormEvent, useState } from "react";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import { authClient } from "./authClient";
 import { throwIfRefused } from "./errors";
@@ -20,16 +21,18 @@ import { OrganizationBilling } from "./OrganizationBilling";
 import { OrganizationAccessSettings } from "./OrganizationGroups";
 import { OrganizationMemberDetail } from "./OrganizationMemberDetail";
 import { OrganizationPeople } from "./OrganizationPeople";
-import { formatRole } from "./organizationPeopleState";
 import {
   canDeleteOrganization,
   canLeaveOrganizationWithOwnerCount,
   canManageOrganization,
-  organizationMemberIdForPath,
-  organizationSettingsPage,
+  formatRoles,
   type WorkspaceOrganization,
 } from "./organizationState";
 import { useAction } from "./useAction";
+import {
+  organizationMemberIdForPath,
+  organizationSettingsPage,
+} from "./workspacePaths";
 
 type OrganizationGeneralAction = "delete" | "leave" | "save";
 
@@ -209,15 +212,15 @@ function OrganizationSettingsNavigation({
   return (
     <>
       {items.map((item) => (
-        <a
+        <AppLink
           aria-current={page === item.page ? "page" : undefined}
           className="tab"
           href={item.path}
           key={item.path}
-          onClick={(event) => handleNavigation(event, item.path, onNavigate)}
+          onNavigate={onNavigate}
         >
           {item.label}
-        </a>
+        </AppLink>
       ))}
     </>
   );
@@ -390,7 +393,7 @@ function OrganizationDetailsCard({
     <Card
       description={
         memberRole
-          ? `Active workspace · your role is ${formatRole(memberRole)}.`
+          ? `Active workspace · your role is ${formatRoles(memberRole)}.`
           : loadError
             ? "Your organization role could not be loaded."
             : "Loading your organization role…"
@@ -512,24 +515,6 @@ function SettingsAccessDenied({
       title="Organization manager access is required."
     />
   );
-}
-
-function handleNavigation(
-  event: MouseEvent<HTMLAnchorElement>,
-  pathname: string,
-  onNavigate: (pathname: string) => void,
-) {
-  if (
-    event.button !== 0 ||
-    event.metaKey ||
-    event.ctrlKey ||
-    event.shiftKey ||
-    event.altKey
-  ) {
-    return;
-  }
-  event.preventDefault();
-  onNavigate(pathname);
 }
 
 function confirmLeave(name: string) {

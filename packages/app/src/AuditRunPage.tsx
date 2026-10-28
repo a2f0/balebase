@@ -33,11 +33,7 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  ActivityFeed,
-  ApiKeyAttribution,
-  formatActivityTime,
-} from "./ActivityFeed";
+import { ActivityFeed, ApiKeyAttribution } from "./ActivityFeed";
 import { ApiDownload } from "./ApiDownload";
 import { ApiImage } from "./ApiImage";
 import {
@@ -57,7 +53,7 @@ import {
   validateImageFiles,
 } from "./auditIssueImages";
 import { errorMessage } from "./errors";
-import { countLabel, formatLabel } from "./labels";
+import { countLabel, formatDate, formatDateTime, formatLabel } from "./labels";
 import { useAction } from "./useAction";
 
 const checkResponses = ["pass", "fail", "na"] as const;
@@ -597,7 +593,7 @@ export function AnswerAttribution({
           {activity.actor.name || activity.actor.email}
         </span>
         <ApiKeyAttribution actor={activity.actor} /> ·{" "}
-        {formatActivityTime(activity.occurredAt)}
+        {formatDateTime(activity.occurredAt)}
       </p>
     );
   }
@@ -1130,7 +1126,7 @@ function IssueCard({
         <h3 className="runIssueTitle">{issue.title}</h3>
         <p className="runAttribution">
           Raised by {issue.createdBy.name} · {issue.createdBy.email} ·{" "}
-          {formatActivityTime(issue.createdAt)}
+          {formatDateTime(issue.createdAt)}
         </p>
         {issue.description && (
           <p className="runIssueDescription">{issue.description}</p>
@@ -1423,10 +1419,4 @@ export function progressFor(
 
 function isAnswered(response: string | undefined) {
   return Boolean(response?.trim());
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(value),
-  );
 }
