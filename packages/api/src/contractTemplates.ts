@@ -353,7 +353,7 @@ contractTemplates.post("/:id/contracts", async (context) => {
         },
       ),
     ]);
-    if (result[0]?.meta.changes !== 1) {
+    if (!result[0]?.meta.changes) {
       await context.env.STORAGE.delete(objectKey);
       return notFound(context);
     }

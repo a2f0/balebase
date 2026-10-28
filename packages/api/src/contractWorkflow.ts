@@ -235,7 +235,7 @@ async function completeContract(
       finalKey,
     )
     .run();
-  if (completed.meta.changes !== 1) {
+  if (!completed.meta.changes) {
     await environment.STORAGE.delete(finalKey);
     return false;
   }

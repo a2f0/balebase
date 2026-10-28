@@ -166,7 +166,7 @@ contracts.post("/", async (context) => {
     await context.env.STORAGE.delete(objectKey);
     throw cause;
   }
-  if (created[0]?.meta.changes !== 1) {
+  if (!created[0]?.meta.changes) {
     await context.env.STORAGE.delete(objectKey);
     return context.json({ error: uploadExpired }, 409);
   }
