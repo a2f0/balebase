@@ -20,6 +20,8 @@ import {
   recipientTone,
   reminderOptions,
 } from "./contractFields";
+import { addNavigationGuard } from "./navigationGuard";
+import { confirmDiscardChanges } from "./unsavedChanges";
 import { useAction } from "./useAction";
 
 type Editor = ReturnType<typeof useDraftEditor>;
@@ -100,7 +102,7 @@ function useDraftEditor(
 }
 
 /**
- * Saves the draft a moment after each edit, when leaving the page, and on
+ * Saves the draft a moment after each edit, before leaving the page, and on
  * request, and guards against closing the tab with unsaved edits.
  */
 function useDraftSaving({
@@ -123,7 +125,8 @@ function useDraftSaving({
   const { busy, error, notice, run, setNotice } = useAction(
     "Could not save the contract.",
   );
-  const [stalled, setStalled] = useState(false);
+  // A draft the API refused is not retried until it is edited again.
+  const [refused, setRefused] = useState<DraftInput>();
   const unsaved = useRef<DraftInput | null>(null);
   const contractId = contract.id;
   // A cleared title still saves, under the document's name, so edits made
@@ -133,50 +136,44 @@ function useDraftSaving({
   const saveDraft = useCallback(
     async (value: DraftInput) => {
       const saving = revision.current;
-      const titled = value.title.trim() ? value : { ...value, title: untitled };
-      onChanged(await api.contracts.saveDraft(contractId, titled));
+      onChanged(
+        await api.contracts.saveDraft(contractId, titled(value, untitled)),
+      );
       if (revision.current !== saving) return false;
+      unsaved.current = null;
       setDirty(false);
       return true;
     },
     [contractId, onChanged, revision, setDirty, untitled],
   );
-
-  const autosave = dirty && !busy && !stalled;
-  useEffect(() => {
-    if (!autosave) return;
-    const timer = window.setTimeout(() => {
-      const started = revision.current;
-      void run(async () => {
+  // "stale" means the save landed but newer edits arrived while it ran.
+  const attempt = useCallback(
+    async (value: DraftInput): Promise<SaveOutcome> => {
+      let saved = false;
+      const succeeded = await run(async () => {
         try {
-          await saveDraft(draft);
+          saved = await saveDraft(value);
         } catch (cause) {
-          // Wait for the next edit rather than retrying a rejected draft,
-          // unless it was already edited while this save was in flight.
-          if (revision.current === started) setStalled(true);
+          setRefused(value);
           throw cause;
         }
       });
-    }, autosaveDelayMs);
+      if (!succeeded) return "failed";
+      return saved ? "saved" : "stale";
+    },
+    [run, saveDraft],
+  );
+
+  const autosave = dirty && !busy && refused !== draft;
+  useEffect(() => {
+    if (!autosave) return;
+    const timer = window.setTimeout(() => void attempt(draft), autosaveDelayMs);
     return () => window.clearTimeout(timer);
-  }, [autosave, draft, revision, run, saveDraft]);
+  }, [attempt, autosave, draft]);
   useEffect(() => {
     unsaved.current = dirty ? draft : null;
-    setStalled(false);
   }, [dirty, draft]);
-  // Leaving the page saves edits the autosave has not reached yet.
-  useEffect(
-    () => () => {
-      const value = unsaved.current;
-      if (value) {
-        const titled = value.title.trim()
-          ? value
-          : { ...value, title: untitled };
-        void api.contracts.saveDraft(contractId, titled).catch(() => undefined);
-      }
-    },
-    [contractId, untitled],
-  );
+  useSaveOnLeave({ attempt, contractId, dirty, unsaved, untitled });
   useEffect(() => {
     if (!dirty && !busy) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
@@ -209,6 +206,58 @@ function useDraftSaving({
         onChanged(await api.contracts.send(contractId));
       }),
   };
+}
+
+/**
+ * Leaving the page first saves edits the autosave has not reached. When that
+ * save fails, the page shows why and asks before discarding them.
+ */
+function useSaveOnLeave({
+  attempt,
+  contractId,
+  dirty,
+  unsaved,
+  untitled,
+}: {
+  attempt: (value: DraftInput) => Promise<SaveOutcome>;
+  contractId: string;
+  dirty: boolean;
+  unsaved: { current: DraftInput | null };
+  untitled: string;
+}) {
+  useEffect(() => {
+    if (!dirty) return;
+    return addNavigationGuard(async () => {
+      // Edits made while a save runs are saved too before the page goes.
+      for (let value = unsaved.current; value; value = unsaved.current) {
+        if ((await attempt(value)) !== "failed") continue;
+        const leave = await confirmDiscardChanges(
+          "Your latest edits to this draft could not be saved.",
+        );
+        if (leave) unsaved.current = null;
+        return leave;
+      }
+      return true;
+    });
+  }, [attempt, dirty, unsaved]);
+  // Navigation is guarded, but the session can also end or change underneath
+  // the page. Its edits still get one try, with no page left to report on.
+  useEffect(
+    () => () => {
+      const value = unsaved.current;
+      if (!value) return;
+      void api.contracts
+        .saveDraft(contractId, titled(value, untitled))
+        .catch(() => undefined);
+    },
+    [contractId, unsaved, untitled],
+  );
+}
+
+type SaveOutcome = "failed" | "saved" | "stale";
+
+function titled(draft: DraftInput, untitled: string) {
+  return draft.title.trim() ? draft : { ...draft, title: untitled };
 }
 
 function recipientActions(
