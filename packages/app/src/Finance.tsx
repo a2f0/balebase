@@ -104,7 +104,7 @@ export function Finance({
  */
 function categorizeTransaction(
   setData: Dispatch<SetStateAction<FinanceData | undefined>>,
-  setError: Dispatch<SetStateAction<string | undefined>>,
+  setError: (message: string | undefined) => void,
 ) {
   return async (transaction: FinanceTransaction, categoryId: string | null) => {
     const previous = transaction.expenseCategoryId;
@@ -490,8 +490,8 @@ function FinanceSetupNotice() {
 
 function usePlaidConnect(
   load: () => Promise<void>,
-  setError: Dispatch<SetStateAction<string | undefined>>,
-  setNotice: Dispatch<SetStateAction<string | undefined>>,
+  setError: (message: string | undefined) => void,
+  setNotice: (message: string | undefined) => void,
 ) {
   const [busy, setBusy] = useState(false);
   const resumedOAuth = useRef(false);
@@ -545,7 +545,7 @@ function useOAuthResume(
   complete: (token: string, metadata: PlaidLinkMetadata) => Promise<void>,
   resumed: { current: boolean },
   setBusy: Dispatch<SetStateAction<boolean>>,
-  setError: Dispatch<SetStateAction<string | undefined>>,
+  setError: (message: string | undefined) => void,
 ) {
   useEffect(() => {
     if (!hasOAuthState() || resumed.current) return;

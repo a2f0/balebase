@@ -18,19 +18,12 @@ import type {
   EmployeeRequirement,
   EmployeeRequirementKind,
 } from "@balebase/validators/employeeForms";
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useCallback, useRef } from "react";
 import { api } from "./apiClient";
 import {
   downloadEmployeeForm,
   downloadScreeningConsent,
 } from "./employeeFormDownloads";
-import { errorMessage } from "./errors";
 import type { WorkspaceOrganization } from "./organizationState";
 import {
   formatDueDate,
@@ -41,6 +34,8 @@ import {
   type StatusBadge,
 } from "./requirementStatus";
 import { ScreeningRequest, screeningProgress } from "./ScreeningRequest";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 import {
   handleNavigation,
   myDocumentsPath,
@@ -186,44 +181,28 @@ function Dashboard({
 }
 
 function useOwnRequirements() {
-  const [requirements, setRequirements] = useState<EmployeeRequirement[]>();
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const reload = useCallback(async () => {
-    setLoading(true);
-    try {
-      setRequirements(
-        (await api.employeeForms.list({ own: true })).requirements,
-      );
-      setError(undefined);
-    } catch (cause) {
-      setError(errorMessage(cause, "Could not update your documents."));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-  useEffect(() => {
-    void reload();
-  }, [reload]);
+  const loaded = useLoad(
+    useCallback(
+      async () => (await api.employeeForms.list({ own: true })).requirements,
+      [],
+    ),
+    "Could not load your documents.",
+  );
+  const change = useAction("Could not update your documents.");
   const action: Action = async (work, success) => {
-    setBusy(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      await work();
-      await reload();
-      setNotice(success);
-    } catch (cause) {
-      const message = errorMessage(cause, "Could not update your documents.");
-      await reload();
-      setError(message);
-    } finally {
-      setBusy(false);
-    }
+    await change.run(work, success);
+    // Reload either way so a refused change shows what is stored.
+    await loaded.reload();
   };
-  return { action, busy, error, loading, notice, reload, requirements };
+  return {
+    action,
+    busy: change.busy,
+    error: change.error ?? loaded.error,
+    loading: loaded.loading,
+    notice: change.notice,
+    reload: loaded.reload,
+    requirements: loaded.data,
+  };
 }
 
 function Summary({

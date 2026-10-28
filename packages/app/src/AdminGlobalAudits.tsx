@@ -12,16 +12,17 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import { TemplateStats, templateStatusTone } from "./AuditHome";
 import { AuditTemplateBuilder } from "./AuditTemplateBuilder";
 import { api } from "./apiClient";
-import { errorMessage } from "./errors";
 import { countLabel, formatLabel } from "./labels";
 import {
   globalAuditsPath,
   globalAuditTemplateIdForPath,
 } from "./organizationState";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 import { handleNavigation } from "./workspacePaths";
 
 /**
@@ -53,30 +54,24 @@ function GlobalAuditList({
 }: {
   onNavigate: (pathname: string) => void;
 }) {
-  const [templates, setTemplates] = useState<AuditTemplate[]>();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-
-  useEffect(() => {
-    api.adminAuditTemplates
-      .list()
-      .then(({ templates }) => setTemplates(templates))
-      .catch((cause: unknown) =>
-        setError(errorMessage(cause, "Could not load global forms.")),
-      );
-  }, []);
+  const loaded = useLoad(
+    useCallback(
+      async () => (await api.adminAuditTemplates.list()).templates,
+      [],
+    ),
+    "Could not load global forms.",
+  );
+  const templates = loaded.data;
+  const creating = useAction("Could not create the global form.");
+  const { busy } = creating;
+  const error = creating.error ?? loaded.error;
 
   async function createTemplate() {
-    setBusy(true);
-    setError(undefined);
-    try {
+    await creating.run(async () => {
       const { template } =
         await api.adminAuditTemplates.create("Untitled checklist");
       onNavigate(globalAuditsPath(template.id));
-    } catch (cause) {
-      setError(errorMessage(cause, "Could not create the global form."));
-      setBusy(false);
-    }
+    });
   }
 
   return (

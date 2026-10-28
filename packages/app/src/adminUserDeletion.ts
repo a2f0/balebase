@@ -3,33 +3,33 @@ import { confirmDialog } from "@balebase/ui/react";
 import type { AdminUser } from "@balebase/validators/adminUsers";
 import { useState } from "react";
 import { api } from "./apiClient";
-import { errorMessage } from "./errors";
+import { useAction } from "./useAction";
 
 export function useAdminUserDeletion(reload: () => Promise<void>) {
   const [userId, setUserId] = useState<string>();
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
+  const { error, notice, run } = useAction("Could not update user deletion.");
 
   async function update(user: AdminUser) {
     if (!(await confirmUserDeletion(user))) return;
     setUserId(user.id);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      if (user.deletionRequestedAt) {
-        await api.adminUsers.cancelDeletion(user.id);
-        setNotice(`Deletion canceled for ${user.email}.`);
-      } else {
-        await api.adminUsers.markForDeletion(user.id, user.email);
-        setNotice(`${user.email} was marked for deletion.`);
-      }
-      await reload();
-    } catch (cause) {
-      setError(errorMessage(cause, "Could not update user deletion."));
-      if (cause instanceof ApiError && cause.status === 409) await reload();
-    } finally {
-      setUserId(undefined);
-    }
+    await run(
+      async () => {
+        try {
+          await (user.deletionRequestedAt
+            ? api.adminUsers.cancelDeletion(user.id)
+            : api.adminUsers.markForDeletion(user.id, user.email));
+        } catch (cause) {
+          // A conflict means the list is out of date.
+          if (cause instanceof ApiError && cause.status === 409) await reload();
+          throw cause;
+        }
+        await reload();
+      },
+      user.deletionRequestedAt
+        ? `Deletion canceled for ${user.email}.`
+        : `${user.email} was marked for deletion.`,
+    );
+    setUserId(undefined);
   }
 
   return { userId, error, notice, update };

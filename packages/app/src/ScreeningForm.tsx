@@ -9,10 +9,9 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type { ScreeningForm as ScreeningFormData } from "@balebase/validators/employeeForms";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useState } from "react";
 import { api } from "./apiClient";
 import { downloadScreeningConsent } from "./employeeFormDownloads";
-import { errorMessage } from "./errors";
 import {
   DetailFields,
   emptyDetails,
@@ -20,6 +19,8 @@ import {
   type PersonDetails,
   TestCandidates,
 } from "./ScreeningDetails";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 import { handleNavigation } from "./workspacePaths";
 
 type Step = "details" | "disclosure" | "notices" | "rights" | "sign";
@@ -60,20 +61,13 @@ export function ScreeningForm({
   onNavigate: (pathname: string) => void;
   requirementId: string;
 }) {
-  const [form, setForm] = useState<ScreeningFormData>();
-  const [error, setError] = useState<string>();
-  useEffect(() => {
-    let current = true;
-    api.employeeForms.screeningForm(requirementId).then(
-      (loaded) => current && setForm(loaded),
-      (cause: unknown) =>
-        current &&
-        setError(errorMessage(cause, "Could not load the background check.")),
-    );
-    return () => {
-      current = false;
-    };
-  }, [requirementId]);
+  const { data: form, error } = useLoad(
+    useCallback(
+      () => api.employeeForms.screeningForm(requirementId),
+      [requirementId],
+    ),
+    "Could not load the background check.",
+  );
   if (error) {
     return (
       <Banner
@@ -116,8 +110,7 @@ function ScreeningSteps({
 }) {
   const [answers, setAnswers] = useState(() => initialAnswers(form));
   const [stepIndex, setStepIndex] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const { busy, error, run, setError } = useAction("Could not submit.");
   const [submitted, setSubmitted] = useState(false);
   const update: UpdateAnswers = (change) =>
     setAnswers((current) => ({ ...current, ...change }));
@@ -135,19 +128,13 @@ function ScreeningSteps({
     setStepIndex((index) => index + offset);
   };
   async function submit() {
-    setBusy(true);
-    setError(undefined);
-    try {
+    await run(async () => {
       await api.employeeForms.submitScreening(
         requirementId,
         submission(answers, notices, form),
       );
       setSubmitted(true);
-    } catch (cause) {
-      setError(errorMessage(cause, "Could not submit."));
-    } finally {
-      setBusy(false);
-    }
+    });
   }
   if (submitted) {
     return (
@@ -552,22 +539,14 @@ function Submitted({
   onNavigate: (pathname: string) => void;
   requirementId: string;
 }) {
-  const [error, setError] = useState<string>();
+  const { error, run } = useAction("Could not download the authorization.");
   return (
     <Card
       footer={
         <>
           <Button
             onClick={() =>
-              void downloadScreeningConsent(requirementId).catch(
-                (cause: unknown) =>
-                  setError(
-                    errorMessage(
-                      cause,
-                      "Could not download the authorization.",
-                    ),
-                  ),
-              )
+              void run(() => downloadScreeningConsent(requirementId))
             }
             variant="ghost"
           >

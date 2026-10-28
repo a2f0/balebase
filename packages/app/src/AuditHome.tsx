@@ -27,9 +27,9 @@ import {
   storeAuditTemplateView,
 } from "./auditTemplateView";
 import { ErrorToast } from "./ErrorToast";
-import { type ErrorNotice, errorNotice } from "./errors";
 import { InfiniteScroll } from "./InfiniteScroll";
 import { countLabel, formatLabel } from "./labels";
+import { useAction } from "./useAction";
 import { useCursorPages } from "./useCursorPages";
 import { useLoad } from "./useLoad";
 
@@ -42,36 +42,28 @@ export function AuditHome({
     useCallback(async () => (await api.audits.listTemplates()).templates, []),
     "Could not load audits.",
   );
-  const [busy, setBusy] = useState(false);
+  const creating = useAction("Could not create the checklist.");
+  const starting = useAction("Could not start the audit.");
+  const busy = creating.busy || starting.busy;
+  const error = creating.failure ?? starting.failure;
   const [templateView, setTemplateView] = useState(() =>
     readAuditTemplateView(),
   );
-  const [error, setError] = useState<ErrorNotice>();
   const runList = useAuditRunList();
 
   async function createTemplate() {
-    setBusy(true);
-    setError(undefined);
-    try {
+    await creating.run(async () => {
       const { template } =
         await api.audits.createTemplate("Untitled checklist");
       onNavigate(`/audits/templates/${template.id}`);
-    } catch (cause) {
-      setError(errorNotice(cause, "Could not load audits."));
-      setBusy(false);
-    }
+    });
   }
 
   async function beginAudit(templateId: string) {
-    setBusy(true);
-    setError(undefined);
-    try {
+    await starting.run(async () => {
       const { auditId } = await api.audits.start(templateId);
       onNavigate(`/audits/runs/${auditId}`);
-    } catch (cause) {
-      setError(errorNotice(cause, "Could not load audits."));
-      setBusy(false);
-    }
+    });
   }
 
   function changeTemplateView(view: AuditTemplateView) {

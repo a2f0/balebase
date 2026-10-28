@@ -26,6 +26,7 @@ import {
   offlineScopeKey,
 } from "./offlineStore";
 import { retryOfflineWork, startOfflineAudit } from "./offlineWork";
+import { useAction } from "./useAction";
 
 export interface OfflineIdentity {
   scope: OfflineScope;
@@ -49,7 +50,7 @@ export function OfflineWorkspacePage({
   const [auditId, setAuditId] = useState<string>();
   const [creatingIssue, setCreatingIssue] = useState(false);
   const [epoch] = useState(offlineAccessEpoch);
-  const { error, setError, run } = useOfflineActions();
+  const { error, setError, run } = useAction("Could not save offline work.");
   const audit = workspace?.audits.find((entry) => entry.id === auditId);
   return (
     <Page>
@@ -170,19 +171,6 @@ function OfflineAuditList({
       ))}
     </PageSection>
   );
-}
-
-function useOfflineActions() {
-  const [error, setError] = useState<string>();
-  const run = async (action: () => Promise<unknown>) => {
-    setError(undefined);
-    try {
-      await action();
-    } catch (cause) {
-      setError(errorMessage(cause, "Could not save offline work."));
-    }
-  };
-  return { error, setError, run };
 }
 
 function DownloadedChecklists({

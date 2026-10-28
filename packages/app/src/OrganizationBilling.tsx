@@ -162,7 +162,7 @@ function createBillingAction(
       );
     } catch (cause) {
       if (sequence === actionSequence.current) {
-        setError(errorMessage(cause, "Could not load billing."));
+        setError(errorMessage(cause, "Could not open billing."));
         setBusy(false);
       }
     }

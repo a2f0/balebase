@@ -20,7 +20,7 @@ import {
   recipientTone,
   reminderOptions,
 } from "./contractFields";
-import { errorMessage } from "./errors";
+import { useAction } from "./useAction";
 
 type Editor = ReturnType<typeof useDraftEditor>;
 
@@ -120,28 +120,16 @@ function useDraftSaving({
   revision: { current: number };
   setDirty: (dirty: boolean) => void;
 }) {
-  const [busy, setBusy] = useState(false);
+  const { busy, error, notice, run, setNotice } = useAction(
+    "Could not save the contract.",
+  );
   const [stalled, setStalled] = useState(false);
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
   const unsaved = useRef<DraftInput | null>(null);
   const contractId = contract.id;
   // A cleared title still saves, under the document's name, so edits made
   // meanwhile are never skipped.
   const untitled =
     contract.document.filename.replace(/\.pdf$/i, "") || "Untitled";
-  const run = useCallback(async (action: () => Promise<void>) => {
-    setBusy(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      await action();
-    } catch (cause) {
-      setError(errorMessage(cause, "Could not save."));
-    } finally {
-      setBusy(false);
-    }
-  }, []);
   const saveDraft = useCallback(
     async (value: DraftInput) => {
       const saving = revision.current;

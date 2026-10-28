@@ -17,10 +17,10 @@ import {
 } from "react";
 import { AccountControl } from "./AccountControl";
 import type { AccountSession } from "./accountSessions";
-import { errorMessage } from "./errors";
 import type { WorkspaceOrganization } from "./organizationState";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { readSidebarWidth } from "./sidebarWidth";
+import { useAction } from "./useAction";
 
 export interface WorkspaceUser {
   email: string;
@@ -351,8 +351,7 @@ function OrganizationSwitcher({
   onOrganizationCreate: (name: string) => Promise<void>;
   organizations: WorkspaceOrganization[];
 }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const { busy, error, run } = useAction("Could not switch organizations.");
   if (organizations.length === 0 || !activeOrganizationId) {
     return (
       <div className="organizationSwitcher">
@@ -375,27 +374,11 @@ function OrganizationSwitcher({
     if (organizationId === "create") {
       const name = (await askOrganizationName())?.trim();
       if (!name) return;
-      setBusy(true);
-      setError(undefined);
-      try {
-        await onOrganizationCreate(name);
-      } catch (cause) {
-        setError(errorMessage(cause, "Could not switch organizations."));
-      } finally {
-        setBusy(false);
-      }
+      await run(() => onOrganizationCreate(name));
       return;
     }
     if (organizationId === activeOrganizationId) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      await onOrganizationChange(organizationId);
-    } catch (cause) {
-      setError(errorMessage(cause, "Could not switch organizations."));
-    } finally {
-      setBusy(false);
-    }
+    await run(() => onOrganizationChange(organizationId));
   }
 
   return (

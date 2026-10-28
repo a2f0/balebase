@@ -11,14 +11,14 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type { AdminUser } from "@balebase/validators/adminUsers";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { AdminDeletionMenu } from "./AdminDeletionMenu";
 import { formatDate, Identity } from "./adminDisplay";
 import { useAdminUserDeletion } from "./adminUserDeletion";
 import { adminUserListQuery, adminUserPageSize } from "./adminUserList";
 import { api } from "./apiClient";
-import { errorMessage } from "./errors";
 import { countLabel } from "./labels";
+import { useLoad } from "./useLoad";
 
 interface UserListing {
   total: number;
@@ -26,32 +26,23 @@ interface UserListing {
 }
 
 export function AdminUsers() {
-  const [listing, setListing] = useState<UserListing>();
   const [page, setPage] = useState(0);
-  const [busy, setBusy] = useState(true);
-  const [error, setError] = useState<string>();
-
-  const loadUsers = useCallback(
-    async (preserveListing = false) => {
-      setBusy(true);
-      setError(undefined);
-      if (!preserveListing) setListing(undefined);
-      try {
-        setListing(await api.adminUsers.list(adminUserListQuery(page)));
-      } catch (cause) {
-        setError(errorMessage(cause, "Could not load users."));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [page],
+  const {
+    data: listing,
+    error,
+    loading: busy,
+    reload,
+    setData,
+  } = useLoad<UserListing>(
+    useCallback(() => api.adminUsers.list(adminUserListQuery(page)), [page]),
+    "Could not load users.",
   );
+  const loadUsers = () => {
+    setData(undefined);
+    void reload();
+  };
 
-  const lifecycle = useAdminUserDeletion(() => loadUsers(true));
-
-  useEffect(() => {
-    void loadUsers();
-  }, [loadUsers]);
+  const lifecycle = useAdminUserDeletion(reload);
 
   return (
     <Page>
@@ -61,7 +52,7 @@ export function AdminUsers() {
             busy={busy}
             disabled={lifecycle.userId !== undefined}
             icon="refresh"
-            onClick={() => void loadUsers()}
+            onClick={loadUsers}
           >
             {busy ? "Loading…" : "Refresh"}
           </Button>

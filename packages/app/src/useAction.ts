@@ -1,28 +1,33 @@
 import { useCallback, useState } from "react";
-import { errorMessage } from "./errors";
+import { type ErrorNotice, errorNotice } from "./errors";
 
 /**
  * Runs a mutation: marks it busy, clears the last outcome, then shows its
  * error or the optional success notice. Resolves whether the work succeeded.
+ * `failure` keeps the error's upgrade flag for `ErrorToast`.
  */
 export function useAction(fallback: string) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const [failure, setFailure] = useState<ErrorNotice>();
   const [notice, setNotice] = useState<string>();
+  const setError = useCallback((message: string | undefined) => {
+    setFailure(message === undefined ? undefined : { message, upgrade: false });
+  }, []);
   const run = useCallback(
     async <T>(
       work: () => Promise<T>,
       success?: string | ((result: T) => string | undefined),
     ) => {
       setBusy(true);
-      setError(undefined);
+      setFailure(undefined);
       setNotice(undefined);
       try {
         const result = await work();
-        setNotice(typeof success === "function" ? success(result) : success);
+        if (success)
+          setNotice(typeof success === "function" ? success(result) : success);
         return true;
       } catch (cause) {
-        setError(errorMessage(cause, fallback));
+        setFailure(errorNotice(cause, fallback));
         return false;
       } finally {
         setBusy(false);
@@ -30,5 +35,13 @@ export function useAction(fallback: string) {
     },
     [fallback],
   );
-  return { busy, error, notice, run, setError, setNotice };
+  return {
+    busy,
+    error: failure?.message,
+    failure,
+    notice,
+    run,
+    setError,
+    setNotice,
+  };
 }

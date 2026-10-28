@@ -1,9 +1,8 @@
 import { Badge, Button, confirmDialog, Toast } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
-import { useState } from "react";
 import { api } from "./apiClient";
-import { errorMessage } from "./errors";
 import { formatLabel } from "./labels";
+import { useAction } from "./useAction";
 
 /** Publication changes save the editor's content, including unsaved edits. */
 export function GlobalAuditControls({
@@ -19,8 +18,11 @@ export function GlobalAuditControls({
   status: string;
   template: AuditTemplate;
 }) {
-  const [discarding, setDiscarding] = useState(false);
-  const [error, setError] = useState<string>();
+  const {
+    busy: discarding,
+    error,
+    run,
+  } = useAction("Could not discard draft.");
   async function discard() {
     if (
       !(await confirmDialog({
@@ -32,16 +34,10 @@ export function GlobalAuditControls({
       }))
     )
       return;
-    setDiscarding(true);
-    setError(undefined);
-    try {
+    await run(async () => {
       await api.adminAuditTemplates.discard(template);
       onDiscarded();
-    } catch (cause) {
-      setError(errorMessage(cause, "Could not discard draft."));
-    } finally {
-      setDiscarding(false);
-    }
+    });
   }
   return (
     <>

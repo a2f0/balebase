@@ -127,6 +127,31 @@ describe("useLoad", () => {
     await reloaded;
     expect(hook.current().data).toBe("fresh");
   });
+
+  it("reloads with the newest loader when called from an older render", async () => {
+    const requested: string[] = [];
+    const loaders = new Map<string, () => Promise<string>>();
+    const loaderFor = (id: string) => {
+      let loader = loaders.get(id);
+      if (!loader) {
+        loader = async () => {
+          requested.push(id);
+          return id;
+        };
+        loaders.set(id, loader);
+      }
+      return loader;
+    };
+    const hook = await renderHook(
+      ({ id }: { id: string }) => useLoad(loaderFor(id), "Could not load."),
+      { id: "a" },
+    );
+    const staleReload = hook.current().reload;
+    await hook.rerender({ id: "b" });
+    await act(() => staleReload());
+    expect(requested).toEqual(["a", "b", "b"]);
+    expect(hook.current().data).toBe("b");
+  });
 });
 
 describe("useAction", () => {

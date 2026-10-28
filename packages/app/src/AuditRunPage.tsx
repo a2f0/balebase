@@ -27,7 +27,14 @@ import type {
   AuditTemplateItem,
   AuditTemplateSection,
 } from "@balebase/validators/audits";
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityFeed,
   ApiKeyAttribution,
@@ -44,6 +51,7 @@ import {
 import { api } from "./apiClient";
 import { errorMessage } from "./errors";
 import { countLabel, formatLabel } from "./labels";
+import { useAction } from "./useAction";
 
 const acceptedImageTypes = [
   "image/gif",
@@ -127,22 +135,29 @@ export function runStateReducer(state: RunState, action: RunAction): RunState {
   }
 }
 
-export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
+/**
+ * The run and its unsaved answers. The reducer keeps those answers across
+ * issue refreshes, so this guards its own requests instead of using useLoad.
+ */
+function useAuditRun(id: string) {
   const [{ detail, responses }, dispatch] = useReducer(runStateReducer, {
     detail: undefined,
     responses: {},
   });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
+  const [loadError, setLoadError] = useState<string>();
+  const latest = useRef(0);
 
   const fetchRun = useCallback(
     async (type: "issuesRefreshed" | "loaded") => {
+      const request = ++latest.current;
       try {
-        dispatch({ detail: await api.audits.getRun(id), type });
-        if (type === "loaded") setError(undefined);
+        const next = await api.audits.getRun(id);
+        if (request !== latest.current) return;
+        dispatch({ detail: next, type });
+        if (type === "loaded") setLoadError(undefined);
       } catch (cause) {
-        setError(errorMessage(cause, "Could not update audit."));
+        if (request === latest.current)
+          setLoadError(errorMessage(cause, "Could not load the audit."));
       }
     },
     [id],
@@ -153,22 +168,27 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
     [fetchRun],
   );
 
-  useEffect(() => void load(), [load]);
+  useEffect(() => {
+    void load();
+    return () => {
+      latest.current += 1;
+    };
+  }, [load]);
+  return { detail, dispatch, load, loadError, refreshIssues, responses };
+}
+
+export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
+  const { detail, dispatch, load, loadError, refreshIssues, responses } =
+    useAuditRun(id);
+  const { busy, notice, run, ...action } = useAction("Could not update audit.");
+  const error = action.error ?? loadError;
 
   /** Runs a change, then reloads the audit so the page shows what was stored. */
   async function perform(change: () => Promise<unknown>, success: string) {
-    setBusy(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
+    await run(async () => {
       await change();
       await load();
-      setNotice(success);
-    } catch (cause) {
-      setError(errorMessage(cause, "Could not update audit."));
-    } finally {
-      setBusy(false);
-    }
+    }, success);
   }
 
   async function save(status: "completed" | "in_progress") {
@@ -213,7 +233,13 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
         {notice && <Toast tone="success">{notice}</Toast>}
         <RunOverview audit={detail.audit} busy={busy} onDiscard={discard} />
         {error && (
-          <Button onClick={() => void load()} size="sm">
+          <Button
+            onClick={() => {
+              action.setError(undefined);
+              void load();
+            }}
+            size="sm"
+          >
             Reload audit
           </Button>
         )}
@@ -853,13 +879,12 @@ function useIssueDraft(auditId: string, item: AuditTemplateItem | undefined) {
   const [priority, setPriority] = useState<AuditIssuePriority>("medium");
   const [assignedTo, setAssignedTo] = useState("");
   const [images, setImages] = useState<File[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const { busy, error, run, setError } = useAction(
+    "Could not create the issue.",
+  );
 
   async function submit(onCreated: (warning?: string) => Promise<void>) {
-    setBusy(true);
-    setError(undefined);
-    try {
+    await run(async () => {
       const warning = await createIssueWithImages(
         auditId,
         {
@@ -872,10 +897,7 @@ function useIssueDraft(auditId: string, item: AuditTemplateItem | undefined) {
         images,
       );
       await onCreated(warning);
-    } catch (cause) {
-      setError(errorMessage(cause, "Could not update audit."));
-      setBusy(false);
-    }
+    });
   }
 
   return {
@@ -1199,6 +1221,7 @@ function useIssueCardActions({
 }) {
   const [busy, setBusy] = useState(false);
 
+  // Errors go to the run page's single toast rather than useAction's state.
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
     onError(undefined);
@@ -1206,7 +1229,7 @@ function useIssueCardActions({
       await action();
       await onChange();
     } catch (cause) {
-      onError(errorMessage(cause, "Could not update audit."));
+      onError(errorMessage(cause, "Could not update the issue."));
     } finally {
       setBusy(false);
     }

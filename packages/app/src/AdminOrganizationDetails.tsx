@@ -15,11 +15,11 @@ import type {
   AdminOrganizationRequirement,
 } from "@balebase/validators/adminOrganizations";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 import { formatDate, Identity } from "./adminDisplay";
 import { api } from "./apiClient";
-import { errorMessage } from "./errors";
 import { countLabel } from "./labels";
+import { useLoad } from "./useLoad";
 
 export function AdminOrganizationDetails({
   onNavigate,
@@ -28,29 +28,18 @@ export function AdminOrganizationDetails({
   onNavigate: (pathname: string) => void;
   organizationId: string;
 }) {
-  const [detail, setDetail] = useState<AdminOrganizationDetail>();
-  const [error, setError] = useState<string>();
-  const requestSequence = useRef(0);
-  const load = useCallback(async () => {
-    const requestId = ++requestSequence.current;
-    setDetail(undefined);
-    setError(undefined);
-    try {
-      const result = await api.adminOrganizations.get(organizationId);
-      if (requestId === requestSequence.current) setDetail(result);
-    } catch (cause) {
-      if (requestId === requestSequence.current) {
-        setError(errorMessage(cause, "Could not load organization details."));
-      }
-    }
-  }, [organizationId]);
-  useEffect(() => {
-    void load();
-    return () => {
-      requestSequence.current += 1;
-    };
-  }, [load]);
-  const busy = !detail && !error;
+  const {
+    data: detail,
+    error,
+    loading: busy,
+    reload: load,
+  } = useLoad(
+    useCallback(
+      () => api.adminOrganizations.get(organizationId),
+      [organizationId],
+    ),
+    "Could not load organization details.",
+  );
   return (
     <Page>
       <PageHeader

@@ -29,9 +29,10 @@ import {
 } from "react";
 import { ApiDownload } from "./ApiDownload";
 import { api } from "./apiClient";
-import { errorMessage } from "./errors";
 import { LinkedEmailList } from "./LinkedEmailList";
 import { countLabel, formatBytes } from "./labels";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 import { useMenuDismissal } from "./useMenuDismissal";
 import type { WorkspaceUser } from "./WorkspaceShell";
 import {
@@ -152,42 +153,24 @@ export function Library({
  * after navigation cannot repaint the previous folder.
  */
 function useLibraryData(folderId: string | undefined) {
-  const [folders, setFolders] = useState<LibraryFolder[]>();
-  const [objects, setObjects] = useState<StoredObject[]>();
-  const [detail, setDetail] = useState<LibraryFolderDetail>();
-  const [error, setError] = useState<string>();
-  const requestSequence = useRef(0);
-
-  const refresh = useCallback(async () => {
-    const requestId = ++requestSequence.current;
-    try {
-      const [nextFolders, nextObjects, nextDetail] = await Promise.all([
+  const { data, error, reload } = useLoad(
+    useCallback(async () => {
+      const [folders, objects, detail] = await Promise.all([
         api.libraryFolders.list(),
         api.objects.list(folderId),
         folderId ? api.libraryFolders.get(folderId) : undefined,
       ]);
-      if (requestId !== requestSequence.current) return;
-      setError(undefined);
-      setFolders(nextFolders);
-      setObjects(nextObjects);
-      setDetail(nextDetail);
-    } catch (cause) {
-      if (requestId === requestSequence.current)
-        setError(errorMessage(cause, "Something went wrong."));
-    }
-  }, [folderId]);
-
-  const latestRefresh = useRef(refresh);
-  useEffect(() => {
-    latestRefresh.current = refresh;
-    setObjects(undefined);
-    setDetail(undefined);
-    setError(undefined);
-    void refresh();
-  }, [refresh]);
-  const refreshCurrent = useCallback(() => latestRefresh.current(), []);
-
-  return { detail, error, folders, objects, refresh: refreshCurrent };
+      return { detail, folders, objects };
+    }, [folderId]),
+    "Could not load the library.",
+  );
+  return {
+    detail: data?.detail,
+    error,
+    folders: data?.folders,
+    objects: data?.objects,
+    refresh: reload,
+  };
 }
 
 function useLibraryActions(
@@ -195,8 +178,7 @@ function useLibraryActions(
   refresh: () => Promise<void>,
   onNavigate: (pathname: string) => void,
 ) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const action = useAction("Could not update the library.");
   const [folderForm, setFolderForm] = useState<FolderForm>();
 
   // Opening another folder closes a create or rename form left open.
@@ -204,40 +186,25 @@ function useLibraryActions(
   if (openedFolder.current !== folderId) {
     openedFolder.current = folderId;
     setFolderForm(undefined);
-    setError(undefined);
+    action.setError(undefined);
   }
 
-  async function run(action: () => Promise<unknown>) {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await action();
+  const run = (change: () => Promise<unknown>) =>
+    action.run(async () => {
+      await change();
       await refresh();
-      return true;
-    } catch (cause) {
-      setError(errorMessage(cause, "Something went wrong."));
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }
+    });
 
   return {
-    busy,
+    busy: action.busy,
     deleteFolder: async (detail: LibraryFolderDetail) => {
       if (!(await confirmFolderDeletion(detail.folder))) return;
-      setBusy(true);
-      setError(undefined);
-      try {
+      await action.run(async () => {
         await api.libraryFolders.delete(detail.folder.id);
         onNavigate(libraryPath());
-      } catch (cause) {
-        setError(errorMessage(cause, "Something went wrong."));
-      } finally {
-        setBusy(false);
-      }
+      });
     },
-    error,
+    error: action.error,
     folderForm,
     move: (object: StoredObject, destination: string | null) =>
       run(() => api.objects.move(object.id, destination)),
@@ -684,29 +651,22 @@ function VerificationStatus({
   initialNotice,
   onResend,
 }: VerificationStatusProps) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState(initialNotice);
+  const { busy, error, notice, run } = useAction(
+    "Could not send the verification email.",
+  );
+  const [openingNotice, setOpeningNotice] = useState(initialNotice);
 
   async function resend() {
-    setBusy(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      await onResend();
-      setNotice("Verification email sent. Check your inbox.");
-    } catch (cause) {
-      setError(errorMessage(cause, "Something went wrong."));
-    } finally {
-      setBusy(false);
-    }
+    setOpeningNotice(undefined);
+    await run(onResend, "Verification email sent. Check your inbox.");
   }
 
-  if (!notice && emailVerified) return null;
+  const shown = notice ?? openingNotice;
+  if (!shown && emailVerified) return null;
   return (
     <>
       {error && <Toast tone="danger">{error}</Toast>}
-      {notice && <Toast tone="success">{notice}</Toast>}
+      {shown && <Toast tone="success">{shown}</Toast>}
       {!emailVerified && (
         <Banner
           actions={

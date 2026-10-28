@@ -8,13 +8,13 @@ import {
   Select,
   Toast,
 } from "@balebase/ui/react";
-import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
+import { type FormEvent, type MouseEvent, useState } from "react";
 import { AccountDeletion } from "./AccountDeletion";
 import { AccountSecurity } from "./AccountSecurity";
 import { saveDefaultOrganizationPreference } from "./defaultOrganization";
-import { errorMessage } from "./errors";
 import type { WorkspaceOrganization } from "./organizationState";
 import { ThemeSwitcher } from "./ThemeSwitcher";
+import { useAction } from "./useAction";
 
 export function AccountSettings({
   defaultOrganizationId,
@@ -126,29 +126,26 @@ function AccountGeneral({
   const current = organizations.some(({ id }) => id === defaultOrganizationId)
     ? defaultOrganizationId
     : organizations[0]?.id;
-  const [selected, setSelected] = useState(current ?? "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
-
-  useEffect(() => setSelected(current ?? ""), [current]);
+  // Follows the saved default until the person picks another.
+  const [choice, setChoice] = useState<string>();
+  const selected = choice ?? current ?? "";
+  const {
+    busy: saving,
+    error,
+    notice,
+    run,
+    setError,
+    setNotice,
+  } = useAction("Could not save your default organization.");
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected) return;
-    setSaving(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      await saveDefaultOrganizationPreference(selected, onSessionChanged);
-      setNotice("Default organization saved.");
-    } catch (cause) {
-      setError(
-        errorMessage(cause, "Could not save your default organization."),
-      );
-    } finally {
-      setSaving(false);
-    }
+    const saved = await run(
+      () => saveDefaultOrganizationPreference(selected, onSessionChanged),
+      "Default organization saved.",
+    );
+    if (saved) setChoice(undefined);
   }
 
   return (
@@ -172,7 +169,7 @@ function AccountGeneral({
           <Select
             disabled={saving || organizations.length === 0}
             onChange={(event) => {
-              setSelected(event.target.value);
+              setChoice(event.target.value);
               setError(undefined);
               setNotice(undefined);
             }}

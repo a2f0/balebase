@@ -20,14 +20,16 @@ import type {
   AuditTemplateSection,
   AuditTemplateVersion,
 } from "@balebase/validators/audits";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
 import { api } from "./apiClient";
 import { ErrorToast } from "./ErrorToast";
-import { type ErrorNotice, errorNotice } from "./errors";
+import type { ErrorNotice } from "./errors";
 import { GlobalAuditControls } from "./GlobalAuditControls";
 import { countLabel } from "./labels";
 import { globalAuditsPath } from "./organizationState";
+import { useAction } from "./useAction";
+import { useLoad } from "./useLoad";
 import { moveEntry, useReorderDrag } from "./useReorderDrag";
 
 interface BuilderProps {
@@ -83,61 +85,55 @@ function useTemplateBuilder({
   manageGlobal = false,
   onNavigate,
 }: BuilderProps) {
-  const [template, setTemplate] = useState<AuditTemplate>();
-  const [currentStatus, setCurrentStatus] = useState<string>();
-  const [versions, setVersions] = useState<AuditTemplateVersion[]>();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ErrorNotice>();
+  const loaded = useLoad(
+    useCallback(async () => {
+      const [{ template }, { versions }] = await Promise.all([
+        loadTemplate(id, manageGlobal),
+        loadVersions(id, manageGlobal),
+      ]);
+      return { currentStatus: template.status, template, versions };
+    }, [id, manageGlobal]),
+    "Could not load the checklist.",
+  );
+  const { setData } = loaded;
+  const template = loaded.data?.template;
+  const versionLoad = useAction("Could not load that version.");
+  const saving = useAction("Could not save checklist.");
   const [notice, setNotice] = useState<string>();
-
-  useEffect(() => {
-    Promise.all([
-      loadTemplate(id, manageGlobal),
-      loadVersions(id, manageGlobal),
-    ])
-      .then(([{ template: nextTemplate }, { versions: nextVersions }]) => {
-        setTemplate(nextTemplate);
-        setCurrentStatus(nextTemplate.status);
-        setVersions(nextVersions);
-      })
-      .catch((cause: unknown) =>
-        setError(errorNotice(cause, "Could not save checklist.")),
-      );
-  }, [id, manageGlobal]);
+  const setTemplate = (next: AuditTemplate) =>
+    setData((current) => current && { ...current, template: next });
 
   async function selectVersion(version: number) {
     if (!template || version === template.version) return;
-    setBusy(true);
-    setError(undefined);
     setNotice(undefined);
-    try {
+    await versionLoad.run(async () => {
       const { template: selected } = await loadTemplate(
         id,
         manageGlobal,
         version === template.currentVersion ? undefined : version,
       );
       setTemplate(selected);
-    } catch (cause) {
-      setError(errorNotice(cause, "Could not save checklist."));
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function save(status?: "published" | "unpublished") {
     if (!template) return;
-    setBusy(true);
-    setError(undefined);
     setNotice(undefined);
-    try {
+    await saving.run(async () => {
       const copiedGlobal = template.scope === "global" && !manageGlobal;
       const { template: saved } = await saveTemplate(
         template,
         manageGlobal,
         status,
       );
-      setTemplate(saved);
-      setCurrentStatus(saved.status);
+      setData(
+        (current) =>
+          current && {
+            ...current,
+            currentStatus: saved.status,
+            template: saved,
+          },
+      );
       setNotice(
         copiedGlobal
           ? "Organization form created. The global form is unchanged."
@@ -148,20 +144,20 @@ function useTemplateBuilder({
       if (saved.id !== id) {
         onNavigate(`/audits/templates/${encodeURIComponent(saved.id)}`);
       }
-      setVersions((await loadVersions(saved.id, manageGlobal)).versions);
-    } catch (cause) {
-      setError(errorNotice(cause, "Could not save checklist."));
-    } finally {
-      setBusy(false);
-    }
+      const { versions } = await loadVersions(saved.id, manageGlobal);
+      setData((current) => current && { ...current, versions });
+    });
   }
 
+  const loadError: ErrorNotice | undefined = loaded.error
+    ? { message: loaded.error, upgrade: false }
+    : undefined;
   return {
     template,
-    currentStatus,
-    versions,
-    busy,
-    error,
+    currentStatus: loaded.data?.currentStatus,
+    versions: loaded.data?.versions,
+    busy: versionLoad.busy || saving.busy,
+    error: saving.failure ?? versionLoad.failure ?? loadError,
     notice,
     save,
     selectVersion,
