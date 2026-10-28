@@ -2,12 +2,12 @@ import { issuesRoutes } from "@balebase/validators/issues";
 import { Hono } from "hono";
 import { activityBatch, findActivity } from "./activity";
 import { isRecord } from "./auditDefinition";
+import type { ApiEnv } from "./authMiddleware";
 import { cursorPage, decodeCursor, encodeCursor } from "./cursorPagination";
 import {
   canSeeFinanceIssues,
   findIssue,
   type IssueContext,
-  type IssueEnv,
   type IssueRow,
   issueSelect,
   issueTargetAvailable,
@@ -19,7 +19,7 @@ import {
 import { listMemberDirectory } from "./organizationMembers";
 import { respond } from "./respond";
 
-export const issues = new Hono<IssueEnv>();
+export const issues = new Hono<ApiEnv>();
 const issuePageSize = 50;
 issues.get("/", listIssues);
 issues.get("/members", async (context) =>

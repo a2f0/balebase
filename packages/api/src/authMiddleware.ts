@@ -22,7 +22,7 @@ export interface AuthVariables {
   organizationRole: string;
 }
 
-type AuthEnv = {
+export type ApiEnv = {
   Bindings: Bindings;
   Variables: AuthVariables;
 };
@@ -39,7 +39,7 @@ const organizationSeatRouteExemptions = new Set([
   "/api/auth/organization/set-active",
 ]);
 
-export const requireAuth = createMiddleware<AuthEnv>(async (context, next) => {
+export const requireAuth = createMiddleware<ApiEnv>(async (context, next) => {
   const token = apiKeyFromHeader(context.req.header("Authorization"));
   if (token !== undefined) {
     const failure = await authenticateRequestApiKey(context, token);
@@ -77,23 +77,21 @@ export const requireAuth = createMiddleware<AuthEnv>(async (context, next) => {
  * Authenticates the MCP endpoint, which accepts only API keys: tools reach the
  * workspace through the same per-route API-key policy as REST calls.
  */
-export const requireApiKey = createMiddleware<AuthEnv>(
-  async (context, next) => {
-    const token = apiKeyFromHeader(context.req.header("Authorization"));
-    if (token === undefined) {
-      context.header("WWW-Authenticate", 'Bearer realm="Balebase"');
-      return context.json(
-        { error: "An API key is required. Send it as a Bearer token." },
-        401,
-      );
-    }
-    const failure = await authenticateRequestApiKey(context, token);
-    return failure ?? next();
-  },
-);
+export const requireApiKey = createMiddleware<ApiEnv>(async (context, next) => {
+  const token = apiKeyFromHeader(context.req.header("Authorization"));
+  if (token === undefined) {
+    context.header("WWW-Authenticate", 'Bearer realm="Balebase"');
+    return context.json(
+      { error: "An API key is required. Send it as a Bearer token." },
+      401,
+    );
+  }
+  const failure = await authenticateRequestApiKey(context, token);
+  return failure ?? next();
+});
 
 async function authenticateRequestApiKey(
-  context: Context<AuthEnv>,
+  context: Context<ApiEnv>,
   token: string,
 ) {
   const now = new Date();
@@ -143,7 +141,7 @@ async function recordUserActivity(
 }
 
 function requireSessionOrganization(requiresSeat: (role: string) => boolean) {
-  return createMiddleware<AuthEnv>(async (context, next) => {
+  return createMiddleware<ApiEnv>(async (context, next) => {
     const session = context.get("authSession");
     // A key belongs to one organization; it never falls back to another.
     const apiKey = context.get("apiKey");
@@ -175,7 +173,7 @@ const organizationPluginAccessExemptPaths = new Set([
   "/api/auth/organization/set-active",
 ]);
 
-export const requireOrganizationPluginAccess = createMiddleware<AuthEnv>(
+export const requireOrganizationPluginAccess = createMiddleware<ApiEnv>(
   async (context, next) => {
     if (organizationPluginAccessExemptPaths.has(context.req.path)) {
       return next();
@@ -206,7 +204,7 @@ export const requireOrganizationPluginAccess = createMiddleware<AuthEnv>(
 );
 
 function listsCurrentUsersTeamsAcrossOrganizations(
-  context: Context<AuthEnv>,
+  context: Context<ApiEnv>,
   currentUserId: string,
 ) {
   if (
@@ -224,7 +222,7 @@ function listsCurrentUsersTeamsAcrossOrganizations(
 }
 
 async function filterTeamsRequiringAccess(
-  context: Context<AuthEnv>,
+  context: Context<ApiEnv>,
   next: Next,
 ) {
   const session = context.get("authSession");
@@ -281,7 +279,7 @@ async function filterTeamsRequiringAccess(
 }
 
 async function authorizeOrganization(
-  context: Context<AuthEnv>,
+  context: Context<ApiEnv>,
   next: Next,
   candidates: string[],
   requiresSeat: (role: string) => boolean,
@@ -369,7 +367,7 @@ async function authorizeOrganization(
 }
 
 async function organizationIdsFromRequest(
-  context: Context<AuthEnv>,
+  context: Context<ApiEnv>,
   activeTeamId: string | null | undefined,
 ) {
   const organizationIds: string[] = [];
@@ -474,7 +472,7 @@ async function organizationIdForSlug(database: D1Database, slug: string) {
   return record?.organizationId;
 }
 
-export const requireAuthOrganizationSeat = createMiddleware<AuthEnv>(
+export const requireAuthOrganizationSeat = createMiddleware<ApiEnv>(
   async (context, next) => {
     if (organizationSeatRouteExemptions.has(context.req.path)) return next();
     const session = context.get("authSession");
@@ -514,7 +512,7 @@ export const requireAuthOrganizationSeat = createMiddleware<AuthEnv>(
 );
 
 async function authOrganizationTarget(
-  context: Context<AuthEnv>,
+  context: Context<ApiEnv>,
   session: AuthSession,
 ) {
   const body = (await context.req.raw
@@ -637,7 +635,7 @@ function organizationCandidates(
 }
 
 export function requireRole(role: "admin" | "user") {
-  return createMiddleware<AuthEnv>(async (context, next) => {
+  return createMiddleware<ApiEnv>(async (context, next) => {
     const roles = context.get("authSession").user.role.split(",");
 
     if (!roles.includes(role)) {

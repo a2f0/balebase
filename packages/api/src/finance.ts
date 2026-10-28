@@ -14,6 +14,7 @@ import {
   findActivity,
   requestActor,
 } from "./activity";
+import type { ApiEnv } from "./authMiddleware";
 import { cursorPage, encodeCursor } from "./cursorPagination";
 import { accountDetail } from "./financeAccountDetail";
 import {
@@ -26,7 +27,7 @@ import {
   renameCategory,
 } from "./financeCategories";
 import { connectionDetail } from "./financeConnectionDetail";
-import type { FinanceContext, FinanceEnv } from "./financeContext";
+import type { FinanceContext } from "./financeContext";
 import { financeListingFilters } from "./financeListingFilters";
 import { expenseReport } from "./financeReports";
 import type { PlaidItemRow } from "./financeSync";
@@ -120,7 +121,7 @@ interface LinkTokenRequest extends Record<string, unknown> {
 }
 
 export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
-  const finance = new Hono<FinanceEnv>();
+  const finance = new Hono<ApiEnv>();
 
   finance.get("/", async (context) => financeListing(context));
   finance.post("/link-token", async (context) =>

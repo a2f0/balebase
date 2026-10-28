@@ -3,10 +3,9 @@ import {
   businessesRoutes,
 } from "@balebase/validators/businesses";
 import { type Context, Hono } from "hono";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { canManageOrganization } from "./organizationMembers";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
 interface BusinessRow {
   city: string | null;
@@ -22,16 +21,12 @@ interface BusinessRow {
   zip: string | null;
 }
 
-type BusinessEnv = {
-  Bindings: Bindings;
-  Variables: AuthVariables;
-};
-type BusinessContext = Context<BusinessEnv>;
+type BusinessContext = Context<ApiEnv>;
 
 const invalidBusinessMessage =
   "Business details are invalid. Use a valid name, EIN, DUNS number, incorporation date, street address, city, two-letter state, and ZIP code.";
 
-export const businesses = new Hono<BusinessEnv>();
+export const businesses = new Hono<ApiEnv>();
 
 businesses.get("/", async (context) => {
   const result = await context.env.DB.prepare(

@@ -6,7 +6,7 @@ import {
   employeeFormsRoutes,
 } from "@balebase/validators/employeeForms";
 import { type Context, Hono } from "hono";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import {
   CheckrRequestError,
   checkrConfigured,
@@ -64,11 +64,7 @@ interface RequirementRow {
   is_subject?: number;
 }
 
-type EmployeeFormsEnv = {
-  Bindings: Bindings;
-  Variables: AuthVariables;
-};
-const employeeForms = new Hono<EmployeeFormsEnv>();
+const employeeForms = new Hono<ApiEnv>();
 const maxDocumentBytes = 10 * 1024 * 1024;
 const maxMultipartBytes = maxDocumentBytes + 256 * 1024;
 const documentTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
@@ -688,7 +684,7 @@ interface ScreeningSubjectRow {
 }
 
 /** The requirement when it belongs to the signed-in person, not a manager. */
-async function findScreeningSubject(context: Context<EmployeeFormsEnv>) {
+async function findScreeningSubject(context: Context<ApiEnv>) {
   return context.env.DB.prepare(
     `SELECT requirement.id, requirement.kind, requirement.title,
             requirement.status, requirement.checkr_report_id,
@@ -727,7 +723,7 @@ function awaitingSubmission(
 }
 
 async function emailScreeningRequest(
-  context: Context<EmployeeFormsEnv>,
+  context: Context<ApiEnv>,
   row: RequirementRow,
 ) {
   const organization = await context.env.DB.prepare(
@@ -944,7 +940,7 @@ function isCity(value: unknown): value is string | undefined {
   );
 }
 
-async function findRequirement(context: Context<EmployeeFormsEnv>) {
+async function findRequirement(context: Context<ApiEnv>) {
   return context.env.DB.prepare(
     `SELECT requirement.id, requirement.kind, requirement.title,
             requirement.due_date, requirement.status, requirement.document_key,
@@ -969,7 +965,7 @@ async function findRequirement(context: Context<EmployeeFormsEnv>) {
 }
 
 async function canAccessRequirement(
-  context: Context<EmployeeFormsEnv>,
+  context: Context<ApiEnv>,
   row: RequirementRow,
 ) {
   if (canManageOrganization(context.get("organizationRole"))) return true;
@@ -986,21 +982,21 @@ async function canAccessRequirement(
   return Boolean(member);
 }
 
-function signedInAsSelf(context: Context<EmployeeFormsEnv>) {
+function signedInAsSelf(context: Context<ApiEnv>) {
   return (
     !context.get("apiKey") &&
     !context.get("authSession").session?.impersonatedBy
   );
 }
 
-function signInRequired(context: Context<EmployeeFormsEnv>) {
+function signInRequired(context: Context<ApiEnv>) {
   return context.json(
     { error: "Sign in to complete your own background check." },
     403,
   );
 }
 
-function managerRequired(context: Context<EmployeeFormsEnv>) {
+function managerRequired(context: Context<ApiEnv>) {
   return context.json({ error: "Organization manager access required." }, 403);
 }
 

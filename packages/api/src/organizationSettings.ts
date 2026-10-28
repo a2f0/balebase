@@ -3,7 +3,7 @@ import {
   organizationSettingsRoutes,
 } from "@balebase/validators/organizationSettings";
 import { Hono } from "hono";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import {
   cancelOrganizationSubscription,
   recoverCheckoutAfterFailedDeletion,
@@ -15,19 +15,13 @@ import {
   listOrganizationMembers,
 } from "./organizationMembers";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
 interface OrganizationRow {
   id: string;
   name: string;
 }
 
-type OrganizationSettingsEnv = {
-  Bindings: Bindings;
-  Variables: AuthVariables;
-};
-
-const organizationSettings = new Hono<OrganizationSettingsEnv>();
+const organizationSettings = new Hono<ApiEnv>();
 
 organizationSettings.get("/organizations", async (context) => {
   const userId = context.get("authSession").user.id;

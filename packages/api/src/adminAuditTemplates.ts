@@ -16,19 +16,15 @@ import {
   templateSelect,
   toTemplate,
 } from "./auditTemplates";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
 /**
  * Global audit templates, shared by every organization. Platform admins
  * manage them here, outside any organization; organizations can only read
  * and copy them.
  */
-const adminAuditTemplates = new Hono<{
-  Bindings: Bindings;
-  Variables: AuthVariables;
-}>();
+const adminAuditTemplates = new Hono<ApiEnv>();
 
 adminAuditTemplates.get("/", async (context) => {
   await ensureStarterTemplates(context.env.DB);

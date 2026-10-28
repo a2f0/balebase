@@ -2,12 +2,11 @@ import type { Issue, IssueTargetType } from "@balebase/validators/issues";
 import type { Context } from "hono";
 import { isRecord, validText } from "./auditDefinition";
 import { storedDefinition } from "./auditTemplates";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { userHasCapability } from "./organizationGroups";
-import type { Bindings } from "./types";
 
-export type IssueEnv = { Bindings: Bindings; Variables: AuthVariables };
-export type IssueContext = Context<IssueEnv>;
+export type IssueEnv = ApiEnv;
+export type IssueContext = Context<ApiEnv>;
 export interface IssueTarget {
   type: IssueTargetType;
   id: string | null;

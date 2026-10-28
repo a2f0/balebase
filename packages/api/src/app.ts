@@ -12,7 +12,7 @@ import { apiKeys, mcpToolRequest } from "./apiKeys";
 import { audits } from "./audits";
 import { createAuth } from "./auth";
 import {
-  type AuthVariables,
+  type ApiEnv,
   requireApiKey,
   requireAuth,
   requireAuthOrganizationSeat,
@@ -38,16 +38,12 @@ import { organizationGroups, requireCapability } from "./organizationGroups";
 import { organizationSettings } from "./organizationSettings";
 import { respond } from "./respond";
 import { signing } from "./signing";
-import type { Bindings } from "./types";
 import { respondToUnexpectedError } from "./unexpectedError";
 import { userDeletion } from "./userDeletion";
 
 const apiVersionHeader = "API-Version";
 
-const app = new Hono<{
-  Bindings: Bindings;
-  Variables: AuthVariables;
-}>();
+const app = new Hono<ApiEnv>();
 
 // Every response names the API version, errors and preflights included, so
 // the client can show which deploy answered.

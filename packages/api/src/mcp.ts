@@ -7,7 +7,7 @@ import {
 import type { Context } from "hono";
 import { version } from "../package.json";
 import type { ApiKeyAccess } from "./apiKeys";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { auditTools } from "./mcpAuditTools";
 import { contractTools } from "./mcpContractTools";
 import { financeTools } from "./mcpFinanceTools";
@@ -15,9 +15,6 @@ import { issueTools } from "./mcpIssueTools";
 import { libraryTools } from "./mcpLibraryTools";
 import { type McpTool, toolAccess, toolInputSchema } from "./mcpToolSchema";
 import { workspaceTools } from "./mcpWorkspaceTools";
-import type { Bindings } from "./types";
-
-type McpEnv = { Bindings: Bindings; Variables: AuthVariables };
 
 /** Runs a request through the API itself, with every route's own checks. */
 export type ApiDispatch = (request: Request) => Response | Promise<Response>;
@@ -41,7 +38,7 @@ export const mcpTools: McpTool[] = [
  * to direct API calls.
  */
 export function handleMcpRequest(
-  context: Context<McpEnv>,
+  context: Context<ApiEnv>,
   dispatch: ApiDispatch,
 ) {
   const apiKey = context.get("apiKey");

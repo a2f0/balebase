@@ -4,7 +4,7 @@ import {
 } from "@balebase/validators/equipment";
 import { type Context, Hono } from "hono";
 import { activityBatch, findActivity } from "./activity";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { normalizeBusinessDate } from "./businesses";
 import { listLinkedEmails, toLinkedEmail } from "./inboundEmailLinks";
 import {
@@ -12,13 +12,8 @@ import {
   listMemberDirectory,
 } from "./organizationMembers";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
-type EquipmentEnv = {
-  Bindings: Bindings;
-  Variables: AuthVariables;
-};
-type EquipmentContext = Context<EquipmentEnv>;
+type EquipmentContext = Context<ApiEnv>;
 
 /** The types offered for new equipment. Adding one needs no migration. */
 const equipmentTypes = ["computer", "cell_phone", "monitor"] as const;
@@ -67,7 +62,7 @@ const assigneeIsMember = `(? IS NULL OR EXISTS (
   SELECT 1 FROM member WHERE organizationId = ? AND userId = ?
 ))`;
 
-const equipment = new Hono<EquipmentEnv>();
+const equipment = new Hono<ApiEnv>();
 
 equipment.get("/", async (context) => {
   const organizationId = context.get("organizationId");

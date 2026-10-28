@@ -52,16 +52,12 @@ import {
   templateSelect,
   toTemplate,
 } from "./auditTemplates";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { freeFormTemplateLimit, organizationTemplateLimit } from "./billing";
 import { cursorPage, decodeCursor, encodeCursor } from "./cursorPagination";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
-const audits = new Hono<{
-  Bindings: Bindings;
-  Variables: AuthVariables;
-}>();
+const audits = new Hono<ApiEnv>();
 
 interface IssueRow {
   assigned_to: string | null;

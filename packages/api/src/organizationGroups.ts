@@ -6,14 +6,13 @@ import {
 } from "@balebase/validators/organizationGroups";
 import { type Context, Hono } from "hono";
 import { createMiddleware } from "hono/factory";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import {
   canManageOrganization,
   countOrganizationOwners,
   listOrganizationMembers,
 } from "./organizationMembers";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
 const supportedCapabilities = OrganizationCapabilitySchema.options;
 
@@ -46,13 +45,9 @@ interface RawGroupInput {
   userIds?: unknown;
 }
 
-type OrganizationEnv = {
-  Bindings: Bindings;
-  Variables: AuthVariables;
-};
-type OrganizationContext = Context<OrganizationEnv>;
+type OrganizationContext = Context<ApiEnv>;
 
-const organizationGroups = new Hono<OrganizationEnv>();
+const organizationGroups = new Hono<ApiEnv>();
 
 organizationGroups.get("/access", async (context) => {
   const organizationId = context.get("organizationId");
@@ -191,7 +186,7 @@ organizationGroups.delete("/:id", async (context) => {
 });
 
 export function requireCapability(capability: OrganizationCapability) {
-  return createMiddleware<OrganizationEnv>(async (context, next) => {
+  return createMiddleware<ApiEnv>(async (context, next) => {
     const hasAccess = await userHasCapability(
       context.env.DB,
       context.get("organizationId"),
