@@ -1,4 +1,9 @@
 import { auditsRoutes } from "@balebase/validators/audits";
+import {
+  issueImageTypeAccepted,
+  maxIssueImageBytes,
+  maxIssueImages,
+} from "@balebase/validators/issueRules";
 import { offlineRoutes } from "@balebase/validators/offline";
 import { type Context, Hono } from "hono";
 import { activityBatch } from "./activity";
@@ -22,10 +27,8 @@ import type { Bindings } from "./types";
 const auditIssueImages = new Hono<ApiEnv>();
 type AuditIssueImageContext = Context<ApiEnv>;
 
-const maxImageBytes = 10 * 1024 * 1024;
 const maxImageDimension = 12_000;
 const maxImagePixels = 40_000_000;
-const maxImagesPerIssue = 10;
 // A maximum-size request can briefly retain its 10 MB input buffer, the
 // immutable Blob consumed by Images, and a 10 MB normalized R2 body. Keep two
 // such pipelines well below Workers' shared 128 MB isolate memory limit.
@@ -123,7 +126,7 @@ export async function uploadAuditIssueImage(
         {
           error: discarded
             ? discardedAuditError
-            : `Issues are limited to ${maxImagesPerIssue} images.`,
+            : `Issues are limited to ${maxIssueImages} images.`,
         },
         409,
       );
@@ -298,7 +301,7 @@ async function reserveAuditIssueImage(
          RETURNING id`,
       )
       .bind(
-        maxImagesPerIssue,
+        maxIssueImages,
         imageId,
         issueId,
         objectId,
@@ -638,7 +641,7 @@ async function writeNormalizedAuditIssueImage(
   try {
     normalizedBytes = await readBodyWithLimit(
       stream,
-      maxImageBytes,
+      maxIssueImageBytes,
       maxImageReadMilliseconds,
     );
   } catch (cause) {
@@ -691,15 +694,12 @@ async function parseImageUpload(
   | { error: string; status: 400 | 408 | 413 }
 > {
   const contentLength = Number(request.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > maxImageBytes) {
+  if (Number.isFinite(contentLength) && contentLength > maxIssueImageBytes) {
     return { error: "Images must be 10 MB or smaller.", status: 413 };
   }
   const contentType = request.headers.get("content-type") ?? "";
   const declaredType = (contentType.split(";", 1)[0] ?? "").toLowerCase();
-  if (
-    declaredType !== "application/octet-stream" &&
-    !supportedImageType(declaredType)
-  ) {
+  if (!issueImageTypeAccepted(declaredType)) {
     return {
       error: "Images must be JPEG, PNG, GIF, or WebP files.",
       status: 400,
@@ -709,7 +709,7 @@ async function parseImageUpload(
   try {
     requestBytes = await readBodyWithLimit(
       request.body,
-      maxImageBytes,
+      maxIssueImageBytes,
       maxImageReadMilliseconds,
     );
   } catch (cause) {

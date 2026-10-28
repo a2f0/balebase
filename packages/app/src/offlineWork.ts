@@ -1,4 +1,8 @@
 import type { AuditTemplate } from "@balebase/validators/audits";
+import {
+  issueImageProblem,
+  maxIssueImages,
+} from "@balebase/validators/issueRules";
 import type { IssueInput } from "@balebase/validators/issues";
 import {
   changeOfflineWorkspace,
@@ -82,19 +86,8 @@ export async function createOfflineIssue(
   target?: { auditId: string; itemId: string },
 ) {
   if (!input.title.trim()) throw new Error("Enter an issue title.");
-  if (files.length > 10) throw new Error("Issues are limited to ten images.");
-  if (
-    files.some(
-      (file) =>
-        !["image/jpeg", "image/png", "image/webp", "image/gif"].includes(
-          file.type,
-        ) ||
-        file.size > 10 * 1024 * 1024 ||
-        !file.size,
-    )
-  ) {
-    throw new Error("Choose JPEG, PNG, GIF, or WebP images up to 10 MB each.");
-  }
+  const imageProblem = issueImageProblem(files, maxIssueImages);
+  if (imageProblem) throw new Error(imageProblem);
   const id = crypto.randomUUID();
   const images = files.map((file) => ({
     id: crypto.randomUUID(),

@@ -465,8 +465,10 @@ Start an offline audit from a downloaded checklist. Answers save to the device
 as they are entered, and drafts survive reopening the app. **Complete and queue
 audit** validates required answers and seals that audit for upload. Raise
 item-specific issues from an audit or standalone issues from the offline home.
-Each issue supports up to ten JPEG, PNG, GIF, or WebP photos of at most 10 MB.
-Saving an issue stores its details, photos, and queued operations together.
+Each issue supports up to ten JPEG, PNG, GIF, or WebP photos of at most 10 MB,
+the same limits as online. A non-empty photo whose type the device cannot tell
+is kept, and the API checks its format when it syncs. Saving an issue stores
+its details, photos, and queued operations together.
 
 Sync runs when the app is open and connectivity returns, on focus, and on a
 30-second timer. It creates the audit first, its issues next, and each issue's

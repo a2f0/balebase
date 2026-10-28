@@ -26,6 +26,11 @@ import type {
   AuditTemplateSection,
 } from "@balebase/validators/audits";
 import {
+  issueImageProblem,
+  issueImageTypes,
+  maxIssueImages,
+} from "@balebase/validators/issueRules";
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -44,13 +49,10 @@ import {
 } from "./AuditRunHeader";
 import { api } from "./apiClient";
 import {
-  acceptedImageTypes,
   appendIssueImageSelection,
   createIssueWithImages,
   issueImageSelectionKey,
-  maxIssueImages,
   uploadIssueImagesSequentially,
-  validateImageFiles,
 } from "./auditIssueImages";
 import { errorMessage } from "./errors";
 import { countLabel, formatDate, formatDateTime, formatLabel } from "./labels";
@@ -981,7 +983,7 @@ function IssueImagePicker({
           <Icon name="image" size={16} />
           Add images
           <input
-            accept={acceptedImageTypes.join(",")}
+            accept={issueImageTypes.join(",")}
             className="srOnly"
             multiple
             onChange={(event) => {
@@ -1231,19 +1233,16 @@ function useIssueCardActions({
 
   return {
     attach: async (files: File[]) => {
-      const selected = validateImageFiles(
+      const problem = issueImageProblem(
         files,
         maxIssueImages - issue.images.length,
       );
-      if (typeof selected === "string") {
-        onError(selected);
+      if (problem) {
+        onError(problem);
         return;
       }
       await run(async () => {
-        const [failure] = await uploadIssueImagesSequentially(
-          issue.id,
-          selected,
-        );
+        const [failure] = await uploadIssueImagesSequentially(issue.id, files);
         if (failure !== undefined)
           onError(errorMessage(failure, "Could not update audit."));
       });
@@ -1317,7 +1316,7 @@ function IssueImages({
           <Icon name="attachment" size={16} />
           Attach images
           <input
-            accept={acceptedImageTypes.join(",")}
+            accept={issueImageTypes.join(",")}
             className="srOnly"
             disabled={busy}
             multiple
