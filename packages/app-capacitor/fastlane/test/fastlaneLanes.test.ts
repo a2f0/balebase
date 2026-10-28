@@ -227,7 +227,7 @@ test("Android release lanes choose build numbers and Play upload options", async
   await Bun.write(join(scratch, "balebase-upload.keystore"), "");
   const result = await runLanes(
     `
-fastfile.define_singleton_method(:merged_release_pr_number) { |_options, _prefix| 153 }
+ENV["ANDROID_RELEASE_PR_NUMBER"] = "153"
 play = { latest: 4 }
 fastfile.define_singleton_method(:latest_google_play_build_number) { |tracks| [{}, play[:latest]] }
 number = lambda do |options|

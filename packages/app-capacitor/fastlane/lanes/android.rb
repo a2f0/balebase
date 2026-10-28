@@ -2,10 +2,10 @@
 
 require 'shellwords'
 require_relative '../lib/lane_options'
-require_relative '../lib/merged_release_pr'
 require_relative '../lib/native_release_target'
 require_relative '../lib/readiness_artifacts'
 require_relative '../lib/readiness_stores'
+require_relative '../lib/release_build_number'
 
 ANDROID_DIR = File.expand_path('../../android', __dir__)
 ANDROID_ASSETS_DIR = File.join(ANDROID_DIR, 'app/src/main/assets')
@@ -121,110 +121,37 @@ def load_android_release_secrets_env
   load_native_release_secrets_env
 end
 
-def explicit_android_release_build_number(options)
-  value = lane_option(options, :build_number, 'ANDROID_BUILD_NUMBER')
-  value ||= env_option('ANDROID_VERSION_CODE')
-  return nil if value.nil?
+GOOGLE_PLAY_BUILD_NUMBER_NAMES = ReleaseBuildNumber::Names.new(
+  platform: 'Android',
+  env_prefix: 'ANDROID',
+  store: 'Google Play',
+  credentials: 'Google Play credentials',
+  guard: 'Google Play version-code guard',
+  next_option: :next_google_play,
+  skip_option: :skip_google_play_version_guard,
+  # ANDROID_VERSION_CODE is the name Gradle reads outside the lanes.
+  build_number_env_names: %w[ANDROID_BUILD_NUMBER ANDROID_VERSION_CODE]
+)
 
-  positive_release_integer(value, 'Android release build number')
-end
-
-def next_google_play_build_number_requested?(options)
-  lane_boolean_option(options, :next_google_play, 'ANDROID_RELEASE_NEXT_GOOGLE_PLAY', false)
-end
-
-def google_play_version_guard_skipped?(options)
-  lane_boolean_option(options, :skip_google_play_version_guard, 'SKIP_GOOGLE_PLAY_VERSION_GUARD', false)
-end
-
-def google_play_version_guard_configured?
-  if google_play_configured?
-    true
-  else
-    UI.important('Google Play credentials not found; using merged PR number without Play version-code guard.')
-    false
-  end
-end
-
-def log_google_play_build_number(build_number, google_tracks)
-  UI.message("Google Play latest build number: #{build_number || 'none'} (tracks #{google_tracks.join(', ')})")
-end
-
-def google_play_version_guard_available?(options)
-  if google_play_version_guard_skipped?(options)
-    UI.important('Skipping Google Play version-code guard as requested.')
-    return false
-  end
-
-  google_play_version_guard_configured?
-end
-
-def latest_google_play_build_number_for_android_release(options)
-  return nil unless google_play_version_guard_available?(options)
-
-  google_tracks = google_play_tracks(options)
-  _version_codes_by_track, build_number = latest_google_play_build_number(google_tracks)
-  log_google_play_build_number(build_number, google_tracks)
-
-  build_number
-rescue StandardError => e
-  UI.user_error!("Failed to verify Google Play build number: #{e.message}")
-end
-
-def android_release_build_hash(build_number, google_play_build_number, merged_pr_number)
-  {
-    build_number: build_number,
-    google_play_latest_build_number: google_play_build_number,
-    merged_pr_number: merged_pr_number
-  }
-end
-
-def automatic_android_release_build_hash(options)
-  merged_pr_number = merged_release_pr_number(options, 'ANDROID')
-  google_play_build_number = latest_google_play_build_number_for_android_release(options)
-  google_play_next_build_number = google_play_build_number.nil? ? nil : google_play_build_number + 1
-  build_number = [merged_pr_number, google_play_next_build_number].compact.max
-
-  android_release_build_hash(build_number, google_play_build_number, merged_pr_number)
-end
-
-def require_next_google_play_build_number_lookup!(options)
-  UI.user_error!('next_google_play requires Google Play version lookup.') if google_play_version_guard_skipped?(options)
-  UI.user_error!('next_google_play requires Google Play credentials.') unless google_play_configured?
-end
-
-def latest_google_play_build_number_for_next_release(options)
-  google_tracks = google_play_tracks(options)
-  _version_codes_by_track, google_play_build_number = latest_google_play_build_number(google_tracks)
-  log_google_play_build_number(google_play_build_number, google_tracks)
-
-  google_play_build_number
-end
-
-def next_google_play_android_release_build_hash(options)
-  require_next_google_play_build_number_lookup!(options)
-  begin
-    google_play_build_number = latest_google_play_build_number_for_next_release(options)
-    build_number = (google_play_build_number || 0) + 1
-    UI.message("Using next Google Play build number: #{build_number}")
-    android_release_build_hash(build_number, google_play_build_number, nil)
-  rescue StandardError => e
-    UI.user_error!("Failed to resolve next Google Play build number: #{e.message}")
-  end
+# Google Play's side of ReleaseBuildNumber: its latest version code across the
+# queried tracks and the app's uploads.
+def google_play_build_number_store(options)
+  tracks = google_play_tracks(options)
+  ReleaseBuildNumber::Store.new(
+    names: GOOGLE_PLAY_BUILD_NUMBER_NAMES,
+    configured: -> { google_play_configured? },
+    latest: -> { latest_google_play_build_number(tracks).last },
+    scope: "tracks #{tracks.join(', ')}"
+  )
 end
 
 def next_android_release_build_number(options)
-  explicit_build_number = explicit_android_release_build_number(options)
-  next_google_play_requested = next_google_play_build_number_requested?(options)
-
-  if !explicit_build_number.nil? && next_google_play_requested
-    UI.user_error!('Use either build_number or next_google_play:true, not both.')
-  end
-
-  return android_release_build_hash(explicit_build_number, nil, nil) unless explicit_build_number.nil?
-  return next_google_play_android_release_build_hash(options) if next_google_play_requested
-
-  automatic_android_release_build_hash(options)
+  release_build = ReleaseBuildNumber.resolve(google_play_build_number_store(options), options)
+  {
+    build_number: release_build.fetch(:build_number),
+    google_play_latest_build_number: release_build.fetch(:store_build_number),
+    merged_pr_number: release_build.fetch(:merged_pr_number)
+  }
 end
 
 def require_android_release_signing!

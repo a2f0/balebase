@@ -35,10 +35,6 @@ results = {
   queriedTrack: f.send(:google_play_tracks, { track: "beta" }),
   defaultQueriedTracks: f.send(:google_play_tracks, {}),
   releaseStatus: f.send(:google_play_release_status, {}),
-  androidBuildNumber: f.send(:explicit_android_release_build_number, { build_number: "41" }),
-  androidVersionCodeOption: f.send(:explicit_android_release_build_number, { version_code: "42" }),
-  iosBuildNumber: f.send(:explicit_ios_release_build_number, { build_number: "43" }),
-  iosAppleBuildNumberOption: f.send(:explicit_ios_release_build_number, { apple_build_number: "44" }),
   teamOption: f.send(:ios_team_id, { team_id: "OPTION", apple_team_id: "ALIAS" }),
   teamAliasOption: f.send(:ios_team_id, { apple_team_id: "ALIAS" }),
   iosVersion: f.send(:explicit_ios_release_version, { version: "2.0.0" }),
@@ -48,10 +44,6 @@ results = {
 }
 ENV["GOOGLE_PLAY_TRACK"] = "alpha"
 results[:envTrack] = f.send(:google_play_upload_track, {})
-ENV["ANDROID_VERSION_CODE"] = "45"
-results[:androidVersionCodeEnv] = f.send(:explicit_android_release_build_number, {})
-ENV["APPLE_BUILD_NUMBER"] = "46"
-results[:iosAppleBuildNumberEnv] = f.send(:explicit_ios_release_build_number, {})
 ENV["TEAM_ID"] = "SHARED"
 results[:teamEnv] = f.send(:ios_team_id, {})
 ENV["APP_STORE_VERSION"] = "2.0.2"
@@ -91,10 +83,6 @@ test("lanes take one name per option and keep their environment fallbacks", asyn
     queriedTrack: ["beta"],
     defaultQueriedTracks: ["production", "beta", "alpha", "internal"],
     releaseStatus: "completed",
-    androidBuildNumber: 41,
-    androidVersionCodeOption: null,
-    iosBuildNumber: 43,
-    iosAppleBuildNumberOption: null,
     teamOption: "OPTION",
     teamAliasOption: null,
     iosVersion: "2.0.0",
@@ -102,8 +90,6 @@ test("lanes take one name per option and keep their environment fallbacks", asyn
     mergedPrNumber: 47,
     prNumberOption: null,
     envTrack: "alpha",
-    androidVersionCodeEnv: 45,
-    iosAppleBuildNumberEnv: 46,
     teamEnv: "SHARED",
     iosAppleVersionEnv: "2.0.2",
     prNumberEnv: 49,
