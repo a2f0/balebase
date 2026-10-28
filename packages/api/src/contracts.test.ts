@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
+import { Hono } from "hono";
 import { degrees, PDFDocument } from "pdf-lib";
 import {
   resumeStalledContracts,
@@ -13,7 +14,7 @@ import { queryHooks, toD1 } from "./testing/d1";
 import { createTestDatabase } from "./testing/database";
 import { requester } from "./testing/http";
 import { seedOrganization, seedUser } from "./testing/seed";
-import { testApp, withTestSession } from "./testing/session";
+import { type ApiTestEnv, withTestSession } from "./testing/session";
 
 const timestamp = "2026-09-20T12:00:00.000Z";
 const png = `data:image/png;base64,${"iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAEUlEQVR4nGNgYGD4z8DAwMAAAA0ABQHsHwEAAAAASUVORK5CYII="}`;
@@ -745,7 +746,7 @@ function createFixture() {
       userId,
     });
     // Signing links are public, so only the contract routes are signed in.
-    const app = testApp({});
+    const app = new Hono<ApiTestEnv>();
     app.use("/api/contracts/*", session);
     app.use("/api/contracts", session);
     app.route("/api/contracts", contracts);

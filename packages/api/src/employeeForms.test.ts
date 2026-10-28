@@ -1,4 +1,3 @@
-import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import { Hono } from "hono";
 import type { AuthVariables } from "./authMiddleware";
@@ -2787,9 +2786,11 @@ describe("employee forms", () => {
       null,
       null,
     );
-    await expect(
-      migrationInTransaction(database, "0067_self_host_checkr_screenings.sql"),
-    ).rejects.toThrow("Finish or cancel open hosted Checkr invitations first");
+    const migrate0067 = () =>
+      applyMigrations(database, { before: "0068", from: "0067" });
+    expect(migrate0067).toThrow(
+      "Finish or cancel open hosted Checkr invitations first",
+    );
     expect(
       database
         .query(
@@ -2801,10 +2802,8 @@ describe("employee forms", () => {
       .query(`UPDATE employee_requirements
               SET checkr_invitation_status = 'expired' WHERE id = 'invited'`)
       .run();
-    await migrationInTransaction(
-      database,
-      "0067_self_host_checkr_screenings.sql",
-    );
+    // The failed attempt rolled back, so the retry starts from 0066's schema.
+    migrate0067();
     expect(
       database
         .query(`SELECT id, status, checkr_candidate_id, checkr_report_id,
@@ -3200,38 +3199,6 @@ async function createFixture(migrations: { before?: string } = {}) {
     hooks,
     storageState,
   };
-}
-
-/**
- * Applies a migration atomically and statement by statement, as D1 does;
- * bun:sqlite's exec would skip a statement that fails partway through.
- */
-async function migrationInTransaction(database: Database, filename: string) {
-  const sql = await Bun.file(
-    new URL(`../migrations/${filename}`, import.meta.url),
-  ).text();
-  const statements: string[] = [];
-  let statement = "";
-  for (const line of sql.split("\n")) {
-    if (line.trim().startsWith("--")) continue;
-    statement += `${line}\n`;
-    const ended = /^\s*CREATE TRIGGER/i.test(statement)
-      ? /^END;$/i.test(line.trim())
-      : line.trim().endsWith(";");
-    if (ended) {
-      statements.push(statement);
-      statement = "";
-    }
-  }
-  database.run("BEGIN");
-  try {
-    // A trailing semicolon would make Bun treat each as a script again.
-    for (const next of statements) database.run(next.trim().replace(/;$/, ""));
-    database.run("COMMIT");
-  } catch (cause) {
-    database.run("ROLLBACK");
-    throw cause;
-  }
 }
 
 function now() {

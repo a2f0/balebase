@@ -8,7 +8,7 @@ const migrations = readdirSync(directory)
   .sort()
   .map((filename) => ({
     filename,
-    sql: readFileSync(join(directory, filename), "utf8"),
+    statements: statementsOf(readFileSync(join(directory, filename), "utf8")),
   }));
 let migratedImage: Uint8Array | undefined;
 
@@ -41,7 +41,11 @@ export function createTestDatabase(
   return migrate(empty(foreignKeys), { before: options.before });
 }
 
-/** Applies migrations in order under the database's foreign key setting. */
+/**
+ * Applies migrations in order under the database's foreign key setting. Each
+ * migration is atomic, as in D1: a failed guard leaves no partial schema, so
+ * the migration can run again once the data is fixed.
+ */
 export function applyMigrations(database: Database, range: MigrationRange) {
   migrate(database, range);
 }
@@ -58,9 +62,41 @@ function migrate(
 ) {
   const start = from === undefined ? 0 : position(from);
   const end = before === undefined ? migrations.length : position(before);
-  for (const migration of migrations.slice(start, end))
-    database.exec(migration.sql);
+  for (const migration of migrations.slice(start, end)) {
+    database.run("BEGIN");
+    try {
+      for (const statement of migration.statements) database.run(statement);
+      database.run("COMMIT");
+    } catch (cause) {
+      database.run("ROLLBACK");
+      throw cause;
+    }
+  }
   return database;
+}
+
+/**
+ * Splits a migration into single statements. bun:sqlite runs a multi-statement
+ * script without reporting a statement that fails partway through, which
+ * would hide a migration guard's RAISE.
+ */
+function statementsOf(sql: string) {
+  const statements: string[] = [];
+  let statement = "";
+  for (const line of sql.split("\n")) {
+    if (line.trim().startsWith("--")) continue;
+    statement += `${line}\n`;
+    const ended = /^\s*CREATE TRIGGER/i.test(statement)
+      ? /^END;$/i.test(line.trim())
+      : line.trim().endsWith(";");
+    if (ended) {
+      // A trailing semicolon would make Bun treat the statement as a script.
+      statements.push(statement.trim().replace(/;$/, ""));
+      statement = "";
+    }
+  }
+  if (statement.trim()) throw new Error("Migration ends mid-statement.");
+  return statements;
 }
 
 function position(name: string) {

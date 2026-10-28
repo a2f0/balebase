@@ -3,7 +3,7 @@ import type { AuthSession } from "../auth";
 import type { AuthVariables } from "../authMiddleware";
 import type { Bindings } from "../types";
 
-type TestEnv = { Bindings: Bindings; Variables: AuthVariables };
+export type ApiTestEnv = { Bindings: Bindings; Variables: AuthVariables };
 
 export interface TestIdentity {
   /** Defaults to "user-1". */
@@ -53,9 +53,9 @@ function testSession(identity: TestIdentity = {}): AuthSession {
  * requireOrganization. Pass a function to choose the identity per request.
  */
 export function withTestSession(
-  identity: TestIdentity | ((context: Context<TestEnv>) => TestIdentity),
+  identity: TestIdentity | ((context: Context<ApiTestEnv>) => TestIdentity),
 ) {
-  return async (context: Context<TestEnv>, next: () => Promise<void>) => {
+  return async (context: Context<ApiTestEnv>, next: () => Promise<void>) => {
     const current =
       typeof identity === "function" ? identity(context) : identity;
     context.set("authSession", testSession(current));
@@ -69,10 +69,10 @@ export function withTestSession(
 
 /** Mounts `routes` behind a test session for `identity`. */
 export function testApp(
-  routes: Record<string, Hono<TestEnv>>,
+  routes: Record<string, Hono<ApiTestEnv>>,
   identity: Parameters<typeof withTestSession>[0] = {},
 ) {
-  const app = new Hono<TestEnv>();
+  const app = new Hono<ApiTestEnv>();
   app.use("*", withTestSession(identity));
   for (const [path, route] of Object.entries(routes)) app.route(path, route);
   return app;
