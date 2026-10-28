@@ -18,7 +18,6 @@ import type {
   AuditDefinition,
   AuditDetail,
   AuditIssue,
-  AuditIssuePriority,
   AuditIssueUpdate,
   AuditPerson,
   AuditRun,
@@ -30,6 +29,7 @@ import {
   issueImageTypes,
   maxIssueImages,
 } from "@balebase/validators/issueRules";
+import type { IssueInput } from "@balebase/validators/issues";
 import {
   useCallback,
   useEffect,
@@ -55,6 +55,7 @@ import {
   uploadIssueImagesSequentially,
 } from "./auditIssueImages";
 import { errorMessage } from "./errors";
+import { IssueFields } from "./IssueForm";
 import { countLabel, formatDate, formatDateTime, formatLabel } from "./labels";
 import { useAction } from "./useAction";
 
@@ -702,7 +703,7 @@ export function FailedItemIssue({
             <Button
               busy={draft.busy}
               className="runIssueSubmit"
-              disabled={!draft.title.trim()}
+              disabled={!draft.input.title.trim()}
               icon="add"
               onClick={() =>
                 void draft.submit((warning) => onCreated(state.offer, warning))
@@ -830,7 +831,7 @@ function IssueForm({
         <Button
           busy={draft.busy}
           className="runIssueSubmit"
-          disabled={!draft.itemId || !draft.title.trim()}
+          disabled={!draft.itemId || !draft.input.title.trim()}
           icon="add"
           onClick={() => void draft.submit(onCreated)}
           variant="primary"
@@ -845,10 +846,9 @@ function IssueForm({
         <Select
           onChange={(event) => {
             const nextId = event.target.value;
+            const title = items.find((item) => item.id === nextId)?.prompt;
             draft.setItemId(nextId);
-            draft.setTitle(
-              items.find((item) => item.id === nextId)?.prompt ?? "",
-            );
+            draft.setInput((current) => ({ ...current, title: title ?? "" }));
           }}
           value={draft.itemId}
         >
@@ -870,10 +870,12 @@ type IssueDraft = ReturnType<typeof useIssueDraft>;
 /** A new issue's fields and its create-then-attach-images submission. */
 function useIssueDraft(auditId: string, item: AuditTemplateItem | undefined) {
   const [itemId, setItemId] = useState(item?.id ?? "");
-  const [title, setTitle] = useState(item?.prompt ?? "");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<AuditIssuePriority>("medium");
-  const [assignedTo, setAssignedTo] = useState("");
+  const [input, setInput] = useState<IssueInput>({
+    assignedTo: null,
+    description: "",
+    priority: "medium",
+    title: item?.prompt ?? "",
+  });
   const [images, setImages] = useState<File[]>([]);
   const { busy, error, run, setError } = useAction(
     "Could not create the issue.",
@@ -883,13 +885,7 @@ function useIssueDraft(auditId: string, item: AuditTemplateItem | undefined) {
     await run(async () => {
       const warning = await createIssueWithImages(
         auditId,
-        {
-          assignedTo: assignedTo || null,
-          description,
-          itemId,
-          priority,
-          title,
-        },
+        { ...input, itemId },
         images,
       );
       await onCreated(warning);
@@ -897,22 +893,16 @@ function useIssueDraft(auditId: string, item: AuditTemplateItem | undefined) {
   }
 
   return {
-    assignedTo,
     busy,
-    description,
     error,
     images,
+    input,
     itemId,
-    priority,
-    setAssignedTo,
-    setDescription,
     setError,
     setImages,
+    setInput,
     setItemId,
-    setPriority,
-    setTitle,
     submit,
-    title,
   };
 }
 
@@ -925,30 +915,10 @@ function IssueDraftFields({
 }) {
   return (
     <>
-      <Field label="Title">
-        <input
-          className="input"
-          maxLength={300}
-          onChange={(event) => draft.setTitle(event.target.value)}
-          value={draft.title}
-        />
-      </Field>
-      <Field label="Description" optional>
-        <textarea
-          className="textarea"
-          maxLength={2000}
-          onChange={(event) => draft.setDescription(event.target.value)}
-          placeholder="Describe the problem, evidence, and expected follow-up."
-          rows={3}
-          value={draft.description}
-        />
-      </Field>
-      <IssueAssignmentFields
-        assignedTo={draft.assignedTo}
+      <IssueFields
+        input={draft.input}
         members={members}
-        onAssignedToChange={draft.setAssignedTo}
-        onPriorityChange={draft.setPriority}
-        priority={draft.priority}
+        onChange={draft.setInput}
       />
       <IssueImagePicker
         files={draft.images}
@@ -1014,51 +984,6 @@ function IssueImagePicker({
         }
       />
     </fieldset>
-  );
-}
-
-function IssueAssignmentFields({
-  assignedTo,
-  members,
-  onAssignedToChange,
-  onPriorityChange,
-  priority,
-}: {
-  assignedTo: string;
-  members: AuditPerson[];
-  onAssignedToChange: (assignedTo: string) => void;
-  onPriorityChange: (priority: AuditIssuePriority) => void;
-  priority: AuditIssuePriority;
-}) {
-  return (
-    <div className="formRow">
-      <Field label="Priority">
-        <Select
-          onChange={(event) =>
-            onPriorityChange(event.target.value as AuditIssuePriority)
-          }
-          value={priority}
-        >
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-          <option value="critical">Critical</option>
-        </Select>
-      </Field>
-      <Field label="Assignee">
-        <Select
-          onChange={(event) => onAssignedToChange(event.target.value)}
-          value={assignedTo}
-        >
-          <option value="">Unassigned</option>
-          {members.map((member) => (
-            <option key={member.id} value={member.id}>
-              {member.name} · {member.email}
-            </option>
-          ))}
-        </Select>
-      </Field>
-    </div>
   );
 }
 

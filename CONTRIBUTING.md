@@ -116,6 +116,10 @@ creation lives in `packages/api/src/issues.ts` (general issues) and
 `audits.ts` (audit-specific routes); offline replay uses
 `offlineRecords.ts`. They share the `issues` table and its activity triggers.
 Check both route families and the offline operation schema when changing a field.
+Issue priorities and image limits live in the zod-free
+`packages/validators/src/issueRules.ts`, which the API and the app's online and
+offline paths all import; every app issue form renders `IssueFields` from
+`IssueForm.tsx`.
 
 The logo and every image generated from it are described in the
 [UI package's images section](packages/ui/README.md#images).

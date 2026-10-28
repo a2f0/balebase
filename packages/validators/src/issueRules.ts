@@ -1,6 +1,8 @@
 // Issue rules the API enforces and the app checks before sending. This module
 // stays free of zod so the app bundle can import it.
 
+export const issuePriorities = ["low", "medium", "high", "critical"] as const;
+
 /** The image formats the API stores. */
 export const issueImageTypes: readonly string[] = [
   "image/gif",

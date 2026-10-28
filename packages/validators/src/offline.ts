@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { auditsRoutes } from "./audits";
+import { issuePriorities } from "./issueRules";
 import { IssueMemberSchema } from "./issues";
 import { route } from "./route";
 
@@ -24,7 +25,7 @@ export const OfflineOperationSchema = z.discriminatedUnion("type", [
     type: z.literal("issue"),
     title: z.string().trim().min(1).max(300),
     description: z.string().max(2000),
-    priority: z.enum(["low", "medium", "high", "critical"]),
+    priority: z.enum(issuePriorities),
     assignedTo: z.string().min(1).max(200).nullable(),
     auditId: z.uuid().optional(),
     itemId: z.string().min(1).max(100).optional(),
