@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { OfflineWorkspacePage } from "./OfflineWorkspacePage";
 import {
   activeOfflineKey,
@@ -19,6 +19,10 @@ interface Workspace {
   organizations: { id: string; name: string }[];
 }
 
+/**
+ * The offline page for this path, if any. It opens in the workspace shell when
+ * signed in and connected, and stands alone otherwise.
+ */
 export function useOfflineRoute(
   session: OfflineSession | null | undefined,
   workspace: Workspace,
@@ -78,12 +82,27 @@ export function useOfflineRoute(
     // begins, so reconnecting never replaces an in-progress local editor.
     if (fallback && pathname !== "/offline") navigate("/offline");
   }, [fallback, pathname, navigate]);
-  if (excluded) return undefined;
-  if (local && (pathname === "/offline" || fallback)) {
+  const page = offlinePage();
+  const standalone = useOpenedLayout(
+    Boolean(page),
+    fallback || !session || Boolean(sessionError),
+  );
+  // Only the shell needs a session.
+  return page && { page, standalone: standalone || !session };
+
+  function offlinePage() {
+    if (excluded) return undefined;
+    const saved = pathname === "/offline" || fallback ? local : undefined;
+    const key =
+      saved?.key ??
+      (pathname === "/offline" && identity
+        ? offlineScopeKey(identity.scope)
+        : undefined);
+    if (!key) return undefined;
     return (
       <OfflineWorkspacePage
-        key={local.key}
-        workspace={local}
+        key={key}
+        workspace={saved}
         identity={identity}
         online={offline.online}
         onNavigate={navigate}
@@ -91,21 +110,17 @@ export function useOfflineRoute(
       />
     );
   }
-  if (pathname === "/offline" && identity) {
-    return (
-      <OfflineWorkspacePage
-        key={offlineScopeKey(identity.scope)}
-        workspace={
-          local?.key === offlineScopeKey(identity.scope) ? local : undefined
-        }
-        identity={identity}
-        online={offline.online}
-        onNavigate={navigate}
-        storageError={offline.error}
-      />
-    );
-  }
-  return undefined;
+}
+
+/**
+ * The page keeps the layout it opened with until the person leaves it, so
+ * losing or regaining coverage never remounts an in-progress local editor.
+ */
+function useOpenedLayout(shown: boolean, standalone: boolean) {
+  const [opened, setOpened] = useState<boolean>();
+  if (shown && opened === undefined) setOpened(standalone);
+  if (!shown && opened !== undefined) setOpened(undefined);
+  return opened ?? standalone;
 }
 
 function matchingWorkspace(

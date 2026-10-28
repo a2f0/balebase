@@ -111,7 +111,7 @@ export function App() {
   const signingToken = signingTokenForPath(pathname);
   if (signingToken) return <SigningPage token={signingToken} />;
 
-  if (offlineRoute) return offlineRoute;
+  if (offlineRoute?.standalone) return offlineRoute.page;
 
   // The sign-in page stays through background refetches; see useSessionRefetch.
   const background = sessionRefetch.background && !session;
@@ -148,6 +148,7 @@ export function App() {
       accounts={accounts}
       access={access}
       navigate={navigate}
+      offlinePage={offlineRoute?.page}
       pathname={pathname}
       onSessionChanged={() => refetch()}
       session={session}
@@ -305,6 +306,7 @@ function AuthenticatedWorkspace({
   access,
   accounts,
   navigate,
+  offlinePage,
   onSessionChanged,
   pathname,
   session,
@@ -314,6 +316,7 @@ function AuthenticatedWorkspace({
   access: ReturnType<typeof useOrganizationAccess>;
   accounts: ReturnType<typeof useAccountSessions>;
   navigate: (pathname: string) => void;
+  offlinePage: ReactNode;
   onSessionChanged: () => Promise<unknown>;
   pathname: string;
   session: AuthenticatedSession;
@@ -327,7 +330,8 @@ function AuthenticatedWorkspace({
     session,
     workspace,
   );
-  if (blocked) return blocked;
+  // Offline work checks its own access, and a loading screen would remount it.
+  if (blocked && !offlinePage) return blocked;
   const library = (
     <Library
       initialNotice={verificationNotice}
@@ -368,31 +372,33 @@ function AuthenticatedWorkspace({
       organizations={workspace.organizations}
       user={session.user}
     >
-      <OrganizationGate
-        access={access}
-        navigate={navigate}
-        pathname={pathname}
-        signOut={guardWorkspaceChange(accounts.signOutActiveAccount)}
-      >
-        {showContent ? (
-          contentForPath(
-            pathname,
-            library,
-            navigate,
-            workspace,
-            addAccount,
-            access,
-            session.user.defaultOrganizationId,
-            Boolean(session.user.twoFactorEnabled),
-            async () => {
-              await onSessionChanged();
-              await access.refresh();
-            },
-          )
-        ) : (
-          <NoOrganization />
-        )}
-      </OrganizationGate>
+      {offlinePage ?? (
+        <OrganizationGate
+          access={access}
+          navigate={navigate}
+          pathname={pathname}
+          signOut={guardWorkspaceChange(accounts.signOutActiveAccount)}
+        >
+          {showContent ? (
+            contentForPath(
+              pathname,
+              library,
+              navigate,
+              workspace,
+              addAccount,
+              access,
+              session.user.defaultOrganizationId,
+              Boolean(session.user.twoFactorEnabled),
+              async () => {
+                await onSessionChanged();
+                await access.refresh();
+              },
+            )
+          ) : (
+            <NoOrganization />
+          )}
+        </OrganizationGate>
+      )}
     </WorkspaceShell>
   );
 }
@@ -696,6 +702,7 @@ function currentLocation() {
 function activePageFor(pathname: string) {
   if (isWithin(pathname, "/issues")) return "issues" as const;
   if (pathname === "/activity") return "activity" as const;
+  if (pathname === "/offline") return "offline" as const;
   if (isWithin(pathname, "/audits")) {
     return "audits" as const;
   }
