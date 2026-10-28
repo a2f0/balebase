@@ -177,6 +177,33 @@ describe("leaving a contract draft", () => {
     expect(saved).toEqual(["Lease 2027"]);
   });
 
+  it("also saves edits made while the leaving save is in flight", async () => {
+    const saved: string[] = [];
+    let release = () => {};
+    globalThis.fetch = (async (input, init) => {
+      if (init?.method === "PUT") {
+        const { title } = JSON.parse(String(init.body)) as { title: string };
+        if (saved.length === 0)
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        saved.push(title);
+        return Response.json({ contract: { ...draft, title } });
+      }
+      if (String(input).endsWith("/document"))
+        return new Response(null, { status: 404 });
+      return Response.json({ contract: draft });
+    }) as typeof fetch;
+    const container = await mount();
+    await retitle(container, "Lease 2027");
+    const question = await leave();
+    await retitle(container, "Lease 2028");
+    await act(async () => release());
+    await settle();
+    expect(await question.allowed).toBe(true);
+    expect(saved).toEqual(["Lease 2027", "Lease 2028"]);
+  });
+
   it("shows a failed save and keeps the page until the edits are discarded", async () => {
     const saved = stubApi(["fail", "fail", "save"]);
     const container = await mount();

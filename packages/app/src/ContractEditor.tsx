@@ -146,16 +146,21 @@ function useDraftSaving({
     },
     [contractId, onChanged, revision, setDirty, untitled],
   );
+  // "stale" means the save landed but newer edits arrived while it ran.
   const attempt = useCallback(
-    (value: DraftInput) =>
-      run(async () => {
+    async (value: DraftInput): Promise<SaveOutcome> => {
+      let saved = false;
+      const succeeded = await run(async () => {
         try {
-          await saveDraft(value);
+          saved = await saveDraft(value);
         } catch (cause) {
           setRefused(value);
           throw cause;
         }
-      }),
+      });
+      if (!succeeded) return "failed";
+      return saved ? "saved" : "stale";
+    },
     [run, saveDraft],
   );
 
@@ -214,7 +219,7 @@ function useSaveOnLeave({
   unsaved,
   untitled,
 }: {
-  attempt: (value: DraftInput) => Promise<boolean>;
+  attempt: (value: DraftInput) => Promise<SaveOutcome>;
   contractId: string;
   dirty: boolean;
   unsaved: { current: DraftInput | null };
@@ -223,13 +228,16 @@ function useSaveOnLeave({
   useEffect(() => {
     if (!dirty) return;
     return addNavigationGuard(async () => {
-      const value = unsaved.current;
-      if (!value || (await attempt(value))) return true;
-      const leave = await confirmDiscardChanges(
-        "Your latest edits to this draft could not be saved.",
-      );
-      if (leave) unsaved.current = null;
-      return leave;
+      // Edits made while a save runs are saved too before the page goes.
+      for (let value = unsaved.current; value; value = unsaved.current) {
+        if ((await attempt(value)) !== "failed") continue;
+        const leave = await confirmDiscardChanges(
+          "Your latest edits to this draft could not be saved.",
+        );
+        if (leave) unsaved.current = null;
+        return leave;
+      }
+      return true;
     });
   }, [attempt, dirty, unsaved]);
   // Navigation is guarded, but the session can also end or change underneath
@@ -245,6 +253,8 @@ function useSaveOnLeave({
     [contractId, unsaved, untitled],
   );
 }
+
+type SaveOutcome = "failed" | "saved" | "stale";
 
 function titled(draft: DraftInput, untitled: string) {
   return draft.title.trim() ? draft : { ...draft, title: untitled };
