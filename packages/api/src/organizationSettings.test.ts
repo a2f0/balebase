@@ -1,10 +1,12 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { Hono } from "hono";
-import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
 import { organizationSettings } from "./organizationSettings";
-import type { Bindings } from "./types";
+import { testBindings } from "./testing/bindings";
+import { toD1 } from "./testing/d1";
+import { createTestDatabase } from "./testing/database";
+import { withFetch } from "./testing/http";
+import { insertBilling, seedAccount, seedMember } from "./testing/seed";
+import { testApp } from "./testing/session";
 
 const targetOrganizationId = "org_owner-user";
 const fallbackOrganizationId = "org_member-user";
@@ -12,7 +14,7 @@ const proPriceId = "price_pro_test";
 
 describe("organization deletion", () => {
   it("only lets an organization owner delete the organization", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const response = await fixture
       .app("member-user", "member")
       .request("/current", { method: "DELETE" });
@@ -30,7 +32,7 @@ describe("organization deletion", () => {
   });
 
   it("soft-deletes the organization and redirects active pointers", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const response = await fixture
       .app("owner-user", "owner")
       .request("/current", { method: "DELETE" });
@@ -109,180 +111,173 @@ describe("organization deletion", () => {
         .get(targetOrganizationId),
     ).toEqual({ count: 0 });
     expect(
-      fixture.database.query("SELECT COUNT(*) AS count FROM user").get(),
+      fixture.database
+        .query("SELECT COUNT(*) AS count FROM user WHERE id IN (?, ?)")
+        .get("owner-user", "member-user"),
     ).toEqual({ count: 2 });
   });
 
   it("cancels paid billing before an owner deletes the organization", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     insertPaidBilling(fixture.database, targetOrganizationId);
-    const originalFetch = globalThis.fetch;
-    const requests: Array<{ method: string; url: string }> = [];
-    globalThis.fetch = (async (input, init) => {
-      requests.push({ method: init?.method ?? "GET", url: String(input) });
-      return Response.json(canceledSubscription(targetOrganizationId));
-    }) as typeof fetch;
-    try {
-      const response = await fixture
-        .app("owner-user", "owner")
-        .request("/current", { method: "DELETE" });
-      expect(response.status).toBe(200);
-      expect(requests).toEqual([
-        {
-          method: "DELETE",
-          url: "https://api.stripe.com/v1/subscriptions/sub_test",
-        },
-      ]);
-      expect(
-        fixture.database
-          .query(
-            `SELECT organization.deletedAt, organization_billing.stripe_status
-             FROM organization
-             JOIN organization_billing
-               ON organization_billing.organization_id = organization.id
-             WHERE organization.id = ?`,
-          )
-          .get(targetOrganizationId),
-      ).toMatchObject({
-        deletedAt: expect.any(String),
-        stripe_status: "canceled",
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": () =>
+          Response.json(canceledSubscription(targetOrganizationId)),
+      },
+      async ({ requests }) => {
+        const response = await fixture
+          .app("owner-user", "owner")
+          .request("/current", { method: "DELETE" });
+        expect(response.status).toBe(200);
+        expect(requests.map(({ method, url }) => ({ method, url }))).toEqual([
+          {
+            method: "DELETE",
+            url: "https://api.stripe.com/v1/subscriptions/sub_test",
+          },
+        ]);
+        expect(
+          fixture.database
+            .query(
+              `SELECT organization.deletedAt, organization_billing.stripe_status
+               FROM organization
+               JOIN organization_billing
+                 ON organization_billing.organization_id = organization.id
+               WHERE organization.id = ?`,
+            )
+            .get(targetOrganizationId),
+        ).toMatchObject({
+          deletedAt: expect.any(String),
+          stripe_status: "canceled",
+        });
+      },
+    );
   });
 
   it("expires an open Checkout before an owner deletes the organization", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     insertPendingCheckout(fixture.database, "cs_pending_open");
-    const originalFetch = globalThis.fetch;
-    const requests: Array<{ method: string; url: string }> = [];
-    globalThis.fetch = (async (input, init) => {
-      const request = { method: init?.method ?? "GET", url: String(input) };
-      requests.push(request);
-      return Response.json({
-        id: "cs_pending_open",
-        status: request.method === "POST" ? "expired" : "open",
-        subscription: null,
-      });
-    }) as typeof fetch;
-    try {
-      const response = await fixture
-        .app("owner-user", "owner")
-        .request("/current", { method: "DELETE" });
-      expect(response.status).toBe(200);
-      expect(requests).toEqual([
-        {
-          method: "GET",
-          url: "https://api.stripe.com/v1/checkout/sessions/cs_pending_open",
-        },
-        {
-          method: "POST",
-          url: "https://api.stripe.com/v1/checkout/sessions/cs_pending_open/expire",
-        },
-      ]);
-      expect(
-        fixture.database
-          .query(
-            `SELECT checkout_disabled_at, pending_checkout_session_id
-             FROM organization_billing WHERE organization_id = ?`,
-          )
-          .get(targetOrganizationId),
-      ).toMatchObject({
-        checkout_disabled_at: expect.any(String),
-        pending_checkout_session_id: null,
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    const session = (status: string) => () =>
+      Response.json({ id: "cs_pending_open", status, subscription: null });
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/checkout/sessions/cs_pending_open":
+          session("open"),
+        "POST https://api.stripe.com/v1/checkout/sessions/cs_pending_open/expire":
+          session("expired"),
+      },
+      async ({ requests }) => {
+        const response = await fixture
+          .app("owner-user", "owner")
+          .request("/current", { method: "DELETE" });
+        expect(response.status).toBe(200);
+        expect(requests.map(({ method, url }) => ({ method, url }))).toEqual([
+          {
+            method: "GET",
+            url: "https://api.stripe.com/v1/checkout/sessions/cs_pending_open",
+          },
+          {
+            method: "POST",
+            url: "https://api.stripe.com/v1/checkout/sessions/cs_pending_open/expire",
+          },
+        ]);
+        expect(
+          fixture.database
+            .query(
+              `SELECT checkout_disabled_at, pending_checkout_session_id
+               FROM organization_billing WHERE organization_id = ?`,
+            )
+            .get(targetOrganizationId),
+        ).toMatchObject({
+          checkout_disabled_at: expect.any(String),
+          pending_checkout_session_id: null,
+        });
+      },
+    );
   });
 
   it("cancels a completed pending Checkout before owner deletion", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     insertPendingCheckout(fixture.database, "cs_pending_complete");
-    const originalFetch = globalThis.fetch;
-    const requests: Array<{ method: string; url: string }> = [];
-    globalThis.fetch = (async (input, init) => {
-      const request = { method: init?.method ?? "GET", url: String(input) };
-      requests.push(request);
-      if (request.method === "GET") {
-        return Response.json({
-          id: "cs_pending_complete",
-          status: "complete",
-          subscription: "sub_pending",
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/checkout/sessions/cs_pending_complete":
+          () =>
+            Response.json({
+              id: "cs_pending_complete",
+              status: "complete",
+              subscription: "sub_pending",
+            }),
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_pending": () =>
+          Response.json(
+            canceledSubscription(targetOrganizationId, "sub_pending"),
+          ),
+      },
+      async ({ requests }) => {
+        const response = await fixture
+          .app("owner-user", "owner")
+          .request("/current", { method: "DELETE" });
+        expect(response.status).toBe(200);
+        expect(requests.map(({ method, url }) => ({ method, url }))).toEqual([
+          {
+            method: "GET",
+            url: "https://api.stripe.com/v1/checkout/sessions/cs_pending_complete",
+          },
+          {
+            method: "DELETE",
+            url: "https://api.stripe.com/v1/subscriptions/sub_pending",
+          },
+        ]);
+        expect(
+          fixture.database
+            .query(
+              `SELECT stripe_status, stripe_subscription_id
+               FROM organization_billing WHERE organization_id = ?`,
+            )
+            .get(targetOrganizationId),
+        ).toEqual({
+          stripe_status: "canceled",
+          stripe_subscription_id: "sub_pending",
         });
-      }
-      return Response.json(
-        canceledSubscription(targetOrganizationId, "sub_pending"),
-      );
-    }) as typeof fetch;
-    try {
-      const response = await fixture
-        .app("owner-user", "owner")
-        .request("/current", { method: "DELETE" });
-      expect(response.status).toBe(200);
-      expect(requests).toEqual([
-        {
-          method: "GET",
-          url: "https://api.stripe.com/v1/checkout/sessions/cs_pending_complete",
-        },
-        {
-          method: "DELETE",
-          url: "https://api.stripe.com/v1/subscriptions/sub_pending",
-        },
-      ]);
-      expect(
-        fixture.database
-          .query(
-            `SELECT stripe_status, stripe_subscription_id
-             FROM organization_billing WHERE organization_id = ?`,
-          )
-          .get(targetOrganizationId),
-      ).toEqual({
-        stripe_status: "canceled",
-        stripe_subscription_id: "sub_pending",
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+      },
+    );
   });
 
   it("keeps a paid organization when owner cancellation fails", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     insertPaidBilling(fixture.database, targetOrganizationId);
-    const originalFetch = globalThis.fetch;
-    const originalConsoleError = console.error;
-    globalThis.fetch = (async (_input, _init) =>
-      Response.json(
-        { error: { message: "Stripe unavailable" } },
-        { status: 503 },
-      )) as typeof fetch;
-    console.error = () => {};
-    try {
-      const response = await fixture
-        .app("owner-user", "owner")
-        .request("/current", { method: "DELETE" });
-      expect(response.status).toBe(502);
-      expect(
-        fixture.database
-          .query(
-            `SELECT organization.deletedAt,
-                    organization_billing.checkout_disabled_at
-             FROM organization
-             JOIN organization_billing
-               ON organization_billing.organization_id = organization.id
-             WHERE organization.id = ?`,
-          )
-          .get(targetOrganizationId),
-      ).toEqual({ checkout_disabled_at: null, deletedAt: null });
-    } finally {
-      console.error = originalConsoleError;
-      globalThis.fetch = originalFetch;
-    }
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": () =>
+          Response.json(
+            { error: { message: "Stripe unavailable" } },
+            { status: 503 },
+          ),
+      },
+      async () => {
+        const response = await fixture
+          .app("owner-user", "owner")
+          .request("/current", { method: "DELETE" });
+        expect(response.status).toBe(502);
+        expect(
+          fixture.database
+            .query(
+              `SELECT organization.deletedAt,
+                      organization_billing.checkout_disabled_at
+               FROM organization
+               JOIN organization_billing
+                 ON organization_billing.organization_id = organization.id
+               WHERE organization.id = ?`,
+            )
+            .get(targetOrganizationId),
+        ).toEqual({ checkout_disabled_at: null, deletedAt: null });
+      },
+      { captureErrors: true },
+    );
   });
 
   it("re-enables checkout when deletion storage fails after cancellation", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     insertPaidBilling(fixture.database, targetOrganizationId);
     fixture.database.exec(
       `CREATE TRIGGER fail_owner_organization_deletion
@@ -292,45 +287,42 @@ describe("organization deletion", () => {
          SELECT RAISE(ABORT, 'forced organization deletion failure');
        END`,
     );
-    const originalFetch = globalThis.fetch;
-    const originalConsoleError = console.error;
-    globalThis.fetch = (async (_input, _init) =>
-      Response.json(
-        canceledSubscription(targetOrganizationId),
-      )) as typeof fetch;
-    console.error = () => {};
-    try {
-      const response = await fixture
-        .app("owner-user", "owner")
-        .request("/current", { method: "DELETE" });
-      expect(response.status).toBe(500);
-      expect(
-        fixture.database
-          .query(
-            `SELECT organization.deletedAt,
-                    organization_billing.checkout_disabled_at,
-                    organization_billing.stripe_status
-             FROM organization
-             JOIN organization_billing
-               ON organization_billing.organization_id = organization.id
-             WHERE organization.id = ?`,
-          )
-          .get(targetOrganizationId),
-      ).toEqual({
-        checkout_disabled_at: null,
-        deletedAt: null,
-        stripe_status: "canceled",
-      });
-    } finally {
-      console.error = originalConsoleError;
-      globalThis.fetch = originalFetch;
-    }
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": () =>
+          Response.json(canceledSubscription(targetOrganizationId)),
+      },
+      async () => {
+        const response = await fixture
+          .app("owner-user", "owner")
+          .request("/current", { method: "DELETE" });
+        expect(response.status).toBe(500);
+        expect(
+          fixture.database
+            .query(
+              `SELECT organization.deletedAt,
+                      organization_billing.checkout_disabled_at,
+                      organization_billing.stripe_status
+               FROM organization
+               JOIN organization_billing
+                 ON organization_billing.organization_id = organization.id
+               WHERE organization.id = ?`,
+            )
+            .get(targetOrganizationId),
+        ).toEqual({
+          checkout_disabled_at: null,
+          deletedAt: null,
+          stripe_status: "canceled",
+        });
+      },
+      { captureErrors: true },
+    );
   });
 });
 
 describe("organization member security", () => {
   it("lets a manager require two-factor authentication per member", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const response = await fixture
       .app("owner-user", "owner")
       .request("/people/target-member/two-factor-required", {
@@ -368,7 +360,7 @@ describe("organization member security", () => {
   });
 
   it("identifies the signed-in member and when each member joined", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const listing = await fixture
       .app("member-user", "member")
       .request("/people");
@@ -398,7 +390,7 @@ describe("organization member security", () => {
   });
 
   it("shows managers, but not members, when each member was last active", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     fixture.database
       .query("UPDATE user SET lastActiveAt = ? WHERE id = ?")
       .run("2026-10-15T08:30:00.000Z", "member-user");
@@ -425,7 +417,7 @@ describe("organization member security", () => {
   });
 
   it("rejects member changes from non-managers", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const response = await fixture
       .app("member-user", "member")
       .request("/people/target-member/two-factor-required", {
@@ -442,7 +434,7 @@ describe("organization member security", () => {
   });
 
   it("does not update a member from another organization", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const response = await fixture
       .app("owner-user", "owner")
       .request("/people/fallback-member/two-factor-required", {
@@ -459,33 +451,22 @@ describe("organization member security", () => {
   });
 });
 
-async function createFixture() {
-  const database = new Database(":memory:");
-  database.exec("PRAGMA foreign_keys = ON");
-  await applyMigration(database, "0003_create_auth.sql");
-  insertUser(database, "owner-user");
-  insertUser(database, "member-user");
-  await applyMigration(database, "0004_create_organizations.sql");
-  database
-    .query(
-      `INSERT INTO member
-       (id, organizationId, userId, role, createdAt)
-       VALUES (?, ?, ?, ?, ?)`,
-    )
-    .run("target-member", targetOrganizationId, "member-user", "member", now());
-  database
-    .query(
-      `INSERT INTO member
-       (id, organizationId, userId, role, createdAt)
-       VALUES (?, ?, ?, ?, ?)`,
-    )
-    .run(
-      "fallback-member",
-      fallbackOrganizationId,
-      "owner-user",
-      "member",
-      now(),
-    );
+function createFixture() {
+  const database = createTestDatabase();
+  seedAccount(database, { createdAt: now(), id: "owner-user" });
+  seedAccount(database, { createdAt: now(), id: "member-user" });
+  seedMember(database, {
+    createdAt: now(),
+    id: "target-member",
+    organizationId: targetOrganizationId,
+    userId: "member-user",
+  });
+  seedMember(database, {
+    createdAt: now(),
+    id: "fallback-member",
+    organizationId: fallbackOrganizationId,
+    userId: "owner-user",
+  });
   database
     .query(
       `INSERT INTO invitation
@@ -500,51 +481,49 @@ async function createFixture() {
       now(),
       "owner-user",
     );
-  await applyMigration(database, "0010_create_organization_groups.sql");
-  await applyMigration(database, "0011_soft_delete_organizations.sql");
-  await applyMigration(database, "0013_track_organization_deletion_actor.sql");
-  await applyMigration(database, "0020_add_two_factor_authentication.sql");
-  await applyMigration(database, "0031_require_member_two_factor.sql");
-  await applyMigration(database, "0032_create_billing.sql");
-  await applyMigration(database, "0053_track_paid_billing_end.sql");
-  await applyMigration(database, "0055_track_user_last_active.sql");
   insertSession(database, "owner-user", targetOrganizationId);
   insertSession(database, "member-user", targetOrganizationId);
-  const bindings = {
+  const bindings = testBindings({
     DB: toD1(database),
     STRIPE_PRO_PRICE_ID: proPriceId,
     STRIPE_SECRET_KEY: "sk_live_test",
-  } as Bindings;
+  });
   return {
-    app: (userId: string, organizationRole: string) =>
-      testApp(bindings, userId, organizationRole),
+    app: (userId: string, organizationRole: string) => {
+      const app = testApp(
+        { "/": organizationSettings },
+        { organizationId: targetOrganizationId, organizationRole, userId },
+      );
+      return {
+        request: (path: string, init?: RequestInit) =>
+          app.request(path, init, bindings),
+      };
+    },
     database,
   };
 }
 
 function insertPaidBilling(database: Database, organizationId: string) {
-  database
-    .query(
-      `INSERT INTO organization_billing
-       (organization_id, stripe_customer_id, stripe_subscription_id,
-        stripe_subscription_item_id, stripe_price_id, stripe_status,
-        seat_quantity, stripe_event_created, updated_at)
-       VALUES (?, 'cus_test', 'sub_test', 'si_test', ?, 'active', 2, 1, ?)`,
-    )
-    .run(organizationId, proPriceId, now());
+  insertBilling(database, organizationId, {
+    seat_quantity: 2,
+    stripe_customer_id: "cus_test",
+    stripe_event_created: 1,
+    stripe_price_id: proPriceId,
+    stripe_status: "active",
+    stripe_subscription_id: "sub_test",
+    stripe_subscription_item_id: "si_test",
+    updated_at: now(),
+  });
 }
 
 function insertPendingCheckout(database: Database, sessionId: string) {
-  database
-    .query(
-      `INSERT INTO organization_billing
-       (organization_id, pending_checkout_session_id, pending_checkout_url,
-        pending_checkout_expires_at, updated_at)
-       VALUES (?, ?, 'https://checkout.stripe.test/pending', 2000000000, ?)`,
-    )
-    .run(targetOrganizationId, sessionId, now());
+  insertBilling(database, targetOrganizationId, {
+    pending_checkout_expires_at: 2_000_000_000,
+    pending_checkout_session_id: sessionId,
+    pending_checkout_url: "https://checkout.stripe.test/pending",
+    updated_at: now(),
+  });
 }
-
 function canceledSubscription(
   organizationId: string,
   subscriptionId = "sub_test",
@@ -565,33 +544,6 @@ function canceledSubscription(
     metadata: { organization_id: organizationId },
     status: "canceled",
   };
-}
-
-function testApp(bindings: Bindings, userId: string, organizationRole: string) {
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-  app.use("*", async (context, next) => {
-    context.set("organizationId", targetOrganizationId);
-    context.set("organizationRole", organizationRole);
-    context.set("authSession", {
-      user: { id: userId, role: "user" },
-    } as AuthSession);
-    await next();
-  });
-  app.route("/", organizationSettings);
-  return {
-    request: (path: string, init?: RequestInit) =>
-      app.request(path, init, bindings),
-  };
-}
-
-function insertUser(database: Database, id: string) {
-  database
-    .query(
-      `INSERT INTO user
-       (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-       VALUES (?, ?, ?, 1, ?, ?, 'user', 0)`,
-    )
-    .run(id, id, `${id}@example.com`, now(), now());
 }
 
 function insertSession(
@@ -616,49 +568,6 @@ function insertSession(
       activeOrganizationId,
       `team_finance_${activeOrganizationId}`,
     );
-}
-
-interface TestStatement {
-  execute: () => unknown;
-}
-
-function toD1(database: Database) {
-  return {
-    batch: async (statements: TestStatement[]) =>
-      statements.map((statement) => statement.execute()),
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const statement = {
-        all: async () => ({ results: database.query(query).all(...values) }),
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        execute: () => {
-          const result = database.query(query).run(...values);
-          return {
-            meta: { changes: result.changes },
-            results: [],
-            success: true,
-          };
-        },
-        first: async () => database.query(query).get(...values),
-        run: async () => {
-          const result = database.query(query).run(...values);
-          return { meta: { changes: result.changes } };
-        },
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
-}
-
-async function applyMigration(database: Database, filename: string) {
-  database.exec(
-    await Bun.file(
-      new URL(`../migrations/${filename}`, import.meta.url),
-    ).text(),
-  );
 }
 
 function now() {

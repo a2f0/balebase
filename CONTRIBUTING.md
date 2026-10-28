@@ -124,6 +124,14 @@ schemas after each test. API tests use in-memory database fixtures and test
 bindings; they do not need `.secrets`, Wrangler login, local migrations, or a
 running API. Installing dependencies is still required.
 
+Build API tests from `packages/api/src/testing/`, not local D1 adapters or
+binding literals. `createTestDatabase` applies every migration with foreign
+keys on; only migration tests stop `before` one and call `applyMigrations`.
+`toD1` serves it as D1 with atomic batches, and `queryHooks` inject faults
+that fail the test if they never run. Use `testBindings`, `testApp`, the
+`seed*` builders and `insertBilling` for rows, `requester` for JSON requests,
+and `withFetch` for outbound HTTP.
+
 `check:fast` runs Biome, Markdownlint, file-name checks, and all TypeScript
 checks. It needs only the installed JavaScript toolchain. It leaves dependency
 reachability, shell lint, and Terraform checks to `check`.

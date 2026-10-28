@@ -1,8 +1,4 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { Hono } from "hono";
-import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
 import {
   businesses,
   normalizeBusinessDate,
@@ -11,6 +7,11 @@ import {
   normalizeState,
   normalizeZip,
 } from "./businesses";
+import { testBindings } from "./testing/bindings";
+import { toD1 } from "./testing/d1";
+import { applyMigrations, createTestDatabase } from "./testing/database";
+import { seedAccount, seedMember, seedUser } from "./testing/seed";
+import { testApp } from "./testing/session";
 import type { Bindings } from "./types";
 
 interface BusinessMutationBody {
@@ -103,7 +104,7 @@ describe("business locations", () => {
 
 describe("organization businesses", () => {
   it("creates multiple businesses without EINs", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const first = await create(fixture.ownerApp, fixture.bindings, {
       name: "Acme",
     });
@@ -132,7 +133,7 @@ describe("organization businesses", () => {
   });
 
   it("lets managers create multiple businesses and prevents duplicate EINs", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const first = await create(fixture.ownerApp, fixture.bindings, {
       city: "  New York  ",
       ein: "12-3456789",
@@ -201,7 +202,7 @@ describe("organization businesses", () => {
   });
 
   it("stores DUNS numbers and prevents duplicates within an organization", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const created = await create(fixture.ownerApp, fixture.bindings, {
       duns: " 12-345-6789 ",
       ein: "12-3456789",
@@ -272,7 +273,7 @@ describe("organization businesses", () => {
   });
 
   it("lets managers edit optional business details", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const created = await create(fixture.ownerApp, fixture.bindings, {
       city: "New York",
       duns: "12-345-6789",
@@ -347,7 +348,7 @@ describe("organization businesses", () => {
   });
 
   it("loads a business by id only within its organization", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const created = await create(fixture.ownerApp, fixture.bindings, {
       name: "Acme",
     });
@@ -383,7 +384,7 @@ describe("organization businesses", () => {
   });
 
   it("validates input and limits mutations to organization managers", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const invalidEin = await create(fixture.ownerApp, fixture.bindings, {
       ein: "not-an-ein",
       name: "Acme",
@@ -474,7 +475,7 @@ describe("organization businesses", () => {
   });
 
   it("isolates organizations, scopes deletes, and cascades purged data", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const created = await create(fixture.ownerApp, fixture.bindings, {
       ein: "12-3456789",
       name: "Acme",
@@ -520,12 +521,13 @@ describe("organization businesses", () => {
   });
 
   it("preserves existing businesses through business schema extensions", async () => {
-    const database = new Database(":memory:");
-    database.exec("PRAGMA foreign_keys = ON");
-    await applyMigration(database, "0003_create_auth.sql");
-    insertUser(database, "owner");
-    await applyMigration(database, "0004_create_organizations.sql");
-    await applyMigration(database, "0015_create_businesses.sql");
+    const database = createTestDatabase({ before: "0004" });
+    seedUser(database, {
+      createdAt: timestamp,
+      emailVerified: false,
+      id: "owner",
+    });
+    applyMigrations(database, { before: "0017", from: "0004" });
     database
       .query(
         `INSERT INTO businesses
@@ -542,10 +544,7 @@ describe("organization businesses", () => {
         timestamp,
       );
 
-    await applyMigration(database, "0017_make_business_ein_optional.sql");
-    await applyMigration(database, "0018_add_business_details.sql");
-    await applyMigration(database, "0019_add_business_city_state_zip.sql");
-    await applyMigration(database, "0051_add_business_duns.sql");
+    applyMigrations(database, { from: "0017" });
 
     expect(
       database
@@ -568,67 +567,28 @@ describe("organization businesses", () => {
   });
 });
 
-async function createFixture() {
-  const database = new Database(":memory:");
-  database.exec("PRAGMA foreign_keys = ON");
-  await applyMigration(database, "0003_create_auth.sql");
-  insertUser(database, "owner");
-  insertUser(database, "member");
-  insertUser(database, "other-owner");
-  await applyMigration(database, "0004_create_organizations.sql");
-  database
-    .query(
-      `INSERT INTO member (id, organizationId, userId, role, createdAt)
-       VALUES (?, ?, ?, ?, ?)`,
-    )
-    .run("member-extra", "org_owner", "member", "member", timestamp);
-  await applyMigration(database, "0015_create_businesses.sql");
-  await applyMigration(database, "0017_make_business_ein_optional.sql");
-  await applyMigration(database, "0018_add_business_details.sql");
-  await applyMigration(database, "0019_add_business_city_state_zip.sql");
-  await applyMigration(database, "0051_add_business_duns.sql");
-  const bindings = bindingsFor(database);
-  return {
-    bindings,
-    database,
-    memberApp: testApp("org_owner", "member", "member"),
-    otherOwnerApp: testApp("org_other-owner", "other-owner", "owner"),
-    ownerApp: testApp("org_owner", "owner", "owner"),
-  };
-}
-
-function insertUser(database: Database, id: string) {
-  database
-    .query(
-      `INSERT INTO user
-       (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      id,
-      id,
-      `${id}@example.com`,
-      false,
-      timestamp,
-      timestamp,
-      "user",
-      false,
-    );
-}
-
-function testApp(organizationId: string, userId: string, role: string) {
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-  app.use("*", async (context, next) => {
-    context.set("organizationId", organizationId);
-    context.set("organizationRole", role);
-    context.set("authSession", {
-      session: { activeOrganizationId: organizationId },
-      user: { id: userId, role: "user" },
-    } as unknown as AuthSession);
-    await next();
+function createFixture() {
+  const database = createTestDatabase();
+  for (const id of ["owner", "member", "other-owner"])
+    seedAccount(database, { createdAt: timestamp, emailVerified: false, id });
+  seedMember(database, {
+    createdAt: timestamp,
+    id: "member-extra",
+    organizationId: "org_owner",
+    userId: "member",
   });
-  app.route("/", businesses);
-  return app;
+  const app = (organizationId: string, userId: string, role: string) =>
+    testApp(
+      { "/": businesses },
+      { organizationId, organizationRole: role, userId },
+    );
+  return {
+    bindings: testBindings({ DB: toD1(database) }),
+    database,
+    memberApp: app("org_owner", "member", "member"),
+    otherOwnerApp: app("org_other-owner", "other-owner", "owner"),
+    ownerApp: app("org_owner", "owner", "owner"),
+  };
 }
 
 function create(
@@ -661,52 +621,6 @@ function update(
       method: "PATCH",
     },
     bindings,
-  );
-}
-
-function bindingsFor(database: Database): Bindings {
-  return {
-    AUTH_EMAIL_FROM: "security@auth.balebase.com",
-    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-    BETTER_AUTH_URL: "https://api.test",
-    CORS_ORIGIN: "https://app.test",
-    DB: toD1(database),
-    EMAIL: {} as SendEmail,
-    IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
-    STORAGE: {} as R2Bucket,
-  };
-}
-
-function toD1(database: Database) {
-  return {
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const statement = {
-        all: async () => ({
-          results: database.query(query).all(...values),
-          success: true,
-        }),
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        first: async () => database.query(query).get(...values),
-        run: async () => {
-          const result = database.query(query).run(...values);
-          return { meta: { changes: result.changes }, success: true };
-        },
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
-}
-
-async function applyMigration(database: Database, filename: string) {
-  database.exec(
-    await Bun.file(
-      new URL(`../migrations/${filename}`, import.meta.url),
-    ).text(),
   );
 }
 

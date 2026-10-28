@@ -1,7 +1,6 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
+import type { Database, SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import type { AuditDefinition } from "@balebase/validators/audits";
-import { Hono } from "hono";
 import { activity } from "./activity";
 import { adminAuditTemplates } from "./adminAuditTemplates";
 import {
@@ -10,11 +9,14 @@ import {
   readBodyWithLimit,
 } from "./auditIssueImages";
 import { audits } from "./audits";
-import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
 import { purgeDeletedObjects } from "./deletedObjectCleanup";
 import { offline } from "./offline";
-import type { Bindings } from "./types";
+import { memoryStorage, testBindings } from "./testing/bindings";
+import { type QueryEvent, queryHooks, toD1 } from "./testing/d1";
+import { applyMigrations, createTestDatabase } from "./testing/database";
+import { requester } from "./testing/http";
+import { insertBilling, seedAccount } from "./testing/seed";
+import { testApp } from "./testing/session";
 
 interface TemplateResponse {
   template: {
@@ -107,7 +109,7 @@ interface ActivityRunResponse {
 
 describe("audits", () => {
   it("preserves legacy shared global forms when publication controls are introduced", async () => {
-    const fixture = await createFixture(true, false);
+    const fixture = createFixture({ before: "0058" });
     const admin = { role: "admin" };
     const legacy = await jsonRequest<TemplateResponse>(
       fixture,
@@ -139,10 +141,7 @@ describe("audits", () => {
         definition, '{}', 'in_progress', 'user-1', created_at, created_at
       FROM audit_template_versions WHERE template_id = ? AND version = 1`)
       .run(id);
-    await applyMigration(
-      fixture.database,
-      "0058_publish_legacy_global_audits.sql",
-    );
+    applyMigrations(fixture.database, { from: "0058" });
     const shared = await jsonRequest<TemplateResponse>(
       fixture,
       `/templates/${id}`,
@@ -163,12 +162,10 @@ describe("audits", () => {
       2, 1,
     ]);
     expect(
-      (await jsonRequest(fixture, `/templates/${id}/versions/1`, "GET"))
-        .response.status,
+      (await jsonRequest(fixture, `/templates/${id}/versions/1`, "GET")).status,
     ).toBe(200);
     expect(
-      (await jsonRequest(fixture, `/templates/${id}/runs`, "POST")).response
-        .status,
+      (await jsonRequest(fixture, `/templates/${id}/runs`, "POST")).status,
     ).toBe(201);
     expect(
       (
@@ -176,7 +173,7 @@ describe("audits", () => {
           definition,
           name,
         })
-      ).response.status,
+      ).status,
     ).toBe(201);
     const existing = await jsonRequest(fixture, "/runs/legacy-audit", "GET");
     expect(existing.body).toMatchObject({
@@ -206,12 +203,12 @@ describe("audits", () => {
           `/templates/${fresh.body.template.id}`,
           "GET",
         )
-      ).response.status,
+      ).status,
     ).toBe(404);
   });
 
   it("shares only published versions and activity after publishing a global draft", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const admin = { role: "admin" };
     const created = await jsonRequest<TemplateResponse>(
       fixture,
@@ -235,7 +232,7 @@ describe("audits", () => {
             { definition, expectedCurrentVersion, name, status },
             admin,
           )
-        ).response.status,
+        ).status,
       ).toBe(200);
     }
     for (const version of [1, 3]) {
@@ -246,7 +243,7 @@ describe("audits", () => {
             `/templates/${id}/versions/${version}`,
             "GET",
           )
-        ).response.status,
+        ).status,
       ).toBe(404);
       expect(
         (
@@ -257,12 +254,11 @@ describe("audits", () => {
             undefined,
             admin,
           )
-        ).response.status,
+        ).status,
       ).toBe(200);
     }
     expect(
-      (await jsonRequest(fixture, `/templates/${id}/versions/2`, "GET"))
-        .response.status,
+      (await jsonRequest(fixture, `/templates/${id}/versions/2`, "GET")).status,
     ).toBe(200);
     const shared = await jsonRequest<TemplateVersionsResponse>(
       fixture,
@@ -300,7 +296,7 @@ describe("audits", () => {
   });
 
   it("unpublishes global forms without losing history or existing audits", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const admin = { role: "admin" };
     const id = "nfpa70e_global";
     const current = await jsonRequest<TemplateResponse>(
@@ -333,9 +329,7 @@ describe("audits", () => {
       [`/templates/${id}/runs`, "POST"],
       [`/templates/${id}/copies`, "POST"],
     ] as const) {
-      expect((await jsonRequest(fixture, path, method)).response.status).toBe(
-        404,
-      );
+      expect((await jsonRequest(fixture, path, method)).status).toBe(404);
     }
     const listed = await jsonRequest<TemplateListResponse>(
       fixture,
@@ -379,16 +373,15 @@ describe("audits", () => {
           { expectedCurrentVersion: 2 },
           admin,
         )
-      ).response.status,
+      ).status,
     ).toBe(409);
-    expect((await save("published", 1)).response.status).toBe(409);
+    expect((await save("published", 1)).status).toBe(409);
     expect((await save("published", 2)).body.template).toMatchObject({
       status: "published",
       version: 3,
     });
     expect(
-      (await jsonRequest(fixture, `/templates/${id}/runs`, "POST")).response
-        .status,
+      (await jsonRequest(fixture, `/templates/${id}/runs`, "POST")).status,
     ).toBe(201);
     expect(
       (
@@ -399,12 +392,12 @@ describe("audits", () => {
           { expectedCurrentVersion: 3 },
           admin,
         )
-      ).response.status,
+      ).status,
     ).toBe(409);
   });
 
   it("keeps global drafts private and discards them with a version guard", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const admin = { role: "admin" };
     const created = await jsonRequest<TemplateResponse>(
       fixture,
@@ -414,12 +407,11 @@ describe("audits", () => {
       admin,
     );
     const { id } = created.body.template;
+    expect((await jsonRequest(fixture, `/templates/${id}`, "GET")).status).toBe(
+      404,
+    );
     expect(
-      (await jsonRequest(fixture, `/templates/${id}`, "GET")).response.status,
-    ).toBe(404);
-    expect(
-      (await jsonRequest(fixture, `/templates/${id}/runs`, "POST")).response
-        .status,
+      (await jsonRequest(fixture, `/templates/${id}/runs`, "POST")).status,
     ).toBe(404);
     const saved = await jsonRequest(
       fixture,
@@ -444,7 +436,7 @@ describe("audits", () => {
           { expectedCurrentVersion: 1 },
           admin,
         )
-      ).response.status,
+      ).status,
     ).toBe(409);
     expect(
       (
@@ -455,7 +447,7 @@ describe("audits", () => {
           {},
           admin,
         )
-      ).response.status,
+      ).status,
     ).toBe(400);
     expect(
       (
@@ -466,7 +458,7 @@ describe("audits", () => {
           { expectedCurrentVersion: 2 },
           admin,
         )
-      ).response.status,
+      ).status,
     ).toBe(200);
     for (const suffix of ["", "/versions", "/versions/1", "/activity"]) {
       expect(
@@ -478,7 +470,7 @@ describe("audits", () => {
             undefined,
             admin,
           )
-        ).response.status,
+        ).status,
       ).toBe(404);
     }
     const listed = await jsonRequest<TemplateListResponse>(
@@ -566,7 +558,7 @@ describe("audits", () => {
   });
 
   it("paginates every retained audit run with a stable cursor", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const insert = fixture.database.query(
       `INSERT INTO audits
        (id, organization_id, template_name, definition, responses, status,
@@ -591,7 +583,7 @@ describe("audits", () => {
     }
 
     const first = await jsonRequest<RunListResponse>(fixture, "/runs", "GET");
-    expect(first.response.status).toBe(200);
+    expect(first.status).toBe(200);
     expect(first.body.audits).toHaveLength(100);
     expect(first.body.nextCursor).toBeString();
 
@@ -600,7 +592,7 @@ describe("audits", () => {
       `/runs?cursor=${encodeURIComponent(first.body.nextCursor ?? "")}`,
       "GET",
     );
-    expect(second.response.status).toBe(200);
+    expect(second.status).toBe(200);
     expect(second.body.audits).toHaveLength(5);
     expect(second.body.nextCursor).toBeNull();
     const ids = [...first.body.audits, ...second.body.audits].map(
@@ -612,12 +604,12 @@ describe("audits", () => {
     expect(ids.at(-1)).toBe("history-000");
 
     const invalid = await jsonRequest(fixture, "/runs?cursor=not-valid", "GET");
-    expect(invalid.response.status).toBe(400);
+    expect(invalid.status).toBe(400);
     expect(invalid.body).toEqual({ error: "Invalid audit cursor." });
   });
 
   it("reports an audit removed during an update as missing", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const now = "2026-08-25T12:00:00.000Z";
     fixture.database
       .query(
@@ -635,7 +627,12 @@ describe("audits", () => {
         now,
         now,
       );
-    fixture.databaseControl.deleteAuditBeforeRunUpdate = true;
+    fixture.hooks.before("UPDATE audits SET responses", (event) => {
+      const { auditId, organizationId } = auditTarget(event);
+      fixture.database
+        .query("DELETE FROM audits WHERE id = ? AND organization_id = ?")
+        .run(auditId, organizationId);
+    });
 
     const updated = await jsonRequest(fixture, "/runs/update-race", "PATCH", {
       expectedRevision: 0,
@@ -643,12 +640,12 @@ describe("audits", () => {
       status: "in_progress",
     });
 
-    expect(updated.response.status).toBe(404);
+    expect(updated.status).toBe(404);
     expect(updated.body).toEqual({ error: "Audit not found." });
   });
 
   it("normalizes and stores every supported issue image format", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const now = "2026-08-25T12:00:00.000Z";
     fixture.database
       .query(
@@ -701,10 +698,9 @@ describe("audits", () => {
           outputOptions = options;
         },
       });
-      const uploaded = await fixture.app.request(
+      const uploaded = await fixture.request(
         `/issues/format-issue/images?filename=evidence.original`,
         imageUpload(format.bytes, format.contentType),
-        fixture.bindings,
       );
       expect(uploaded.status).toBe(201);
       const body = (await uploaded.json()) as IssueImageResponse;
@@ -735,10 +731,9 @@ describe("audits", () => {
       });
       expect(fixture.stored.get(object.object_key)).toEqual(format.bytes);
 
-      const storedImage = await fixture.app.request(
+      const storedImage = await fixture.request(
         `/issues/format-issue/images/${body.image.id}`,
         undefined,
-        fixture.bindings,
       );
       expect(storedImage.status).toBe(200);
       expect(storedImage.headers.get("content-type")).toBe(format.contentType);
@@ -750,12 +745,11 @@ describe("audits", () => {
       format: "image/png",
     });
     const longUnicodeName = `${"😀".repeat(255)}.original`;
-    const unicodeUpload = await fixture.app.request(
+    const unicodeUpload = await fixture.request(
       `/issues/format-issue/images?${new URLSearchParams({
         filename: longUnicodeName,
       })}`,
       imageUpload(emojiBytes, "image/png"),
-      fixture.bindings,
     );
     expect(unicodeUpload.status).toBe(201);
     const unicodeBody = (await unicodeUpload.json()) as IssueImageResponse;
@@ -767,7 +761,7 @@ describe("audits", () => {
   });
 
   it("bounds concurrent maximum-size image upload memory", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const now = "2026-08-25T12:00:00.000Z";
     for (const [suffix, organizationId, userId] of [
       ["one", "org_user-1", "user-1"],
@@ -815,23 +809,20 @@ describe("audits", () => {
     });
 
     const uploads = await Promise.all([
-      fixture.app.request(
+      fixture.request(
         "/issues/memory-issue-one/images?filename=one-a.png",
         imageUpload(maximumImage),
-        fixture.bindings,
       ),
-      fixture.app.request(
+      fixture.request(
         "/issues/memory-issue-one/images?filename=one-b.png",
         imageUpload(maximumImage),
-        fixture.bindings,
       ),
-      fixture.app.request(
+      fixture.request(
         "/issues/memory-issue-two/images?filename=two.png",
         imageUpload(maximumImage, "image/png", {
           "x-test-organization-id": "org_user-2",
           "x-test-user-id": "user-2",
         }),
-        fixture.bindings,
       ),
     ]);
 
@@ -848,7 +839,7 @@ describe("audits", () => {
   });
 
   it("migrates existing templates and audit provenance into version one", async () => {
-    const database = await createLegacyDatabase();
+    const database = legacyDatabase("0022");
     const definition: AuditDefinition = {
       sections: [
         {
@@ -900,7 +891,7 @@ describe("audits", () => {
         "2026-08-20T12:00:00.000Z",
       );
 
-    await applyMigration(database, "0022_version_audit_templates.sql");
+    applyMigrations(database, { before: "0023", from: "0022" });
 
     expect(
       database
@@ -929,12 +920,8 @@ describe("audits", () => {
   });
 
   it("creates templates, snapshots audit runs, and tracks assigned issues", async () => {
-    const fixture = await createFixture();
-    const starterResponse = await fixture.app.request(
-      "/templates",
-      undefined,
-      fixture.bindings,
-    );
+    const fixture = createFixture();
+    const starterResponse = await fixture.request("/templates", undefined);
     expect(starterResponse.status).toBe(200);
     const starterBody = (await starterResponse.json()) as TemplateListResponse;
     expect(starterBody.templates).toHaveLength(2);
@@ -968,7 +955,7 @@ describe("audits", () => {
       "POST",
       { name: "Site walkthrough" },
     );
-    expect(created.response.status).toBe(201);
+    expect(created.status).toBe(201);
     const template = created.body.template;
     expect(template).toMatchObject({
       currentVersion: 1,
@@ -992,7 +979,7 @@ describe("audits", () => {
         name: template.name,
       },
     );
-    expect(updated.response.status).toBe(200);
+    expect(updated.status).toBe(200);
     expect(updated.body.template).toMatchObject({
       currentVersion: 2,
       version: 2,
@@ -1003,7 +990,7 @@ describe("audits", () => {
       `/templates/${template.id}/runs`,
       "POST",
     );
-    expect(started.response.status).toBe(201);
+    expect(started.status).toBe(201);
 
     const incomplete = await jsonRequest(
       fixture,
@@ -1011,7 +998,7 @@ describe("audits", () => {
       "PATCH",
       { expectedRevision: 0, responses: {}, status: "completed" },
     );
-    expect(incomplete.response.status).toBe(400);
+    expect(incomplete.status).toBe(400);
 
     const firstItem = template.definition.sections[0]?.items[0];
     expect(firstItem).toBeDefined();
@@ -1025,7 +1012,7 @@ describe("audits", () => {
         status: "in_progress",
       },
     );
-    expect(saved.response.status).toBe(200);
+    expect(saved.status).toBe(200);
 
     const issue = await jsonRequest<IssueResponse>(
       fixture,
@@ -1039,7 +1026,7 @@ describe("audits", () => {
         title: firstItem?.prompt,
       },
     );
-    expect(issue.response.status).toBe(201);
+    expect(issue.status).toBe(201);
 
     const invalidAssignee = await jsonRequest(
       fixture,
@@ -1047,7 +1034,7 @@ describe("audits", () => {
       "PATCH",
       { assignedTo: "user-2" },
     );
-    expect(invalidAssignee.response.status).toBe(400);
+    expect(invalidAssignee.status).toBe(400);
 
     fixture.database
       .query(
@@ -1056,14 +1043,19 @@ describe("audits", () => {
          VALUES ('member-user-2-org-1', 'org_user-1', 'user-2', 'member', ?)`,
       )
       .run("2026-08-25T12:00:00.000Z");
-    fixture.databaseControl.deleteAssigneeBeforeIssueUpdate = true;
+    fixture.hooks.before(
+      /UPDATE issues[\s\S]*SELECT 1 FROM member/,
+      ({ values }) => {
+        fixtureMemberDeletion(fixture.database, values.at(-2), values.at(-1));
+      },
+    );
     const removedDuringAssignment = await jsonRequest(
       fixture,
       `/issues/${issue.body.issueId}`,
       "PATCH",
       { assignedTo: "user-2" },
     );
-    expect(removedDuringAssignment.response.status).toBe(400);
+    expect(removedDuringAssignment.status).toBe(400);
     expect(
       fixture.database
         .query(`SELECT assigned_to FROM issues WHERE id = ?`)
@@ -1076,38 +1068,35 @@ describe("audits", () => {
       "PATCH",
       { assignedTo: null },
     );
-    expect(unassigned.response.status).toBe(200);
+    expect(unassigned.status).toBe(200);
     const reassigned = await jsonRequest(
       fixture,
       `/issues/${issue.body.issueId}`,
       "PATCH",
       { assignedTo: "user-1" },
     );
-    expect(reassigned.response.status).toBe(200);
+    expect(reassigned.status).toBe(200);
 
-    const invalidImage = await fixture.app.request(
+    const invalidImage = await fixture.request(
       `/issues/${issue.body.issueId}/images?filename=fake.png`,
       imageUpload("not an image"),
-      fixture.bindings,
     );
     expect(invalidImage.status).toBe(400);
     expect(fixture.stored.size).toBe(0);
 
-    const truncatedImage = await fixture.app.request(
+    const truncatedImage = await fixture.request(
       `/issues/${issue.body.issueId}/images?filename=truncated.png`,
       imageUpload(
         new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
       ),
-      fixture.bindings,
     );
     expect(truncatedImage.status).toBe(400);
     expect(fixture.stored.size).toBe(0);
 
     fixture.bindings.IMAGES = imagesFor({ width: 12_001 });
-    const oversizedDimensions = await fixture.app.request(
+    const oversizedDimensions = await fixture.request(
       `/issues/${issue.body.issueId}/images?filename=too-wide.png`,
       imageUpload(pngBytes(), "application/octet-stream"),
-      fixture.bindings,
     );
     expect(oversizedDimensions.status).toBe(400);
     expect(fixture.stored.size).toBe(0);
@@ -1115,10 +1104,9 @@ describe("audits", () => {
     fixture.bindings.IMAGES = imagesFor({
       normalizedBytes: new Uint8Array(10 * 1024 * 1024 + 1),
     });
-    const oversizedNormalizedImage = await fixture.app.request(
+    const oversizedNormalizedImage = await fixture.request(
       `/issues/${issue.body.issueId}/images?filename=oversized-output.png`,
       imageUpload(pngBytes()),
-      fixture.bindings,
     );
     expect(oversizedNormalizedImage.status).toBe(413);
     expect(fixture.stored.size).toBe(0);
@@ -1129,10 +1117,9 @@ describe("audits", () => {
     ).toEqual({ count: 0 });
     fixture.bindings.IMAGES = imagesFor();
 
-    const uploaded = await fixture.app.request(
+    const uploaded = await fixture.request(
       `/issues/${issue.body.issueId}/images?filename=electrical-panel.jpg`,
       imageUpload(pngBytes(), "image/jpeg"),
-      fixture.bindings,
     );
     expect(uploaded.status).toBe(201);
     const uploadedBody = (await uploaded.json()) as IssueImageResponse;
@@ -1141,12 +1128,16 @@ describe("audits", () => {
       filename: "electrical-panel.png",
     });
 
-    fixture.databaseControl.commitThenThrowImageActivation = true;
-    fixture.databaseControl.failNextPendingUpdate = true;
-    const committedWithoutResponse = await fixture.app.request(
+    const lostActivation = fixture.hooks.after(imageActivation, () => {
+      throw new Error("D1 activation response was lost after commit");
+    });
+    const pendingUpdate = fixture.hooks.before(
+      "SET deletion_pending = 1",
+      failPendingUpdate,
+    );
+    const committedWithoutResponse = await fixture.request(
       `/issues/${issue.body.issueId}/images?filename=committed-without-response.png`,
       imageUpload(pngBytes()),
-      fixture.bindings,
     );
     expect(committedWithoutResponse.status).toBe(201);
     const committedWithoutResponseBody =
@@ -1160,19 +1151,17 @@ describe("audits", () => {
         .get(),
     ).toEqual({ deletion_pending: 0 });
     expect(fixture.stored.size).toBe(2);
-    const retainedCommittedImage = await fixture.app.request(
+    const retainedCommittedImage = await fixture.request(
       `/issues/${issue.body.issueId}/images/${committedWithoutResponseBody.image.id}`,
       undefined,
-      fixture.bindings,
     );
     expect(retainedCommittedImage.status).toBe(200);
-    expect(fixture.databaseControl.commitThenThrowImageActivation).toBe(false);
-    expect(fixture.databaseControl.failNextPendingUpdate).toBe(true);
-    fixture.databaseControl.failNextPendingUpdate = false;
-    const deletedCommittedImage = await fixture.app.request(
+    expect(lostActivation.calls).toBe(1);
+    expect(pendingUpdate.calls).toBe(0);
+    pendingUpdate.remove();
+    const deletedCommittedImage = await fixture.request(
       `/issues/${issue.body.issueId}/images/${committedWithoutResponseBody.image.id}`,
       { method: "DELETE" },
-      fixture.bindings,
     );
     expect(deletedCommittedImage.status).toBe(204);
     expect(fixture.stored.size).toBe(1);
@@ -1199,18 +1188,16 @@ describe("audits", () => {
         upload_token: expect.any(String),
       });
     };
-    const leaseProtectedUpload = await fixture.app.request(
+    const leaseProtectedUpload = await fixture.request(
       `/issues/${issue.body.issueId}/images?filename=lease-protected.png`,
       imageUpload(pngBytes()),
-      fixture.bindings,
     );
     expect(leaseProtectedUpload.status).toBe(201);
     const leaseProtectedBody =
       (await leaseProtectedUpload.json()) as IssueImageResponse;
-    const deletedLeaseProtectedImage = await fixture.app.request(
+    const deletedLeaseProtectedImage = await fixture.request(
       `/issues/${issue.body.issueId}/images/${leaseProtectedBody.image.id}`,
       { method: "DELETE" },
-      fixture.bindings,
     );
     expect(deletedLeaseProtectedImage.status).toBe(204);
     expect(fixture.stored.size).toBe(1);
@@ -1232,10 +1219,9 @@ describe("audits", () => {
         ),
       ).toBe(1);
     };
-    const expiredMidWriteUpload = await fixture.app.request(
+    const expiredMidWriteUpload = await fixture.request(
       `/issues/${issue.body.issueId}/images?filename=expired-mid-write.png`,
       imageUpload(pngBytes()),
-      fixture.bindings,
     );
     expect(expiredMidWriteUpload.status).toBe(500);
     expect(fixture.stored.size).toBe(1);
@@ -1247,12 +1233,13 @@ describe("audits", () => {
         .get(),
     ).toBeNull();
 
-    fixture.databaseControl.failNextImageActivation = true;
+    fixture.hooks.before(imageActivation, () => {
+      throw new Error("Transient D1 image activation failure");
+    });
     fixture.storageControl.failNextDelete = true;
-    const failedUploadCleanup = await fixture.app.request(
+    const failedUploadCleanup = await fixture.request(
       `/issues/${issue.body.issueId}/images?filename=cleanup-retry.png`,
       imageUpload(pngBytes()),
-      fixture.bindings,
     );
     expect(failedUploadCleanup.status).toBe(500);
     expect(fixture.stored.size).toBe(2);
@@ -1265,7 +1252,25 @@ describe("audits", () => {
         .get(),
     ).toEqual({ count: 1 });
     expect(await purgePendingAuditIssueImages(fixture.bindings)).toBe(0);
-    fixture.databaseControl.activateBeforeCleanupClaim = true;
+    fixture.hooks.before(
+      "SET cleanup_token = ?",
+      ({ values }) => {
+        const objectId = values[2];
+        if (typeof objectId !== "string") {
+          throw new Error("Cleanup claim object id missing");
+        }
+        fixture.database
+          .query(
+            `UPDATE objects
+             SET deletion_pending = 0, cleanup_token = NULL,
+                 cleanup_claimed_at = NULL, upload_token = NULL,
+                 upload_lease_expires_at = NULL
+             WHERE id = ?`,
+          )
+          .run(objectId);
+      },
+      { method: "first" },
+    );
     expect(
       await purgePendingAuditIssueImages(
         fixture.bindings,
@@ -1303,10 +1308,9 @@ describe("audits", () => {
     });
     const concurrentUploads = await Promise.all(
       Array.from({ length: 10 }, (_, index) =>
-        fixture.app.request(
+        fixture.request(
           `/issues/${issue.body.issueId}/images?filename=concurrent-${index}.png`,
           imageUpload(pngBytes()),
-          fixture.bindings,
         ),
       ),
     );
@@ -1324,10 +1328,9 @@ describe("audits", () => {
     const retriedUploads: Response[] = [];
     for (let index = 0; index < 9; index += 1) {
       retriedUploads.push(
-        await fixture.app.request(
+        await fixture.request(
           `/issues/${issue.body.issueId}/images?filename=retry-${index}.png`,
           imageUpload(pngBytes()),
-          fixture.bindings,
         ),
       );
     }
@@ -1351,15 +1354,14 @@ describe("audits", () => {
       fixture.database.query(`SELECT DISTINCT kind FROM objects`).all(),
     ).toEqual([{ kind: "audit_issue_image" }]);
 
-    const rejectedBeforeProcessing = await fixture.app.request(
+    const rejectedBeforeProcessing = await fixture.request(
       `/issues/${issue.body.issueId}/images?filename=invalid.png`,
       imageUpload("not an image"),
-      fixture.bindings,
     );
     expect(rejectedBeforeProcessing.status).toBe(409);
     expect(fixture.stored.size).toBe(10);
 
-    const hiddenImage = await fixture.app.request(
+    const hiddenImage = await fixture.request(
       `/issues/${issue.body.issueId}/images/${uploadedBody.image.id}`,
       {
         headers: {
@@ -1367,14 +1369,12 @@ describe("audits", () => {
           "x-test-user-id": "user-2",
         },
       },
-      fixture.bindings,
     );
     expect(hiddenImage.status).toBe(404);
 
-    const image = await fixture.app.request(
+    const image = await fixture.request(
       `/issues/${issue.body.issueId}/images/${uploadedBody.image.id}`,
       undefined,
-      fixture.bindings,
     );
     expect(image.status).toBe(200);
     expect(image.headers.get("cache-control")).toBe("no-store");
@@ -1387,10 +1387,9 @@ describe("audits", () => {
         thumbnailTransform = options;
       },
     });
-    const thumbnail = await fixture.app.request(
+    const thumbnail = await fixture.request(
       `/issues/${issue.body.issueId}/images/${uploadedBody.image.id}?variant=thumbnail`,
       undefined,
-      fixture.bindings,
     );
     expect(thumbnail.status).toBe(200);
     expect(thumbnail.headers.get("cache-control")).toBe("no-store");
@@ -1401,10 +1400,9 @@ describe("audits", () => {
       width: 480,
     });
 
-    const detail = await fixture.app.request(
+    const detail = await fixture.request(
       `/runs/${started.body.auditId}`,
       undefined,
-      fixture.bindings,
     );
     const detailBody = (await detail.json()) as {
       issues: Array<{
@@ -1451,25 +1449,23 @@ describe("audits", () => {
       "PATCH",
       { status: "resolved" },
     );
-    expect(resolved.response.status).toBe(200);
+    expect(resolved.status).toBe(200);
     expect(
       fixture.database
         .query(`SELECT assigned_to, status FROM issues WHERE id = ?`)
         .get(issue.body.issueId),
     ).toEqual({ assigned_to: "user-1", status: "resolved" });
 
-    fixture.databaseControl.failNextPendingUpdate = true;
-    const failedMetadataDelete = await fixture.app.request(
+    fixture.hooks.before("SET deletion_pending = 1", failPendingUpdate);
+    const failedMetadataDelete = await fixture.request(
       `/issues/${issue.body.issueId}/images/${uploadedBody.image.id}`,
       { method: "DELETE" },
-      fixture.bindings,
     );
     expect(failedMetadataDelete.status).toBe(500);
     expect(fixture.stored.size).toBe(10);
-    const retainedImage = await fixture.app.request(
+    const retainedImage = await fixture.request(
       `/issues/${issue.body.issueId}/images/${uploadedBody.image.id}`,
       undefined,
-      fixture.bindings,
     );
     expect(retainedImage.status).toBe(200);
 
@@ -1477,10 +1473,9 @@ describe("audits", () => {
       .query(`SELECT id FROM objects WHERE filename = 'electrical-panel.png'`)
       .get() as { id: string };
     fixture.storageControl.failNextDelete = true;
-    const failedImageDelete = await fixture.app.request(
+    const failedImageDelete = await fixture.request(
       `/issues/${issue.body.issueId}/images/${uploadedBody.image.id}`,
       { method: "DELETE" },
-      fixture.bindings,
     );
     expect(failedImageDelete.status).toBe(202);
     expect(fixture.stored.size).toBe(10);
@@ -1497,16 +1492,14 @@ describe("audits", () => {
         .query(`SELECT id FROM audit_issue_images WHERE id = ?`)
         .get(uploadedBody.image.id),
     ).toBeNull();
-    const pendingImage = await fixture.app.request(
+    const pendingImage = await fixture.request(
       `/issues/${issue.body.issueId}/images/${uploadedBody.image.id}`,
       undefined,
-      fixture.bindings,
     );
     expect(pendingImage.status).toBe(404);
-    const replacementImage = await fixture.app.request(
+    const replacementImage = await fixture.request(
       `/issues/${issue.body.issueId}/images?filename=replacement.png`,
       imageUpload(pngBytes()),
-      fixture.bindings,
     );
     expect(replacementImage.status).toBe(201);
     const replacementImageBody =
@@ -1525,25 +1518,22 @@ describe("audits", () => {
       (detailBody.issues[0]?.images ?? [])
         .filter(({ id }) => id !== uploadedBody.image.id)
         .map(({ id }) =>
-          fixture.app.request(
-            `/issues/${issue.body.issueId}/images/${id}`,
-            { method: "DELETE" },
-            fixture.bindings,
-          ),
+          fixture.request(`/issues/${issue.body.issueId}/images/${id}`, {
+            method: "DELETE",
+          }),
         ),
     );
     expect(deletedImages.every(({ status }) => status === 204)).toBe(true);
-    const deletedReplacement = await fixture.app.request(
+    const deletedReplacement = await fixture.request(
       `/issues/${issue.body.issueId}/images/${replacementImageBody.image.id}`,
       { method: "DELETE" },
-      fixture.bindings,
     );
     expect(deletedReplacement.status).toBe(204);
     expect(fixture.stored.size).toBe(0);
   });
 
   it("tombstones image objects when an issue is cascade-deleted", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const now = "2026-08-25T12:00:00.000Z";
     const definition = JSON.stringify({ sections: [], version: 1 });
     fixture.database
@@ -1635,10 +1625,9 @@ describe("audits", () => {
         .run();
     };
 
-    const racedUpload = await fixture.app.request(
+    const racedUpload = await fixture.request(
       "/issues/upload-race-issue/images?filename=race.png",
       imageUpload(pngBytes()),
-      fixture.bindings,
     );
 
     expect(racedUpload.status).toBe(500);
@@ -1664,7 +1653,7 @@ describe("audits", () => {
   });
 
   it("retains R2 cleanup after an organization is hard-deleted", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const now = "2026-08-25T12:00:00.000Z";
     fixture.database
       .query(
@@ -1759,7 +1748,7 @@ describe("audits", () => {
   });
 
   it("waits out in-flight uploads before purging deleted organizations", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const now = "2026-08-25T12:00:00.000Z";
     fixture.database
       .query(
@@ -1806,7 +1795,7 @@ describe("audits", () => {
   });
 
   it("keeps every saved template version immutable", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const created = await jsonRequest<TemplateResponse>(
       fixture,
       "/templates",
@@ -1876,11 +1865,11 @@ describe("audits", () => {
       expectedCurrentVersion: 2,
       name: "Stale form",
     });
-    expect(stale.response.status).toBe(409);
+    expect(stale.status).toBe(409);
   });
 
   it("allows every question to be removed from a section", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const created = await jsonRequest<TemplateResponse>(
       fixture,
       "/templates",
@@ -1902,7 +1891,7 @@ describe("audits", () => {
         name: created.body.template.name,
       },
     );
-    expect(saved.response.status).toBe(200);
+    expect(saved.status).toBe(200);
     expect(saved.body.template.definition.sections[0]?.items).toEqual([]);
 
     const started = await jsonRequest<RunResponse>(
@@ -1916,43 +1905,41 @@ describe("audits", () => {
       "PATCH",
       { expectedRevision: 0, responses: {}, status: "completed" },
     );
-    expect(completed.response.status).toBe(200);
+    expect(completed.status).toBe(200);
   });
 
   it("limits Free organizations to five form templates", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     for (let index = 1; index <= 5; index += 1) {
       const created = await jsonRequest(fixture, "/templates", "POST", {
         name: `Free form ${index}`,
       });
-      expect(created.response.status).toBe(201);
+      expect(created.status).toBe(201);
     }
     const limited = await jsonRequest(fixture, "/templates", "POST", {
       name: "Sixth free form",
     });
-    expect(limited.response.status).toBe(409);
+    expect(limited.status).toBe(409);
     expect(limited.body).toEqual({
       code: "UPGRADE_REQUIRED",
       error:
         "The Free plan is limited to 5 form templates. Upgrade to Pro for unlimited forms.",
     });
 
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_price_id, stripe_status, seat_quantity,
-          stripe_event_created, updated_at)
-         VALUES ('org_user-1', 'price_pro_test', 'active', 1, 1, ?)`,
-      )
-      .run(new Date().toISOString());
+    insertBilling(fixture.database, "org_user-1", {
+      seat_quantity: 1,
+      stripe_event_created: 1,
+      stripe_price_id: "price_pro_test",
+      stripe_status: "active",
+    });
     const pro = await jsonRequest(fixture, "/templates", "POST", {
       name: "Sixth Pro form",
     });
-    expect(pro.response.status).toBe(201);
+    expect(pro.status).toBe(201);
   });
 
   it("shares global templates without exposing organization templates", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     for (const role of ["user", "admin"]) {
       const denied = await jsonRequest(
         fixture,
@@ -1961,7 +1948,7 @@ describe("audits", () => {
         { name: "Organization-created global form", scope: "global" },
         { role },
       );
-      expect(denied.response.status).toBe(400);
+      expect(denied.status).toBe(400);
     }
 
     const global = await jsonRequest<TemplateResponse>(
@@ -1971,7 +1958,7 @@ describe("audits", () => {
       { name: "Shared safety form" },
       { role: "admin" },
     );
-    expect(global.response.status).toBe(201);
+    expect(global.status).toBe(201);
     expect(global.body.template.scope).toBe("global");
     await jsonRequest(
       fixture,
@@ -1991,7 +1978,7 @@ describe("audits", () => {
       "POST",
       { name: "Private form", scope: "organization" },
     );
-    expect(local.response.status).toBe(201);
+    expect(local.status).toBe(201);
 
     const otherOrganization = await jsonRequest<TemplateListResponse>(
       fixture,
@@ -2024,7 +2011,7 @@ describe("audits", () => {
         },
         { role },
       );
-      expect(deniedUpdate.response.status).toBe(403);
+      expect(deniedUpdate.status).toBe(403);
     }
 
     const organizationCopy = await jsonRequest<TemplateResponse>(
@@ -2037,7 +2024,7 @@ describe("audits", () => {
         name: "Organization safety form",
       },
     );
-    expect(organizationCopy.response.status).toBe(201);
+    expect(organizationCopy.status).toBe(201);
     expect(organizationCopy.body.template).toMatchObject({
       currentVersion: 1,
       name: "Organization safety form",
@@ -2083,7 +2070,7 @@ describe("audits", () => {
       undefined,
       { organizationId: "org_user-2", userId: "user-2" },
     );
-    expect(privateRun.response.status).toBe(404);
+    expect(privateRun.status).toBe(404);
 
     const copiedRun = await jsonRequest(
       fixture,
@@ -2092,7 +2079,7 @@ describe("audits", () => {
       undefined,
       { organizationId: "org_user-2", userId: "user-2" },
     );
-    expect(copiedRun.response.status).toBe(404);
+    expect(copiedRun.status).toBe(404);
 
     const globalRun = await jsonRequest<RunResponse>(
       fixture,
@@ -2101,7 +2088,7 @@ describe("audits", () => {
       undefined,
       { organizationId: "org_user-2", userId: "user-2" },
     );
-    expect(globalRun.response.status).toBe(201);
+    expect(globalRun.status).toBe(201);
     const globalRunDetail = await jsonRequest(
       fixture,
       `/runs/${globalRun.body.auditId}`,
@@ -2119,7 +2106,7 @@ describe("audits", () => {
   });
 
   it("manages global templates from root admin without organization templates", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const admin = { role: "admin" };
     const local = await jsonRequest<TemplateResponse>(
       fixture,
@@ -2136,7 +2123,7 @@ describe("audits", () => {
       { name: "  Shared ladder form  " },
       admin,
     );
-    expect(created.response.status).toBe(201);
+    expect(created.status).toBe(201);
     expect(created.body.template).toMatchObject({
       currentVersion: 1,
       name: "Shared ladder form",
@@ -2151,7 +2138,7 @@ describe("audits", () => {
       { name: " " },
       admin,
     );
-    expect(invalid.response.status).toBe(400);
+    expect(invalid.status).toBe(400);
 
     const listed = await jsonRequest<TemplateListResponse>(
       fixture,
@@ -2190,7 +2177,7 @@ describe("audits", () => {
           : undefined,
         admin,
       );
-      expect(hidden.response.status).toBe(404);
+      expect(hidden.status).toBe(404);
     }
 
     const stale = await jsonRequest(
@@ -2204,7 +2191,7 @@ describe("audits", () => {
       },
       admin,
     );
-    expect(stale.response.status).toBe(409);
+    expect(stale.status).toBe(409);
     const saved = await jsonRequest<TemplateResponse>(
       fixture,
       `/admin/audit-templates/${id}`,
@@ -2253,7 +2240,7 @@ describe("audits", () => {
       undefined,
       admin,
     );
-    expect(badVersion.response.status).toBe(400);
+    expect(badVersion.status).toBe(400);
 
     const history = await jsonRequest<ActivityResponse>(
       fixture,
@@ -2277,13 +2264,13 @@ describe("audits", () => {
   });
 
   it("attributes built-in templates to a durable system actor", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const bookmarked = await jsonRequest<TemplateResponse>(
       fixture,
       "/templates/us_residential_core_global",
       "GET",
     );
-    expect(bookmarked.response.status).toBe(200);
+    expect(bookmarked.status).toBe(200);
     expect(bookmarked.body.template.name).toBe(
       "U.S. residential construction — comprehensive baseline",
     );
@@ -2293,7 +2280,7 @@ describe("audits", () => {
       "/templates",
       "GET",
     );
-    expect(firstOrganization.response.status).toBe(200);
+    expect(firstOrganization.status).toBe(200);
 
     const otherOrganization = await jsonRequest<TemplateListResponse>(
       fixture,
@@ -2317,10 +2304,11 @@ describe("audits", () => {
       "person@example.com",
     );
 
+    // Foreign keys are enforced, so a restricting reference would throw here.
+    fixture.database.query("DELETE FROM user WHERE id = 'user-1'").run();
     expect(
-      fixture.database.query("DELETE FROM user WHERE id = 'user-1'").run()
-        .changes,
-    ).toBe(1);
+      fixture.database.query("SELECT id FROM user WHERE id = 'user-1'").get(),
+    ).toBeNull();
     expect(
       fixture.database
         .query(
@@ -2333,8 +2321,7 @@ describe("audits", () => {
   });
 
   it("seeds the audit actor despite a public email collision", async () => {
-    const database = await createLegacyDatabase();
-    await applyMigration(database, "0022_version_audit_templates.sql");
+    const database = legacyDatabase("0033");
     database
       .query(
         `INSERT INTO user
@@ -2347,7 +2334,7 @@ describe("audits", () => {
         "2026-08-25T12:00:00.000Z",
       );
 
-    await applyMigration(database, "0033_create_audit_library_actor.sql");
+    applyMigrations(database, { before: "0034", from: "0033" });
 
     expect(
       database
@@ -2367,9 +2354,7 @@ describe("audits", () => {
   });
 
   it("consolidates organization starters into one global template", async () => {
-    const database = await createLegacyDatabase();
-    database.exec("PRAGMA foreign_keys = ON");
-    await applyMigration(database, "0022_version_audit_templates.sql");
+    const database = legacyDatabase("0023");
     const definition = JSON.stringify({ sections: [], version: 1 });
     const insertFamily = database.query(
       `INSERT INTO audit_template_families
@@ -2415,8 +2400,7 @@ describe("audits", () => {
       )
       .run(definition, "2026-08-21T12:00:00.000Z", "2026-08-21T12:00:00.000Z");
 
-    await applyMigration(database, "0023_make_nfpa70e_template_global.sql");
-    await applyMigration(database, "0033_create_audit_library_actor.sql");
+    applyMigrations(database, { before: "0034", from: "0023" });
 
     expect(
       database
@@ -2460,7 +2444,7 @@ describe("audits", () => {
 
 describe("audit discarding", () => {
   it("moves a discarded in-progress audit to the deleted view with its history", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const { auditId } = await createActivityAudit(fixture);
     await jsonRequest(fixture, `/runs/${auditId}`, "PATCH", {
       expectedRevision: 0,
@@ -2475,7 +2459,7 @@ describe("audit discarding", () => {
       undefined,
       { userId: "user-2" },
     );
-    expect(discarded.response.status).toBe(200);
+    expect(discarded.status).toBe(200);
     expect(discarded.body.deletedAt).toBeString();
 
     const active = await jsonRequest<RunListResponse>(fixture, "/runs", "GET");
@@ -2504,7 +2488,7 @@ describe("audit discarding", () => {
       `/runs/${auditId}`,
       "GET",
     );
-    expect(detail.response.status).toBe(200);
+    expect(detail.status).toBe(200);
     expect(detail.body.audit).toMatchObject({
       deletedAt: discarded.body.deletedAt,
       deletedBy: { id: "user-2" },
@@ -2522,12 +2506,12 @@ describe("audit discarding", () => {
     });
 
     const invalid = await jsonRequest(fixture, "/runs?view=archived", "GET");
-    expect(invalid.response.status).toBe(400);
+    expect(invalid.status).toBe(400);
     expect(invalid.body).toEqual({ error: "Invalid audit view." });
   });
 
   it("keeps a discarded audit, its issues, and their images read-only", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const { auditId } = await createActivityAudit(fixture);
     const created = await jsonRequest<IssueResponse>(
       fixture,
@@ -2536,10 +2520,9 @@ describe("audit discarding", () => {
       { itemId: "check", title: "Inspect this" },
     );
     const issueId = created.body.issueId;
-    const uploaded = await fixture.app.request(
+    const uploaded = await fixture.request(
       `/issues/${issueId}/images?filename=evidence.png`,
       imageUpload(pngBytes()),
-      fixture.bindings,
     );
     const image = ((await uploaded.json()) as IssueImageResponse).image;
     await jsonRequest(fixture, `/runs/${auditId}`, "DELETE");
@@ -2559,31 +2542,27 @@ describe("audit discarding", () => {
       }),
       await jsonRequest(fixture, `/runs/${auditId}`, "DELETE"),
     ];
-    for (const { body, response } of rejections) {
-      expect(response.status).toBe(409);
+    for (const { body, status } of rejections) {
+      expect(status).toBe(409);
       expect(body).toEqual({ error: "This audit was discarded." });
     }
     for (const response of [
-      await fixture.app.request(
+      await fixture.request(
         `/issues/${issueId}/images?filename=late.png`,
         imageUpload(pngBytes()),
-        fixture.bindings,
       ),
-      await fixture.app.request(
-        `/issues/${issueId}/images/${image.id}`,
-        { method: "DELETE" },
-        fixture.bindings,
-      ),
+      await fixture.request(`/issues/${issueId}/images/${image.id}`, {
+        method: "DELETE",
+      }),
     ]) {
       expect(response.status).toBe(409);
       const body: unknown = await response.json();
       expect(body).toEqual({ error: "This audit was discarded." });
     }
 
-    const viewed = await fixture.app.request(
+    const viewed = await fixture.request(
       `/issues/${issueId}/images/${image.id}`,
       undefined,
-      fixture.bindings,
     );
     expect(viewed.status).toBe(200);
     expect(
@@ -2608,7 +2587,7 @@ describe("audit discarding", () => {
   });
 
   it("discards only in-progress audits in the active organization", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const { auditId } = await createActivityAudit(fixture);
     const otherOrganization = await jsonRequest(
       fixture,
@@ -2617,9 +2596,9 @@ describe("audit discarding", () => {
       undefined,
       { organizationId: "org_user-2" },
     );
-    expect(otherOrganization.response.status).toBe(404);
+    expect(otherOrganization.status).toBe(404);
     const missing = await jsonRequest(fixture, "/runs/missing", "DELETE");
-    expect(missing.response.status).toBe(404);
+    expect(missing.status).toBe(404);
 
     await jsonRequest(fixture, `/runs/${auditId}`, "PATCH", {
       expectedRevision: 0,
@@ -2627,7 +2606,7 @@ describe("audit discarding", () => {
       status: "completed",
     });
     const completed = await jsonRequest(fixture, `/runs/${auditId}`, "DELETE");
-    expect(completed.response.status).toBe(409);
+    expect(completed.status).toBe(409);
     expect(completed.body).toEqual({
       error: "Only in-progress audits can be discarded.",
     });
@@ -2640,7 +2619,7 @@ describe("audit discarding", () => {
   });
 
   it("keeps an image when its audit is discarded after the removal's initial read", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const { auditId } = await createActivityAudit(fixture);
     const created = await jsonRequest<IssueResponse>(
       fixture,
@@ -2649,26 +2628,28 @@ describe("audit discarding", () => {
       { itemId: "check", title: "Inspect this" },
     );
     const issueId = created.body.issueId;
-    const uploaded = await fixture.app.request(
+    const uploaded = await fixture.request(
       `/issues/${issueId}/images?filename=evidence.png`,
       imageUpload(pngBytes()),
-      fixture.bindings,
     );
     const image = ((await uploaded.json()) as IssueImageResponse).image;
     const storedBefore = fixture.stored.size;
-    fixture.databaseControl.afterNextImageRead = () => {
-      fixture.database
-        .query(
-          `UPDATE audits SET deleted_at = ?, deleted_by_user_id = 'user-2'
-           WHERE id = ?`,
-        )
-        .run(new Date().toISOString(), auditId);
-    };
+    fixture.hooks.after(
+      "FROM audit_issue_images AS image",
+      () => {
+        fixture.database
+          .query(
+            `UPDATE audits SET deleted_at = ?, deleted_by_user_id = 'user-2'
+             WHERE id = ?`,
+          )
+          .run(new Date().toISOString(), auditId);
+      },
+      { method: "first" },
+    );
 
-    const removed = await fixture.app.request(
+    const removed = await fixture.request(
       `/issues/${issueId}/images/${image.id}`,
       { method: "DELETE" },
-      fixture.bindings,
     );
     expect(removed.status).toBe(409);
     const body: unknown = await removed.json();
@@ -2690,7 +2671,7 @@ describe("audit discarding", () => {
   });
 
   it("rejects an upload, issue update, or discard that a discard overtakes", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const { auditId } = await createActivityAudit(fixture);
     const created = await jsonRequest<IssueResponse>(
       fixture,
@@ -2721,10 +2702,9 @@ describe("audit discarding", () => {
     // Discarded while the bytes upload: activation refuses the image.
     fixture.storageControl.beforeNextPut = async () => discardNow();
     await expectDiscarded(
-      await fixture.app.request(
+      await fixture.request(
         `/issues/${issueId}/images?filename=during.png`,
         imageUpload(pngBytes()),
-        fixture.bindings,
       ),
     );
     // Discarded between the issue check and the reservation: no bytes upload.
@@ -2733,37 +2713,32 @@ describe("audit discarding", () => {
     fixture.storageControl.beforeNextPut = async () => {
       uploadedBytes = true;
     };
-    fixture.databaseControl.afterNextIssueRead = discardNow;
+    fixture.hooks.after("FROM issues AS issue", discardNow, {
+      method: "first",
+    });
     await expectDiscarded(
-      await fixture.app.request(
+      await fixture.request(
         `/issues/${issueId}/images?filename=before.png`,
         imageUpload(pngBytes()),
-        fixture.bindings,
       ),
     );
     expect(uploadedBytes).toBe(false);
     delete fixture.storageControl.beforeNextPut;
     restore();
-    fixture.databaseControl.afterNextIssueRead = discardNow;
+    fixture.hooks.after("FROM issues AS issue", discardNow, {
+      method: "first",
+    });
     await expectDiscarded(
-      await fixture.app.request(
-        `/issues/${issueId}`,
-        {
-          body: JSON.stringify({ status: "resolved" }),
-          headers: { "content-type": "application/json" },
-          method: "PATCH",
-        },
-        fixture.bindings,
-      ),
+      await fixture.request(`/issues/${issueId}`, {
+        body: JSON.stringify({ status: "resolved" }),
+        headers: { "content-type": "application/json" },
+        method: "PATCH",
+      }),
     );
     restore();
-    fixture.databaseControl.afterNextAuditRead = discardNow;
+    fixture.hooks.after("FROM audits AS audit", discardNow);
     await expectDiscarded(
-      await fixture.app.request(
-        `/runs/${auditId}`,
-        { method: "DELETE" },
-        fixture.bindings,
-      ),
+      await fixture.request(`/runs/${auditId}`, { method: "DELETE" }),
     );
 
     expect(fixture.stored.size).toBe(0);
@@ -2785,7 +2760,7 @@ describe("audit discarding", () => {
   });
 
   it("rejects a save or new issue when the audit is discarded after the initial read", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const { auditId } = await createActivityAudit(fixture);
     const discardNow = () => {
       fixture.database
@@ -2796,19 +2771,19 @@ describe("audit discarding", () => {
         .run(new Date().toISOString(), auditId);
     };
 
-    fixture.databaseControl.afterNextAuditRead = discardNow;
+    fixture.hooks.after("FROM audits AS audit", discardNow);
     const saved = await jsonRequest(fixture, `/runs/${auditId}`, "PATCH", {
       expectedRevision: 0,
       responses: { check: "pass" },
       status: "in_progress",
     });
-    expect(saved.response.status).toBe(409);
+    expect(saved.status).toBe(409);
     expect(saved.body).toEqual({ error: "This audit was discarded." });
 
     fixture.database
       .query("UPDATE audits SET deleted_at = NULL WHERE id = ?")
       .run(auditId);
-    fixture.databaseControl.afterNextAuditRead = discardNow;
+    fixture.hooks.after("FROM audits AS audit", discardNow);
     const raised = await jsonRequest(
       fixture,
       `/runs/${auditId}/issues`,
@@ -2818,7 +2793,7 @@ describe("audit discarding", () => {
         title: "Too late",
       },
     );
-    expect(raised.response.status).toBe(409);
+    expect(raised.status).toBe(409);
     expect(raised.body).toEqual({ error: "This audit was discarded." });
     expect(
       fixture.database
@@ -2835,7 +2810,7 @@ describe("audit discarding", () => {
 
 describe("audit activity", () => {
   it("records creators, every answer change, completion, and reopening without duplicate no-op events", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const { auditId, templateId } = await createActivityAudit(fixture);
     const templateHistory = await jsonRequest<ActivityResponse>(
       fixture,
@@ -2987,7 +2962,7 @@ describe("audit activity", () => {
   });
 
   it("records issue and image actions, but excludes failed uploads and unchanged issue updates", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const { auditId } = await createActivityAudit(fixture);
     const created = await jsonRequest<IssueResponse>(
       fixture,
@@ -3003,7 +2978,7 @@ describe("audit activity", () => {
       { userId: "user-2" },
     );
     const issueId = created.body.issueId;
-    expect(created.response.status).toBe(201);
+    expect(created.status).toBe(201);
     await jsonRequest(fixture, `/issues/${issueId}`, "PATCH", {
       assignedTo: null,
       status: "resolved",
@@ -3019,23 +2994,20 @@ describe("audit activity", () => {
       { status: "open" },
       { userId: "user-2" },
     );
-    const failedUpload = await fixture.app.request(
+    const failedUpload = await fixture.request(
       `/issues/${issueId}/images?filename=bad.png`,
       imageUpload("invalid image"),
-      fixture.bindings,
     );
     expect(failedUpload.status).toBe(400);
-    const uploaded = await fixture.app.request(
+    const uploaded = await fixture.request(
       `/issues/${issueId}/images?filename=evidence.png`,
       imageUpload(pngBytes()),
-      fixture.bindings,
     );
     expect(uploaded.status).toBe(201);
     const image = ((await uploaded.json()) as IssueImageResponse).image;
-    const removed = await fixture.app.request(
+    const removed = await fixture.request(
       `/issues/${issueId}/images/${image.id}`,
       { headers: { "x-test-user-id": "user-2" }, method: "DELETE" },
-      fixture.bindings,
     );
     expect(removed.status).toBe(204);
     const detail = await jsonRequest<ActivityRunResponse>(
@@ -3079,7 +3051,7 @@ describe("audit activity", () => {
   });
 
   it("rejects stale and invalid saves without changing answers or recording activity", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const { auditId } = await createActivityAudit(fixture);
     const first = await jsonRequest(
       fixture,
@@ -3092,13 +3064,13 @@ describe("audit activity", () => {
       },
       { userId: "user-2" },
     );
-    expect(first.response.status).toBe(200);
+    expect(first.status).toBe(200);
     const stale = await jsonRequest(fixture, `/runs/${auditId}`, "PATCH", {
       expectedRevision: 0,
       responses: { check: "fail" },
       status: "in_progress",
     });
-    expect(stale.response.status).toBe(409);
+    expect(stale.status).toBe(409);
     for (const expectedRevision of [
       undefined,
       null,
@@ -3117,7 +3089,7 @@ describe("audit activity", () => {
           status: "in_progress",
         },
       );
-      expect(invalidRevision.response.status).toBe(400);
+      expect(invalidRevision.status).toBe(400);
       expect(invalidRevision.body).toEqual({
         error: "A valid audit revision is required. Reload it before saving.",
       });
@@ -3127,7 +3099,7 @@ describe("audit activity", () => {
       responses: {},
       status: "completed",
     });
-    expect(invalid.response.status).toBe(400);
+    expect(invalid.status).toBe(400);
     const detail = await jsonRequest<ActivityRunResponse>(
       fixture,
       `/runs/${auditId}`,
@@ -3144,15 +3116,24 @@ describe("audit activity", () => {
   });
 
   it("rejects a save when another writer changes the revision after the initial read", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const { auditId } = await createActivityAudit(fixture);
-    fixture.databaseControl.editAuditBeforeRunUpdate = true;
+    fixture.hooks.before("UPDATE audits SET responses", (event) => {
+      const { auditId, organizationId } = auditTarget(event);
+      fixture.database
+        .query(
+          `UPDATE audits SET responses = '{"check":"pass"}',
+             revision = revision + 1, activity_actor_id = 'user-2', updated_at = ?
+           WHERE id = ? AND organization_id = ?`,
+        )
+        .run(new Date().toISOString(), auditId, organizationId);
+    });
     const rejected = await jsonRequest(fixture, `/runs/${auditId}`, "PATCH", {
       expectedRevision: 0,
       responses: { check: "fail" },
       status: "completed",
     });
-    expect(rejected.response.status).toBe(409);
+    expect(rejected.status).toBe(409);
     expect(rejected.body).toEqual({
       error: "This audit has changed. Reload it before saving.",
     });
@@ -3182,21 +3163,21 @@ describe("audit activity", () => {
   });
 
   it("keeps answer values and attribution in one snapshot during concurrent saves", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const { auditId } = await createActivityAudit(fixture);
     await jsonRequest(fixture, `/runs/${auditId}`, "PATCH", {
       expectedRevision: 0,
       responses: { check: "pass" },
       status: "in_progress",
     });
-    fixture.databaseControl.afterNextAuditRead = () => {
+    fixture.hooks.after("FROM audits AS audit", () => {
       fixture.database
         .query(
           `UPDATE audits SET responses = '{"check":"fail"}', revision = revision + 1,
              activity_actor_id = 'user-2', updated_at = ? WHERE id = ?`,
         )
         .run(new Date().toISOString(), auditId);
-    };
+    });
     const snapshot = await jsonRequest<ActivityRunResponse>(
       fixture,
       `/runs/${auditId}`,
@@ -3220,7 +3201,7 @@ describe("audit activity", () => {
   });
 
   it("isolates organization feeds and resource history while allowing shared global form history", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const { auditId, templateId } = await createActivityAudit(fixture);
     const other = { organizationId: "org_user-2", userId: "user-2" };
     for (const path of [
@@ -3228,7 +3209,7 @@ describe("audit activity", () => {
       `/templates/${templateId}/activity`,
     ]) {
       const denied = await jsonRequest(fixture, path, "GET", undefined, other);
-      expect(denied.response.status).toBe(404);
+      expect(denied.status).toBe(404);
     }
     const ownFeed = await jsonRequest<ActivityResponse>(
       fixture,
@@ -3283,7 +3264,7 @@ describe("audit activity", () => {
   });
 
   it("paginates activity without duplicates and retains attribution beyond the first page", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const { auditId } = await createActivityAudit(fixture);
     await jsonRequest(
       fixture,
@@ -3341,29 +3322,25 @@ describe("audit activity", () => {
         `/runs/${auditId}/activity?cursor=${cursor}`,
         "GET",
       );
-      expect(invalid.response.status).toBe(400);
+      expect(invalid.status).toBe(400);
     }
   });
 
   it("rolls back a mutation if its activity cannot be written", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const { auditId } = await createActivityAudit(fixture);
     fixture.database.exec(
       "CREATE TRIGGER reject_activity BEFORE INSERT ON activity_events BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END;",
     );
-    const failed = await fixture.app.request(
-      `/runs/${auditId}`,
-      {
-        body: JSON.stringify({
-          expectedRevision: 0,
-          responses: { check: "pass" },
-          status: "in_progress",
-        }),
-        headers: { "content-type": "application/json" },
-        method: "PATCH",
-      },
-      fixture.bindings,
-    );
+    const failed = await fixture.request(`/runs/${auditId}`, {
+      body: JSON.stringify({
+        expectedRevision: 0,
+        responses: { check: "pass" },
+        status: "in_progress",
+      }),
+      headers: { "content-type": "application/json" },
+      method: "PATCH",
+    });
     expect(failed.status).toBe(500);
     const detail = await jsonRequest<ActivityRunResponse>(
       fixture,
@@ -3375,7 +3352,7 @@ describe("audit activity", () => {
   });
 
   it("imports only known historical actors without inventing earlier answer or completion history", async () => {
-    const fixture = await createFixture(false);
+    const fixture = createFixture({ before: "0049" });
     const { auditId, templateId } = await createActivityAudit(fixture);
     fixture.database
       .query(
@@ -3386,8 +3363,7 @@ describe("audit activity", () => {
       .query(`INSERT INTO audit_issues (id, organization_id, audit_id, item_id, title, description, priority, status, created_by, created_at, updated_at)
       VALUES ('legacy-issue', 'org_user-1', ?, 'check', 'Legacy issue', '', 'high', 'resolved', 'user-2', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z')`)
       .run(auditId);
-    await applyActivityMigrations(fixture.database);
-    await applyMigration(fixture.database, "0062_create_issues.sql");
+    applyMigrations(fixture.database, { from: "0049" });
     const history = await jsonRequest<ActivityResponse>(
       fixture,
       `/runs/${auditId}/activity`,
@@ -3439,9 +3415,7 @@ describe("audit activity", () => {
   });
 });
 
-async function createActivityAudit(
-  fixture: Awaited<ReturnType<typeof createFixture>>,
-) {
+async function createActivityAudit(fixture: ReturnType<typeof createFixture>) {
   const created = await jsonRequest<TemplateResponse>(
     fixture,
     "/templates",
@@ -3487,416 +3461,105 @@ async function createActivityAudit(
   return { auditId: started.body.auditId, templateId };
 }
 
-interface DatabaseControl {
-  activateBeforeCleanupClaim: boolean;
-  afterNextAuditRead?: () => void;
-  afterNextImageRead?: () => void;
-  afterNextIssueRead?: () => void;
-  commitThenThrowImageActivation: boolean;
-  deleteAssigneeBeforeIssueUpdate: boolean;
-  deleteAuditBeforeRunUpdate: boolean;
-  editAuditBeforeRunUpdate: boolean;
-  failNextImageActivation: boolean;
-  failNextPendingUpdate: boolean;
+/** The statement that activates an uploaded issue image. */
+const imageActivation = "SET size = ?, deletion_pending = 0";
+
+function failPendingUpdate(): never {
+  throw new Error("Transient D1 update failure");
 }
 
-async function createFixture(
-  includeActivity = true,
-  includePublication = true,
-) {
-  const database = await createLegacyDatabase();
-  await applyMigration(database, "0022_version_audit_templates.sql");
-  await applyMigration(database, "0024_create_audit_issue_images.sql");
-  await applyMigration(database, "0025_classify_objects.sql");
-  await applyMigration(database, "0026_track_object_deletion.sql");
-  await applyMigration(database, "0027_claim_object_cleanup.sql");
-  await applyMigration(database, "0028_lease_audit_image_uploads.sql");
-  await applyMigration(database, "0029_tombstone_cascaded_audit_images.sql");
-  await applyMigration(database, "0030_queue_deleted_objects.sql");
-  await applyMigration(database, "0032_create_billing.sql");
-  await applyMigration(database, "0033_create_audit_library_actor.sql");
-  if (includeActivity) await applyActivityMigrations(database);
-  await applyMigration(database, "0007_create_finance.sql");
-  await applyMigration(database, "0009_retain_finance_history.sql");
-  await applyMigration(database, "0010_create_organization_groups.sql");
-  // Billing restore triggers reference deletedAt; table rebuilds revalidate them.
-  await applyMigration(database, "0011_soft_delete_organizations.sql");
-  await applyMigration(database, "0056_discard_audits.sql");
-  if (includePublication)
-    await applyMigration(database, "0058_publish_legacy_global_audits.sql");
-  if (includeActivity) {
-    await applyMigration(database, "0062_create_issues.sql");
-    await applyMigration(database, "0070_offline_operations.sql");
+/** The audit and organization an audit update binds last. */
+function auditTarget({ values }: QueryEvent) {
+  const [auditId, organizationId] = values.slice(-2);
+  if (typeof auditId !== "string" || typeof organizationId !== "string") {
+    throw new Error("Expected an audit and organization id.");
   }
-  const stored = new Map<string, Uint8Array>();
-  const databaseControl: DatabaseControl = {
-    activateBeforeCleanupClaim: false,
-    commitThenThrowImageActivation: false,
-    deleteAuditBeforeRunUpdate: false,
-    editAuditBeforeRunUpdate: false,
-    deleteAssigneeBeforeIssueUpdate: false,
-    failNextImageActivation: false,
-    failNextPendingUpdate: false,
-  };
+  return { auditId, organizationId };
+}
+
+function createFixture(migrations: { before?: string } = {}) {
+  const database = legacyDatabase(migrations.before);
+  const hooks = queryHooks();
   const storageControl: {
     beforeNextPut?: () => Promise<void>;
     failNextDelete: boolean;
   } = { failNextDelete: false };
-  const bindings = bindingsFor(
-    database,
-    stored,
-    storageControl,
-    databaseControl,
+  const { bucket, stored } = memoryStorage(new Map(), {
+    beforePut: async () => {
+      const beforePut = storageControl.beforeNextPut;
+      delete storageControl.beforeNextPut;
+      await beforePut?.();
+    },
+  });
+  const bindings = testBindings({
+    DB: toD1(database, hooks),
+    IMAGES: imagesFor(),
+    STORAGE: {
+      ...bucket,
+      delete: async (key: string) => {
+        if (storageControl.failNextDelete) {
+          storageControl.failNextDelete = false;
+          throw new Error("Transient R2 delete failure");
+        }
+        return bucket.delete(key);
+      },
+    } as R2Bucket,
+    STRIPE_PRO_PRICE_ID: "price_pro_test",
+  });
+  const app = testApp(
+    {
+      "/offline": offline,
+      "/activity": activity,
+      "/admin/audit-templates": adminAuditTemplates,
+      "/": audits,
+    },
+    (context) => ({
+      organizationId:
+        context.req.header("x-test-organization-id") ?? "org_user-1",
+      organizationRole: "owner",
+      role: context.req.header("x-test-role") ?? "user",
+      userId: context.req.header("x-test-user-id") ?? "user-1",
+    }),
   );
-  const app = testApp();
   return {
     app,
     bindings,
     database,
-    databaseControl,
+    hooks,
+    request: (path: string, init?: RequestInit) =>
+      app.request(path, init, bindings),
+    send: requester(app, bindings),
     storageControl,
     stored,
   };
 }
 
-async function createLegacyDatabase() {
-  const database = new Database(":memory:");
-  await applyMigration(database, "0001_create_objects.sql");
-  await applyMigration(database, "0003_create_auth.sql");
-  const insertUser = database.query(
-    `INSERT INTO user
-     (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
+/** A database migrated up to `before`, with the people audits name. */
+function legacyDatabase(before?: string) {
+  const database = createTestDatabase(before === undefined ? {} : { before });
   for (const [id, name, email] of [
     ["user-1", "Example Person", "person@example.com"],
     ["user-2", "Second Person", "second@example.com"],
   ] as const) {
-    insertUser.run(
-      id,
-      name,
-      email,
-      false,
-      "2026-08-18T12:00:00.000Z",
-      "2026-08-18T12:00:00.000Z",
-      "user",
-      false,
-    );
+    seedAccount(database, { email, emailVerified: false, id, name });
   }
-  await applyMigration(database, "0004_create_organizations.sql");
-  await applyMigration(database, "0005_create_audits.sql");
-  await applyMigration(database, "0006_scope_objects_to_organizations.sql");
   return database;
 }
 
-function testApp() {
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-  app.use("*", async (context, next) => {
-    const organizationId =
-      context.req.header("x-test-organization-id") ?? "org_user-1";
-    const userId = context.req.header("x-test-user-id") ?? "user-1";
-    context.set("organizationId", organizationId);
-    context.set("organizationRole", "owner");
-    context.set("authSession", {
-      user: {
-        defaultOrganizationId: organizationId,
-        id: userId,
-        role: context.req.header("x-test-role") ?? "user",
-      },
-    } as unknown as AuthSession);
-    await next();
-  });
-  app.route("/offline", offline);
-  app.route("/activity", activity);
-  app.route("/admin/audit-templates", adminAuditTemplates);
-  app.route("/", audits);
-  return app;
-}
-
 async function jsonRequest<T = unknown>(
-  fixture: Awaited<ReturnType<typeof createFixture>>,
+  fixture: ReturnType<typeof createFixture>,
   path: string,
   method: string,
   body?: unknown,
   identity?: TestIdentity,
 ) {
-  const headers: Record<string, string> = {
-    "content-type": "application/json",
-  };
+  const headers: Record<string, string> = {};
   if (identity?.organizationId) {
     headers["x-test-organization-id"] = identity.organizationId;
   }
   if (identity?.role) headers["x-test-role"] = identity.role;
   if (identity?.userId) headers["x-test-user-id"] = identity.userId;
-  const init: RequestInit = {
-    headers,
-    method,
-  };
-  if (body !== undefined) init.body = JSON.stringify(body);
-  const response = await fixture.app.request(path, init, fixture.bindings);
-  return { body: (await response.json()) as T, response };
-}
-
-function bindingsFor(
-  database: Database,
-  stored: Map<string, Uint8Array> = new Map(),
-  storageControl: {
-    beforeNextPut?: () => Promise<void>;
-    failNextDelete: boolean;
-  } = { failNextDelete: false },
-  databaseControl: DatabaseControl = {
-    activateBeforeCleanupClaim: false,
-    commitThenThrowImageActivation: false,
-    deleteAuditBeforeRunUpdate: false,
-    editAuditBeforeRunUpdate: false,
-    deleteAssigneeBeforeIssueUpdate: false,
-    failNextImageActivation: false,
-    failNextPendingUpdate: false,
-  },
-): Bindings {
-  return {
-    AUTH_EMAIL_FROM: "security@auth.balebase.com",
-    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-    BETTER_AUTH_URL: "https://api.test",
-    CORS_ORIGIN: "https://app.test",
-    DB: toD1(database, databaseControl),
-    EMAIL: {} as SendEmail,
-    IMAGES: imagesFor(),
-    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
-    STRIPE_PRO_PRICE_ID: "price_pro_test",
-    STORAGE: storageFor(stored, storageControl),
-  };
-}
-
-function storageFor(
-  stored: Map<string, Uint8Array>,
-  control: {
-    beforeNextPut?: () => Promise<void>;
-    failNextDelete: boolean;
-  },
-) {
-  return {
-    delete: async (key: string) => {
-      if (control.failNextDelete) {
-        control.failNextDelete = false;
-        throw new Error("Transient R2 delete failure");
-      }
-      return stored.delete(key);
-    },
-    get: async (key: string) => {
-      const content = stored.get(key);
-      if (!content) return null;
-      return {
-        body: new Blob([content]).stream(),
-        httpEtag: '"test-etag"',
-      };
-    },
-    put: async (
-      key: string,
-      value: ArrayBuffer | ReadableStream<Uint8Array> | Uint8Array,
-    ) => {
-      const beforePut = control.beforeNextPut;
-      delete control.beforeNextPut;
-      await beforePut?.();
-      if (value instanceof ReadableStream) {
-        throw new Error("R2 put requires a body with a known length");
-      }
-      const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
-      stored.set(key, bytes.slice());
-    },
-  } as unknown as R2Bucket;
-}
-
-function toD1(
-  database: Database,
-  control: DatabaseControl = {
-    activateBeforeCleanupClaim: false,
-    commitThenThrowImageActivation: false,
-    deleteAuditBeforeRunUpdate: false,
-    editAuditBeforeRunUpdate: false,
-    deleteAssigneeBeforeIssueUpdate: false,
-    failNextImageActivation: false,
-    failNextPendingUpdate: false,
-  },
-) {
-  let batchTail: Promise<void> = Promise.resolve();
-  // A write that commits but whose response never arrives, as D1 can report.
-  let lostResponse: Error | undefined;
-  const throwLostResponse = () => {
-    const cause = lostResponse;
-    lostResponse = undefined;
-    if (cause) throw cause;
-  };
-  const afterAuditRead = () => {
-    const callback = control.afterNextAuditRead;
-    delete control.afterNextAuditRead;
-    callback?.();
-  };
-  return {
-    batch: (statements: D1PreparedStatement[]) => {
-      const execution = batchTail.then(() => {
-        database.exec("BEGIN");
-        let results: D1Result[];
-        try {
-          results = statements.map((statement) =>
-            (
-              statement as D1PreparedStatement & {
-                runSync: () => D1Result;
-              }
-            ).runSync(),
-          );
-          database.exec("COMMIT");
-          afterAuditRead();
-        } catch (cause) {
-          database.exec("ROLLBACK");
-          throw cause;
-        }
-        throwLostResponse();
-        return results;
-      });
-      batchTail = execution.then(
-        () => undefined,
-        () => undefined,
-      );
-      return execution;
-    },
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const runSync = () => {
-        if (
-          control.editAuditBeforeRunUpdate &&
-          query.includes("UPDATE audits SET responses")
-        ) {
-          control.editAuditBeforeRunUpdate = false;
-          const auditId = values.at(-2);
-          const organizationId = values.at(-1);
-          if (
-            typeof auditId !== "string" ||
-            typeof organizationId !== "string"
-          ) {
-            throw new Error("Expected an audit and organization id.");
-          }
-          database
-            .query(
-              `UPDATE audits SET responses = '{"check":"pass"}',
-                 revision = revision + 1, activity_actor_id = 'user-2', updated_at = ?
-               WHERE id = ? AND organization_id = ?`,
-            )
-            .run(new Date().toISOString(), auditId, organizationId);
-        }
-        if (
-          control.deleteAuditBeforeRunUpdate &&
-          query.includes("UPDATE audits SET responses")
-        ) {
-          control.deleteAuditBeforeRunUpdate = false;
-          const auditId = values.at(-2);
-          const organizationId = values.at(-1);
-          if (
-            typeof auditId !== "string" ||
-            typeof organizationId !== "string"
-          ) {
-            throw new Error("Expected an audit and organization id.");
-          }
-          database
-            .query("DELETE FROM audits WHERE id = ? AND organization_id = ?")
-            .run(auditId, organizationId);
-        }
-        if (
-          control.deleteAssigneeBeforeIssueUpdate &&
-          query.includes("UPDATE issues") &&
-          query.includes("SELECT 1 FROM member")
-        ) {
-          control.deleteAssigneeBeforeIssueUpdate = false;
-          const organizationId = values.at(-2);
-          const userId = values.at(-1);
-          fixtureMemberDeletion(database, organizationId, userId);
-        }
-        if (
-          control.failNextImageActivation &&
-          query.includes("SET size = ?, deletion_pending = 0")
-        ) {
-          control.failNextImageActivation = false;
-          throw new Error("Transient D1 image activation failure");
-        }
-        if (
-          control.commitThenThrowImageActivation &&
-          query.includes("SET size = ?, deletion_pending = 0")
-        ) {
-          control.commitThenThrowImageActivation = false;
-          lostResponse = new Error(
-            "D1 activation response was lost after commit",
-          );
-        }
-        if (
-          control.failNextPendingUpdate &&
-          query.includes("SET deletion_pending = 1")
-        ) {
-          control.failNextPendingUpdate = false;
-          throw new Error("Transient D1 update failure");
-        }
-        if (query.trimStart().startsWith("SELECT")) {
-          return {
-            meta: { changes: 0 },
-            results: database.query(query).all(...values),
-            success: true,
-          };
-        }
-        const result = database.query(query).run(...values);
-        return { meta: { changes: result.changes }, success: true };
-      };
-      const statement = {
-        all: async () => ({
-          results: database.query(query).all(...values),
-          success: true,
-        }),
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        first: async () => {
-          if (
-            control.activateBeforeCleanupClaim &&
-            query.includes("SET cleanup_token = ?")
-          ) {
-            control.activateBeforeCleanupClaim = false;
-            const objectId = values[2];
-            if (typeof objectId !== "string") {
-              throw new Error("Cleanup claim object id missing");
-            }
-            database
-              .query(
-                `UPDATE objects
-                 SET deletion_pending = 0, cleanup_token = NULL,
-                     cleanup_claimed_at = NULL, upload_token = NULL,
-                     upload_lease_expires_at = NULL
-                 WHERE id = ?`,
-              )
-              .run(objectId);
-          }
-          const result = database.query(query).get(...values);
-          if (query.includes("FROM audits AS audit")) afterAuditRead();
-          if (query.includes("FROM audit_issue_images AS image")) {
-            const callback = control.afterNextImageRead;
-            delete control.afterNextImageRead;
-            callback?.();
-          }
-          if (query.includes("FROM issues AS issue")) {
-            const callback = control.afterNextIssueRead;
-            delete control.afterNextIssueRead;
-            callback?.();
-          }
-          return result;
-        },
-        run: async () => {
-          const result = runSync();
-          throwLostResponse();
-          return result;
-        },
-        runSync,
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
+  return fixture.send<T>(method, path, body, headers);
 }
 
 function fixtureMemberDeletion(
@@ -4019,23 +3682,8 @@ function imagesFor(
   } as unknown as ImagesBinding;
 }
 
-/** Activity events, including their API key attribution. */
-async function applyActivityMigrations(database: Database) {
-  await applyMigration(database, "0049_create_activity_events.sql");
-  await applyMigration(database, "0060_create_organization_api_keys.sql");
-  await applyMigration(database, "0061_attribute_activity_to_api_keys.sql");
-}
-
-async function applyMigration(database: Database, filename: string) {
-  database.exec(
-    await Bun.file(
-      new URL(`../migrations/${filename}`, import.meta.url),
-    ).text(),
-  );
-}
-
 it("replays offline image uploads after lost responses and removal without duplicate storage or history", async () => {
-  const f = await createFixture();
+  const f = createFixture();
   const issueId = crypto.randomUUID();
   const scope = { userId: "user-1", organizationId: "org_user-1" };
   const created = await jsonRequest(f, "/offline/operations", "POST", {
@@ -4049,16 +3697,14 @@ it("replays offline image uploads after lost responses and removal without dupli
       assignedTo: null,
     },
   });
-  expect(created.response.status).toBe(201);
+  expect(created.status).toBe(201);
   const imageId = crypto.randomUUID();
   const path = `/offline/issues/${issueId}/images/${imageId}?userId=user-1&organizationId=org_user-1&filename=gate.png`;
   const upload = () =>
-    f.app.request(
-      path,
-      { ...imageUpload(pngBytes()), method: "PUT" },
-      f.bindings,
-    );
-  f.databaseControl.commitThenThrowImageActivation = true;
+    f.request(path, { ...imageUpload(pngBytes()), method: "PUT" });
+  f.hooks.after(imageActivation, () => {
+    throw new Error("D1 activation response was lost after commit");
+  });
   const first = await upload();
   expect(first.status).toBe(201);
   const body = await first.json();
@@ -4073,23 +3719,16 @@ it("replays offline image uploads after lost responses and removal without dupli
       )
       .all(),
   ).toHaveLength(1);
-  const list = await f.app.request(
-    `/offline/issues/${issueId}/images`,
-    {},
-    f.bindings,
-  );
+  const list = await f.request(`/offline/issues/${issueId}/images`, {});
   expect(((await list.json()) as { images: unknown[] }).images).toHaveLength(1);
-  const wrongScope = await f.app.request(
+  const wrongScope = await f.request(
     path.replace("userId=user-1", "userId=user-2"),
     { ...imageUpload(pngBytes()), method: "PUT" },
-    f.bindings,
   );
   expect(wrongScope.status).toBe(403);
-  const removed = await f.app.request(
-    `/issues/${issueId}/images/${imageId}`,
-    { method: "DELETE" },
-    f.bindings,
-  );
+  const removed = await f.request(`/issues/${issueId}/images/${imageId}`, {
+    method: "DELETE",
+  });
   expect(removed.status).toBe(204);
   expect((await upload()).status).toBe(200);
   expect(f.database.query("SELECT id FROM audit_issue_images").all()).toEqual(
@@ -4100,7 +3739,7 @@ it("replays offline image uploads after lost responses and removal without dupli
 });
 
 it("acknowledges an uploaded offline image after its audit and issue are purged", async () => {
-  const fixture = await createFixture();
+  const fixture = createFixture();
   const { auditId } = await createActivityAudit(fixture);
   const issue = await jsonRequest<IssueResponse>(
     fixture,
@@ -4108,19 +3747,14 @@ it("acknowledges an uploaded offline image after its audit and issue are purged"
     "POST",
     { title: "Rail", itemId: "check" },
   );
-  expect(issue.response.status).toBe(201);
+  expect(issue.status).toBe(201);
   const imageId = crypto.randomUUID();
   const path = `/offline/issues/${issue.body.issueId}/images/${imageId}?userId=user-1&organizationId=org_user-1&filename=rail.png`;
   const upload = () =>
-    fixture.app.request(
-      path,
-      { ...imageUpload(pngBytes()), method: "PUT" },
-      fixture.bindings,
-    );
+    fixture.request(path, { ...imageUpload(pngBytes()), method: "PUT" });
   const first = await upload();
   expect(first.status).toBe(201);
   const image = await first.json();
-  fixture.database.exec("PRAGMA foreign_keys = ON");
   fixture.database.query("DELETE FROM audits WHERE id = ?").run(auditId);
   expect(
     fixture.database

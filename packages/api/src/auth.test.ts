@@ -1,11 +1,13 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { readdir } from "node:fs/promises";
 import { findActivity } from "./activity";
 import { app } from "./app";
 import { createAuth } from "./auth";
 import { withNativeOrigin } from "./nativeRequest";
-import type { Bindings } from "./types";
+import { testBindings } from "./testing/bindings";
+import { toD1 } from "./testing/d1";
+import { applyMigrations, createTestDatabase } from "./testing/database";
+import { insertBilling, seedUser } from "./testing/seed";
 
 const baseURL = "https://api.test";
 const origin = "https://app.test";
@@ -23,7 +25,7 @@ describe("password authentication", () => {
         "https://localhost",
       ]) {
         const fixture = await createFixture();
-        const bindings = { ...fixture.bindings, DB: toD1(fixture.database) };
+        const { bindings } = fixture;
         const cookies = new CookieJar();
         const request = async (
           path: string,
@@ -784,14 +786,12 @@ describe("password authentication", () => {
     const organization = fixture.database
       .query(`SELECT defaultOrganizationId AS id FROM user WHERE email = ?`)
       .get(email) as { id: string };
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_price_id, stripe_status, seat_quantity,
-          stripe_event_created, updated_at)
-         VALUES (?, 'price_pro_test', 'active', 1, 1, ?)`,
-      )
-      .run(organization.id, new Date().toISOString());
+    insertBilling(fixture.database, organization.id, {
+      seat_quantity: 1,
+      stripe_event_created: 1,
+      stripe_price_id: "price_pro_test",
+      stripe_status: "active",
+    });
     const invitedEmail = "downgraded-invitee@example.com";
     const invite = await post(
       fixture.auth,
@@ -867,14 +867,12 @@ describe("password authentication", () => {
       .get(email) as { id: string; name: string };
     const invitedEmail = "invitee@example.com";
 
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_price_id, stripe_status, seat_quantity,
-          stripe_event_created, updated_at)
-         VALUES (?, 'price_pro_test', 'active', 1, 1, ?)`,
-      )
-      .run(organization.id, new Date().toISOString());
+    insertBilling(fixture.database, organization.id, {
+      seat_quantity: 1,
+      stripe_event_created: 1,
+      stripe_price_id: "price_pro_test",
+      stripe_status: "active",
+    });
 
     const firstInvite = await post(
       fixture.auth,
@@ -1212,14 +1210,12 @@ describe("password authentication", () => {
     const ownerOrganization = fixture.database
       .query("SELECT defaultOrganizationId AS id FROM user WHERE email = ?")
       .get(email) as { id: string };
-    fixture.database
-      .query(
-        `INSERT INTO organization_billing
-         (organization_id, stripe_price_id, stripe_status, seat_quantity,
-          stripe_event_created, updated_at)
-         VALUES (?, 'price_pro_test', 'active', 1, 1, ?)`,
-      )
-      .run(ownerOrganization.id, new Date().toISOString());
+    insertBilling(fixture.database, ownerOrganization.id, {
+      seat_quantity: 1,
+      stripe_event_created: 1,
+      stripe_price_id: "price_pro_test",
+      stripe_status: "active",
+    });
 
     const invitedEmail = "saved-default@example.com";
     await post(fixture.auth, "/sign-up/email", {
@@ -1247,7 +1243,7 @@ describe("password authentication", () => {
         },
         method: "PATCH",
       },
-      { ...fixture.bindings, DB: toD1(fixture.database) },
+      fixture.bindings,
       executionContext(fixture.pending),
     );
     expect(saved.status).toBe(200);
@@ -1324,7 +1320,7 @@ describe("password authentication", () => {
       const response = await app.request(
         "/api/me",
         { headers: { cookie } },
-        { ...fixture.bindings, DB: toD1(fixture.database) },
+        fixture.bindings,
         executionContext(fixture.pending),
       );
       await Promise.all(fixture.pending);
@@ -1347,26 +1343,19 @@ describe("password authentication", () => {
   });
 
   it("backfills last activity from account creation", async () => {
-    const database = new Database(":memory:");
-    await applyMigration(database, "0003_create_auth.sql");
+    const database = createTestDatabase({ before: "0055" });
+    seedUser(database, {
+      createdAt: "2026-08-18T12:00:00.000Z",
+      email: "existing@example.com",
+      emailVerified: false,
+      id: "existing-user",
+      name: "Existing User",
+    });
     database
-      .query(
-        `INSERT INTO user
-         (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        "existing-user",
-        "Existing User",
-        "existing@example.com",
-        false,
-        "2026-08-18T12:00:00.000Z",
-        "2026-09-01T12:00:00.000Z",
-        "user",
-        false,
-      );
+      .query("UPDATE user SET updatedAt = ? WHERE id = ?")
+      .run("2026-09-01T12:00:00.000Z", "existing-user");
 
-    await applyMigration(database, "0055_track_user_last_active.sql");
+    applyMigrations(database, { from: "0055" });
 
     expect(
       database
@@ -1412,7 +1401,7 @@ describe("password authentication", () => {
     const response = await app.request(
       "/api/me",
       { headers: { cookie: cookies.header() } },
-      { ...fixture.bindings, DB: toD1(fixture.database) },
+      fixture.bindings,
       executionContext(fixture.pending),
     );
     await Promise.all(fixture.pending);
@@ -1428,26 +1417,16 @@ describe("password authentication", () => {
   });
 
   it("backfills an organization for an existing user", async () => {
-    const database = new Database(":memory:");
-    await applyMigration(database, "0003_create_auth.sql");
-    database
-      .query(
-        `INSERT INTO user
-         (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        "existing-user",
-        "Existing User",
-        "existing@example.com",
-        false,
-        "2026-08-18T12:00:00.000Z",
-        "2026-08-18T12:00:00.000Z",
-        "user",
-        false,
-      );
+    const database = createTestDatabase({ before: "0004" });
+    seedUser(database, {
+      createdAt: "2026-08-18T12:00:00.000Z",
+      email: "existing@example.com",
+      emailVerified: false,
+      id: "existing-user",
+      name: "Existing User",
+    });
 
-    await applyMigration(database, "0004_create_organizations.sql");
+    applyMigrations(database, { from: "0004" });
 
     expect(
       database
@@ -1676,9 +1655,7 @@ describe("organization role activity", () => {
 
 async function createRoleActivityFixture() {
   const fixture = await createFixture();
-  fixture.database.exec("PRAGMA foreign_keys = ON");
-  const bindings = { ...fixture.bindings, DB: toD1(fixture.database) };
-  const auth = createAuth(bindings, (promise) => fixture.pending.push(promise));
+  const { auth, bindings } = fixture;
   async function person(userEmail: string, name: string) {
     expect(
       (
@@ -1714,11 +1691,11 @@ async function createRoleActivityFixture() {
     .query(`INSERT INTO member (id, organizationId, userId, role, createdAt)
     VALUES ('bob-member', ?, ?, 'member', ?)`)
     .run(owner.organizationId, target.id, new Date().toISOString());
-  fixture.database
-    .query(`INSERT INTO organization_billing
-    (organization_id, stripe_price_id, stripe_status, seat_quantity, updated_at)
-    VALUES (?, 'price_pro_test', 'active', 3, ?)`)
-    .run(owner.organizationId, new Date().toISOString());
+  insertBilling(fixture.database, owner.organizationId, {
+    seat_quantity: 3,
+    stripe_price_id: "price_pro_test",
+    stripe_status: "active",
+  });
   return {
     ...fixture,
     auth,
@@ -1771,74 +1748,23 @@ function executionContext(pending: Promise<unknown>[]) {
   } as unknown as ExecutionContext;
 }
 
-function toD1(database: Database) {
-  return {
-    batch: async (statements: Array<{ execute: () => unknown }>) =>
-      statements.map((statement) => statement.execute()),
-    exec: async (query: string) => database.exec(query),
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const statement = {
-        all: async () => {
-          const results = database.query(query).all(...values);
-          const meta = database
-            .query(
-              `SELECT changes() AS changes,
-                      last_insert_rowid() AS last_row_id`,
-            )
-            .get() as { changes: number; last_row_id: number };
-          return { meta, results, success: true };
-        },
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        execute: () => run(),
-        first: async () => database.query(query).get(...values),
-        raw: async () => database.query(query).values(...values),
-        run: async () => run(),
-      };
-      const run = () => {
-        const result = database.query(query).run(...values);
-        return {
-          meta: { changes: result.changes },
-          results: [],
-          success: true,
-        };
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
-}
-
 async function createFixture() {
-  const database = new Database(":memory:");
+  const database = createTestDatabase();
   const messages: EmailMessageBuilder[] = [];
   const pending: Promise<unknown>[] = [];
-  const bindings = {
-    AUTH_EMAIL_FROM: "security@auth.balebase.com",
-    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
+  const bindings = testBindings({
     BETTER_AUTH_URL: baseURL,
     CORS_ORIGIN: origin,
-    DB: database as unknown as D1Database,
+    DB: toD1(database),
     EMAIL: {
       send: async (message: EmailMessageBuilder) => {
         messages.push(message);
         return { messageId: "test-message" };
       },
     } as unknown as SendEmail,
-    IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
     STRIPE_PRO_PRICE_ID: "price_pro_test",
-    STORAGE: {} as R2Bucket,
-  } satisfies Bindings;
+  });
   const auth = createAuth(bindings, (promise) => pending.push(promise));
-
-  const directory = new URL("../migrations/", import.meta.url);
-  for (const filename of (await readdir(directory.pathname)).sort()) {
-    if (filename.endsWith(".sql")) await applyMigration(database, filename);
-  }
-
   return { auth, bindings, database, messages, pending };
 }
 
@@ -1859,14 +1785,6 @@ function post(
       },
       method: "POST",
     }),
-  );
-}
-
-async function applyMigration(database: Database, filename: string) {
-  database.exec(
-    await Bun.file(
-      new URL(`../migrations/${filename}`, import.meta.url),
-    ).text(),
   );
 }
 

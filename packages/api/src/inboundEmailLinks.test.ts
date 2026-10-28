@@ -1,13 +1,14 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
+import type { Database, SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { readdir } from "node:fs/promises";
-import { Hono } from "hono";
-import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
 import { createFinanceRouter } from "./finance";
 import { inbox } from "./inbox";
 import { libraryFolders } from "./libraryFolders";
-import type { Bindings } from "./types";
+import { testBindings } from "./testing/bindings";
+import { queryHooks, toD1 } from "./testing/d1";
+import { createTestDatabase } from "./testing/database";
+import { requester } from "./testing/http";
+import { seedGroup, seedOrganization, seedUser } from "./testing/seed";
+import { testApp } from "./testing/session";
 
 const timestamp = "2026-09-20T12:00:00.000Z";
 const rawEmail = [
@@ -36,7 +37,7 @@ interface LinkedEmail {
 
 describe("inbound email links", () => {
   it("links an email to a library folder once and unlinks it", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const member = fixture.as("member-user");
 
     const created = await member.json<{ link: EmailLink }>(
@@ -89,7 +90,7 @@ describe("inbound email links", () => {
   });
 
   it("limits transaction links to Finance group members", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const member = fixture.as("member-user");
     const financeMember = fixture.as("finance-user");
     const target = { targetId: "txn-1", targetType: "finance_transaction" };
@@ -142,7 +143,7 @@ describe("inbound email links", () => {
   });
 
   it("rejects other organizations' records and emails in Trash", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const financeMember = fixture.as("finance-user");
 
     for (const target of [
@@ -209,7 +210,7 @@ describe("inbound email links", () => {
   });
 
   it("protects linked email from Trash, including hidden Finance links", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const member = fixture.as("member-user");
     const financeMember = fixture.as("finance-user");
     for (const target of [
@@ -255,7 +256,7 @@ describe("inbound email links", () => {
   });
 
   it("keeps archived email linked, readable, and editable", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const member = fixture.as("member-user");
     await member.json("POST", "/api/inbox/email-1/links", {
       targetId: "folder-1",
@@ -290,8 +291,9 @@ describe("inbound email links", () => {
   });
 
   it("does not insert a link if the email was trashed after validation", async () => {
-    const fixture = await createFixture((database) => {
-      database
+    const fixture = createFixture();
+    fixture.hooks.before("INSERT INTO inbound_email_links", () => {
+      fixture.database
         .query("UPDATE inbound_emails SET deleted_at = ? WHERE id = 'email-1'")
         .run(timestamp);
     });
@@ -307,7 +309,7 @@ describe("inbound email links", () => {
   });
 
   it("removes links when either side is deleted", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const financeMember = fixture.as("finance-user");
     for (const target of [
       { targetId: "folder-1", targetType: "library_folder" },
@@ -342,7 +344,7 @@ describe("inbound email links", () => {
   });
 
   it("hides links to transactions Plaid has removed", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const financeMember = fixture.as("finance-user");
     await financeMember.json("POST", "/api/inbox/email-1/links", {
       targetId: "txn-1",
@@ -370,7 +372,7 @@ describe("inbound email links", () => {
 
 describe("finance transaction search", () => {
   it("matches name, merchant, or amount within the organization", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const financeMember = fixture.as("finance-user");
     const search = async (query: string) => {
       const response = await financeMember.json<{
@@ -408,90 +410,49 @@ async function linksFor(client: Client, emailId: string) {
 
 type Client = ReturnType<Awaited<ReturnType<typeof createFixture>>["as"]>;
 
-async function createFixture(beforeLinkInsert?: (database: Database) => void) {
-  const database = new Database(":memory:");
-  database.exec("PRAGMA foreign_keys = ON");
-  await applyMigrations(database);
+function createFixture() {
+  const database = createTestDatabase();
   seed(database);
   const raw = new TextEncoder().encode(rawEmail);
-  const bindings = {
-    AUTH_EMAIL_FROM: "security@auth.balebase.com",
-    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-    BETTER_AUTH_URL: "https://api.test",
-    CORS_ORIGIN: "https://app.test",
-    DB: toD1(database, beforeLinkInsert),
-    EMAIL: {} as SendEmail,
-    IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
+  const hooks = queryHooks();
+  const bindings = testBindings({
+    DB: toD1(database, hooks),
     STORAGE: {
       get: async () => ({ arrayBuffer: async () => raw.slice().buffer }),
     } as unknown as R2Bucket,
-  } satisfies Bindings;
-
-  function as(userId: string) {
-    const app = testApp(userId);
-    return {
-      json: async <T = unknown>(
-        method: string,
-        path: string,
-        body?: unknown,
-      ) => {
-        const init: RequestInit = { method };
-        if (body !== undefined) {
-          init.body = JSON.stringify(body);
-          init.headers = { "content-type": "application/json" };
-        }
-        const response = await app.request(path, init, bindings);
-        const text = await response.text();
-        return {
-          body: (text ? JSON.parse(text) : null) as T,
-          status: response.status,
-        };
-      },
-    };
-  }
-  return { as, database };
+  });
+  const routes = {
+    "/api/finance": createFinanceRouter(async () => {
+      throw new Error("Plaid is not used by these tests.");
+    }),
+    "/api/inbox": inbox,
+    "/api/library/folders": libraryFolders,
+  };
+  const as = (userId: string) => ({
+    json: requester(
+      testApp(routes, {
+        organizationId: "org-1",
+        organizationRole: "member",
+        userId,
+      }),
+      bindings,
+    ),
+  });
+  return { as, database, hooks };
 }
 
 function seed(database: Database) {
   const run = (query: string, ...values: SQLQueryBindings[]) =>
     database.query(query).run(...values);
-  for (const id of ["finance-user", "member-user", "other-user"]) {
-    run(
-      `INSERT INTO user
-       (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-       VALUES (?, ?, ?, 1, ?, ?, 'user', 0)`,
-      id,
-      id,
-      `${id}@example.com`,
-      timestamp,
-      timestamp,
-    );
-  }
-  for (const id of ["org-1", "org-2"]) {
-    run(
-      `INSERT INTO organization (id, name, slug, createdAt)
-       VALUES (?, ?, ?, ?)`,
-      id,
-      id,
-      id,
-      timestamp,
-    );
-  }
-  run(
-    `INSERT INTO team (id, name, organizationId, createdAt)
-     VALUES ('team-finance', 'Finance', 'org-1', ?)`,
-    timestamp,
-  );
-  run(
-    `INSERT INTO teamMember (id, teamId, userId)
-     VALUES ('team-member-1', 'team-finance', 'finance-user')`,
-  );
-  run(
-    `INSERT INTO organization_group_capability
-     (organization_id, team_id, capability)
-     VALUES ('org-1', 'team-finance', 'finance')`,
-  );
+  for (const id of ["finance-user", "member-user", "other-user"])
+    seedUser(database, { createdAt: timestamp, id });
+  for (const id of ["org-1", "org-2"])
+    seedOrganization(database, { createdAt: timestamp, id });
+  seedGroup(database, {
+    id: "team-finance",
+    organizationId: "org-1",
+    userIds: ["finance-user"],
+  });
   for (const [id, organizationId, name] of [
     ["folder-1", "org-1", "Receipts"],
     ["folder-other", "org-2", "Other"],
@@ -621,63 +582,4 @@ function seed(database: Database) {
       timestamp,
     );
   }
-}
-
-function testApp(userId: string) {
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-  app.use("*", async (context, next) => {
-    context.set("organizationId", "org-1");
-    context.set("organizationRole", "member");
-    context.set("authSession", {
-      session: { activeOrganizationId: "org-1" },
-      user: { id: userId, role: "user" },
-    } as unknown as AuthSession);
-    await next();
-  });
-  app.route(
-    "/api/finance",
-    createFinanceRouter(async () => {
-      throw new Error("Plaid is not used by these tests.");
-    }),
-  );
-  app.route("/api/inbox", inbox);
-  app.route("/api/library/folders", libraryFolders);
-  return app;
-}
-
-async function applyMigrations(database: Database) {
-  const directory = `${import.meta.dir}/../migrations`;
-  for (const filename of (await readdir(directory)).sort()) {
-    database.exec(await Bun.file(`${directory}/${filename}`).text());
-  }
-}
-
-function toD1(
-  database: Database,
-  beforeLinkInsert?: (database: Database) => void,
-) {
-  return {
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const statement = {
-        all: async () => ({
-          results: database.query(query).all(...values),
-          success: true,
-        }),
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        first: async () => database.query(query).get(...values),
-        run: async () => {
-          if (query.includes("INSERT INTO inbound_email_links")) {
-            beforeLinkInsert?.(database);
-          }
-          const result = database.query(query).run(...values);
-          return { meta: { changes: result.changes }, success: true };
-        },
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
 }

@@ -1,16 +1,9 @@
-import { Database } from "bun:sqlite";
 import { expect, it } from "bun:test";
-import { readdir } from "node:fs/promises";
+import { applyMigrations, createTestDatabase } from "./testing/database";
 
 it("migrates active and completed bank jobs without losing checkpoints, retry budgets, or deletion ownership", async () => {
-  const database = new Database(":memory:");
+  const database = createTestDatabase({ before: "0073" });
   try {
-    database.exec("PRAGMA foreign_keys = ON");
-    const directory = new URL("../migrations/", import.meta.url);
-    for (const file of (await readdir(directory.pathname))
-      .filter((file) => file.endsWith(".sql") && file < "0073")
-      .sort())
-      database.exec(await Bun.file(new URL(file, directory)).text());
     database.exec(`INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt)
       VALUES ('actor', 'Actor', 'actor@example.com', 1, '2026-10-01', '2026-10-01');
       INSERT INTO organization (id, name, slug, createdAt) VALUES ('org', 'Org', 'org', '2026-10-01');`);
@@ -45,9 +38,7 @@ it("migrates active and completed bank jobs without losing checkpoints, retry bu
     const previous = database
       .query("SELECT * FROM finance_sync_jobs ORDER BY id")
       .all();
-    database.exec(
-      await Bun.file(new URL("0073_unify_job_runs.sql", directory)).text(),
-    );
+    applyMigrations(database, { before: "0074", from: "0073" });
     const migrated = database.query("SELECT * FROM job_runs ORDER BY id").all();
     for (let i = 0; i < previous.length; i++) {
       expect(migrated[i]).toMatchObject(previous[i] as Record<string, unknown>);

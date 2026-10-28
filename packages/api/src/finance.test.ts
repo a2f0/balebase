@@ -1,10 +1,6 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { describe, expect, it, spyOn } from "bun:test";
-import { readdir } from "node:fs/promises";
-import { Hono } from "hono";
 import { findActivity } from "./activity";
-import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
 import { createFinanceRouter } from "./finance";
 import { jobRunDetail } from "./jobHistory";
 import { scheduleJobs } from "./jobScheduler";
@@ -15,6 +11,12 @@ import {
   type PlaidRequestBody,
   type TransactionsSyncResponse,
 } from "./plaid";
+import { testBindings } from "./testing/bindings";
+import { queryHooks, toD1 } from "./testing/d1";
+import { applyMigrations, createTestDatabase } from "./testing/database";
+import { requester } from "./testing/http";
+import { seedAccount, seedOrganization } from "./testing/seed";
+import { testApp as sessionApp } from "./testing/session";
 import type { Bindings } from "./types";
 
 const encryptionKey = btoa(String.fromCharCode(...new Uint8Array(32).fill(9)));
@@ -177,7 +179,7 @@ describe("finance", () => {
       "report-txn-2",
     ]);
     const unknown = await list("?category=dining");
-    expect(unknown.response.status).toBe(200);
+    expect(unknown.status).toBe(200);
     expect(unknown.body.transactions).toEqual([]);
     const otherOrganization = testApp("organization-2", fixture.requestPlaid);
     await createCategory({ ...fixture, app: otherOrganization }, "Meals");
@@ -208,7 +210,7 @@ describe("finance", () => {
         `?${query}`,
         "GET",
       );
-      expect(result.response.status).toBe(400);
+      expect(result.status).toBe(400);
     }
   });
 
@@ -220,7 +222,7 @@ describe("finance", () => {
       "/link-token",
       "POST",
     );
-    expect(linkToken.response.status).toBe(200);
+    expect(linkToken.status).toBe(200);
     expect(linkToken.body).toEqual({
       expiration: "2026-08-19T12:30:00Z",
       linkToken: "link-sandbox-test",
@@ -237,7 +239,7 @@ describe("finance", () => {
         publicToken: "public-sandbox-test",
       },
     );
-    expect(exchange.response.status).toBe(201);
+    expect(exchange.status).toBe(201);
     const storedToken = fixture.database
       .query(
         `SELECT access_token_ciphertext, organization_id
@@ -258,7 +260,7 @@ describe("finance", () => {
       `/connections/${exchange.body.connectionId}/sync`,
       "POST",
     );
-    expect(sync.response.status).toBe(200);
+    expect(sync.status).toBe(200);
     expect(sync.body).toEqual({ added: 1, modified: 0, removed: 0 });
 
     const listing = await jsonRequest<FinanceListing>(
@@ -303,7 +305,7 @@ describe("finance", () => {
       `/transactions/${transactionId}`,
       "GET",
     );
-    expect(detail.response.status).toBe(200);
+    expect(detail.status).toBe(200);
     expect(detail.body.source).toEqual({
       accountMask: "1234",
       accountOfficialName: "Plaid Gold Checking",
@@ -326,7 +328,7 @@ describe("finance", () => {
         reviewed: true,
       },
     );
-    expect(annotated.response.status).toBe(200);
+    expect(annotated.status).toBe(200);
     const category = await jsonRequest<{ category: { id: string } }>(
       fixture.app,
       fixture.bindings,
@@ -334,7 +336,7 @@ describe("finance", () => {
       "POST",
       { name: "Client meals" },
     );
-    expect(category.response.status).toBe(201);
+    expect(category.status).toBe(201);
     const categoryId = category.body.category.id;
     const assigned = await jsonRequest(
       fixture.app,
@@ -343,7 +345,7 @@ describe("finance", () => {
       "PUT",
       { categoryId },
     );
-    expect(assigned.response.status).toBe(200);
+    expect(assigned.status).toBe(200);
 
     const otherOrganization = testApp("organization-2", fixture.requestPlaid);
     const hidden = await jsonRequest<FinanceListing>(
@@ -360,14 +362,14 @@ describe("finance", () => {
       `/connections/${exchange.body.connectionId}/sync`,
       "POST",
     );
-    expect(cannotSync.response.status).toBe(404);
+    expect(cannotSync.status).toBe(404);
     const cannotRead = await jsonRequest(
       otherOrganization,
       fixture.bindings,
       `/transactions/${transactionId}`,
       "GET",
     );
-    expect(cannotRead.response.status).toBe(404);
+    expect(cannotRead.status).toBe(404);
     const cannotAnnotate = await jsonRequest(
       otherOrganization,
       fixture.bindings,
@@ -379,7 +381,7 @@ describe("finance", () => {
         reviewed: false,
       },
     );
-    expect(cannotAnnotate.response.status).toBe(404);
+    expect(cannotAnnotate.status).toBe(404);
 
     const cannotDeleteActive = await fixture.app.request(
       financePath(`/connections/${exchange.body.connectionId}/data`),
@@ -440,7 +442,7 @@ describe("finance", () => {
         publicToken: "public-sandbox-test",
       },
     );
-    expect(reconnected.response.status).toBe(201);
+    expect(reconnected.status).toBe(201);
     await jsonRequest(
       fixture.app,
       fixture.bindings,
@@ -536,10 +538,10 @@ describe("finance", () => {
         `/connections/${id}`,
         "GET",
       );
-    expect((await sync()).response.status).toBe(200);
+    expect((await sync()).status).toBe(200);
 
     const synced = await detail();
-    expect(synced.response.status).toBe(200);
+    expect(synced.status).toBe(200);
     expect(synced.body.connection).toMatchObject({
       createdBy: { email: "person@example.com", name: "Example Person" },
       disconnectedAt: null,
@@ -575,14 +577,14 @@ describe("finance", () => {
     expect(JSON.stringify(synced.body)).not.toContain("access-sandbox");
 
     failSync = true;
-    expect((await sync()).response.status).toBe(502);
+    expect((await sync()).status).toBe(502);
     expect((await detail()).body.connection).toMatchObject({
       errorCode: "ITEM_LOGIN_REQUIRED",
       errorMessage: "The login details of this item have changed.",
       status: "error",
     });
     failSync = false;
-    expect((await sync()).response.status).toBe(200);
+    expect((await sync()).status).toBe(200);
     expect((await detail()).body.connection).toMatchObject({
       errorCode: null,
       errorMessage: null,
@@ -610,7 +612,7 @@ describe("finance", () => {
         path,
         "GET",
       );
-      expect(missing.response.status).toBe(404);
+      expect(missing.status).toBe(404);
     }
   });
 
@@ -623,7 +625,7 @@ describe("finance", () => {
       "/accounts/account-report",
       "GET",
     );
-    expect(detail.response.status).toBe(200);
+    expect(detail.status).toBe(200);
     expect(detail.body.account).toMatchObject({
       id: "account-report",
       name: "Operating",
@@ -668,7 +670,7 @@ describe("finance", () => {
         path,
         "GET",
       );
-      expect(missing.response.status).toBe(404);
+      expect(missing.status).toBe(404);
     }
   });
 
@@ -746,7 +748,7 @@ describe("expense categories", () => {
       "POST",
       { name: "  Meals   and  drinks " },
     );
-    expect(created.response.status).toBe(201);
+    expect(created.status).toBe(201);
     expect(created.body.category).toMatchObject({
       name: "Meals and drinks",
       slug: "meals-and-drinks",
@@ -761,7 +763,7 @@ describe("expense categories", () => {
       "POST",
       { name: "meals AND drinks" },
     );
-    expect(duplicate.response.status).toBe(409);
+    expect(duplicate.status).toBe(409);
     for (const name of ["", "   ", "x".repeat(61), 42]) {
       const invalid = await jsonRequest(
         fixture.app,
@@ -770,7 +772,7 @@ describe("expense categories", () => {
         "POST",
         { name },
       );
-      expect(invalid.response.status).toBe(400);
+      expect(invalid.status).toBe(400);
     }
 
     const renamed = await jsonRequest<{ category: Category }>(
@@ -780,7 +782,7 @@ describe("expense categories", () => {
       "PATCH",
       { name: "Client meals" },
     );
-    expect(renamed.response.status).toBe(200);
+    expect(renamed.status).toBe(200);
     expect(renamed.body.category).toMatchObject({
       id: categoryId,
       name: "Client meals",
@@ -793,7 +795,7 @@ describe("expense categories", () => {
       "PATCH",
       { name: "client MEALS" },
     );
-    expect(sameNameOtherCase.response.status).toBe(200);
+    expect(sameNameOtherCase.status).toBe(200);
 
     const defaults = await jsonRequest<{ categories: Category[] }>(
       fixture.app,
@@ -801,7 +803,7 @@ describe("expense categories", () => {
       "/categories/defaults",
       "POST",
     );
-    expect(defaults.response.status).toBe(200);
+    expect(defaults.status).toBe(200);
     expect(defaults.body.categories).toHaveLength(17);
     const again = await jsonRequest<{ categories: Category[] }>(
       fixture.app,
@@ -821,7 +823,7 @@ describe("expense categories", () => {
       "PATCH",
       { name: "travel" },
     );
-    expect(clash.response.status).toBe(409);
+    expect(clash.status).toBe(409);
 
     const otherOrganization = testApp("organization-2", fixture.requestPlaid);
     const hidden = await jsonRequest<{ categories: Category[] }>(
@@ -838,7 +840,7 @@ describe("expense categories", () => {
       "PATCH",
       { name: "Taken over" },
     );
-    expect(cannotRename.response.status).toBe(404);
+    expect(cannotRename.status).toBe(404);
     const cannotDelete = await otherOrganization.request(
       financePath(`/categories/${categoryId}`),
       { method: "DELETE" },
@@ -857,7 +859,7 @@ describe("expense categories", () => {
         "POST",
         { name },
       );
-      expect(created.response.status).toBe(201);
+      expect(created.status).toBe(201);
       return created.body.category;
     };
     const cafe = await create("Café & Bar");
@@ -881,7 +883,7 @@ describe("expense categories", () => {
         "PATCH",
         { name },
       );
-      expect(renamed.response.status).toBe(200);
+      expect(renamed.status).toBe(200);
       return renamed.body.category.slug;
     };
     expect(await rename(repeat.id, "Cafe Bar!")).toBe("cafe-bar-2");
@@ -922,7 +924,7 @@ describe("expense categories", () => {
       "POST",
       { name: "Cafe/Bar" },
     );
-    expect(raced.response.status).toBe(201);
+    expect(raced.status).toBe(201);
     expect(raced.body.category.slug).toBe("cafe-bar-2");
     const renamed = await jsonRequest<{ category: Category }>(
       fixture.app,
@@ -931,7 +933,7 @@ describe("expense categories", () => {
       "PATCH",
       { name: "Snacks" },
     );
-    expect(renamed.response.status).toBe(200);
+    expect(renamed.status).toBe(200);
     expect(renamed.body.category.slug).toBe("snacks-2");
     const defaults = await jsonRequest<{ categories: Category[] }>(
       fixture.app,
@@ -960,7 +962,7 @@ describe("expense categories", () => {
         "PUT",
         { categoryId },
       );
-      expect(assigned.response.status).toBe(200);
+      expect(assigned.status).toBe(200);
       expect(assigned.body.expenseCategoryId).toBe(categoryId);
     }
     const listing = await jsonRequest<FinanceListing>(
@@ -992,7 +994,7 @@ describe("expense categories", () => {
         "PUT",
         body,
       );
-      expect(invalid.response.status).toBe(400);
+      expect(invalid.status).toBe(400);
     }
     const unknownCategory = await jsonRequest(
       fixture.app,
@@ -1001,7 +1003,7 @@ describe("expense categories", () => {
       "PUT",
       { categoryId: "missing" },
     );
-    expect(unknownCategory.response.status).toBe(404);
+    expect(unknownCategory.status).toBe(404);
     const otherOrganization = testApp("organization-2", fixture.requestPlaid);
     const foreignTransaction = await jsonRequest(
       otherOrganization,
@@ -1010,7 +1012,7 @@ describe("expense categories", () => {
       "PUT",
       { categoryId: null },
     );
-    expect(foreignTransaction.response.status).toBe(404);
+    expect(foreignTransaction.status).toBe(404);
 
     const deleted = await fixture.app.request(
       financePath(`/categories/${travel}`),
@@ -1039,7 +1041,7 @@ describe("expense categories", () => {
       "PUT",
       { categoryId: null },
     );
-    expect(cleared.response.status).toBe(200);
+    expect(cleared.status).toBe(200);
   });
 
   it("reports expense totals by category with transfers and income excluded", async () => {
@@ -1063,7 +1065,7 @@ describe("expense categories", () => {
         "PUT",
         { categoryId },
       );
-      expect(assigned.response.status).toBe(200);
+      expect(assigned.status).toBe(200);
     }
 
     const august = await jsonRequest<ExpenseReport>(
@@ -1072,7 +1074,7 @@ describe("expense categories", () => {
       "/reports/expenses?from=2026-08-01&to=2026-08-31",
       "GET",
     );
-    expect(august.response.status).toBe(200);
+    expect(august.status).toBe(200);
     expect(august.body.from).toBe("2026-08-01");
     expect(august.body.to).toBe("2026-08-31");
     expect(august.body.currencies.map(({ currency }) => currency)).toEqual([
@@ -1137,7 +1139,7 @@ describe("expense categories", () => {
         `/reports/expenses${query}`,
         "GET",
       );
-      expect(invalid.response.status).toBe(400);
+      expect(invalid.status).toBe(400);
     }
     const otherOrganization = testApp("organization-2", fixture.requestPlaid);
     const hidden = await jsonRequest<ExpenseReport>(
@@ -1150,15 +1152,8 @@ describe("expense categories", () => {
   });
 
   it("migrates free-text category overrides into categories", async () => {
-    const database = new Database(":memory:");
-    for (const migration of [
-      "0003_create_auth.sql",
-      "0004_create_organizations.sql",
-      "0007_create_finance.sql",
-      "0009_retain_finance_history.sql",
-    ]) {
-      await applyMigration(database, migration);
-    }
+    // The legacy annotations name transactions this test does not seed.
+    const database = createTestDatabase({ before: "0034", foreignKeys: false });
     const overrides: [string, string, string | null][] = [
       ["txn-a", "org-a", "Client meal"],
       ["txn-b", "org-a", " client MEAL "],
@@ -1183,10 +1178,7 @@ describe("expense categories", () => {
           "2026-08-19T12:00:00.000Z",
         );
     }
-    await applyMigration(
-      database,
-      "0034_create_finance_expense_categories.sql",
-    );
+    applyMigrations(database, { from: "0034" });
 
     const categories = database
       .query(
@@ -1227,13 +1219,8 @@ describe("expense categories", () => {
   });
 
   it("backfills category slugs that are unique in each organization", async () => {
-    const database = new Database(":memory:");
-    const migrations = (await readdir(`${import.meta.dir}/../migrations`))
-      .filter((name) => name.endsWith(".sql"))
-      .sort();
-    const slugMigration = "0065_slug_finance_expense_categories.sql";
-    for (const migration of migrations.filter((name) => name < slugMigration))
-      await applyMigration(database, migration);
+    const database = createTestDatabase({ before: "0065" });
+    for (const id of ["org-a", "org-b"]) seedOrganization(database, { id });
     const categories: [string, string, string][] = [
       ["a1234567-first", "org-a", "Meals & drinks"],
       ["b1234567-second", "org-a", "Meals/drinks"],
@@ -1254,7 +1241,7 @@ describe("expense categories", () => {
         )
         .run(id, organizationId, name, `2026-08-0${index + 1}`, "");
     }
-    await applyMigration(database, slugMigration);
+    applyMigrations(database, { from: "0065" });
 
     expect(
       database
@@ -1340,51 +1327,29 @@ async function createCategory(
     "POST",
     { name },
   );
-  expect(created.response.status).toBe(201);
+  expect(created.status).toBe(201);
   return created.body.category.id;
 }
 
-/** Bindings where another category takes `slug` just before the first write. */
+/** Bindings where another category takes `slug` just before the next write. */
 function raceForSlug(
   fixture: Awaited<ReturnType<typeof createFixture>>,
   slug: string,
 ): Bindings {
-  const database = fixture.bindings.DB;
-  let raced = false;
-  const race = () => {
-    if (raced) return;
-    raced = true;
-    fixture.database
-      .query(
-        `INSERT INTO finance_expense_categories
-           (id, organization_id, name, slug, created_at, updated_at)
-         VALUES (?, 'org_user-1', ?, ?, '', '')`,
-      )
-      .run(`rival-${slug}`, `Rival ${slug}`, slug);
-  };
-  const prepare = (query: string) => {
-    const statement = database.prepare(query);
-    if (!/^\s*(INSERT|UPDATE)\b.*finance_expense_categories\b/.test(query))
-      return statement;
-    // Single writes run; the defaults batch executes each statement.
-    const { execute, run } = statement as unknown as TestStatement & {
-      run: () => Promise<unknown>;
-    };
-    return Object.assign(statement, {
-      execute: () => {
-        race();
-        return execute();
-      },
-      run: () => {
-        race();
-        return run();
-      },
-    });
-  };
-  return {
-    ...fixture.bindings,
-    DB: { ...database, prepare } as unknown as D1Database,
-  };
+  // The defaults batch races ahead of its first statement, as D1 serializes it.
+  fixture.hooks.before(
+    /^\s*(INSERT|UPDATE)\b.*finance_expense_categories\b/,
+    () => {
+      fixture.database
+        .query(
+          `INSERT INTO finance_expense_categories
+             (id, organization_id, name, slug, created_at, updated_at)
+           VALUES (?, 'org_user-1', ?, ?, '', '')`,
+        )
+        .run(`rival-${slug}`, `Rival ${slug}`, slug);
+    },
+  );
+  return fixture.bindings;
 }
 
 /**
@@ -1473,36 +1438,31 @@ interface FinanceListing {
 }
 
 async function createFixture(options?: { pendingTransition?: boolean }) {
-  const database = new Database(":memory:");
-  await applyMigration(database, "0003_create_auth.sql");
-  database
-    .query(
-      `INSERT INTO user
-       (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      "user-1",
-      "Example Person",
-      "person@example.com",
-      false,
-      "2026-08-19T12:00:00.000Z",
-      "2026-08-19T12:00:00.000Z",
-      "user",
-      false,
-    );
-  for (const migration of (
-    await readdir(`${import.meta.dir}/../migrations`)
-  ).sort()) {
-    if (migration.endsWith(".sql") && migration !== "0003_create_auth.sql")
-      await applyMigration(database, migration);
-  }
+  const database = createTestDatabase();
+  seedAccount(database, {
+    createdAt: "2026-08-19T12:00:00.000Z",
+    email: "person@example.com",
+    emailVerified: false,
+    id: "user-1",
+    name: "Example Person",
+  });
+  // Another tenant whose writes must stay out of org_user-1's views.
+  seedOrganization(database, { id: "organization-2" });
   const requestPlaid = mockPlaid(options);
-  const bindings = bindingsFor(database);
+  const hooks = queryHooks();
+  const bindings = testBindings({
+    DB: toD1(database, hooks),
+    PLAID_CLIENT_ID: "client-test",
+    PLAID_ENV: "sandbox",
+    PLAID_REDIRECT_URI: "https://app.test/finance",
+    PLAID_SECRET: "secret-test",
+    PLAID_TOKEN_ENCRYPTION_KEY: encryptionKey,
+  });
   return {
     app: testApp("org_user-1", requestPlaid),
     bindings,
     database,
+    hooks,
     requestPlaid,
   };
 }
@@ -1610,7 +1570,15 @@ function postedPage(): TransactionsSyncResponse {
 }
 
 function testApp(organizationId: string, requestPlaid: PlaidRequest) {
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
+  const app = sessionApp(
+    {},
+    {
+      email: "person@example.com",
+      name: "Example Person",
+      organizationId,
+      userId: "user-1",
+    },
+  );
   app.use("*", async (context, next) => {
     context.env = {
       ...context.env,
@@ -1627,107 +1595,24 @@ function testApp(organizationId: string, requestPlaid: PlaidRequest) {
             ),
         } as unknown as Queue<{ jobId: string }>),
     };
-    context.set("organizationId", organizationId);
-    context.set("authSession", {
-      user: {
-        defaultOrganizationId: organizationId,
-        id: "user-1",
-        name: "Example Person",
-        email: "person@example.com",
-        role: "user",
-      },
-    } as unknown as AuthSession);
     await next();
   });
   app.route("/api/finance", createFinanceRouter(requestPlaid));
   return app;
 }
 
-async function jsonRequest<T = unknown>(
+function jsonRequest<T = unknown>(
   app: ReturnType<typeof testApp>,
   bindings: Bindings,
   path: string,
   method: string,
   body?: unknown,
 ) {
-  const init: RequestInit = {
-    headers: { "content-type": "application/json" },
-    method,
-  };
-  if (body !== undefined) init.body = JSON.stringify(body);
-  const response = await app.request(financePath(path), init, bindings);
-  return {
-    body: (response.status === 204 ? null : await response.json()) as T,
-    response,
-  };
+  return requester(app, bindings)<T>(method, financePath(path), body);
 }
 
 function financePath(path: string) {
   return path === "/" ? "/api/finance" : `/api/finance${path}`;
-}
-
-function bindingsFor(database: Database): Bindings {
-  return {
-    AUTH_EMAIL_FROM: "security@auth.balebase.com",
-    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-    BETTER_AUTH_URL: "https://api.test",
-    CORS_ORIGIN: "https://app.test",
-    DB: toD1(database),
-    EMAIL: {} as SendEmail,
-    IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
-    PLAID_CLIENT_ID: "client-test",
-    PLAID_ENV: "sandbox",
-    PLAID_REDIRECT_URI: "https://app.test/finance",
-    PLAID_SECRET: "secret-test",
-    PLAID_TOKEN_ENCRYPTION_KEY: encryptionKey,
-    STORAGE: {} as R2Bucket,
-  };
-}
-
-interface TestStatement {
-  execute: () => unknown;
-}
-
-function toD1(database: Database) {
-  return {
-    batch: async (statements: TestStatement[]) =>
-      database.transaction(() =>
-        statements.map((statement) => statement.execute()),
-      )(),
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const statement = {
-        all: async () => ({
-          results: database.query(query).all(...values),
-          success: true,
-        }),
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        execute: () => {
-          const results = database.query(query).all(...values);
-          const meta = database.query("SELECT changes() AS changes").get();
-          return { results, meta };
-        },
-        first: async () => database.query(query).get(...values),
-        run: async () => {
-          const result = database.query(query).run(...values);
-          return { meta: { changes: result.changes }, success: true };
-        },
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
-}
-
-async function applyMigration(database: Database, filename: string) {
-  database.exec(
-    await Bun.file(
-      new URL(`../migrations/${filename}`, import.meta.url),
-    ).text(),
-  );
 }
 
 async function queuedFixture() {
@@ -1784,7 +1669,7 @@ describe("durable finance sync", () => {
       "/sync-jobs",
       "POST",
     );
-    expect(first.response.status).toBe(202);
+    expect(first.status).toBe(202);
     expect(first.body.status).toBe("queued");
     expect((await fixture.request("/sync-status")).body).toMatchObject({
       connection: { syncJob: { id: first.body.id, status: "queued" } },
@@ -1795,7 +1680,7 @@ describe("durable finance sync", () => {
       `/connections/${fixture.id}/sync-status`,
       "GET",
     );
-    expect(foreign.response.status).toBe(404);
+    expect(foreign.status).toBe(404);
     expect(
       fixture.database
         .query("SELECT count(*) AS count FROM plaid_accounts")
@@ -1853,7 +1738,7 @@ describe("durable finance sync", () => {
     const fixture = await queuedFixture();
     expect(
       (await fixture.request("/sync-settings", "PATCH", { dailySync: "true" }))
-        .response.status,
+        .status,
     ).toBe(400);
     expect(
       (
@@ -1861,7 +1746,7 @@ describe("durable finance sync", () => {
           dailySync: true,
           extra: 1,
         })
-      ).response.status,
+      ).status,
     ).toBe(400);
     expect(
       (await fixture.request("/sync-settings", "PATCH", { dailySync: true }))
@@ -1888,14 +1773,14 @@ describe("durable finance sync", () => {
             method,
             body,
           )
-        ).response.status,
+        ).status,
       ).toBe(404);
     }
     fixture.database.exec(`CREATE TRIGGER fail_settings_history BEFORE INSERT ON activity_events WHEN NEW.action = 'finance.daily_sync_changed'
       BEGIN SELECT RAISE(ABORT, 'history failed'); END;`);
     expect(
       (await fixture.request("/sync-settings", "PATCH", { dailySync: false }))
-        .response.status,
+        .status,
     ).toBe(500);
     expect(
       fixture.database.query("SELECT daily_sync FROM plaid_items").get(),
@@ -1915,7 +1800,7 @@ describe("durable finance sync", () => {
       "/sync-jobs",
       "POST",
     );
-    expect(accepted.response.status).toBe(202);
+    expect(accepted.status).toBe(202);
     expect(fixture.messages).toHaveLength(0);
     fixture.bindings.FINANCE_SYNC_QUEUE = producer;
     await scheduleJobs(fixture.bindings);
@@ -1983,19 +1868,17 @@ describe("durable finance sync", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await fixture.deliver(job.id, plaid);
     expect(calls).toBe(1);
-    expect((await fixture.request("", "DELETE")).response.status).toBe(409);
+    expect((await fixture.request("", "DELETE")).status).toBe(409);
     expect(
       (await fixture.request<{ id: string }>("/sync-jobs", "POST")).body.id,
     ).toBe(job.id);
     finish?.();
     await running;
-    expect((await fixture.request("", "DELETE")).response.status).toBe(204);
-    expect((await fixture.request("/sync-jobs", "POST")).response.status).toBe(
-      404,
-    );
+    expect((await fixture.request("", "DELETE")).status).toBe(204);
+    expect((await fixture.request("/sync-jobs", "POST")).status).toBe(404);
     expect(
       (await fixture.request("/sync-settings", "PATCH", { dailySync: true }))
-        .response.status,
+        .status,
     ).toBe(404);
   });
 
@@ -2133,7 +2016,7 @@ it("keeps legacy sync running during backoff and returns a background status whe
   ) => originalTimer(callback, 0)) as typeof setTimeout);
   try {
     const result = await fixture.request("/sync", "POST");
-    expect(result.response.status).toBe(503);
+    expect(result.status).toBe(503);
     expect(result.body).toMatchObject({
       error: expect.stringContaining("continues in the background"),
     });
@@ -2163,7 +2046,7 @@ it.each(["active", "error"])(
       `/connections/${fixture.id}`,
       "DELETE",
     );
-    expect(result.response.status).toBe(502);
+    expect(result.status).toBe(502);
     expect(
       fixture.database
         .query(
@@ -2178,9 +2061,7 @@ it.each(["active", "error"])(
         )
         .all(),
     ).toEqual([]);
-    expect((await fixture.request("/sync-jobs", "POST")).response.status).toBe(
-      202,
-    );
+    expect((await fixture.request("/sync-jobs", "POST")).status).toBe(202);
   },
 );
 
@@ -2260,12 +2141,12 @@ it.each(["ITEM_NOT_FOUND", "INVALID_ACCESS_TOKEN"])(
         `/connections/${fixture.id}`,
         "DELETE",
       );
-    expect((await disconnect()).response.status).toBe(409);
+    expect((await disconnect()).status).toBe(409);
     expect(removals).toBe(0);
     fixture.database
       .query("UPDATE plaid_items SET disconnect_lease_until = ?")
       .run(new Date(Date.now() - 60_000).toISOString());
-    expect((await disconnect()).response.status).toBe(204);
+    expect((await disconnect()).status).toBe(204);
     expect(removals).toBe(1);
     expect(
       fixture.database
@@ -2303,7 +2184,7 @@ it.each(["queued", "backoff", "expired"])(
       fixture.database
         .query("UPDATE job_runs SET status = 'running', lease_until = ?")
         .run(new Date(Date.now() - 60_000).toISOString());
-    expect((await fixture.request("", "DELETE")).response.status).toBe(204);
+    expect((await fixture.request("", "DELETE")).status).toBe(204);
     expect(
       fixture.database
         .query("SELECT status, error_code, lease_until FROM job_runs")
@@ -2319,9 +2200,7 @@ it.each(["queued", "backoff", "expired"])(
       return transactionPage() as T;
     });
     expect(calls).toBe(0);
-    expect((await fixture.request("/data", "DELETE")).response.status).toBe(
-      204,
-    );
+    expect((await fixture.request("/data", "DELETE")).status).toBe(204);
   },
 );
 
@@ -2334,11 +2213,11 @@ it("finishes disconnecting after a lost Plaid removal response", async () => {
   });
   const disconnect = () =>
     jsonRequest(app, fixture.bindings, `/connections/${fixture.id}`, "DELETE");
-  expect((await disconnect()).response.status).toBe(500);
+  expect((await disconnect()).status).toBe(500);
   expect(
     fixture.database.query("SELECT status FROM plaid_items").get(),
   ).toEqual({ status: "active" });
-  expect((await disconnect()).response.status).toBe(204);
+  expect((await disconnect()).status).toBe(204);
   expect(
     fixture.database.query("SELECT status FROM plaid_items").get(),
   ).toEqual({ status: "disconnected" });

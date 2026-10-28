@@ -1,19 +1,19 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { Hono } from "hono";
 import { accountSettings } from "./accountSettings";
-import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
-import type { Bindings } from "./types";
+import { testBindings } from "./testing/bindings";
+import { toD1 } from "./testing/d1";
+import { createTestDatabase } from "./testing/database";
+import { requester } from "./testing/http";
+import { seedAccount, seedMember, seedOrganization } from "./testing/seed";
+import { testApp } from "./testing/session";
 
 describe("default organization settings", () => {
   it("saves an explicit choice from the user's active memberships", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const response = await fixture.request("member", "shared");
 
     expect(response.status).toBe(200);
-    const body: unknown = await response.json();
-    expect(body).toEqual({ defaultOrganizationId: "shared" });
+    expect(response.body).toEqual({ defaultOrganizationId: "shared" });
     expect(fixture.defaultFor("member")).toEqual({
       defaultOrganizationId: "shared",
       defaultOrganizationPinned: 1,
@@ -25,7 +25,7 @@ describe("default organization settings", () => {
   });
 
   it("rejects organizations the user does not belong to", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     const response = await fixture.request("other", "shared");
 
     expect(response.status).toBe(403);
@@ -36,7 +36,7 @@ describe("default organization settings", () => {
   });
 
   it("rejects deleted organizations and invalid input", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     fixture.database
       .query("UPDATE organization SET deletedAt = ? WHERE id = ?")
       .run("2026-09-23T00:00:00Z", "shared");
@@ -50,67 +50,31 @@ describe("default organization settings", () => {
   });
 });
 
-async function createFixture() {
-  const database = new Database(":memory:");
-  for (const filename of [
-    "0003_create_auth.sql",
-    "0004_create_organizations.sql",
-    "0010_create_organization_groups.sql",
-    "0011_soft_delete_organizations.sql",
-    "0040_pin_default_organization.sql",
-  ]) {
-    database.exec(
-      await Bun.file(
-        new URL(`../migrations/${filename}`, import.meta.url),
-      ).text(),
-    );
-  }
-  const now = "2026-09-23T00:00:00Z";
+function createFixture() {
+  const database = createTestDatabase();
   for (const id of ["member", "other"]) {
-    database
-      .query(
-        `INSERT INTO user
-         (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-         VALUES (?, ?, ?, 1, ?, ?, 'user', 0)`,
-      )
-      .run(id, id, `${id}@example.com`, now, now);
-    database
-      .query(
-        `INSERT INTO organization (id, name, slug, createdAt)
-         VALUES (?, ?, ?, ?)`,
-      )
-      .run(`org_${id}`, id, `org-${id}`, now);
-    database
-      .query(
-        `INSERT INTO member (id, organizationId, userId, role, createdAt)
-         VALUES (?, ?, ?, 'owner', ?)`,
-      )
-      .run(`member_${id}`, `org_${id}`, id, now);
-    database
-      .query("UPDATE user SET defaultOrganizationId = ? WHERE id = ?")
-      .run(`org_${id}`, id);
+    seedAccount(database, {
+      createdAt: "2026-09-23T00:00:00Z",
+      id,
+      organizationName: id,
+    });
   }
-  database
-    .query(
-      "INSERT INTO organization (id, name, slug, createdAt) VALUES (?, ?, ?, ?)",
-    )
-    .run("shared", "Shared", "shared", now);
-  database
-    .query(
-      `INSERT INTO member (id, organizationId, userId, role, createdAt)
-       VALUES (?, ?, ?, 'member', ?)`,
-    )
-    .run("shared-member", "shared", "member", now);
-
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-  app.use("*", async (context, next) => {
-    context.set("authSession", {
-      user: { id: context.req.header("x-test-user") },
-    } as AuthSession);
-    await next();
+  seedOrganization(database, {
+    createdAt: "2026-09-23T00:00:00Z",
+    id: "shared",
+    name: "Shared",
   });
-  app.route("/", accountSettings);
-  const bindings = { DB: toD1(database) } as Bindings;
+  seedMember(database, {
+    createdAt: "2026-09-23T00:00:00Z",
+    id: "shared-member",
+    organizationId: "shared",
+    userId: "member",
+  });
+
+  const app = testApp({ "/": accountSettings }, (context) => ({
+    userId: context.req.header("x-test-user"),
+  }));
+  const request = requester(app, testBindings({ DB: toD1(database) }));
   return {
     database,
     defaultFor: (userId: string) =>
@@ -120,36 +84,11 @@ async function createFixture() {
         )
         .get(userId),
     request: (userId: string, organizationId: unknown) =>
-      app.request(
+      request(
+        "PATCH",
         "/default-organization",
-        {
-          body: JSON.stringify({ organizationId }),
-          headers: {
-            "content-type": "application/json",
-            "x-test-user": userId,
-          },
-          method: "PATCH",
-        },
-        bindings,
+        { organizationId },
+        { "x-test-user": userId },
       ),
   };
-}
-
-function toD1(database: Database) {
-  return {
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const statement = {
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        run: async () => {
-          const result = database.query(query).run(...values);
-          return { meta: { changes: result.changes } };
-        },
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
 }

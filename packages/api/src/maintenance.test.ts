@@ -1,11 +1,7 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { afterEach, expect, it, spyOn } from "bun:test";
-import { readdir } from "node:fs/promises";
-import { Hono } from "hono";
 import { adminJobs } from "./adminJobs";
 import { adminUsers } from "./adminUsers";
-import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
 import { purgeDeletedObjects } from "./deletedObjectCleanup";
 import { claimJob, recoverJobs } from "./jobRuns";
 import { consumeJobs } from "./jobWorker";
@@ -17,7 +13,11 @@ import {
 } from "./maintenance";
 import { withNativeOrigin } from "./nativeRequest";
 import { purgeDeletedOrganizations } from "./organizationPurge";
-import type { Bindings } from "./types";
+import { testBindings } from "./testing/bindings";
+import { queryHooks, toD1 } from "./testing/d1";
+import { createTestDatabase } from "./testing/database";
+import { seedUser } from "./testing/seed";
+import { testApp } from "./testing/session";
 import { purgeRequestedUsers, userDeletion } from "./userDeletion";
 
 const databases: Database[] = [];
@@ -27,109 +27,48 @@ afterEach(() => {
 const now = new Date("2026-09-28T12:00:00.000Z");
 const origin = "https://app.example.com";
 
-async function fixture(role = "admin", impersonatedBy?: string) {
-  const database = new Database(":memory:");
-  let beforeUserDelete: (() => void) | undefined;
-  let beforeOrganizationPurge: (() => void) | undefined;
+function fixture(role = "admin", impersonatedBy?: string) {
+  const database = createTestDatabase();
   databases.push(database);
-  database.exec("PRAGMA foreign_keys = ON");
-  const directory = new URL("../migrations/", import.meta.url);
-  for (const file of (await readdir(directory.pathname))
-    .filter((file) => file.endsWith(".sql"))
-    .sort()) {
-    database.exec(await Bun.file(new URL(file, directory)).text());
-  }
   const messages: string[] = [];
   const deletedKeys: string[] = [];
-  const bindings = {
-    STORAGE: {
-      async delete(key: string) {
-        deletedKeys.push(key);
-      },
-    },
+  const hooks = queryHooks();
+  const bindings = testBindings({
+    CORS_ORIGIN: origin,
+    DB: toD1(database, hooks),
     FINANCE_SYNC_QUEUE: {
       async send(body: { jobId: string }) {
         messages.push(body.jobId);
       },
-    },
-    CORS_ORIGIN: origin,
-    DB: {
-      async batch(statements: { execute: () => unknown }[]) {
-        return database.transaction(() =>
-          statements.map((statement) => statement.execute()),
-        )();
+    } as unknown as Queue<{ jobId: string }>,
+    STORAGE: {
+      async delete(key: string) {
+        deletedKeys.push(key);
       },
-      prepare(sql: string) {
-        let values: SQLQueryBindings[] = [];
-        const statement = {
-          execute() {
-            const results = database.query(sql).all(...values);
-            const { changes } = database
-              .query("SELECT changes() AS changes")
-              .get() as { changes: number };
-            return { results, meta: { changes } };
-          },
-          bind(...params: SQLQueryBindings[]) {
-            values = params;
-            return statement;
-          },
-          async all() {
-            return { results: database.query(sql).all(...values) };
-          },
-          async first() {
-            if (sql.startsWith("DELETE FROM organization")) {
-              const interleave = beforeOrganizationPurge;
-              beforeOrganizationPurge = undefined;
-              interleave?.();
-            }
-            if (sql.startsWith("DELETE FROM user WHERE")) {
-              const interleave = beforeUserDelete;
-              beforeUserDelete = undefined;
-              interleave?.();
-            }
-            return database.query(sql).get(...values);
-          },
-          async run() {
-            const result = database.query(sql).run(...values);
-            return { meta: { changes: result.changes } };
-          },
-        };
-        return statement;
-      },
+    } as unknown as R2Bucket,
+  });
+  const app = testApp(
+    {},
+    {
+      email: "actor@example.com",
+      name: "Admin Actor",
+      role,
+      session: { impersonatedBy },
+      userId: "actor",
     },
-  } as unknown as Bindings;
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
+  );
   app.use("*", async (context, next) => {
     context.req.raw = withNativeOrigin(
       context.req.raw,
       context.env.CORS_ORIGIN,
     );
-    context.set("authSession", {
-      user: {
-        id: "actor",
-        role,
-        name: "Admin Actor",
-        email: "actor@example.com",
-      },
-      session: { impersonatedBy },
-    } as unknown as AuthSession);
     await next();
   });
   app.route("/jobs", adminJobs);
   app.route("/deletion", userDeletion);
   app.route("/users", adminUsers);
   function insertUser(id: string, requestedAt?: string, userRole = "user") {
-    database
-      .query(`INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt, role)
-      VALUES (?, ?, ?, 1, ?, ?, ?)`)
-      .run(
-        id,
-        id,
-        `${id}@example.com`,
-        now.toISOString(),
-        now.toISOString(),
-        userRole,
-      );
+    seedUser(database, { createdAt: now.toISOString(), id, role: userRole });
     if (requestedAt)
       database
         .query(
@@ -158,12 +97,10 @@ async function fixture(role = "admin", impersonatedBy?: string) {
         bindings,
       ),
     insertUser,
-    beforeUserDelete(callback: () => void) {
-      beforeUserDelete = callback;
-    },
-    beforeOrganizationPurge(callback: () => void) {
-      beforeOrganizationPurge = callback;
-    },
+    beforeUserDelete: (callback: () => void) =>
+      hooks.before(/^DELETE FROM user WHERE/, callback, { method: "first" }),
+    beforeOrganizationPurge: (callback: () => void) =>
+      hooks.before(/^DELETE FROM organization/, callback, { method: "first" }),
     request: (path: string, init?: RequestInit) =>
       app.request(path, init, bindings, {
         waitUntil() {},
@@ -181,7 +118,7 @@ function post(confirm: string, requestOrigin = origin) {
 }
 
 it("purges only organizations past 30 days and honors a restore or renewed deletion before execution", async () => {
-  const f = await fixture();
+  const f = fixture();
   const insert = f.database.query(`INSERT INTO organization
     (id, name, slug, createdAt, deletedAt) VALUES (?, ?, ?, '2026-01-01', ?)`);
   for (const [id, deletedAt] of [
@@ -223,7 +160,7 @@ it("purges only organizations past 30 days and honors a restore or renewed delet
 });
 
 it("bounds organization purges to 25 and makes progress across repeated runs", async () => {
-  const f = await fixture();
+  const f = fixture();
   const insert = f.database.query(`INSERT INTO organization
     (id, name, slug, createdAt, deletedAt) VALUES (?, ?, ?, '2026-01-01', '2026-08-01')`);
   for (let i = 29; i >= 0; i--) {
@@ -251,7 +188,7 @@ it("bounds organization purges to 25 and makes progress across repeated runs", a
 });
 
 it("queues a confirmed organization purge, cascades records, and retains every kind of file for retryable cleanup", async () => {
-  const f = await fixture();
+  const f = fixture();
   f.insertUser("person");
   f.database.exec(`
     INSERT INTO organization (id, name, slug, createdAt, deletedAt)
@@ -388,7 +325,7 @@ it("queues a confirmed organization purge, cascades records, and retains every k
 });
 
 it("rolls back organization deletion and cleanup tombstones together on a cascade failure", async () => {
-  const f = await fixture();
+  const f = fixture();
   f.database.exec(`
     INSERT INTO organization (id, name, slug, createdAt, deletedAt)
       VALUES ('purge', 'Purge', 'purge', '2020-01-01', '2020-02-01');
@@ -423,7 +360,7 @@ it("rolls back organization deletion and cleanup tombstones together on a cascad
 });
 
 it("isolates failing organizations, retains partial counters, and rotates the batch", async () => {
-  const f = await fixture();
+  const f = fixture();
   const insert = f.database.query(`INSERT INTO organization
     (id, name, slug, createdAt, deletedAt) VALUES (?, ?, ?, '2020-01-01', '2020-02-01')`);
   for (let i = 0; i < 30; i++) {
@@ -483,7 +420,7 @@ it("isolates failing organizations, retains partial counters, and rotates the ba
 });
 
 it("only purges requested, aged accounts without active memberships or protected roles", async () => {
-  const f = await fixture();
+  const f = fixture();
   f.insertUser("eligible", "2026-08-29T12:00:00.000Z");
   f.insertUser("recent", "2026-08-29T12:00:00.001Z");
   f.insertUser("unrequested");
@@ -528,7 +465,7 @@ it("only purges requested, aged accounts without active memberships or protected
 });
 
 it("preserves retained references and rotates blocked users so later requests can run", async () => {
-  const f = await fixture();
+  const f = fixture();
   f.database.exec(
     "CREATE TABLE retained_test (user_id TEXT REFERENCES user(id) ON DELETE RESTRICT)",
   );
@@ -553,7 +490,7 @@ it("preserves retained references and rotates blocked users so later requests ca
 });
 
 it("preserves former members referenced by retained contracts and their audit events", async () => {
-  const f = await fixture();
+  const f = fixture();
   for (const id of ["creator", "sender", "event-actor", "unreferenced"])
     f.insertUser(id, "2026-08-01");
   f.database.exec(`
@@ -614,7 +551,7 @@ it.each([
 ])(
   "preserves a selected account that $name before deletion",
   async ({ sql }) => {
-    const f = await fixture();
+    const f = fixture();
     f.insertUser("eligible", "2026-08-01");
     let interleaved = false;
     f.beforeUserDelete(() => {
@@ -649,7 +586,7 @@ it.each(["capacitor://localhost", "https://localhost"])(
         "X-Balebase-Native-Origin": nativeOrigin,
       },
     });
-    const f = await fixture("user");
+    const f = fixture("user");
     f.insertUser("actor");
     expect(
       (await f.request("/deletion", nativePost("delete my account"))).status,
@@ -688,7 +625,7 @@ it.each(["capacitor://localhost", "https://localhost"])(
         )
       ).status,
     ).toBe(403);
-    const admin = await fixture();
+    const admin = fixture();
     expect(
       (
         await admin.request(
@@ -701,7 +638,7 @@ it.each(["capacitor://localhost", "https://localhost"])(
 );
 
 it("records a user's own request once and permits cancellation", async () => {
-  const f = await fixture("user");
+  const f = fixture("user");
   f.insertUser("actor");
   expect(
     (
@@ -769,7 +706,7 @@ it("records a user's own request once and permits cancellation", async () => {
 });
 
 it("rejects deletion requests from impersonated sessions", async () => {
-  const f = await fixture("user", "admin-id");
+  const f = fixture("user", "admin-id");
   f.insertUser("actor");
   expect((await f.request("/deletion", post("delete my account"))).status).toBe(
     403,
@@ -796,7 +733,7 @@ it("rejects deletion requests from impersonated sessions", async () => {
 });
 
 it("requires root admin access, trusted origin, a known job, and explicit confirmation", async () => {
-  const regular = await fixture("user");
+  const regular = fixture("user");
   expect((await regular.request("/jobs")).status).toBe(403);
   expect(
     (
@@ -806,7 +743,7 @@ it("requires root admin access, trusted origin, a known job, and explicit confir
       )
     ).status,
   ).toBe(403);
-  const admin = await fixture();
+  const admin = fixture();
   expect((await admin.request("/jobs")).status).toBe(200);
   expect(
     (
@@ -861,7 +798,7 @@ it("requires root admin access, trusted origin, a known job, and explicit confir
 });
 
 it("keeps a sanitized failed run and does not replay duplicate deliveries", async () => {
-  const f = await fixture();
+  const f = fixture();
   const job = await enqueueMaintenance(f.bindings, "purgeDeletedObjects", {
     trigger: "manual",
     actorUserId: "actor",
@@ -881,7 +818,7 @@ it("keeps a sanitized failed run and does not replay duplicate deliveries", asyn
 });
 
 it("retains execution failures after an accepted manual request", async () => {
-  const f = await fixture();
+  const f = fixture();
   f.database.exec("DROP TABLE user_deletion_requests");
   const response = await f.request(
     "/jobs/purgeRequestedUsers/runs",
@@ -896,7 +833,7 @@ it("retains execution failures after an accepted manual request", async () => {
 });
 
 it("deduplicates active requests, recovers failed sends, and never replays interrupted maintenance", async () => {
-  const f = await fixture();
+  const f = fixture();
   if (!f.bindings.FINANCE_SYNC_QUEUE) throw new Error("Missing queue");
   const send = spyOn(f.bindings.FINANCE_SYNC_QUEUE, "send").mockRejectedValue(
     new Error("offline"),
@@ -926,7 +863,7 @@ it("deduplicates active requests, recovers failed sends, and never replays inter
 });
 
 it("keeps hourly scheduling idempotent and gates cleanup on retention even when messages arrive out of order", async () => {
-  const f = await fixture();
+  const f = fixture();
   const source = {
     trigger: "scheduled" as const,
     cron: "17 * * * *",
@@ -965,7 +902,7 @@ it("keeps hourly scheduling idempotent and gates cleanup on retention even when 
 });
 
 it("paginates filtered history and logs, rejects invalid filters, and expires only terminal runs after 30 days", async () => {
-  const f = await fixture();
+  const f = fixture();
   const created = new Date().toISOString();
   const old = new Date(Date.now() - 31 * 86400000).toISOString();
   for (let i = 0; i < 55; i++)
@@ -1043,7 +980,7 @@ it("paginates filtered history and logs, rejects invalid filters, and expires on
 });
 
 it("lets root admins mark and cancel users with durable actor history", async () => {
-  const f = await fixture();
+  const f = fixture();
   f.insertUser("target");
   const response = await f.request(
     "/users/target/deletion",
@@ -1135,10 +1072,7 @@ it("lets root admins mark and cancel users with durable actor history", async ()
 });
 
 it("restricts user deletion management to real admins with a trusted origin and confirmation", async () => {
-  for (const f of [
-    await fixture("user"),
-    await fixture("admin", "impersonator"),
-  ]) {
+  for (const f of [fixture("user"), fixture("admin", "impersonator")]) {
     f.insertUser("target");
     expect((await f.request("/users")).status).toBe(403);
     expect(
@@ -1157,7 +1091,7 @@ it("restricts user deletion management to real admins with a trusted origin and 
       f.database.query("SELECT * FROM user_deletion_events").all(),
     ).toEqual([]);
   }
-  const f = await fixture();
+  const f = fixture();
   f.insertUser("target");
   for (const method of ["POST", "DELETE"]) {
     for (const headers of [{}, { Origin: "https://evil.example" }]) {
@@ -1206,7 +1140,7 @@ it("restricts user deletion management to real admins with a trusted origin and 
 });
 
 it("paginates human users deterministically and includes legacy deletion requests", async () => {
-  const f = await fixture();
+  const f = fixture();
   f.insertUser("a", "2026-10-01");
   f.insertUser("b");
   f.insertUser("system:other");
@@ -1244,7 +1178,7 @@ it("paginates human users deterministically and includes legacy deletion request
 });
 
 it("rolls back user deletion requests and cancellations when recording history fails", async () => {
-  const f = await fixture();
+  const f = fixture();
   f.insertUser("target");
   f.database.exec(
     "CREATE TRIGGER reject_user_deletion_event BEFORE INSERT ON user_deletion_events BEGIN SELECT RAISE(ABORT, 'history unavailable'); END",
@@ -1278,7 +1212,7 @@ it("rolls back user deletion requests and cancellations when recording history f
 });
 
 it("records only one request event when duplicate requests have the same timestamp", async () => {
-  const f = await fixture();
+  const f = fixture();
   f.insertUser("target");
   const clock = spyOn(Date.prototype, "toISOString").mockReturnValue(
     "2026-10-26T00:00:00.000Z",
@@ -1302,7 +1236,7 @@ it("records only one request event when duplicate requests have the same timesta
 });
 
 it("preserves completed results for older apps and never reports queued work as completed", async () => {
-  const f = await fixture();
+  const f = fixture();
   const run = await enqueueMaintenance(f.bindings, "purgeRequestedUsers", {
     trigger: "manual",
     actorUserId: "actor",
@@ -1349,7 +1283,7 @@ it("preserves completed results for older apps and never reports queued work as 
 });
 
 it("tells older clients that queued work continues without claiming completion", async () => {
-  const f = await fixture();
+  const f = fixture();
   const legacy = await import("./legacyJobRun");
   const wait = spyOn(legacy, "waitForLegacyJob").mockResolvedValue(null);
   try {
@@ -1370,7 +1304,7 @@ it("tells older clients that queued work continues without claiming completion",
 });
 
 it("reports caught and interrupted maintenance failures and treats cancellation neutrally", async () => {
-  const f = await fixture();
+  const f = fixture();
   const diagnostics = await import("./diagnostics");
   const report = spyOn(diagnostics, "captureApiError").mockResolvedValue(
     undefined,
