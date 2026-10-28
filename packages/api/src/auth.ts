@@ -393,13 +393,7 @@ async function runStatement(
   values: string[],
 ) {
   const statement = database.prepare(query);
-  if (typeof statement.bind === "function") {
-    await statement.bind(...values).run();
-    return;
-  }
-  await (
-    statement as unknown as { run: (...bindings: string[]) => unknown }
-  ).run(...values);
+  await statement.bind(...values).run();
 }
 
 async function prepareSession(
@@ -456,14 +450,7 @@ async function updateDefaultOrganization(
   const statement = database.prepare(
     'UPDATE "user" SET "defaultOrganizationId" = ? WHERE "id" = ? AND ("defaultOrganizationPinned" = 0 OR "defaultOrganizationId" IS NULL)',
   );
-  if (typeof statement.bind === "function") {
-    await statement.bind(organizationId, userId).run();
-    return;
-  }
-  await (statement as unknown as { run: (...values: string[]) => unknown }).run(
-    organizationId,
-    userId,
-  );
+  await statement.bind(organizationId, userId).run();
 }
 
 type Auth = ReturnType<typeof createAuth>;

@@ -1617,14 +1617,7 @@ async function findBilling(database: D1Database, organizationId: string) {
             last_reconciled_at, updated_at
      FROM organization_billing WHERE organization_id = ?`,
   );
-  if (typeof statement.bind === "function") {
-    return statement.bind(organizationId).first<BillingRow>();
-  }
-  return (
-    statement as unknown as {
-      get: (value: string) => BillingRow | null;
-    }
-  ).get(organizationId);
+  return statement.bind(organizationId).first<BillingRow>();
 }
 
 async function disableCheckoutForDeletion(
