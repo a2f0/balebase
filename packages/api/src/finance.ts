@@ -1,3 +1,4 @@
+import { productName } from "@balebase/ui/brand";
 import {
   type FinanceAccount,
   type FinanceConnection,
@@ -276,7 +277,7 @@ async function createLinkToken(
 ) {
   requireEncryptionKey(context.env);
   const body: LinkTokenRequest = {
-    client_name: "Balebase",
+    client_name: productName,
     country_codes: ["US"],
     language: "en",
     products: ["transactions"],

@@ -1,3 +1,4 @@
+import { productName } from "@balebase/ui/brand";
 import type { Context, Next } from "hono";
 import { createMiddleware } from "hono/factory";
 import {
@@ -81,7 +82,7 @@ export const requireAuth = createMiddleware<ApiEnv>(async (context, next) => {
 export const requireApiKey = createMiddleware<ApiEnv>(async (context, next) => {
   const token = apiKeyFromHeader(context.req.header("Authorization"));
   if (token === undefined) {
-    context.header("WWW-Authenticate", 'Bearer realm="Balebase"');
+    context.header("WWW-Authenticate", `Bearer realm="${productName}"`);
     return context.json(
       { error: "An API key is required. Send it as a Bearer token." },
       401,
@@ -101,7 +102,7 @@ async function authenticateRequestApiKey(
     if (result.status === 401) {
       context.header(
         "WWW-Authenticate",
-        'Bearer realm="Balebase", error="invalid_token"',
+        `Bearer realm="${productName}", error="invalid_token"`,
       );
     }
     return context.json({ error: result.error }, result.status);

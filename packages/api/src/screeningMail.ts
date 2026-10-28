@@ -1,4 +1,5 @@
 import { productName } from "@balebase/ui/brand";
+import { sendMail } from "./mailSender";
 import type { Bindings } from "./types";
 
 type MailEnvironment = Pick<
@@ -111,12 +112,9 @@ function sendScreeningMail(
     "/apple-touch-icon.png",
     environment.CORS_ORIGIN,
   ).toString();
-  return environment.EMAIL.send({
-    from: {
-      email: environment.AUTH_EMAIL_FROM,
-      name: `${mail.organizationName} via ${productName}`.slice(0, 100),
-    },
-    subject: message.subject.slice(0, 250),
+  return sendMail(environment, {
+    organizationName: mail.organizationName,
+    subject: message.subject,
     text: [
       ...message.paragraphs,
       `${message.action}:\n${message.link}`,
