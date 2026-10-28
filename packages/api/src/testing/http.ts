@@ -69,6 +69,44 @@ function encodeBody(body: unknown, init: RequestInit) {
   };
 }
 
+/**
+ * A multipart upload whose file streams `fileBytes` in 1 MB chunks. Its
+ * `progress` shows how much the server pulled and whether it cancelled,
+ * so a test can prove an oversized upload is refused while it streams.
+ */
+export function streamedUpload(fileBytes: number) {
+  const boundary = "streamed-upload";
+  const encoder = new TextEncoder();
+  const progress = { cancelled: false, sentBytes: 0 };
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(
+          `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="large.pdf"\r\nContent-Type: application/pdf\r\n\r\n`,
+        ),
+      );
+    },
+    pull(controller) {
+      if (progress.sentBytes === fileBytes) {
+        controller.enqueue(encoder.encode(`\r\n--${boundary}--\r\n`));
+        controller.close();
+        return;
+      }
+      const chunk = Math.min(1024 * 1024, fileBytes - progress.sentBytes);
+      progress.sentBytes += chunk;
+      controller.enqueue(new Uint8Array(chunk));
+    },
+    cancel() {
+      progress.cancelled = true;
+    },
+  });
+  return {
+    body,
+    headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+    progress,
+  };
+}
+
 async function readBody(response: Response) {
   const text = await response.text();
   if (!text) return null;

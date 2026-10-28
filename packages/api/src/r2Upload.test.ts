@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
-import { readBodyWithLimit } from "./auditIssueImages";
+import { readBodyWithLimit } from "./storage";
 
 test("workerd accepts the bounded known-length upload body", async () => {
   const miniflare = new Miniflare(

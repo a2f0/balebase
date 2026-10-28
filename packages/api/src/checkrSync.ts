@@ -9,8 +9,8 @@ import {
 } from "./checkrScreening";
 import { isRecord } from "./jsonInput";
 import { sendPendingScreeningNotifications } from "./screeningNotifications";
+import { readBoundedRequest } from "./storage";
 import type { Bindings } from "./types";
-import { readWebhookPayload } from "./webhookPayload";
 
 const maxCheckrWebhookBytes = 1024 * 1024;
 const screeningRefreshLimit = 24;
@@ -36,7 +36,7 @@ export async function handleCheckrWebhook(
     console.error("Checkr webhook verification is not configured.");
     return context.json({ error: "Webhook verification is unavailable." }, 503);
   }
-  const payload = await readWebhookPayload(
+  const payload = await readBoundedRequest(
     context.req.raw,
     maxCheckrWebhookBytes,
   );

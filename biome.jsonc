@@ -81,54 +81,6 @@
     // Existing large files may shrink, but should not grow. Remove an override
     // once its file fits the default budget; extract responsibilities to get there.
     {
-      "includes": ["packages/api/src/auditIssueImages.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noExcessiveLinesPerFile": {
-              "level": "error",
-              "options": {
-                "maxLines": 858,
-                "skipBlankLines": true
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "includes": ["packages/api/src/billing.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noExcessiveLinesPerFile": {
-              "level": "error",
-              "options": {
-                "maxLines": 2097,
-                "skipBlankLines": true
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "includes": ["packages/api/src/employeeForms.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noExcessiveLinesPerFile": {
-              "level": "error",
-              "options": {
-                "maxLines": 811,
-                "skipBlankLines": true
-              }
-            }
-          }
-        }
-      }
-    },
-    {
       "includes": ["packages/app/src/**/*.tsx"],
       "linter": {
         "rules": {

@@ -1,8 +1,8 @@
 import { auditsRoutes } from "@balebase/validators/audits";
 import { Hono } from "hono";
 import { activityBatch, activityStatement } from "./activity";
+import { deletePendingAuditIssueObject } from "./auditIssueImageCleanup";
 import { findAuditIssueImage } from "./auditIssueImageRecords";
-import { deletePendingAuditIssueObject } from "./auditIssueImages";
 import { discardedAuditError, imageAuditNotDiscarded } from "./auditRunRecords";
 import type { ApiEnv } from "./authMiddleware";
 import { respond } from "./respond";

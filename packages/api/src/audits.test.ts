@@ -3,14 +3,11 @@ import { describe, expect, it } from "bun:test";
 import type { AuditDefinition } from "@balebase/validators/audits";
 import { activity } from "./activity";
 import { adminAuditTemplates } from "./adminAuditTemplates";
-import {
-  ImageUploadReadTimeoutError,
-  purgePendingAuditIssueImages,
-  readBodyWithLimit,
-} from "./auditIssueImages";
+import { purgePendingAuditIssueImages } from "./auditIssueImageCleanup";
 import { audits } from "./audits";
 import { purgeDeletedObjects } from "./deletedObjectCleanup";
 import { offline } from "./offline";
+import { BodyReadTimeoutError, readBodyWithLimit } from "./storage";
 import { memoryStorage, testBindings } from "./testing/bindings";
 import { type QueryEvent, queryHooks, toD1 } from "./testing/d1";
 import { applyMigrations, createTestDatabase } from "./testing/database";
@@ -524,7 +521,7 @@ describe("audits", () => {
       },
     });
     await expect(readBodyWithLimit(stalled, 7, 5)).rejects.toBeInstanceOf(
-      ImageUploadReadTimeoutError,
+      BodyReadTimeoutError,
     );
     expect(timedOutStreamCancelled).toBe(true);
   });
@@ -554,7 +551,7 @@ describe("audits", () => {
         setTimeout(() => resolve("stalled"), 50),
       ),
     ]);
-    expect(timeoutOutcome).toBeInstanceOf(ImageUploadReadTimeoutError);
+    expect(timeoutOutcome).toBeInstanceOf(BodyReadTimeoutError);
   });
 
   it("paginates every retained audit run with a stable cursor", async () => {

@@ -1,8 +1,9 @@
+import { reconcilePendingCheckoutEntitlements } from "./billingCheckoutSync";
 import {
   freeRetentionDays,
   lapsedRetentionGraceDays,
-  reconcilePendingCheckoutEntitlements,
-} from "./billing";
+  paidStatusList,
+} from "./billingEntitlements";
 import type { Bindings } from "./types";
 
 const retentionBatchSize = 100;
@@ -61,8 +62,7 @@ export async function purgeExpiredFreeAuditRuns(
            )
            AND datetime(COALESCE(audit.completed_at, audit.updated_at)) <
                datetime(?)
-           AND COALESCE(billing.stripe_status, '') NOT IN
-             ('active', 'past_due', 'trialing')
+           AND COALESCE(billing.stripe_status, '') NOT IN ${paidStatusList}
          ORDER BY COALESCE(audit.completed_at, audit.updated_at) ASC,
                   audit.id ASC
          LIMIT ?
