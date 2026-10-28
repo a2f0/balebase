@@ -99,6 +99,14 @@ Read untrusted JSON with `isRecord` and `validText` from `jsonInput.ts`, and
 send mail with `sendMail` from `mailSender.ts`, which names the sender with
 `productName`.
 
+File handling lives in `storage.ts`. Read uploads and webhook bodies with
+`readBoundedForm` and `readBoundedRequest`, which refuse an oversized body
+while it streams, and serve stored files with `storedDownload`. Write every
+new upload with `trackedPut`: it queues the key for the deleted-object cleanup
+before the bytes reach R2. The row that references the upload must hold
+`uploadStillQueued`, and a migration trigger deletes the queued record when
+that row is written.
+
 See [API client onboarding](docs/api-client.md) for a public-import example,
 browser credentials and CORS, the shared wrapper, and native host assumptions.
 
