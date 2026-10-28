@@ -132,10 +132,10 @@ bun run --cwd packages/api test src/app.test.ts
 ```
 
 Run API tests through the package command: its working directory loads
-`packages/api/bunfig.toml`, whose `contractTestSetup.ts` preload checks response
-schemas after each test. API tests use in-memory database fixtures and test
-bindings; they do not need `.secrets`, Wrangler login, local migrations, or a
-running API. Installing dependencies is still required.
+`packages/api/bunfig.toml`, whose `testing/responseContractPreload.ts` preload
+checks response schemas after each test. API tests use in-memory database
+fixtures and test bindings; they do not need `.secrets`, Wrangler login, local
+migrations, or a running API. Installing dependencies is still required.
 
 Build API tests from `packages/api/src/testing/`, not local D1 adapters or
 binding literals. `createTestDatabase` applies every migration with foreign
