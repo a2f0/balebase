@@ -61,8 +61,6 @@
     "mobile:upload:android:staging": "sh scripts/release/uploadAndroidStagingRelease.sh",
     "mobile:upload:ios": "sh scripts/release/uploadIosRelease.sh",
     "mobile:upload:ios:staging": "sh scripts/release/uploadIosStagingRelease.sh",
-    "organizations:objects:reorganize": "bash scripts/admin/reorganizeOrganizationObjects.sh",
-    "organizations:purge": "bash scripts/admin/purgeOrganizations.sh",
     "scope": "bash scripts/dev/scope.sh",
     "terraform:apply": "bash terraform/scripts/run.sh apply",
     "terraform:plan": "bash terraform/scripts/run.sh plan",
