@@ -129,22 +129,6 @@
       }
     },
     {
-      "includes": ["packages/app/src/AuditRunPage.tsx"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noExcessiveLinesPerFile": {
-              "level": "error",
-              "options": {
-                "maxLines": 1102,
-                "skipBlankLines": true
-              }
-            }
-          }
-        }
-      }
-    },
-    {
       "includes": ["packages/app/src/**/*.tsx"],
       "linter": {
         "rules": {
