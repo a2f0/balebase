@@ -17,24 +17,31 @@ import {
   eventStatement,
   type FieldRow,
   findContract,
-  firstSigners,
   listEvents,
   listFields,
   listRecipients,
   mailFor,
-  notifyRecipients,
   type RecipientRow,
   recordEvent,
 } from "./contractRecords";
 import { contractTemplates } from "./contractTemplates";
+import { firstSigners, notifyRecipients } from "./contractWorkflow";
 import { normalizeFilename } from "./filenames";
 import { respond } from "./respond";
+import {
+  readBoundedForm,
+  storedDownload,
+  trackedPut,
+  uploadExpired,
+  uploadStillQueued,
+} from "./storage";
 
 type ContractContext = Context<ApiEnv>;
 
 // Stamping holds the document in memory several times over, so this stays
 // well inside a Worker's memory limit.
 const maxDocumentBytes = 10 * 1024 * 1024;
+const documentTooLarge = "Contracts must be 10 MB or smaller.";
 const manualReminderGapMs = 60 * 60 * 1000;
 
 interface SummaryRow {
@@ -80,17 +87,18 @@ contracts.get("/", async (context) => {
 
 // Uploads a PDF as a new draft.
 contracts.post("/", async (context) => {
-  const body = (await context.req.parseBody()) as {
-    file?: File | string;
-    title?: File | string;
-  };
-  const file = body.file;
+  const form = await readBoundedForm(context.req.raw, maxDocumentBytes);
+  if (form === "too_large") {
+    return context.json({ error: documentTooLarge }, 413);
+  }
+  const file = form?.get("file");
   if (!(file instanceof File)) {
     return context.json({ error: "Choose a PDF to upload." }, 400);
   }
   if (file.size > maxDocumentBytes) {
-    return context.json({ error: "Contracts must be 10 MB or smaller." }, 413);
+    return context.json({ error: documentTooLarge }, 413);
   }
+  const titleField = form?.get("title");
   const bytes = new Uint8Array(await file.arrayBuffer());
   let pageCount: number;
   try {
@@ -109,22 +117,28 @@ contracts.post("/", async (context) => {
     "contract.pdf",
   );
   const suppliedTitle =
-    typeof body.title === "string" ? body.title.trim().slice(0, 200) : "";
+    typeof titleField === "string" ? titleField.trim().slice(0, 200) : "";
   const title = suppliedTitle || filename.replace(/\.pdf$/i, "") || "Contract";
   const objectKey = `organizations/${organizationId}/contracts/${id}/original.pdf`;
   const now = new Date().toISOString();
-  await context.env.STORAGE.put(objectKey, bytes, {
-    customMetadata: { contractId: id, organizationId },
-    httpMetadata: { contentType: "application/pdf" },
-  });
+  await trackedPut(
+    context.env,
+    { cleanupId: `contract-upload:${id}`, key: objectKey, organizationId },
+    bytes,
+    {
+      customMetadata: { contractId: id, organizationId },
+      httpMetadata: { contentType: "application/pdf" },
+    },
+  );
+  let created: D1Result[];
   try {
-    await context.env.DB.batch([
+    created = await context.env.DB.batch([
       context.env.DB.prepare(
         `INSERT INTO contracts
            (id, organization_id, title, document_object_key,
             document_filename, document_size, document_sha256,
             document_page_count, created_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${uploadStillQueued}`,
       ).bind(
         id,
         organizationId,
@@ -137,16 +151,24 @@ contracts.post("/", async (context) => {
         userId,
         now,
         now,
+        objectKey,
       ),
-      eventStatement(context.env.DB, {
-        actorUserId: userId,
-        contractId: id,
-        type: "created",
-      }),
+      eventStatement(
+        context.env.DB,
+        { actorUserId: userId, contractId: id, type: "created" },
+        {
+          bindings: [id],
+          sql: "EXISTS (SELECT 1 FROM contracts WHERE id = ?)",
+        },
+      ),
     ]);
   } catch (cause) {
     await context.env.STORAGE.delete(objectKey);
     throw cause;
+  }
+  if (!created[0]?.meta.changes) {
+    await context.env.STORAGE.delete(objectKey);
+    return context.json({ error: uploadExpired }, 409);
   }
   return respond(
     context,
@@ -513,17 +535,14 @@ async function pdfResponse(
   key: string,
   filename: string,
 ) {
-  const object = await context.env.STORAGE.get(key);
-  if (!object)
-    return context.json({ error: "The document file is missing." }, 404);
-  const encoded = encodeURIComponent(filename).replaceAll("'", "%27");
-  return new Response(object.body, {
-    headers: {
-      "content-disposition": `attachment; filename="contract.pdf"; filename*=UTF-8''${encoded}`,
-      "content-type": "application/pdf",
-      "x-content-type-options": "nosniff",
-    },
+  const download = await storedDownload(context.env.STORAGE, key, {
+    fallbackFilename: "contract.pdf",
+    filename,
+    headers: { "content-type": "application/pdf" },
   });
+  return (
+    download ?? context.json({ error: "The document file is missing." }, 404)
+  );
 }
 
 function toSummary(row: SummaryRow): ContractSummary {

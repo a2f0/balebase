@@ -8,11 +8,12 @@ import {
 } from "./contractReminders";
 import { contracts } from "./contracts";
 import type { TemplateDefinition } from "./contractTemplateDefinition";
+import { purgeDeletedObjects } from "./deletedObjectCleanup";
 import { signing } from "./signing";
 import { memoryStorage, testBindings } from "./testing/bindings";
 import { queryHooks, toD1 } from "./testing/d1";
 import { createTestDatabase } from "./testing/database";
-import { requester } from "./testing/http";
+import { requester, streamedUpload } from "./testing/http";
 import { seedOrganization, seedUser } from "./testing/seed";
 import { type ApiTestEnv, withTestSession } from "./testing/session";
 
@@ -589,6 +590,68 @@ describe("contracts", () => {
     expect(fixture.emails).toEqual([]);
   });
 
+  it("queues every contract file for cleanup until its row claims it", async () => {
+    const fixture = createFixture();
+    const id = await fixture.prepare(solo());
+    await fixture.json("POST", `/api/contracts/${id}/send`);
+    const signed = await fixture.json<{ completed: boolean }>(
+      "POST",
+      `/api/signing/${tokenFrom(fixture.emails[0])}/sign`,
+      { consent: true, signature: png },
+    );
+    expect(signed.body.completed).toBe(true);
+    const template = await uploadTemplate(fixture);
+    const path = `/api/contracts/templates/${template.id}`;
+    await fixture.json("POST", `${path}/versions`, templateVersion(template));
+    const copied = await fixture.json(
+      "POST",
+      `${path}/contracts`,
+      roleMapping(2),
+    );
+    expect(copied.status).toBe(201);
+    // The upload, the signed copy, the template, and the template's copy.
+    expect(fixture.storage.queuedAtPut).toEqual([true, true, true, true]);
+    expect(
+      fixture.database
+        .query("SELECT COUNT(*) AS count FROM deleted_object_cleanup")
+        .get(),
+    ).toEqual({ count: 0 });
+  });
+
+  it("leaves an upload whose response was lost to the cleanup", async () => {
+    const fixture = createFixture();
+    fixture.storage.loseNextResponse = true;
+    const lost = await fixture.upload(await samplePdf(), "Lost.pdf");
+    expect(lost.status).toBe(500);
+    const [lostKey] = [...fixture.stored.keys()];
+    expect(
+      fixture.database
+        .query("SELECT object_key FROM deleted_object_cleanup")
+        .all(),
+    ).toEqual([{ object_key: lostKey }]);
+    const later = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    await purgeDeletedObjects(fixture.bindings, {
+      abandonedClaimedBefore: later,
+      deletedBefore: later,
+    });
+    expect(fixture.stored.size).toBe(0);
+  });
+
+  it("refuses an oversized contract while it streams", async () => {
+    const fixture = await createFixture();
+    const fileBytes = 32 * 1024 * 1024;
+    const upload = streamedUpload(fileBytes);
+    const response = await fixture.request("/api/contracts", {
+      body: upload.body,
+      headers: upload.headers,
+      method: "POST",
+    });
+    expect(response.status).toBe(413);
+    expect(upload.progress.cancelled).toBe(true);
+    expect(upload.progress.sentBytes).toBeLessThan(fileBytes);
+    expect(fixture.stored.size).toBe(0);
+  });
+
   it("rejects adopted images that could not be stamped", async () => {
     const fixture = createFixture();
     const id = await fixture.prepare(solo());
@@ -721,10 +784,27 @@ function createFixture() {
   const database = createTestDatabase();
   seed(database);
   const emails: SentEmail[] = [];
-  const storage = { failWrites: false };
+  const storage = {
+    failWrites: false,
+    loseNextResponse: false,
+    queuedAtPut: [] as boolean[],
+  };
   const { bucket, stored } = memoryStorage(new Map(), {
-    beforePut: () => {
+    afterPut: () => {
+      if (!storage.loseNextResponse) return;
+      storage.loseNextResponse = false;
+      throw new Error("The storage response was lost.");
+    },
+    beforePut: (key) => {
       if (storage.failWrites) throw new Error("Storage is unavailable.");
+      storage.queuedAtPut.push(
+        database
+          .query(
+            `SELECT 1 FROM deleted_object_cleanup
+             WHERE object_key = ? AND cleanup_token IS NULL`,
+          )
+          .get(key) !== null,
+      );
     },
   });
   const hooks = queryHooks();
@@ -1057,6 +1137,24 @@ describe("contract templates", () => {
       fixture.database.query("SELECT COUNT(*) AS count FROM contracts").get(),
     ).toEqual({ count: 0 });
     expect(fixture.stored.size).toBe(1);
+  });
+
+  it("refuses an oversized template while it streams", async () => {
+    const fixture = await createFixture();
+    const fileBytes = 32 * 1024 * 1024;
+    const upload = streamedUpload(fileBytes);
+    const response = await fixture.request("/api/contracts/templates", {
+      body: upload.body,
+      headers: upload.headers,
+      method: "POST",
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Contract templates must be 10 MB or smaller.",
+    });
+    expect(upload.progress.cancelled).toBe(true);
+    expect(upload.progress.sentBytes).toBeLessThan(fileBytes);
+    expect(fixture.stored.size).toBe(0);
   });
 
   it("scopes every template route to the active organization", async () => {

@@ -23,6 +23,7 @@ import { sendPendingScreeningNotifications } from "./screeningNotifications";
 import { testBindings } from "./testing/bindings";
 import { queryHooks, toD1 } from "./testing/d1";
 import { applyMigrations, createTestDatabase } from "./testing/database";
+import { streamedUpload } from "./testing/http";
 import { seedAccount, seedMember, seedOrganization } from "./testing/seed";
 import { testApp } from "./testing/session";
 import type { Bindings } from "./types";
@@ -461,6 +462,28 @@ describe("employee forms", () => {
     ).toEqual({ count: 1 });
   });
 
+  it("escapes the document's name in its download header", async () => {
+    const fixture = await createFixture();
+    const id = await createRequirement(fixture, "form", "W-4");
+    const form = new FormData();
+    form.set(
+      "file",
+      new File(["form contents"], "Dana's W-4 (final).pdf", {
+        type: "application/pdf",
+      }),
+    );
+    const upload = await fixture
+      .app("employee", "member")
+      .request(`/${id}/document`, { body: form, method: "POST" });
+    expect(upload.status).toBe(200);
+    const download = await fixture
+      .app("employee", "member")
+      .request(`/${id}/document`);
+    expect(download.headers.get("content-disposition")).toBe(
+      `attachment; filename="document"; filename*=UTF-8''Dana%27s%20W-4%20(final).pdf`,
+    );
+  });
+
   it("purges an uploaded form after an interrupted request", async () => {
     const fixture = await createFixture();
     const id = await createRequirement(fixture, "form", "W-4");
@@ -565,6 +588,24 @@ describe("employee forms", () => {
       .app("employee", "member")
       .request(`/${id}/document`, { body: form, method: "POST" });
     expect(upload.status).toBe(413);
+    expect(fixture.files.size).toBe(0);
+  });
+
+  it("refuses an oversized document while it streams", async () => {
+    const fixture = await createFixture();
+    const id = await createRequirement(fixture, "form", "W-4");
+    const fileBytes = 32 * 1024 * 1024;
+    const upload = streamedUpload(fileBytes);
+    const response = await fixture
+      .app("employee", "member")
+      .request(`/${id}/document`, {
+        body: upload.body,
+        headers: upload.headers,
+        method: "POST",
+      });
+    expect(response.status).toBe(413);
+    expect(upload.progress.cancelled).toBe(true);
+    expect(upload.progress.sentBytes).toBeLessThan(fileBytes);
     expect(fixture.files.size).toBe(0);
   });
 
@@ -3152,6 +3193,7 @@ async function createFixture(migrations: { before?: string } = {}) {
         return file
           ? {
               body: file.stream(),
+              httpEtag: '"test-etag"',
               writeHttpMetadata: (headers: Headers) => {
                 headers.set("content-type", file.type);
               },
