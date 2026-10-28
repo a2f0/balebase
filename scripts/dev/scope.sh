@@ -43,7 +43,7 @@ fi
 if [[ "${1:-}" != down && "${1:-}" != status ]]; then
   if [[ ! -f "$scope_dir/apps/cli/dist/scope.mjs" ]] ||
     [[ "$(git -C "$scope_dir" rev-parse HEAD 2>/dev/null || true)" != "$scope_revision" ]]; then
-    echo 'Scope is missing or uses a different revision. Run bun run scope:install.' >&2
+    echo 'Scope is missing or uses a different revision. Run bun run scope install.' >&2
     exit 1
   fi
 fi

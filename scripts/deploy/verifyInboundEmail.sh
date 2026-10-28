@@ -8,22 +8,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/cloudflareEnv.sh"
 DEPLOY_TIER="${DEPLOY_TIER:-prod}"
-if [[ "$DEPLOY_TIER" == "staging" ]]; then
-  unset TF_VAR_cloudflare_api_token TF_VAR_cloudflare_account_id \
-    CLOUDFLARE_EMAIL_API_TOKEN
-  load_tier_env staging
-  validate_cloudflare_env
-  if [[ -z "${CLOUDFLARE_EMAIL_API_TOKEN:-}" ]]; then
-    echo "ERROR: Missing CLOUDFLARE_EMAIL_API_TOKEN." >&2
-    exit 1
-  fi
-  export CLOUDFLARE_API_TOKEN="$CLOUDFLARE_EMAIL_API_TOKEN"
-elif [[ "$DEPLOY_TIER" == "prod" ]]; then
-  load_cloudflare_email_env
-else
-  echo "ERROR: Unknown deployment tier: $DEPLOY_TIER" >&2
+load_cloudflare_tier_env "$DEPLOY_TIER"
+if [[ -z "${CLOUDFLARE_EMAIL_API_TOKEN:-}" ]]; then
+  echo "ERROR: Missing CLOUDFLARE_EMAIL_API_TOKEN." >&2
   exit 1
 fi
+# The zone-scoped email token reads Email Routing; the account token reads DNS.
+account_token="$CLOUDFLARE_API_TOKEN"
+email_token="$CLOUDFLARE_EMAIL_API_TOKEN"
 
 API_BASE="https://api.cloudflare.com/client/v4"
 ZONE_NAME="balebase.com"
@@ -38,10 +30,12 @@ else
 fi
 
 cloudflare_get() {
-  curl -fsS "$1" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+  local token="$1"
+  shift
+  curl -fsS "$@" -H "Authorization: Bearer $token"
 }
 
-zone_response="$(cloudflare_get "$API_BASE/zones?name=$ZONE_NAME")"
+zone_response="$(cloudflare_get "$email_token" "$API_BASE/zones?name=$ZONE_NAME")"
 zone_id="$(jq -r '.result[0].id // empty' <<<"$zone_response")"
 
 if [[ -z "$zone_id" ]]; then
@@ -52,23 +46,11 @@ fi
 # The Email Routing DNS endpoint only describes the records a subdomain needs,
 # and public resolvers negatively cache a subdomain that was checked before it
 # existed, so read the zone's live MX records with the account token.
-if [[ "$DEPLOY_TIER" == "staging" ]]; then
-  export CLOUDFLARE_API_TOKEN="${TF_VAR_cloudflare_api_token:-}"
-  export CLOUDFLARE_ACCOUNT_ID="${TF_VAR_cloudflare_account_id:-}"
-else
-  load_cloudflare_env
-fi
 mx_response="$(
-  curl -fsS --get "$API_BASE/zones/$zone_id/dns_records" \
+  cloudflare_get "$account_token" --get "$API_BASE/zones/$zone_id/dns_records" \
     --data-urlencode "type=MX" \
-    --data-urlencode "name=$INBOUND_DOMAIN" \
-    -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+    --data-urlencode "name=$INBOUND_DOMAIN"
 )"
-if [[ "$DEPLOY_TIER" == "staging" ]]; then
-  export CLOUDFLARE_API_TOKEN="$CLOUDFLARE_EMAIL_API_TOKEN"
-else
-  load_cloudflare_email_env
-fi
 
 if ! jq -e \
   '(.success == true) and
@@ -81,7 +63,7 @@ if ! jq -e \
 fi
 
 rules_response="$(
-  cloudflare_get "$API_BASE/zones/$zone_id/email/routing/rules"
+  cloudflare_get "$email_token" "$API_BASE/zones/$zone_id/email/routing/rules"
 )"
 
 matching_rules="$(
@@ -101,7 +83,9 @@ if [[ "$matching_rules" -ne 1 ]]; then
   exit 1
 fi
 
-settings_response="$(cloudflare_get "$API_BASE/zones/$zone_id/email/routing")"
+settings_response="$(
+  cloudflare_get "$email_token" "$API_BASE/zones/$zone_id/email/routing"
+)"
 if ! jq -e \
   '(.success == true) and (.result.support_subaddress == true)' \
   >/dev/null <<<"$settings_response"; then

@@ -10,8 +10,7 @@ setup, feature boundaries, and public client API it needs to work here.
 A passing inspection task is evidence about that task and environment. It is
 not an overall readiness score, proof of a clean install, or a successful code
 change. Keep infrastructure failures separate from agent and repository findings.
-The [2026-10-26 assessment report](agent-readiness.md) records the baseline,
-documentation fixes, comparison results, and remaining limitations.
+The [assessment summary](agent-readiness.md) records the last measured result.
 
 ## Install and start
 
@@ -19,7 +18,7 @@ The upstream source is pinned in `scripts/dev/scope.sh` and lives at
 `~/.local/share/scope/source`. `SCOPE_SOURCE_DIR` overrides that location.
 Install Node 22+, pnpm, Bun, and Docker Compose 2.24.4+ with a running engine.
 Podman on macOS can supply the Docker API; use Docker Compose for its override
-syntax. `scope:install` builds the CLI and installs it into `~/.local/bin`,
+syntax. `bun run scope install` builds the CLI and installs it into `~/.local/bin`,
 or `SCOPE_INSTALL_DIR`. Installation refuses dirty source and checks out the pin
 when needed; stack startup refuses a dirty or mismatched checkout.
 
@@ -31,8 +30,8 @@ mappings must match those ports. `CODEX_JUDGE_MODEL` can override the
 judge model for a separate experiment.
 
 ```sh
-bun run scope:install
-bun run scope:up
+bun run scope install
+bun run scope up
 bun run scope judge
 ```
 
@@ -54,7 +53,7 @@ SCOPE_CLAUDE_CREDENTIALS_FILE="$HOME/.claude/.credentials.json"
 This opt-in reads an existing JSON OAuth login at startup without copying its
 token. For Keychain installations use `claude setup-token` and supply
 `CLAUDE_CODE_OAUTH_TOKEN`, or provide `ANTHROPIC_API_KEY`. Explicit credentials
-take precedence. Refresh expired credentials and rerun `scope:up`.
+take precedence. Refresh expired credentials and rerun `bun run scope up`.
 Model discovery requires an API key and is separately enabled with
 `COMPOSE_PROFILES=anthropic-model-scanner`; the subscription worker can use its
 default model without it.
@@ -66,17 +65,17 @@ commands load these settings; the plain installed `scope` binary does not.
 The API uses anonymous local development mode. Local processes can submit
 work using the worker's credentials. The worker also has the container-engine
 socket, so it is intended for trusted tasks and source. Stop containers with
-`bun run scope:down` and stop the foreground judge with Ctrl-C when idle.
+`bun run scope down` and stop the foreground judge with Ctrl-C when idle.
 Named volumes preserve projects, artifacts, and worker project transcripts.
 Other Claude user state lives in writable temporary memory and resets when
 the worker restarts.
-After a configuration-only change, `bun run scope:up --no-build` reuses the
+After a configuration-only change, `bun run scope up --no-build` reuses the
 existing images. Rebuild when the pinned upstream source changes.
 
 ## Run a baseline
 
 ```sh
-bun run scope:register HEAD
+bun run scope register HEAD
 bun run scope calibrate
 bun run scope benchmark
 bun run scope portal
@@ -140,12 +139,21 @@ bun run scope run list
 bun run scope run get -i <run-id>
 bun run scope run download -i <run-id> -d .scope/results
 bun run scope regrade .scope/benchmarks/<directory>/receipt.json
-bun run scope:status
-bun run test:scope
+bun run scope status
 ```
 
 Regrading preserves original portal grades and writes a separate receipt.
 A polling timeout can leave a request running; inspect it before resubmitting.
-The offline tests exercise verdict completeness, dependency skips, run outcomes,
-artifact boundaries, session identity and credential handling. Live evaluation
-remains opt-in and is not part of CI.
+
+## Test the tooling
+
+```sh
+bun run test:scope
+```
+
+These offline tests exercise verdict completeness, dependency skips, run
+outcomes, artifact boundaries, session identity and credential handling.
+`bun run verify`, and so CI, runs them; `bun run test` and the pre-push hook do
+not. Nothing runs live evaluations. Run them after changing
+`scripts/dev/scope.sh` or
+`scripts/dev/scope/`.

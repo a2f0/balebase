@@ -1,13 +1,13 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { readdir } from "node:fs/promises";
 import { activityBatch } from "./activity";
 import { apiKeyRouteDenial } from "./apiKeys";
 import { app } from "./app";
 import { createAuth } from "./auth";
 import { mcpTools } from "./mcp";
 import { toolAccess, toolInputSchema } from "./mcpToolSchema";
-import type { Bindings } from "./types";
+import { testBindings } from "./testing/bindings";
+import { toD1 } from "./testing/d1";
+import { createTestDatabase } from "./testing/database";
 
 interface ApiKey {
   access: "read" | "write";
@@ -1045,13 +1045,8 @@ describe("MCP tool catalog", () => {
 });
 
 async function createFixture() {
-  const database = new Database(":memory:");
-  database.exec("PRAGMA foreign_keys = ON");
-  const directory = `${import.meta.dir}/../migrations`;
-  for (const filename of (await readdir(directory)).sort()) {
-    database.exec(await Bun.file(`${directory}/${filename}`).text());
-  }
-  const bindings = testBindings(database);
+  const database = createTestDatabase();
+  const bindings = testBindings({ DB: toD1(database) });
   const pending: Promise<unknown>[] = [];
   const executionContext = {
     passThroughOnException: () => undefined,
@@ -1282,75 +1277,6 @@ async function rpcMessage<T = unknown>(response: Response) {
 
 function now() {
   return new Date().toISOString();
-}
-
-function testBindings(database: Database): Bindings {
-  return {
-    AUTH_EMAIL_FROM: "security@auth.balebase.com",
-    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-    BETTER_AUTH_URL: "https://api.test",
-    CORS_ORIGIN: "https://app.test",
-    DB: toD1(database),
-    EMAIL: {
-      send: async () => ({ messageId: "test-message" }),
-    } as unknown as SendEmail,
-    IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
-    STORAGE: {} as R2Bucket,
-  };
-}
-
-interface TestStatement {
-  execute: () => unknown;
-}
-
-function toD1(database: Database) {
-  return {
-    // A D1 batch is one transaction, so a failure rolls back every statement.
-    batch: async (statements: TestStatement[]) =>
-      database.transaction(() =>
-        statements.map((statement) => statement.execute()),
-      )(),
-    exec: async (query: string) => database.exec(query),
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const run = () => {
-        if (/^\s*SELECT\b/i.test(query))
-          return {
-            meta: { changes: 0 },
-            results: database.query(query).all(...values),
-            success: true,
-          };
-        const result = database.query(query).run(...values);
-        return {
-          meta: { changes: result.changes },
-          results: [],
-          success: true,
-        };
-      };
-      const statement = {
-        all: async () => {
-          const results = database.query(query).all(...values);
-          const meta = database
-            .query(
-              `SELECT changes() AS changes,
-                      last_insert_rowid() AS last_row_id`,
-            )
-            .get() as { changes: number; last_row_id: number };
-          return { meta, results, success: true };
-        },
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        execute: () => run(),
-        first: async () => database.query(query).get(...values),
-        raw: async () => database.query(query).values(...values),
-        run: async () => run(),
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
 }
 
 it("attributes daily-sync settings to API keys and protects bank activity with Finance access", async () => {

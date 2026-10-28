@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { handleEmail } from "./email";
-import type { Bindings } from "./types";
+import { testBindings } from "./testing/bindings";
 
 const organizationId = "organization-1";
 const inboundEmailDomain = "inbox.balebase.com";
@@ -146,18 +146,14 @@ async function expectRejectedMessage(raw: string, reason: RegExp) {
   expect(database.statements).toHaveLength(0);
 }
 
-function createBindings(database: D1Database, storage: R2Bucket): Bindings {
-  return {
-    AUTH_EMAIL_FROM: "security@auth.balebase.com",
-    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
+function createBindings(database: D1Database, storage: R2Bucket) {
+  return testBindings({
     BETTER_AUTH_URL: "https://api.balebase.com",
     CORS_ORIGIN: "https://app.balebase.com",
     DB: database,
-    EMAIL: {} as SendEmail,
-    IMAGES: {} as ImagesBinding,
     INBOUND_EMAIL_DOMAIN: inboundEmailDomain,
     STORAGE: storage,
-  };
+  });
 }
 
 function createDatabase() {

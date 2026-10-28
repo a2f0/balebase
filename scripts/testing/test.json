@@ -6,16 +6,16 @@
       "command": ["bunx", "--bun", "--no-install", "turbo", "run", "test"]
     },
     {
-      "label": "test:staging",
-      "command": ["bun", "--bun", "run", "test:staging"]
+      "label": "test:deploy",
+      "command": ["bun", "--bun", "run", "test:deploy"]
     },
     {
       "label": "test:env",
       "command": ["bun", "--bun", "run", "test:env"]
     },
     {
-      "label": "test:scope",
-      "command": ["bun", "--bun", "run", "test:scope"]
+      "label": "test:docs",
+      "command": ["bun", "--bun", "run", "test:docs"]
     },
     {
       "label": "test:markdownlint",

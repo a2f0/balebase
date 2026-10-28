@@ -1,0 +1,33 @@
+{
+  "defaultTier": "production",
+  "tiers": {
+    "production": {
+      "androidBuildVariant": "release",
+      "apiHost": "api.balebase.com",
+      "appHost": "app.balebase.com",
+      "appIdentifier": "com.balebase.app",
+      "appName": "Balebase",
+      "capacitorSyncScript": "cap:sync:release",
+      "iosArchiveName": "Balebase.xcarchive",
+      "iosConfiguration": "Release",
+      "iosIpaName": "Balebase.ipa",
+      "iosOutputDirectory": "output",
+      "iosScheme": "App",
+      "secretsTier": "prod"
+    },
+    "staging": {
+      "androidBuildVariant": "staging",
+      "apiHost": "api-staging.balebase.com",
+      "appHost": "app-staging.balebase.com",
+      "appIdentifier": "com.balebase.staging.app",
+      "appName": "Balebase Staging",
+      "capacitorSyncScript": "cap:sync:staging",
+      "iosArchiveName": "Balebase-Staging.xcarchive",
+      "iosConfiguration": "Release-Staging",
+      "iosIpaName": "Balebase-Staging.ipa",
+      "iosOutputDirectory": "output/staging",
+      "iosScheme": "App-Staging",
+      "secretsTier": "staging"
+    }
+  }
+}

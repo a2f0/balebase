@@ -54,15 +54,17 @@ android {
 // lanes select with NATIVE_RELEASE_TIER (without one, production), or from
 // NATIVE_RELEASE_SECRETS_DIR, resolved against this package as the lanes
 // resolve it. Each tier has its own key, registered with its Play app.
+// nativeReleaseTargets.json names the tiers and their secrets folders.
 def releaseSecretsDir() {
-    def tier = (System.getenv("NATIVE_RELEASE_TIER") ?: "production").trim().toLowerCase()
-    def secretsTier = [production: "prod", staging: "staging"][tier]
-    if (secretsTier == null) {
-        throw new GradleException("Unknown NATIVE_RELEASE_TIER '${tier}'. Expected production or staging.")
+    def targets = new JsonSlurper().parse(file('../../nativeReleaseTargets.json'))
+    def tier = (System.getenv("NATIVE_RELEASE_TIER") ?: targets.defaultTier).trim().toLowerCase()
+    def target = targets.tiers[tier]
+    if (target == null) {
+        throw new GradleException("Unknown NATIVE_RELEASE_TIER '${tier}'. Expected ${targets.tiers.keySet().join(' or ')}.")
     }
     def secretsDirOverride = System.getenv("NATIVE_RELEASE_SECRETS_DIR")?.trim()
     if (!secretsDirOverride) {
-        return rootProject.file("../../../.secrets/${secretsTier}")
+        return rootProject.file("../../../.secrets/${target.secretsTier}")
     }
     def secretsDir = new File(secretsDirOverride)
     return secretsDir.absolute ? secretsDir : new File(rootProject.projectDir.parentFile, secretsDirOverride)

@@ -51,6 +51,12 @@ unset TF_VAR_cloudflare_api_token TF_VAR_cloudflare_account_id \
   PLAID_TOKEN_ENCRYPTION_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET \
   STRIPE_PRO_PRICE_ID STRIPE_PORTAL_CONFIGURATION_ID \
   STRIPE_PRO_LEGACY_PRICE_IDS STRIPE_PUBLISHABLE_KEY
+# Simulate Cloudflare credentials that an earlier command already exported.
+if [[ -n "${AMBIENT_CLOUDFLARE_TOKEN:-}" ]]; then
+  export TF_VAR_cloudflare_api_token="$AMBIENT_CLOUDFLARE_TOKEN" \
+    TF_VAR_cloudflare_account_id=ambient-account \
+    CLOUDFLARE_EMAIL_API_TOKEN=ambient-email-token
+fi
 if [[ "$1" == "devApi" ]]; then
   exec bash scripts/dev/devApi.sh
 fi
@@ -133,6 +139,9 @@ expect_output \
   'tf_token=prod-token tf_account=shared-account token=prod-token account=shared-account auth=prod-auth' \
   load_cloudflare_env
 expect_output \
+  'tf_token=prod-token tf_account=shared-account token=prod-token account=shared-account auth=prod-auth' \
+  load_cloudflare_tier_env prod
+expect_output \
   'tf_token=prod-token tf_account=shared-account token=shared-email-token account= auth=prod-auth' \
   load_cloudflare_email_env
 
@@ -178,6 +187,19 @@ expect_dev_env "$(printf '%s\n' \
   PLAID_SECRET=sandbox-plaid-secret \
   PLAID_TOKEN_ENCRYPTION_KEY=prod-plaid-key \
   "$dev_vars")"
+
+# Staging Cloudflare credentials come only from the staging tier, never from
+# values a production command already exported.
+export AMBIENT_CLOUDFLARE_TOKEN=prod-token
+expect_failure 'Missing required Cloudflare variables' \
+  load_cloudflare_tier_env staging
+printf '%s\n' TF_VAR_cloudflare_api_token=staging-token \
+  TF_VAR_cloudflare_account_id=staging-account \
+  >> "$FIXTURE/.secrets/staging/app.env"
+expect_output \
+  'tf_token=staging-token tf_account=staging-account token=staging-token account=staging-account auth=staging-auth' \
+  load_cloudflare_tier_env staging
+unset AMBIENT_CLOUDFLARE_TOKEN
 
 # shared.env is optional.
 rm "$FIXTURE/.secrets/prod/shared.env"

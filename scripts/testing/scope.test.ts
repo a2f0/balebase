@@ -113,12 +113,12 @@ async function record() {
 
 test("missing or mismatched installations stop before invoking tools", async () => {
   env.SCOPE_TEST_REVISION = "different-revision";
-  expect(run("up").stderr.toString()).toContain("bun run scope:install");
+  expect(run("up").stderr.toString()).toContain("bun run scope install");
   env.SCOPE_TEST_REVISION = revision;
   await rm(join(source, "apps/cli/dist/scope.mjs"));
   const result = run("--version");
   expect(result.exitCode).toBe(1);
-  expect(result.stderr.toString()).toContain("bun run scope:install");
+  expect(result.stderr.toString()).toContain("bun run scope install");
   expect(await Bun.file(join(directory, "record.json")).exists()).toBe(false);
 });
 

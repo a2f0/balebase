@@ -11,10 +11,11 @@ mkdir -p "$FIXTURE/scripts/deploy" "$FIXTURE/scripts/lib" "$FIXTURE/terraform/sc
   "$FIXTURE/terraform/stacks/staging" "$FIXTURE/.secrets/staging" "$FIXTURE/bin" \
   "$FIXTURE/packages/api" "$FIXTURE/packages/app-web" "$FIXTURE/packages/website"
 cp "$REPO_ROOT/scripts/deploy/deployStaging.sh" "$FIXTURE/scripts/deploy/"
-cp "$REPO_ROOT/scripts/lib/cloudflareEnv.sh" "$FIXTURE/scripts/lib/"
+cp "$REPO_ROOT/scripts/lib/cloudflareEnv.sh" "$REPO_ROOT/scripts/lib/workerDeploy.sh" \
+  "$FIXTURE/scripts/lib/"
 cp "$REPO_ROOT/scripts/deploy/createStagingConfigs.ts" "$FIXTURE/scripts/deploy/"
 cp "$REPO_ROOT/terraform/scripts/run.sh" "$FIXTURE/terraform/scripts/"
-for verifier in checkProductionDomains verifyStaging verifyInboundEmail; do
+for verifier in checkDomains verifyDeployment verifyInboundEmail; do
   cat > "$FIXTURE/scripts/deploy/$verifier.sh" <<'EOF'
 #!/usr/bin/env bash
 printf 'verify %s tier=%s token=%s\n' "${BASH_SOURCE[0]##*/}" "${DEPLOY_TIER:-}" "${CLOUDFLARE_API_TOKEN:-}" >> "$MOCK_LOG"
@@ -88,7 +89,7 @@ export MOCK_LOG="$FIXTURE/commands.log"
 PATH="$FIXTURE/bin:$PATH" DRY_RUN=1 bash "$FIXTURE/scripts/deploy/deployStaging.sh" > "$FIXTURE/output.log"
 assert_release_preflight_order
 
-[[ "$(grep -c '^bunx wrangler deploy ' "$MOCK_LOG" || true)" -eq 2 ]] || {
+[[ "$(grep -c 'wrangler deploy ' "$MOCK_LOG" || true)" -eq 2 ]] || {
   echo 'Expected two frontend staging dry-run deployments' >&2
   exit 1
 }
@@ -166,9 +167,17 @@ for secret_name in BETTER_AUTH_SECRET PLAID_CLIENT_ID PLAID_SECRET PLAID_TOKEN_E
 done
 [[ "$(cat "$MOCK_LOG")" == *'value=sk_test_fixture'* ]]
 [[ "$(cat "$MOCK_LOG")" == *'value=test-auth'* ]]
+if grep -q 'secret put CHECKR_' "$MOCK_LOG"; then
+  echo 'Normal deployment uploaded unset optional Checkr secrets' >&2
+  exit 1
+fi
 [[ "$(grep -cF "terraform -chdir=$FIXTURE/terraform/stacks/staging apply -auto-approve aws=test-state-key" "$MOCK_LOG" || true)" -eq 1 ]]
-[[ "$(grep -cF 'verify checkProductionDomains.sh tier=staging token=test-token' "$MOCK_LOG" || true)" -eq 1 ]]
-[[ "$(grep -cF 'verify verifyInboundEmail.sh tier=staging token=test-token' "$MOCK_LOG" || true)" -eq 1 ]]
+for verifier in checkDomains verifyDeployment verifyInboundEmail; do
+  [[ "$(grep -cF "verify $verifier.sh tier=staging token=test-token" "$MOCK_LOG" || true)" -eq 1 ]] || {
+    echo "Normal deployment did not run $verifier for staging" >&2
+    exit 1
+  }
+done
 if grep -Eq 'wrangler deploy .*wrangler\.jsonc|terraform .*stacks/prod' "$MOCK_LOG"; then
   echo 'Normal deployment targeted production resources' >&2
   exit 1

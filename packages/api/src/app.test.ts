@@ -1,9 +1,11 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import { version } from "../package.json";
 import { app } from "./app";
 import { createAuth } from "./auth";
-import type { Bindings } from "./types";
+import { testBindings } from "./testing/bindings";
+import { toD1 } from "./testing/d1";
+import { createTestDatabase } from "./testing/database";
+import { seedMember, seedUser } from "./testing/seed";
 
 describe("api", () => {
   it("applies native origins through the real authenticated route middleware", async () => {
@@ -91,14 +93,14 @@ describe("api", () => {
   });
 
   it("reports its health", async () => {
-    const response = await app.request("/health", undefined, {} as Bindings);
+    const response = await app.request("/health", undefined, testBindings());
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ status: "ok" });
   });
 
   it("returns a JSON 404", async () => {
-    const response = await app.request("/missing", undefined, {} as Bindings);
+    const response = await app.request("/missing", undefined, testBindings());
 
     expect(response.status).toBe(404);
     expect(await response.text()).toBe('{"error":"Not found."}');
@@ -121,15 +123,9 @@ describe("api", () => {
   });
 
   it("names the API version on every response", async () => {
-    const authDatabase = new Database(":memory:");
-    authDatabase.exec(
-      await Bun.file(
-        new URL("../migrations/0003_create_auth.sql", import.meta.url),
-      ).text(),
-    );
     const responses = [
-      await app.request("/health", undefined, {} as Bindings),
-      await app.request("/missing", undefined, {} as Bindings),
+      await app.request("/health", undefined, testBindings()),
+      await app.request("/missing", undefined, testBindings()),
       await app.request("/api/me", undefined, authBindings()),
       await app.request(
         "/api/inbox",
@@ -142,13 +138,22 @@ describe("api", () => {
         },
         authBindings(),
       ),
-      await app.request("/api/auth/ok", undefined, authBindings(authDatabase), {
+      await app.request("/api/auth/ok", undefined, authBindings(), {
         passThroughOnException: () => undefined,
         props: {},
         waitUntil: () => undefined,
       } as unknown as ExecutionContext),
-      // Without an execution context the auth route throws.
-      await app.request("/api/auth/get-session", undefined, authBindings()),
+      await app.request(
+        "/api/auth/get-session",
+        undefined,
+        testBindings({
+          DB: toD1(createTestDatabase(), {
+            onQuery: () => {
+              throw new Error("D1 is unavailable.");
+            },
+          }),
+        }),
+      ),
     ];
 
     // Health, not found, unauthenticated, a CORS preflight, a Better Auth
@@ -399,30 +404,15 @@ describe("api", () => {
 
   it("names the missing seat on organization plugin routes but lets the member leave", async () => {
     const fixture = await protectedOrganizationFixture();
-    for (const filename of [
-      "0032_create_billing.sql",
-      "0053_track_paid_billing_end.sql",
-    ]) {
-      fixture.database.exec(
-        await Bun.file(
-          new URL(`../migrations/${filename}`, import.meta.url),
-        ).text(),
-      );
-    }
     // An earlier owner holds the Free plan's one seat.
-    fixture.database
-      .query(
-        `INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt)
-         VALUES ('seat-holder', 'Seat Holder', 'seat@example.com', 1,
-                 '2026-01-01', '2026-01-01')`,
-      )
-      .run();
-    fixture.database
-      .query(
-        `INSERT INTO member (id, organizationId, userId, role, createdAt)
-         VALUES ('seat-member', ?, 'seat-holder', 'owner', '2026-01-01')`,
-      )
-      .run(fixture.organizationId);
+    seedUser(fixture.database, { id: "seat-holder", name: "Seat Holder" });
+    seedMember(fixture.database, {
+      createdAt: "2026-01-01",
+      id: "seat-member",
+      organizationId: fixture.organizationId,
+      role: "owner",
+      userId: "seat-holder",
+    });
     fixture.database
       .query(
         "UPDATE member SET createdAt = '2026-02-01', twoFactorRequired = 0 WHERE id = ?",
@@ -466,92 +456,13 @@ describe("api", () => {
   });
 });
 
-function authBindings(
-  database: Database = new Database(":memory:"),
-  useD1 = false,
-): Bindings {
-  return {
-    AUTH_EMAIL_FROM: "security@auth.balebase.com",
-    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-    BETTER_AUTH_URL: "https://api.test",
-    CORS_ORIGIN: "https://app.test",
-    DB: useD1 ? toD1(database) : (database as unknown as D1Database),
-    EMAIL: {
-      send: async () => ({ messageId: "test-message" }),
-    } as unknown as SendEmail,
-    IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
-    STORAGE: {} as R2Bucket,
-  };
-}
-
-interface TestStatement {
-  execute: () => unknown;
-}
-
-function toD1(database: Database) {
-  return {
-    batch: async (statements: TestStatement[]) =>
-      statements.map((statement) => statement.execute()),
-    exec: async (query: string) => database.exec(query),
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const statement = {
-        all: async () => {
-          const results = database.query(query).all(...values);
-          const meta = database
-            .query(
-              `SELECT changes() AS changes,
-                      last_insert_rowid() AS last_row_id`,
-            )
-            .get() as { changes: number; last_row_id: number };
-          return { meta, results, success: true };
-        },
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        execute: () => run(),
-        first: async () => database.query(query).get(...values),
-        raw: async () => database.query(query).values(...values),
-        run: async () => run(),
-      };
-      const run = () => {
-        const result = database.query(query).run(...values);
-        return {
-          meta: { changes: result.changes },
-          results: [],
-          success: true,
-        };
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
+function authBindings(database = createTestDatabase()) {
+  return testBindings({ DB: toD1(database) });
 }
 
 async function protectedOrganizationFixture() {
-  const database = new Database(":memory:");
-  for (const filename of [
-    "0003_create_auth.sql",
-    "0004_create_organizations.sql",
-    "0008_keep_organization_defaults_valid.sql",
-    "0010_create_organization_groups.sql",
-    "0011_soft_delete_organizations.sql",
-    "0020_add_two_factor_authentication.sql",
-    "0021_track_terms_acceptance.sql",
-    "0031_require_member_two_factor.sql",
-    "0040_pin_default_organization.sql",
-    "0048_create_user_deletion_requests.sql",
-    "0055_track_user_last_active.sql",
-    "0071_record_user_deletion_activity.sql",
-  ]) {
-    database.exec(
-      await Bun.file(
-        new URL(`../migrations/${filename}`, import.meta.url),
-      ).text(),
-    );
-  }
-  const bindings = authBindings(database, true);
+  const database = createTestDatabase();
+  const bindings = authBindings(database);
   const pending: Promise<unknown>[] = [];
   const auth = createAuth(bindings, (promise) => pending.push(promise));
   const authRequest = (path: string, body: Record<string, unknown>) =>

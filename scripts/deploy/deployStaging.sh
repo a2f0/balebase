@@ -8,14 +8,16 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # shellcheck source=scripts/lib/cloudflareEnv.sh
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/cloudflareEnv.sh"
-unset TF_VAR_cloudflare_api_token TF_VAR_cloudflare_account_id
+# shellcheck source=scripts/lib/workerDeploy.sh
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/workerDeploy.sh"
+# Like the Cloudflare credentials, application secrets come only from staging.
 unset BETTER_AUTH_SECRET PLAID_CLIENT_ID PLAID_SECRET \
   CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE \
   PLAID_TOKEN_ENCRYPTION_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET \
   STAGING_STRIPE_PRO_PRICE_ID STAGING_STRIPE_PORTAL_CONFIGURATION_ID \
   STAGING_STRIPE_PUBLISHABLE_KEY
-load_tier_env staging "$REPO_ROOT"
-validate_cloudflare_env
+load_cloudflare_tier_env staging "$REPO_ROOT"
 validate_auth_env
 validate_plaid_env
 validate_stripe_env any
@@ -34,8 +36,6 @@ if [[ -n "${STAGING_STRIPE_PUBLISHABLE_KEY:-}" &&
   exit 1
 fi
 
-export CLOUDFLARE_API_TOKEN="${TF_VAR_cloudflare_api_token:-}"
-export CLOUDFLARE_ACCOUNT_ID="${TF_VAR_cloudflare_account_id:-}"
 STAGING_D1_DATABASE_ID="$(
   bash "$REPO_ROOT/terraform/scripts/run.sh" staging output -raw d1_database_id
 )"
@@ -65,50 +65,27 @@ bun --bun run --cwd "$REPO_ROOT/packages/api" deploy staging --check
 bun --bun run --cwd "$REPO_ROOT/packages/app-web" build:release staging --check
 
 api_config="$REPO_ROOT/packages/api/wrangler.staging.jsonc"
-client_config="$REPO_ROOT/packages/app-web/wrangler.staging.jsonc"
-website_config="$REPO_ROOT/packages/website/wrangler.staging.jsonc"
-
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
   bun --bun run --cwd "$REPO_ROOT/packages/api" deploy staging
 else
   bunx --bun wrangler d1 migrations apply DB --remote --config "$api_config"
-  for secret_name in \
-    BETTER_AUTH_SECRET PLAID_CLIENT_ID PLAID_SECRET \
-    PLAID_TOKEN_ENCRYPTION_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET; do
-    printf '%s' "${!secret_name}" | bunx --bun wrangler secret put \
-      "$secret_name" --config "$api_config" >/dev/null
-  done
-  for secret_name in \
-    CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE; do
-    if [[ -n "${!secret_name:-}" ]]; then
-      printf '%s' "${!secret_name}" | bunx --bun wrangler secret put \
-        "$secret_name" --config "$api_config" >/dev/null
-    fi
-  done
+  put_api_worker_secrets "$api_config"
   bun --bun run --cwd "$REPO_ROOT/packages/api" deploy staging
 fi
 
-VITE_API_URL="https://api-staging.balebase.com" \
-  VITE_WEBSITE_URL="https://website-staging.balebase.com" \
-  bun --bun run --cwd "$REPO_ROOT/packages/app-web" build:release staging
-PUBLIC_APP_URL="https://app-staging.balebase.com" PUBLIC_RELEASE_TIER=staging \
-  bun --bun run --cwd "$REPO_ROOT/packages/website" build
-
+build_staging_frontends "$REPO_ROOT"
+deploy_staging_frontends "$REPO_ROOT"
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
-  bunx --bun wrangler deploy --config "$client_config" --dry-run
-  bunx --bun wrangler deploy --config "$website_config" --dry-run
   echo "Staging dry run completed."
   exit 0
 fi
 
-bunx --bun wrangler deploy --config "$client_config"
-bunx --bun wrangler deploy --config "$website_config"
-DEPLOY_TIER=staging bash "$SCRIPT_DIR/checkProductionDomains.sh"
+DEPLOY_TIER=staging bash "$SCRIPT_DIR/checkDomains.sh"
 apply_args=(apply -input=true)
 if [[ "${AUTO_APPROVE:-0}" == "1" ]]; then
   apply_args=(apply -auto-approve)
 fi
 bash "$REPO_ROOT/terraform/scripts/run.sh" staging "${apply_args[@]}"
-bash "$SCRIPT_DIR/verifyStaging.sh"
+DEPLOY_TIER=staging bash "$SCRIPT_DIR/verifyDeployment.sh"
 DEPLOY_TIER=staging bash "$SCRIPT_DIR/verifyInboundEmail.sh"
 echo "Staging deployment completed."

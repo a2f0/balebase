@@ -5,7 +5,6 @@ import type { ApiEnv } from "./authMiddleware";
 import { isRecord, validText } from "./jsonInput";
 import { userHasCapability } from "./organizationGroups";
 
-export type IssueEnv = ApiEnv;
 export type IssueContext = Context<ApiEnv>;
 export type IssueField =
   | "assignedTo"

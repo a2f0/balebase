@@ -1,10 +1,11 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { Hono } from "hono";
-import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
 import { objects } from "./objects";
-import type { Bindings } from "./types";
+import { memoryStorage, testBindings } from "./testing/bindings";
+import { toD1 } from "./testing/d1";
+import { applyMigrations, createTestDatabase } from "./testing/database";
+import { requester } from "./testing/http";
+import { seedMember, seedOrganization, seedUser } from "./testing/seed";
+import { testApp } from "./testing/session";
 
 interface ObjectResponse {
   object: {
@@ -28,20 +29,16 @@ interface ObjectListResponse {
 
 describe("organization uploads", () => {
   it("backfills existing uploads and isolates object access", async () => {
-    const fixture = await createFixture();
+    const fixture = createFixture();
     expect(
       fixture.database
         .query("SELECT organization_id, kind FROM objects WHERE id = ?")
         .get("legacy-object"),
     ).toEqual({ kind: "library", organization_id: "org_user-1" });
 
-    const firstList = await fixture.firstApp.request(
-      "/",
-      undefined,
-      fixture.bindings,
-    );
+    const firstList = await fixture.first<ObjectListResponse>("GET", "/");
     expect(firstList.status).toBe(200);
-    expect((await firstList.json()) as ObjectListResponse).toEqual({
+    expect(firstList.body).toEqual({
       objects: [
         {
           filename: "legacy.txt",
@@ -55,16 +52,11 @@ describe("organization uploads", () => {
       ],
     });
 
-    const hiddenAuditImage = await fixture.firstApp.request(
-      "/audit-image-object",
-      undefined,
-      fixture.bindings,
-    );
+    const hiddenAuditImage = await fixture.first("GET", "/audit-image-object");
     expect(hiddenAuditImage.status).toBe(404);
-    const auditImageDelete = await fixture.firstApp.request(
+    const auditImageDelete = await fixture.first(
+      "DELETE",
       "/audit-image-object",
-      { method: "DELETE" },
-      fixture.bindings,
     );
     expect(auditImageDelete.status).toBe(404);
     expect(
@@ -74,22 +66,14 @@ describe("organization uploads", () => {
     ).toEqual({ kind: "audit_issue_image" });
     expect(fixture.stored.has("audit-images/evidence.png")).toBe(true);
 
-    const otherObject = await fixture.firstApp.request(
-      "/other-object",
-      undefined,
-      fixture.bindings,
-    );
+    const otherObject = await fixture.first("GET", "/other-object");
     expect(otherObject.status).toBe(404);
 
     const form = new FormData();
     form.set("file", new File(["new upload"], "report.txt"));
-    const uploaded = await fixture.firstApp.request(
-      "/",
-      { body: form, method: "POST" },
-      fixture.bindings,
-    );
+    const uploaded = await fixture.first<ObjectResponse>("POST", "/", form);
     expect(uploaded.status).toBe(201);
-    const uploadBody = (await uploaded.json()) as ObjectResponse;
+    const uploadBody = uploaded.body;
     expect(uploadBody.object.objectKey).toStartWith(
       "organizations/org_user-1/uploads/",
     );
@@ -104,13 +88,13 @@ describe("organization uploads", () => {
       "file",
       new File(["unicode upload"], `${"😀".repeat(255)}.txt`),
     );
-    const unicodeUpload = await fixture.firstApp.request(
+    const unicodeUpload = await fixture.first<ObjectResponse>(
+      "POST",
       "/",
-      { body: unicodeForm, method: "POST" },
-      fixture.bindings,
+      unicodeForm,
     );
     expect(unicodeUpload.status).toBe(201);
-    const unicodeBody = (await unicodeUpload.json()) as ObjectResponse;
+    const unicodeBody = unicodeUpload.body;
     expect(
       new TextEncoder().encode(unicodeBody.object.filename).byteLength,
     ).toBe(252);
@@ -118,18 +102,13 @@ describe("organization uploads", () => {
       new TextEncoder().encode(unicodeBody.object.objectKey).byteLength,
     ).toBeLessThan(1_024);
 
-    const hiddenFromOtherOrganization = await fixture.secondApp.request(
+    const hiddenFromOtherOrganization = await fixture.second(
+      "GET",
       `/${uploadBody.object.id}`,
-      undefined,
-      fixture.bindings,
     );
     expect(hiddenFromOtherOrganization.status).toBe(404);
 
-    const deleted = await fixture.firstApp.request(
-      `/${uploadBody.object.id}`,
-      { method: "DELETE" },
-      fixture.bindings,
-    );
+    const deleted = await fixture.first("DELETE", `/${uploadBody.object.id}`);
     expect(deleted.status).toBe(204);
     expect(fixture.stored.has(uploadBody.object.objectKey)).toBe(false);
     expect(
@@ -140,12 +119,16 @@ describe("organization uploads", () => {
   });
 });
 
-async function createFixture() {
-  const database = new Database(":memory:");
-  await applyMigration(database, "0001_create_objects.sql");
-  await applyMigration(database, "0003_create_auth.sql");
-  insertUser(database, "user-1", "Example Person", "person@example.com");
-  await applyMigration(database, "0004_create_organizations.sql");
+function createFixture() {
+  // Uploads from before organizations existed belong to their owner's.
+  const database = createTestDatabase({ before: "0004" });
+  seedUser(database, {
+    email: "person@example.com",
+    emailVerified: false,
+    id: "user-1",
+    name: "Example Person",
+  });
+  applyMigrations(database, { before: "0006", from: "0004" });
   database
     .query(
       `INSERT INTO objects
@@ -160,10 +143,7 @@ async function createFixture() {
       6,
       "2026-08-18T12:00:00.000Z",
     );
-  await applyMigration(database, "0006_scope_objects_to_organizations.sql");
-  await applyMigration(database, "0025_classify_objects.sql");
-  await applyMigration(database, "0030_queue_deleted_objects.sql");
-  await applyMigration(database, "0035_create_library_folders.sql");
+  applyMigrations(database, { from: "0006" });
   database
     .query(
       `INSERT INTO objects
@@ -181,72 +161,50 @@ async function createFixture() {
       "2026-08-19T12:00:00.000Z",
     );
   addSecondOrganization(database);
-  const stored = new Map([
-    ["uploads/legacy-object/legacy.txt", new TextEncoder().encode("legacy")],
-    ["audit-images/evidence.png", new Uint8Array(8)],
-  ]);
-  const bindings = bindingsFor(database, stored);
+  const { bucket, stored } = memoryStorage(
+    new Map([
+      ["uploads/legacy-object/legacy.txt", new TextEncoder().encode("legacy")],
+      ["audit-images/evidence.png", new Uint8Array(8)],
+    ]),
+  );
+  const bindings = testBindings({ DB: toD1(database), STORAGE: bucket });
+  const appFor = (organizationId: string) =>
+    requester(
+      testApp({ "/": objects }, { organizationId, userId: "user" }),
+      bindings,
+    );
   return {
-    bindings,
     database,
-    firstApp: testApp("org_user-1"),
-    secondApp: testApp("organization-2"),
+    first: appFor("org_user-1"),
+    second: appFor("organization-2"),
     stored,
   };
 }
 
-function insertUser(
-  database: Database,
-  id: string,
-  name: string,
-  email: string,
+function addSecondOrganization(
+  database: ReturnType<typeof createTestDatabase>,
 ) {
-  database
-    .query(
-      `INSERT INTO user
-       (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      id,
-      name,
-      email,
-      false,
-      "2026-08-18T12:00:00.000Z",
-      "2026-08-18T12:00:00.000Z",
-      "user",
-      false,
-    );
-}
-
-function addSecondOrganization(database: Database) {
-  insertUser(database, "user-2", "Another Person", "another@example.com");
-  database
-    .query(
-      `INSERT INTO organization (id, name, slug, createdAt)
-       VALUES (?, ?, ?, ?)`,
-    )
-    .run(
-      "organization-2",
-      "Another Organization",
-      "another-organization",
-      "2026-08-19T12:00:00.000Z",
-    );
-  database
-    .query(
-      `INSERT INTO member (id, organizationId, userId, role, createdAt)
-       VALUES (?, ?, ?, ?, ?)`,
-    )
-    .run(
-      "member-2",
-      "organization-2",
-      "user-2",
-      "owner",
-      "2026-08-19T12:00:00.000Z",
-    );
-  database
-    .query(`UPDATE user SET defaultOrganizationId = ? WHERE id = ?`)
-    .run("organization-2", "user-2");
+  const createdAt = "2026-08-19T12:00:00.000Z";
+  seedOrganization(database, {
+    createdAt,
+    id: "organization-2",
+    name: "Another Organization",
+    slug: "another-organization",
+  });
+  seedUser(database, {
+    defaultOrganizationId: "organization-2",
+    email: "another@example.com",
+    emailVerified: false,
+    id: "user-2",
+    name: "Another Person",
+  });
+  seedMember(database, {
+    createdAt,
+    id: "member-2",
+    organizationId: "organization-2",
+    role: "owner",
+    userId: "user-2",
+  });
   database
     .query(
       `INSERT INTO objects
@@ -261,88 +219,6 @@ function addSecondOrganization(database: Database) {
       "file.txt",
       "text/plain",
       4,
-      "2026-08-19T12:00:00.000Z",
+      createdAt,
     );
-}
-
-function testApp(organizationId: string) {
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
-  app.use("*", async (context, next) => {
-    context.set("organizationId", organizationId);
-    context.set("authSession", {
-      user: { defaultOrganizationId: organizationId, id: "user", role: "user" },
-    } as unknown as AuthSession);
-    await next();
-  });
-  app.route("/", objects);
-  return app;
-}
-
-function bindingsFor(
-  database: Database,
-  stored: Map<string, Uint8Array>,
-): Bindings {
-  return {
-    AUTH_EMAIL_FROM: "security@auth.balebase.com",
-    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-    BETTER_AUTH_URL: "https://api.test",
-    CORS_ORIGIN: "https://app.test",
-    DB: toD1(database),
-    EMAIL: {} as SendEmail,
-    IMAGES: {} as ImagesBinding,
-    INBOUND_EMAIL_DOMAIN: "inbox.balebase.com",
-    STORAGE: storageFor(stored),
-  };
-}
-
-function toD1(database: Database) {
-  return {
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const statement = {
-        all: async () => ({
-          results: database.query(query).all(...values),
-          success: true,
-        }),
-        bind: (...nextValues: SQLQueryBindings[]) => {
-          values = nextValues;
-          return statement;
-        },
-        first: async () => database.query(query).get(...values),
-        run: async () => {
-          const result = database.query(query).run(...values);
-          return { meta: { changes: result.changes }, success: true };
-        },
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
-}
-
-function storageFor(stored: Map<string, Uint8Array>) {
-  return {
-    delete: async (key: string) => stored.delete(key),
-    get: async (key: string) => {
-      const content = stored.get(key);
-      if (!content) return null;
-      return {
-        body: new Blob([content]).stream(),
-        httpEtag: '"test-etag"',
-        writeHttpMetadata: (headers: Headers) => {
-          headers.set("content-type", "application/octet-stream");
-        },
-      };
-    },
-    put: async (key: string, value: Blob) => {
-      stored.set(key, new Uint8Array(await value.arrayBuffer()));
-    },
-  } as unknown as R2Bucket;
-}
-
-async function applyMigration(database: Database, filename: string) {
-  database.exec(
-    await Bun.file(
-      new URL(`../migrations/${filename}`, import.meta.url),
-    ).text(),
-  );
 }

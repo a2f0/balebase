@@ -8,6 +8,10 @@ const nativeReleaseTargetPath = resolve(
   packageRoot,
   "fastlane/lib/native_release_target.rb",
 );
+const nativeReleaseTargetsPath = resolve(
+  packageRoot,
+  "nativeReleaseTargets.json",
+);
 const snapshotScriptPath = resolve(
   packageRoot,
   "fastlane/test/support/native_release_snapshot.rb",
@@ -150,6 +154,10 @@ export async function readNativeReleaseEnvironmentResult(
     temporaryRoot,
     "packages/app-capacitor/fastlane/lib/native_release_target.rb",
   );
+  const copiedTargetsPath = join(
+    temporaryRoot,
+    "packages/app-capacitor/nativeReleaseTargets.json",
+  );
   const fixtureFiles: Record<string, string> = {
     ".secrets/staging/shared.env": sharedEnv,
     ".secrets/staging/app.env": stagingAppEnv,
@@ -159,6 +167,7 @@ export async function readNativeReleaseEnvironmentResult(
   };
   await mkdir(dirname(copiedTargetPath), { recursive: true });
   await Bun.write(copiedTargetPath, Bun.file(nativeReleaseTargetPath));
+  await Bun.write(copiedTargetsPath, Bun.file(nativeReleaseTargetsPath));
   await Promise.all(
     Object.entries(fixtureFiles).map(([path, contents]) =>
       Bun.write(join(temporaryRoot, path), contents),

@@ -34,7 +34,7 @@ both shared and record views. Global form history also has publication rules.
 | Finance and billing | `finance.ts`, `financeCategories.ts`, `plaid*.ts`, `billing.ts`, `billingRetention.ts`, scheduled jobs |
 | Contracts and employee records | `contracts.ts`, `contractDraft.ts`, `contractTemplates.ts`, `contractRecords.ts`, `employeeForms.ts`, `screening*.ts`, Checkr handlers |
 | Library, inbox, business records | file/library routes, `email.ts`, `businesses.ts`, attachment handlers |
-| Administrative and maintenance work | admin routes, auth role hooks, scheduled worker, `scripts/admin/purge*.sh`, organization object maintenance |
+| Administrative and maintenance work | admin routes, auth role hooks, scheduled worker and maintenance jobs, `scripts/admin/purgeEmails.sh` |
 
 Resolve actual filenames with `rg --files`; this map is a starting point,
 not a coverage claim. Inspect route mounts and contract definitions to discover

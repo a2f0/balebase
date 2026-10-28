@@ -9,7 +9,7 @@ import { criterionSchema, type Suite, suiteSchema } from "./types";
 export function projectConfig() {
   const savedConfig = readSavedConfig();
   if (!savedConfig || savedConfig.apiUrl !== settings.apiUrl)
-    throw new Error("Run bun run scope:register first");
+    throw new Error("Run bun run scope register first");
   return savedConfig;
 }
 

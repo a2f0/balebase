@@ -756,13 +756,7 @@ export async function assignAcceptedInvitationRequirements(
     organizationId,
     invitationId,
   ];
-  if (typeof statement.bind === "function") {
-    await statement.bind(...values).run();
-  } else {
-    await (
-      statement as unknown as { run: (...values: string[]) => unknown }
-    ).run(...values);
-  }
+  await statement.bind(...values).run();
 }
 
 export async function assignRenewedInvitationRequirements(
@@ -790,13 +784,7 @@ export async function assignRenewedInvitationRequirements(
     email,
     new Date().toISOString(),
   ];
-  if (typeof statement.bind === "function") {
-    await statement.bind(...values).run();
-  } else {
-    await (
-      statement as unknown as { run: (...values: string[]) => unknown }
-    ).run(...values);
-  }
+  await statement.bind(...values).run();
 }
 
 function toRequirement(

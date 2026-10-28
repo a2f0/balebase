@@ -7,23 +7,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/lib/cloudflareEnv.sh
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/cloudflareEnv.sh"
-if [[ "${DEPLOY_TIER:-prod}" == "staging" ]]; then
-  unset TF_VAR_cloudflare_api_token TF_VAR_cloudflare_account_id
-  load_tier_env staging
-  validate_cloudflare_env
-  export CLOUDFLARE_API_TOKEN="${TF_VAR_cloudflare_api_token:-}"
-  export CLOUDFLARE_ACCOUNT_ID="${TF_VAR_cloudflare_account_id:-}"
-else
-  load_cloudflare_env
-fi
+# Read-only preflight: each tier's hostnames must be free or already attached
+# to that tier's Worker before Terraform attaches them.
+DEPLOY_TIER="${DEPLOY_TIER:-prod}"
+load_cloudflare_tier_env "$DEPLOY_TIER"
 
 API_BASE="https://api.cloudflare.com/client/v4"
 ZONE_NAME="balebase.com"
-DEPLOY_TIER="${DEPLOY_TIER:-prod}"
-if [[ "$DEPLOY_TIER" != "prod" && "$DEPLOY_TIER" != "staging" ]]; then
-  echo "ERROR: Unknown deployment tier: $DEPLOY_TIER" >&2
-  exit 1
-fi
 
 cloudflare_get() {
   curl -fsS "$1" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"

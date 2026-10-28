@@ -1,16 +1,17 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { afterEach, describe, expect, it } from "bun:test";
-import { readdir } from "node:fs/promises";
 import type { ActivityPage } from "@balebase/validators/activity";
-import { Hono } from "hono";
 import { activity } from "./activity";
 import { audits } from "./audits";
-import type { AuthSession } from "./auth";
-import type { AuthVariables } from "./authMiddleware";
 import { createFinanceRouter } from "./finance";
 import { issues } from "./issues";
 import { requireCapability } from "./organizationGroups";
-import type { Bindings } from "./types";
+import { testBindings } from "./testing/bindings";
+import { queryHooks, toD1 } from "./testing/d1";
+import { applyMigrations, createTestDatabase } from "./testing/database";
+import { requester } from "./testing/http";
+import { seedAccount, seedMember } from "./testing/seed";
+import { testApp } from "./testing/session";
 
 const databases: Database[] = [];
 const now = "2026-10-01T12:00:00.000Z";
@@ -503,10 +504,9 @@ describe("workspace issues", () => {
 
   it("returns a conflict if the source disappears after validation but before insert", async () => {
     const f = await fixture();
-    f.beforeBatch = () => {
-      f.beforeBatch = undefined;
+    f.hooks.before("INSERT INTO issues", () => {
       f.db.exec("DELETE FROM plaid_transactions WHERE id = 'txn'");
-    };
+    });
     expect(
       (
         await f.request("/issues", "POST", {
@@ -546,8 +546,7 @@ describe("workspace issues", () => {
       )
       .run(now);
     const events = f.db.query("SELECT * FROM activity_events").all();
-    await migrate(f.db, "0062_create_issues.sql");
-    await migrate(f.db, "0063_record_finance_annotations.sql");
+    applyMigrations(f.db, { from: "0062" });
     expect(f.db.query("PRAGMA foreign_key_check").all()).toEqual([]);
     expect(f.db.query("SELECT * FROM activity_events").all()).toEqual(events);
     expect(
@@ -798,28 +797,19 @@ describe("transaction annotation activity", () => {
   });
 });
 
-async function fixture(legacy = false) {
-  const db = new Database(":memory:");
+function fixture(legacy = false) {
+  const db = createTestDatabase({
+    ...(legacy ? { before: "0062" } : {}),
+  });
   databases.push(db);
-  db.exec("PRAGMA foreign_keys = ON");
-  await migrate(db, "0003_create_auth.sql");
   for (const id of ["user-1", "user-2"])
-    db.query(
-      `INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt, role, banned) VALUES (?, ?, ?, 1, ?, ?, 'user', 0)`,
-    ).run(id, id, `${id}@example.com`, now, now);
-  for (const file of (
-    await readdir(`${import.meta.dir}/../migrations`)
-  ).sort()) {
-    if (
-      file.endsWith(".sql") &&
-      file !== "0003_create_auth.sql" &&
-      (!legacy || file < "0062")
-    )
-      await migrate(db, file);
-  }
-  db.query(
-    `INSERT INTO member (id, organizationId, userId, role, createdAt) VALUES ('second-member', 'org_user-1', 'user-2', 'member', ?)`,
-  ).run(now);
+    seedAccount(db, { createdAt: now, id });
+  seedMember(db, {
+    createdAt: now,
+    id: "second-member",
+    organizationId: "org_user-1",
+    userId: "user-2",
+  });
   db.query(
     `INSERT INTO plaid_items (id, organization_id, plaid_item_id, access_token_ciphertext, access_token_iv, created_by, created_at, updated_at) VALUES ('item', 'org_user-1', 'plaid-item', '', '', 'user-1', ?, ?)`,
   ).run(now, now);
@@ -829,18 +819,21 @@ async function fixture(legacy = false) {
   db.query(
     `INSERT INTO plaid_transactions (id, organization_id, plaid_item_record_id, account_record_id, plaid_transaction_id, name, amount, transaction_date, pending, updated_at) VALUES ('txn', 'org_user-1', 'item', 'account', 'plaid-txn', 'Coffee', 25, '2026-10-01', 0, ?)`,
   ).run(now);
+  const hooks = queryHooks();
+  const bindings = testBindings({ DB: toD1(db, hooks) });
   const state = {
     db,
+    hooks,
     user: "user-1",
     organization: "org_user-1",
     apiKey: false,
-    beforeBatch: undefined as (() => void) | undefined,
     request,
   };
-  const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
+  const app = testApp({}, () => ({
+    organizationId: state.organization,
+    userId: state.user,
+  }));
   app.use("*", async (context, next) => {
-    context.set("organizationId", state.organization);
-    context.set("authSession", { user: { id: state.user } } as AuthSession);
     if (state.apiKey)
       context.set("apiKey", {
         id: "key",
@@ -855,57 +848,9 @@ async function fixture(legacy = false) {
   app.route("/audits", audits);
   app.use("/finance/*", requireCapability("finance"));
   app.route("/finance", createFinanceRouter());
-  async function request<T = unknown>(
-    path: string,
-    method = "GET",
-    body?: unknown,
-  ) {
-    const init: RequestInit = {
-      method,
-      headers: { "content-type": "application/json" },
-    };
-    if (body !== undefined) init.body = JSON.stringify(body);
-    const response = await app.request(path, init, {
-      DB: toD1(db, () => state.beforeBatch?.()),
-    } as Bindings);
-    return {
-      status: response.status,
-      body: (await response.json().catch(() => null)) as T,
-    };
+  const send = requester(app, bindings);
+  function request<T = unknown>(path: string, method = "GET", body?: unknown) {
+    return send<T>(method, path, body);
   }
   return state;
-}
-async function migrate(db: Database, file: string) {
-  db.exec(await Bun.file(`${import.meta.dir}/../migrations/${file}`).text());
-}
-function toD1(db: Database, beforeBatch: () => void) {
-  return {
-    batch: async (statements: { execute: () => unknown }[]) => {
-      beforeBatch();
-      return db.transaction(() =>
-        statements.map((statement) => statement.execute()),
-      )();
-    },
-    prepare: (query: string) => {
-      let values: SQLQueryBindings[] = [];
-      const execute = () => ({
-        success: true,
-        meta: { changes: db.query(query).run(...values).changes },
-      });
-      const statement = {
-        bind: (...next: SQLQueryBindings[]) => {
-          values = next;
-          return statement;
-        },
-        all: async () => ({
-          results: db.query(query).all(...values),
-          success: true,
-        }),
-        first: async () => db.query(query).get(...values),
-        run: async () => execute(),
-        execute,
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
 }

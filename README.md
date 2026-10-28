@@ -8,8 +8,9 @@ the web at <https://balebase.com>. The browser app at
 
 ## Quick start
 
-Install [mise](https://mise.jdx.dev/), or install [Bun](https://bun.sh/) 1.4.3
-directly and skip `mise install`. Node.js and npm are not required.
+Install [mise](https://mise.jdx.dev/), or install the [Bun](https://bun.sh/)
+version pinned in `.mise.toml` directly and skip `mise install`. Node.js and npm
+are not required.
 
 ```sh
 mise install                 # the Bun and Ruby versions pinned in .mise.toml
@@ -18,7 +19,7 @@ bun run hooks:install
 bun run --cwd packages/api db:migrate:local
 bun run dev
 # API:     http://localhost:8787
-# Client:  http://localhost:5173
+# App:     http://localhost:5173
 # Website: http://localhost:4321
 ```
 
@@ -32,7 +33,7 @@ unit tests do not need that file; see the
 [focused verification path](CONTRIBUTING.md#check-a-change).
 
 Wrangler persists the local D1 database and R2 bucket under
-`packages/api/.wrangler/`. The client defaults to the local API. Override it by
+`packages/api/.wrangler/`. The web app defaults to the local API. Override it by
 copying `packages/app-web/.env.example` to `packages/app-web/.env`. To build
 and run the native apps, see the
 [Capacitor shell's local development](packages/app-capacitor/README.md#develop-locally).
@@ -40,20 +41,8 @@ and run the native apps, see the
 ## Layout
 
 Every workspace lives under `packages/`, and infrastructure lives in
-`terraform/`:
-
-| Path | Contents |
-| --- | --- |
-| `packages/api` | Hono API on Cloudflare Workers, with D1 and R2 bindings |
-| `packages/validators` | The zod request and response contract for every API route |
-| `packages/api-client` | The typed client for those routes |
-| `packages/app` | The React application: screens, API calls, and the host interface each shell fills in |
-| `packages/app-web` | The Vite web shell deployed to Cloudflare |
-| [`packages/app-capacitor`](packages/app-capacitor/README.md) | The Capacitor iOS and Android shell, with its native projects and Fastlane release lanes |
-| [`packages/ui`](packages/ui/README.md) | The shared design system (tokens, component styles, React primitives, icons, and pricing copy) used by the app and the website |
-| `packages/diagnostics` | Sentry error reporting shared by the API and app shells |
-| `packages/website` | The static Astro marketing site |
-| [`terraform`](terraform/README.md) | D1, R2, and `balebase.com` Worker-domain infrastructure |
+`terraform/`. [Find the code](CONTRIBUTING.md#find-the-code) maps each kind of
+change to its package or script directory.
 
 Release builds report filtered errors to Sentry, with separate projects for
 web, API, Android, and iOS in staging and production. Development builds stay
@@ -74,13 +63,14 @@ organization, and the pull request workflow.
 bun run check:fast # format, lint source, and type-check (no infrastructure tools)
 bun run check     # full lint and type checks, including infrastructure
 bun run test      # package tests and script regression tests
+bun run verify    # everything CI runs, including browser suites and builds
 bun run build     # production builds
 bun run format    # apply source and Markdown fixes
 ```
 
 The full `check` also needs ShellCheck, Terraform, TFLint, and the Fastlane
-Ruby bundle. Provisioning and deploys read their Cloudflare credentials from
-`.secrets`, as the deployment guide describes.
+Ruby bundle; browser suites need Chrome. Provisioning and deploys read their
+Cloudflare credentials from `.secrets`, as the deployment guide describes.
 
 ## Reference
 
