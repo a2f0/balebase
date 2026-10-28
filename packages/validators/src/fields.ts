@@ -5,6 +5,22 @@ export function requiredText(max: number) {
   return z.string().trim().min(1).max(max);
 }
 
+/**
+ * A name on one line: NUL characters are dropped, runs of whitespace become
+ * one space, and the trimmed result has 1 to `max` characters. `rule`
+ * describes the limit to people.
+ */
+export function lineName(max: number, rule: string) {
+  return z
+    .string({ error: rule })
+    .overwrite((name) => name.replaceAll("\0", "").trim().replace(/\s+/g, " "))
+    .min(1, rule)
+    .max(max, rule);
+}
+
+/** The ID of a record that the request points at. */
+export const RecordIdSchema = z.string().min(1).max(100);
+
 const blank = z
   .string()
   .trim()

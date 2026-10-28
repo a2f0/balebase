@@ -34,3 +34,10 @@ export const financeLimits = {
   annotationNote: 2000,
   categoryName: 60,
 } as const;
+
+/** What membership in a group can grant. */
+export const organizationCapabilities = ["finance"] as const;
+
+export const groupLimits = { members: 100, name: 100 } as const;
+
+export const libraryFolderNameMaxLength = 80;

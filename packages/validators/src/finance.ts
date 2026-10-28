@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
-import { optionalText, requiredText } from "./fields";
+import { lineName, optionalText, RecordIdSchema, requiredText } from "./fields";
 import { LinkedEmailSchema } from "./inbox";
 import { route } from "./route";
 import { financeLimits } from "./rules";
@@ -247,15 +247,8 @@ const FinanceListingQuerySchema = z.object({
 
 const categoryNameRule = `Category names need 1 to ${financeLimits.categoryName} characters.`;
 
-/** A category name, trimmed and with runs of whitespace collapsed. */
 const CategoryNameSchema = z.object(
-  {
-    name: z
-      .string({ error: categoryNameRule })
-      .overwrite((name) => name.trim().replace(/\s+/g, " "))
-      .min(1, categoryNameRule)
-      .max(financeLimits.categoryName, categoryNameRule),
-  },
+  { name: lineName(financeLimits.categoryName, categoryNameRule) },
   { error: categoryNameRule },
 );
 const CategoriesResponseSchema = z.object({
@@ -377,7 +370,7 @@ export const financeRoutes = {
   setTransactionCategory: route({
     method: "PUT",
     path: "/api/finance/transactions/:id/category",
-    body: z.object({ categoryId: z.string().min(1).max(100).nullable() }),
+    body: z.object({ categoryId: RecordIdSchema.nullable() }),
     response: z.object({ expenseCategoryId: z.string().nullable() }),
   }),
   listCategories: route({

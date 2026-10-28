@@ -3,7 +3,7 @@ import { type Context, Hono } from "hono";
 import type { ApiEnv } from "./authMiddleware";
 import { maxFilenameBytes, normalizeFilename } from "./filenames";
 import { findLibraryFolder } from "./libraryFolders";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 import type { StoredObjectRow } from "./types";
 import { toStoredObject } from "./types";
 
@@ -156,11 +156,13 @@ objects.get("/:id", async (context) => {
 
 // Moves a document into a folder, or back to the library root with null.
 objects.patch("/:id", async (context) => {
-  const input: unknown = await context.req.json().catch(() => null);
-  const folderId = folderIdFrom(input);
-  if (folderId === undefined) {
-    return context.json({ error: "A folder or null is required." }, 400);
-  }
+  const input = await readBody(
+    context,
+    objectsRoutes.move,
+    "A folder or null is required.",
+  );
+  if (input instanceof Response) return input;
+  const { folderId } = input;
   const organizationId = context.get("organizationId");
   const row = await findObject(
     context.env.DB,
@@ -226,17 +228,6 @@ async function findObject(
 }
 
 /** A folder id, null for the library root, or undefined when invalid. */
-function folderIdFrom(input: unknown) {
-  if (typeof input !== "object" || input === null) return undefined;
-  const folderId = Reflect.get(input, "folderId");
-  if (folderId === null) return null;
-  return typeof folderId === "string" &&
-    folderId.length > 0 &&
-    folderId.length <= 100
-    ? folderId
-    : undefined;
-}
-
 function folderNotFound(context: Context) {
   return context.json({ error: "Folder not found." }, 404);
 }

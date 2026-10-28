@@ -651,7 +651,11 @@ it("records a user's own request once and permits cancellation", async () => {
       )
     ).status,
   ).toBe(403);
-  expect((await f.request("/deletion", post("wrong"))).status).toBe(400);
+  const wrong = await f.request("/deletion", post("wrong"));
+  expect(wrong.status).toBe(400);
+  expect(await wrong.json()).toEqual({
+    error: "Account deletion confirmation is required.",
+  });
   expect((await f.request("/deletion", post("delete my account"))).status).toBe(
     200,
   );

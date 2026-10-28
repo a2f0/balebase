@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RecordIdSchema } from "./fields";
 import { route } from "./route";
 
 /** An email linked to a folder, transaction, or item, as the target lists it. */
@@ -79,7 +80,7 @@ const InboundEmailLinkSchema = z.discriminatedUnion("targetType", [
 export type InboundEmailLink = z.infer<typeof InboundEmailLinkSchema>;
 
 const InboundEmailLinkTargetSchema = z.object({
-  targetId: z.string(),
+  targetId: RecordIdSchema,
   targetType: EmailLinkTargetTypeSchema,
 });
 export type InboundEmailLinkTarget = z.infer<

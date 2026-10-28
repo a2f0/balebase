@@ -7,7 +7,7 @@ export const accountSettingsRoutes = {
   updateDefaultOrganization: route({
     method: "PATCH",
     path: "/api/account-settings/default-organization",
-    body: z.object({ organizationId: z.string() }),
+    body: z.object({ organizationId: z.string().min(1) }),
     response: z.object({ defaultOrganizationId: z.string() }),
   }),
   deletion: route({

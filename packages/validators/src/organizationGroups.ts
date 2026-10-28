@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { requiredText } from "./fields";
 import { OrganizationMemberSchema } from "./organizationSettings";
 import { route } from "./route";
+import { groupLimits, organizationCapabilities } from "./rules";
 
-export const OrganizationCapabilitySchema = z.enum(["finance"]);
+const OrganizationCapabilitySchema = z.enum(organizationCapabilities);
 export type OrganizationCapability = z.infer<
   typeof OrganizationCapabilitySchema
 >;
@@ -17,12 +19,20 @@ const OrganizationGroupSchema = z.object({
 });
 export type OrganizationGroup = z.infer<typeof OrganizationGroupSchema>;
 
+function unique<Value>(values: Value[]) {
+  return [...new Set(values)];
+}
+
 const OrganizationGroupInputSchema = z.object({
-  capabilities: z.array(OrganizationCapabilitySchema),
-  name: z.string(),
-  userIds: z.array(z.string()),
+  capabilities: z.array(OrganizationCapabilitySchema).transform(unique),
+  name: requiredText(groupLimits.name),
+  /** Replaces the group's members; blanks and repeats are dropped. */
+  userIds: z
+    .array(z.string().trim())
+    .max(groupLimits.members)
+    .transform((userIds) => unique(userIds.filter(Boolean))),
 });
-export type OrganizationGroupInput = z.infer<
+export type OrganizationGroupInput = z.input<
   typeof OrganizationGroupInputSchema
 >;
 

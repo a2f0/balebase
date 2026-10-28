@@ -7,7 +7,7 @@ import {
 import type { Context } from "hono";
 import type { ApiEnv } from "./authMiddleware";
 import { userHasCapability } from "./organizationGroups";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 
 type LinkContext = Context<ApiEnv>;
 
@@ -63,14 +63,13 @@ export async function listEmailLinks(
 
 /** Links an email outside Trash to a library folder, equipment, or a transaction. */
 export async function createEmailLink(context: LinkContext) {
-  const emailId = context.req.param("id");
-  const input = linkInput(await context.req.json().catch(() => null));
-  if (!emailId || !input) {
-    return context.json(
-      { error: "A link target type and id are required." },
-      400,
-    );
-  }
+  const emailId = context.req.param("id") ?? "";
+  const input = await readBody(
+    context,
+    inboxRoutes.link,
+    "A link target type and id are required.",
+  );
+  if (input instanceof Response) return input;
   const organizationId = context.get("organizationId");
   const database = context.env.DB;
   const email = await database
@@ -292,23 +291,6 @@ function toEmailLink(row: EmailLinkRow): InboundEmailLink | null {
       name: row.transaction_name,
     },
   };
-}
-
-function linkInput(input: unknown): InboundEmailLinkTarget | null {
-  if (typeof input !== "object" || input === null) return null;
-  const targetType = Reflect.get(input, "targetType");
-  const targetId = Reflect.get(input, "targetId");
-  if (
-    (targetType !== "equipment" &&
-      targetType !== "library_folder" &&
-      targetType !== "finance_transaction") ||
-    typeof targetId !== "string" ||
-    targetId.length === 0 ||
-    targetId.length > 100
-  ) {
-    return null;
-  }
-  return { targetId, targetType };
 }
 
 function financeRequired(context: LinkContext) {

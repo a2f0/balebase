@@ -1,7 +1,7 @@
 import { accountSettingsRoutes } from "@balebase/validators/accountSettings";
 import { Hono } from "hono";
 import type { ApiEnv } from "./authMiddleware";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 import type { Bindings } from "./types";
 import {
   cancelUserDeletion,
@@ -32,15 +32,12 @@ userDeletion.post("/", async (context) => {
       403,
     );
   }
-  const input = await context.req
-    .json<{ confirm?: unknown }>()
-    .catch(() => null);
-  if (input?.confirm !== "delete my account") {
-    return context.json(
-      { error: "Account deletion confirmation is required." },
-      400,
-    );
-  }
+  const input = await readBody(
+    context,
+    accountSettingsRoutes.requestDeletion,
+    "Account deletion confirmation is required.",
+  );
+  if (input instanceof Response) return input;
   const userId = session.user.id;
   if (await requestUserDeletion(context.env.DB, userId, session.user)) {
     console.log({ event: "user_deletion_requested", actorUserId: userId });

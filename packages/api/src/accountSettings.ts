@@ -1,21 +1,17 @@
 import { accountSettingsRoutes } from "@balebase/validators/accountSettings";
 import { Hono } from "hono";
 import type { ApiEnv } from "./authMiddleware";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 
 const accountSettings = new Hono<ApiEnv>();
 
 accountSettings.patch("/default-organization", async (context) => {
-  const body: unknown = await context.req.json().catch(() => null);
-  if (
-    typeof body !== "object" ||
-    body === null ||
-    !("organizationId" in body) ||
-    typeof body.organizationId !== "string" ||
-    !body.organizationId
-  ) {
-    return context.json({ error: "An organization is required." }, 400);
-  }
+  const body = await readBody(
+    context,
+    accountSettingsRoutes.updateDefaultOrganization,
+    "An organization is required.",
+  );
+  if (body instanceof Response) return body;
 
   const userId = context.get("authSession").user.id;
   const result = await context.env.DB.prepare(

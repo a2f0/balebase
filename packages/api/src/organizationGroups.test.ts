@@ -55,6 +55,37 @@ describe("organization groups", () => {
       200,
     );
 
+    const valid = { capabilities: ["finance"], name: "Ops", userIds: [] };
+    for (const body of [
+      null,
+      { ...valid, name: "  " },
+      { ...valid, name: "x".repeat(101) },
+      { ...valid, capabilities: ["payroll"] },
+      { ...valid, userIds: Array.from({ length: 101 }, () => "owner-user") },
+      { ...valid, userIds: [7] },
+    ]) {
+      expect(await owner("POST", "/", body)).toMatchObject({
+        body: {
+          error: "A valid group name, members, and capabilities are required.",
+        },
+        status: 400,
+      });
+    }
+    const deduplicated = await owner<{ id: string }>("POST", "/", {
+      ...valid,
+      capabilities: ["finance", "finance"],
+      userIds: [" owner-user ", "owner-user", ""],
+    });
+    expect(deduplicated.status).toBe(201);
+    expect(
+      (await owner<GroupListing>("GET", "/")).body.groups.find(
+        ({ id }) => id === deduplicated.body.id,
+      ),
+    ).toMatchObject({
+      capabilities: ["finance"],
+      memberUserIds: ["owner-user"],
+    });
+
     const invalidMember = await owner("PATCH", `/${groupId}`, {
       capabilities: ["finance"],
       name: "Finance",

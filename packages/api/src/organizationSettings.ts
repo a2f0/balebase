@@ -15,7 +15,7 @@ import {
   listOrganizationMembers,
   requireManager,
 } from "./organizationMembers";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 
 interface OrganizationRow {
   id: string;
@@ -70,10 +70,12 @@ organizationSettings.patch(
   "/people/:memberId/two-factor-required",
   requireManager(),
   async (context) => {
-    const body: unknown = await context.req.json().catch(() => null);
-    if (!isTwoFactorRequirement(body)) {
-      return context.json({ error: "A required boolean is required." }, 400);
-    }
+    const body = await readBody(
+      context,
+      organizationSettingsRoutes.updateMemberTwoFactorRequirement,
+      "A required boolean is required.",
+    );
+    if (body instanceof Response) return body;
     const organizationId = context.get("organizationId");
     const memberId = context.req.param("memberId");
     const member = await context.env.DB.prepare(
@@ -173,17 +175,6 @@ async function listPendingInvitations(
     .bind(organizationId)
     .all<OrganizationInvitation>();
   return result.results;
-}
-
-function isTwoFactorRequirement(
-  value: unknown,
-): value is { required: boolean } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "required" in value &&
-    typeof value.required === "boolean"
-  );
 }
 
 export { organizationSettings };
