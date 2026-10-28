@@ -9,7 +9,15 @@ AllCops:
   SuggestExtensions: false
   TargetRubyVersion: 4.0
 
+# Test fixtures keep each scenario's stubs beside it, so, as with Biome's
+# function limits, size and complexity limits do not apply to them. Every
+# other cop does.
+Metrics:
+  Exclude:
+    - fastlane/test/**/*
+
 Metrics/BlockLength:
   Exclude:
     - fastlane/lanes/android.rb
     - fastlane/lanes/ios.rb
+    - fastlane/test/**/*

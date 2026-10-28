@@ -5,10 +5,10 @@ require 'shellwords'
 require_relative '../lib/app_store_build'
 require_relative '../lib/ios_signing_keychain'
 require_relative '../lib/lane_options'
-require_relative '../lib/merged_release_pr'
 require_relative '../lib/native_release_target'
 require_relative '../lib/readiness_artifacts'
 require_relative '../lib/readiness_stores'
+require_relative '../lib/release_build_number'
 require_relative '../lib/swift_package_pins'
 require_relative '../lib/testflight_upload_options'
 
@@ -92,18 +92,6 @@ def ios_signing_keychain_exists?(keychain_name)
   ["#{base_path}-db", "#{base_path}.keychain-db", base_path, "#{base_path}.keychain"].any? { |path| File.file?(path) }
 end
 
-def explicit_ios_release_build_number(options)
-  value = lane_option(options, :build_number, 'IOS_BUILD_NUMBER')
-  value ||= env_option('APPLE_BUILD_NUMBER')
-  return nil if value.nil?
-
-  positive_release_integer(value, 'iOS release build number')
-end
-
-def next_testflight_build_number_requested?(options)
-  lane_boolean_option(options, :next_testflight, 'IOS_RELEASE_NEXT_TESTFLIGHT', false)
-end
-
 def explicit_ios_release_version(options)
   lane_option(options, :version, 'IOS_VERSION') || env_option('APP_STORE_VERSION')
 end
@@ -114,37 +102,20 @@ def ios_release_version(options)
   explicit_ios_release_version(options) || JSON.parse(File.read(IOS_PACKAGE_JSON_PATH)).fetch('version')
 end
 
-def testflight_version_guard_skipped?(options)
-  lane_boolean_option(options, :skip_testflight_version_guard, 'SKIP_TESTFLIGHT_VERSION_GUARD', false)
-end
-
-def testflight_version_guard_configured?
-  if app_store_configured?
-    true
-  else
-    UI.important(
-      'App Store Connect credentials not found; using merged PR number without TestFlight build-number guard.'
-    )
-    false
-  end
-end
-
-def testflight_version_guard_available?(options)
-  if testflight_version_guard_skipped?(options)
-    UI.important('Skipping TestFlight build-number guard as requested.')
-    return false
-  end
-
-  testflight_version_guard_configured?
-end
+TESTFLIGHT_BUILD_NUMBER_NAMES = ReleaseBuildNumber::Names.new(
+  platform: 'iOS',
+  env_prefix: 'IOS',
+  store: 'TestFlight',
+  credentials: 'App Store Connect credentials',
+  guard: 'TestFlight build-number guard',
+  next_option: :next_testflight,
+  skip_option: :skip_testflight_version_guard,
+  build_number_env_names: %w[IOS_BUILD_NUMBER APPLE_BUILD_NUMBER]
+)
 
 def normalized_ios_testflight_build_number(build_number)
   number = build_number.to_i
   number.positive? ? number : nil
-end
-
-def log_ios_testflight_build_number(build_number, version)
-  UI.message("TestFlight latest build number: #{build_number || 'none'} (version #{version})")
 end
 
 def fetch_ios_testflight_build_number(version)
@@ -156,64 +127,26 @@ def fetch_ios_testflight_build_number(version)
   )
 end
 
-def latest_testflight_build_number_for_ios_release(options, version)
-  return nil unless testflight_version_guard_available?(options)
-
-  build_number = fetch_ios_testflight_build_number(version)
-  normalized_build_number = normalized_ios_testflight_build_number(build_number)
-  log_ios_testflight_build_number(normalized_build_number, version)
-  normalized_build_number
-rescue StandardError => e
-  UI.user_error!("Failed to verify TestFlight build number: #{e.message}")
-end
-
-def ios_release_build_hash(build_number, testflight_build_number, merged_pr_number, version)
-  {
-    build_number: build_number,
-    merged_pr_number: merged_pr_number,
-    testflight_latest_build_number: testflight_build_number,
-    version: version
-  }
-end
-
-def automatic_ios_release_build_hash(options, version)
-  merged_pr_number = merged_release_pr_number(options, 'IOS')
-  testflight_build_number = latest_testflight_build_number_for_ios_release(options, version)
-  testflight_next_build_number = testflight_build_number.nil? ? nil : testflight_build_number + 1
-  build_number = [merged_pr_number, testflight_next_build_number].compact.max
-
-  ios_release_build_hash(build_number, testflight_build_number, merged_pr_number, version)
-end
-
-def require_next_testflight_build_number_lookup!(options)
-  UI.user_error!('next_testflight requires TestFlight version lookup.') if testflight_version_guard_skipped?(options)
-  UI.user_error!('next_testflight requires App Store Connect credentials.') unless app_store_configured?
-end
-
-def next_testflight_ios_release_build_hash(options, version)
-  require_next_testflight_build_number_lookup!(options)
-  testflight_build_number = latest_testflight_build_number_for_ios_release(options, version)
-  build_number = (testflight_build_number || 0) + 1
-  UI.message("Using next TestFlight build number: #{build_number}")
-
-  ios_release_build_hash(build_number, testflight_build_number, nil, version)
-rescue StandardError => e
-  UI.user_error!("Failed to resolve next TestFlight build number: #{e.message}")
+# TestFlight's side of ReleaseBuildNumber: its latest build of the marketing
+# version.
+def testflight_build_number_store(version)
+  ReleaseBuildNumber::Store.new(
+    names: TESTFLIGHT_BUILD_NUMBER_NAMES,
+    configured: -> { app_store_configured? },
+    latest: -> { normalized_ios_testflight_build_number(fetch_ios_testflight_build_number(version)) },
+    scope: "version #{version}"
+  )
 end
 
 def next_ios_release_build_number(options)
   version = ios_release_version(options)
-  explicit_build_number = explicit_ios_release_build_number(options)
-  next_testflight_requested = next_testflight_build_number_requested?(options)
-
-  if !explicit_build_number.nil? && next_testflight_requested
-    UI.user_error!('Use either build_number or next_testflight:true, not both.')
-  end
-
-  return ios_release_build_hash(explicit_build_number, nil, nil, version) unless explicit_build_number.nil?
-  return next_testflight_ios_release_build_hash(options, version) if next_testflight_requested
-
-  automatic_ios_release_build_hash(options, version)
+  release_build = ReleaseBuildNumber.resolve(testflight_build_number_store(version), options)
+  {
+    build_number: release_build.fetch(:build_number),
+    merged_pr_number: release_build.fetch(:merged_pr_number),
+    testflight_latest_build_number: release_build.fetch(:store_build_number),
+    version: version
+  }
 end
 
 # Resolve the signing team from the first source that is set. The iOS-specific

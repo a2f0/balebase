@@ -53,12 +53,15 @@ configuration:
 
 The production app is named **Balebase**, and the staging app,
 **Balebase Staging**, installs beside it.
-`NATIVE_RELEASE_TIER` (`production` by default) selects the tier.
-`capacitor.config.ts` sets the app ID and name from it, and the Vite build
-defaults `VITE_API_URL` and `VITE_APP_URL` to the tier's hosted API and app.
-`fastlane/lib/native_release_target.rb` maps the tier to its Gradle variant,
-Xcode scheme and configuration, and secrets folder. An unknown tier fails
-before any lane runs.
+`nativeReleaseTargets.json` defines each tier once: its app ID and name,
+hosted API and app hosts, Gradle variant, Xcode scheme and configuration,
+output names, and secrets folder. `NATIVE_RELEASE_TIER` (`production` by
+default) selects one. `capacitor.config.ts` and `vite.config.ts` read it
+through `nativeReleaseTarget.ts`, so the Vite build defaults `VITE_API_URL`
+and `VITE_APP_URL` to the tier's hosts; Fastlane reads it in
+`fastlane/lib/native_release_target.rb`, and Gradle reads the tier's secrets
+folder from it. An unknown tier fails before any lane runs. The native
+projects still name each app ID in their build settings.
 
 Android staging inherits the release build type. Both iOS schemes are
 committed and shared so Fastlane can archive either tier without relying on
@@ -97,8 +100,8 @@ a remote environment.
 To point a local build at staging, prefix these commands with
 `NATIVE_RELEASE_TIER=staging`, or put these values in
 `packages/app-capacitor/.env.local`. The debug app keeps its
-`com.balebase.app` identifier; the staging store app comes from the release
-wrappers.
+`com.balebase.app` identifier; the staging store app comes from the staging
+release scripts.
 
 The `.env.local` values:
 
@@ -136,37 +139,30 @@ The Fastlane lanes live in `fastlane/`: `lanes/ios.rb`, `lanes/android.rb`,
 it, a lane picks the next number as described under
 [build numbers](#build-numbers).
 
-Every lane but `android test` and `android clean` has a package script named
-`<platform>:<lane in kebab case>`; `store_build_numbers` is
-`store:build-numbers`. The iOS, App Bundle, Android readiness, and store build
-number scripts have a `:staging` variant for the staging app. Every script sets
+Run the `build_release` and `upload_release` lanes from the repository root
+with `bun run mobile:build:ios`, `bun run mobile:build:android`,
+`bun run mobile:upload:ios`, or `bun run mobile:upload:android`, adding
+`:staging` for the staging app. Each runs
+`scripts/lib/nativeRelease.sh <platform> <build|upload> <tier>`, which sets
+`NATIVE_RELEASE_TIER`, restores the Gradle wrapper on a fresh checkout, and
+passes its arguments to the lane. Uploads default to the store's next build
+number unless a number, PR, or date is chosen (see
+[build numbers](#build-numbers)), and print the number they used. The lanes
+default the bundle's `VITE_API_URL` and `VITE_APP_URL` to the tier's hosts and
+refuse any other host or a non-HTTPS URL before building.
+
+Every other lane but `android test` and `android clean` has a package script
+named `<platform>:<lane in kebab case>`; `store_build_numbers` is
+`store:build-numbers`. The iOS, Android readiness, and store build number
+scripts have a `:staging` variant for the staging app. Every script sets
 `NATIVE_RELEASE_TIER` itself, and arguments pass through to Fastlane:
 
 ```sh
-bun run ios:build-release
-bun run android:upload-release:staging track:alpha
-bun run ios:profiles force:true
+bun run mobile:build:ios                         # from the repository root
+bun run mobile:upload:android:staging track:alpha
+bun run ios:profiles force:true                  # from this package
 bun run store:build-numbers:staging
 ```
-
-The release lanes also have repository-root wrappers, which hold the bundle's
-`VITE_API_URL` and `VITE_APP_URL` to HTTPS on the tier's own host before
-running the matching package script:
-
-```sh
-./scripts/release/buildIosRelease.sh            # ios:build-release
-./scripts/release/buildIosStagingRelease.sh     # ios:build-release:staging
-./scripts/release/uploadIosRelease.sh           # ios:upload-release
-./scripts/release/uploadIosStagingRelease.sh    # ios:upload-release:staging
-./scripts/release/buildAndroidRelease.sh        # android:build-release
-./scripts/release/buildAndroidStagingRelease.sh # android:build-release:staging
-./scripts/release/uploadAndroidRelease.sh       # android:upload-release
-./scripts/release/uploadAndroidStagingRelease.sh # android:upload-release:staging
-```
-
-All wrappers delegate to `scripts/lib/nativeRelease.sh`. Pass `--help` to any
-wrapper for its options. The upload wrappers default to the store's next build
-number (see below) and print the number they used.
 
 ### Secrets
 
@@ -184,8 +180,8 @@ which then wins. Neither file may set the bundle's `VITE_*` hosts.
 | `shared.env` | `TEAM_ID`, `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `MATCH_GIT_URL`, `MATCH_GIT_BASIC_AUTHORIZATION`, `MATCH_PASSWORD` |
 | `app.env` | `ANDROID_KEYSTORE_STORE_PASS` and `ANDROID_KEYSTORE_KEY_PASS` for the tier's upload key |
 | `AuthKey_<APP_STORE_CONNECT_KEY_ID>.p8` | App Store Connect API key |
-| `google-play-service-account-admin.json` | Google Play publishing service account |
-| `balebase-upload.keystore` | Android upload key (alias `upload`), registered with the tier's Play app |
+| `google-play-service-account-admin.json` | Google Play publishing service account (`tearleads-admin`) |
+| `balebase-upload.keystore` | PKCS12 Android upload key (alias `upload`), registered with the tier's Play app |
 
 ### Build numbers
 
@@ -201,8 +197,9 @@ Set the final number with `build_number:<number>`, or with
 `ANDROID_BUILD_NUMBER` or `ANDROID_VERSION_CODE` (the name Gradle reads outside
 the lanes) on Android and `IOS_BUILD_NUMBER` or `APPLE_BUILD_NUMBER` on iOS.
 Take the store's next number with `next_google_play:true` or
-`next_testflight:true`; the upload wrappers do that unless a number, PR, or date
-is chosen.
+`next_testflight:true`; the `mobile:upload:*` scripts do that unless a number,
+PR, or date is chosen. `fastlane/lib/release_build_number.rb` applies these
+rules to both stores.
 
 ### Google Play
 

@@ -1,21 +1,12 @@
 import type { CapacitorConfig } from "@capacitor/cli";
+import { nativeReleaseTarget } from "./nativeReleaseTarget.ts";
 
-// The native release tier picks the store app; fastlane/lib/native_release_target.rb
-// maps the same tiers to Gradle build types, Xcode schemes, and secrets folders.
-const { NATIVE_RELEASE_TIER } = process.env;
-const nativeReleaseTier = (NATIVE_RELEASE_TIER ?? "production")
-  .trim()
-  .toLowerCase();
-if (nativeReleaseTier !== "production" && nativeReleaseTier !== "staging") {
-  throw new Error(
-    `Unknown NATIVE_RELEASE_TIER=${JSON.stringify(nativeReleaseTier)}. Expected production or staging.`,
-  );
-}
-const isStagingRelease = nativeReleaseTier === "staging";
+// The native release tier picks the store app (nativeReleaseTargets.json).
+const { appIdentifier, appName } = nativeReleaseTarget();
 
 const config: CapacitorConfig = {
-  appId: isStagingRelease ? "com.balebase.staging.app" : "com.balebase.app",
-  appName: isStagingRelease ? "Balebase Staging" : "Balebase",
+  appId: appIdentifier,
+  appName,
   webDir: "dist",
   backgroundColor: "#181916",
   // Saving a password sends it through the bridge. Disable Capacitor's
