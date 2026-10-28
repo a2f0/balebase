@@ -2,7 +2,18 @@ import type { OfflineOperation } from "@balebase/validators/offline";
 import { activityStatement } from "./activity";
 import { allRequiredAnswered, parseResponses } from "./auditDefinition";
 import { findTemplate, storedDefinition } from "./auditTemplates";
-import { type IssueContext, issueTargetAvailable } from "./issueRecords";
+import {
+  type IssueContext,
+  issueInsert,
+  issueTargetAvailable,
+} from "./issueRecords";
+
+/**
+ * Why an operation's writes did not happen though their batch succeeded: an
+ * issue insert skips an assignee who has left the organization.
+ */
+export const formerAssigneeError =
+  "The issue assignee is no longer a member. Your local work has been kept.";
 
 export async function offlineStatements(
   context: IssueContext,
@@ -103,34 +114,5 @@ async function issueStatements(
   };
   if (!(await issueTargetAvailable(context, target)))
     return "This issue's audit is unavailable. Your local work has been kept.";
-  const organizationId = context.get("organizationId");
-  if (
-    operation.assignedTo &&
-    !(await context.env.DB.prepare(
-      "SELECT id FROM member WHERE organizationId = ? AND userId = ?",
-    )
-      .bind(organizationId, operation.assignedTo)
-      .first())
-  ) {
-    return "The issue assignee is no longer a member. Your local work has been kept.";
-  }
-  const now = new Date().toISOString();
-  return [
-    context.env.DB.prepare(`INSERT INTO issues
-    (id, organization_id, target_type, target_id, item_id, title, description, priority, status, assigned_to, created_by, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)`).bind(
-      operation.id,
-      organizationId,
-      target.type,
-      target.id,
-      target.itemId,
-      operation.title,
-      operation.description,
-      operation.priority,
-      operation.assignedTo,
-      context.get("authSession").user.id,
-      now,
-      now,
-    ),
-  ];
+  return [issueInsert(context, { ...operation, target })];
 }

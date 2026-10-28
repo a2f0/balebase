@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+/** A person a record names, such as its creator or assignee. */
+export const PersonSchema = z.object({
+  email: z.string(),
+  id: z.string(),
+  name: z.string(),
+});
+
 /** Text with something visible in it, trimmed, at most `max` characters. */
 export function requiredText(max: number) {
   return z.string().trim().min(1).max(max);
@@ -34,9 +41,23 @@ const blank = z
  */
 export function optionalText<Rule extends z.ZodType<unknown, string>>(
   rule: Rule,
+  invalid?: string,
 ) {
-  return z.union([z.null(), blank, rule]).optional();
+  const choices = [z.null(), blank, rule] as const;
+  return (
+    invalid === undefined
+      ? z.union(choices)
+      : z.union(choices, { error: invalid })
+  ).optional();
 }
+
+/** Every field a schema accepts, present, as a form holds them. */
+export type FormInput<Schema extends z.ZodType> = {
+  [Field in keyof z.input<Schema>]-?: Exclude<
+    z.input<Schema>[Field],
+    undefined
+  >;
+};
 
 /** A real calendar day as YYYY-MM-DD. */
 export const CalendarDateSchema = z

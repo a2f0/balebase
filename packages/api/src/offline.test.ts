@@ -3,10 +3,10 @@ import { afterEach, expect, it } from "bun:test";
 import type { OfflineOperation } from "@balebase/validators/offline";
 import { offline } from "./offline";
 import { testBindings } from "./testing/bindings";
-import { toD1 } from "./testing/d1";
+import { queryHooks, toD1 } from "./testing/d1";
 import { createTestDatabase } from "./testing/database";
 import { requester } from "./testing/http";
-import { seedAccount } from "./testing/seed";
+import { seedAccount, seedMember } from "./testing/seed";
 import { testApp } from "./testing/session";
 
 const databases: Database[] = [];
@@ -145,6 +145,38 @@ it("creates standalone issues and rejects former assignees", async () => {
   );
 });
 
+it("keeps no receipt when the assignee leaves before the issue is written", async () => {
+  const f = fixture();
+  seedMember(f.db, {
+    createdAt: "2026-10-01",
+    organizationId: "org_user-1",
+    userId: "user-2",
+  });
+  f.hooks.before(
+    "INSERT INTO issues",
+    () => f.db.exec("DELETE FROM member WHERE userId = 'user-2'"),
+    { method: "batch" },
+  );
+  const issue: OfflineOperation = {
+    type: "issue",
+    id: crypto.randomUUID(),
+    title: "Broken gate",
+    description: "",
+    priority: "medium",
+    assignedTo: "user-2",
+  };
+  expect(await f.apply(issue)).toMatchObject({
+    body: {
+      error:
+        "The issue assignee is no longer a member. Your local work has been kept.",
+    },
+    status: 409,
+  });
+  expect(f.db.query("SELECT id FROM offline_operations").all()).toEqual([]);
+  expect(f.db.query("SELECT id FROM issues").all()).toEqual([]);
+  expect((await f.apply({ ...issue, assignedTo: null })).status).toBe(201);
+});
+
 it("keeps device-reported audit times separate from server history time", async () => {
   const f = fixture();
   const operation = {
@@ -201,9 +233,11 @@ function fixture() {
       JSON.stringify(definition),
     );
   const app = testApp({ "/": offline }, scope);
-  const request = requester(app, testBindings({ DB: toD1(db) }));
+  const hooks = queryHooks();
+  const request = requester(app, testBindings({ DB: toD1(db, hooks) }));
   return {
     db,
+    hooks,
     request,
     apply: (operation: OfflineOperation, identity = scope) =>
       request("POST", "/operations", { ...identity, operation }),

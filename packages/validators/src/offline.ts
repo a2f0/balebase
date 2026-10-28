@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { auditsRoutes } from "./audits";
-import { IssueMemberSchema } from "./issues";
+import { PersonSchema } from "./fields";
+import { NewIssueSchema } from "./issues";
 import { route } from "./route";
 
 export const OfflineScopeSchema = z.object({
@@ -19,15 +20,16 @@ export const OfflineOperationSchema = z.discriminatedUnion("type", [
     completedAt: z.iso.datetime().optional(),
     responses: z.record(z.string().max(100), z.string().max(2000)),
   }),
+  // Keys stay in this order: a receipt's digest is of the parsed operation.
   z.object({
     id: z.uuid(),
     type: z.literal("issue"),
-    title: z.string().trim().min(1).max(300),
-    description: z.string().max(2000),
-    priority: z.enum(["low", "medium", "high", "critical"]),
-    assignedTo: z.string().min(1).max(200).nullable(),
+    title: NewIssueSchema.shape.title,
+    description: NewIssueSchema.shape.description,
+    priority: NewIssueSchema.shape.priority,
+    assignedTo: NewIssueSchema.shape.assignedTo,
     auditId: z.uuid().optional(),
-    itemId: z.string().min(1).max(100).optional(),
+    itemId: z.string().trim().min(1).max(100).optional(),
   }),
 ]);
 export type OfflineOperation = z.infer<typeof OfflineOperationSchema>;
@@ -45,7 +47,7 @@ export const offlineRoutes = {
     path: "/api/offline/forms",
     query: OfflineScopeSchema,
     response: auditsRoutes.listTemplates.response.extend({
-      members: z.array(IssueMemberSchema),
+      members: z.array(PersonSchema),
     }),
   }),
   apply: route({

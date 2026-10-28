@@ -2808,6 +2808,82 @@ describe("audit discarding", () => {
   });
 });
 
+describe("audit issue writes", () => {
+  it("rejects an unknown priority instead of defaulting it", async () => {
+    const fixture = createFixture();
+    const { auditId } = await createActivityAudit(fixture);
+    const rejected = await jsonRequest(
+      fixture,
+      `/runs/${auditId}/issues`,
+      "POST",
+      {
+        itemId: "check",
+        priority: "urgent",
+        title: "Loose rail",
+      },
+    );
+    expect(rejected).toMatchObject({
+      body: { error: "Invalid issue details." },
+      status: 400,
+    });
+
+    const raised = await jsonRequest<{ issueId: string }>(
+      fixture,
+      `/runs/${auditId}/issues`,
+      "POST",
+      { assignedTo: " ", itemId: "check", title: " Loose rail " },
+    );
+    expect(raised.status).toBe(201);
+    expect(
+      fixture.database
+        .query(
+          "SELECT assigned_to, description, priority, title FROM issues WHERE id = ?",
+        )
+        .get(raised.body.issueId),
+    ).toEqual({
+      assigned_to: null,
+      description: "",
+      priority: "medium",
+      title: "Loose rail",
+    });
+  });
+
+  it("refuses an assignee who leaves after the initial read", async () => {
+    const fixture = createFixture();
+    const { auditId } = await createActivityAudit(fixture);
+    fixture.database
+      .query(
+        `INSERT INTO member (id, organizationId, userId, role, createdAt)
+         VALUES ('member-user-2-org-1', 'org_user-1', 'user-2', 'member', ?)`,
+      )
+      .run("2026-08-25T12:00:00.000Z");
+    fixture.hooks.before(
+      "INSERT INTO issues",
+      () => fixtureMemberDeletion(fixture.database, "org_user-1", "user-2"),
+      { method: "batch" },
+    );
+    const raised = await jsonRequest(
+      fixture,
+      `/runs/${auditId}/issues`,
+      "POST",
+      {
+        assignedTo: "user-2",
+        itemId: "check",
+        title: "Loose rail",
+      },
+    );
+    expect(raised).toMatchObject({
+      body: { error: "Issue assignee is not a member." },
+      status: 400,
+    });
+    expect(
+      fixture.database
+        .query("SELECT COUNT(*) AS count FROM issues WHERE target_id = ?")
+        .get(auditId),
+    ).toEqual({ count: 0 });
+  });
+});
+
 describe("audit activity", () => {
   it("records creators, every answer change, completion, and reopening without duplicate no-op events", async () => {
     const fixture = createFixture();

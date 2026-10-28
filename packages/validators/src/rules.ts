@@ -41,3 +41,7 @@ export const organizationCapabilities = ["finance"] as const;
 export const groupLimits = { members: 100, name: 100 } as const;
 
 export const libraryFolderNameMaxLength = 80;
+
+export const issuePriorities = ["low", "medium", "high", "critical"] as const;
+
+export const issueLimits = { description: 2000, title: 300 } as const;

@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
-import { CalendarDateSchema, optionalText, requiredText } from "./fields";
+import {
+  CalendarDateSchema,
+  type FormInput,
+  optionalText,
+  requiredText,
+} from "./fields";
 import { LinkedEmailSchema } from "./inbox";
 import { route } from "./route";
 import { equipmentLimits, equipmentTypes } from "./rules";
@@ -66,12 +71,7 @@ const EquipmentChangesSchema = EquipmentFieldsSchema.partial().extend({
 });
 
 /** A complete equipment form, as the app fills it in to add or edit. */
-export type EquipmentInput = {
-  [Field in keyof z.input<typeof EquipmentChangesSchema>]-?: Exclude<
-    z.input<typeof EquipmentChangesSchema>[Field],
-    undefined
-  >;
-};
+export type EquipmentInput = FormInput<typeof EquipmentChangesSchema>;
 
 const EquipmentResponseSchema = z.object({ equipment: EquipmentItemSchema });
 

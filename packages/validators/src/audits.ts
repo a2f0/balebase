@@ -4,7 +4,8 @@ import {
   ActivityPageSchema,
   ActivityQuerySchema,
 } from "./activity";
-import { IssueSchema } from "./issues";
+import { optionalText } from "./fields";
+import { IssueSchema, NewIssueSchema } from "./issues";
 import { route } from "./route";
 
 const AuditTemplateItemSchema = z.object({
@@ -163,22 +164,34 @@ const AuditDetailSchema = z.object({
 });
 export type AuditDetail = z.infer<typeof AuditDetailSchema>;
 
-const AuditIssueCreateSchema = z.object({
-  assignedTo: z.string().nullable().optional(),
-  description: z.string().optional(),
-  itemId: z.string(),
-  /** Medium unless given. */
-  priority: AuditIssuePrioritySchema.optional(),
-  title: z.string(),
+const AuditIssueCreateSchema = NewIssueSchema.extend({
+  /** The checklist item the issue is about. */
+  itemId: z.string().trim().min(1).max(100),
 });
-export type AuditIssueInput = z.infer<typeof AuditIssueCreateSchema>;
+export type AuditIssueInput = z.input<typeof AuditIssueCreateSchema>;
 
-const AuditIssueUpdateSchema = z.object({
-  /** Null or empty unassigns the issue. */
-  assignedTo: z.string().nullable().optional(),
-  status: AuditIssueStatusSchema.optional(),
-});
-export type AuditIssueUpdate = z.infer<typeof AuditIssueUpdateSchema>;
+const AuditIssueUpdateSchema = z
+  .object(
+    {
+      status: z
+        .enum(AuditIssueStatusSchema.options, {
+          error: "Issue status must be open or resolved.",
+        })
+        .optional(),
+      /** Null or empty unassigns the issue. */
+      assignedTo: optionalText(
+        z.string().trim().max(200),
+        "Issue assignee is invalid.",
+      ),
+    },
+    { error: "Invalid issue update." },
+  )
+  .refine(
+    (changes) =>
+      changes.status !== undefined || changes.assignedTo !== undefined,
+    "No issue changes were provided.",
+  );
+export type AuditIssueUpdate = z.input<typeof AuditIssueUpdateSchema>;
 
 export const auditsRoutes = {
   listTemplates: route({
