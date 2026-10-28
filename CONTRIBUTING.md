@@ -83,6 +83,15 @@ and a unique ID together and use the shared opaque cursor codec; the decoder
 also accepts the earlier JSON and base64 formats. Keep filters and authorization
 in each query before pagination, and treat returned cursors as opaque in clients.
 
+API routers share a few primitives. Type routers and contexts with `ApiEnv`
+from `authMiddleware.ts`. Gate owner- and admin-only routes with
+`requireManager()`, or branch on `canManage(context)`, from
+`organizationMembers.ts`. Mount platform admin routers below `/api/admin`,
+where `app.ts` applies the one `requireAuth` and `requireRole("admin")` guard.
+Read untrusted JSON with `isRecord` and `validText` from `jsonInput.ts`, and
+send mail with `sendMail` from `mailSender.ts`, which names the sender with
+`productName`.
+
 See [API client onboarding](docs/api-client.md) for a public-import example,
 browser credentials and CORS, the shared wrapper, and native host assumptions.
 
