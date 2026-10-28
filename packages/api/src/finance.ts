@@ -1,3 +1,4 @@
+import { productName } from "@balebase/ui/brand";
 import {
   type FinanceAccount,
   type FinanceConnection,
@@ -14,6 +15,7 @@ import {
   findActivity,
   requestActor,
 } from "./activity";
+import type { ApiEnv } from "./authMiddleware";
 import { cursorPage, encodeCursor } from "./cursorPagination";
 import { accountDetail } from "./financeAccountDetail";
 import {
@@ -26,7 +28,7 @@ import {
   renameCategory,
 } from "./financeCategories";
 import { connectionDetail } from "./financeConnectionDetail";
-import type { FinanceContext, FinanceEnv } from "./financeContext";
+import type { FinanceContext } from "./financeContext";
 import { financeListingFilters } from "./financeListingFilters";
 import { expenseReport } from "./financeReports";
 import type { PlaidItemRow } from "./financeSync";
@@ -38,6 +40,7 @@ import {
 } from "./financeSyncRoutes";
 import { searchTransactions } from "./financeTransactionSearch";
 import { listLinkedEmails, toLinkedEmail } from "./inboundEmailLinks";
+import { isRecord, validText } from "./jsonInput";
 import { PlaidApiError, type PlaidRequest, plaidRequest } from "./plaid";
 import { decryptToken, encryptToken } from "./plaidCrypto";
 import { respond } from "./respond";
@@ -120,7 +123,7 @@ interface LinkTokenRequest extends Record<string, unknown> {
 }
 
 export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
-  const finance = new Hono<FinanceEnv>();
+  const finance = new Hono<ApiEnv>();
 
   finance.get("/", async (context) => financeListing(context));
   finance.post("/link-token", async (context) =>
@@ -274,7 +277,7 @@ async function createLinkToken(
 ) {
   requireEncryptionKey(context.env);
   const body: LinkTokenRequest = {
-    client_name: "Balebase",
+    client_name: productName,
     country_codes: ["US"],
     language: "en",
     products: ["transactions"],
@@ -760,7 +763,9 @@ function clientUserId(organizationId: string, userId: string) {
   return `${organizationId}:${userId}`.slice(0, 128);
 }
 
-async function financeInput(context: FinanceContext) {
+async function financeInput(
+  context: FinanceContext,
+): Promise<FinanceInput | null> {
   const input: unknown = await context.req.json().catch(() => null);
   return isRecord(input) ? input : null;
 }
@@ -806,16 +811,6 @@ function parseLabels(value: string | null) {
   } catch {
     return [];
   }
-}
-
-function isRecord(value: unknown): value is FinanceInput {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function validText(value: unknown, maxLength: number): value is string {
-  return (
-    typeof value === "string" && value.length > 0 && value.length <= maxLength
-  );
 }
 
 function optionalText(value: unknown, maxLength: number) {

@@ -1,13 +1,9 @@
 import { accountSettingsRoutes } from "@balebase/validators/accountSettings";
 import { Hono } from "hono";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
-const accountSettings = new Hono<{
-  Bindings: Bindings;
-  Variables: AuthVariables;
-}>();
+const accountSettings = new Hono<ApiEnv>();
 
 accountSettings.patch("/default-organization", async (context) => {
   const body: unknown = await context.req.json().catch(() => null);

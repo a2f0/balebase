@@ -3,36 +3,14 @@ import type {
   AuditTemplateItem,
   AuditTemplateSection,
 } from "@balebase/validators/audits";
-
-interface UnknownRecord {
-  assignedTo?: unknown;
-  definition?: unknown;
-  description?: unknown;
-  expectedCurrentVersion?: unknown;
-  expectedRevision?: unknown;
-  id?: unknown;
-  itemId?: unknown;
-  items?: unknown;
-  name?: unknown;
-  priority?: unknown;
-  prompt?: unknown;
-  required?: unknown;
-  responses?: unknown;
-  responseType?: unknown;
-  sections?: unknown;
-  scope?: unknown;
-  status?: unknown;
-  title?: unknown;
-  version?: unknown;
-  [key: string]: unknown;
-}
+import { isRecord, validText } from "./jsonInput";
 
 const maxSections = 50;
 const maxItemsPerSection = 100;
 
 export function parseAuditDefinition(value: unknown): AuditDefinition | null {
   if (
-    !isRecord(value) ||
+    !isRecord<"sections" | "version">(value) ||
     value.version !== 1 ||
     !Array.isArray(value.sections)
   ) {
@@ -48,7 +26,8 @@ export function parseAuditDefinition(value: unknown): AuditDefinition | null {
 }
 
 function parseSection(value: unknown): AuditTemplateSection | null {
-  if (!isRecord(value) || !validText(value.id, 100)) return null;
+  if (!isRecord<"id" | "items" | "title">(value) || !validText(value.id, 100))
+    return null;
   if (!validText(value.title, 200) || !Array.isArray(value.items)) {
     return null;
   }
@@ -66,7 +45,11 @@ function parseSection(value: unknown): AuditTemplateSection | null {
 }
 
 function parseItem(value: unknown): AuditTemplateItem | null {
-  if (!isRecord(value) || !validText(value.id, 100)) return null;
+  if (
+    !isRecord<"id" | "prompt" | "required" | "responseType">(value) ||
+    !validText(value.id, 100)
+  )
+    return null;
   if (!validText(value.prompt, 500) || typeof value.required !== "boolean") {
     return null;
   }
@@ -79,18 +62,6 @@ function parseItem(value: unknown): AuditTemplateItem | null {
     required: value.required,
     responseType: value.responseType,
   };
-}
-
-export function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-export function validText(value: unknown, maxLength: number): value is string {
-  return (
-    typeof value === "string" &&
-    value.trim().length > 0 &&
-    value.trim().length <= maxLength
-  );
 }
 
 export function parseResponses(value: unknown, definition: AuditDefinition) {

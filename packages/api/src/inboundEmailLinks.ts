@@ -5,15 +5,11 @@ import {
   type LinkedEmail,
 } from "@balebase/validators/inbox";
 import type { Context } from "hono";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { userHasCapability } from "./organizationGroups";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
-type LinkContext = Context<{
-  Bindings: Bindings;
-  Variables: AuthVariables;
-}>;
+type LinkContext = Context<ApiEnv>;
 
 type EmailLinkTargetType = InboundEmailLinkTarget["targetType"];
 

@@ -6,14 +6,10 @@ import {
   discardRejection,
   findAudit,
 } from "./auditRunRecords";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
-export const auditRunDiscard = new Hono<{
-  Bindings: Bindings;
-  Variables: AuthVariables;
-}>();
+export const auditRunDiscard = new Hono<ApiEnv>();
 
 /** Discarding keeps the audit readable in the Deleted view; it never changes again. */
 auditRunDiscard.delete("/:id", async (context) => {

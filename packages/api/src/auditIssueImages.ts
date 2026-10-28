@@ -12,21 +12,15 @@ import {
   issueAuditDiscarded,
   issueAuditNotDiscarded,
 } from "./auditRunRecords";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { maxFilenameBytes, normalizeFilename } from "./filenames";
 import { auditIssueImageUploadGraceMilliseconds } from "./objectLifecycle";
 import { replayOfflineImage } from "./offlineImages";
 import { respond } from "./respond";
 import type { Bindings } from "./types";
 
-const auditIssueImages = new Hono<{
-  Bindings: Bindings;
-  Variables: AuthVariables;
-}>();
-type AuditIssueImageContext = Context<{
-  Bindings: Bindings;
-  Variables: AuthVariables;
-}>;
+const auditIssueImages = new Hono<ApiEnv>();
+type AuditIssueImageContext = Context<ApiEnv>;
 
 const maxImageBytes = 10 * 1024 * 1024;
 const maxImageDimension = 12_000;

@@ -7,6 +7,7 @@ import {
   refreshCheckrScreening,
   reportSettleMs,
 } from "./checkrScreening";
+import { isRecord } from "./jsonInput";
 import { sendPendingScreeningNotifications } from "./screeningNotifications";
 import type { Bindings } from "./types";
 import { readWebhookPayload } from "./webhookPayload";
@@ -265,10 +266,4 @@ async function screeningsForEvent(
     .bind(objectId, candidateId)
     .all<CheckrScreeningRow>();
   return results;
-}
-
-function isRecord<Key extends string>(
-  value: unknown,
-): value is Partial<Record<Key, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

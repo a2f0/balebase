@@ -1,3 +1,4 @@
+import { sendMail } from "./mailSender";
 import type { Bindings } from "./types";
 
 type MailEnvironment = Pick<
@@ -152,14 +153,11 @@ function send(
     to: Person;
   },
 ) {
-  return environment.EMAIL.send({
+  return sendMail(environment, {
     ...(message.attachments ? { attachments: message.attachments } : {}),
-    from: {
-      email: environment.AUTH_EMAIL_FROM,
-      name: `${mail.organizationName} via Balebase`.slice(0, 100),
-    },
+    organizationName: mail.organizationName,
     ...(mail.sender ? { replyTo: mail.sender.email } : {}),
-    subject: message.subject.slice(0, 250),
+    subject: message.subject,
     text: message.text,
     to: { email: message.to.email, name: message.to.name },
   });

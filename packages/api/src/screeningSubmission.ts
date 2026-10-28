@@ -1,4 +1,5 @@
 import type { CheckrCandidateDetails } from "./checkr";
+import { isRecord } from "./jsonInput";
 import { requiredStateNotices } from "./screeningDisclosures";
 
 export interface ScreeningSubmission {
@@ -237,8 +238,4 @@ function driverLicense(number: unknown, state: unknown) {
 
 function fields<Key extends string>(value: unknown) {
   return (isRecord(value) ? value : {}) as Partial<Record<Key, unknown>>;
-}
-
-function isRecord(value: unknown): value is object {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

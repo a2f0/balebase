@@ -1,6 +1,6 @@
 import { accountSettingsRoutes } from "@balebase/validators/accountSettings";
 import { Hono } from "hono";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { respond } from "./respond";
 import type { Bindings } from "./types";
 import {
@@ -8,10 +8,7 @@ import {
   requestUserDeletion,
 } from "./userDeletionActivity";
 
-export const userDeletion = new Hono<{
-  Bindings: Bindings;
-  Variables: AuthVariables;
-}>();
+export const userDeletion = new Hono<ApiEnv>();
 
 userDeletion.get("/", async (context) => {
   const request = await context.env.DB.prepare(

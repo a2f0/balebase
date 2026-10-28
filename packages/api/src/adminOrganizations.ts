@@ -4,7 +4,7 @@ import {
   adminOrganizationsRoutes,
 } from "@balebase/validators/adminOrganizations";
 import { Hono } from "hono";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import {
   cancelOrganizationSubscription,
   recoverCheckoutAfterFailedDeletion,
@@ -17,10 +17,7 @@ import { listOrganizationMembers } from "./organizationMembers";
 import { respond } from "./respond";
 import type { Bindings } from "./types";
 
-const adminOrganizations = new Hono<{
-  Bindings: Bindings;
-  Variables: AuthVariables;
-}>();
+const adminOrganizations = new Hono<ApiEnv>();
 
 interface OrganizationRow {
   created_at: number | string;

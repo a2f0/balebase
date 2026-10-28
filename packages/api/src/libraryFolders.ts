@@ -3,16 +3,11 @@ import {
   libraryFoldersRoutes,
 } from "@balebase/validators/libraryFolders";
 import { type Context, Hono } from "hono";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { listLinkedEmails, toLinkedEmail } from "./inboundEmailLinks";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
 
-type LibraryEnv = {
-  Bindings: Bindings;
-  Variables: AuthVariables;
-};
-type LibraryContext = Context<LibraryEnv>;
+type LibraryContext = Context<ApiEnv>;
 
 interface FolderRow {
   created_at: string;
@@ -39,7 +34,7 @@ const folderSelect = `
            AS email_count
   FROM library_folders AS folder`;
 
-const libraryFolders = new Hono<LibraryEnv>();
+const libraryFolders = new Hono<ApiEnv>();
 
 libraryFolders.get("/", async (context) => {
   const result = await context.env.DB.prepare(

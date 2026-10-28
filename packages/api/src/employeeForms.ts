@@ -6,7 +6,7 @@ import {
   employeeFormsRoutes,
 } from "@balebase/validators/employeeForms";
 import { type Context, Hono } from "hono";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import {
   CheckrRequestError,
   checkrConfigured,
@@ -22,7 +22,8 @@ import {
 } from "./checkrScreening";
 import { checkrTestCandidates } from "./checkrTestCandidates";
 import { normalizeFilename } from "./filenames";
-import { canManageOrganization } from "./organizationMembers";
+import { isRecord } from "./jsonInput";
+import { canManage, requireManager } from "./organizationMembers";
 import { respond } from "./respond";
 import {
   disclosureFingerprint,
@@ -64,11 +65,7 @@ interface RequirementRow {
   is_subject?: number;
 }
 
-type EmployeeFormsEnv = {
-  Bindings: Bindings;
-  Variables: AuthVariables;
-};
-const employeeForms = new Hono<EmployeeFormsEnv>();
+const employeeForms = new Hono<ApiEnv>();
 const maxDocumentBytes = 10 * 1024 * 1024;
 const maxMultipartBytes = maxDocumentBytes + 256 * 1024;
 const documentTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
@@ -78,8 +75,7 @@ employeeForms.get("/", async (context) => {
   // My documents lists only the person's own requests, as the person sees
   // them, even when they also manage the organization.
   const own = context.req.query("for") === "me";
-  const manager =
-    !own && canManageOrganization(context.get("organizationRole"));
+  const manager = !own && canManage(context);
   const userId = context.get("authSession").user.id;
   const result = await context.env.DB.prepare(
     `SELECT requirement.id, requirement.kind, requirement.title,
@@ -119,12 +115,9 @@ employeeForms.get("/", async (context) => {
   });
 });
 
-employeeForms.post("/", async (context) => {
-  if (!canManageOrganization(context.get("organizationRole"))) {
-    return managerRequired(context);
-  }
+employeeForms.post("/", requireManager(), async (context) => {
   const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord(body)) {
+  if (!isRecord<keyof InputRecord>(body)) {
     return context.json(
       { error: "A target and requirements are required." },
       400,
@@ -199,14 +192,12 @@ employeeForms.post("/", async (context) => {
   return respond(context, employeeFormsRoutes.create, { ids }, 201);
 });
 
-employeeForms.patch("/:id", async (context) => {
-  if (!canManageOrganization(context.get("organizationRole"))) {
-    return managerRequired(context);
-  }
+employeeForms.patch("/:id", requireManager(), async (context) => {
   const row = await findRequirement(context);
   if (!row) return context.json({ error: "Requirement not found." }, 404);
   const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord(body)) return context.json({ error: "Invalid update." }, 400);
+  if (!isRecord<keyof InputRecord>(body))
+    return context.json({ error: "Invalid update." }, 400);
   const status = body.status;
   const dueDate = body.dueDate;
   if (!isValidRequirementUpdate(row, body)) {
@@ -253,10 +244,7 @@ employeeForms.patch("/:id", async (context) => {
   return respond(context, employeeFormsRoutes.update, { ok: true });
 });
 
-employeeForms.delete("/:id", async (context) => {
-  if (!canManageOrganization(context.get("organizationRole"))) {
-    return managerRequired(context);
-  }
+employeeForms.delete("/:id", requireManager(), async (context) => {
   const row = await findRequirement(context);
   if (!row) return context.json({ error: "Requirement not found." }, 404);
   if (screeningActive(row)) {
@@ -344,7 +332,7 @@ employeeForms.post("/:id/document", async (context) => {
         context.get("organizationId"),
         row.document_key,
         key,
-        canManageOrganization(context.get("organizationRole")) ? 1 : 0,
+        canManage(context) ? 1 : 0,
         context.get("organizationId"),
         context.get("authSession").user.id,
       )
@@ -434,10 +422,7 @@ employeeForms.get("/:id/document", async (context) => {
   return new Response(object.body, { headers });
 });
 
-employeeForms.post("/:id/checkr/request", async (context) => {
-  if (!canManageOrganization(context.get("organizationRole"))) {
-    return managerRequired(context);
-  }
+employeeForms.post("/:id/checkr/request", requireManager(), async (context) => {
   const row = await findRequirement(context);
   if (
     row?.kind !== "background_check" ||
@@ -452,7 +437,11 @@ employeeForms.post("/:id/checkr/request", async (context) => {
     );
   }
   const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord(body) || !isUsStateCode(body.state) || !isCity(body.city)) {
+  if (
+    !isRecord<keyof InputRecord>(body) ||
+    !isUsStateCode(body.state) ||
+    !isCity(body.city)
+  ) {
     return context.json(
       { error: "A US work state and optional city are required." },
       400,
@@ -614,10 +603,7 @@ employeeForms.post("/:id/checkr/submit", async (context) => {
   });
 });
 
-employeeForms.post("/:id/checkr/refresh", async (context) => {
-  if (!canManageOrganization(context.get("organizationRole"))) {
-    return managerRequired(context);
-  }
+employeeForms.post("/:id/checkr/refresh", requireManager(), async (context) => {
   const row = await findRequirement(context);
   if (!row?.checkr_report_id) {
     return context.json({ error: "Screening not submitted." }, 404);
@@ -688,7 +674,7 @@ interface ScreeningSubjectRow {
 }
 
 /** The requirement when it belongs to the signed-in person, not a manager. */
-async function findScreeningSubject(context: Context<EmployeeFormsEnv>) {
+async function findScreeningSubject(context: Context<ApiEnv>) {
   return context.env.DB.prepare(
     `SELECT requirement.id, requirement.kind, requirement.title,
             requirement.status, requirement.checkr_report_id,
@@ -727,7 +713,7 @@ function awaitingSubmission(
 }
 
 async function emailScreeningRequest(
-  context: Context<EmployeeFormsEnv>,
+  context: Context<ApiEnv>,
   row: RequirementRow,
 ) {
   const organization = await context.env.DB.prepare(
@@ -855,10 +841,6 @@ interface InputRecord {
   city?: unknown;
 }
 
-function isRecord(value: unknown): value is InputRecord {
-  return typeof value === "object" && value !== null;
-}
-
 function isDate(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;
@@ -872,7 +854,7 @@ function isDate(value: unknown): value is string {
 
 function isRequirementInput(value: unknown): value is EmployeeRequirementInput {
   return (
-    isRecord(value) &&
+    isRecord<keyof InputRecord>(value) &&
     typeof value.kind === "string" &&
     ["form", "background_check", "credit_check"].includes(value.kind) &&
     typeof value.title === "string" &&
@@ -932,7 +914,7 @@ function isCity(value: unknown): value is string | undefined {
   );
 }
 
-async function findRequirement(context: Context<EmployeeFormsEnv>) {
+async function findRequirement(context: Context<ApiEnv>) {
   return context.env.DB.prepare(
     `SELECT requirement.id, requirement.kind, requirement.title,
             requirement.due_date, requirement.status, requirement.document_key,
@@ -957,10 +939,10 @@ async function findRequirement(context: Context<EmployeeFormsEnv>) {
 }
 
 async function canAccessRequirement(
-  context: Context<EmployeeFormsEnv>,
+  context: Context<ApiEnv>,
   row: RequirementRow,
 ) {
-  if (canManageOrganization(context.get("organizationRole"))) return true;
+  if (canManage(context)) return true;
   if (!row.member_id) return false;
   const member = await context.env.DB.prepare(
     `SELECT id FROM member WHERE id = ? AND organizationId = ? AND userId = ?`,
@@ -974,22 +956,18 @@ async function canAccessRequirement(
   return Boolean(member);
 }
 
-function signedInAsSelf(context: Context<EmployeeFormsEnv>) {
+function signedInAsSelf(context: Context<ApiEnv>) {
   return (
     !context.get("apiKey") &&
     !context.get("authSession").session?.impersonatedBy
   );
 }
 
-function signInRequired(context: Context<EmployeeFormsEnv>) {
+function signInRequired(context: Context<ApiEnv>) {
   return context.json(
     { error: "Sign in to complete your own background check." },
     403,
   );
-}
-
-function managerRequired(context: Context<EmployeeFormsEnv>) {
-  return context.json({ error: "Organization manager access required." }, 403);
 }
 
 export { employeeForms };

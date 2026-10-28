@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import {
-  requireAuthOrganizationSeat,
   requireBillingOrganization,
   requireOrganization,
   requireOrganizationPluginAccess,
@@ -136,7 +135,7 @@ describe("organization middleware", () => {
     );
     expect(response.status).toBe(400);
     expect((await response.json()) as unknown).toEqual({
-      error: "Organization selectors do not match.",
+      error: "Conflicting organization references are not allowed.",
     });
   });
 
@@ -260,7 +259,7 @@ function authOrganizationApp() {
       userId: "user-id",
     },
   );
-  app.use("*", requireAuthOrganizationSeat);
+  app.use("*", requireOrganizationPluginAccess);
   app.all("*", (context) => context.json({ ok: true }));
   return app;
 }
@@ -274,7 +273,7 @@ function combinedAuthOrganizationApp() {
       userId: "user-id",
     },
   );
-  app.use("*", requireOrganizationPluginAccess, requireAuthOrganizationSeat);
+  app.use("*", requireOrganizationPluginAccess);
   app.all("*", (context) => context.json({ ok: true }));
   return app;
 }
@@ -450,6 +449,7 @@ describe("organization plugin middleware", () => {
 
     expect(response.status).toBe(403);
     expect((await response.json()) as unknown).toEqual({
+      code: "SEAT_UNAVAILABLE",
       error:
         "This organization's Free plan includes one user. Ask an owner to upgrade or remove another member.",
     });
@@ -470,6 +470,7 @@ describe("organization plugin middleware", () => {
 
     expect(response.status).toBe(403);
     expect((await response.json()) as unknown).toEqual({
+      code: "SEAT_UNAVAILABLE",
       error:
         "This organization's Free plan includes one user. Ask an owner to upgrade or remove another member.",
     });
@@ -573,11 +574,7 @@ function pluginRequest(
       userId: "user-id",
     },
   );
-  app.use(
-    "/api/auth/organization/*",
-    requireOrganizationPluginAccess,
-    requireAuthOrganizationSeat,
-  );
+  app.use("/api/auth/organization/*", requireOrganizationPluginAccess);
   app.all("/api/auth/organization/*", async (context) =>
     context.json(
       responseBody ?? { request: body ? await context.req.json() : null },

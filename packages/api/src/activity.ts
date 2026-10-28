@@ -5,13 +5,10 @@ import {
 } from "@balebase/validators/activity";
 import { type Context, Hono } from "hono";
 import type { ApiKeyChannel, ApiKeyPrincipal } from "./apiKeys";
-import type { AuthVariables } from "./authMiddleware";
+import type { ApiEnv } from "./authMiddleware";
 import { cursorPage } from "./cursorPagination";
 import { userHasCapability } from "./organizationGroups";
 import { respond } from "./respond";
-import type { Bindings } from "./types";
-
-type ActivityEnv = { Bindings: Bindings; Variables: AuthVariables };
 
 export interface ActivityRow {
   action: string;
@@ -47,7 +44,7 @@ export interface ActivityActor {
 
 const pageSize = 50;
 
-export const activity = new Hono<ActivityEnv>();
+export const activity = new Hono<ApiEnv>();
 
 activity.get("/", async (context) => {
   const query = activityRoutes.list.query.safeParse(context.req.query());
@@ -164,7 +161,7 @@ export function toAuditAnswerActivity(rows: ActivityRow[]) {
   );
 }
 
-export function requestActor(context: Context<ActivityEnv>): ActivityActor {
+export function requestActor(context: Context<ApiEnv>): ActivityActor {
   return {
     apiKey: context.get("apiKey"),
     userId: context.get("authSession").user.id,

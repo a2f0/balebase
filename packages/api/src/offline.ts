@@ -12,12 +12,13 @@ import {
   templateSelect,
   toTemplate,
 } from "./auditTemplates";
-import type { IssueContext, IssueEnv } from "./issueRecords";
+import type { ApiEnv } from "./authMiddleware";
+import type { IssueContext } from "./issueRecords";
 import { offlineStatements } from "./offlineRecords";
 import { listMemberDirectory } from "./organizationMembers";
 import { respond } from "./respond";
 
-export const offline = new Hono<IssueEnv>();
+export const offline = new Hono<ApiEnv>();
 
 offline.get("/issues/:issueId/images", async (context) =>
   respond(context, offlineRoutes.images, {
