@@ -113,22 +113,6 @@
       }
     },
     {
-      "includes": ["packages/api/src/employeeForms.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noExcessiveLinesPerFile": {
-              "level": "error",
-              "options": {
-                "maxLines": 811,
-                "skipBlankLines": true
-              }
-            }
-          }
-        }
-      }
-    },
-    {
       "includes": ["packages/app/src/AuditRunPage.tsx"],
       "linter": {
         "rules": {
@@ -136,7 +120,7 @@
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
-                "maxLines": 1102,
+                "maxLines": 1094,
                 "skipBlankLines": true
               }
             }
