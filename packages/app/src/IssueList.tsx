@@ -8,12 +8,12 @@ import {
   LoadingState,
 } from "@balebase/ui/react";
 import { useCallback } from "react";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import { InfiniteScroll } from "./InfiniteScroll";
-import { issuePath } from "./issuePaths";
 import { formatLabel } from "./labels";
 import { useCursorPages } from "./useCursorPages";
-import { handleNavigation } from "./workspacePaths";
+import { issuePath } from "./workspacePaths";
 
 export function IssueList({
   filters,
@@ -53,15 +53,13 @@ export function IssueList({
               {items.map((issue) => (
                 <li className="row" key={issue.id}>
                   <div className="rowMain">
-                    <a
+                    <AppLink
                       className="rowTitle"
                       href={issuePath(issue.id)}
-                      onClick={(event) =>
-                        handleNavigation(event, issuePath(issue.id), onNavigate)
-                      }
+                      onNavigate={onNavigate}
                     >
                       {issue.title}
-                    </a>
+                    </AppLink>
                     <span className="rowMeta">
                       {issue.target.label} ·{" "}
                       {issue.assignedTo?.name ||

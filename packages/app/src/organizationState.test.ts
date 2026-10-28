@@ -1,20 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import {
-  adminOrganizationIdForPath,
   assignableOrganizationRoles,
   canDeleteOrganization,
   canLeaveOrganizationWithOwnerCount,
   canManageOrganization,
   createOrganizationSlug,
   editableOrganizationRoles,
-  globalAuditsPath,
-  globalAuditTemplateIdForPath,
-  isRootAdminPath,
-  organizationMemberIdForPath,
-  organizationPathRequiresAccess,
-  organizationPeoplePath,
+  formatRoles,
+  hasRole,
   organizationRoleValue,
-  organizationSettingsPage,
   resolveActiveOrganizationId,
 } from "./organizationState";
 
@@ -51,96 +45,17 @@ describe("organization state", () => {
     );
   });
 
-  it("routes organization settings to focused sub-pages", () => {
-    expect(organizationSettingsPage("/organization")).toBe("general");
-    expect(organizationSettingsPage("/organization/people")).toBe("people");
-    expect(organizationSettingsPage("/organization/people/member%2F1")).toBe(
-      "people",
-    );
-    expect(organizationMemberIdForPath("/organization/people/member%2F1")).toBe(
-      "member/1",
-    );
-    expect(organizationMemberIdForPath("/organization/people")).toBeUndefined();
-    expect(organizationMemberIdForPath("/organization/people/%E0%A4%A")).toBe(
-      undefined,
-    );
-    expect(organizationPeoplePath("member/1")).toBe(
-      "/organization/people/member%2F1",
-    );
-    expect(organizationSettingsPage("/organization/access")).toBe("access");
-    expect(organizationSettingsPage("/organization/api-keys")).toBe("api-keys");
-    expect(organizationSettingsPage("/organization/unknown")).toBe("general");
-  });
-
-  it("waits for access on every organization-dependent route", () => {
-    for (const path of [
-      "/",
-      "/audits",
-      "/businesses",
-      "/finance",
-      "/inbox",
-      "/me",
-      "/me/screening/check",
-      "/organization",
-    ]) {
-      expect(organizationPathRequiresAccess(path)).toBeTrue();
-    }
-    for (const path of [
-      "/account/security",
-      "/root/users",
-      "/root/organizations",
-      "/root/organizations/other-organization",
-      "/root/global-audits",
-      "/root/global-audits/nfpa70e_global",
-      "/root/jobs",
-      "/invite",
-    ]) {
-      expect(organizationPathRequiresAccess(path)).toBeFalse();
-    }
-    expect(organizationPathRequiresAccess("/admin")).toBeTrue();
-    expect(isRootAdminPath("/root/jobs")).toBeTrue();
-    expect(isRootAdminPath("/root/users")).toBeTrue();
-    expect(isRootAdminPath("/root/organizations")).toBeTrue();
-    expect(
-      isRootAdminPath("/root/organizations/other-organization"),
-    ).toBeTrue();
-    expect(isRootAdminPath("/root/global-audits")).toBeTrue();
-    expect(isRootAdminPath("/root/global-audits/template")).toBeTrue();
-    expect(isRootAdminPath("/root/global-auditsx")).toBeFalse();
-    expect(isRootAdminPath("/audits/global-templates/template")).toBeFalse();
-    expect(isRootAdminPath("/admin")).toBeFalse();
-  });
-
-  it("resolves Global Audits form links and rejects malformed IDs", () => {
-    expect(globalAuditsPath()).toBe("/root/global-audits");
-    expect(globalAuditsPath("form/1")).toBe("/root/global-audits/form%2F1");
-    expect(globalAuditTemplateIdForPath("/root/global-audits/form%2F1")).toBe(
-      "form/1",
-    );
-    expect(globalAuditTemplateIdForPath("/root/global-audits/form-1/")).toBe(
-      "form-1",
-    );
-    expect(globalAuditTemplateIdForPath("/root/global-audits")).toBeUndefined();
-    expect(
-      globalAuditTemplateIdForPath("/root/global-audits/%"),
-    ).toBeUndefined();
-    expect(
-      globalAuditTemplateIdForPath("/root/global-audits/form-1/unexpected"),
-    ).toBeUndefined();
-  });
-
-  it("resolves organization detail links and rejects malformed IDs", () => {
-    expect(adminOrganizationIdForPath("/root/organizations/org%2F1")).toBe(
-      "org/1",
-    );
-    expect(adminOrganizationIdForPath("/root/organizations/org-1/")).toBe(
-      "org-1",
-    );
-    expect(adminOrganizationIdForPath("/root/organizations")).toBeUndefined();
-    expect(adminOrganizationIdForPath("/root/organizations/%")).toBeUndefined();
-    expect(
-      adminOrganizationIdForPath("/root/organizations/org-1/unexpected"),
-    ).toBeUndefined();
+  it("reads each of several comma-separated roles", () => {
+    expect(hasRole("admin", "admin")).toBe(true);
+    expect(hasRole("member, admin", "admin")).toBe(true);
+    expect(hasRole("member", "owner", "admin")).toBe(false);
+    expect(hasRole("administrator", "admin")).toBe(false);
+    expect(hasRole(null, "admin")).toBe(false);
+    expect(hasRole(undefined, "admin")).toBe(false);
+    expect(formatRoles("member")).toBe("Member");
+    expect(formatRoles("admin,owner")).toBe("Admin, Owner");
+    expect(formatRoles(" admin , ,owner ")).toBe("Admin, Owner");
+    expect(formatRoles(null)).toBe("");
   });
 
   it("only lets organization managers invite members", () => {

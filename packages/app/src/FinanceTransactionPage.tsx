@@ -19,9 +19,9 @@ import { api } from "./apiClient";
 import { FinanceTransactionRow } from "./FinanceTransactionHistory";
 import { FinanceTransactionSourceData } from "./FinanceTransactionSourceData";
 import { IssueList } from "./IssueList";
-import { transactionIssuePath } from "./issuePaths";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
+import { transactionIssuePath } from "./workspacePaths";
 
 export function FinanceTransactionPage({
   id,

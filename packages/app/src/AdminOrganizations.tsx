@@ -18,13 +18,17 @@ import {
   useState,
 } from "react";
 import { AdminDeletionMenu } from "./AdminDeletionMenu";
+import { AdminIdentity } from "./AdminIdentity";
 import { AdminOrganizationDetails } from "./AdminOrganizationDetails";
-import { formatDate, Identity } from "./adminDisplay";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
-import { countLabel } from "./labels";
-import { adminOrganizationIdForPath } from "./organizationState";
+import { countLabel, formatDate } from "./labels";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
+import {
+  adminOrganizationIdForPath,
+  adminOrganizationPath,
+} from "./workspacePaths";
 
 interface AdminOrganizationAction {
   organizationId: string;
@@ -43,7 +47,7 @@ interface OrganizationTableActions extends OrganizationActions {
 
 export function AdminOrganizations({
   onNavigate,
-  pathname = "/root/organizations",
+  pathname = adminOrganizationPath(),
 }: {
   onNavigate: (pathname: string) => void;
   pathname?: string | undefined;
@@ -279,33 +283,19 @@ function OrganizationTableRow({
     <tr>
       <td>
         <div className="adminIdentityText adminOrganization">
-          <a
+          <AppLink
             className="adminOrganizationName adminOrganizationLink"
-            href={`/root/organizations/${encodeURIComponent(organization.id)}`}
-            onClick={(event) => {
-              if (
-                event.button !== 0 ||
-                event.metaKey ||
-                event.ctrlKey ||
-                event.shiftKey ||
-                event.altKey
-              ) {
-                return;
-              }
-              event.preventDefault();
-              onNavigate(
-                `/root/organizations/${encodeURIComponent(organization.id)}`,
-              );
-            }}
+            href={adminOrganizationPath(organization.id)}
+            onNavigate={onNavigate}
           >
             {organization.name}
-          </a>
+          </AppLink>
           <span className="adminSlug mono">{organization.slug}</span>
         </div>
       </td>
       <td>
         {organization.ownerName || organization.ownerEmail ? (
-          <Identity
+          <AdminIdentity
             detail={
               organization.ownerName
                 ? (organization.ownerEmail ?? undefined)
@@ -369,7 +359,7 @@ function DeletedBy({ organization }: { organization: AdminOrganization }) {
     return <span className="textSubtle">—</span>;
   }
   return (
-    <Identity
+    <AdminIdentity
       detail={
         organization.deletedByEmail ??
         organization.deletedByUserId ??

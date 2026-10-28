@@ -1,6 +1,7 @@
 import type { ActivityEvent } from "@balebase/validators/activity";
 import { assigneeLabel, textValue } from "./activityLabels";
-import { equipmentTypeLabel, formatPurchaseDate } from "./equipmentLabels";
+import { equipmentTypeLabel } from "./equipmentLabels";
+import { formatCalendarDate } from "./labels";
 
 interface EquipmentChange {
   after: unknown;
@@ -79,7 +80,7 @@ function fieldValue(field: string, value: unknown) {
   const text = textValue(value);
   if (!text) return "Not recorded";
   if (field === "type") return equipmentTypeLabel(text);
-  return field === "purchaseDate" ? formatPurchaseDate(text) : text;
+  return field === "purchaseDate" ? formatCalendarDate(text) : text;
 }
 
 function equipmentChanges(value: unknown) {

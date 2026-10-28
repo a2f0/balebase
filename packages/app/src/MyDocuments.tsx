@@ -2,7 +2,6 @@ import {
   Badge,
   Banner,
   Button,
-  ButtonLink,
   cx,
   EmptyState,
   Icon,
@@ -19,15 +18,15 @@ import type {
   EmployeeRequirementKind,
 } from "@balebase/validators/employeeForms";
 import { type ReactNode, useCallback, useRef } from "react";
+import { AppButtonLink } from "./AppLink";
 import { api } from "./apiClient";
 import {
   downloadEmployeeForm,
   downloadScreeningConsent,
 } from "./employeeFormDownloads";
+import { formatCalendarDate, formatDate } from "./labels";
 import type { WorkspaceOrganization } from "./organizationState";
 import {
-  formatDueDate,
-  formatTimestamp,
   localDate,
   type PersonalGroup,
   personalRequirement,
@@ -36,11 +35,7 @@ import {
 import { ScreeningRequest, screeningProgress } from "./ScreeningRequest";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
-import {
-  handleNavigation,
-  myDocumentsPath,
-  myScreeningIdForPath,
-} from "./workspacePaths";
+import { myDocumentsPath, myScreeningIdForPath } from "./workspacePaths";
 
 type Action = (work: () => Promise<unknown>, success: string) => Promise<void>;
 
@@ -282,8 +277,8 @@ function Group({
                 <span className="rowMeta">
                   {kinds[requirement.kind].label} ·{" "}
                   {requirement.completedAt
-                    ? `Completed ${formatTimestamp(requirement.completedAt)}`
-                    : `Due ${formatDueDate(requirement.dueDate)}`}
+                    ? `Completed ${formatDate(requirement.completedAt)}`
+                    : `Due ${formatCalendarDate(requirement.dueDate)}`}
                 </span>
                 <Hint
                   organizationName={organizationName}
@@ -364,10 +359,10 @@ function Actions({
   if (requirement.canSubmitCheckr || requirement.checkrReportStatus) {
     const path = myDocumentsPath(requirement.id);
     controls.push(
-      <ButtonLink
+      <AppButtonLink
         href={path}
         key="screening"
-        onClick={(event) => handleNavigation(event, path, onNavigate)}
+        onNavigate={onNavigate}
         size="sm"
         variant="primary"
       >
@@ -376,7 +371,7 @@ function Actions({
           : requirement.checkrSubmitting
             ? "Finish background check"
             : "Start background check"}
-      </ButtonLink>,
+      </AppButtonLink>,
     );
   }
   if (requirement.kind === "form" && requirement.status !== "complete") {
@@ -486,14 +481,14 @@ function BackToMyDocuments({
 }) {
   const path = myDocumentsPath();
   return (
-    <ButtonLink
+    <AppButtonLink
       href={path}
       icon="arrowLeft"
-      onClick={(event) => handleNavigation(event, path, onNavigate)}
+      onNavigate={onNavigate}
       size="sm"
       variant="ghost"
     >
       My documents
-    </ButtonLink>
+    </AppButtonLink>
   );
 }

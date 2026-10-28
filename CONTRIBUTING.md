@@ -26,6 +26,7 @@ Every workspace lives under `packages/`, and infrastructure lives in
 | Request and response schemas for every route | `packages/validators/src` |
 | Typed client for those routes | `packages/api-client/src` |
 | Database schema | `packages/api/migrations` |
+| Built-in audit templates and their seed migrations | `packages/api/auditLibrary`, [residential audit library](docs/residential-audit-library.md) |
 | Application screens and the host interface each shell fills in | `packages/app/src` |
 | Web shell and its Worker | `packages/app-web` |
 | Native shell, mobile projects, and Fastlane lanes | [`packages/app-capacitor`](packages/app-capacitor/README.md) (store tiers in `nativeReleaseTargets.json`), `scripts/dev/run*.sh`, `scripts/lib/nativeRelease.sh` |
@@ -62,6 +63,13 @@ when a screen needs to be split.
 Load with `useLoad`, mutate with `useAction`, and show errors with
 `errorMessage` from `src/errors.ts` or `ErrorToast`. Page cursor lists with
 `useCursorPages` and `InfiniteScroll`.
+
+Build paths with the `src/workspacePaths.ts` helpers, read a route's record
+ID with `recordIdForPath`, and link with `AppLink`. A new workspace section
+needs a route in `src/workspaceRoutes.tsx` and a page and sidebar item in
+`WorkspaceShell.tsx`. Format dates with `src/labels.ts`, using
+`formatCalendarDate` for YYYY-MM-DD days, and roles with `hasRole` and
+`formatRoles` from `src/organizationState.ts`.
 
 Use `Select` from `@balebase/ui/react` for form dropdowns, with `Field` or an
 associated label. Compact inline controls can use `aria-label`. `Select`

@@ -3,7 +3,6 @@ import { Hono } from "hono";
 import { findActivity, requestActor } from "./activity";
 import {
   createTemplate,
-  ensureStarterTemplates,
   findTemplate,
   listTemplateVersions,
   positiveInteger,
@@ -25,7 +24,6 @@ import { readBody, respond } from "./respond";
 const adminAuditTemplates = new Hono<ApiEnv>();
 
 adminAuditTemplates.get("/", async (context) => {
-  await ensureStarterTemplates(context.env.DB);
   const result = await context.env.DB.prepare(
     `${templateSelect}
      WHERE family.scope = 'global' AND version.status != 'discarded'

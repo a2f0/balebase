@@ -10,8 +10,7 @@ import {
   PageHeader,
 } from "@balebase/ui/react";
 import type { AuditRun } from "@balebase/validators/audits";
-import { formatActivityTime } from "./ActivityFeed";
-import { formatLabel } from "./labels";
+import { formatDateTime, formatLabel } from "./labels";
 
 // The audit run page's header, status line, and loading state.
 
@@ -111,7 +110,7 @@ export function RunOverview({
       <div className="runOverview">
         <p className="runAttribution">
           Started by {audit.createdBy.name} · {audit.createdBy.email} ·{" "}
-          {formatActivityTime(audit.createdAt)}
+          {formatDateTime(audit.createdAt)}
         </p>
         {!deletedAt && audit.status === "in_progress" && (
           <Button
@@ -129,7 +128,7 @@ export function RunOverview({
         <Banner announce={false} icon="trash" tone="warning">
           Discarded
           {deletedBy ? ` by ${deletedBy.name} · ${deletedBy.email}` : ""} ·{" "}
-          {formatActivityTime(deletedAt)}. A discarded audit can't be changed.
+          {formatDateTime(deletedAt)}. A discarded audit can't be changed.
         </Banner>
       )}
     </>

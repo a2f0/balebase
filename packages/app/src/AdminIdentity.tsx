@@ -1,6 +1,6 @@
 import { Avatar } from "@balebase/ui/react";
 
-export function Identity({
+export function AdminIdentity({
   avatar = false,
   detail,
   name,
@@ -18,10 +18,4 @@ export function Identity({
       </div>
     </div>
   );
-}
-
-export function formatDate(value: Date | number | string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-  }).format(new Date(value));
 }

@@ -20,16 +20,6 @@ export function copiedNotice(identifier: BusinessIdentifier) {
   return `${identifier} copied.`;
 }
 
-export function formatBusinessDate(value: string) {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return Number.isNaN(date.valueOf())
-    ? value
-    : new Intl.DateTimeFormat(undefined, {
-        dateStyle: "medium",
-        timeZone: "UTC",
-      }).format(date);
-}
-
 /** One line: street, then city with state and ZIP; blank parts are skipped. */
 export function formatBusinessAddress(
   business: Pick<Business, "city" | "state" | "streetAddress" | "zip">,

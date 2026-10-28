@@ -13,20 +13,18 @@ import {
 } from "@balebase/ui/react";
 import type { FinanceAccountDetail } from "@balebase/validators/finance";
 import { useCallback } from "react";
+import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
 import { connectionTone } from "./FinanceAccounts";
 import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
 import { FinanceSyncSettings } from "./FinanceSyncSettings";
-import {
-  formatDateTime,
-  formatDay,
-  formatImportedHistory,
-  formatMoney,
-} from "./financeFormat";
-import { financeConnectionPath, financeTransactionPath } from "./financePages";
-import { formatLabel } from "./labels";
+import { formatImportedHistory, formatMoney } from "./financeFormat";
+import { formatCalendarDate, formatDateTime, formatLabel } from "./labels";
 import { useLoad } from "./useLoad";
-import { handleNavigation } from "./workspacePaths";
+import {
+  financeConnectionPath,
+  financeTransactionPath,
+} from "./workspacePaths";
 
 export function FinanceAccountPage({
   id,
@@ -104,14 +102,9 @@ function AccountSummary({
         <dl className="keyValue">
           <dt>Institution</dt>
           <dd>
-            <a
-              href={connectionPath}
-              onClick={(event) =>
-                handleNavigation(event, connectionPath, onNavigate)
-              }
-            >
+            <AppLink href={connectionPath} onNavigate={onNavigate}>
               {connection.institutionName ?? "Financial institution"}
-            </a>
+            </AppLink>
           </dd>
           <dt>Connection</dt>
           <dd>
@@ -153,17 +146,15 @@ function RecentTransactions({
               return (
                 <li className="row rowInteractive" key={transaction.id}>
                   <div className="rowMain">
-                    <a
+                    <AppLink
                       className="rowTitle rowTarget"
                       href={path}
-                      onClick={(event) =>
-                        handleNavigation(event, path, onNavigate)
-                      }
+                      onNavigate={onNavigate}
                     >
                       {transaction.merchantName ?? transaction.name}
-                    </a>
+                    </AppLink>
                     <span className="rowMeta">
-                      {formatDay(transaction.transactionDate)}
+                      {formatCalendarDate(transaction.transactionDate)}
                       {transaction.pending && " · Pending"}
                     </span>
                   </div>

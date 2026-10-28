@@ -25,7 +25,12 @@ import { api } from "./apiClient";
 import { EmailLinks } from "./EmailLinks";
 import { errorMessage } from "./errors";
 import { selectEmailId } from "./inboxSelection";
-import { countLabel, formatBytes } from "./labels";
+import {
+  countLabel,
+  formatBytes,
+  formatDateTime,
+  formatShortDate,
+} from "./labels";
 import { previewKindFor } from "./previewKind";
 import { useAction } from "./useAction";
 import { useClipboard } from "./useClipboard";
@@ -472,8 +477,8 @@ function MessageListItem({
         </span>
         <span className="inboxItemDate">
           {folder === "trash" && email.deletedAt
-            ? `Deleted ${formatDate(email.deletedAt)}`
-            : formatDate(email.receivedAt)}
+            ? `Deleted ${formatShortDate(email.deletedAt)}`
+            : formatShortDate(email.receivedAt)}
         </span>
       </span>
       <span className="rowMeta truncate">{email.from}</span>
@@ -740,20 +745,6 @@ function deletedBy(email: InboundEmailSummary) {
     email.deletedByUserId ??
     "an unknown user"
   );
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    month: "short",
-  }).format(new Date(value));
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
 }
 
 function confirmMoveToTrash(subject: string) {

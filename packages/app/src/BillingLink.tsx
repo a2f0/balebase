@@ -1,7 +1,5 @@
-import { ButtonLink } from "@balebase/ui/react";
-import { handleNavigation } from "./workspacePaths";
-
-export const billingPath = "/organization/billing";
+import { AppButtonLink } from "./AppLink";
+import { billingPath } from "./workspacePaths";
 
 /** Opens Billing in place; a modified click opens it in a new tab. */
 export function BillingLink({
@@ -12,13 +10,13 @@ export function BillingLink({
   variant?: "primary" | "secondary";
 }) {
   return (
-    <ButtonLink
+    <AppButtonLink
       href={billingPath}
-      onClick={(event) => handleNavigation(event, billingPath, onNavigate)}
+      onNavigate={onNavigate}
       size={variant === "primary" ? undefined : "sm"}
       variant={variant}
     >
       Go to Billing
-    </ButtonLink>
+    </AppButtonLink>
   );
 }

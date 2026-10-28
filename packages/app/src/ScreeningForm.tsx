@@ -10,6 +10,7 @@ import {
 } from "@balebase/ui/react";
 import type { ScreeningForm as ScreeningFormData } from "@balebase/validators/employeeForms";
 import { type FormEvent, type ReactNode, useCallback, useState } from "react";
+import { AppButtonLink } from "./AppLink";
 import { api } from "./apiClient";
 import { downloadScreeningConsent } from "./employeeFormDownloads";
 import {
@@ -21,7 +22,6 @@ import {
 } from "./ScreeningDetails";
 import { useAction } from "./useAction";
 import { useLoad } from "./useLoad";
-import { handleNavigation } from "./workspacePaths";
 
 type Step = "details" | "disclosure" | "notices" | "rights" | "sign";
 
@@ -72,13 +72,9 @@ export function ScreeningForm({
     return (
       <Banner
         actions={
-          <ButtonLink
-            href={back}
-            onClick={(event) => handleNavigation(event, back, onNavigate)}
-            size="sm"
-          >
+          <AppButtonLink href={back} onNavigate={onNavigate} size="sm">
             Back to My documents
-          </ButtonLink>
+          </AppButtonLink>
         }
         tone="danger"
       >
@@ -325,13 +321,9 @@ function RightsStep({
     <StepCard
       continueDisabled={!answers.summaryOfRights}
       onBack={
-        <ButtonLink
-          href={back}
-          onClick={(event) => handleNavigation(event, back, onNavigate)}
-          variant="ghost"
-        >
+        <AppButtonLink href={back} onNavigate={onNavigate} variant="ghost">
           Cancel
-        </ButtonLink>
+        </AppButtonLink>
       }
       onContinue={onNext}
       title={summaryOfRights.title}
@@ -552,13 +544,9 @@ function Submitted({
           >
             Download your signed authorization
           </Button>
-          <ButtonLink
-            href={back}
-            onClick={(event) => handleNavigation(event, back, onNavigate)}
-            variant="primary"
-          >
+          <AppButtonLink href={back} onNavigate={onNavigate} variant="primary">
             Back to My documents
-          </ButtonLink>
+          </AppButtonLink>
         </>
       }
       title="Background check submitted"

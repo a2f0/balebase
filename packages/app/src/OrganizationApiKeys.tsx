@@ -18,6 +18,7 @@ import type {
 } from "@balebase/validators/apiKeys";
 import { type FormEvent, useCallback, useState } from "react";
 import { api } from "./apiClient";
+import { formatDate } from "./labels";
 import { McpConfiguration } from "./McpConfiguration";
 import { useAction } from "./useAction";
 import { useClipboard } from "./useClipboard";
@@ -385,10 +386,4 @@ function confirmRevoke(name: string) {
     title: `Revoke ${name}?`,
     tone: "danger",
   });
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(value),
-  );
 }

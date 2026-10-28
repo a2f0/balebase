@@ -4,8 +4,8 @@ import {
   equipmentName,
   equipmentTypeIcon,
   equipmentTypeLabel,
-  formatPurchaseDate,
 } from "./equipmentLabels";
+import { formatCalendarDate } from "./labels";
 
 describe("equipment labels", () => {
   it("names the starting types and falls back for types added later", () => {
@@ -18,7 +18,7 @@ describe("equipment labels", () => {
   });
 
   it("describes an item by what is recorded about it", () => {
-    const purchased = formatPurchaseDate("2026-03-01");
+    const purchased = formatCalendarDate("2026-03-01");
     expect(purchased).toContain("2026");
     expect(
       equipmentMeta({
