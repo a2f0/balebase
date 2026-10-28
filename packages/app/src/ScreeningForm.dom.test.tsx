@@ -1,54 +1,13 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type { ScreeningForm as ScreeningFormData } from "@balebase/validators/employeeForms";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
 import { ScreeningForm } from "./ScreeningForm";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({
+const { button, mount, respond } = installDom({
   url: "http://localhost:5173/me/screening/check",
 });
-const domGlobals = {
-  document: dom.document,
-  Element: dom.Element,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
-  window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
 let container: HTMLElement;
-
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
 
 const section = (title: string) => ({ paragraphs: [`${title} text.`], title });
 
@@ -106,37 +65,22 @@ const form: ScreeningFormData = {
   workLocation: { city: "San Jose", state: "CA" },
 };
 
-async function mount(data: ScreeningFormData, submitted: unknown[]) {
-  globalThis.fetch = (async (input, init) => {
+async function mountForm(data: ScreeningFormData, submitted: unknown[]) {
+  respond(async (url, init) => {
     if (init?.method === "POST") {
       submitted.push(JSON.parse(String(init.body)));
-      expect(String(input)).toEndWith(
-        "/api/employee-forms/check/checkr/submit",
-      );
+      expect(url.href).toEndWith("/api/employee-forms/check/checkr/submit");
       return Response.json({ status: "pending" });
     }
     return Response.json(data);
-  }) as typeof fetch;
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(
-      <ScreeningForm
-        back="/me"
-        onNavigate={() => undefined}
-        requirementId="check"
-      />,
-    ),
-  );
-}
-
-function button(label: string) {
-  const match = [...container.querySelectorAll("button")].find(
-    (element) => element.textContent?.trim() === label,
-  );
-  if (!match) throw new Error(`No button labeled ${label}`);
-  return match;
+  });
+  ({ container } = await mount(
+    <ScreeningForm
+      back="/me"
+      onNavigate={() => undefined}
+      requirementId="check"
+    />,
+  ));
 }
 
 async function check(label: string) {
@@ -159,7 +103,7 @@ function heading() {
 describe("screening form", () => {
   it("walks through the disclosures, fills a test candidate, and signs", async () => {
     const submitted: unknown[] = [];
-    await mount(form, submitted);
+    await mountForm(form, submitted);
     expect(container.textContent).toContain("Test mode · Checkr staging");
     expect(
       [...container.querySelectorAll(".screeningSteps li")].map(
@@ -252,7 +196,7 @@ describe("screening form", () => {
   });
 
   it("skips state notices and test candidates when neither applies", async () => {
-    await mount(
+    await mountForm(
       {
         ...form,
         testCandidates: null,

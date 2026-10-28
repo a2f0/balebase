@@ -1,31 +1,12 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type { Stripe } from "@stripe/stripe-js";
-import { Window } from "happy-dom";
 import { type CheckoutSummary, mountCheckout } from "./stripeCheckout";
+import { installDom } from "./testing/dom";
 
-const dom = new Window();
-const savedObserver = Object.getOwnPropertyDescriptor(
-  globalThis,
-  "MutationObserver",
-);
+const { window: dom } = installDom({
+  globals: (window) => ({ MutationObserver: window.MutationObserver }),
+});
 const session = { clientSecret: "cs_secret", publishableKey: "pk_test" };
-
-beforeAll(() => {
-  Object.defineProperty(globalThis, "MutationObserver", {
-    configurable: true,
-    value: dom.MutationObserver,
-    writable: true,
-  });
-});
-
-afterAll(async () => {
-  if (savedObserver) {
-    Object.defineProperty(globalThis, "MutationObserver", savedObserver);
-  } else {
-    Reflect.deleteProperty(globalThis, "MutationObserver");
-  }
-  await dom.happyDOM.close();
-});
 
 function host() {
   dom.document.documentElement.setAttribute("data-theme", "light");

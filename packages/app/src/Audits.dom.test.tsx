@@ -1,69 +1,18 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type { AuditDetail, AuditTemplate } from "@balebase/validators/audits";
-import { Window } from "happy-dom";
-import { act } from "react";
-import type { Root } from "react-dom/client";
 import { Audits } from "./Audits";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/audits" });
-const domGlobals = {
-  document: dom.document,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
-  window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+const { render, respond, settle } = installDom({
+  url: "http://localhost:5173/audits",
+});
 let container: HTMLElement;
 
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 30));
-  });
-}
-
 async function show(pathname: string) {
-  await act(async () =>
-    root?.render(<Audits onNavigate={() => {}} pathname={pathname} />),
-  );
-  await settle();
-}
-
-function mount() {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
+  ({ container } = await render(
+    <Audits onNavigate={() => {}} pathname={pathname} />,
+  ));
+  await settle(30);
 }
 
 /** Holds a record's response until the test releases it. */
@@ -75,7 +24,7 @@ function deferredResponses() {
     },
     async release(id: string, response: Response) {
       pending.get(id)?.(response);
-      await settle();
+      await settle(30);
     },
   };
 }
@@ -124,15 +73,13 @@ function template(id: string, name: string): AuditTemplate {
 describe("audit record navigation, mounted", () => {
   it("keeps the current run when an earlier run answers late", async () => {
     const responses = deferredResponses();
-    globalThis.fetch = (async (input) => {
-      const path = new URL(String(input)).pathname;
+    respond(async ({ pathname: path }) => {
       if (path === "/api/audits/runs/run-1") return responses.hold("run-1");
       if (path === "/api/audits/runs/run-2") {
         return Response.json(run("run-2", "Electrical panel"));
       }
       return Response.json({ events: [], nextCursor: null });
-    }) as typeof fetch;
-    mount();
+    });
 
     await show("/audits/runs/run-1");
     await show("/audits/runs/run-2");
@@ -145,16 +92,14 @@ describe("audit record navigation, mounted", () => {
 
   it("keeps the current template when an earlier template answers late", async () => {
     const responses = deferredResponses();
-    globalThis.fetch = (async (input) => {
-      const path = new URL(String(input)).pathname;
+    respond(async ({ pathname: path }) => {
       if (path === "/api/audits/templates/t1") return responses.hold("t1");
       if (path === "/api/audits/templates/t2") {
         return Response.json({ template: template("t2", "Closing checklist") });
       }
       if (path.endsWith("/versions")) return Response.json({ versions: [] });
       return Response.json({ events: [], nextCursor: null });
-    }) as typeof fetch;
-    mount();
+    });
     const names = () =>
       [...container.querySelectorAll("input")].map((input) => input.value);
 

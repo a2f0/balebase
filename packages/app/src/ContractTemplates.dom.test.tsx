@@ -1,9 +1,7 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { ContractTemplate } from "@balebase/validators/contractTemplates";
-import { Window } from "happy-dom";
 import { act, useState } from "react";
-import type { Root } from "react-dom/client";
 import {
   EditorOverlay,
   FieldHelp,
@@ -14,46 +12,18 @@ import {
 import { Contracts } from "./Contracts";
 import type { DraftInput } from "./contractFields";
 import { canNavigate, guardWorkspaceChange } from "./navigationGuard";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/contracts/templates/t1" });
-const domGlobals = {
-  document: dom.document,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
+const {
+  button,
+  click,
+  fill,
+  mount,
+  render,
+  respond,
+  settle,
   window: dom,
-};
-const savedGlobals = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
-const mounted: { container: HTMLElement; root: Root }[] = [];
-
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    savedGlobals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-afterAll(async () => {
-  for (const [key, descriptor] of savedGlobals) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
-afterEach(async () => {
-  for (const { container, root } of mounted.splice(0)) {
-    await act(async () => root.unmount());
-    container.remove();
-  }
-  globalThis.fetch = originalFetch;
-});
+} = installDom({ url: "http://localhost:5173/contracts/templates/t1" });
 
 function template(version = 2): ContractTemplate {
   return {
@@ -112,8 +82,7 @@ function stubApi(
   } = {},
 ) {
   const posts: Array<{ body: TemplatePost; url: string }> = [];
-  globalThis.fetch = (async (input, init) => {
-    const url = String(input);
+  respond(async ({ href: url }, init) => {
     if (init?.method === "DELETE")
       return options.deleteResponse ?? new Response(null, { status: 204 });
     if (init?.body instanceof FormData)
@@ -166,30 +135,19 @@ function stubApi(
     return Response.json({
       template: template(url.includes("version=1") ? 1 : 2),
     });
-  }) as typeof fetch;
+  });
   return posts;
 }
 
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
-async function mount(
+async function mountContracts(
   pathname = "/contracts/templates/t1",
   onNavigate: (path: string) => void = () => {},
 ) {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  mounted.push({ container, root });
-  await act(async () =>
-    root.render(
-      <>
-        <Contracts onNavigate={onNavigate} pathname={pathname} />
-        <DialogHost />
-      </>,
-    ),
+  const { container } = await mount(
+    <>
+      <Contracts onNavigate={onNavigate} pathname={pathname} />
+      <DialogHost />
+    </>,
   );
   await settle();
   return container;
@@ -198,13 +156,9 @@ async function mount(
 /** Answers the open dialog with the button labelled `label`. */
 async function answer(label: string) {
   await settle();
-  const choice = [
-    ...(document.querySelector("dialog[open]")?.querySelectorAll("button") ??
-      []),
-  ].find((element) => element.textContent?.trim() === label);
-  expect(choice).toBeTruthy();
-  await act(async () => choice?.click());
-  await settle();
+  const dialog = document.querySelector("dialog[open]");
+  if (!dialog) throw new Error("No open dialog");
+  await click(button(label, dialog));
 }
 
 /** Starts a guarded action, answers its dialog, and returns its result. */
@@ -215,13 +169,6 @@ async function decide<Result>(start: () => Promise<Result>, label: string) {
   });
   await answer(label);
   return action;
-}
-function button(container: HTMLElement, text: string) {
-  const found = [...container.querySelectorAll("button")].find(
-    (element) => element.textContent?.trim() === text,
-  );
-  expect(found).toBeTruthy();
-  return found as HTMLButtonElement;
 }
 function field(container: HTMLElement, label: string) {
   const element = [...container.querySelectorAll("label")].find(
@@ -235,26 +182,7 @@ function field(container: HTMLElement, label: string) {
   return found as HTMLInputElement;
 }
 async function change(input: HTMLInputElement, value: string) {
-  await act(async () => {
-    const prototype =
-      input.tagName === "SELECT"
-        ? dom.HTMLSelectElement.prototype
-        : dom.HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(
-      input,
-      value,
-    );
-    fire(
-      input,
-      new dom.Event(input.tagName === "SELECT" ? "change" : "input", {
-        bubbles: true,
-      }),
-    );
-  });
-  await settle();
-}
-async function click(element: HTMLElement) {
-  await act(async () => element.click());
+  await fill(input, value);
   await settle();
 }
 
@@ -262,7 +190,7 @@ describe("contract templates, mounted", () => {
   it("routes the templates list separately from issued contracts", async () => {
     stubApi();
     const navigations: string[] = [];
-    const container = await mount("/contracts/templates", (path) =>
+    const container = await mountContracts("/contracts/templates", (path) =>
       navigations.push(path),
     );
     expect(container.querySelector("h1")?.textContent).toBe(
@@ -278,11 +206,11 @@ describe("contract templates, mounted", () => {
 
   it("saves boxes under unassigned roles and appends a version", async () => {
     const posts = stubApi();
-    const container = await mount();
+    const container = await mountContracts();
     expect(container.querySelector("input[type=email]")).toBeNull();
     await change(field(container, "Role 1"), "Worker");
-    await click(button(container, "Full name"));
-    await click(button(container, "Save version 3"));
+    await click(button("Full name", container));
+    await click(button("Save version 3", container));
     const definition = posts[0]?.body
       .definition as ContractTemplate["definition"];
     expect(definition.roles).toEqual([
@@ -299,18 +227,20 @@ describe("contract templates, mounted", () => {
     expect(container.querySelector(".toast")?.textContent).toContain(
       "Version 3 saved",
     );
-    expect(button(container, "Save version 4").disabled).toBe(true);
+    expect(button("Save version 4", container).disabled).toBe(true);
   });
 
   it("uses a selected older version and maps its role once", async () => {
     const posts = stubApi();
     const navigations: string[] = [];
-    const container = await mount(undefined, (path) => navigations.push(path));
+    const container = await mountContracts(undefined, (path) =>
+      navigations.push(path),
+    );
     await change(field(container, "Version"), "1");
     expect(container.querySelector("h1")?.textContent).toBe(
       "Original agreement",
     );
-    await click(button(container, "Use this version"));
+    await click(button("Use this version", container));
     await change(field(container, "Employee name"), "Sam Signer");
     await change(field(container, "Employee email"), "sam@example.com");
     await act(async () =>
@@ -333,24 +263,24 @@ describe("contract templates, mounted", () => {
 
   it("preserves edits after a conflict and prevents discarded navigation", async () => {
     stubApi({ conflict: true });
-    const container = await mount();
+    const container = await mountContracts();
     await change(field(container, "Role 1"), "Worker");
     expect(await decide(canNavigate, "Keep editing")).toBe(false);
-    await click(button(container, "Use this version"));
+    await click(button("Use this version", container));
     expect(document.querySelector("dialog[open]")?.textContent).toContain(
       "Discard unsaved changes?",
     );
     await answer("Keep editing");
     expect(container.querySelector("input[type=email]")).toBeNull();
-    await click(button(container, "Save version 3"));
+    await click(button("Save version 3", container));
     expect(container.textContent).toContain("This template changed");
     expect(field(container, "Role 1").value).toBe("Worker");
-    expect(button(container, "Save version 3").disabled).toBe(false);
+    expect(button("Save version 3", container).disabled).toBe(false);
   });
 
   it("guards account, organization, and sign-out actions before changing the session", async () => {
     stubApi();
-    const container = await mount();
+    const container = await mountContracts();
     await change(field(container, "Role 1"), "Worker");
     const changes: string[] = [];
     const switchAccount = guardWorkspaceChange(async (id: string) => {
@@ -380,8 +310,10 @@ describe("contract templates, mounted", () => {
     });
     stubApi({ createResponse: response });
     const navigations: string[] = [];
-    const container = await mount(undefined, (path) => navigations.push(path));
-    await click(button(container, "Use this version"));
+    const container = await mountContracts(undefined, (path) =>
+      navigations.push(path),
+    );
+    await click(button("Use this version", container));
     await change(field(container, "Employee name"), "Sam Signer");
     await change(field(container, "Employee email"), "sam@example.com");
     await act(async () => {
@@ -392,15 +324,12 @@ describe("contract templates, mounted", () => {
     });
     await settle();
     expect(field(container, "Version").disabled).toBe(true);
-    expect(button(container, "Delete template").disabled).toBe(true);
-    const root = mounted.at(-1)?.root;
-    await act(async () =>
-      root?.render(
-        <Contracts
-          onNavigate={(path) => navigations.push(path)}
-          pathname="/contracts/templates"
-        />,
-      ),
+    expect(button("Delete template", container).disabled).toBe(true);
+    await render(
+      <Contracts
+        onNavigate={(path) => navigations.push(path)}
+        pathname="/contracts/templates"
+      />,
     );
     await act(async () => {
       complete?.(
@@ -421,7 +350,7 @@ describe("contract templates, mounted", () => {
     });
     stubApi({ uploadResponse });
     const navigations: string[] = [];
-    const container = await mount("/contracts/templates", (path) =>
+    const container = await mountContracts("/contracts/templates", (path) =>
       navigations.push(path),
     );
     const input = container.querySelector(
@@ -434,8 +363,7 @@ describe("contract templates, mounted", () => {
     await act(async () => {
       fire(input, new dom.Event("change", { bubbles: true }));
     });
-    const root = mounted.at(-1)?.root;
-    await act(async () => root?.render(<p>Other workspace</p>));
+    await render(<p>Other workspace</p>);
     await act(async () => {
       complete?.(Response.json({ template: template() }, { status: 201 }));
     });
@@ -451,11 +379,12 @@ describe("contract templates, mounted", () => {
     });
     stubApi({ deleteResponse });
     const navigations: string[] = [];
-    const container = await mount(undefined, (path) => navigations.push(path));
-    await click(button(container, "Delete template"));
+    const container = await mountContracts(undefined, (path) =>
+      navigations.push(path),
+    );
+    await click(button("Delete template", container));
     await answer("Delete template");
-    const root = mounted.at(-1)?.root;
-    await act(async () => root?.render(<p>Other workspace</p>));
+    await render(<p>Other workspace</p>);
     await act(async () => {
       complete?.(new Response(null, { status: 204 }));
     });
@@ -491,12 +420,8 @@ function FieldHarness() {
 }
 
 it("shares keyboard placement, movement, and removal with the draft editor", async () => {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  mounted.push({ container, root });
-  await act(async () => root.render(<FieldHarness />));
-  await click(button(container, "Initials"));
+  const { container } = await mount(<FieldHarness />);
+  await click(button("Initials", container));
   const placed = container.querySelector(
     "button.contractField",
   ) as HTMLButtonElement;

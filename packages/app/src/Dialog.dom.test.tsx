@@ -1,76 +1,39 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
   confirmDialog,
   DialogHost,
   dismissDialogs,
   promptDialog,
 } from "@balebase/ui/react";
-import { Window } from "happy-dom";
 import { act, type ReactNode } from "react";
-import type { Root } from "react-dom/client";
 import {
   addNavigationGuard,
   useDismissDialogsOnWorkspaceChange,
   useWorkspaceNavigation,
 } from "./navigationGuard";
+import { installDom } from "./testing/dom";
 import { confirmDiscardChanges } from "./unsavedChanges";
 
-const dom = new Window({ url: "http://localhost:5173" });
-const saved = new Map<string, PropertyDescriptor | undefined>();
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
-let container: HTMLElement;
-
-beforeAll(async () => {
-  for (const [key, value] of Object.entries({
-    document: dom.document,
-    Element: dom.Element,
-    HTMLElement: dom.HTMLElement,
-    IS_REACT_ACT_ENVIRONMENT: true,
-    Node: dom.Node,
-    window: dom,
-  })) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
+const {
+  click,
+  fill,
+  mount,
+  render: renderInDom,
+  window: dom,
+} = installDom({ url: "http://localhost:5173" });
 
 /** Mounts the host beside a button that stands in for whatever opened it. */
-async function mount(page?: ReactNode) {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(
-      <>
-        <button type="button">Opener</button>
-        {page}
-        <DialogHost />
-      </>,
-    ),
+async function mountHost(page?: ReactNode) {
+  const { container, unmount } = await mount(
+    <>
+      <button type="button">Opener</button>
+      {page}
+      <DialogHost />
+    </>,
   );
   const opener = container.querySelector("button") as HTMLButtonElement;
   opener.focus();
-  return opener;
+  return { opener, unmount };
 }
 
 /**
@@ -91,24 +54,11 @@ const choice = (label: string) =>
     (element) => element.textContent?.trim() === label,
   ) ?? null;
 
-async function click(element: HTMLElement | null) {
-  expect(element).toBeTruthy();
-  await act(async () => element?.click());
-}
-
 async function type(value: string) {
-  const field =
-    openDialog()?.querySelector<HTMLInputElement>("input, textarea");
-  expect(field).toBeTruthy();
-  const prototype =
-    field?.tagName === "TEXTAREA"
-      ? dom.HTMLTextAreaElement.prototype
-      : dom.HTMLInputElement.prototype;
-  const setValue = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
-  await act(async () => {
-    setValue?.call(field, value);
-    field?.dispatchEvent(new dom.Event("input", { bubbles: true }) as never);
-  });
+  await fill(
+    openDialog()?.querySelector<HTMLInputElement>("input, textarea"),
+    value,
+  );
 }
 
 const deletion = {
@@ -120,7 +70,7 @@ const deletion = {
 
 describe("confirmDialog", () => {
   it("asks in a labelled alert dialog and resolves true on confirm", async () => {
-    const opener = await mount();
+    const { opener } = await mountHost();
     const { answer } = await open(() => confirmDialog(deletion));
     const dialog = openDialog();
     expect(dialog?.getAttribute("role")).toBe("alertdialog");
@@ -141,7 +91,7 @@ describe("confirmDialog", () => {
   });
 
   it("focuses Cancel for a destructive question and resolves false", async () => {
-    const opener = await mount();
+    const { opener } = await mountHost();
     const { answer } = await open(() => confirmDialog(deletion));
     expect(document.activeElement).toBe(choice("Cancel"));
     await click(choice("Cancel"));
@@ -150,7 +100,7 @@ describe("confirmDialog", () => {
   });
 
   it("focuses the confirm button for a safe question", async () => {
-    await mount();
+    await mountHost();
     const { answer } = await open(() =>
       confirmDialog({ confirmLabel: "Restore", title: "Restore Acme?" }),
     );
@@ -161,7 +111,7 @@ describe("confirmDialog", () => {
   });
 
   it("treats Escape as no", async () => {
-    await mount();
+    await mountHost();
     const { answer } = await open(() => confirmDialog(deletion));
     const cancel = new dom.Event("cancel", { cancelable: true });
     await act(async () => openDialog()?.dispatchEvent(cancel as never));
@@ -171,7 +121,7 @@ describe("confirmDialog", () => {
   });
 
   it("enables a type-to-confirm button only once the text matches", async () => {
-    await mount();
+    await mountHost();
     const { answer } = await open(() =>
       confirmDialog({
         confirmLabel: "Delete organization",
@@ -194,7 +144,7 @@ describe("confirmDialog", () => {
   });
 
   it("shows queued questions one at a time, in order", async () => {
-    await mount();
+    await mountHost();
     const { answer: first } = await open(() => confirmDialog(deletion));
     const { answer: second } = await open(() =>
       confirmDialog({ confirmLabel: "Restore", title: "Restore Acme?" }),
@@ -217,7 +167,7 @@ describe("confirmDialog", () => {
 
 describe("promptDialog", () => {
   it("returns the typed answer, or null when cancelled", async () => {
-    await mount();
+    await mountHost();
     let { answer } = await open(() =>
       promptDialog({
         confirmLabel: "Void contract",
@@ -247,7 +197,7 @@ describe("promptDialog", () => {
   });
 
   it("requires text when asked to", async () => {
-    await mount();
+    await mountHost();
     const { answer } = await open(() =>
       promptDialog({
         confirmLabel: "Create organization",
@@ -267,20 +217,19 @@ describe("promptDialog", () => {
 
 describe("DialogHost", () => {
   it("answers no when it unmounts, so a later host shows nothing stale", async () => {
-    await mount();
+    const host = await mountHost();
     const { answer } = await open(() => confirmDialog(deletion));
-    await act(async () => root?.unmount());
-    root = undefined;
+    await host.unmount();
     expect(await answer).toBe(false);
 
-    await mount();
+    await mountHost();
     expect(openDialog()).toBeNull();
   });
 });
 
 describe("dismissDialogs", () => {
   it("answers the open and queued questions with no", async () => {
-    await mount();
+    await mountHost();
     const { answer: confirmed } = await open(() => confirmDialog(deletion));
     const { answer: prompted } = await open(() =>
       promptDialog({
@@ -304,7 +253,7 @@ describe("dismissDialogs", () => {
     const onNavigated = (pathname: string) => {
       pages.push(pathname);
     };
-    await mount(<Workspace />);
+    await mountHost(<Workspace />);
     const { answer } = await open(() =>
       confirmDialog({
         confirmLabel: "Generate new codes",
@@ -330,7 +279,7 @@ describe("guarded Back with a question open", () => {
       useWorkspaceNavigation(() => {});
       return null;
     }
-    await mount(<Workspace />);
+    await mountHost(<Workspace />);
     const removeGuard = addNavigationGuard(confirmDiscardChanges);
     try {
       const { answer } = await open(() => confirmDialog(deletion));
@@ -358,14 +307,12 @@ describe("useDismissDialogsOnWorkspaceChange", () => {
     return null;
   }
   const render = (session: Session, shown: string) =>
-    act(async () =>
-      root?.render(
-        <>
-          <button type="button">Opener</button>
-          <Workspace session={session} shown={shown} />
-          <DialogHost />
-        </>,
-      ),
+    renderInDom(
+      <>
+        <button type="button">Opener</button>
+        <Workspace session={session} shown={shown} />
+        <DialogHost />
+      </>,
     );
   const askToDelete = () =>
     open(() =>
@@ -378,7 +325,9 @@ describe("useDismissDialogsOnWorkspaceChange", () => {
     );
 
   it("keeps the question while the workspace stays the same", async () => {
-    await mount(<Workspace session={signedIn("u1", "org-1")} shown="org-1" />);
+    await mountHost(
+      <Workspace session={signedIn("u1", "org-1")} shown="org-1" />,
+    );
     const { answer } = await askToDelete();
     await render(signedIn("u1", "org-1"), "org-1");
     expect(openDialog()).toBeTruthy();
@@ -387,7 +336,9 @@ describe("useDismissDialogsOnWorkspaceChange", () => {
   });
 
   it("answers no when another tab switches the organization shown", async () => {
-    await mount(<Workspace session={signedIn("u1", "org-1")} shown="org-1" />);
+    await mountHost(
+      <Workspace session={signedIn("u1", "org-1")} shown="org-1" />,
+    );
     const { answer } = await askToDelete();
     await render(signedIn("u1", "org-2"), "org-2");
     expect(await answer).toBe(false);
@@ -395,7 +346,9 @@ describe("useDismissDialogsOnWorkspaceChange", () => {
   });
 
   it("answers no when the session moves before the organization list does", async () => {
-    await mount(<Workspace session={signedIn("u1", "org-1")} shown="org-1" />);
+    await mountHost(
+      <Workspace session={signedIn("u1", "org-1")} shown="org-1" />,
+    );
     const { answer } = await askToDelete();
     // The newly active organization is missing from the cached list, so the
     // page still shows org-1, but the API would now act on org-new.
@@ -405,7 +358,9 @@ describe("useDismissDialogsOnWorkspaceChange", () => {
   });
 
   it("answers no when the account changes", async () => {
-    await mount(<Workspace session={signedIn("u1", "org-1")} shown="org-1" />);
+    await mountHost(
+      <Workspace session={signedIn("u1", "org-1")} shown="org-1" />,
+    );
     const { answer } = await askToDelete();
     await render(signedIn("u2", "org-1"), "org-1");
     expect(await answer).toBe(false);

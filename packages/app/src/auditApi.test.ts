@@ -7,30 +7,28 @@ import {
   uploadIssueImagesSequentially,
 } from "./auditIssueImages";
 import { apiUrl } from "./config";
+import { installFetch } from "./testing/fetch";
+
+const respond = installFetch();
 
 describe("audit template API", () => {
   it("saves and copies a template against the version it was read at", async () => {
-    const originalFetch = globalThis.fetch;
     const bodies: unknown[] = [];
     const template = { ...exampleTemplate(), currentVersion: 3 };
-    globalThis.fetch = (async (_input, init) => {
+    respond(async (_url, init) => {
       bodies.push(JSON.parse(String(init?.body)));
       return Response.json({ template });
-    }) as typeof fetch;
+    });
 
-    try {
-      await api.audits.updateTemplate(template);
-      await api.audits.copyTemplate(template);
-      const saved = {
-        definition: template.definition,
-        description: template.description,
-        expectedCurrentVersion: 3,
-        name: template.name,
-      };
-      expect(bodies).toEqual([saved, saved]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    await api.audits.updateTemplate(template);
+    await api.audits.copyTemplate(template);
+    const saved = {
+      definition: template.definition,
+      description: template.description,
+      expectedCurrentVersion: 3,
+      name: template.name,
+    };
+    expect(bodies).toEqual([saved, saved]);
   });
 });
 
@@ -87,14 +85,13 @@ describe("audit issue API", () => {
   });
 
   it("preserves rate-limit responses and backs off across repeated 429s", async () => {
-    const originalFetch = globalThis.fetch;
     const file = new File([new Uint8Array([1])], "panel.png", {
       type: "image/png",
     });
     const calls: string[] = [];
     const waits: number[] = [];
-    globalThis.fetch = (async (input) => {
-      calls.push(input.toString());
+    respond(async (url) => {
+      calls.push(url.href);
       if (calls.length <= 3) {
         return Response.json(
           { error: "busy" },
@@ -102,29 +99,25 @@ describe("audit issue API", () => {
         );
       }
       return Response.json({ image: {} });
-    }) as typeof fetch;
+    });
 
-    try {
-      const failures = await uploadIssueImagesSequentially(
-        "issue/id",
-        [file],
-        api.audits.uploadIssueImage,
-        async (milliseconds) => {
-          waits.push(milliseconds);
-        },
-      );
+    const failures = await uploadIssueImagesSequentially(
+      "issue/id",
+      [file],
+      api.audits.uploadIssueImage,
+      async (milliseconds) => {
+        waits.push(milliseconds);
+      },
+    );
 
-      expect(failures).toEqual([]);
-      expect(calls).toEqual([
-        `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
-        `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
-        `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
-        `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
-      ]);
-      expect(waits).toEqual([1_000, 2_000, 4_000]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    expect(failures).toEqual([]);
+    expect(calls).toEqual([
+      `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
+      `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
+      `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
+      `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
+    ]);
+    expect(waits).toEqual([1_000, 2_000, 4_000]);
   });
 
   it("stops retrying an image after a bounded 429 backoff window", async () => {

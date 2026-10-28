@@ -1,54 +1,25 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { beforeAll, describe, expect, it } from "bun:test";
 import type { AuditTemplate } from "@balebase/validators/audits";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/audits/templates/t1" });
-const domGlobals = {
-  cancelAnimationFrame: dom.cancelAnimationFrame.bind(dom),
-  document: dom.document,
-  Element: dom.Element,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
-  requestAnimationFrame: dom.requestAnimationFrame.bind(dom),
+const {
+  mount,
+  respond,
+  settle,
   window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
+} = installDom({
+  url: "http://localhost:5173/audits/templates/t1",
+  globals: (window) => ({
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  }),
+});
 let AuditTemplateBuilder: typeof import("./AuditTemplateBuilder").AuditTemplateBuilder;
-let root: Root | undefined;
 let container: HTMLElement;
 
 beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
   ({ AuditTemplateBuilder } = await import("./AuditTemplateBuilder"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
 });
 
 function question(id: string, prompt: string) {
@@ -87,8 +58,7 @@ const template: AuditTemplate = {
 /** Serves the template; a save echoes back what was sent. */
 function stubApi() {
   const saves: Array<{ definition: AuditTemplate["definition"] }> = [];
-  globalThis.fetch = (async (input, init) => {
-    const url = new URL(String(input instanceof Request ? input.url : input));
+  respond(async (url, init) => {
     if (init?.method === "PUT") {
       const body = JSON.parse(String(init.body)) as {
         definition: AuditTemplate["definition"];
@@ -105,24 +75,15 @@ function stubApi() {
       return Response.json({ versions: [] });
     }
     return Response.json({ events: [], nextCursor: null });
-  }) as typeof fetch;
+  });
   return saves;
 }
 
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 30));
-  });
-}
-
 async function render() {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(<AuditTemplateBuilder id="t1" onNavigate={() => {}} />),
-  );
-  await settle();
+  ({ container } = await mount(
+    <AuditTemplateBuilder id="t1" onNavigate={() => {}} />,
+  ));
+  await settle(30);
 }
 
 const sections = () => [
@@ -159,7 +120,7 @@ async function press(element: Element | null | undefined, key: string) {
       }) as never,
     );
   });
-  await settle();
+  await settle(30);
 }
 
 async function pointer(
@@ -193,7 +154,7 @@ describe("reordering the audit form", () => {
     expect(menuItem("Move down")?.disabled).toBe(false);
 
     await act(async () => menuItem("Move down")?.click());
-    await settle();
+    await settle(30);
     expect(prompts()).toEqual(["Second", "First", "Third"]);
     expect(document.activeElement?.getAttribute("data-reorder-focus")).toBe(
       "number-q1",
@@ -204,7 +165,7 @@ describe("reordering the audit form", () => {
       button.textContent?.includes("Save as version 2"),
     );
     await act(async () => save?.click());
-    await settle();
+    await settle(30);
     expect(
       saves[0]?.definition.sections[0]?.items.map(({ prompt }) => prompt),
     ).toEqual(["Second", "First", "Third"]);
@@ -223,7 +184,7 @@ describe("reordering the audit form", () => {
     );
     expect(menuItem("Move down")?.disabled).toBe(true);
     await act(async () => menuItem("Move up")?.click());
-    await settle();
+    await settle(30);
     expect(sectionTitles()).toEqual(["Storage", "Kitchen"]);
 
     const kitchenHandle = sections()[1]?.querySelector<HTMLElement>(
@@ -255,7 +216,7 @@ describe("reordering the audit form", () => {
     expect(third?.className).toContain("auditDropAfter");
 
     await pointer(handle, "pointerup", 260);
-    await settle();
+    await settle(30);
     expect(prompts()).toEqual(["Second", "Third", "First"]);
     expect(container.querySelector(".auditDragging")).toBeNull();
     expect(prompts(1)).toEqual(["Other"]);
@@ -284,7 +245,7 @@ describe("reordering the audit form", () => {
 
     await pointer(firstHandle, "pointermove", 160, 1);
     await pointer(firstHandle, "pointerup", 160, 1);
-    await settle();
+    await settle(30);
     expect(prompts()).toEqual(["Second", "First", "Third"]);
     expect(container.querySelector(".auditDragging")).toBeNull();
   });
@@ -319,7 +280,7 @@ describe("reordering the audit form", () => {
       // really is, not on the stale target.
       scrolled = 0;
       await pointer(handle, "pointerup", 120);
-      await settle();
+      await settle(30);
       expect(prompts()).toEqual(["First", "Second", "Third"]);
     } finally {
       if (savedScrollY) Object.defineProperty(dom, "scrollY", savedScrollY);
@@ -340,7 +301,7 @@ describe("reordering the audit form", () => {
     expect(prompts()).toEqual(["First", "Second", "Third"]);
     expect(questions()[2]?.className).toContain("auditDragging");
     await pointer(third, "pointerup", 250);
-    await settle();
+    await settle(30);
     expect(prompts()).toEqual(["First", "Second", "Third"]);
 
     const first = questions()[0]?.querySelector(".auditDragHandle");
@@ -350,7 +311,7 @@ describe("reordering the audit form", () => {
     await press(first, "Escape");
     expect(container.querySelector(".auditDragging")).toBeNull();
     await pointer(first, "pointerup", 260);
-    await settle();
+    await settle(30);
     expect(prompts()).toEqual(["First", "Second", "Third"]);
 
     // Once nothing is being dragged, the arrow keys move entries again.
@@ -379,13 +340,13 @@ describe("reordering the audit form", () => {
         ?.click(),
     );
     await act(async () => menuItem("Move down")?.click());
-    await settle();
+    await settle(30);
     expect(prompts()).toEqual(["Second", "First", "Third"]);
     expect(container.querySelector(".auditDragging")).toBeNull();
 
     // The stale drag does not drop the third question into the new order.
     await pointer(third, "pointerup", 120);
-    await settle();
+    await settle(30);
     expect(prompts()).toEqual(["Second", "First", "Third"]);
   });
 

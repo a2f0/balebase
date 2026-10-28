@@ -1,55 +1,21 @@
-import { afterAll, afterEach, beforeAll, expect, it, spyOn } from "bun:test";
+import { afterEach, expect, it, spyOn } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
 import { AdminJobs } from "./AdminJobs";
-import { IntersectionObserverFixture } from "./intersectionObserverFixture";
+import { installDom } from "./testing/dom";
+import { IntersectionObserverFixture } from "./testing/intersectionObserver";
 
-const dom = new Window({ url: "http://localhost:5173/root/jobs" });
-const domGlobals = {
-  document: dom.document,
-  Element: dom.Element,
-  HTMLElement: dom.HTMLElement,
-  IntersectionObserver: IntersectionObserverFixture,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
-  window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+const { button, mount, respond } = installDom({
+  url: "http://localhost:5173/root/jobs",
+  globals: () => ({
+    IntersectionObserver: IntersectionObserverFixture,
+  }),
+});
 let container: HTMLElement;
 
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
+afterEach(() => {
   IntersectionObserverFixture.instances.length = 0;
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
 });
 
 const queued: JobRun = {
@@ -94,8 +60,7 @@ it("times out a slow job output read and lets the user retry", async () => {
   const deadline = new AbortController();
   timeout.mockReturnValue(deadline.signal);
   let detailRequests = 0;
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = new URL(String(input));
+  respond(async (url, init) => {
     if (url.pathname.endsWith("/runs/run-1")) {
       detailRequests += 1;
       if (detailRequests === 1)
@@ -115,7 +80,7 @@ it("times out a slow job output read and lets the user retry", async () => {
     if (url.pathname.endsWith("/runs"))
       return Response.json({ runs: [queued], nextCursor: null });
     return Response.json({ jobs: definitions });
-  }) as typeof fetch;
+  });
   try {
     await render();
     await act(async () => button("View run").click());
@@ -146,8 +111,7 @@ it("keeps saved job output visible while retrying a failed poll", async () => {
       logs: [],
       nextBefore: null,
     });
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = new URL(String(input));
+  respond(async (url) => {
     if (url.pathname.endsWith("/runs/run-1")) {
       detailRequests += 1;
       if (detailRequests === 1) return response(1);
@@ -159,7 +123,7 @@ it("keeps saved job output visible while retrying a failed poll", async () => {
     if (url.pathname.endsWith("/runs"))
       return Response.json({ runs: [queued], nextCursor: null });
     return Response.json({ jobs: definitions });
-  }) as typeof fetch;
+  });
   await render();
   await act(async () => button("View run").click());
   expect(container.textContent).toContain('"progress": 1');
@@ -174,32 +138,21 @@ it("keeps saved job output visible while retrying a failed poll", async () => {
   expect(container.textContent).toContain('"progress": 2');
 }, 15_000);
 
-function button(label: string) {
-  const match = [...document.querySelectorAll("button")].find(
-    (item) => item.textContent?.trim() === label,
-  );
-  if (!match) throw new Error(`Missing button ${label}`);
-  return match;
-}
 async function render() {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(
-      <>
-        <AdminJobs />
-        <DialogHost />
-      </>,
-    ),
+  const view = await mount(
+    <>
+      <AdminJobs />
+      <DialogHost />
+    </>,
   );
+  container = view.container;
+  return view;
 }
 
 it("queues confirmed maintenance, exposes persisted output after remount, and filters bank jobs", async () => {
   let completed = false;
   const requests: string[] = [];
-  const fakeFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = new URL(String(input));
+  respond(async (url, init) => {
     requests.push(`${init?.method ?? "GET"} ${url.pathname}${url.search}`);
     const run = completed
       ? {
@@ -234,9 +187,8 @@ it("queues confirmed maintenance, exposes persisted output after remount, and fi
     if (url.pathname.endsWith("/jobs"))
       return Response.json({ jobs: definitions });
     throw new Error(`Unexpected URL ${url}`);
-  };
-  globalThis.fetch = fakeFetch as typeof fetch;
-  await render();
+  });
+  const first = await render();
   expect(container.textContent).toContain("30 days");
   expect(container.textContent).toContain("Sync bank accounts");
   const jobRows = [...container.querySelectorAll(".adminJobRow")];
@@ -259,7 +211,7 @@ it("queues confirmed maintenance, exposes persisted output after remount, and fi
   expect(container.textContent).toContain("Job queued.");
   expect(container.textContent).not.toContain("Job completed.");
   completed = true;
-  await act(async () => root?.unmount());
+  await first.unmount();
   container.remove();
   await render();
   await act(async () => button("View run").click());
@@ -297,8 +249,7 @@ it("shows failed saved runs and guards against a stale detail response", async (
     errorCode: "INTERRUPTED",
     error: "Review completed work before retrying.",
   };
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = new URL(String(input));
+  respond(async (url) => {
     if (url.pathname.endsWith("/runs/run-1"))
       return new Promise<Response>((resolve) => {
         finishFirst = resolve;
@@ -308,7 +259,7 @@ it("shows failed saved runs and guards against a stale detail response", async (
     if (url.pathname.endsWith("/runs"))
       return Response.json({ runs: [queued, failed], nextCursor: null });
     return Response.json({ jobs: definitions });
-  }) as typeof fetch;
+  });
   await render();
   const views = [...container.querySelectorAll("button")].filter(
     (item) => item.textContent === "View run",
@@ -327,8 +278,7 @@ it("shows failed saved runs and guards against a stale detail response", async (
 
 it("opens a requested run inline immediately and resets older filtered history", async () => {
   const requests: string[] = [];
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = new URL(String(input));
+  respond(async (url, init) => {
     requests.push(`${init?.method ?? "GET"} ${url.pathname}${url.search}`);
     if (init?.method === "POST")
       return Response.json({ run: queued }, { status: 202 });
@@ -341,7 +291,7 @@ it("opens a requested run inline immediately and resets older filtered history",
         nextCursor: url.searchParams.has("cursor") ? null : "older",
       });
     return Response.json({ jobs: definitions });
-  }) as typeof fetch;
+  });
   await render();
   const filter = container.querySelector("select");
   if (!filter) throw new Error("Missing job filter");
@@ -369,8 +319,7 @@ it("opens a requested run inline immediately and resets older filtered history",
 
 it("does not restore a requested run after history has shown it and newer runs replace it", async () => {
   let historyRuns = [queued];
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = new URL(String(input));
+  respond(async (url, init) => {
     if (init?.method === "POST")
       return Response.json({ run: queued }, { status: 202 });
     if (url.pathname.endsWith("/runs/run-1"))
@@ -378,7 +327,7 @@ it("does not restore a requested run after history has shown it and newer runs r
     if (url.pathname.endsWith("/runs"))
       return Response.json({ runs: historyRuns, nextCursor: null });
     return Response.json({ jobs: definitions });
-  }) as typeof fetch;
+  });
   await render();
   await act(async () => button("Run now").click());
   await act(async () => button("Run job").click());
@@ -402,8 +351,7 @@ it("does not restore a requested run after history has shown it and newer runs r
 it("loads older runs on intersection once, deduplicates overlaps, and preserves expanded details", async () => {
   const older = Promise.withResolvers<Response>();
   let olderRequests = 0;
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = new URL(String(input));
+  respond(async (url) => {
     if (url.pathname.endsWith("/runs/run-1"))
       return Response.json({ run: queued, logs: [], nextBefore: null });
     if (url.pathname.endsWith("/runs")) {
@@ -414,7 +362,7 @@ it("loads older runs on intersection once, deduplicates overlaps, and preserves 
       return Response.json({ runs: [queued], nextCursor: "older" });
     }
     return Response.json({ jobs: definitions });
-  }) as typeof fetch;
+  });
   await render();
   await act(async () => button("View run").click());
   const firstRow = container.querySelector(".adminJobHistoryItem");
@@ -443,8 +391,7 @@ it("loads older runs on intersection once, deduplicates overlaps, and preserves 
 it("discards old pages and observer notifications after job and status filters change", async () => {
   const older = Promise.withResolvers<Response>();
   const queries: string[] = [];
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = new URL(String(input));
+  respond(async (url) => {
     if (!url.pathname.endsWith("/runs"))
       return Response.json({ jobs: definitions });
     queries.push(url.search);
@@ -458,7 +405,7 @@ it("discards old pages and observer notifications after job and status filters c
       ],
       nextCursor: url.search ? null : "older",
     });
-  }) as typeof fetch;
+  });
   await render();
   const oldObserver = IntersectionObserverFixture.instances.at(-1);
   await act(async () => IntersectionObserverFixture.intersect());
@@ -491,8 +438,7 @@ it("discards old pages and observer notifications after job and status filters c
 
 it("pauses automatic history paging on failure and retries the same cursor manually", async () => {
   const cursors: string[] = [];
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = new URL(String(input));
+  respond(async (url) => {
     if (!url.pathname.endsWith("/runs"))
       return Response.json({ jobs: definitions });
     const cursor = url.searchParams.get("cursor");
@@ -504,7 +450,7 @@ it("pauses automatic history paging on failure and retries the same cursor manua
       runs: [{ ...queued, runId: "older-run" }],
       nextCursor: null,
     });
-  }) as typeof fetch;
+  });
   await render();
   await act(async () => IntersectionObserverFixture.intersect());
   expect(container.textContent).toContain("History unavailable.");
@@ -524,8 +470,7 @@ it("retries automatic loading when a poll wins the race to load history", async 
   let finishPoll: ((response: Response) => void) | undefined;
   const firstPage = () =>
     Response.json({ runs: [queued], nextCursor: "older" });
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = new URL(String(input));
+  respond(async (url) => {
     if (!url.pathname.endsWith("/runs"))
       return Response.json({ jobs: definitions });
     if (url.searchParams.has("cursor")) {
@@ -539,7 +484,7 @@ it("retries automatic loading when a poll wins the race to load history", async 
     return new Promise<Response>((resolve) => {
       finishPoll = resolve;
     });
-  }) as typeof fetch;
+  });
   try {
     await render();
     const poll = timer.mock.calls.findLast(([, delay]) => delay === 5000)?.[0];
@@ -567,8 +512,7 @@ it("refreshes through the oldest loaded run when new jobs shift page boundaries"
       runs: ids.map((runId) => ({ ...queued, runId, status: "succeeded" })),
       nextCursor,
     });
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = new URL(String(input));
+  respond(async (url) => {
     if (url.pathname.endsWith("/runs/run-1"))
       return Response.json({
         run: { ...queued, status: "succeeded" },
@@ -584,7 +528,7 @@ it("refreshes through the oldest loaded run when new jobs shift page boundaries"
     return refreshed
       ? history(["run-4", "run-3"], "new-2")
       : history(["run-3", "run-2"], "page-2");
-  }) as typeof fetch;
+  });
   try {
     await render();
     await act(async () => IntersectionObserverFixture.intersect());

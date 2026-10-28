@@ -1,54 +1,16 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type { FinanceAccountDetail } from "@balebase/validators/finance";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
 import { FinanceAccountPage } from "./FinanceAccountPage";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({
+const { clickLink, mount, respond, settle, stubClipboard } = installDom({
   url: "http://localhost:5173/finance/accounts/account-1",
+  globals: (window) => ({
+    MouseEvent: window.MouseEvent,
+  }),
 });
-const domGlobals = {
-  document: dom.document,
-  Element: dom.Element,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  MouseEvent: dom.MouseEvent,
-  navigator: dom.navigator,
-  Node: dom.Node,
-  window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
 let container: HTMLElement;
-
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
-  Reflect.deleteProperty(dom.navigator, "clipboard");
-});
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
 
 const detail: FinanceAccountDetail = {
   account: {
@@ -99,16 +61,11 @@ const detail: FinanceAccountDetail = {
   ],
 };
 
-async function mount(onNavigate: (path: string) => void = () => undefined) {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(<FinanceAccountPage id="account-1" onNavigate={onNavigate} />),
-  );
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
+async function mountPage(onNavigate: (path: string) => void = () => undefined) {
+  ({ container } = await mount(
+    <FinanceAccountPage id="account-1" onNavigate={onNavigate} />,
+  ));
+  await settle();
 }
 
 function link(href: string) {
@@ -119,28 +76,22 @@ function link(href: string) {
 
 async function click(element: HTMLElement) {
   await act(async () => {
-    element.dispatchEvent(
-      new dom.MouseEvent("click", {
-        bubbles: true,
-        button: 0,
-        cancelable: true,
-      }) as unknown as MouseEvent,
-    );
+    clickLink(element);
   });
 }
 
 describe("Finance account page", () => {
   it("updates daily sync on the account's bank connection", async () => {
     let enabled = false;
-    globalThis.fetch = (async (input, init) => {
+    respond(async (url, init) => {
       if (init?.method === "PATCH") {
-        expect(String(input)).toEndWith("/connections/item-1/sync-settings");
+        expect(url.href).toEndWith("/connections/item-1/sync-settings");
         enabled = JSON.parse(String(init.body)).dailySync;
         return Response.json({ dailySync: enabled });
       }
       return Response.json(detail);
-    }) as typeof fetch;
-    await mount();
+    });
+    await mountPage();
     expect(container.textContent).toContain("Daily sync");
     const checkbox = container.querySelector<HTMLInputElement>(
       'input[type="checkbox"]',
@@ -152,16 +103,13 @@ describe("Finance account page", () => {
   });
   it("shows the account, its newest transactions, and copyable identifiers", async () => {
     const requests: string[] = [];
-    globalThis.fetch = (async (input) => {
-      requests.push(String(input));
+    respond(async (url) => {
+      requests.push(url.href);
       return Response.json(detail);
-    }) as typeof fetch;
-    const copied: string[] = [];
-    Object.defineProperty(dom.navigator, "clipboard", {
-      configurable: true,
-      value: { writeText: async (text: string) => void copied.push(text) },
     });
-    await mount();
+    const copied: string[] = [];
+    stubClipboard(async (text) => void copied.push(text));
+    await mountPage();
 
     expect(requests).toEqual([
       expect.stringContaining("/api/finance/accounts/account-1"),
@@ -191,10 +139,9 @@ describe("Finance account page", () => {
   });
 
   it("opens the account's connection and transactions in the app", async () => {
-    globalThis.fetch = (async (_input) =>
-      Response.json(detail)) as typeof fetch;
+    respond(async () => Response.json(detail));
     const paths: string[] = [];
-    await mount((path) => paths.push(path));
+    await mountPage((path) => paths.push(path));
 
     await click(link("/finance/transactions/txn-1"));
     await click(link("/finance/connections/item-1"));
@@ -211,12 +158,10 @@ describe("Finance account page", () => {
   });
 
   it("reports an account that cannot be loaded", async () => {
-    globalThis.fetch = (async (_input) =>
-      Response.json(
-        { error: "Account not found." },
-        { status: 404 },
-      )) as typeof fetch;
-    await mount();
+    respond(async () =>
+      Response.json({ error: "Account not found." }, { status: 404 }),
+    );
+    await mountPage();
     expect(container.textContent).toContain("Account not found.");
     expect(container.textContent).not.toContain("Loading account");
   });

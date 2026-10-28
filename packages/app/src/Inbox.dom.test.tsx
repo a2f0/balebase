@@ -1,100 +1,32 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import type {
   InboundEmailDetail,
   InboxFolder,
 } from "@balebase/validators/inbox";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
 import { Inbox } from "./Inbox";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/inbox" });
-const domGlobals = {
-  document: dom.document,
-  Element: dom.Element,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
+const {
+  button,
+  click,
+  mount,
+  respond,
+  settle,
+  stubClipboard,
   window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-const originalClipboard = Object.getOwnPropertyDescriptor(
-  dom.navigator,
-  "clipboard",
-);
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+} = installDom({ url: "http://localhost:5173/inbox" });
 let container: HTMLElement;
 
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
-  if (originalClipboard)
-    Object.defineProperty(dom.navigator, "clipboard", originalClipboard);
-  else Reflect.deleteProperty(dom.navigator, "clipboard");
+afterEach(() => {
   dom.history.replaceState(null, "", "/inbox");
 });
 
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
-
 async function render() {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(<Inbox canAccessFinance={false} onNavigate={() => {}} />),
-  );
+  ({ container } = await mount(
+    <Inbox canAccessFinance={false} onNavigate={() => {}} />,
+  ));
   await settle();
-}
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
-
-function button(label: string) {
-  const found = [...container.querySelectorAll("button")].find(
-    (element) =>
-      element.textContent === label ||
-      element.getAttribute("aria-label") === label,
-  );
-  expect(found).toBeDefined();
-  return found as HTMLButtonElement;
-}
-
-async function click(label: string) {
-  await act(async () => button(label).click());
-  await settle();
-}
-
-function stubClipboard(writeText?: (value: string) => Promise<void>) {
-  Object.defineProperty(dom.navigator, "clipboard", {
-    configurable: true,
-    value: writeText ? { writeText } : undefined,
-  });
 }
 
 function fixture(linkCount = 0, listed = true) {
@@ -119,8 +51,7 @@ function fixture(linkCount = 0, listed = true) {
     text: "Your purchase receipt",
     to: "upload@example.com",
   };
-  globalThis.fetch = (async (input, init) => {
-    const url = new URL(String(input));
+  respond(async (url, init) => {
     requests.push(`${init?.method ?? "GET"} ${url.pathname}${url.search}`);
     if (url.pathname.endsWith("/archive")) {
       status = "archived";
@@ -145,7 +76,7 @@ function fixture(linkCount = 0, listed = true) {
       address: "upload@example.com",
       emails: listed && folder === status ? [{ ...email, status }] : [],
     });
-  }) as typeof fetch;
+  });
   return {
     email,
     requests,

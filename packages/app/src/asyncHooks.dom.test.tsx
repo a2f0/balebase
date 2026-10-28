@@ -1,45 +1,11 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
-import { Window } from "happy-dom";
+import { describe, expect, it } from "bun:test";
 import { act, useCallback } from "react";
-import type { Root } from "react-dom/client";
+import { installDom } from "./testing/dom";
 import { useAction } from "./useAction";
 import { useCursorPages } from "./useCursorPages";
 import { useLoad } from "./useLoad";
 
-const dom = new Window();
-const globals = {
-  document: dom.document,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
-
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(globals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
+const { mount } = installDom();
 
 /** Renders a hook and returns a getter for its latest result. */
 async function renderHook<Props, Result>(
@@ -51,12 +17,10 @@ async function renderHook<Props, Result>(
     result = hook(current.props);
     return null;
   }
-  root = createRoot(document.createElement("div"));
-  await act(async () => root?.render(<Probe props={props} />));
+  const view = await mount(<Probe props={props} />);
   return {
     current: () => result as Result,
-    rerender: (next: Props) =>
-      act(async () => root?.render(<Probe props={next} />)),
+    rerender: (next: Props) => view.render(<Probe props={next} />),
   };
 }
 

@@ -1,56 +1,22 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { beforeAll, describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
 import { apiUrl } from "./config";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/root/global-audits" });
-const domGlobals = {
-  cancelAnimationFrame: dom.cancelAnimationFrame.bind(dom),
-  document: dom.document,
-  Element: dom.Element,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
-  requestAnimationFrame: dom.requestAnimationFrame.bind(dom),
-  window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
+const { button, mount, respond, settle } = installDom({
+  url: "http://localhost:5173/root/global-audits",
+  globals: (window) => ({
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  }),
+});
 let AdminGlobalAudits: typeof import("./AdminGlobalAudits").AdminGlobalAudits;
-let root: Root | undefined;
 let container: HTMLElement;
 
 beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
   ({ AdminGlobalAudits } = await import("./AdminGlobalAudits"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
 });
 
 const globalForm: AuditTemplate = {
@@ -89,8 +55,7 @@ const admin = `${apiUrl}/api/admin/audit-templates`;
 /** Answers like the root admin API, recording every request. */
 function stubApi(form = globalForm, failure?: string) {
   const requests: string[] = [];
-  globalThis.fetch = (async (input, init) => {
-    const url = String(input);
+  respond(async ({ href: url }, init) => {
     const method = init?.method ?? "GET";
     requests.push(`${method} ${url}`);
     if (method === "DELETE") {
@@ -116,42 +81,23 @@ function stubApi(form = globalForm, failure?: string) {
       return Response.json({ events: [], nextCursor: null });
     }
     return Response.json({ template: form });
-  }) as typeof fetch;
-  return requests;
-}
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 30));
   });
+  return requests;
 }
 
 async function render(pathname: string) {
   const paths: string[] = [];
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(
-      <>
-        <AdminGlobalAudits
-          onNavigate={(path) => paths.push(path)}
-          pathname={pathname}
-        />
-        <DialogHost />
-      </>,
-    ),
-  );
-  await settle();
+  ({ container } = await mount(
+    <>
+      <AdminGlobalAudits
+        onNavigate={(path) => paths.push(path)}
+        pathname={pathname}
+      />
+      <DialogHost />
+    </>,
+  ));
+  await settle(30);
   return paths;
-}
-
-function button(text: string) {
-  const found = [...container.querySelectorAll("button")].find(
-    (element) => element.textContent?.trim() === text,
-  );
-  if (!found) throw new Error(`No button labeled ${text}`);
-  return found;
 }
 
 describe("Global Audits", () => {
@@ -160,11 +106,11 @@ describe("Global Audits", () => {
     await render("/root/global-audits/fire%2Fsafety");
     expect(container.textContent).not.toContain("Discard draft");
     await act(async () => button("Unpublish").click());
-    await settle();
+    await settle(30);
     expect(container.textContent).toContain("Form unpublished.");
     expect(container.textContent).not.toContain("Discard draft");
     await act(async () => button("Publish").click());
-    await settle();
+    await settle(30);
     expect(container.textContent).toContain("Form published.");
     expect(
       requests.filter((request) => request.startsWith("PUT")),
@@ -188,7 +134,7 @@ describe("Global Audits", () => {
     );
     expect(confirm).not.toBeNull();
     await act(async () => confirm?.click());
-    await settle();
+    await settle(30);
     expect(requests).toContain(`DELETE ${admin}/fire%2Fsafety`);
     expect(paths).toEqual(["/root/global-audits"]);
   });
@@ -205,7 +151,7 @@ describe("Global Audits", () => {
         .querySelector<HTMLButtonElement>('[role="alertdialog"] .buttonDanger')
         ?.click(),
     );
-    await settle();
+    await settle(30);
     expect(paths).toEqual([]);
     expect(container.textContent).toContain(
       "This template has a newer version.",
@@ -235,7 +181,7 @@ describe("Global Audits", () => {
     const paths = await render("/root/global-audits");
 
     await act(async () => button("New global checklist").click());
-    await settle();
+    await settle(30);
     expect(requests).toEqual([`GET ${admin}`, `POST ${admin}`]);
     expect(paths).toEqual(["/root/global-audits/new%2Fform"]);
   });
@@ -248,7 +194,7 @@ describe("Global Audits", () => {
       "You are managing the shared global form",
     );
     await act(async () => button("Save as version 2").click());
-    await settle();
+    await settle(30);
     expect(container.textContent).toContain("Version 2 saved.");
     expect(requests).toContain(`PUT ${admin}/fire%2Fsafety`);
     expect(requests).toContain(`GET ${admin}/fire%2Fsafety/activity`);

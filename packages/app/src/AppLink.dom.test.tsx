@@ -1,78 +1,16 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
-import { Window } from "happy-dom";
-import { act, type ReactNode } from "react";
-import type { Root } from "react-dom/client";
+import { describe, expect, it } from "bun:test";
+import type { ReactNode } from "react";
 import { AppButtonLink, AppLink } from "./AppLink";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/" });
-const domGlobals = {
-  document: dom.document,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
-  window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+const { clickLink, mount } = installDom({ url: "http://localhost:5173/" });
 let container: HTMLElement;
 
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
-
 async function render(element: ReactNode) {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () => root?.render(element));
+  ({ container } = await mount(element));
   const link = container.querySelector<HTMLAnchorElement>("a");
   if (!link) throw new Error("No link rendered.");
   return link;
-}
-
-/** Clicks the link and reports whether the app took over the click. */
-function click(
-  link: HTMLAnchorElement,
-  init: {
-    altKey?: boolean;
-    button?: number;
-    ctrlKey?: boolean;
-    metaKey?: boolean;
-    shiftKey?: boolean;
-  } = {},
-) {
-  const event = new dom.MouseEvent("click", {
-    bubbles: true,
-    button: 0,
-    cancelable: true,
-    ...init,
-  });
-  link.dispatchEvent(event as unknown as Event);
-  return event.defaultPrevented;
 }
 
 const browserClicks = [
@@ -102,11 +40,11 @@ describe("app links", () => {
     expect(link.textContent).toBe("Laptop");
 
     for (const init of browserClicks) {
-      expect([init, click(link, init)]).toEqual([init, false]);
+      expect([init, clickLink(link, init)]).toEqual([init, false]);
     }
     expect(paths).toEqual([]);
 
-    expect(click(link)).toBe(true);
+    expect(clickLink(link)).toBe(true);
     expect(paths).toEqual(["/equipment/item%2F1"]);
   });
 
@@ -128,9 +66,9 @@ describe("app links", () => {
     expect(link.classList.contains("buttonSm")).toBe(true);
 
     for (const init of browserClicks) {
-      expect(click(link, init)).toBe(false);
+      expect(clickLink(link, init)).toBe(false);
     }
-    expect(click(link)).toBe(true);
+    expect(clickLink(link)).toBe(true);
     expect(paths).toEqual(["/me"]);
   });
 });

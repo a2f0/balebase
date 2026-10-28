@@ -1,64 +1,22 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { Business } from "@balebase/validators/businesses";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
 import { Businesses } from "./Businesses";
+import { installDom } from "./testing/dom";
 
 // Mounts the real page in happy-dom so effects run: the add form folds away
 // and focus moves the way a keyboard user would experience it.
-const dom = new Window({ url: "http://localhost:5173/businesses" });
-const domGlobals = {
-  document: dom.document,
-  Element: dom.Element,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
+const {
+  click,
+  fill,
+  mount,
+  queryButton,
+  respond,
+  settle,
+  stubClipboard,
   window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-const originalClipboard = Object.getOwnPropertyDescriptor(
-  dom.navigator,
-  "clipboard",
-);
-let createRoot: (container: Element) => Root;
-
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  // React DOM decides whether it can use the DOM when first loaded.
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
-
-const mounted: { container: HTMLElement; root: Root }[] = [];
-
-afterEach(async () => {
-  for (const { container, root } of mounted.splice(0)) {
-    await act(async () => root.unmount());
-    container.remove();
-  }
-  globalThis.fetch = originalFetch;
-  if (originalClipboard)
-    Object.defineProperty(dom.navigator, "clipboard", originalClipboard);
-  else Reflect.deleteProperty(dom.navigator, "clipboard");
-});
+} = installDom({ url: "http://localhost:5173/businesses" });
 
 function business(id: string, name: string): Business {
   return {
@@ -83,38 +41,26 @@ function stubApi(
   canManage = true,
 ) {
   const created: string[] = [];
-  globalThis.fetch = (async (_input, init) => {
+  respond(async (_url, init) => {
     if ((init?.method ?? "GET") === "GET") {
       return Response.json({ businesses, canManage });
     }
     const { name } = JSON.parse(String(init?.body)) as { name: string };
     created.push(name);
     return createResponse(name);
-  }) as typeof fetch;
-  return created;
-}
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
   });
+  return created;
 }
 
 async function mountPage(
   onNavigate: (pathname: string) => void = () => {},
   pathname = "/businesses",
 ) {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  mounted.push({ container, root });
-  await act(async () =>
-    root.render(
-      <>
-        <Businesses onNavigate={onNavigate} pathname={pathname} />
-        <DialogHost />
-      </>,
-    ),
+  const { container } = await mount(
+    <>
+      <Businesses onNavigate={onNavigate} pathname={pathname} />
+      <DialogHost />
+    </>,
   );
   await settle();
   return page(container);
@@ -125,15 +71,10 @@ function page(container: HTMLElement) {
     [...container.querySelectorAll("form")].find((element) =>
       element.textContent?.includes("Add a business"),
     );
-  // Null, not undefined, when absent: `document.activeElement` compares to it.
-  const button = (scope: Element | null | undefined, label: string) =>
-    [...(scope?.querySelectorAll("button") ?? [])].find(
-      (element) => element.textContent?.trim() === label,
-    ) ?? null;
   return {
     addButton: () =>
-      button(container.querySelector(".pageActions"), "Add business"),
-    cancelButton: () => button(form(), "Cancel"),
+      queryButton("Add business", container.querySelector(".pageActions")),
+    cancelButton: () => queryButton("Cancel", form()),
     form,
     labelled: (label: string) =>
       container.querySelector<HTMLButtonElement>(
@@ -152,27 +93,6 @@ function page(container: HTMLElement) {
   };
 }
 
-async function click(element: HTMLElement | null | undefined) {
-  expect(element).toBeTruthy();
-  await act(async () => element?.click());
-  await settle();
-}
-
-async function typeName(
-  field: HTMLInputElement | null | undefined,
-  value: string,
-) {
-  expect(field).toBeTruthy();
-  const setValue = Object.getOwnPropertyDescriptor(
-    dom.HTMLInputElement.prototype,
-    "value",
-  )?.set;
-  await act(async () => {
-    setValue?.call(field, value);
-    field?.dispatchEvent(new dom.Event("input", { bubbles: true }) as never);
-  });
-}
-
 describe("adding a business, mounted", () => {
   it("opens the form on arrival for the first business without moving focus", async () => {
     stubApi([], (name) => Response.json({ business: business("b1", name) }));
@@ -188,7 +108,7 @@ describe("adding a business, mounted", () => {
       Response.json({ business: business("b1", name) }),
     );
     const view = await mountPage();
-    await typeName(view.nameField(), "Acme, Inc.");
+    await fill(view.nameField(), "Acme, Inc.");
     await click(view.submitButton());
 
     expect(created).toEqual(["Acme, Inc."]);
@@ -220,7 +140,7 @@ describe("adding a business, mounted", () => {
     );
     const view = await mountPage();
     await click(view.addButton());
-    await typeName(view.nameField(), "Beta LLC");
+    await fill(view.nameField(), "Beta LLC");
     await click(view.submitButton());
 
     expect(created).toEqual(["Beta LLC"]);
@@ -235,7 +155,7 @@ describe("adding a business, mounted", () => {
     );
     const view = await mountPage();
     await click(view.addButton());
-    await typeName(view.nameField(), "Beta LLC");
+    await fill(view.nameField(), "Beta LLC");
     await click(view.submitButton());
 
     expect(view.form()).toBeTruthy();
@@ -244,13 +164,6 @@ describe("adding a business, mounted", () => {
     expect(view.rows()).toBe(1);
   });
 });
-
-function stubClipboard(writeText: (value: string) => Promise<void>) {
-  Object.defineProperty(dom.navigator, "clipboard", {
-    configurable: true,
-    value: { writeText },
-  });
-}
 
 async function openContextMenu(element: HTMLElement | null | undefined) {
   expect(element).toBeTruthy();
@@ -347,10 +260,7 @@ describe("copying a business EIN", () => {
   });
 
   it("reports when the Clipboard API is unavailable", async () => {
-    Object.defineProperty(dom.navigator, "clipboard", {
-      configurable: true,
-      value: undefined,
-    });
+    stubClipboard();
     stubApi([{ ...business("b1", "Acme, Inc."), ein: "123456789" }], () =>
       Response.json({}),
     );
@@ -369,13 +279,13 @@ describe("a business DUNS number", () => {
     );
     const served = globalThis.fetch;
     const posted: unknown[] = [];
-    globalThis.fetch = (async (input, init) => {
+    respond(async (url, init) => {
       if (init?.method === "POST") posted.push(JSON.parse(String(init.body)));
-      return served(input, init);
-    }) as typeof fetch;
+      return served(url, init);
+    });
     const view = await mountPage();
-    await typeName(view.nameField(), "Acme, Inc.");
-    await typeName(
+    await fill(view.nameField(), "Acme, Inc.");
+    await fill(
       view
         .form()
         ?.querySelector<HTMLInputElement>('input[placeholder="12-345-6789"]'),
@@ -431,8 +341,7 @@ describe("a business DUNS number", () => {
 
 describe("copying identifiers on the business detail page", () => {
   async function mountDetail(detail: Business) {
-    globalThis.fetch = (async (_input) =>
-      Response.json({ business: detail, canManage: false })) as typeof fetch;
+    respond(async () => Response.json({ business: detail, canManage: false }));
     return mountPage(undefined, `/businesses/${detail.id}`);
   }
 
@@ -498,13 +407,13 @@ describe("editing a business from its detail page", () => {
     canManage = true,
   ) {
     const patches: unknown[] = [];
-    globalThis.fetch = (async (_input, init) => {
+    respond(async (_url, init) => {
       if (init?.method !== "PATCH") {
         return Response.json({ business: acme, canManage });
       }
       patches.push(JSON.parse(String(init.body)));
       return patch();
-    }) as typeof fetch;
+    });
     const view = await mountPage(undefined, `/businesses/${acme.id}`);
     return { patches, view };
   }
@@ -533,7 +442,7 @@ describe("editing a business from its detail page", () => {
     expect(field("12-3456789")?.value).toBe("12-3456789");
     expect(field("12-345-6789")?.value).toBe("12-345-6789");
 
-    await typeName(field("Acme, Inc."), "Acme Holdings");
+    await fill(field("Acme, Inc."), "Acme Holdings");
     await click(named("Save changes"));
     expect(patches).toEqual([
       expect.objectContaining({
@@ -551,7 +460,7 @@ describe("editing a business from its detail page", () => {
   it("discards edits on cancel and hands focus back to Edit", async () => {
     const { patches, view } = await mountEditable();
     await click(named("Edit"));
-    await typeName(field("Acme, Inc."), "Changed");
+    await fill(field("Acme, Inc."), "Changed");
     await click(named("Cancel"));
     expect(patches).toEqual([]);
     expect(editor()).toBeUndefined();
@@ -567,7 +476,7 @@ describe("editing a business from its detail page", () => {
       ),
     );
     await click(named("Edit"));
-    await typeName(field("Acme, Inc."), "Acme Holdings");
+    await fill(field("Acme, Inc."), "Acme Holdings");
     await click(named("Save changes"));
     expect(editor()).toBeTruthy();
     expect(field("Acme, Inc.")?.value).toBe("Acme Holdings");
@@ -594,16 +503,16 @@ describe("deleting a business", () => {
 
   it("asks in the app's dialog, and deletes only once confirmed", async () => {
     const deletes: string[] = [];
-    globalThis.fetch = (async (input, init) => {
+    respond(async (url, init) => {
       if (init?.method === "DELETE") {
-        deletes.push(String(input));
+        deletes.push(url.href);
         return new Response(null, { status: 204 });
       }
       return Response.json({
         businesses: [business("b1", "Acme, Inc.")],
         canManage: true,
       });
-    }) as typeof fetch;
+    });
     const view = await mountPage();
     const remove = () =>
       [...(view.row()?.querySelectorAll("button") ?? [])].find(

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { api } from "./apiClient";
 import { apiUrl } from "./config";
+import { installFetch } from "./testing/fetch";
+
+const respond = installFetch();
 
 describe("finance API", () => {
   it("requests expense reports for a range, or all time without one", async () => {
@@ -43,16 +46,11 @@ describe("finance API", () => {
 });
 
 async function captureRequests(run: () => Promise<void>) {
-  const originalFetch = globalThis.fetch;
   const urls: string[] = [];
-  globalThis.fetch = (async (input) => {
-    urls.push(input.toString());
+  respond(async (url) => {
+    urls.push(url.href);
     return Response.json({});
-  }) as typeof fetch;
-  try {
-    await run();
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  });
+  await run();
   return urls;
 }

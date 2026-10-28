@@ -1,54 +1,18 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type { Issue } from "@balebase/validators/issues";
-import { Window } from "happy-dom";
 import { act, type ReactNode } from "react";
-import type { Root } from "react-dom/client";
 import { FinanceTransactionPage } from "./FinanceTransactionPage";
 import { Issues } from "./Issues";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/finance" });
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+const {
+  click,
+  mount,
+  respond,
+  window: dom,
+} = installDom({ url: "http://localhost:5173/finance" });
 let container: HTMLElement;
-beforeAll(async () => {
-  for (const [key, value] of Object.entries({
-    document: dom.document,
-    HTMLElement: dom.HTMLElement,
-    Node: dom.Node,
-    IS_REACT_ACT_ENVIRONMENT: true,
-    window: dom,
-  })) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
-});
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
 
-function respond(
-  handler: (url: URL, init?: RequestInit) => Response | Promise<Response>,
-) {
-  globalThis.fetch = ((input, init) =>
-    Promise.resolve(handler(new URL(input.toString()), init))) as typeof fetch;
-}
 const issue: Issue = {
   id: "issue-1",
   title: "Duplicate charge",
@@ -93,18 +57,8 @@ const source = {
   plaidTransactionId: "plaid-old-txn",
   updatedAt: "2018-01-02T12:00:00.000Z",
 };
-async function mount(node: ReactNode) {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () => root?.render(node));
-}
-async function click(label: string) {
-  const button = [...container.querySelectorAll("button")].find(
-    (node) => node.textContent?.trim() === label,
-  );
-  if (!button) throw new Error(`Missing button ${label}`);
-  await act(async () => button.click());
+async function show(node: ReactNode) {
+  ({ container } = await mount(node));
 }
 async function submit() {
   await act(async () =>
@@ -133,7 +87,7 @@ describe("workspace issues, mounted", () => {
       queries.push(url.searchParams);
       return Response.json({ issues: [issue], nextCursor: null });
     });
-    await mount(
+    await show(
       <Issues
         pathname="/issues"
         canAccessFinance
@@ -173,7 +127,7 @@ describe("workspace issues, mounted", () => {
       }
       return baseResponse(url);
     });
-    await mount(
+    await show(
       <Issues
         pathname="/issues/new/transactions/old-txn"
         canAccessFinance
@@ -231,7 +185,7 @@ describe("workspace issues, mounted", () => {
       }
       return baseResponse(url);
     });
-    await mount(
+    await show(
       <Issues
         pathname="/issues/issue-1"
         canAccessFinance
@@ -299,7 +253,7 @@ describe("workspace issues, mounted", () => {
         return Response.json({ issues: [issue], nextCursor: null });
       return baseResponse(url);
     });
-    await mount(
+    await show(
       <FinanceTransactionPage
         id="old-txn"
         onNavigate={(path) => paths.push(path)}
@@ -329,7 +283,7 @@ it("handles malformed issue links without a render exception", async () => {
     requests.push(url.pathname);
     return Response.json({ error: "Issue not found." }, { status: 404 });
   });
-  await mount(
+  await show(
     <Issues
       pathname="/issues/%E0"
       canAccessFinance
