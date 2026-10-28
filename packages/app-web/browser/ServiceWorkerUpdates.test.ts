@@ -92,6 +92,75 @@ async function confirmUpdate(page: Page) {
   await page.getByRole("button", { name: "Update and reload" }).click();
 }
 
+interface Activation {
+  channel: MessageChannel;
+  controllerChanged: boolean;
+  postedToWaiting: boolean;
+  replies: unknown[];
+}
+
+/**
+ * Asks the waiting worker to activate, as an update from another tab does,
+ * and waits for it to control the page. Gives up well before the test's
+ * timeout, reporting the registration's workers and the worker's replies.
+ */
+async function activateFromAnotherTab(page: Page) {
+  await page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.getRegistration();
+    const activation: Activation = {
+      channel: new MessageChannel(),
+      controllerChanged: false,
+      postedToWaiting: Boolean(registration?.waiting),
+      replies: [],
+    };
+    Reflect.set(window, "activation", activation);
+    activation.channel.port1.onmessage = (event) =>
+      activation.replies.push(event.data);
+    navigator.serviceWorker.addEventListener(
+      "controllerchange",
+      () => {
+        activation.controllerChanged = true;
+      },
+      { once: true },
+    );
+    registration?.waiting?.postMessage({ type: "ACTIVATE_UPDATE" }, [
+      activation.channel.port2,
+    ]);
+  });
+  try {
+    await page.waitForFunction(
+      () => (Reflect.get(window, "activation") as Activation).controllerChanged,
+      undefined,
+      { timeout: 15_000 },
+    );
+  } catch (cause) {
+    const state = await page.evaluate(async () => {
+      const worker = (candidate: ServiceWorker | null | undefined) =>
+        candidate
+          ? { scriptURL: candidate.scriptURL, state: candidate.state }
+          : null;
+      const registration = await navigator.serviceWorker.getRegistration();
+      const { postedToWaiting, replies } = Reflect.get(
+        window,
+        "activation",
+      ) as Activation;
+      return {
+        active: worker(registration?.active),
+        controller: worker(navigator.serviceWorker.controller),
+        installing: worker(registration?.installing),
+        postedToWaiting,
+        registered: Boolean(registration),
+        replies,
+        waiting: worker(registration?.waiting),
+      };
+    });
+    throw new Error(
+      `The waiting worker did not take control: ${JSON.stringify(state)}`,
+      { cause },
+    );
+  }
+}
+
 for (const engine of [chromium, firefox, webkit]) {
   const { CHROME_PATH } = process.env;
   const launchOptions =
@@ -271,19 +340,7 @@ for (const engine of [chromium, firefox, webkit]) {
       app.deploy();
       await checkForUpdate(page, "focus");
       await page.getByText("Update available", { exact: true }).waitFor();
-      await page.evaluate(async () => {
-        const registration = await navigator.serviceWorker.getRegistration();
-        await new Promise<void>((resolve) => {
-          navigator.serviceWorker.addEventListener(
-            "controllerchange",
-            () => resolve(),
-            { once: true },
-          );
-          registration?.waiting?.postMessage({ type: "ACTIVATE_UPDATE" }, [
-            new MessageChannel().port2,
-          ]);
-        });
-      });
+      await activateFromAnotherTab(page);
       expect(await page.evaluate(() => sessionStorage.getItem("loads"))).toBe(
         "1",
       );

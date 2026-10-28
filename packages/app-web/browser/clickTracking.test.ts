@@ -42,10 +42,11 @@ beforeAll(async () => {
   );
 }, 120_000);
 
+// Chrome can take longer than Bun's 5 s hook default to exit on a loaded host.
 afterAll(async () => {
   await browser?.close();
   await rm(dist, { recursive: true, force: true });
-});
+}, 30_000);
 
 it("the real Vite bundle initializes only at the app's deployed origins", async () => {
   for (const [origin, environment] of [
