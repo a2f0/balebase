@@ -1,7 +1,6 @@
 import { adminAuditTemplatesRoutes } from "@balebase/validators/adminAuditTemplates";
 import { Hono } from "hono";
 import { findActivity, requestActor } from "./activity";
-import { isRecord, validText } from "./auditDefinition";
 import {
   createTemplate,
   ensureStarterTemplates,
@@ -17,6 +16,7 @@ import {
   toTemplate,
 } from "./auditTemplates";
 import type { ApiEnv } from "./authMiddleware";
+import { isRecord, validText } from "./jsonInput";
 import { respond } from "./respond";
 
 /**
@@ -40,7 +40,7 @@ adminAuditTemplates.get("/", async (context) => {
 
 adminAuditTemplates.post("/", async (context) => {
   const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord(body) || !validText(body.name, 200)) {
+  if (!isRecord<"name">(body) || !validText(body.name, 200)) {
     return context.json({ error: "A template name is required." }, 400);
   }
   const template = await createTemplate(context.env.DB, {
@@ -128,7 +128,7 @@ adminAuditTemplates.put("/:id", async (context) => {
   const body: unknown = await context.req.json().catch(() => null);
   const input = templateSaveInput(body);
   if (typeof input === "string") return context.json({ error: input }, 400);
-  const status = isRecord(body) ? body.status : undefined;
+  const status = isRecord<"status">(body) ? body.status : undefined;
   if (
     status !== undefined &&
     status !== "published" &&
@@ -174,7 +174,10 @@ adminAuditTemplates.delete("/:id", async (context) => {
     );
   }
   const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord(body) || !Number.isSafeInteger(body.expectedCurrentVersion)) {
+  if (
+    !isRecord<"expectedCurrentVersion">(body) ||
+    !Number.isSafeInteger(body.expectedCurrentVersion)
+  ) {
     return context.json(
       { error: "The current template version is required." },
       400,

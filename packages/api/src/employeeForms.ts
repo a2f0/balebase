@@ -22,6 +22,7 @@ import {
 } from "./checkrScreening";
 import { checkrTestCandidates } from "./checkrTestCandidates";
 import { normalizeFilename } from "./filenames";
+import { isRecord } from "./jsonInput";
 import { canManage, requireManager } from "./organizationMembers";
 import { respond } from "./respond";
 import {
@@ -116,7 +117,7 @@ employeeForms.get("/", async (context) => {
 
 employeeForms.post("/", requireManager(), async (context) => {
   const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord(body)) {
+  if (!isRecord<keyof InputRecord>(body)) {
     return context.json(
       { error: "A target and requirements are required." },
       400,
@@ -195,7 +196,8 @@ employeeForms.patch("/:id", requireManager(), async (context) => {
   const row = await findRequirement(context);
   if (!row) return context.json({ error: "Requirement not found." }, 404);
   const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord(body)) return context.json({ error: "Invalid update." }, 400);
+  if (!isRecord<keyof InputRecord>(body))
+    return context.json({ error: "Invalid update." }, 400);
   const status = body.status;
   const dueDate = body.dueDate;
   if (!isValidRequirementUpdate(row, body)) {
@@ -435,7 +437,11 @@ employeeForms.post("/:id/checkr/request", requireManager(), async (context) => {
     );
   }
   const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord(body) || !isUsStateCode(body.state) || !isCity(body.city)) {
+  if (
+    !isRecord<keyof InputRecord>(body) ||
+    !isUsStateCode(body.state) ||
+    !isCity(body.city)
+  ) {
     return context.json(
       { error: "A US work state and optional city are required." },
       400,
@@ -847,10 +853,6 @@ interface InputRecord {
   city?: unknown;
 }
 
-function isRecord(value: unknown): value is InputRecord {
-  return typeof value === "object" && value !== null;
-}
-
 function isDate(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;
@@ -864,7 +866,7 @@ function isDate(value: unknown): value is string {
 
 function isRequirementInput(value: unknown): value is EmployeeRequirementInput {
   return (
-    isRecord(value) &&
+    isRecord<keyof InputRecord>(value) &&
     typeof value.kind === "string" &&
     ["form", "background_check", "credit_check"].includes(value.kind) &&
     typeof value.title === "string" &&

@@ -13,12 +13,7 @@ import {
   requestActor,
   toAuditAnswerActivity,
 } from "./activity";
-import {
-  allRequiredAnswered,
-  isRecord,
-  parseResponses,
-  validText,
-} from "./auditDefinition";
+import { allRequiredAnswered, parseResponses } from "./auditDefinition";
 import {
   type AuditIssueImageRow,
   findAuditIssueImages,
@@ -55,6 +50,8 @@ import {
 import type { ApiEnv } from "./authMiddleware";
 import { freeFormTemplateLimit, organizationTemplateLimit } from "./billing";
 import { cursorPage, decodeCursor, encodeCursor } from "./cursorPagination";
+import type { IssueField } from "./issueRecords";
+import { isRecord, validText } from "./jsonInput";
 import { respond } from "./respond";
 
 const audits = new Hono<ApiEnv>();
@@ -101,7 +98,7 @@ audits.get("/templates", async (context) => {
 
 audits.post("/templates", async (context) => {
   const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord(body) || !validText(body.name, 200)) {
+  if (!isRecord<"name" | "scope">(body) || !validText(body.name, 200)) {
     return context.json({ error: "A template name is required." }, 400);
   }
   // Global templates are created through Global Audits.
@@ -431,7 +428,7 @@ audits.patch("/runs/:id", async (context) => {
   if (audit.deleted_at)
     return context.json({ error: discardedAuditError }, 409);
   const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord(body))
+  if (!isRecord<"expectedRevision" | "responses" | "status">(body))
     return context.json({ error: "Invalid audit update." }, 400);
   if (
     typeof body.expectedRevision !== "number" ||
@@ -554,7 +551,7 @@ audits.post("/runs/:id/issues", async (context) => {
 
 audits.patch("/issues/:id", async (context) => {
   const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord(body))
+  if (!isRecord<"assignedTo" | "status">(body))
     return context.json({ error: "Invalid issue update." }, 400);
   const organizationId = context.get("organizationId");
   const issue = await findIssueForUpdate(
@@ -764,7 +761,8 @@ async function parseIssueInput(
   definition: AuditDefinition,
   value: unknown,
 ) {
-  if (!isRecord(value) || !validText(value.itemId, 100)) return null;
+  if (!isRecord<IssueField | "itemId">(value) || !validText(value.itemId, 100))
+    return null;
   if (!validText(value.title, 300)) return null;
   if (!definitionItemIds(definition).has(value.itemId)) return null;
   const description =

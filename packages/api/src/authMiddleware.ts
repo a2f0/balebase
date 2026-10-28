@@ -11,6 +11,7 @@ import {
 import type { AuthSession } from "./auth";
 import { createAuth } from "./auth";
 import { organizationUserHasSeat } from "./billing";
+import { isRecord } from "./jsonInput";
 import { isOrganizationOwner } from "./organizationMembers";
 import type { Bindings } from "./types";
 
@@ -442,10 +443,6 @@ const organizationPluginPathsUsingActiveTeam = new Set([
   "/api/auth/organization/get-active-team",
   "/api/auth/organization/list-team-members",
 ]);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function stringProperty(value: Record<string, unknown>, key: string) {
   const property = value[key];

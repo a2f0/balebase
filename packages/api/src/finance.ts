@@ -39,6 +39,7 @@ import {
 } from "./financeSyncRoutes";
 import { searchTransactions } from "./financeTransactionSearch";
 import { listLinkedEmails, toLinkedEmail } from "./inboundEmailLinks";
+import { isRecord, validText } from "./jsonInput";
 import { PlaidApiError, type PlaidRequest, plaidRequest } from "./plaid";
 import { decryptToken, encryptToken } from "./plaidCrypto";
 import { respond } from "./respond";
@@ -761,7 +762,9 @@ function clientUserId(organizationId: string, userId: string) {
   return `${organizationId}:${userId}`.slice(0, 128);
 }
 
-async function financeInput(context: FinanceContext) {
+async function financeInput(
+  context: FinanceContext,
+): Promise<FinanceInput | null> {
   const input: unknown = await context.req.json().catch(() => null);
   return isRecord(input) ? input : null;
 }
@@ -807,16 +810,6 @@ function parseLabels(value: string | null) {
   } catch {
     return [];
   }
-}
-
-function isRecord(value: unknown): value is FinanceInput {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function validText(value: unknown, maxLength: number): value is string {
-  return (
-    typeof value === "string" && value.length > 0 && value.length <= maxLength
-  );
 }
 
 function optionalText(value: unknown, maxLength: number) {
