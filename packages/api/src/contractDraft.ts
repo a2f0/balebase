@@ -1,41 +1,20 @@
+import type {
+  ContractDraft,
+  DraftField,
+  DraftRecipient,
+} from "@balebase/validators/contracts";
 import { CalendarDateSchema } from "@balebase/validators/fields";
-import type { ContractRow, FieldRow } from "./contractRecords";
+import type { ContractRow } from "./contractRecords";
 
 const maxRecipients = 20;
 const maxFields = 500;
 const fieldTypes = ["signature", "initials", "date_signed", "name", "text"];
 
-interface DraftRecipient {
-  email: string;
-  key: string;
-  name: string;
-  routingOrder: number;
-}
-
-interface DraftField {
-  height: number;
-  label: string | null;
-  page: number;
-  recipientKey: string;
-  required: boolean;
-  type: FieldRow["type"];
-  width: number;
-  x: number;
-  y: number;
-}
-
-export interface Draft {
-  dueDate: string | null;
-  fields: DraftField[];
-  message: string;
-  recipients: DraftRecipient[];
-  reminderIntervalDays: number | null;
-  signingOrder: "parallel" | "sequential";
-  title: string;
-}
-
 /** Validates a draft save, returning a message when it is invalid. */
-export function draftInput(body: unknown, pageCount: number): Draft | string {
+export function draftInput(
+  body: unknown,
+  pageCount: number,
+): ContractDraft | string {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     return "The contract draft is invalid.";
   }
@@ -55,7 +34,7 @@ export function draftInput(body: unknown, pageCount: number): Draft | string {
 
 function detailsInput(
   field: (name: string) => unknown,
-): Omit<Draft, "fields" | "recipients"> | string {
+): Omit<ContractDraft, "fields" | "recipients"> | string {
   const title = textValue(field("title"));
   if (!title || title.length > 200) {
     return "Give the contract a title of up to 200 characters.";
@@ -235,7 +214,7 @@ function rectInput(x: unknown, y: unknown, width: unknown, height: unknown) {
 export function draftStatements(
   database: D1Database,
   contract: Pick<ContractRow, "id" | "organization_id">,
-  draft: Draft,
+  draft: ContractDraft,
   now: string,
 ) {
   const recipientIds = new Map(

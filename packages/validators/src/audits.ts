@@ -4,7 +4,7 @@ import {
   ActivityPageSchema,
   ActivityQuerySchema,
 } from "./activity";
-import { optionalText, requiredText } from "./fields";
+import { optionalText, PersonSchema, requiredText } from "./fields";
 import { IssueSchema, NewIssueSchema } from "./issues";
 import { route } from "./route";
 import { auditLimits } from "./rules";
@@ -40,14 +40,6 @@ export const AuditDefinitionSchema = z.object({
 });
 export type AuditDefinition = z.infer<typeof AuditDefinitionSchema>;
 
-/** Someone an audit names: who saved, started, or uploaded, or a member. */
-const AuditPersonSchema = z.object({
-  email: z.string(),
-  id: z.string(),
-  name: z.string(),
-});
-export type AuditPerson = z.infer<typeof AuditPersonSchema>;
-
 const AuditTemplateScopeSchema = z.enum(["global", "organization"]);
 export type AuditTemplateScope = z.infer<typeof AuditTemplateScopeSchema>;
 
@@ -59,7 +51,7 @@ const AuditTemplateSchema = z.object({
   id: z.string(),
   name: z.string(),
   savedAt: z.string(),
-  savedBy: AuditPersonSchema,
+  savedBy: PersonSchema,
   scope: AuditTemplateScopeSchema,
   /** Draft, published, or unpublished; the stored value is not constrained. */
   status: z.string(),
@@ -70,7 +62,7 @@ export type AuditTemplate = z.infer<typeof AuditTemplateSchema>;
 
 const AuditTemplateVersionSchema = z.object({
   createdAt: z.string(),
-  createdBy: AuditPersonSchema,
+  createdBy: PersonSchema,
   version: z.number(),
 });
 export type AuditTemplateVersion = z.infer<typeof AuditTemplateVersionSchema>;
@@ -131,10 +123,10 @@ export type AuditRunView = z.infer<typeof AuditRunViewSchema>;
 const AuditRunFields = {
   completedAt: z.string().nullable(),
   createdAt: z.string(),
-  createdBy: AuditPersonSchema,
+  createdBy: PersonSchema,
   deletedAt: z.string().nullable(),
   /** Null once the discarding account has been deleted. */
-  deletedBy: AuditPersonSchema.nullable(),
+  deletedBy: PersonSchema.nullable(),
   id: z.string(),
   status: AuditStatusSchema,
   templateName: z.string(),
@@ -169,7 +161,7 @@ const AuditIssueImageSchema = z.object({
   filename: z.string(),
   id: z.string(),
   size: z.number(),
-  uploadedBy: AuditPersonSchema,
+  uploadedBy: PersonSchema,
 });
 export type AuditIssueImage = z.infer<typeof AuditIssueImageSchema>;
 
@@ -182,7 +174,7 @@ const AuditIssueSchema = z.object({
   assigneeEmail: z.string().nullable(),
   assigneeName: z.string().nullable(),
   createdAt: z.string(),
-  createdBy: AuditPersonSchema,
+  createdBy: PersonSchema,
   description: z.string(),
   id: z.string(),
   images: z.array(AuditIssueImageSchema),
@@ -197,7 +189,7 @@ export type AuditIssue = z.infer<typeof AuditIssueSchema>;
 const AuditDetailSchema = z.object({
   audit: AuditRunSchema,
   issues: z.array(AuditIssueSchema),
-  members: z.array(AuditPersonSchema),
+  members: z.array(PersonSchema),
 });
 export type AuditDetail = z.infer<typeof AuditDetailSchema>;
 

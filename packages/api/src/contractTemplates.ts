@@ -2,6 +2,7 @@ import {
   type ContractTemplate,
   type ContractTemplateSummary,
   contractTemplatesRoutes,
+  type TemplateDefinition,
   type TemplateVersion,
 } from "@balebase/validators/contractTemplates";
 import { type Context, Hono } from "hono";
@@ -9,11 +10,7 @@ import type { ApiEnv } from "./authMiddleware";
 import { draftStatements } from "./contractDraft";
 import { InvalidPdfError, inspectPdf, sha256Hex } from "./contractPdf";
 import { eventStatement } from "./contractRecords";
-import {
-  mappedDraft,
-  type TemplateDefinition,
-  templateInput,
-} from "./contractTemplateDefinition";
+import { mappedDraft, templateInput } from "./contractTemplateDefinition";
 import { normalizeFilename } from "./filenames";
 import { respond } from "./respond";
 

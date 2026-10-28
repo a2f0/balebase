@@ -4,21 +4,15 @@ import {
   CalendarDateSchema,
   type FormInput,
   optionalText,
+  PersonSchema,
   requiredText,
 } from "./fields";
 import { LinkedEmailSchema } from "./inbox";
 import { route } from "./route";
 import { equipmentLimits, equipmentTypes } from "./rules";
 
-const EquipmentMemberSchema = z.object({
-  email: z.string(),
-  id: z.string(),
-  name: z.string(),
-});
-export type EquipmentMember = z.infer<typeof EquipmentMemberSchema>;
-
 const EquipmentItemSchema = z.object({
-  assignee: EquipmentMemberSchema.nullable(),
+  assignee: PersonSchema.nullable(),
   createdAt: z.string(),
   /** Inbox emails outside Trash linked to this item. */
   emailCount: z.number(),
@@ -35,7 +29,7 @@ export type EquipmentItem = z.infer<typeof EquipmentItemSchema>;
 
 const EquipmentContextSchema = z.object({
   canManage: z.boolean(),
-  members: z.array(EquipmentMemberSchema),
+  members: z.array(PersonSchema),
   /** The types new equipment can have, in display order. */
   types: z.array(z.enum(equipmentTypes)),
 });

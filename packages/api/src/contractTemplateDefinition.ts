@@ -1,20 +1,5 @@
-import { type Draft, draftInput, validEmail } from "./contractDraft";
-
-interface Role {
-  key: string;
-  label: string;
-  routingOrder: number;
-}
-
-export interface TemplateDefinition {
-  fields: Array<
-    Omit<Draft["fields"][number], "recipientKey"> & { roleKey: string }
-  >;
-  message: string;
-  reminderIntervalDays: number | null;
-  roles: Role[];
-  signingOrder: Draft["signingOrder"];
-}
+import type { TemplateDefinition } from "@balebase/validators/contractTemplates";
+import { draftInput, validEmail } from "./contractDraft";
 
 export function templateInput(body: unknown, pageCount: number) {
   if (!body || typeof body !== "object" || Array.isArray(body))

@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
+import type { TemplateDefinition } from "@balebase/validators/contractTemplates";
 import { Hono } from "hono";
 import { degrees, PDFDocument } from "pdf-lib";
 import {
@@ -7,7 +8,6 @@ import {
   sendContractReminders,
 } from "./contractReminders";
 import { contracts } from "./contracts";
-import type { TemplateDefinition } from "./contractTemplateDefinition";
 import { signing } from "./signing";
 import { memoryStorage, testBindings } from "./testing/bindings";
 import { queryHooks, toD1 } from "./testing/d1";

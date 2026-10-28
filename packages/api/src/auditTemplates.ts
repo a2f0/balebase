@@ -1,12 +1,12 @@
 import {
   type AuditDefinition,
   AuditDefinitionSchema,
-  type AuditPerson,
   type AuditTemplate,
   type AuditTemplateSaveSchema,
   type AuditTemplateScope,
   type AuditTemplateVersion,
 } from "@balebase/validators/audits";
+import type { Person } from "@balebase/validators/fields";
 import type { z } from "zod";
 import { type ActivityActor, activityBatch } from "./activity";
 import { nfpa70eStarter } from "./nfpa70eStarter";
@@ -405,6 +405,6 @@ function toTemplateVersion(row: TemplateVersionRow): AuditTemplateVersion {
   };
 }
 
-function templateActor(id: string, name: string, email: string): AuditPerson {
+function templateActor(id: string, name: string, email: string): Person {
   return id === auditLibraryActor.id ? auditLibraryActor : { email, id, name };
 }

@@ -9,8 +9,10 @@ import {
   PageSection,
 } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
-import type { IssueMember } from "@balebase/validators/issues";
+import type { Person } from "@balebase/validators/fields";
+
 import type { OfflineScope } from "@balebase/validators/offline";
+
 import { useEffect, useState } from "react";
 import { api } from "./apiClient";
 import { errorMessage } from "./errors";
@@ -30,7 +32,7 @@ import { useAction } from "./useAction";
 
 export interface OfflineIdentity {
   scope: OfflineScope;
-  user: IssueMember;
+  user: Person;
   organizationName: string;
 }
 

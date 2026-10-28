@@ -20,11 +20,11 @@ import type {
   AuditIssue,
   AuditIssuePriority,
   AuditIssueUpdate,
-  AuditPerson,
   AuditRun,
   AuditTemplateItem,
   AuditTemplateSection,
 } from "@balebase/validators/audits";
+import type { Person } from "@balebase/validators/fields";
 import {
   useCallback,
   useEffect,
@@ -390,7 +390,7 @@ interface IssueContext {
   audit: AuditRun;
   auditId: string;
   issues: AuditIssue[];
-  members: AuditPerson[];
+  members: Person[];
   onCreated: () => Promise<void>;
 }
 
@@ -660,7 +660,7 @@ export function FailedItemIssue({
 }: {
   auditId: string;
   item: AuditTemplateItem;
-  members: AuditPerson[];
+  members: Person[];
   onCreated: (offer: number, warning?: string) => Promise<void>;
   onSkipChange: (skip: boolean) => void;
   openIssueCount: number;
@@ -760,7 +760,7 @@ function IssuePanel({
   auditId: string;
   definition: AuditDefinition;
   issues: AuditIssue[];
-  members: AuditPerson[];
+  members: Person[];
   onChange: () => Promise<void>;
   responses: Record<string, string>;
 }) {
@@ -817,7 +817,7 @@ function IssueForm({
 }: {
   auditId: string;
   items: AuditTemplateItem[];
-  members: AuditPerson[];
+  members: Person[];
   onCreated: (warning?: string) => Promise<void>;
   responses: Record<string, string>;
 }) {
@@ -923,7 +923,7 @@ function IssueDraftFields({
   members,
 }: {
   draft: IssueDraft;
-  members: AuditPerson[];
+  members: Person[];
 }) {
   return (
     <>
@@ -1027,7 +1027,7 @@ function IssueAssignmentFields({
   priority,
 }: {
   assignedTo: string;
-  members: AuditPerson[];
+  members: Person[];
   onAssignedToChange: (assignedTo: string) => void;
   onPriorityChange: (priority: AuditIssuePriority) => void;
   priority: AuditIssuePriority;
@@ -1071,7 +1071,7 @@ function IssueList({
   onError,
 }: {
   issues: AuditIssue[];
-  members: AuditPerson[];
+  members: Person[];
   onChange: () => Promise<void>;
   onError: (error: string | undefined) => void;
 }) {
@@ -1106,7 +1106,7 @@ function IssueCard({
   onError,
 }: {
   issue: AuditIssue;
-  members: AuditPerson[];
+  members: Person[];
   onChange: () => Promise<void>;
   onError: (error: string | undefined) => void;
 }) {
@@ -1160,7 +1160,7 @@ function IssueCardActions({
 }: {
   busy: boolean;
   issue: AuditIssue;
-  members: AuditPerson[];
+  members: Person[];
   onUpdate: (update: AuditIssueUpdate) => Promise<void>;
 }) {
   const assignedMemberIsMissing =

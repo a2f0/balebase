@@ -142,6 +142,7 @@ export const DraftFieldSchema = FieldBoxSchema.extend({
   required: z.boolean(),
   type: FieldTypeSchema,
 });
+export type DraftField = z.infer<typeof DraftFieldSchema>;
 
 const ContractDraftSchema = z.object({
   dueDate: z.string().nullable(),

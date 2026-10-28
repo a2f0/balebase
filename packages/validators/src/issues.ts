@@ -19,8 +19,6 @@ export type IssueTargetType = z.infer<typeof IssueTargetTypeSchema>;
 const IssuePrioritySchema = z.enum(issuePriorities);
 const IssueStatusSchema = z.enum(["open", "resolved"]);
 
-export type IssueMember = z.infer<typeof PersonSchema>;
-
 export const IssueSchema = z.object({
   assignedTo: PersonSchema.nullable(),
   createdAt: z.string(),

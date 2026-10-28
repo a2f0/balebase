@@ -18,10 +18,12 @@ import {
 import type {
   EquipmentInput,
   EquipmentItem,
-  EquipmentMember,
 } from "@balebase/validators/equipment";
+import type { Person } from "@balebase/validators/fields";
 import type { LinkedEmail } from "@balebase/validators/inbox";
+
 import { isEquipmentType } from "@balebase/validators/rules";
+
 import {
   type FormEvent,
   type RefObject,
@@ -210,7 +212,7 @@ function EquipmentFilters({
   types,
 }: {
   assignee: AssigneeFilter;
-  members: EquipmentMember[];
+  members: Person[];
   onAssigneeChange: (assignee: AssigneeFilter) => void;
   onTypeChange: (type: string) => void;
   type: string;
@@ -329,7 +331,7 @@ function EquipmentList({
   );
 }
 
-function Assignee({ member }: { member: EquipmentMember | null }) {
+function Assignee({ member }: { member: Person | null }) {
   if (!member) {
     return (
       <span className="equipmentAssignee equipmentUnassigned">Unassigned</span>
@@ -532,7 +534,7 @@ function EquipmentDetails({
   busy: boolean;
   canManage: boolean;
   item: EquipmentItem;
-  members: EquipmentMember[];
+  members: Person[];
   onAssign: (assigneeId: string | null) => void;
 }) {
   return (
@@ -592,7 +594,7 @@ function AssigneeSelect({
   compact?: boolean;
   disabled?: boolean;
   label: string;
-  members: EquipmentMember[];
+  members: Person[];
   onChange: (assigneeId: string | null) => void;
   value: string | null;
 }) {
@@ -622,7 +624,7 @@ function EquipmentForm({
   types,
 }: {
   initial?: EquipmentItem;
-  members: EquipmentMember[];
+  members: Person[];
   onCancel: () => void;
   onSave: (input: EquipmentInput) => Promise<boolean>;
   types: string[];
@@ -700,7 +702,7 @@ function EquipmentFields({
 }: {
   firstField: RefObject<HTMLSelectElement | null>;
   form: EquipmentInput;
-  members: EquipmentMember[];
+  members: Person[];
   set: <Key extends keyof EquipmentInput>(
     key: Key,
     value: EquipmentInput[Key],

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PersonSchema } from "./fields";
 import { route } from "./route";
 
 /** One person's membership in an organization. */
@@ -12,7 +13,7 @@ export const OrganizationMemberSchema = z.object({
   twoFactorEnabled: z.boolean().optional(),
   /** Sent to managers only. */
   twoFactorRequired: z.boolean().optional(),
-  user: z.object({ email: z.string(), id: z.string(), name: z.string() }),
+  user: PersonSchema,
 });
 export type OrganizationMember = z.infer<typeof OrganizationMemberSchema>;
 

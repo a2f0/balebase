@@ -6,6 +6,7 @@ export const PersonSchema = z.object({
   id: z.string(),
   name: z.string(),
 });
+export type Person = z.infer<typeof PersonSchema>;
 
 /**
  * Text with something visible in it, trimmed, at most `max` characters.

@@ -1,5 +1,6 @@
 import { Banner, Button, Field, Select } from "@balebase/ui/react";
-import type { IssueInput, IssueMember } from "@balebase/validators/issues";
+import type { Person } from "@balebase/validators/fields";
+import type { IssueInput } from "@balebase/validators/issues";
 import { type FormEvent, useCallback, useState } from "react";
 import { api } from "./apiClient";
 import { errorMessage } from "./errors";
@@ -26,7 +27,7 @@ export function IssueForm({
   onError?: (message: string) => void;
   label?: string;
   disabled?: boolean;
-  offlineMembers?: IssueMember[];
+  offlineMembers?: Person[];
   onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [input, setInput] = useState(initial);
@@ -139,7 +140,7 @@ export function IssueForm({
   );
 }
 
-function useIssueMembers(offlineMembers: IssueMember[] | undefined) {
+function useIssueMembers(offlineMembers: Person[] | undefined) {
   const online = !offlineMembers;
   const { data, error } = useLoad(
     useCallback(

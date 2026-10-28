@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PersonSchema } from "./fields";
 import { route } from "./route";
 import {
   apiKeyAccessLevels,
@@ -21,16 +22,10 @@ export type ApiKeyExpiration = z.infer<typeof ApiKeyExpirationSchema>;
 
 const nameRule = `Name the API key with 1 to ${apiKeyNameMaxLength} characters.`;
 
-const ApiKeyPersonSchema = z.object({
-  email: z.string(),
-  id: z.string(),
-  name: z.string(),
-});
-
 const ApiKeySchema = z.object({
   access: ApiKeyAccessSchema,
   createdAt: z.string(),
-  createdBy: ApiKeyPersonSchema,
+  createdBy: PersonSchema,
   expiresAt: z.string().nullable(),
   id: z.string(),
   lastUsedAt: z.string().nullable(),
@@ -38,7 +33,7 @@ const ApiKeySchema = z.object({
   /** The token's first characters, enough to recognize it. */
   prefix: z.string(),
   revokedAt: z.string().nullable(),
-  revokedBy: ApiKeyPersonSchema.nullable(),
+  revokedBy: PersonSchema.nullable(),
   /** `inactive` keys belong to someone who no longer manages the organization. */
   status: z.enum(["active", "expired", "inactive", "revoked"]),
 });
