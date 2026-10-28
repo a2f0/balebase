@@ -20,3 +20,10 @@ export const businessLimits = {
   name: 120,
   streetAddress: 240,
 } as const;
+
+export const apiKeyAccessLevels = ["read", "write"] as const;
+
+/** Days until a new API key expires; a key may also never expire. */
+export const apiKeyExpirationDays = [30, 90, 365] as const;
+
+export const apiKeyNameMaxLength = 100;

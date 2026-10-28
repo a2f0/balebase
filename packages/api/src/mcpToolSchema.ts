@@ -1,5 +1,5 @@
+import type { ApiKeyAccess } from "@balebase/validators/apiKeys";
 import type { JsonSchemaType } from "@modelcontextprotocol/server";
-import type { ApiKeyAccess } from "./apiKeys";
 
 /**
  * An MCP tool that calls one REST route. Path parameters, query parameters,

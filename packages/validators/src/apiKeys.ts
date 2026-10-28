@@ -1,14 +1,25 @@
 import { z } from "zod";
 import { route } from "./route";
+import {
+  apiKeyAccessLevels,
+  apiKeyExpirationDays,
+  apiKeyNameMaxLength,
+} from "./rules";
 
-const ApiKeyAccessSchema = z.enum(["read", "write"]);
+const ApiKeyAccessSchema = z.enum(apiKeyAccessLevels, {
+  error: 'Access must be "read" or "write".',
+});
 export type ApiKeyAccess = z.infer<typeof ApiKeyAccessSchema>;
 
 /** Days until a new key expires, or null for a key that never does. */
 const ApiKeyExpirationSchema = z
-  .union([z.literal(30), z.literal(90), z.literal(365)])
+  .literal(apiKeyExpirationDays, {
+    error: `Expiration must be ${apiKeyExpirationDays.join(", ")} days, or null for no expiration.`,
+  })
   .nullable();
 export type ApiKeyExpiration = z.infer<typeof ApiKeyExpirationSchema>;
+
+const nameRule = `Name the API key with 1 to ${apiKeyNameMaxLength} characters.`;
 
 const ApiKeyPersonSchema = z.object({
   email: z.string(),
@@ -33,11 +44,19 @@ const ApiKeySchema = z.object({
 });
 export type ApiKey = z.infer<typeof ApiKeySchema>;
 
-const ApiKeyInputSchema = z.object({
-  access: ApiKeyAccessSchema,
-  expiresInDays: ApiKeyExpirationSchema,
-  name: z.string(),
-});
+// Fields in the order their messages should take precedence.
+const ApiKeyInputSchema = z.object(
+  {
+    name: z
+      .string({ error: nameRule })
+      .trim()
+      .min(1, nameRule)
+      .max(apiKeyNameMaxLength, nameRule),
+    access: ApiKeyAccessSchema,
+    expiresInDays: ApiKeyExpirationSchema,
+  },
+  { error: "A name, access level, and expiration are required." },
+);
 export type ApiKeyInput = z.infer<typeof ApiKeyInputSchema>;
 
 export const apiKeysRoutes = {

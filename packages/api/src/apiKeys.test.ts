@@ -69,19 +69,26 @@ describe("organization API keys", () => {
 
   it("validates new keys and limits them to organization managers", async () => {
     const fixture = await createFixture();
-    for (const input of [
-      { access: "read", expiresInDays: 90, name: "" },
-      { access: "read", expiresInDays: 90, name: "x".repeat(101) },
-      { access: "admin", expiresInDays: 90, name: "Key" },
-      { access: "write", expiresInDays: 7, name: "Key" },
-      { access: "write", name: "Key" },
-    ]) {
+    const name = "Name the API key with 1 to 100 characters.";
+    const expiration =
+      "Expiration must be 30, 90, 365 days, or null for no expiration.";
+    for (const [input, error] of [
+      [null, "A name, access level, and expiration are required."],
+      [{ access: "read", expiresInDays: 90, name: " " }, name],
+      [{ access: "read", expiresInDays: 90, name: "x".repeat(101) }, name],
+      [
+        { access: "admin", expiresInDays: 90, name: "Key" },
+        'Access must be "read" or "write".',
+      ],
+      [{ access: "write", expiresInDays: 7, name: "Key" }, expiration],
+      [{ access: "write", name: "Key" }, expiration],
+    ] as const) {
       const response = await fixture.session(
         "POST",
         "/api/organization-settings/api-keys",
         input,
       );
-      expect(response.status).toBe(400);
+      expect(response).toMatchObject({ body: { error }, status: 400 });
     }
     expect(
       (

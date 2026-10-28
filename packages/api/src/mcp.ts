@@ -1,4 +1,5 @@
 import { productName } from "@balebase/ui/brand";
+import type { ApiKeyAccess } from "@balebase/validators/apiKeys";
 import {
   type CallToolResult,
   createMcpHandler,
@@ -7,7 +8,6 @@ import {
 } from "@modelcontextprotocol/server";
 import type { Context } from "hono";
 import { version } from "../package.json";
-import type { ApiKeyAccess } from "./apiKeys";
 import type { ApiEnv } from "./authMiddleware";
 import { auditTools } from "./mcpAuditTools";
 import { contractTools } from "./mcpContractTools";
