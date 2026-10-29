@@ -269,7 +269,7 @@ describe("finance", () => {
     });
   });
 
-  it("retains and reconciles imported history after a disconnect", async () => {
+  it("links a Plaid connection and imports its transactions", async () => {
     const fixture = await createFixture();
     const linkToken = await jsonRequest(
       fixture.app,
@@ -371,36 +371,11 @@ describe("finance", () => {
       plaidTransactionId: "transaction-test-1",
       updatedAt: expect.any(String),
     });
+  });
 
-    const annotated = await jsonRequest(
-      fixture.app,
-      fixture.bindings,
-      `/transactions/${transactionId}/annotation`,
-      "PATCH",
-      {
-        labels: ["reimbursable", "client"],
-        note: "Dinner after the site visit.",
-        reviewed: true,
-      },
-    );
-    expect(annotated.status).toBe(200);
-    const category = await jsonRequest<{ category: { id: string } }>(
-      fixture.app,
-      fixture.bindings,
-      "/categories",
-      "POST",
-      { name: "Client meals" },
-    );
-    expect(category.status).toBe(201);
-    const categoryId = category.body.category.id;
-    const assigned = await jsonRequest(
-      fixture.app,
-      fixture.bindings,
-      `/transactions/${transactionId}/category`,
-      "PUT",
-      { categoryId },
-    );
-    expect(assigned.status).toBe(200);
+  it("keeps a connection's history from other organizations", async () => {
+    const fixture = await createFixture();
+    const { exchange, transactionId } = await importedConnection(fixture);
 
     const otherOrganization = testApp("organization-2", fixture.requestPlaid);
     const hidden = await jsonRequest<FinanceListing>(
@@ -437,6 +412,42 @@ describe("finance", () => {
       },
     );
     expect(cannotAnnotate.status).toBe(404);
+  });
+
+  it("keeps annotated history after a disconnect and reconciles it on reconnect", async () => {
+    const fixture = await createFixture();
+    const { accountId, exchange, transactionId } =
+      await importedConnection(fixture);
+
+    const annotated = await jsonRequest(
+      fixture.app,
+      fixture.bindings,
+      `/transactions/${transactionId}/annotation`,
+      "PATCH",
+      {
+        labels: ["reimbursable", "client"],
+        note: "Dinner after the site visit.",
+        reviewed: true,
+      },
+    );
+    expect(annotated.status).toBe(200);
+    const category = await jsonRequest<{ category: { id: string } }>(
+      fixture.app,
+      fixture.bindings,
+      "/categories",
+      "POST",
+      { name: "Client meals" },
+    );
+    expect(category.status).toBe(201);
+    const categoryId = category.body.category.id;
+    const assigned = await jsonRequest(
+      fixture.app,
+      fixture.bindings,
+      `/transactions/${transactionId}/category`,
+      "PUT",
+      { categoryId },
+    );
+    expect(assigned.status).toBe(200);
 
     const cannotDeleteActive = await fixture.app.request(
       financePath(`/connections/${exchange.body.connectionId}/data`),
@@ -523,6 +534,17 @@ describe("finance", () => {
       expenseCategoryId: categoryId,
       id: transactionId,
     });
+  });
+
+  it("deletes the data of archived and current connections", async () => {
+    const fixture = await createFixture();
+    const { exchange } = await importedConnection(fixture);
+    await fixture.app.request(
+      financePath(`/connections/${exchange.body.connectionId}`),
+      { method: "DELETE" },
+      fixture.bindings,
+    );
+    const { exchange: reconnected } = await importedConnection(fixture);
 
     const deleteArchive = await fixture.app.request(
       financePath(`/connections/${exchange.body.connectionId}/data`),
@@ -806,5 +828,39 @@ interface ConnectionDetail {
     lastSyncedAt: string | null;
     status: string;
     transactions: { count: number };
+  };
+}
+
+/** Links First Test Bank and imports its one transaction. */
+async function importedConnection(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+) {
+  const exchange = await jsonRequest<{ connectionId: string }>(
+    fixture.app,
+    fixture.bindings,
+    "/exchange",
+    "POST",
+    {
+      institutionId: "ins_test",
+      institutionName: "First Test Bank",
+      publicToken: "public-sandbox-test",
+    },
+  );
+  await jsonRequest(
+    fixture.app,
+    fixture.bindings,
+    `/connections/${exchange.body.connectionId}/sync`,
+    "POST",
+  );
+  const listing = await jsonRequest<FinanceListing>(
+    fixture.app,
+    fixture.bindings,
+    "/",
+    "GET",
+  );
+  return {
+    accountId: listing.body.accounts[0]?.id,
+    exchange,
+    transactionId: listing.body.transactions[0]?.id,
   };
 }
