@@ -71,8 +71,9 @@ against the group's stored state in the same batch as the write; a save that
 changes nothing records nothing, and deletion keeps the group's history until
 the organization is purged. Better Auth's team endpoints that would change
 groups (`create-team`, `update-team`, `remove-team`, `add-team-member`,
-`remove-team-member`) are disabled, so `/api/organization-groups` is the only
-writer. Group and two-factor requirement writes re-check in the transaction
+`remove-team-member`) are disabled, and invitations cannot carry a group
+(older ones lose theirs on acceptance), so `/api/organization-groups` is the
+only writer. Group and two-factor requirement writes re-check in the transaction
 that the actor is still an owner or admin.
 
 ## Reviewing coverage

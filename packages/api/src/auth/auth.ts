@@ -229,6 +229,27 @@ function configuredOrganizationPlugin(env: Bindings, waitUntil: WaitUntil) {
     membershipLimit: async (_user, organization) =>
       (await organizationPlanLimits(env, organization.id)).seats,
     organizationHooks: {
+      // Invitations never carry group access: accepting one would add the
+      // invitee to the group with no history. Managers add people to groups
+      // from Organization access once they join.
+      beforeCreateInvitation: async ({ invitation }) => {
+        if (invitation.teamId) {
+          throw new APIError("BAD_REQUEST", {
+            message: "Invitations cannot add people to groups.",
+          });
+        }
+      },
+      // Better Auth reads the invitation's groups back after this hook, so
+      // clearing them here keeps an older invitation from granting access.
+      beforeAcceptInvitation: async ({ invitation }) => {
+        if (invitation.teamId) {
+          await env.DB.prepare(
+            'UPDATE invitation SET "teamId" = NULL WHERE id = ?',
+          )
+            .bind(invitation.id)
+            .run();
+        }
+      },
       afterCreateInvitation: async ({ invitation, organization }) => {
         await assignRenewedInvitationRequirements(
           env.DB,

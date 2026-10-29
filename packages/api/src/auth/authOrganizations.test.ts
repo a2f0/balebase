@@ -337,6 +337,82 @@ describe("organizations", () => {
     });
   });
 
+  it("keeps group access out of invitations", async () => {
+    const fixture = await createFixture();
+    const { organization, ownerCookie } = await proOrganizationOwner(fixture);
+    const { teamId } = fixture.database
+      .query('SELECT id AS teamId FROM "team" WHERE "organizationId" = ?')
+      .get(organization.id) as { teamId: string };
+    const invitedEmail = "invitee@example.com";
+    const invite = await post(
+      fixture.auth,
+      "/organization/invite-member",
+      {
+        email: invitedEmail,
+        organizationId: organization.id,
+        role: "member",
+        teamId,
+      },
+      ownerCookie,
+    );
+    expect(invite.status).toBe(400);
+    const invitations = () =>
+      fixture.database
+        .query('SELECT id, "teamId" FROM invitation WHERE email = ?')
+        .all(invitedEmail);
+    expect(invitations()).toEqual([]);
+
+    // An invitation saved with a group before this rule grants no access.
+    const owner = fixture.database
+      .query("SELECT id FROM user WHERE email = ?")
+      .get(email) as { id: string };
+    fixture.database
+      .query(
+        `INSERT INTO invitation
+         (id, organizationId, email, role, status, expiresAt, createdAt,
+          inviterId, "teamId")
+         VALUES ('legacy-invitation', ?, ?, 'member', 'pending', ?, ?, ?, ?)`,
+      )
+      .run(
+        organization.id,
+        invitedEmail,
+        new Date(Date.now() + 86_400_000).toISOString(),
+        new Date().toISOString(),
+        owner.id,
+        teamId,
+      );
+    await post(fixture.auth, "/sign-up/email", {
+      email: invitedEmail,
+      name: "Invited Person",
+      password: originalPassword,
+      termsAccepted: true,
+    });
+    const inviteeSignIn = await post(fixture.auth, "/sign-in/email", {
+      email: invitedEmail,
+      password: originalPassword,
+    });
+    const accepted = await post(
+      fixture.auth,
+      "/organization/accept-invitation",
+      { invitationId: "legacy-invitation" },
+      inviteeSignIn.headers.get("set-cookie"),
+    );
+    expect(accepted.status).toBe(200);
+    await Promise.all(fixture.pending);
+    expect(
+      fixture.database
+        .query(
+          `SELECT member.role, "teamMember"."teamId" AS team_id
+           FROM member JOIN user ON user.id = member.userId
+           LEFT JOIN "teamMember"
+             ON "teamMember"."userId" = user.id AND "teamMember"."teamId" = ?
+           WHERE user.email = ? AND member.organizationId = ?`,
+        )
+        .all(teamId, invitedEmail, organization.id),
+    ).toEqual([{ role: "member", team_id: null }]);
+    expect(invitations()).toEqual([{ id: "legacy-invitation", teamId: null }]);
+  });
+
   it("lets the owner, but not an invited admin, change roles", async () => {
     const fixture = await createFixture();
     const { invitedEmail, inviteeCookie, organization, ownerCookie } =
