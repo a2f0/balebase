@@ -19,6 +19,12 @@ import type {
 import type { Person } from "@balebase/validators/fields";
 import { isEquipmentType } from "@balebase/validators/rules";
 import { useCallback, useState } from "react";
+import { AppLink } from "../shared/AppLink";
+import { api } from "../shared/apiClient";
+import { countLabel } from "../shared/labels";
+import { useAction } from "../shared/useAction";
+import { useLoad } from "../shared/useLoad";
+import { equipmentIdForPath, equipmentPath } from "../workspace/workspacePaths";
 import { Assignee } from "./EquipmentAssignee";
 import { EquipmentDetailPage } from "./EquipmentDetail";
 import { EquipmentForm } from "./EquipmentForm";
@@ -29,12 +35,6 @@ import {
   equipmentTypeIcon,
   equipmentTypeLabel,
 } from "./equipmentLabels";
-import { AppLink } from "./shared/AppLink";
-import { api } from "./shared/apiClient";
-import { countLabel } from "./shared/labels";
-import { useAction } from "./shared/useAction";
-import { useLoad } from "./shared/useLoad";
-import { equipmentIdForPath, equipmentPath } from "./workspace/workspacePaths";
 
 export function Equipment({
   onNavigate,

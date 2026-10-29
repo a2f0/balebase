@@ -1,5 +1,5 @@
 import type { ActivityEvent } from "@balebase/validators/activity";
-import { equipmentTypeLabel } from "../equipmentLabels";
+import { equipmentTypeLabel } from "../equipment/equipmentLabels";
 import { formatCalendarDate } from "../shared/labels";
 import { assigneeLabel, textValue } from "./activityLabels";
 

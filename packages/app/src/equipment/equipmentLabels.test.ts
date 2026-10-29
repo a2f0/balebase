@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
+import { formatCalendarDate } from "../shared/labels";
 import {
   equipmentMeta,
   equipmentName,
   equipmentTypeIcon,
   equipmentTypeLabel,
 } from "./equipmentLabels";
-import { formatCalendarDate } from "./shared/labels";
 
 describe("equipment labels", () => {
   it("names the starting types and falls back for types added later", () => {

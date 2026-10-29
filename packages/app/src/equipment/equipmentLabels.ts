@@ -1,5 +1,5 @@
 import type { IconName } from "@balebase/ui/react";
-import { formatCalendarDate, formatLabel } from "./shared/labels";
+import { formatCalendarDate, formatLabel } from "../shared/labels";
 
 const typeLabels: Record<string, { icon: IconName; label: string }> = {
   cell_phone: { icon: "cellPhone", label: "Cell phone" },

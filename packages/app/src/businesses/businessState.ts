@@ -2,7 +2,7 @@ import type {
   Business,
   BusinessListing,
 } from "@balebase/validators/businesses";
-import { useClipboard } from "./shared/useClipboard";
+import { useClipboard } from "../shared/useClipboard";
 
 export function formatEin(ein: string) {
   return /^\d{9}$/.test(ein) ? `${ein.slice(0, 2)}-${ein.slice(2)}` : ein;

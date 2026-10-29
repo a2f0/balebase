@@ -16,7 +16,7 @@ import {
   describeEmailLink,
   formatTransactionDate,
 } from "./emailLinkDescription";
-import { equipmentName, equipmentTypeLabel } from "./equipmentLabels";
+import { equipmentName, equipmentTypeLabel } from "./equipment/equipmentLabels";
 import { formatMoney } from "./financeFormat";
 import { AppLink } from "./shared/AppLink";
 import { api } from "./shared/apiClient";

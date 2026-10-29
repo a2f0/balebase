@@ -23,6 +23,12 @@ import {
   useRef,
   useState,
 } from "react";
+import { AppLink } from "../shared/AppLink";
+import { api } from "../shared/apiClient";
+import { errorMessage } from "../shared/errors";
+import { countLabel, formatCalendarDate } from "../shared/labels";
+import { useFocusWhenFolded } from "../shared/useFocusWhenFolded";
+import { businessIdForPath, businessPath } from "../workspace/workspacePaths";
 import { BusinessDetailPage } from "./BusinessDetail";
 import {
   BusinessFields,
@@ -42,12 +48,6 @@ import {
   initialBusinessListState,
   useIdentifierCopy,
 } from "./businessState";
-import { AppLink } from "./shared/AppLink";
-import { api } from "./shared/apiClient";
-import { errorMessage } from "./shared/errors";
-import { countLabel, formatCalendarDate } from "./shared/labels";
-import { useFocusWhenFolded } from "./shared/useFocusWhenFolded";
-import { businessIdForPath, businessPath } from "./workspace/workspacePaths";
 
 export function Businesses({
   onNavigate,

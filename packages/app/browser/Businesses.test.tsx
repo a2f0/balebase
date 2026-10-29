@@ -9,12 +9,12 @@ import {
   chromeLaunchOptions,
   closeChrome,
 } from "../../../scripts/testing/chrome";
-import { BusinessListView } from "../src/Businesses";
+import { BusinessListView } from "../src/businesses/Businesses";
 import {
   type BusinessListState,
   businessListReducer,
   initialBusinessListState,
-} from "../src/businessState";
+} from "../src/businesses/businessState";
 
 const acme: Business = {
   city: null,

@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { Business } from "@balebase/validators/businesses";
 import { act } from "react";
+import { installDom } from "../testing/dom";
 import { Businesses } from "./Businesses";
-import { installDom } from "./testing/dom";
 
 // Mounts the real page in happy-dom so effects run: the add form folds away
 // and focus moves the way a keyboard user would experience it.
