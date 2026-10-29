@@ -149,14 +149,20 @@ describe("projects", () => {
     const renamed = await owner<{ project: Project }>(
       "PATCH",
       `/api/projects/${id}`,
-      { name: "Clinic renovation" },
+      { expectedRevision: 0, name: "Clinic renovation" },
     );
     expect(renamed.body.project).toMatchObject({
       description: "",
       name: "Clinic renovation",
+      revision: 1,
     });
     // Saving the same values changes nothing and claims nothing.
-    await owner("PATCH", `/api/projects/${id}`, { name: "Clinic renovation" });
+    const same = await owner<{ project: Project }>(
+      "PATCH",
+      `/api/projects/${id}`,
+      { expectedRevision: 1, name: "Clinic renovation" },
+    );
+    expect(same.body.project.revision).toBe(1);
     for (let attempt = 0; attempt < 2; attempt++) {
       await owner("DELETE", `/api/projects/${id}/members/member-user`);
       await owner("DELETE", `/api/projects/${id}/forms/org-form`);
@@ -205,23 +211,48 @@ describe("projects", () => {
     ]);
   });
 
-  it("rejects an edit made over a concurrent change without recording it", async () => {
+  it("rejects an edit made from an older revision without recording it", async () => {
     const { as, events, hooks, run } = fixture();
     const owner = as("owner-user", "owner");
+    const admin = as("member-user", "admin");
     const id = await createProject(owner);
-    hooks.after("FROM projects AS project", () => {
-      run("UPDATE projects SET name = 'Renamed elsewhere' WHERE id = ?").run(
-        id,
-      );
-    });
-    const stale = await owner("PATCH", `/api/projects/${id}`, {
-      name: "Mine",
+    // Two managers load revision 0; the first saves a new name.
+    expect(
+      (
+        await owner("PATCH", `/api/projects/${id}`, {
+          expectedRevision: 0,
+          name: "Clinic",
+        })
+      ).status,
+    ).toBe(200);
+    // The second's description edit was made without seeing it.
+    const stale = await admin("PATCH", `/api/projects/${id}`, {
+      description: "Their notes",
+      expectedRevision: 0,
     });
     expect(stale.status).toBe(409);
-    expect(run("SELECT name FROM projects").get()).toEqual({
-      name: "Renamed elsewhere",
+    // An edit committed between this request's read and its write loses too.
+    hooks.after("FROM projects AS project", () => {
+      run(
+        "UPDATE projects SET description = 'Elsewhere', revision = revision + 1 WHERE id = ?",
+      ).run(id);
     });
-    expect(events().map((event) => event.action)).toEqual(["project.created"]);
+    const raced = await admin("PATCH", `/api/projects/${id}`, {
+      description: "Their notes",
+      expectedRevision: 1,
+    });
+    expect(raced.status).toBe(409);
+    expect(
+      run("SELECT name, description, revision FROM projects").get(),
+    ).toEqual({ description: "Elsewhere", name: "Clinic", revision: 2 });
+    expect(
+      (await owner("PATCH", `/api/projects/${id}`, { name: "No revision" }))
+        .status,
+    ).toBe(400);
+    expect(events().map((event) => event.action)).toEqual([
+      "project.created",
+      "project.updated",
+    ]);
   });
 
   it("lets members read projects but only managers change them", async () => {
@@ -235,7 +266,7 @@ describe("projects", () => {
     expect(detail.body.canManage).toBe(false);
     for (const [method, path, body] of [
       ["POST", "/api/projects", { name: "Mine" }],
-      ["PATCH", `/api/projects/${id}`, { name: "Mine" }],
+      ["PATCH", `/api/projects/${id}`, { expectedRevision: 0, name: "Mine" }],
       ["PUT", `/api/projects/${id}/members/member-user`, undefined],
       ["DELETE", `/api/projects/${id}/members/member-user`, undefined],
       ["PUT", `/api/projects/${id}/forms/org-form`, undefined],

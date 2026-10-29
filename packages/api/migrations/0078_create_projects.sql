@@ -6,6 +6,9 @@ CREATE TABLE projects (
     REFERENCES organization (id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
+  -- Counts saved edits to the name and description; an edit must name the
+  -- revision it was made from.
+  revision INTEGER NOT NULL DEFAULT 0,
   created_by TEXT REFERENCES user (id) ON DELETE SET NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL

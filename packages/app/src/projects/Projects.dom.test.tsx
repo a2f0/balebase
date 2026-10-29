@@ -19,9 +19,12 @@ const forms: ProjectForm[] = [
   { id: "nfpa", name: "NFPA 70E", scope: "global", version: 1 },
 ];
 
+const edits: unknown[] = [];
+
 /** Serves one project, applying member and form changes, and records writes. */
 function stubApi(canManage: boolean) {
   const writes: string[] = [];
+  edits.length = 0;
   let project: Project = {
     createdAt: "2026-10-01T00:00:00.000Z",
     description: "North wing",
@@ -32,6 +35,7 @@ function stubApi(canManage: boolean) {
     memberCount: 0,
     members: [],
     name: "Hospital renovation",
+    revision: 0,
     updatedAt: "2026-10-01T00:00:00.000Z",
   };
   respond(async (url, init) => {
@@ -46,6 +50,12 @@ function stubApi(canManage: boolean) {
         project,
       });
     writes.push(`${method} ${url.pathname}`);
+    if (method === "PATCH") {
+      const changes = JSON.parse(String(init?.body)) as Partial<Project>;
+      edits.push(changes);
+      project = { ...project, ...changes, revision: project.revision + 1 };
+      return Response.json({ project });
+    }
     const [, , , , kind, target] = url.pathname.split("/");
     if (kind === "members") {
       const members =
@@ -116,6 +126,18 @@ describe("project detail", () => {
       "DELETE /api/projects/project-1/forms/walk",
       "DELETE /api/projects/project-1/members/sam",
     ]);
+  });
+
+  it("saves only the edited fields from the revision it loaded", async () => {
+    stubApi(true);
+    const container = await render();
+    await click(queryButton("Edit", container));
+    await fill(container.querySelector("form input"), "Clinic renovation");
+    await click(queryButton("Save changes", container));
+    await settle();
+    expect(edits).toEqual([{ expectedRevision: 0, name: "Clinic renovation" }]);
+    expect(container.textContent).toContain("Clinic renovation");
+    expect(container.textContent).toContain("North wing");
   });
 
   it("shows members a read-only view", async () => {

@@ -23,6 +23,8 @@ const ProjectSummarySchema = z.object({
   isMember: z.boolean(),
   memberCount: z.number(),
   name: z.string(),
+  /** Counts saved edits to the name and description. */
+  revision: z.number(),
   updatedAt: z.string(),
 });
 export type ProjectSummary = z.infer<typeof ProjectSummarySchema>;
@@ -40,8 +42,10 @@ const ProjectFieldsSchema = z.object({
 });
 export type NewProject = z.input<typeof ProjectFieldsSchema>;
 
+/** The fields to change, and the revision the edit was made from. */
 const ProjectChangesSchema = z.object({
   description: z.string().trim().max(projectLimits.description).optional(),
+  expectedRevision: z.number().int().nonnegative(),
   name: requiredText(projectLimits.name).optional(),
 });
 export type ProjectChanges = z.input<typeof ProjectChangesSchema>;

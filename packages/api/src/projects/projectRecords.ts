@@ -17,14 +17,15 @@ interface ProjectRow {
   is_member: number;
   member_count: number;
   name: string;
+  revision: number;
   updated_at: string;
 }
 
 // Forms count only while the organization can still use them: a global form
 // that is unpublished stays turned on but is not offered or downloaded.
 const projectSelect = `
-  SELECT project.id, project.name, project.description, project.created_at,
-         project.updated_at,
+  SELECT project.id, project.name, project.description, project.revision,
+         project.created_at, project.updated_at,
          (SELECT COUNT(*) FROM project_members AS person
           WHERE person.project_id = project.id) AS member_count,
          (SELECT COUNT(*) FROM project_audit_forms AS enabled
@@ -148,6 +149,7 @@ function toSummary(row: ProjectRow): ProjectSummary {
     isMember: Boolean(row.is_member),
     memberCount: row.member_count,
     name: row.name,
+    revision: row.revision,
     updatedAt: row.updated_at,
   };
 }

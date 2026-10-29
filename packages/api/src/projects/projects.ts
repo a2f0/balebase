@@ -127,8 +127,9 @@ projects.get("/:id/activity", async (context) => {
     : context.json({ error: "Invalid activity cursor." }, 400);
 });
 
-// Saves only the fields sent, and only over the values this request read: a
-// concurrent edit returns 409 instead of being overwritten or misrecorded.
+// Saves only the fields sent, and only over the revision the editor loaded:
+// an edit made from an older revision returns 409 instead of overwriting or
+// misrecording a change it never saw.
 projects.patch("/:id", requireManager(), async (context) => {
   const organizationId = context.get("organizationId");
   const database = context.env.DB;
@@ -141,6 +142,8 @@ projects.patch("/:id", requireManager(), async (context) => {
   if (!existing) return projectNotFound(context);
   const input = await readBody(context, projectsRoutes.update, invalidProject);
   if (input instanceof Response) return input;
+  if (input.expectedRevision !== existing.revision)
+    return staleProject(context);
   const changes = (["name", "description"] as const).flatMap((field) =>
     input[field] === undefined || input[field] === existing[field]
       ? []
@@ -149,20 +152,10 @@ projects.patch("/:id", requireManager(), async (context) => {
   if (!changes.length)
     return projectResponse(context, projectsRoutes.update, existing.id);
   const name = input.name ?? existing.name;
-  const description = input.description ?? existing.description;
   const now = new Date().toISOString();
-  const asRead =
-    "id = ? AND organization_id = ? AND name = ? AND description = ?";
-  const unchanged = {
-    bindings: [
-      existing.id,
-      organizationId,
-      existing.name,
-      existing.description,
-    ],
-    sql: `EXISTS (SELECT 1 FROM projects WHERE ${asRead})`,
-  };
-  // The event reads the row before the update changes it.
+  const asLoaded = "id = ? AND organization_id = ? AND revision = ?";
+  const bindings = [existing.id, organizationId, existing.revision];
+  // The event commits only with the update it describes.
   const [, update] = await activityBatch(database, context.get("apiKey"), [
     activityStatement(
       database,
@@ -175,20 +168,18 @@ projects.patch("/:id", requireManager(), async (context) => {
         root: { id: existing.id, label: name, type: "project" },
         subject: { id: existing.id, type: "project" },
       },
-      unchanged,
+      { bindings, sql: `EXISTS (SELECT 1 FROM projects WHERE ${asLoaded})` },
     ),
     database
       .prepare(
-        `UPDATE projects SET name = ?, description = ?, updated_at = ?
-         WHERE ${asRead}`,
+        `UPDATE projects
+         SET name = ?, description = ?, revision = revision + 1,
+             updated_at = ?
+         WHERE ${asLoaded}`,
       )
-      .bind(name, description, now, ...unchanged.bindings),
+      .bind(name, input.description ?? existing.description, now, ...bindings),
   ]);
-  if (update?.meta.changes === 0)
-    return context.json(
-      { error: "This project changed. Reload it before saving." },
-      409,
-    );
+  if (update?.meta.changes === 0) return staleProject(context);
   return projectResponse(context, projectsRoutes.update, existing.id);
 });
 
@@ -488,6 +479,13 @@ function userId(context: ProjectContext) {
 
 function projectNotFound(context: ProjectContext) {
   return context.json({ error: "Project not found." }, 404);
+}
+
+function staleProject(context: ProjectContext) {
+  return context.json(
+    { error: "This project changed. Reload it before saving." },
+    409,
+  );
 }
 
 function formNotFound(context: ProjectContext) {

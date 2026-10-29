@@ -133,7 +133,7 @@ export function ProjectDetailPage({
                 onCancel={() => setEditing(false)}
                 onSave={async (input) => {
                   const saved = await change(
-                    () => api.projects.update(id, input),
+                    () => api.projects.update(id, editedFields(project, input)),
                     "Project updated.",
                   );
                   if (saved) setEditing(false);
@@ -199,7 +199,6 @@ function ProjectMembers({
           {countLabel(members.length, "member")}
         </span>
       }
-      description="Members get the project's audit forms downloaded for offline work when they sign in."
       title="Members"
     >
       {canManage && candidates.length > 0 && (
@@ -316,4 +315,21 @@ function ProjectForms({
       )}
     </PageSection>
   );
+}
+
+/**
+ * Only the fields this editor changed, from the revision it loaded, so a
+ * concurrent edit is refused rather than overwritten.
+ */
+function editedFields(
+  project: Project,
+  input: { description: string; name: string },
+) {
+  return {
+    expectedRevision: project.revision,
+    ...(input.name === project.name ? {} : { name: input.name }),
+    ...(input.description === project.description
+      ? {}
+      : { description: input.description }),
+  };
 }

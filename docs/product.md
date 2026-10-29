@@ -344,7 +344,9 @@ organization's own. A form stays turned on as it gets new versions, so members
 always receive its current version. Every member can view projects;
 organization owners and admins create, edit, and delete them, add and remove
 members, and turn forms on and off. Leaving or being removed from the
-organization removes a person from its projects. Turned-on global forms that
+organization removes a person from its projects. Editing a project's name or
+description requires `expectedRevision` from its latest response; an edit made
+from an older revision returns 409. Turned-on global forms that
 are later unpublished are no longer offered or counted. Creating, editing, and
 deleting a project, membership changes, and form changes are recorded in
 Activity, which keeps a deleted project's history. Migration
