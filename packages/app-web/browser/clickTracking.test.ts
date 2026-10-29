@@ -3,7 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
-import { type Browser, chromium } from "playwright";
+import type { Browser } from "playwright";
+import { closeChromium, launchChromium } from "./chromium";
 
 const types: Record<string, string> = {
   ".css": "text/css",
@@ -36,17 +37,16 @@ beforeAll(async () => {
     new Response(build.stderr).text(),
   ]);
   if (exitCode !== 0) throw new Error(`App build failed: ${stdout}\n${stderr}`);
-  const { CHROME_PATH } = process.env;
-  browser = await chromium.launch(
-    CHROME_PATH ? { executablePath: CHROME_PATH } : {},
-  );
+  browser = await launchChromium();
 }, 120_000);
 
-// Chrome can take longer than Bun's 5 s hook default to exit on a loaded host.
 afterAll(async () => {
-  await browser?.close();
-  await rm(dist, { recursive: true, force: true });
-}, 30_000);
+  try {
+    await closeChromium(browser);
+  } finally {
+    await rm(dist, { recursive: true, force: true });
+  }
+});
 
 it("the real Vite bundle initializes only at the app's deployed origins", async () => {
   for (const [origin, environment] of [
