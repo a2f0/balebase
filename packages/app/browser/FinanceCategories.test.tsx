@@ -4,7 +4,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
 import { renderToStaticMarkup } from "react-dom/server";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 import { FinanceCategories } from "../src/FinanceCategories";
 
 it("opens a category from anywhere on its row except its own buttons", async () => {
@@ -87,6 +90,6 @@ it("opens a category from anywhere on its row except its own buttons", async () 
       );
     }
   } finally {
-    await browser?.close();
+    await closeChrome(browser);
   }
 }, 30_000);

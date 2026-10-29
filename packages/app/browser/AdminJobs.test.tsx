@@ -2,7 +2,10 @@ import { expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 
 it("keeps long job descriptions beside actions and expands run details in place", async () => {
   const bundle = await Bun.build({
@@ -109,6 +112,6 @@ it("keeps long job descriptions beside actions and expands run details in place"
       await page.close();
     }
   } finally {
-    await browser?.close();
+    await closeChrome(browser);
   }
 }, 30_000);
