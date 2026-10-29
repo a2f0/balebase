@@ -127,6 +127,7 @@ The Fastlane lanes live in `fastlane/`: `lanes/ios.rb`, `lanes/android.rb`,
 | `ios upload_release` | `build_release`, then uploads to TestFlight | `build_number:` |
 | `ios profiles` | Creates or renews the match App Store profiles | `force:true` regenerates them |
 | `ios fetch_profiles` | Installs the match App Store profiles read-only | |
+| `ios select_store_build` | Selects an uploaded build for the App Store draft, without submitting | `version:`, `build_number:` |
 | `android build_release` | Signed release App Bundle, without uploading | `build_number:` |
 | `android upload_release` | `build_release`, then uploads to a Google Play track | `build_number:`, `track:` (`internal`), `release_status:` (`completed`) |
 | `ios readiness`, `android readiness` | Inspects a candidate and its store state, read-only | See [readiness lanes](../../docs/readiness.md) |

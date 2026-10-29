@@ -3,7 +3,7 @@
 Start with the [quick start](README.md#quick-start). Run commands from the
 repository root unless a command specifies `--cwd`.
 
-`.mise.toml` pins Bun to the CI version. With mise installed, run
+`.mise.toml` pins Bun and Ruby to the CI versions. With mise installed, run
 `mise install` and activate mise in your shell. For one command, use
 `mise exec -- bun run check:fast`. In agent shells, prepend the pinned binary
 directories under `~/.local/share/mise/installs` to PATH without running
@@ -243,10 +243,8 @@ rather than in every `bun run test`.
   (15 in `packages/app` TSX). Tests are exempt so fixtures can stay beside
   assertions.
 - Source files in `packages/api/src` and `packages/app/src` have an 800
-  nonblank-line limit. Existing larger files have explicit budgets in
-  `biome.jsonc`. Lower or remove those overrides when splitting a file; split
-  new responsibilities out instead of raising the budget. Blank lines are
-  free: use them to separate ideas.
+  nonblank-line limit with no per-file exceptions; split a new responsibility
+  out instead of adding one. Blank lines are free: use them to separate ideas.
 - Keep exports used and dependencies reachable; both Knip modes run in
   `check`. Explain necessary lint suppressions at the affected line.
 - Test observable behavior and failure paths. Use the existing tests for

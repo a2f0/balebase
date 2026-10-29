@@ -29,10 +29,10 @@ both shared and record views. Global form history also has publication rules.
 
 | Slice | Entry points and evidence |
 | --- | --- |
-| Access and organization lifecycle | `auth.ts`, `organizationRoleActivity.ts`, `organizationMembers.ts`, `organizationGroups.ts`, `organizationSettings.ts`, `organizationDeletion.ts`, `apiKeys.ts` |
+| Access and organization lifecycle | `auth.ts`, `organizationRoleActivity.ts`, `organizationMembers.ts`, `organizationGroups.ts`, `organizationSettings.ts`, `organizationDeletion.ts`, `organizationPurge.ts`, `apiKeys.ts` |
 | Audits, issues, equipment | `audits.ts`, `auditTemplates.ts`, `auditRunDiscard.ts`, `auditIssueImages.ts`, `auditIssueImageRemoval.ts`, `issues.ts`, `equipment.ts` |
-| Finance and billing | `finance.ts`, `financeCategories.ts`, `plaid*.ts`, `billing.ts`, `billingRetention.ts`, scheduled jobs |
-| Contracts and employee records | `contracts.ts`, `contractDraft.ts`, `contractTemplates.ts`, `contractRecords.ts`, `employeeForms.ts`, `screening*.ts`, Checkr handlers |
+| Finance and billing | `finance*.ts`, `plaid*.ts`, `billing*.ts` (checkout, subscriptions, seats, webhook, retention, deletion), scheduled jobs |
+| Contracts and employee records | `contracts.ts`, `contractDraft.ts`, `contractWorkflow.ts`, `contractTemplates.ts`, `contractRecords.ts`, `employeeForms.ts`, `screening*.ts`, Checkr handlers |
 | Library, inbox, business records | file/library routes, `email.ts`, `businesses.ts`, attachment handlers |
 | Administrative and maintenance work | admin routes, auth role hooks, scheduled worker and maintenance jobs, `scripts/admin/purgeEmails.sh` |
 
@@ -43,11 +43,11 @@ webhook receipts before classifying a missing shared event.
 
 ## Verification
 
-Use existing API fixtures and their SQLite-backed D1 adapter for local probes.
-Check which migrations the fixture applies and whether its batch adapter uses
-a transaction. Some older fixtures apply only selected migrations or execute
-batch statements sequentially; those cannot establish final-schema coverage
-or D1 rollback behavior without adaptation.
+Build local probes with the shared API test harness in
+`packages/api/src/testing`: `createTestDatabase` applies every migration with
+foreign keys on, and `toD1` runs each batch as one transaction, as D1 does.
+A database created `before` a migration, as migration tests use, lacks the
+final schema and cannot establish current trigger coverage.
 Run noisy finite commands through `bun run agent:run --label <label> --
 <command>` and inspect the saved evidence. Never invoke remote purge or deploy
 scripts for an audit. Repository-wide `check` and `test` are required when
