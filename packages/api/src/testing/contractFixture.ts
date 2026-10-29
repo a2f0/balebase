@@ -146,33 +146,8 @@ export function createFixture() {
     STORAGE: bucket,
   });
 
-  function as(userId: string, organizationId: string) {
-    const session = withTestSession({
-      organizationId,
-      organizationRole: "member",
-      userId,
-    });
-    // Signing links are public, so only the contract routes are signed in.
-    const app = new Hono<ApiTestEnv>();
-    app.use("/api/contracts/*", session);
-    app.use("/api/contracts", session);
-    app.route("/api/contracts", contracts);
-    app.route("/api/signing", signing);
-    const request = (path: string, init?: RequestInit) =>
-      app.request(path, init, bindings);
-    const send = requester(app, bindings);
-    const json = <T = unknown>(method: string, path: string, body?: unknown) =>
-      body === undefined || method === "GET"
-        ? send<T>(method, path)
-        : send<T>(method, path, body, { "cf-connecting-ip": "203.0.113.7" });
-    const upload = (bytes: Uint8Array, filename: string) => {
-      const form = new FormData();
-      form.set("file", new File([bytes], filename));
-      return send<{ contract: Contract }>("POST", "/api/contracts", form);
-    };
-    return { json, request, upload };
-  }
-
+  const as = (userId: string, organizationId: string) =>
+    contractClient(bindings, userId, organizationId);
   const owner = as("owner-user", "org-1");
   return {
     ...owner,
@@ -198,6 +173,37 @@ export function createFixture() {
     },
     stored,
   };
+}
+
+function contractClient(
+  bindings: ReturnType<typeof testBindings>,
+  userId: string,
+  organizationId: string,
+) {
+  const session = withTestSession({
+    organizationId,
+    organizationRole: "member",
+    userId,
+  });
+  // Signing links are public, so only the contract routes are signed in.
+  const app = new Hono<ApiTestEnv>();
+  app.use("/api/contracts/*", session);
+  app.use("/api/contracts", session);
+  app.route("/api/contracts", contracts);
+  app.route("/api/signing", signing);
+  const request = (path: string, init?: RequestInit) =>
+    app.request(path, init, bindings);
+  const send = requester(app, bindings);
+  const json = <T = unknown>(method: string, path: string, body?: unknown) =>
+    body === undefined || method === "GET"
+      ? send<T>(method, path)
+      : send<T>(method, path, body, { "cf-connecting-ip": "203.0.113.7" });
+  const upload = (bytes: Uint8Array, filename: string) => {
+    const form = new FormData();
+    form.set("file", new File([bytes], filename));
+    return send<{ contract: Contract }>("POST", "/api/contracts", form);
+  };
+  return { json, request, upload };
 }
 
 function seed(database: Database) {

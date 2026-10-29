@@ -1,3 +1,4 @@
+import type { Database } from "bun:sqlite";
 import { expect } from "bun:test";
 import { Hono } from "hono";
 import type { AuthVariables } from "../authMiddleware";
@@ -259,29 +260,7 @@ export function jsonPost(body: unknown): RequestInit {
 
 export async function createFixture(migrations: { before?: string } = {}) {
   const database = createTestDatabase(migrations);
-  for (const id of ["owner", "employee", "invitee", "other"])
-    seedAccount(database, {
-      createdAt: now(),
-      id,
-      ...(id === "owner" ? { organizationName: "Acme" } : {}),
-    });
-  seedMember(database, {
-    createdAt: now(),
-    id: "employee-member",
-    organizationId: orgId,
-    userId: "employee",
-  });
-  seedMember(database, {
-    createdAt: now(),
-    id: "other-member",
-    organizationId: "org_other",
-    userId: "invitee",
-  });
-  database
-    .query(`INSERT INTO invitation
-    (id, organizationId, email, role, status, expiresAt, createdAt, inviterId)
-    VALUES ('invite', ?, 'invitee@example.com', 'member', 'pending', ?, ?, 'owner')`)
-    .run(orgId, "2026-10-01", now());
+  seedPeople(database);
   const files = new Map<string, File>();
   const emails: Array<{
     html: string;
@@ -308,30 +287,7 @@ export async function createFixture(migrations: { before?: string } = {}) {
       userId: string,
       role: string,
       via: { apiKey?: boolean; impersonatedBy?: string } = {},
-    ) => {
-      const app = testApp(
-        {},
-        {
-          organizationId: orgId,
-          organizationRole: role,
-          session: { impersonatedBy: via.impersonatedBy ?? null },
-          userId,
-        },
-      );
-      app.use("*", async (context, next) => {
-        if (via.apiKey) {
-          context.set("apiKey", {
-            access: "write",
-          } as AuthVariables["apiKey"] & object);
-        }
-        await next();
-      });
-      app.route("/", employeeForms);
-      return {
-        request: (path: string, init?: RequestInit) =>
-          app.request(path, init, bindings),
-      };
-    },
+    ) => employeeFormsClient(bindings, userId, role, via),
     bindings,
     /** Runs `action` before the next `run()` of a statement containing `sql`. */
     beforeRun: (sql: string, action: () => void) =>
@@ -341,6 +297,63 @@ export async function createFixture(migrations: { before?: string } = {}) {
     files,
     hooks,
     storageState,
+  };
+}
+
+/** The owner's organization, an employee, and an invitee from elsewhere. */
+function seedPeople(database: Database) {
+  for (const id of ["owner", "employee", "invitee", "other"])
+    seedAccount(database, {
+      createdAt: now(),
+      id,
+      ...(id === "owner" ? { organizationName: "Acme" } : {}),
+    });
+  seedMember(database, {
+    createdAt: now(),
+    id: "employee-member",
+    organizationId: orgId,
+    userId: "employee",
+  });
+  seedMember(database, {
+    createdAt: now(),
+    id: "other-member",
+    organizationId: "org_other",
+    userId: "invitee",
+  });
+  database
+    .query(`INSERT INTO invitation
+    (id, organizationId, email, role, status, expiresAt, createdAt, inviterId)
+    VALUES ('invite', ?, 'invitee@example.com', 'member', 'pending', ?, ?, 'owner')`)
+    .run(orgId, "2026-10-01", now());
+}
+
+function employeeFormsClient(
+  bindings: ReturnType<typeof testBindings>,
+  userId: string,
+  role: string,
+  via: { apiKey?: boolean; impersonatedBy?: string },
+) {
+  const app = testApp(
+    {},
+    {
+      organizationId: orgId,
+      organizationRole: role,
+      session: { impersonatedBy: via.impersonatedBy ?? null },
+      userId,
+    },
+  );
+  app.use("*", async (context, next) => {
+    if (via.apiKey) {
+      context.set("apiKey", {
+        access: "write",
+      } as AuthVariables["apiKey"] & object);
+    }
+    await next();
+  });
+  app.route("/", employeeForms);
+  return {
+    request: (path: string, init?: RequestInit) =>
+      app.request(path, init, bindings),
   };
 }
 
