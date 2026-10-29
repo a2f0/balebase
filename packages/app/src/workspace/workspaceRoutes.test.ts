@@ -59,6 +59,8 @@ describe("workspace routes", () => {
       "/me/screening/check-1": "myDocuments",
       "/offline": "offline",
       "/organization/people/member-1": "organization",
+      "/projects": "projects",
+      "/projects/project-1": "projects",
       "/root/global-audits/form-1": "rootGlobalAudits",
       "/root/jobs": "rootJobs",
       "/root/organizations/org-1": "rootOrganizations",

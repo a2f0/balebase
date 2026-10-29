@@ -47,6 +47,7 @@ export type WorkspacePage =
   | "library"
   | "myDocuments"
   | "organization"
+  | "projects"
   | "rootGlobalAudits"
   | "rootJobs"
   | "rootOrganizations"
@@ -256,6 +257,12 @@ function navigationFor(canAccessFinance: boolean, isAdmin: boolean) {
       page: "myDocuments",
     },
     { href: "/audits", icon: "audits", label: "Audits", page: "audits" },
+    {
+      href: "/projects",
+      icon: "layers",
+      label: "Projects",
+      page: "projects",
+    },
     {
       href: "/offline",
       icon: "download",

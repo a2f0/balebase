@@ -9,6 +9,7 @@ import {
   type TemplateRow,
   templateSelect,
   toTemplate,
+  visibleTemplateFilter,
 } from "../audits/auditTemplates";
 import type { ApiEnv } from "../auth/apiEnv";
 import type { IssueContext } from "../issues/issueRecords";
@@ -40,7 +41,7 @@ offline.get("/forms", async (context) => {
       403,
     );
   const templates = await context.env.DB.prepare(`${templateSelect}
-    WHERE (family.scope = 'global' AND version.status = 'published') OR family.organization_id = ?
+    WHERE ${visibleTemplateFilter()}
     ORDER BY family.updated_at DESC`)
     .bind(scope.data.organizationId)
     .all<TemplateRow>();

@@ -1,0 +1,131 @@
+import { beforeAll, describe, expect, it } from "bun:test";
+import { DialogHost } from "@balebase/ui/react";
+import type { Project, ProjectForm } from "@balebase/validators/projects";
+import { installDom } from "../testing/dom";
+
+const { click, fill, mount, queryButton, respond, settle } = installDom({
+  url: "http://localhost:5173/projects/project-1",
+});
+let Projects: typeof import("./Projects").Projects;
+
+beforeAll(async () => {
+  ({ Projects } = await import("./Projects"));
+});
+
+const owner = { email: "owner@example.com", id: "owner", name: "Olivia" };
+const member = { email: "sam@example.com", id: "sam", name: "Sam" };
+const forms: ProjectForm[] = [
+  { id: "walk", name: "Site walk", scope: "organization", version: 3 },
+  { id: "nfpa", name: "NFPA 70E", scope: "global", version: 1 },
+];
+
+/** Serves one project, applying member and form changes, and records writes. */
+function stubApi(canManage: boolean) {
+  const writes: string[] = [];
+  let project: Project = {
+    createdAt: "2026-10-01T00:00:00.000Z",
+    description: "North wing",
+    formCount: 0,
+    forms: [],
+    id: "project-1",
+    isMember: false,
+    memberCount: 0,
+    members: [],
+    name: "Hospital renovation",
+    updatedAt: "2026-10-01T00:00:00.000Z",
+  };
+  respond(async (url, init) => {
+    const method = init?.method ?? "GET";
+    if (url.pathname.endsWith("/activity"))
+      return Response.json({ events: [], nextCursor: null });
+    if (method === "GET")
+      return Response.json({
+        availableForms: forms,
+        canManage,
+        directory: [owner, member],
+        project,
+      });
+    writes.push(`${method} ${url.pathname}`);
+    const [, , , , kind, target] = url.pathname.split("/");
+    if (kind === "members") {
+      const members =
+        method === "PUT"
+          ? [...project.members, member]
+          : project.members.filter((person) => person.id !== target);
+      project = { ...project, memberCount: members.length, members };
+    } else {
+      const enabled =
+        method === "PUT"
+          ? [...project.forms, ...forms.filter((form) => form.id === target)]
+          : project.forms.filter((form) => form.id !== target);
+      project = { ...project, formCount: enabled.length, forms: enabled };
+    }
+    return Response.json({ project });
+  });
+  return writes;
+}
+
+async function render() {
+  const { container } = await mount(
+    <>
+      <Projects onNavigate={() => {}} pathname="/projects/project-1" />
+      <DialogHost />
+    </>,
+  );
+  await settle();
+  return container;
+}
+
+function checkbox(container: HTMLElement, label: string) {
+  return [...container.querySelectorAll("label.check")]
+    .find((entry) => entry.textContent?.startsWith(label))
+    ?.querySelector("input") as HTMLInputElement | null;
+}
+
+describe("project detail", () => {
+  it("lets a manager add members and turn audit forms on and off", async () => {
+    const writes = stubApi(true);
+    const container = await render();
+    expect(container.textContent).toContain("Hospital renovation");
+    expect(container.textContent).toContain("No members yet");
+
+    await fill(
+      container.querySelector('select[aria-label="Add a member"]'),
+      "sam",
+    );
+    await click(queryButton("Add member", container));
+    await settle();
+    expect(container.textContent).toContain("sam@example.com");
+
+    const walk = checkbox(container, "Site walk · v3");
+    expect(walk?.checked).toBe(false);
+    expect(checkbox(container, "NFPA 70E · v1 · Global")).toBeTruthy();
+    await click(walk);
+    await settle();
+    expect(checkbox(container, "Site walk")?.checked).toBe(true);
+    expect(container.textContent).toContain("1 form on");
+    await click(checkbox(container, "Site walk"));
+    await settle();
+    expect(checkbox(container, "Site walk")?.checked).toBe(false);
+
+    await click(queryButton("Remove Sam", container));
+    await settle();
+    expect(writes).toEqual([
+      "PUT /api/projects/project-1/members/sam",
+      "PUT /api/projects/project-1/forms/walk",
+      "DELETE /api/projects/project-1/forms/walk",
+      "DELETE /api/projects/project-1/members/sam",
+    ]);
+  });
+
+  it("shows members a read-only view", async () => {
+    const writes = stubApi(false);
+    const container = await render();
+    expect(container.textContent).toContain("Hospital renovation");
+    expect(container.querySelector("select")).toBeNull();
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(queryButton("Edit", container)).toBeFalsy();
+    expect(container.textContent).toContain("No audit forms turned on");
+    expect(writes).toEqual([]);
+  });
+});

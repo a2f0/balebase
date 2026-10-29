@@ -8,6 +8,7 @@ const resourceLabels: Record<ActivityResourceType, string> = {
   audit_template: "Forms",
   issue: "Workspace issues",
   equipment: "Equipment",
+  project: "Projects",
   organization_member: "People",
   api_key: "API keys",
   finance_transaction: "Transactions",

@@ -20,6 +20,7 @@ import { OrganizationInvitation } from "../organizations/OrganizationInvitation"
 import { OrganizationSettings } from "../organizations/OrganizationSettings";
 import type { WorkspaceOrganization } from "../organizations/organizationState";
 import type { useOrganizationAccess } from "../organizations/useOrganizationAccess";
+import { Projects } from "../projects/Projects";
 import type { WorkspacePage } from "./WorkspaceShell";
 import {
   adminOrganizationPath,
@@ -88,6 +89,13 @@ const routes: WorkspaceRoute[] = [
     matches: exactly("/offline"),
     page: "offline",
     render: ({ library }) => library,
+  },
+  {
+    matches: within("/projects"),
+    page: "projects",
+    render: ({ navigate, pathname }) => (
+      <Projects onNavigate={navigate} pathname={pathname} />
+    ),
   },
   {
     matches: within("/audits"),

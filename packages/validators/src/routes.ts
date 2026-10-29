@@ -20,6 +20,7 @@ import { objectsRoutes } from "./objects";
 import { offlineRoutes } from "./offline";
 import { organizationGroupsRoutes } from "./organizationGroups";
 import { organizationSettingsRoutes } from "./organizationSettings";
+import { projectsRoutes } from "./projects";
 import type { Route } from "./route";
 import { sessionRoutes } from "./session";
 import { signingRoutes } from "./signing";
@@ -48,6 +49,7 @@ export const routes: Record<string, Record<string, Route>> = {
   offline: offlineRoutes,
   organizationGroups: organizationGroupsRoutes,
   organizationSettings: organizationSettingsRoutes,
+  projects: projectsRoutes,
   session: sessionRoutes,
   signing: signingRoutes,
 };

@@ -41,6 +41,15 @@ export function equipmentIdForPath(pathname: string) {
   return recordIdForPath(pathname, "/equipment");
 }
 
+/** The project list, or one project. */
+export function projectPath(projectId?: string) {
+  return projectId ? `/projects/${encodeURIComponent(projectId)}` : "/projects";
+}
+
+export function projectIdForPath(pathname: string) {
+  return recordIdForPath(pathname, "/projects");
+}
+
 /** The business list, or one business. */
 export function businessPath(businessId?: string) {
   return businessId

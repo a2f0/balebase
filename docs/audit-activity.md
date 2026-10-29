@@ -1,7 +1,7 @@
 # Audit activity
 
 Activity is the shared history of consequential changes across Balebase. The
-checklist Audits feature is one producer alongside equipment, issues,
+checklist Audits feature is one producer alongside equipment, projects, issues,
 organization roles, API keys, and transaction annotations, categories, and bank
 connection sync settings. The workspace page is `/activity`; individual records
 can expose the same events in their own history. Contract signing also has a
@@ -42,7 +42,7 @@ actor model, never a fabricated human identity.
 `GET /api/activity` reads the active organization's events newest first, with
 cursor pagination. Its optional `resourceType` filter selects the root type
 before pagination. The Activity page offers all resources, audits, forms,
-workspace issues, equipment, people, API keys, transactions, and bank
+workspace issues, equipment, projects, people, API keys, transactions, and bank
 connections. Audit and transaction filters include issues attached to those
 roots; workspace issues are standalone issues. Transaction and bank connection
 activity requires Finance capability even when a caller supplies the filter
@@ -66,7 +66,7 @@ For implementation changes, test successful event creation, actor attribution,
 relevant before/after values, no-op or failure behavior, and authorized reads.
 Use rollback and retry tests when those paths affect correctness. Existing
 examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
-`equipment/equipment.test.ts`, `auth/apiKeys.test.ts`,
+`equipment/equipment.test.ts`, `projects/projects.test.ts`, `auth/apiKeys.test.ts`,
 `auth/organizationRoleActivity.test.ts`, and `issues/issues.test.ts`.
 
 The repository-owned [audit-trails skill](../skills/audit-trails/SKILL.md)
