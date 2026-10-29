@@ -1,15 +1,15 @@
 import { productName } from "@balebase/ui/brand";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import {
+  addTextPages,
+  formatUtcTimestamp,
+  type PdfLine,
+} from "../shared/pdfText";
+import {
   type DisclosureSection,
   type ScreeningDisclosures,
   summaryOfRightsUrl,
 } from "./screeningDisclosures";
-import {
-  addTextPages,
-  formatUtcTimestamp,
-  type PdfLine,
-} from "./shared/pdfText";
 
 export interface ScreeningConsent {
   consentId: string;

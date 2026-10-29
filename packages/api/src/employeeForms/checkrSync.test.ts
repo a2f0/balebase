@@ -1,6 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { verifyCheckrWebhook } from "./checkr";
-import { refreshActiveCheckrScreenings } from "./checkrSync";
 import {
   checkrWebhook,
   createFixture,
@@ -11,7 +9,9 @@ import {
   orgId,
   requestedScreening,
   withoutCheckrKey,
-} from "./testing/employeeFormFixture";
+} from "../testing/employeeFormFixture";
+import { verifyCheckrWebhook } from "./checkr";
+import { refreshActiveCheckrScreenings } from "./checkrSync";
 
 describe("Checkr sync", () => {
   it("refreshes canceled reports and lets managers request the check again", async () => {

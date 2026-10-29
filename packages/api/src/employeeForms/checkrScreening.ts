@@ -1,3 +1,5 @@
+import { trackedPut } from "../shared/storage";
+import type { Bindings } from "../types";
 import {
   CheckrRequestError,
   createCheckrCandidate,
@@ -10,8 +12,6 @@ import { buildScreeningConsentPdf } from "./screeningConsentPdf";
 import type { ScreeningDisclosures } from "./screeningDisclosures";
 import { sendPendingScreeningNotifications } from "./screeningNotifications";
 import type { ScreeningSubmission } from "./screeningSubmission";
-import { trackedPut } from "./shared/storage";
-import type { Bindings } from "./types";
 
 // A canceled report frees the screening to be requested again.
 export function isClosedReportStatus(status: string | null) {

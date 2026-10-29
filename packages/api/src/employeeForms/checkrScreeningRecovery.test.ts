@@ -1,6 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { recoverCheckrAttempt } from "./checkrScreening";
-import { refreshActiveCheckrScreenings } from "./checkrSync";
 import {
   checkrResponses,
   checkrWebhook,
@@ -14,7 +12,9 @@ import {
   orgId,
   requestedScreening,
   submitScreening,
-} from "./testing/employeeFormFixture";
+} from "../testing/employeeFormFixture";
+import { recoverCheckrAttempt } from "./checkrScreening";
+import { refreshActiveCheckrScreenings } from "./checkrSync";
 
 describe("Checkr screening recovery", () => {
   it("resumes a lost submission without ordering a second report", async () => {

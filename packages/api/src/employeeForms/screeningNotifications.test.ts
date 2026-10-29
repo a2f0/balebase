@@ -1,7 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { refreshActiveCheckrScreenings } from "./checkrSync";
-import { sendPendingScreeningNotifications } from "./screeningNotifications";
-import { applyMigrations } from "./testing/database";
+import { applyMigrations } from "../testing/database";
 import {
   checkrWebhook,
   createFixture,
@@ -10,7 +8,9 @@ import {
   orgId,
   requestedScreening,
   withoutCheckrKey,
-} from "./testing/employeeFormFixture";
+} from "../testing/employeeFormFixture";
+import { refreshActiveCheckrScreenings } from "./checkrSync";
+import { sendPendingScreeningNotifications } from "./screeningNotifications";
 
 describe("screening notifications", () => {
   it("emails a branded completion once across repeated and concurrent refreshes", async () => {

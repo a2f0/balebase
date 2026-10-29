@@ -1,4 +1,7 @@
 import type { Context } from "hono";
+import { isRecord } from "../shared/jsonInput";
+import { readBoundedRequest } from "../shared/storage";
+import type { Bindings } from "../types";
 import { verifyCheckrWebhook } from "./checkr";
 import {
   type CheckrAttemptRow,
@@ -8,9 +11,6 @@ import {
   reportSettleMs,
 } from "./checkrScreening";
 import { sendPendingScreeningNotifications } from "./screeningNotifications";
-import { isRecord } from "./shared/jsonInput";
-import { readBoundedRequest } from "./shared/storage";
-import type { Bindings } from "./types";
 
 const maxCheckrWebhookBytes = 1024 * 1024;
 const screeningRefreshLimit = 24;

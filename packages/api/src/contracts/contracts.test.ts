@@ -1,10 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { PDFDocument } from "pdf-lib";
-import {
-  resumeStalledContracts,
-  sendContractReminders,
-} from "./contractReminders";
-import { purgeDeletedObjects } from "./deletedObjectCleanup";
+import { purgeDeletedObjects } from "../deletedObjectCleanup";
 import {
   type Contract,
   createFixture,
@@ -16,8 +12,12 @@ import {
   templateVersion,
   timestamp,
   uploadTemplate,
-} from "./testing/contractFixture";
-import { streamedUpload } from "./testing/http";
+} from "../testing/contractFixture";
+import { streamedUpload } from "../testing/http";
+import {
+  resumeStalledContracts,
+  sendContractReminders,
+} from "./contractReminders";
 
 const png = `data:image/png;base64,${"iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAEUlEQVR4nGNgYGD4z8DAwMAAAA0ABQHsHwEAAAAASUVORK5CYII="}`;
 

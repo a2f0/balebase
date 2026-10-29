@@ -1,5 +1,5 @@
+import type { Bindings } from "../types";
 import { sendScreeningComplete } from "./screeningMail";
-import type { Bindings } from "./types";
 
 interface Notification {
   requirement_id: string;

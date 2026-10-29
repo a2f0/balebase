@@ -1,9 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  screeningDisclosureVersion,
-  summaryOfRightsUrl,
-} from "./screeningDisclosures";
-import { applyMigrations, createTestDatabase } from "./testing/database";
+import { applyMigrations, createTestDatabase } from "../testing/database";
 import {
   checkrResponses,
   configureCheckr,
@@ -16,8 +12,12 @@ import {
   orgId,
   requestedScreening,
   submitScreening,
-} from "./testing/employeeFormFixture";
-import { seedOrganization } from "./testing/seed";
+} from "../testing/employeeFormFixture";
+import { seedOrganization } from "../testing/seed";
+import {
+  screeningDisclosureVersion,
+  summaryOfRightsUrl,
+} from "./screeningDisclosures";
 
 describe("Checkr screening", () => {
   it("requests a background check at a work location and emails the person", async () => {

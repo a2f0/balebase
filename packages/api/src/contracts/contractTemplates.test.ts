@@ -6,8 +6,8 @@ import {
   type Template,
   templateVersion,
   uploadTemplate,
-} from "./testing/contractFixture";
-import { streamedUpload } from "./testing/http";
+} from "../testing/contractFixture";
+import { streamedUpload } from "../testing/http";
 
 describe("contract templates", () => {
   it("keeps versions immutable and maps every field through a role into an independent draft", async () => {

@@ -1,5 +1,8 @@
 import { type Signature, signingRoutes } from "@balebase/validators/signing";
 import { type Context, Hono } from "hono";
+import { readBody, respond } from "../shared/respond";
+import { storedDownload } from "../shared/storage";
+import type { Bindings } from "../types";
 import { sendDeclined } from "./contractMail";
 import { isEmbeddablePng } from "./contractPdf";
 import {
@@ -18,9 +21,6 @@ import {
   signingTokenHash,
 } from "./contractTokens";
 import { advanceContract, decodePngDataUrl } from "./contractWorkflow";
-import { readBody, respond } from "./shared/respond";
-import { storedDownload } from "./shared/storage";
-import type { Bindings } from "./types";
 
 /** Public routes a signer reaches through their emailed link; no account. */
 type SigningEnv = { Bindings: Bindings };

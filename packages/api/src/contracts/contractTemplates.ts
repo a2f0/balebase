@@ -6,7 +6,16 @@ import {
   type TemplateVersion,
 } from "@balebase/validators/contractTemplates";
 import { type Context, Hono } from "hono";
-import type { ApiEnv } from "./auth/authMiddleware";
+import type { ApiEnv } from "../auth/authMiddleware";
+import { normalizeFilename } from "../shared/filenames";
+import { readBody, readQuery, respond } from "../shared/respond";
+import {
+  readBoundedForm,
+  storedDownload,
+  trackedPut,
+  uploadExpired,
+  uploadStillQueued,
+} from "../shared/storage";
 import {
   draftStatements,
   fieldsOnDocument,
@@ -15,15 +24,6 @@ import {
 import { InvalidPdfError, inspectPdf, sha256Hex } from "./contractPdf";
 import { eventStatement } from "./contractRecords";
 import { mappedDraft } from "./contractTemplateDefinition";
-import { normalizeFilename } from "./shared/filenames";
-import { readBody, readQuery, respond } from "./shared/respond";
-import {
-  readBoundedForm,
-  storedDownload,
-  trackedPut,
-  uploadExpired,
-  uploadStillQueued,
-} from "./shared/storage";
 
 type TemplateContext = Context<ApiEnv>;
 interface VersionRow {

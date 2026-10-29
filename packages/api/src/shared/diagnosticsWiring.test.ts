@@ -36,7 +36,7 @@ test("production Worker entrypoints report failures without changing their behav
       test("routers with their own error handlers still report unexpected errors", async () => {
         const { Hono } = await import("hono");
         const { createFinanceRouter } = await import(${JSON.stringify(resolve(import.meta.dir, "../finance.ts"))});
-        const { employeeForms } = await import(${JSON.stringify(resolve(import.meta.dir, "../employeeForms.ts"))});
+        const { employeeForms } = await import(${JSON.stringify(resolve(import.meta.dir, "../employeeForms/employeeForms.ts"))});
         const plaidError = new TypeError("Plaid transport failure");
         const databaseError = new Error("database unavailable");
         const routes = new Hono();

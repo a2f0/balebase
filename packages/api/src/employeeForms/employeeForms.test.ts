@@ -1,17 +1,17 @@
 import { describe, expect, it } from "bun:test";
-import { purgeDeletedObjects } from "./deletedObjectCleanup";
-import {
-  assignAcceptedInvitationRequirements,
-  assignRenewedInvitationRequirements,
-} from "./employeeForms";
+import { purgeDeletedObjects } from "../deletedObjectCleanup";
 import {
   createFixture,
   createRequirement,
   jsonPost,
   now,
   orgId,
-} from "./testing/employeeFormFixture";
-import { streamedUpload } from "./testing/http";
+} from "../testing/employeeFormFixture";
+import { streamedUpload } from "../testing/http";
+import {
+  assignAcceptedInvitationRequirements,
+  assignRenewedInvitationRequirements,
+} from "./employeeForms";
 
 describe("employee forms", () => {
   it("assigns invitation requirements and transfers them to the member", async () => {

@@ -17,7 +17,7 @@ import { syncOrganizationSeats } from "../billing/billingSeats";
 import {
   assignAcceptedInvitationRequirements,
   assignRenewedInvitationRequirements,
-} from "../employeeForms";
+} from "../employeeForms/employeeForms";
 import { sendMail } from "../shared/mailSender";
 import type { Bindings } from "../types";
 import { organizationRoleActivity } from "./organizationRoleActivity";
