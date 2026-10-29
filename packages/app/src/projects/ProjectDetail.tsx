@@ -219,6 +219,7 @@ function ProjectMembers({
           {countLabel(members.length, "member")}
         </span>
       }
+      description="Signing in downloads the project's audit forms to each member's device for offline work."
       title="Members"
     >
       {canManage && candidates.length > 0 && (

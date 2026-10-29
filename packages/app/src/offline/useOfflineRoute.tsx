@@ -1,11 +1,14 @@
 import { useEffect, useMemo } from "react";
 import { signingTokenForPath } from "../workspace/workspacePaths";
 import { OfflineWorkspacePage } from "./OfflineWorkspacePage";
+import { hydrateProjectForms } from "./offlineHydration";
 import {
   activeOfflineKey,
   lockOfflineWorkspace,
   lockOtherOfflineWorkspace,
+  type OfflineIdentity,
   type OfflineWorkspace,
+  offlineAccessEpoch,
   offlineScopeKey,
 } from "./offlineStore";
 import { useOfflineWorkspace } from "./useOfflineWorkspace";
@@ -56,6 +59,7 @@ export function useOfflineRoute(
       organizationName,
     ],
   );
+  useProjectFormHydration(identity, offline.online);
   useEffect(() => {
     // An expired cookie pauses API access, not local editing. Explicit sign-out
     // locks in accountSessions; changing identities also locks cached work here.
@@ -125,4 +129,34 @@ function matchingWorkspace(
   )
     return undefined;
   return saved;
+}
+
+/** Identities whose project forms this app load has already downloaded. */
+const hydrated = new Set<string>();
+
+/**
+ * Once per identity and page load, after sign-in confirms the account and
+ * organization, downloads the forms of the person's projects. The epoch is
+ * taken when the identity is first confirmed, so a sign-out or account
+ * switch that starts meanwhile stops it before it unlocks the device.
+ */
+function useProjectFormHydration(
+  identity: OfflineIdentity | undefined,
+  online: boolean,
+) {
+  useEffect(() => {
+    if (!identity || !online) return;
+    const key = offlineScopeKey(identity.scope);
+    if (hydrated.has(key)) return;
+    hydrated.add(key);
+    hydrateProjectForms(identity, offlineAccessEpoch()).catch(
+      (cause: unknown) => {
+        // The Offline work page still offers these downloads by hand.
+        console.warn(
+          "Could not download project forms for offline work.",
+          cause,
+        );
+      },
+    );
+  }, [identity, online]);
 }

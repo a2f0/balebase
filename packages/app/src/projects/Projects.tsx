@@ -74,7 +74,7 @@ function ProjectListPage({
             </Button>
           )
         }
-        description="Group people around the audit forms they use."
+        description="Group people around the audit forms they use. Signing in downloads the forms of your projects for offline work."
         eyebrow="Workspace"
         title="Projects"
       />

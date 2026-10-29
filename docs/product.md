@@ -348,9 +348,11 @@ drops out of its projects' members without the projects being changed, and
 appears in them again on rejoining. Editing a project's name or description
 requires `expectedRevision` from its latest response; an edit made from an older
 revision returns 409. Turned-on global forms that are later unpublished are no
-longer offered or counted. Creating, editing, and deleting a project, membership
-changes, and form changes are recorded in Activity, which keeps a deleted
-project's history. Migration `0078_create_projects.sql` adds the project tables.
+longer offered or counted. Signing in downloads the forms of the signed-in
+member's projects for offline work (see [Offline work](#offline-work)).
+Creating, editing, and deleting a project, membership changes, and form changes
+are recorded in Activity, which keeps a deleted project's history. Migration
+`0078_create_projects.sql` adds the project tables.
 
 ## Contracts and e-signature
 
@@ -485,13 +487,19 @@ licensing, validation, and jurisdiction-overlay rules.
 ## Offline work
 
 Open **Offline work** in the sidebar while connected to prepare the device and
-download checklists. Downloads include the form's exact version and the current
-assignee directory. Each saved edit gives a form a new version; a form whose
-listed version is already on the device shows **Downloaded**, and **Update
-download** appears only once a newer version is listed. Updating a download
-affects future audits; audits already
-started on the device keep their original form. The web shell must finish
-downloading before the device is ready. Native apps already bundle that shell.
+download checklists. Members of [projects](#projects) do not need to: after each
+sign-in, and whenever the app opens signed in and connected, it downloads the
+forms turned on for their projects, and newer versions of them, without opening
+the page. Forms downloaded by hand stay on the device, and signing in as someone
+whose projects have no forms leaves the device untouched. Signing out or
+switching accounts during that download stops it before it unlocks the device.
+Downloads include the form's exact version and the current assignee directory.
+Each saved edit gives a form a new version; a form whose listed version is
+already on the device shows **Downloaded**, and **Update download** appears only
+once a newer version is listed. Updating a download affects future audits;
+audits already started on the device keep their original form. The web shell
+must finish downloading before the device is ready. Native apps already bundle
+that shell.
 
 Start an offline audit from a downloaded checklist. Answers save to the device
 as they are entered, and drafts survive reopening the app. **Complete and queue
