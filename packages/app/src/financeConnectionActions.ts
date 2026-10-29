@@ -6,6 +6,9 @@ interface Institution {
   institutionName: string | null;
 }
 
+/** How long a pending bank sync waits between reads of its status. */
+export const syncPollMs = 3_000;
+
 export function syncPending(status: string | null | undefined) {
   return status === "queued" || status === "running";
 }

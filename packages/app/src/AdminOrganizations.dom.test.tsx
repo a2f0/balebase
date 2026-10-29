@@ -1,53 +1,19 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { AdminOrganizationDetail } from "@balebase/validators/adminOrganizations";
-import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { AdminOrganizations } from "./AdminOrganizations";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/root/organizations" });
-const domGlobals = {
-  document: dom.document,
-  Element: dom.Element,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
+const {
+  fill,
+  render: renderInDom,
+  respond,
   window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+} = installDom({ url: "http://localhost:5173/root/organizations" });
 let container: HTMLElement;
-
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
+let root: Root;
 
 function detail(id = "other/org"): AdminOrganizationDetail {
   return {
@@ -98,20 +64,13 @@ async function render(
   pathname = "/root/organizations",
   onNavigate?: (path: string) => void,
 ) {
-  if (!root) {
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-  }
   const navigate = onNavigate ?? (() => {});
-  await act(async () =>
-    root?.render(
-      <>
-        <AdminOrganizations onNavigate={navigate} pathname={pathname} />
-        <DialogHost />
-      </>,
-    ),
-  );
+  ({ container, root } = await renderInDom(
+    <>
+      <AdminOrganizations onNavigate={navigate} pathname={pathname} />
+      <DialogHost />
+    </>,
+  ));
 }
 
 function button(text: string) {
@@ -128,12 +87,13 @@ describe("root organization details", () => {
     async (count) => {
       const fixture = detail();
       fixture.organization.plaidItemCount = count;
-      globalThis.fetch = (async (input) =>
+      respond(async (url) =>
         Response.json(
-          String(input).endsWith("/other%2Forg")
+          url.href.endsWith("/other%2Forg")
             ? fixture
             : { organizations: [fixture.organization] },
-        )) as typeof fetch;
+        ),
+      );
 
       await render();
       const headings = [...container.querySelectorAll("thead th")];
@@ -160,8 +120,7 @@ describe("root organization details", () => {
       method: string;
       credentials: string | undefined;
     }> = [];
-    globalThis.fetch = (async (input, init) => {
-      const url = String(input);
+    respond(async ({ href: url }, init) => {
       requests.push({
         url,
         method: init?.method ?? "GET",
@@ -172,13 +131,11 @@ describe("root organization details", () => {
           ? fixture
           : { organizations: [fixture.organization] },
       );
-    }) as typeof fetch;
+    });
     const paths: string[] = [];
     const navigate = (path: string) => {
       paths.push(path);
-      root?.render(
-        <AdminOrganizations onNavigate={navigate} pathname={path} />,
-      );
+      root.render(<AdminOrganizations onNavigate={navigate} pathname={path} />);
     };
     await render(undefined, navigate);
     const link = container.querySelector<HTMLAnchorElement>(
@@ -227,10 +184,11 @@ describe("root organization details", () => {
   });
 
   it("keeps modified clicks available for opening a new tab", async () => {
-    globalThis.fetch = (async () =>
+    respond(async () =>
       Response.json({
         organizations: [detail().organization],
-      })) as unknown as typeof fetch;
+      }),
+    );
     const paths: string[] = [];
     await render(undefined, (path) => paths.push(path));
     const link = container.querySelector<HTMLAnchorElement>(
@@ -248,12 +206,12 @@ describe("root organization details", () => {
 
   it("shows errors and allows retrying an empty organization", async () => {
     let attempts = 0;
-    globalThis.fetch = (async () => {
+    respond(async () => {
       attempts += 1;
       return attempts === 1
         ? Response.json({ error: "Organization not found." }, { status: 404 })
         : Response.json({ ...detail(), members: [], requirements: [] });
-    }) as unknown as typeof fetch;
+    });
     await render("/root/organizations/other%2Forg");
     expect(container.textContent).toContain("Organization not found.");
     await act(async () => button("Refresh").click());
@@ -264,12 +222,13 @@ describe("root organization details", () => {
 
   it("ignores a previous organization's response after navigation", async () => {
     let finishFirst: ((response: Response) => void) | undefined;
-    globalThis.fetch = ((input) =>
-      String(input).endsWith("/first")
+    respond((url) =>
+      url.href.endsWith("/first")
         ? new Promise<Response>((resolve) => {
             finishFirst = resolve;
           })
-        : Promise.resolve(Response.json(detail("second")))) as typeof fetch;
+        : Promise.resolve(Response.json(detail("second"))),
+    );
     await render("/root/organizations/first");
     expect(container.textContent).toContain("Loading organization details…");
     await render("/root/organizations/second");
@@ -295,20 +254,13 @@ async function openOrganizationAction(label: string) {
 }
 
 async function typeOrganizationName(value: string) {
-  const input = document.querySelector<HTMLInputElement>("dialog input");
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(
-      dom.HTMLInputElement.prototype,
-      "value",
-    )?.set?.call(input, value);
-    input?.dispatchEvent(new dom.Event("input", { bubbles: true }) as never);
-  });
+  await fill(document.querySelector<HTMLInputElement>("dialog input"), value);
 }
 
 it("confirms organization deletion from a menu and offers confirmed restoration", async () => {
   const organization = detail().organization;
   const mutations: string[] = [];
-  globalThis.fetch = (async (_input, init) => {
+  respond(async (_url, init) => {
     if (init?.method === "DELETE") {
       mutations.push("DELETE");
       return Response.json({
@@ -324,7 +276,7 @@ it("confirms organization deletion from a menu and offers confirmed restoration"
       return Response.json({ organizationId: organization.id });
     }
     return Response.json({ organizations: [organization] });
-  }) as typeof fetch;
+  });
   await render();
   expect(container.textContent).not.toContain("Mark for deletion");
   await openOrganizationAction("Mark for deletion");
@@ -349,13 +301,14 @@ it("confirms organization deletion from a menu and offers confirmed restoration"
 
 it("keeps an organization active and displays a failed deletion", async () => {
   const organization = detail().organization;
-  globalThis.fetch = (async (_input, init) =>
+  respond(async (_url, init) =>
     init?.method === "DELETE"
       ? Response.json(
           { error: "Could not mark organization." },
           { status: 500 },
         )
-      : Response.json({ organizations: [organization] })) as typeof fetch;
+      : Response.json({ organizations: [organization] }),
+  );
   await render();
   await openOrganizationAction("Mark for deletion");
   await typeOrganizationName(organization.name);

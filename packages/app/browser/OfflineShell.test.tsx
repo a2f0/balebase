@@ -1,25 +1,17 @@
 import { expect, it } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Browser, launch } from "puppeteer-core";
 import { build } from "vite";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 import { offlineShell } from "../../app-web/offlineShell";
 
 it.each(["direct", "redirected"])(
   "reopens the precached web shell without caching private API responses (%s HTML)",
   async (html) => {
     const redirectHtml = html === "redirected";
-    const { CHROME_PATH } = process.env;
-    const chrome =
-      CHROME_PATH ||
-      Bun.which("google-chrome") ||
-      Bun.which("chromium") ||
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-    if (!existsSync(chrome))
-      throw new Error("Chrome is required for offline shell tests.");
     const directory = mkdtempSync(join(tmpdir(), "offline-shell-"));
-    const profile = mkdtempSync(join(tmpdir(), "offline-shell-browser-"));
     writeFileSync(
       join(directory, "index.html"),
       '<!doctype html><p id="status">Loading</p><script type="module" src="/entry.js"></script>',
@@ -65,15 +57,7 @@ it.each(["direct", "redirected"])(
     });
     let browser: Browser | undefined;
     try {
-      browser = await launch({
-        executablePath: chrome,
-        headless: true,
-        pipe: true,
-        userDataDir: profile,
-        timeout: 10_000,
-        protocolTimeout: 10_000,
-        args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-      });
+      browser = await launch(chromeLaunchOptions());
       const page = await browser.newPage();
       await page.goto(server.url.href);
       await page.evaluate(() =>
@@ -131,21 +115,12 @@ it.each(["direct", "redirected"])(
       await browser?.close();
       await server.stop(true);
       rmSync(directory, { recursive: true, force: true });
-      rmSync(profile, { recursive: true, force: true });
     }
   },
   30_000,
 );
 
 it("keeps navigation on the active shell until a waiting upgrade activates", async () => {
-  const { CHROME_PATH } = process.env;
-  const chrome =
-    CHROME_PATH ||
-    Bun.which("google-chrome") ||
-    Bun.which("chromium") ||
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  if (!existsSync(chrome))
-    throw new Error("Chrome is required for offline upgrades.");
   const directory = mkdtempSync(join(tmpdir(), "offline-upgrade-"));
   async function buildVersion(version: string) {
     const root = join(directory, version);
@@ -188,15 +163,7 @@ it("keeps navigation on the active shell until a waiting upgrade activates", asy
   });
   let browser: Browser | undefined;
   try {
-    browser = await launch({
-      executablePath: chrome,
-      headless: true,
-      pipe: true,
-      userDataDir: join(directory, "profile"),
-      timeout: 10_000,
-      protocolTimeout: 10_000,
-      args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-    });
+    browser = await launch(chromeLaunchOptions());
     const page = await browser.newPage();
     await page.goto(new URL("/app/", server.url).href);
     await page.evaluate(() =>

@@ -1,12 +1,8 @@
-import { afterAll, describe, expect, it } from "bun:test";
-import { Window } from "happy-dom";
+import { describe, expect, it } from "bun:test";
 import { readCheckoutAppearance } from "./checkoutAppearance";
+import { installDom } from "./testing/dom";
 
-const dom = new Window();
-
-afterAll(async () => {
-  await dom.happyDOM.close();
-});
+const { window: dom } = installDom();
 
 // happy-dom does not inherit custom properties into computed styles, so the
 // tokens sit on the host itself rather than on :root as they do in the app.

@@ -1,58 +1,24 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import type {
   AuditTemplate,
   AuditTemplateScope,
 } from "@balebase/validators/audits";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
 import { AuditHome } from "./AuditHome";
+import { installDom } from "./testing/dom";
 
 // Mounts the real page in happy-dom so the layout switch renders and the
 // choice round-trips through the page's own storage.
-const dom = new Window({ url: "http://localhost:5173/audits" });
-const domGlobals = {
-  document: dom.document,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
+const {
+  click,
+  mount,
+  respond,
+  settle,
   window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
+} = installDom({ url: "http://localhost:5173/audits" });
 
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  // React DOM decides whether it can use the DOM when first loaded.
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
-
-const mounted: { container: HTMLElement; root: Root }[] = [];
-
-afterEach(async () => {
-  for (const { container, root } of mounted.splice(0)) {
-    await act(async () => root.unmount());
-    container.remove();
-  }
+afterEach(() => {
   dom.localStorage.clear();
-  globalThis.fetch = originalFetch;
 });
 
 function template(
@@ -100,29 +66,20 @@ function template(
 }
 
 function stubApi(templates: AuditTemplate[]) {
-  globalThis.fetch = (async (input) => {
-    const url = String(input);
+  respond(async ({ href: url }) => {
     if (url.endsWith("/api/audits/templates")) {
       return Response.json({ templates });
     }
     return Response.json({ audits: [], nextCursor: null });
-  }) as typeof fetch;
-}
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
 
 async function mountPage() {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  mounted.push({ container, root });
-  await act(async () => root.render(<AuditHome onNavigate={() => {}} />));
+  const { container, unmount } = await mount(
+    <AuditHome onNavigate={() => {}} />,
+  );
   await settle();
-  return page(container);
+  return { ...page(container), unmount };
 }
 
 function page(container: HTMLElement) {
@@ -145,12 +102,6 @@ function page(container: HTMLElement) {
       ),
     text: () => container.textContent ?? "",
   };
-}
-
-async function click(element: HTMLElement | null | undefined) {
-  expect(element).toBeTruthy();
-  await act(async () => element?.click());
-  await settle();
 }
 
 const templates = [
@@ -204,10 +155,7 @@ describe("audit template layout, mounted", () => {
     stubApi(templates);
     const first = await mountPage();
     await click(first.layoutButton("List"));
-    for (const { container, root } of mounted.splice(0)) {
-      await act(async () => root.unmount());
-      container.remove();
-    }
+    await first.unmount();
 
     const second = await mountPage();
     expect(second.pressed()).toEqual(["List"]);
@@ -236,8 +184,7 @@ describe("deleted audits, mounted", () => {
       templateVersion: 2,
       updatedAt: "2026-10-01T00:00:00.000Z",
     };
-    globalThis.fetch = (async (input) => {
-      const url = new URL(String(input));
+    respond(async (url) => {
       if (url.pathname.endsWith("/api/audits/templates")) {
         return Response.json({ templates });
       }
@@ -255,7 +202,7 @@ describe("deleted audits, mounted", () => {
             ]
           : [run];
       return Response.json({ audits, nextCursor: null });
-    }) as typeof fetch;
+    });
 
     try {
       const view = await mountPage();
@@ -302,8 +249,7 @@ describe("deleted audits, mounted", () => {
       updatedAt: "2026-10-01T00:00:00.000Z",
     });
     let releaseStalePage: (() => void) | undefined;
-    globalThis.fetch = (async (input) => {
-      const url = new URL(String(input));
+    respond(async (url) => {
       if (url.pathname.endsWith("/api/audits/templates")) {
         return Response.json({ templates });
       }
@@ -318,7 +264,7 @@ describe("deleted audits, mounted", () => {
           url.searchParams.get("view") === "deleted" ? [] : [run("Fresh")],
         nextCursor: "page-2",
       });
-    }) as typeof fetch;
+    });
 
     const view = await mountPage();
     const loadMore = [...document.querySelectorAll("button")].find(

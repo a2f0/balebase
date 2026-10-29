@@ -1,52 +1,15 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
 import { MyDocuments } from "./MyDocuments";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/me" });
-const domGlobals = {
-  document: dom.document,
-  Element: dom.Element,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
+const {
+  mount,
+  respond,
   window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+} = installDom({ url: "http://localhost:5173/me" });
 let container: HTMLElement;
-
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
 
 function requirement(
   overrides: Partial<EmployeeRequirement>,
@@ -119,14 +82,13 @@ const requests = [
 /** Serves the person's own requests and records every request. */
 function stubApi(requirements: EmployeeRequirement[]) {
   const calls: Array<{ method: string; url: string }> = [];
-  globalThis.fetch = (async (input, init) => {
-    const url = String(input);
+  respond(async ({ href: url }, init) => {
     calls.push({ method: init?.method ?? "GET", url });
     if (init?.method === "POST") {
       return Response.json({ filename: "w4.pdf", status: "submitted" });
     }
     return Response.json({ requirements });
-  }) as typeof fetch;
+  });
   return calls;
 }
 
@@ -134,18 +96,13 @@ async function render(
   pathname = "/me",
   onNavigate: (pathname: string) => void = () => {},
 ) {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(
-      <MyDocuments
-        onNavigate={onNavigate}
-        organization={{ id: "org", name: "Acme" }}
-        pathname={pathname}
-      />,
-    ),
-  );
+  ({ container } = await mount(
+    <MyDocuments
+      onNavigate={onNavigate}
+      organization={{ id: "org", name: "Acme" }}
+      pathname={pathname}
+    />,
+  ));
 }
 
 function section(title: string) {
@@ -341,11 +298,12 @@ describe("My documents", () => {
   });
 
   it("shows the background check form under My documents", async () => {
-    globalThis.fetch = (async () =>
+    respond(async () =>
       Response.json(
         { error: "This background check isn’t waiting for you." },
         { status: 409 },
-      )) as unknown as typeof fetch;
+      ),
+    );
     await render("/me/screening/check");
 
     expect(container.querySelector("h1")?.textContent).toBe(

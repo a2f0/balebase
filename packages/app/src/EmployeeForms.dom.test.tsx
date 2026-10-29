@@ -1,51 +1,13 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
 import { EmployeeForms } from "./EmployeeForms";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/organization/people" });
-const domGlobals = {
-  document: dom.document,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
-  window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+const { button, fill, mount, respond } = installDom({
+  url: "http://localhost:5173/organization/people",
+});
 let container: HTMLElement;
-
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
 
 function screening(
   overrides: Partial<EmployeeRequirement>,
@@ -79,24 +41,10 @@ function screening(
 }
 
 async function render(requirements: EmployeeRequirement[]) {
-  globalThis.fetch = (async () =>
-    Response.json({ requirements })) as unknown as typeof fetch;
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(
-      <EmployeeForms scope={{ kind: "member", memberId: "member" }} />,
-    ),
-  );
-}
-
-function button(within: Element, label: string) {
-  const match = [...within.querySelectorAll("button")].find(
-    (element) => element.textContent?.trim() === label,
-  );
-  if (!match) throw new Error(`No button labeled ${label}`);
-  return match;
+  respond(async () => Response.json({ requirements }));
+  ({ container } = await mount(
+    <EmployeeForms scope={{ kind: "member", memberId: "member" }} />,
+  ));
 }
 
 function badgeText(within: Element) {
@@ -114,7 +62,7 @@ function item(title: string) {
 describe("requesting forms on a member's page", () => {
   it("lists only that member's requests and sends new ones to them", async () => {
     const posted: unknown[] = [];
-    globalThis.fetch = (async (_input, init) => {
+    respond(async (_url, init) => {
       if (init?.method === "POST") {
         posted.push(JSON.parse(String(init.body)));
         return Response.json({ ids: ["new"] });
@@ -129,37 +77,21 @@ describe("requesting forms on a member's page", () => {
           }),
         ],
       });
-    }) as typeof fetch;
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () =>
-      root?.render(
-        <EmployeeForms scope={{ kind: "member", memberId: "member" }} />,
-      ),
-    );
+    });
+    ({ container } = await mount(
+      <EmployeeForms scope={{ kind: "member", memberId: "member" }} />,
+    ));
     expect(item("Own check")).toBeTruthy();
     expect(container.textContent).not.toContain("Their check");
 
-    const date = container.querySelector<HTMLInputElement>(
-      ".requirementEditor input[type=date]",
+    await fill(
+      container.querySelector<HTMLInputElement>(
+        ".requirementEditor input[type=date]",
+      ),
+      "2026-11-15",
     );
-    const setValue = Object.getOwnPropertyDescriptor(
-      dom.HTMLInputElement.prototype,
-      "value",
-    )?.set;
-    await act(async () => {
-      setValue?.call(date, "2026-11-15");
-      date?.dispatchEvent(new dom.Event("input", { bubbles: true }) as never);
-    });
-    const press = async (label: string) => {
-      const target = [...container.querySelectorAll("button")].find(
-        (element) => element.textContent?.trim() === label,
-      );
-      await act(async () => target?.click());
-    };
-    await press("Add");
-    await press("Send requests");
+    await act(async () => button("Add").click());
+    await act(async () => button("Send requests").click());
 
     expect(posted).toEqual([
       {
@@ -254,7 +186,7 @@ describe("Checkr screening results", () => {
     ]);
     const credit = item("Credit check");
     expect(badgeText(credit)).toBe("Report in progress");
-    expect(button(credit, "Refresh check")).toBeTruthy();
+    expect(button("Refresh check", credit)).toBeTruthy();
   });
 
   it("does not offer to request a canceled credit report again", async () => {
@@ -280,11 +212,11 @@ describe("requesting a Checkr background check", () => {
   it("requests a check at a work location and says whether the person was emailed", async () => {
     const posted: Array<{ body: unknown; url: string }> = [];
     let requested = false;
-    globalThis.fetch = (async (input, init) => {
+    respond(async (url, init) => {
       if (init?.method === "POST") {
         posted.push({
           body: JSON.parse(String(init.body)),
-          url: String(input),
+          url: url.href,
         });
         requested = true;
         return Response.json({ emailed: false });
@@ -302,36 +234,22 @@ describe("requesting a Checkr background check", () => {
           }),
         ],
       });
-    }) as typeof fetch;
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () =>
-      root?.render(
-        <EmployeeForms scope={{ kind: "member", memberId: "member" }} />,
-      ),
-    );
+    });
+    ({ container } = await mount(
+      <EmployeeForms scope={{ kind: "member", memberId: "member" }} />,
+    ));
     const check = item("Background check");
     expect(badgeText(check)).toBe("Not requested");
-    const setValue = Object.getOwnPropertyDescriptor(
-      dom.HTMLInputElement.prototype,
-      "value",
-    )?.set;
     for (const [label, value] of [
       ["Work state for Background check", "tx"],
       ["Work city for Background check", "Austin"],
     ] as const) {
-      const input = check.querySelector<HTMLInputElement>(
-        `[aria-label="${label}"]`,
+      await fill(
+        check.querySelector<HTMLInputElement>(`[aria-label="${label}"]`),
+        value,
       );
-      await act(async () => {
-        setValue?.call(input, value);
-        input?.dispatchEvent(
-          new dom.Event("input", { bubbles: true }) as never,
-        );
-      });
     }
-    await act(async () => button(check, "Request background check").click());
+    await act(async () => button("Request background check", check).click());
     expect(posted).toEqual([
       {
         body: { city: "Austin", state: "TX" },
@@ -343,7 +261,7 @@ describe("requesting a Checkr background check", () => {
     );
     const waiting = item("Background check");
     expect(badgeText(waiting)).toBe("Waiting for details");
-    expect(button(waiting, "Update request")).toBeTruthy();
+    expect(button("Update request", waiting)).toBeTruthy();
     expect(
       waiting.querySelector<HTMLInputElement>(
         '[aria-label="Work state for Background check"]',

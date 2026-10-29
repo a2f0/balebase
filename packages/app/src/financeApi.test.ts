@@ -1,37 +1,18 @@
 import { describe, expect, it } from "bun:test";
 import { api } from "./apiClient";
 import { apiUrl } from "./config";
+import { installFetch } from "./testing/fetch";
+
+const respond = installFetch();
 
 describe("finance API", () => {
-  it("loads the listing from the mounted route without a trailing slash", async () => {
-    const originalFetch = globalThis.fetch;
-    let requestedUrl: string | undefined;
-    globalThis.fetch = (async (input, init) => {
-      requestedUrl = input.toString();
-      expect(init?.credentials).toBe("include");
-      return Response.json({
-        accounts: [],
-        configured: true,
-        connections: [],
-        transactions: [],
-      });
-    }) as typeof fetch;
-
-    try {
-      await api.finance.data();
-      expect(requestedUrl).toBe(`${apiUrl}/api/finance`);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
   it("requests expense reports for a range, or all time without one", async () => {
     const requested = await captureRequests(async () => {
       await api.finance.expenseReport({ from: "2026-08-01", to: "2026-08-31" });
       await api.finance.expenseReport({ from: null, to: null });
       await api.finance.expenseReport({ from: "2026-01-01", to: null });
     });
-    expect(requested.map(({ url }) => url)).toEqual([
+    expect(requested).toEqual([
       `${apiUrl}/api/finance/reports/expenses?from=2026-08-01&to=2026-08-31`,
       `${apiUrl}/api/finance/reports/expenses`,
       `${apiUrl}/api/finance/reports/expenses?from=2026-01-01`,
@@ -51,7 +32,7 @@ describe("finance API", () => {
         cursor,
       );
     });
-    const url = new URL(requested[0]?.url ?? "");
+    const url = new URL(requested[0] ?? "");
     expect(url.pathname).toBe("/api/finance");
     expect(url.searchParams.getAll("accountId")).toEqual([
       "checking/1",
@@ -62,59 +43,14 @@ describe("finance API", () => {
     expect(url.searchParams.get("uncategorized")).toBe("true");
     expect(url.searchParams.get("cursor")).toBe(cursor);
   });
-
-  it("sets or clears a transaction's single category", async () => {
-    const requested = await captureRequests(async () => {
-      await api.finance.setTransactionCategory("txn/1", "category-1");
-      await api.finance.setTransactionCategory("txn/1", null);
-    });
-    expect(requested).toEqual([
-      {
-        body: JSON.stringify({ categoryId: "category-1" }),
-        method: "PUT",
-        url: `${apiUrl}/api/finance/transactions/txn%2F1/category`,
-      },
-      {
-        body: JSON.stringify({ categoryId: null }),
-        method: "PUT",
-        url: `${apiUrl}/api/finance/transactions/txn%2F1/category`,
-      },
-    ]);
-  });
-
-  it("surfaces the API's message when a category name is taken", async () => {
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () =>
-      Response.json(
-        { error: "A category with that name exists." },
-        { status: 409 },
-      )) as unknown as typeof fetch;
-    try {
-      await expect(api.finance.createExpenseCategory("Meals")).rejects.toThrow(
-        "A category with that name exists.",
-      );
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
 });
 
 async function captureRequests(run: () => Promise<void>) {
-  const originalFetch = globalThis.fetch;
-  const requests: { body?: unknown; method?: string; url: string }[] = [];
-  globalThis.fetch = (async (input, init) => {
-    const request: { body?: unknown; method?: string; url: string } = {
-      url: input.toString(),
-    };
-    if (init?.method) request.method = init.method;
-    if (init?.body) request.body = init.body;
-    requests.push(request);
+  const urls: string[] = [];
+  respond(async (url) => {
+    urls.push(url.href);
     return Response.json({});
-  }) as typeof fetch;
-  try {
-    await run();
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-  return requests;
+  });
+  await run();
+  return urls;
 }

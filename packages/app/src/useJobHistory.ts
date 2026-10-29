@@ -14,6 +14,9 @@ type HistoryState = {
 };
 const initialState: HistoryState = { loadingMore: false, refreshing: false };
 
+/** How long history waits between refreshes, for each page it has loaded. */
+export const historyPollMs = 5_000;
+
 export function useJobHistory(jobId: string, status: JobRun["status"] | "") {
   const [state, setState] = useState(initialState);
   const nextPage = useRef<() => Promise<boolean>>(undefined);
@@ -77,7 +80,7 @@ function historyLoader(
       if (active) {
         publish({ loadingMore: false, refreshing: false });
         // Keep polling traffic proportional to time, even after many pages load.
-        timer = setTimeout(() => void load(), 5000 * pageCount);
+        timer = setTimeout(() => void load(), historyPollMs * pageCount);
       }
     }
     return true;

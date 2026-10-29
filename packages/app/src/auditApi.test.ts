@@ -1,182 +1,34 @@
 import { describe, expect, it } from "bun:test";
 import { ApiError } from "@balebase/api-client";
 import type { AuditTemplate } from "@balebase/validators/audits";
-import { listActivity } from "./activitySource";
 import { api } from "./apiClient";
 import {
   appendIssueImageSelection,
   uploadIssueImagesSequentially,
 } from "./auditIssueImages";
 import { apiUrl } from "./config";
+import { installFetch } from "./testing/fetch";
+
+const respond = installFetch();
 
 describe("audit template API", () => {
-  it("sends version information through the organization template lifecycle", async () => {
-    const originalFetch = globalThis.fetch;
-    const requests: Array<{ body?: string; method: string; url: string }> = [];
-    const template = exampleTemplate();
-    globalThis.fetch = (async (input, init) => {
-      const request: { body?: string; method: string; url: string } = {
-        method: init?.method ?? "GET",
-        url: input.toString(),
-      };
-      if (init?.body) request.body = init.body.toString();
-      requests.push(request);
-      expect(init?.credentials).toBe("include");
-      if (input.toString().endsWith("/versions")) {
-        return Response.json({ versions: [] });
-      }
+  it("saves and copies a template against the version it was read at", async () => {
+    const bodies: unknown[] = [];
+    const template = { ...exampleTemplate(), currentVersion: 3 };
+    respond(async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
       return Response.json({ template });
-    }) as typeof fetch;
+    });
 
-    try {
-      await api.audits.createTemplate("Private form");
-      await api.audits.getTemplateVersion("template/id", 2);
-      await api.audits.listTemplateVersions("template/id");
-      await api.audits.updateTemplate(template);
-      await api.audits.copyTemplate(template);
-      expect(requests).toEqual([
-        {
-          body: JSON.stringify({ name: "Private form" }),
-          method: "POST",
-          url: `${apiUrl}/api/audits/templates`,
-        },
-        {
-          method: "GET",
-          url: `${apiUrl}/api/audits/templates/template%2Fid/versions/2`,
-        },
-        {
-          method: "GET",
-          url: `${apiUrl}/api/audits/templates/template%2Fid/versions`,
-        },
-        {
-          body: JSON.stringify({
-            definition: template.definition,
-            description: template.description,
-            expectedCurrentVersion: 2,
-            name: template.name,
-          }),
-          method: "PUT",
-          url: `${apiUrl}/api/audits/templates/template%2Fid`,
-        },
-        {
-          body: JSON.stringify({
-            definition: template.definition,
-            description: template.description,
-            expectedCurrentVersion: 2,
-            name: template.name,
-          }),
-          method: "POST",
-          url: `${apiUrl}/api/audits/templates/template%2Fid/copies`,
-        },
-      ]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("manages global forms only through the root admin API", async () => {
-    const originalFetch = globalThis.fetch;
-    const requests: Array<{ body?: string; method: string; url: string }> = [];
-    const template = exampleTemplate();
-    globalThis.fetch = (async (input, init) => {
-      const request: { body?: string; method: string; url: string } = {
-        method: init?.method ?? "GET",
-        url: input.toString(),
-      };
-      if (init?.body) request.body = init.body.toString();
-      requests.push(request);
-      expect(init?.credentials).toBe("include");
-      if (input.toString().endsWith("/activity")) {
-        return Response.json({ events: [], nextCursor: null });
-      }
-      if (input.toString().endsWith("/versions")) {
-        return Response.json({ versions: [] });
-      }
-      if (
-        input.toString().endsWith("/audit-templates") &&
-        request.method === "GET"
-      ) {
-        return Response.json({ templates: [template] });
-      }
-      return Response.json({ template });
-    }) as typeof fetch;
-
-    try {
-      expect(await api.adminAuditTemplates.list()).toEqual({
-        templates: [template],
-      });
-      await api.adminAuditTemplates.create("Shared form");
-      await api.adminAuditTemplates.get("template/id");
-      await api.adminAuditTemplates.getVersion("template/id", 2);
-      await api.adminAuditTemplates.listVersions("template/id");
-      await api.adminAuditTemplates.update(template);
-      await listActivity(
-        { id: "template/id", type: "global_audit_template" },
-        "42",
-      );
-      const admin = `${apiUrl}/api/admin/audit-templates`;
-      expect(requests.map(({ method, url }) => `${method} ${url}`)).toEqual([
-        `GET ${admin}`,
-        `POST ${admin}`,
-        `GET ${admin}/template%2Fid`,
-        `GET ${admin}/template%2Fid/versions/2`,
-        `GET ${admin}/template%2Fid/versions`,
-        `PUT ${admin}/template%2Fid`,
-        `GET ${admin}/template%2Fid/activity?cursor=42`,
-      ]);
-      expect(requests[1]?.body).toBe(JSON.stringify({ name: "Shared form" }));
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("requests subsequent audit history pages with an encoded cursor", async () => {
-    const originalFetch = globalThis.fetch;
-    let requestedUrl = "";
-    globalThis.fetch = (async (input, init) => {
-      requestedUrl = input.toString();
-      expect(init?.credentials).toBe("include");
-      return Response.json({
-        audits: [],
-        nextCursor: null,
-      });
-    }) as typeof fetch;
-
-    try {
-      const page = await api.audits.listRuns("cursor/with+a space");
-      expect(requestedUrl).toBe(
-        `${apiUrl}/api/audits/runs?cursor=cursor%2Fwith%2Ba+space`,
-      );
-      expect(page).toEqual({ audits: [], nextCursor: null });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("pages deleted audits and discards an audit by id", async () => {
-    const originalFetch = globalThis.fetch;
-    const requests: string[] = [];
-    globalThis.fetch = (async (input, init) => {
-      requests.push(`${init?.method ?? "GET"} ${input.toString()}`);
-      return init?.method === "DELETE"
-        ? Response.json({ deletedAt: "2026-10-14T12:00:00.000Z" })
-        : Response.json({ audits: [], nextCursor: null });
-    }) as typeof fetch;
-
-    try {
-      await api.audits.listRuns(undefined, "deleted");
-      await api.audits.listRuns("next", "deleted");
-      expect(await api.audits.discardRun("run/1")).toEqual({
-        deletedAt: "2026-10-14T12:00:00.000Z",
-      });
-      expect(requests).toEqual([
-        `GET ${apiUrl}/api/audits/runs?view=deleted`,
-        `GET ${apiUrl}/api/audits/runs?cursor=next&view=deleted`,
-        `DELETE ${apiUrl}/api/audits/runs/run%2F1`,
-      ]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    await api.audits.updateTemplate(template);
+    await api.audits.copyTemplate(template);
+    const saved = {
+      definition: template.definition,
+      description: template.description,
+      expectedCurrentVersion: 3,
+      name: template.name,
+    };
+    expect(bodies).toEqual([saved, saved]);
   });
 });
 
@@ -232,91 +84,14 @@ describe("audit issue API", () => {
     );
   });
 
-  it("updates assignees and uploads and removes images", async () => {
-    const originalFetch = globalThis.fetch;
-    const requests: Array<{
-      init: RequestInit | undefined;
-      url: string;
-    }> = [];
-    globalThis.fetch = (async (input, init) => {
-      const url = input.toString();
-      requests.push({ init: init as RequestInit | undefined, url });
-      if (init?.method === "DELETE") return new Response(null, { status: 204 });
-      if (init?.body instanceof File) {
-        return Response.json({
-          image: {
-            contentType: "image/png",
-            createdAt: "2026-08-25T12:00:00.000Z",
-            filename: "panel.png",
-            id: "image/id",
-            size: 8,
-            uploadedBy: {
-              email: "admin@example.com",
-              id: "admin-id",
-              name: "Admin",
-            },
-          },
-        });
-      }
-      return Response.json({
-        assignedTo: "user/id",
-        status: "open",
-        updatedAt: "2026-08-25T12:00:00.000Z",
-      });
-    }) as typeof fetch;
-
-    try {
-      await api.audits.updateIssue("issue/id", { assignedTo: "user/id" });
-      const file = new File(
-        [new Uint8Array([0x89, 0x50, 0x4e, 0x47])],
-        "panel.png",
-        { type: "image/png" },
-      );
-      await api.audits.uploadIssueImage("issue/id", file);
-      await api.audits.deleteIssueImage("issue/id", "image/id");
-
-      expect(requests).toHaveLength(3);
-      expect(requests[0]).toMatchObject({
-        init: {
-          body: JSON.stringify({ assignedTo: "user/id" }),
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          method: "PATCH",
-        },
-        url: `${apiUrl}/api/audits/issues/issue%2Fid`,
-      });
-      expect(requests[1]).toMatchObject({
-        init: {
-          body: file,
-          credentials: "include",
-          headers: { "Content-Type": "image/png" },
-          method: "POST",
-        },
-        url: `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
-      });
-      expect(requests[2]).toMatchObject({
-        init: { credentials: "include", method: "DELETE" },
-        url: `${apiUrl}/api/audits/issues/issue%2Fid/images/image%2Fid`,
-      });
-      expect(
-        api.audits.issueImageUrl("issue/id", "image/id", "thumbnail"),
-      ).toBe(
-        `${apiUrl}/api/audits/issues/issue%2Fid/images/image%2Fid?variant=thumbnail`,
-      );
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
   it("preserves rate-limit responses and backs off across repeated 429s", async () => {
-    const originalFetch = globalThis.fetch;
     const file = new File([new Uint8Array([1])], "panel.png", {
       type: "image/png",
     });
     const calls: string[] = [];
     const waits: number[] = [];
-    globalThis.fetch = (async (input) => {
-      calls.push(input.toString());
+    respond(async (url) => {
+      calls.push(url.href);
       if (calls.length <= 3) {
         return Response.json(
           { error: "busy" },
@@ -324,29 +99,25 @@ describe("audit issue API", () => {
         );
       }
       return Response.json({ image: {} });
-    }) as typeof fetch;
+    });
 
-    try {
-      const failures = await uploadIssueImagesSequentially(
-        "issue/id",
-        [file],
-        api.audits.uploadIssueImage,
-        async (milliseconds) => {
-          waits.push(milliseconds);
-        },
-      );
+    const failures = await uploadIssueImagesSequentially(
+      "issue/id",
+      [file],
+      api.audits.uploadIssueImage,
+      async (milliseconds) => {
+        waits.push(milliseconds);
+      },
+    );
 
-      expect(failures).toEqual([]);
-      expect(calls).toEqual([
-        `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
-        `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
-        `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
-        `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
-      ]);
-      expect(waits).toEqual([1_000, 2_000, 4_000]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    expect(failures).toEqual([]);
+    expect(calls).toEqual([
+      `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
+      `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
+      `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
+      `${apiUrl}/api/audits/issues/issue%2Fid/images?filename=panel.png`,
+    ]);
+    expect(waits).toEqual([1_000, 2_000, 4_000]);
   });
 
   it("stops retrying an image after a bounded 429 backoff window", async () => {

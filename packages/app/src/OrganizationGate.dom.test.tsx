@@ -1,23 +1,16 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import type { BillingStatus } from "@balebase/validators/billing";
-import { Window } from "happy-dom";
 import { act, useState } from "react";
-import type { Root } from "react-dom/client";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/" });
-const domGlobals = {
-  document: dom.document,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
+const {
+  clickLink,
+  mount,
+  respond,
+  settle,
   window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
+} = installDom({ url: "http://localhost:5173/" });
 let Workspace: (props: { initialPath: string }) => React.JSX.Element;
-let root: Root | undefined;
 let container: HTMLElement;
 
 const freeStatus: BillingStatus = {
@@ -31,15 +24,6 @@ const freeStatus: BillingStatus = {
 };
 
 beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
   const { OrganizationGate } = await import("./OrganizationGate");
   const { OrganizationBilling } = await import("./OrganizationBilling");
   const { useOrganizationAccess } = await import("./useOrganizationAccess");
@@ -76,28 +60,15 @@ beforeAll(async () => {
   };
 });
 
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
+afterEach(() => {
   dom.history.replaceState(null, "", "/");
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
 });
 
 /** Serves the API; a confirmed Checkout gives the user a seat. */
 function serveApi(seatCode: "SEAT_UNAVAILABLE" | "UPGRADE_REQUIRED") {
   const requests: string[] = [];
   let paid = false;
-  globalThis.fetch = (async (input) => {
-    const url = new URL(String(input));
+  respond(async (url) => {
     requests.push(`${url.pathname}${url.search}`);
     if (url.pathname.endsWith("/organization-groups/access")) {
       return paid
@@ -123,22 +94,13 @@ function serveApi(seatCode: "SEAT_UNAVAILABLE" | "UPGRADE_REQUIRED") {
       });
     }
     return Response.json(freeStatus);
-  }) as typeof fetch;
+  });
   return requests;
 }
 
 async function render(initialPath: string) {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () => root?.render(<Workspace initialPath={initialPath} />));
+  ({ container } = await mount(<Workspace initialPath={initialPath} />));
   await settle();
-}
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
 }
 
 function link(name: string) {
@@ -150,13 +112,7 @@ function link(name: string) {
 async function click(element: Element | undefined) {
   if (!element) throw new Error("Nothing to click.");
   await act(async () => {
-    element.dispatchEvent(
-      new dom.MouseEvent("click", {
-        bubbles: true,
-        button: 0,
-        cancelable: true,
-      }) as unknown as Event,
-    );
+    clickLink(element);
   });
   await settle();
 }

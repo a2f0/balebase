@@ -1,102 +1,61 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { ContextMenu } from "@balebase/ui/react";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173" });
-const saved = new Map<string, PropertyDescriptor | undefined>();
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+const { mount, window: dom } = installDom({ url: "http://localhost:5173" });
 let container: HTMLElement;
 
-beforeAll(async () => {
-  for (const [key, value] of Object.entries({
-    document: dom.document,
-    Element: dom.Element,
-    HTMLElement: dom.HTMLElement,
-    IS_REACT_ACT_ENVIRONMENT: true,
-    Node: dom.Node,
-    window: dom,
-  })) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
-
-async function mount() {
+async function mountMenu() {
   const selected: string[] = [];
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(
-      <>
-        <ContextMenu
-          label="Record actions"
-          items={[
-            {
-              id: "first",
-              label: "First",
-              onSelect: () => {
-                selected.push("first");
-              },
+  const { unmount, ...view } = await mount(
+    <>
+      <ContextMenu
+        label="Record actions"
+        items={[
+          {
+            id: "first",
+            label: "First",
+            onSelect: () => {
+              selected.push("first");
             },
-            {
-              disabled: true,
-              id: "disabled",
-              label: "Disabled",
-              onSelect: () => {
-                selected.push("disabled");
-              },
+          },
+          {
+            disabled: true,
+            id: "disabled",
+            label: "Disabled",
+            onSelect: () => {
+              selected.push("disabled");
             },
-            {
-              id: "last",
-              label: "Last",
-              onSelect: () => {
-                selected.push("last");
-              },
+          },
+          {
+            id: "last",
+            label: "Last",
+            onSelect: () => {
+              selected.push("last");
             },
-          ]}
-        >
-          {(props) => (
-            <section {...props}>
-              <a href="/record">Record</a>
-              <button type="button">
-                Control
-                <svg aria-hidden="true">
-                  <path d="M0 0h10v10" />
-                </svg>
-              </button>
-              <input aria-label="Name" />
-            </section>
-          )}
-        </ContextMenu>
-        <button className="outsideControl" type="button">
-          Outside
-        </button>
-      </>,
-    ),
+          },
+        ]}
+      >
+        {(props) => (
+          <section {...props}>
+            <a href="/record">Record</a>
+            <button type="button">
+              Control
+              <svg aria-hidden="true">
+                <path d="M0 0h10v10" />
+              </svg>
+            </button>
+            <input aria-label="Name" />
+          </section>
+        )}
+      </ContextMenu>
+      <button className="outsideControl" type="button">
+        Outside
+      </button>
+    </>,
   );
+  container = view.container;
   return {
     input: container.querySelector<HTMLInputElement>("input"),
     link: container.querySelector<HTMLAnchorElement>("a"),
@@ -104,6 +63,7 @@ async function mount() {
     icon: container.querySelector<SVGElement>("svg path"),
     outside: container.querySelector<HTMLButtonElement>(".outsideControl"),
     selected,
+    unmount,
   };
 }
 
@@ -137,14 +97,14 @@ async function key(element: Element | null, value: string, shiftKey = false) {
 
 describe("shared context menu", () => {
   it("restores focus to the control when opened from its SVG icon", async () => {
-    const view = await mount();
+    const view = await mountMenu();
     await contextClick(view.icon);
     expect(menu()).not.toBeNull();
     await key(document.activeElement, "Escape");
     expect(document.activeElement).toBe(view.control);
   });
   it("opens at the pointer in a portal and focuses the first action", async () => {
-    const view = await mount();
+    const view = await mountMenu();
     const event = await contextClick(view.link);
     expect(event.defaultPrevented).toBe(true);
     expect(menu()?.parentElement).toBe(document.body);
@@ -154,7 +114,7 @@ describe("shared context menu", () => {
   });
 
   it("opens with Shift+F10 or the menu key, navigates enabled actions, and restores focus", async () => {
-    const view = await mount();
+    const view = await mountMenu();
     view.link?.focus();
     expect((await key(view.link, "F10", true)).defaultPrevented).toBe(true);
     await key(document.activeElement, "ArrowDown");
@@ -181,7 +141,7 @@ describe("shared context menu", () => {
   });
 
   it("dismisses on outside press, focus, scrolling, resize, and window blur", async () => {
-    const view = await mount();
+    const view = await mountMenu();
     for (const event of [
       "pointerdown",
       "focusin",
@@ -204,7 +164,7 @@ describe("shared context menu", () => {
   });
 
   it("dismisses on Tab while allowing normal keyboard navigation", async () => {
-    const view = await mount();
+    const view = await mountMenu();
     await contextClick(view.link);
     expect((await key(document.activeElement, "Tab")).defaultPrevented).toBe(
       false,
@@ -214,14 +174,14 @@ describe("shared context menu", () => {
   });
 
   it("keeps the native menu on editable fields", async () => {
-    const view = await mount();
+    const view = await mountMenu();
     expect((await contextClick(view.input)).defaultPrevented).toBe(false);
     expect((await key(view.input, "F10", true)).defaultPrevented).toBe(false);
     expect(menu()).toBeNull();
   });
 
   it("keeps the menu inside the viewport near its bottom-right edge", async () => {
-    const view = await mount();
+    const view = await mountMenu();
     const original = dom.HTMLElement.prototype.getBoundingClientRect;
     dom.HTMLElement.prototype.getBoundingClientRect = function () {
       return this.classList.contains("contextMenu")
@@ -242,7 +202,7 @@ describe("shared context menu", () => {
   });
 
   it("keeps the menu clear of system bars the page draws under", async () => {
-    const view = await mount();
+    const view = await mountMenu();
     const insets = document.createElement("style");
     insets.textContent = `.contextMenu {
       --safe-area-top: 48px; --safe-area-right: 12px;
@@ -275,30 +235,25 @@ describe("shared context menu", () => {
   });
 
   it("opens from a plain click only when asked to", async () => {
-    const { control } = await mount();
+    const { control, unmount } = await mountMenu();
     await act(async () => control?.click());
     expect(menu()).toBeNull();
 
-    await act(async () => root?.unmount());
+    await unmount();
     container.remove();
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () =>
-      root?.render(
-        <ContextMenu
-          items={[{ id: "only", label: "Only", onSelect: () => {} }]}
-          label="Number actions"
-          openOnClick
-        >
-          {(props) => (
-            <button {...props} type="button">
-              01
-            </button>
-          )}
-        </ContextMenu>,
-      ),
-    );
+    ({ container } = await mount(
+      <ContextMenu
+        items={[{ id: "only", label: "Only", onSelect: () => {} }]}
+        label="Number actions"
+        openOnClick
+      >
+        {(props) => (
+          <button {...props} type="button">
+            01
+          </button>
+        )}
+      </ContextMenu>,
+    ));
     const trigger = container.querySelector("button");
     await act(async () => trigger?.click());
     expect(menu()?.getAttribute("aria-label")).toBe("Number actions");
@@ -306,10 +261,9 @@ describe("shared context menu", () => {
   });
 
   it("removes an open portal when its target unmounts", async () => {
-    const view = await mount();
+    const view = await mountMenu();
     await contextClick(view.link);
-    await act(async () => root?.unmount());
-    root = undefined;
+    await view.unmount();
     expect(menu()).toBeNull();
   });
 });

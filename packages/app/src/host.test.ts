@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { fetchApi } from "./apiVersion";
 import { authCallbackUrl } from "./config";
 import { configureHost } from "./host";
+import { installFetch } from "./testing/fetch";
+
+const respond = installFetch();
 
 afterEach(() => configureHost({}));
 
@@ -15,17 +18,12 @@ const nativeHost = (origin: string) => ({
 });
 
 async function sentHeaders(request: Request) {
-  const originalFetch = globalThis.fetch;
   let headers = new Headers();
-  globalThis.fetch = (async (_input, init) => {
+  respond(async (_url, init) => {
     headers = new Headers(init?.headers);
     return new Response("{}");
-  }) as typeof fetch;
-  try {
-    await fetchApi(request);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  });
+  await fetchApi(request);
   return headers;
 }
 

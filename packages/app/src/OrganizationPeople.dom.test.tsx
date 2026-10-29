@@ -1,57 +1,20 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { beforeAll, describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import type {
   OrganizationMember,
   OrganizationPeopleData,
 } from "@balebase/validators/organizationSettings";
-import { Window } from "happy-dom";
-import { act } from "react";
-import type { Root } from "react-dom/client";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/organization/people" });
-const domGlobals = {
-  document: dom.document,
-  Element: dom.Element,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
-  window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
+const { click, fill, mount, queryButton, respond, settle } = installDom({
+  url: "http://localhost:5173/organization/people",
+});
 let OrganizationPeople: typeof import("./OrganizationPeople").OrganizationPeople;
-let root: Root | undefined;
 let container: HTMLElement;
 
 beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
   ({ OrganizationPeople } = await import("./OrganizationPeople"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
 });
 
 function member(id: string, name: string, role = "member"): OrganizationMember {
@@ -113,8 +76,7 @@ function stubApi(
   const requested: unknown[] = [];
   let failures = failedRequests;
   let listingFailures = failedListings;
-  globalThis.fetch = (async (input, init) => {
-    const url = new URL(String(input instanceof Request ? input.url : input));
+  respond(async (url, init) => {
     if (url.pathname.endsWith("/employee-forms") && init?.method === "POST") {
       const body = JSON.parse(String(init.body)) as {
         invitationId?: string;
@@ -167,32 +129,21 @@ function stubApi(
       return Response.json({ requirements });
     }
     return Response.json(people);
-  }) as typeof fetch;
+  });
   return { invited, requested };
 }
 
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
-
 async function render(onNavigate: (pathname: string) => void = () => {}) {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(
-      <>
-        <OrganizationPeople
-          onAccessChanged={async () => {}}
-          onNavigate={onNavigate}
-          organization={{ id: "org-1", name: "Acme" }}
-        />
-        <DialogHost />
-      </>,
-    ),
-  );
+  ({ container } = await mount(
+    <>
+      <OrganizationPeople
+        onAccessChanged={async () => {}}
+        onNavigate={onNavigate}
+        organization={{ id: "org-1", name: "Acme" }}
+      />
+      <DialogHost />
+    </>,
+  ));
   await settle();
 }
 
@@ -200,32 +151,10 @@ const inviteForm = () =>
   [...container.querySelectorAll("form")].find((form) =>
     form.textContent?.includes("Invite a member"),
   );
-const button = (scope: Element | null | undefined, label: string) =>
-  [...(scope?.querySelectorAll("button") ?? [])].find(
-    (element) => element.textContent?.trim() === label,
-  ) ?? null;
-const inviteButton = () => button(container, "Invite member");
+const inviteButton = () => queryButton("Invite member", container);
 const emailField = () =>
   inviteForm()?.querySelector<HTMLInputElement>('input[name="invite-email"]') ??
   null;
-
-async function click(element: HTMLElement | null | undefined) {
-  expect(element).toBeTruthy();
-  await act(async () => element?.click());
-  await settle();
-}
-
-async function type(field: HTMLInputElement | null, value: string) {
-  expect(field).toBeTruthy();
-  const setValue = Object.getOwnPropertyDescriptor(
-    dom.HTMLInputElement.prototype,
-    "value",
-  )?.set;
-  await act(async () => {
-    setValue?.call(field, value);
-    field?.dispatchEvent(new dom.Event("input", { bubbles: true }) as never);
-  });
-}
 
 describe("inviting people", () => {
   it("keeps the form open while the owner is alone, then folds it after the first invitation", async () => {
@@ -238,10 +167,10 @@ describe("inviting people", () => {
     await render();
     expect(inviteForm()).toBeTruthy();
     expect(inviteButton()).toBeNull();
-    expect(button(inviteForm(), "Cancel")).toBeNull();
+    expect(queryButton("Cancel", inviteForm())).toBeNull();
 
-    await type(emailField(), "new@example.com");
-    await click(button(inviteForm(), "Send invitation"));
+    await fill(emailField(), "new@example.com");
+    await click(queryButton("Send invitation", inviteForm()));
 
     expect(invited).toEqual(["new@example.com"]);
     expect(inviteForm()).toBeUndefined();
@@ -264,13 +193,13 @@ describe("inviting people", () => {
       1,
     );
     await render();
-    await type(emailField(), "new@example.com");
-    await type(
+    await fill(emailField(), "new@example.com");
+    await fill(
       inviteForm()?.querySelector<HTMLInputElement>("input[type=date]") ?? null,
       "2026-11-15",
     );
-    await click(button(inviteForm(), "Add"));
-    await click(button(inviteForm(), "Send invitation"));
+    await click(queryButton("Add", inviteForm()));
+    await click(queryButton("Send invitation", inviteForm()));
 
     expect(invited).toEqual(["new@example.com"]);
     expect(inviteForm()?.textContent).toContain(
@@ -280,7 +209,7 @@ describe("inviting people", () => {
       inviteForm()?.querySelector(".requirementDrafts")?.textContent,
     ).toContain("W-4");
 
-    await click(button(inviteForm(), "Retry requests"));
+    await click(queryButton("Retry requests", inviteForm()));
     expect(requested).toHaveLength(2);
     expect(requested[1]).toMatchObject({
       invitationId: "invitation-1",
@@ -317,7 +246,7 @@ describe("inviting people", () => {
     );
     expect(container.textContent).not.toContain("Invitees and former members");
 
-    await click(button(container, "Try again"));
+    await click(queryButton("Try again", container));
     expect(container.textContent).not.toContain("could not be loaded");
     expect(container.textContent).toContain(
       "Credit check · former@example.com",
@@ -336,7 +265,7 @@ describe("inviting people", () => {
 
     await click(inviteButton());
     expect(document.activeElement).toBe(emailField());
-    await click(button(inviteForm(), "Cancel"));
+    await click(queryButton("Cancel", inviteForm()));
     expect(inviteForm()).toBeUndefined();
     expect(document.activeElement).toBe(inviteButton());
   });
@@ -431,8 +360,7 @@ describe("the member list", () => {
       requirement({ memberId: "mark", title: "W-9" }),
       requirement({ memberId: "adam", title: "I-9" }),
     ];
-    globalThis.fetch = (async (input, init) => {
-      const url = new URL(String(input instanceof Request ? input.url : input));
+    respond(async (url, init) => {
       if (url.pathname.endsWith("/organization/update-member-role")) {
         const body = JSON.parse(String(init?.body)) as {
           memberId: string;
@@ -456,7 +384,7 @@ describe("the member list", () => {
         });
       }
       return Response.json(people);
-    }) as typeof fetch;
+    });
     await render();
     const row = (name: string) =>
       [...container.querySelectorAll("a")].find((link) =>
@@ -464,19 +392,12 @@ describe("the member list", () => {
       );
     expect(row("Mark Member")?.textContent).toContain("2 open requests");
 
-    const roleSelect = container.querySelector<HTMLSelectElement>(
-      'select[aria-label="Role for Adam Admin"]',
+    await fill(
+      container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Role for Adam Admin"]',
+      ),
+      "member",
     );
-    const setValue = Object.getOwnPropertyDescriptor(
-      dom.HTMLSelectElement.prototype,
-      "value",
-    )?.set;
-    await act(async () => {
-      setValue?.call(roleSelect, "member");
-      roleSelect?.dispatchEvent(
-        new dom.Event("change", { bubbles: true }) as never,
-      );
-    });
     await settle();
     await settle();
 

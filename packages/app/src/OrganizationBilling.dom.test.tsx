@@ -1,29 +1,19 @@
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  describe,
-  expect,
-  it,
-  mock,
-} from "bun:test";
+import { afterEach, beforeAll, describe, expect, it, mock } from "bun:test";
 import type { BillingStatus } from "@balebase/validators/billing";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/organization/billing" });
-const domGlobals = {
-  document: dom.document,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  MutationObserver: dom.MutationObserver,
-  navigator: dom.navigator,
-  Node: dom.Node,
+const {
+  mount,
+  respond,
+  settle,
   window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
+} = installDom({
+  url: "http://localhost:5173/organization/billing",
+  globals: (window) => ({
+    MutationObserver: window.MutationObserver,
+  }),
+});
 // A stand-in for Stripe.js, so the page runs the real adapter end to end.
 const stripe = {
   confirmResult: { type: "success" } as object,
@@ -33,9 +23,7 @@ const stripe = {
   mounted: [] as Element[],
   releaseActions: () => {},
 };
-let createRoot: (container: Element) => Root;
 let OrganizationBilling: typeof import("./OrganizationBilling").OrganizationBilling;
-let root: Root | undefined;
 let container: HTMLElement;
 
 mock.module("@stripe/stripe-js/pure", () => ({
@@ -76,23 +64,10 @@ mock.module("@stripe/stripe-js/pure", () => ({
 }));
 
 beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
   ({ OrganizationBilling } = await import("./OrganizationBilling"));
 });
 
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
+afterEach(() => {
   Object.assign(stripe, {
     confirmResult: { type: "success" },
     confirmed: 0,
@@ -100,14 +75,6 @@ afterEach(async () => {
     initialized: [],
     mounted: [],
   });
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
 });
 
 const freeStatus: BillingStatus = {
@@ -122,38 +89,27 @@ const freeStatus: BillingStatus = {
 
 function serveBilling(checkout: unknown, status: BillingStatus = freeStatus) {
   const requests: string[] = [];
-  globalThis.fetch = (async (input, init) => {
-    const url = String(input);
+  respond(async ({ href: url }, init) => {
     requests.push(`${init?.method ?? "GET"} ${url.replace(/^.*\/api/, "")}`);
     return Response.json(url.endsWith("/checkout") ? checkout : status);
-  }) as typeof fetch;
+  });
   return requests;
 }
 
 /** Lets the adapter's chain of loads settle. */
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
 
 let planChanges = 0;
 
 async function render() {
   planChanges = 0;
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(
-      <OrganizationBilling
-        onPlanChanged={async () => {
-          planChanges += 1;
-        }}
-        organizationId="org-1"
-      />,
-    ),
-  );
+  ({ container } = await mount(
+    <OrganizationBilling
+      onPlanChanged={async () => {
+        planChanges += 1;
+      }}
+      organizationId="org-1"
+    />,
+  ));
 }
 
 function button(text: string) {

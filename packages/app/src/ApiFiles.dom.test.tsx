@@ -1,69 +1,33 @@
 import {
-  afterAll,
   afterEach,
-  beforeAll,
   beforeEach,
   expect,
   it,
   type Mock,
+  mock,
   spyOn,
 } from "bun:test";
-import { Window } from "happy-dom";
 import { act, type ReactNode } from "react";
-import type { Root } from "react-dom/client";
 import { ApiDownload } from "./ApiDownload";
 import { ApiImage } from "./ApiImage";
 import { configureHost } from "./host";
 import * as saving from "./saveFile";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/audits" });
-const domGlobals = {
-  document: dom.document,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
+const {
+  mount,
+  respond,
   window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+} = installDom({ url: "http://localhost:5173/audits" });
 let container: HTMLElement;
 
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
-
 async function render(element: ReactNode) {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () => root?.render(element));
+  const view = await mount(element);
+  container = view.container;
+  return view;
 }
 
-let fetchMock: Mock<typeof fetch>;
+let fetchMock: Mock<(url: URL, init?: RequestInit) => Promise<Response>>;
 let save: Mock<typeof saving.saveFile>;
 let createUrl: Mock<typeof URL.createObjectURL>;
 let revokeUrl: Mock<typeof URL.revokeObjectURL>;
@@ -76,9 +40,9 @@ beforeEach(() => {
       savePassword: async () => {},
     },
   });
-  fetchMock = spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response(new Uint8Array([0, 255, 1])),
-  );
+  fetchMock = mock<(url: URL, init?: RequestInit) => Promise<Response>>();
+  fetchMock.mockResolvedValue(new Response(new Uint8Array([0, 255, 1])));
+  respond(fetchMock);
   save = spyOn(saving, "saveFile").mockResolvedValue(true);
   createUrl = spyOn(URL, "createObjectURL").mockReturnValue(
     "blob:native-image",
@@ -87,14 +51,15 @@ beforeEach(() => {
 });
 afterEach(() => {
   configureHost({});
-  fetchMock.mockRestore();
   save.mockRestore();
   createUrl.mockRestore();
   revokeUrl.mockRestore();
 });
 
 it("fetches protected native images and releases their local URL on unmount", async () => {
-  await render(<ApiImage alt="Private photo" src="https://api.test/image" />);
+  const view = await render(
+    <ApiImage alt="Private photo" src="https://api.test/image" />,
+  );
   expect(container.querySelector("img")?.getAttribute("src")).toBe(
     "blob:native-image",
   );
@@ -105,8 +70,7 @@ it("fetches protected native images and releases their local URL on unmount", as
   expect(await imageBlob.arrayBuffer()).toEqual(
     new Uint8Array([0, 255, 1]).buffer,
   );
-  await act(async () => root?.unmount());
-  root = undefined;
+  await view.unmount();
   expect(revokeUrl).toHaveBeenCalledWith("blob:native-image");
 });
 

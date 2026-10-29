@@ -1,9 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { initClickTracking } from "@balebase/diagnostics/clickTracking";
 import { type Browser, launch } from "puppeteer-core";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 
 // The shared tracker runs here because diagnostics has no browser suite. The
 // layout test and the web shell's suite check each bundle's own origins.
@@ -12,7 +10,6 @@ const origins = {
   production: "https://tracked.example",
   staging: "https://staging.tracked.example",
 };
-const profile = mkdtempSync(join(tmpdir(), "balebase-clicks-"));
 const sources = new Map<boolean, string>();
 let browser: Browser;
 
@@ -32,32 +29,21 @@ beforeAll(async () => {
     if (!source) throw new Error("Tracking bundle is empty");
     sources.set(production, source);
   }
-  browser = await launch({
-    executablePath:
-      process.env.CHROME_PATH ||
-      Bun.which("google-chrome") ||
-      Bun.which("chromium") ||
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    headless: true,
-    pipe: true,
-    userDataDir: profile,
-    timeout: 10_000,
-    protocolTimeout: 10_000,
-    args: [
-      "--no-sandbox",
-      "--password-store=basic",
-      "--use-mock-keychain",
-      // Isolated contexts are incognito. Disable both automatic and incognito
-      // HTTPS-first upgrades so HTTP rejection fixtures retain their origin.
-      "--disable-features=HttpsUpgrades,HttpsFirstModeIncognito,HttpsFirstBalancedModeAutoEnable",
-    ],
-  });
+  browser = await launch(
+    chromeLaunchOptions({
+      args: [
+        // Isolated contexts are incognito. Disable both automatic and incognito
+        // HTTPS-first upgrades so HTTP rejection fixtures retain their origin.
+        "--disable-features=HttpsUpgrades,HttpsFirstModeIncognito,HttpsFirstBalancedModeAutoEnable",
+      ],
+    }),
+  );
 }, 30_000);
 
+// Chrome can take longer than Bun's 5 s hook default to exit on a loaded host.
 afterAll(async () => {
   await browser?.close();
-  rmSync(profile, { recursive: true, force: true });
-});
+}, 30_000);
 
 type Guard =
   | "none"

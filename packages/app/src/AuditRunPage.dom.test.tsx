@@ -1,67 +1,13 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { AuditDetail } from "@balebase/validators/audits";
-import { Window } from "happy-dom";
-import { act } from "react";
-import type { Root } from "react-dom/client";
 import { AuditRunPage } from "./AuditRunPage";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/audits/run-1" });
-const domGlobals = {
-  document: dom.document,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
-  window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+const { button, click, mount, respond, settle } = installDom({
+  url: "http://localhost:5173/audits/run-1",
+});
 let container: HTMLElement;
-
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
-
-async function click(label: string) {
-  const button = [...container.querySelectorAll("button")].find(
-    (element) => element.textContent === label,
-  );
-  expect(button).toBeDefined();
-  await act(async () => button?.click());
-  await settle();
-}
 
 function detail(revision: number, response: string): AuditDetail {
   return {
@@ -107,9 +53,9 @@ describe("audit save conflicts, mounted", () => {
   it("sends the loaded revision, preserves unsaved answers on conflict, and reloads the newer revision", async () => {
     const writes: unknown[] = [];
     let reads = 0;
-    globalThis.fetch = (async (input, init) => {
+    respond(async (url, init) => {
       expect(init?.credentials).toBe("include");
-      if (String(input).endsWith("/activity")) {
+      if (url.href.endsWith("/activity")) {
         return Response.json({ events: [], nextCursor: null });
       }
       if (init?.method === "POST") {
@@ -131,13 +77,10 @@ describe("audit save conflicts, mounted", () => {
       return Response.json(
         detail(reads === 1 ? 3 : 4, reads === 1 ? "pass" : "fail"),
       );
-    }) as typeof fetch;
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () =>
-      root?.render(<AuditRunPage id="run-1" onNavigate={() => {}} />),
-    );
+    });
+    ({ container } = await mount(
+      <AuditRunPage id="run-1" onNavigate={() => {}} />,
+    ));
     await settle();
     await click("N/A");
     expect(container.textContent).toContain("Unsaved answer");
@@ -179,10 +122,10 @@ describe("discarding an audit, mounted", () => {
     const requests: string[] = [];
     let discarded = false;
     const navigated: string[] = [];
-    globalThis.fetch = (async (input, init) => {
+    respond(async (url, init) => {
       const method = init?.method ?? "GET";
-      requests.push(`${method} ${new URL(String(input)).pathname}`);
-      if (String(input).endsWith("/activity")) {
+      requests.push(`${method} ${url.pathname}`);
+      if (url.href.endsWith("/activity")) {
         return Response.json({ events: [], nextCursor: null });
       }
       if (method === "DELETE") {
@@ -199,21 +142,16 @@ describe("discarding an audit, mounted", () => {
         };
       }
       return Response.json(loaded);
-    }) as typeof fetch;
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () =>
-      root?.render(
-        <>
-          <DialogHost />
-          <AuditRunPage
-            id="run-1"
-            onNavigate={(pathname) => navigated.push(pathname)}
-          />
-        </>,
-      ),
-    );
+    });
+    ({ container } = await mount(
+      <>
+        <DialogHost />
+        <AuditRunPage
+          id="run-1"
+          onNavigate={(pathname) => navigated.push(pathname)}
+        />
+      </>,
+    ));
     await settle();
     expect(buttonLabels()).toContain("Save");
     expect(buttonLabels()).not.toContain("Save draft");
@@ -257,8 +195,8 @@ describe("discarding an audit, mounted", () => {
 describe("discarding an audit whose reload fails, mounted", () => {
   it("keeps the page read-only from the discard response alone", async () => {
     let discarded = false;
-    globalThis.fetch = (async (input, init) => {
-      if (String(input).endsWith("/activity")) {
+    respond(async (url, init) => {
+      if (url.href.endsWith("/activity")) {
         return Response.json({ events: [], nextCursor: null });
       }
       if (init?.method === "DELETE") {
@@ -268,18 +206,13 @@ describe("discarding an audit whose reload fails, mounted", () => {
       return discarded
         ? Response.json({ error: "Temporarily unavailable." }, { status: 503 })
         : Response.json(detail(2, "pass"));
-    }) as typeof fetch;
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () =>
-      root?.render(
-        <>
-          <DialogHost />
-          <AuditRunPage id="run-1" onNavigate={() => {}} />
-        </>,
-      ),
-    );
+    });
+    ({ container } = await mount(
+      <>
+        <DialogHost />
+        <AuditRunPage id="run-1" onNavigate={() => {}} />
+      </>,
+    ));
     await settle();
     await click("Fail");
     await click("Discard audit");
@@ -306,10 +239,6 @@ function buttonLabels() {
 /** Answers the open dialog with the button labelled `label`. */
 async function answerDialog(label: string) {
   const dialog = document.querySelector("dialog[open]");
-  const choice = [...(dialog?.querySelectorAll("button") ?? [])].find(
-    (element) => element.textContent === label,
-  );
-  expect(choice).toBeDefined();
-  await act(async () => choice?.click());
-  await settle();
+  if (!dialog) throw new Error("No open dialog");
+  await click(button(label, dialog));
 }

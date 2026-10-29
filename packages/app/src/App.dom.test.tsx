@@ -1,67 +1,43 @@
 import {
   afterAll,
-  afterEach,
   beforeAll,
   describe,
   expect,
   it,
   setSystemTime,
 } from "bun:test";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
+import { holdTimers, installDom } from "./testing/dom";
 
 // Mounts the real app on an emailed reset link, so the session refreshes
 // around the reset and the sign-in after it run exactly as in the browser.
 const resetLink = "/reset-password?token=reset-token";
-const dom = new Window({ url: `http://localhost:5173${resetLink}` });
-const domGlobals = {
-  document: dom.document,
-  Element: dom.Element,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
+// Better Auth's session store detaches from window a second (nanostores'
+// unmount delay) after its last listener leaves. Hold that second and let it
+// pass once the last test unmounts: these hooks, registered before
+// installDom's, run before the window closes.
+let storeUnmounts: ReturnType<typeof holdTimers>;
+beforeAll(() => {
+  storeUnmounts = holdTimers(1_000);
+});
+afterAll(async () => {
+  await storeUnmounts.fire();
+  storeUnmounts.restore();
+});
+const {
+  button,
+  fill: fillField,
+  mount,
+  respond,
   window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
+} = installDom({ url: `http://localhost:5173${resetLink}` });
 let App: typeof import("./App").App;
 let authClient: typeof import("./authClient").authClient;
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
 let container: HTMLElement;
 
 beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
   ({ App } = await import("./App"));
   ({ authClient } = await import("./authClient"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
-});
-
-afterAll(async () => {
-  // Better Auth's session store unmounts a second after its last listener
-  // leaves, and then detaches from window; let it go before window does.
-  await new Promise((resolve) => setTimeout(resolve, 1_100));
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
 });
 
 const people = {
@@ -93,9 +69,7 @@ function stubAuth(
 ) {
   let active = signedIn;
   let offline = false;
-  globalThis.fetch = (async (input, init) => {
-    const path = new URL(String(input instanceof Request ? input.url : input))
-      .pathname;
+  respond(async ({ pathname: path }, init) => {
     if (path === "/api/auth/get-session") {
       if (offline) throw new TypeError("Failed to fetch");
       return Response.json(
@@ -123,7 +97,7 @@ function stubAuth(
       return Response.json({ redirect: false, token: "token", user: active });
     }
     return Response.json([]);
-  }) as typeof fetch;
+  });
   return {
     reconnect() {
       offline = false;
@@ -144,10 +118,7 @@ async function open(path: string) {
   window.history.replaceState(null, "", path);
   // The session store outlives a mount; fetch this browser's session afresh.
   authClient.$store.notify("$sessionSignal");
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () => root?.render(<App />));
+  ({ container } = await mount(<App />));
   await settle();
 }
 
@@ -160,26 +131,14 @@ async function openResetLink() {
 const heading = () => container.querySelector("h1")?.textContent;
 
 async function fill(name: string, value: string) {
-  const field = container.querySelector<HTMLInputElement>(
-    `input[name="${name}"]`,
+  await fillField(
+    container.querySelector<HTMLInputElement>(`input[name="${name}"]`),
+    value,
   );
-  expect(field).toBeTruthy();
-  const setValue = Object.getOwnPropertyDescriptor(
-    dom.HTMLInputElement.prototype,
-    "value",
-  )?.set;
-  await act(async () => {
-    setValue?.call(field, value);
-    field?.dispatchEvent(new dom.Event("input", { bubbles: true }) as never);
-  });
 }
 
 async function press(label: string) {
-  const button = [...container.querySelectorAll("button")].find(
-    (element) => element.textContent?.trim() === label,
-  );
-  expect(button).toBeTruthy();
-  await act(async () => button?.click());
+  await act(async () => button(label).click());
   await settle();
 }
 
@@ -299,9 +258,7 @@ describe("two-factor sign-in", () => {
   it("keeps the code prompt when returning to the app refetches the session", async () => {
     let sessionRequests = 0;
     let sessionAvailable = true;
-    globalThis.fetch = (async (input) => {
-      const path = new URL(String(input instanceof Request ? input.url : input))
-        .pathname;
+    respond(async ({ pathname: path }) => {
       if (path === "/api/auth/get-session") {
         sessionRequests += 1;
         if (!sessionAvailable) throw new TypeError("Failed to fetch");
@@ -311,7 +268,7 @@ describe("two-factor sign-in", () => {
         return Response.json({ twoFactorRedirect: true });
       }
       return Response.json([]);
-    }) as typeof fetch;
+    });
     await open("/");
     expect(heading()).toBe("Enter your workspace");
 

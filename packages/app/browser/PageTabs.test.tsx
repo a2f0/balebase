@@ -1,20 +1,10 @@
 import { expect, it } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
-
-const { CHROME_PATH } = process.env;
-const chrome =
-  CHROME_PATH ||
-  Bun.which("google-chrome") ||
-  Bun.which("chromium") ||
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 
 it("a narrow tab strip shows the current tab and keeps a strip the user scrolled", async () => {
-  if (!existsSync(chrome))
-    throw new Error("Chrome is required for the page tabs check.");
   const bundle = await Bun.build({
     entrypoints: [
       fileURLToPath(new URL("./pageTabsFixture.tsx", import.meta.url)),
@@ -37,18 +27,9 @@ it("a narrow tab strip shows the current tab and keeps a strip the user scrolled
       ),
     )
     .join("\n");
-  const profile = mkdtempSync(join(tmpdir(), "page-tabs-"));
   let browser: Browser | undefined;
   try {
-    browser = await launch({
-      executablePath: chrome,
-      headless: true,
-      pipe: true,
-      userDataDir: profile,
-      timeout: 10_000,
-      protocolTimeout: 10_000,
-      args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-    });
+    browser = await launch(chromeLaunchOptions());
     const page = await browser.newPage();
     await page.setViewport({ width: 320, height: 640 });
     await page.setContent(
@@ -96,6 +77,5 @@ it("a narrow tab strip shows the current tab and keeps a strip the user scrolled
     });
   } finally {
     await browser?.close();
-    rmSync(profile, { recursive: true, force: true });
   }
 }, 20_000);

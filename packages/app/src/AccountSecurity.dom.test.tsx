@@ -1,55 +1,15 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
-import { Window } from "happy-dom";
-import { act } from "react";
-import type { Root } from "react-dom/client";
 import { AccountSecurity } from "./AccountSecurity";
 import { useDismissDialogsOnWorkspaceChange } from "./navigationGuard";
+import { installDom } from "./testing/dom";
 
 // Mounts the real security page with the app's dialog host, so the
 // confirmations guard the actual MFA requests.
-const dom = new Window({ url: "http://localhost:5173/account/security" });
-const domGlobals = {
-  document: dom.document,
-  Element: dom.Element,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
-  window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+const { click, fill, mount, queryButton, respond, settle } = installDom({
+  url: "http://localhost:5173/account/security",
+});
 let container: HTMLElement;
-
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
 
 interface AuthRequest {
   body: unknown;
@@ -59,9 +19,7 @@ interface AuthRequest {
 /** Answers the two MFA maintenance endpoints and records every request. */
 function stubAuth() {
   const requests: AuthRequest[] = [];
-  globalThis.fetch = (async (input, init) => {
-    const path = new URL(String(input instanceof Request ? input.url : input))
-      .pathname;
+  respond(async ({ pathname: path }, init) => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     requests.push({ body, path });
     if (path.endsWith("/two-factor/generate-backup-codes")) {
@@ -71,7 +29,7 @@ function stubAuth() {
       });
     }
     return Response.json({ status: true });
-  }) as typeof fetch;
+  });
   return requests;
 }
 
@@ -85,31 +43,17 @@ function Workspace({ identity }: { identity: string }) {
   return null;
 }
 
-async function mount(onSecurityChanged: () => Promise<unknown>) {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  const render = (identity: string) =>
-    act(async () =>
-      root?.render(
-        <>
-          <AccountSecurity
-            onSecurityChanged={onSecurityChanged}
-            twoFactorEnabled
-          />
-          <Workspace identity={identity} />
-          <DialogHost />
-        </>,
-      ),
-    );
-  await render("user-1:org-1");
-  return { render };
-}
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
+async function mountPage(onSecurityChanged: () => Promise<unknown>) {
+  const page = (identity: string) => (
+    <>
+      <AccountSecurity onSecurityChanged={onSecurityChanged} twoFactorEnabled />
+      <Workspace identity={identity} />
+      <DialogHost />
+    </>
+  );
+  const view = await mount(page("user-1:org-1"));
+  container = view.container;
+  return { render: (identity: string) => view.render(page(identity)) };
 }
 
 const card = (title: string) =>
@@ -117,47 +61,29 @@ const card = (title: string) =>
     form.textContent?.startsWith(title),
   );
 const openDialog = () => document.querySelector("dialog[open]");
-const buttonIn = (scope: Element | null | undefined, label: string) =>
-  [...(scope?.querySelectorAll("button") ?? [])].find(
-    (element) => element.textContent?.trim() === label,
-  ) ?? null;
-
-async function click(element: HTMLElement | null | undefined) {
-  expect(element).toBeTruthy();
-  await act(async () => element?.click());
-  await settle();
-}
 
 /** Fills a card's current-password field and submits the card. */
 async function submit(title: string, submitLabel: string) {
-  const field = card(title)?.querySelector<HTMLInputElement>(
-    'input[type="password"]',
+  await fill(
+    card(title)?.querySelector<HTMLInputElement>('input[type="password"]'),
+    "correct horse battery",
   );
-  expect(field).toBeTruthy();
-  const setValue = Object.getOwnPropertyDescriptor(
-    dom.HTMLInputElement.prototype,
-    "value",
-  )?.set;
-  await act(async () => {
-    setValue?.call(field, "correct horse battery");
-    field?.dispatchEvent(new dom.Event("input", { bubbles: true }) as never);
-  });
-  await click(buttonIn(card(title), submitLabel));
+  await click(queryButton(submitLabel, card(title)));
 }
 
 describe("recovery code regeneration", () => {
   it("asks first, sends nothing when cancelled, and regenerates once confirmed", async () => {
     const requests = stubAuth();
-    await mount(async () => {});
+    await mountPage(async () => {});
 
     await submit("Recovery codes", "Generate new codes");
     expect(openDialog()?.textContent).toContain("Generate new recovery codes?");
-    await click(buttonIn(openDialog(), "Cancel"));
+    await click(queryButton("Cancel", openDialog()));
     expect(requests).toEqual([]);
     expect(container.textContent).not.toContain("aaaa-bbbb");
 
     await submit("Recovery codes", "Generate new codes");
-    await click(buttonIn(openDialog(), "Generate new codes"));
+    await click(queryButton("Generate new codes", openDialog()));
     expect(requests).toEqual([
       {
         body: { password: "correct horse battery" },
@@ -173,18 +99,18 @@ describe("disabling MFA", () => {
   it("asks first, sends nothing when cancelled, and disables once confirmed", async () => {
     const requests = stubAuth();
     let refreshed = 0;
-    await mount(async () => {
+    await mountPage(async () => {
       refreshed += 1;
     });
 
     await submit("Disable MFA", "Disable MFA");
     expect(openDialog()?.textContent).toContain("Disable MFA?");
-    await click(buttonIn(openDialog(), "Cancel"));
+    await click(queryButton("Cancel", openDialog()));
     expect(requests).toEqual([]);
     expect(refreshed).toBe(0);
 
     await submit("Disable MFA", "Disable MFA");
-    await click(buttonIn(openDialog(), "Disable MFA"));
+    await click(queryButton("Disable MFA", openDialog()));
     expect(requests).toEqual([
       {
         body: { password: "correct horse battery" },
@@ -199,7 +125,7 @@ describe("disabling MFA", () => {
 describe("a workspace change while a security question is open", () => {
   it("answers no, so neither request runs for the account now signed in", async () => {
     const requests = stubAuth();
-    const { render } = await mount(async () => {});
+    const { render } = await mountPage(async () => {});
 
     await submit("Disable MFA", "Disable MFA");
     expect(openDialog()).toBeTruthy();

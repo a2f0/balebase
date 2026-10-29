@@ -1,19 +1,24 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import type {
   FinanceData,
   FinanceTransaction,
 } from "@balebase/validators/finance";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
 import { Finance } from "./Finance";
-import { IntersectionObserverFixture } from "./intersectionObserverFixture";
+import { syncPollMs } from "./financeConnectionActions";
+import { holdTimers, installDom } from "./testing/dom";
+import { IntersectionObserverFixture } from "./testing/intersectionObserver";
 
-const dom = new Window({ url: "http://localhost:5173/finance" });
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+const {
+  mount,
+  respond,
+  window: dom,
+} = installDom({
+  url: "http://localhost:5173/finance",
+  globals: () => ({
+    IntersectionObserver: IntersectionObserverFixture,
+  }),
+});
 let container: HTMLElement;
 let currentPath = "";
 const year = new Date().getFullYear();
@@ -69,57 +74,22 @@ const data: FinanceData = {
   ],
 };
 
-beforeAll(async () => {
-  for (const [key, value] of Object.entries({
-    document: dom.document,
-    Element: dom.Element,
-    HTMLElement: dom.HTMLElement,
-    IntersectionObserver: IntersectionObserverFixture,
-    Node: dom.Node,
-    IS_REACT_ACT_ENVIRONMENT: true,
-    window: dom,
-  })) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
+afterEach(() => {
   IntersectionObserverFixture.instances.length = 0;
 });
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
 
-function respond(
-  handler: (url: URL, init?: RequestInit) => Response | Promise<Response>,
-) {
-  globalThis.fetch = ((input, init) =>
-    Promise.resolve(handler(new URL(input.toString()), init))) as typeof fetch;
-}
 /** Renders Finance at a path; the result navigates as Back or a link would. */
-async function mount(pathname = "/finance") {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  const render = (path: string) => {
+async function mountFinance(pathname = "/finance") {
+  const page = (path: string) => {
     currentPath = path;
-    root?.render(<Finance onNavigate={render} pathname={path} />);
+    return <Finance onNavigate={navigate} pathname={path} />;
   };
-  await act(async () => render(pathname));
-  return (path: string) => act(async () => render(path));
+  const view = await mount(page(pathname));
+  container = view.container;
+  function navigate(path: string) {
+    view.root.render(page(path));
+  }
+  return (path: string) => act(async () => navigate(path));
 }
 function button(label: string) {
   const match = [
@@ -174,7 +144,7 @@ describe("Finance filters", () => {
         nextCursor: url.searchParams.has("accountId") ? null : "older",
       });
     });
-    await mount();
+    await mountFinance();
     const oldObserver = IntersectionObserverFixture.instances.at(-1);
     await act(async () => {
       IntersectionObserverFixture.intersect();
@@ -201,7 +171,7 @@ describe("Finance filters", () => {
       queries.push(url.searchParams);
       return Response.json(data);
     });
-    await mount();
+    await mountFinance();
     await click("Checking");
     expect(selectedAccounts()).toEqual(["Checking"]);
     await click("Savings", true);
@@ -248,7 +218,7 @@ describe("Finance filters", () => {
         transactions: [transaction("Current expense")],
       });
     });
-    await mount();
+    await mountFinance();
     await click("Previous year");
     expect(rowNames()).toEqual([]);
     expect(container.textContent).toContain("Loading finances");
@@ -279,7 +249,7 @@ describe("Finance filters", () => {
           : [transaction("Coffee")],
       });
     });
-    await mount();
+    await mountFinance();
     await click("Savings");
     await click("Current year");
     await click("Uncategorized expenses");
@@ -325,7 +295,7 @@ describe("Finance filters", () => {
         transactions: [transaction("Coffee")],
       });
     });
-    await mount();
+    await mountFinance();
     await click("Load more transactions");
     const annotate = container.querySelectorAll<HTMLButtonElement>(
       ".financeTransactionAction",
@@ -389,7 +359,7 @@ describe("Finance filters", () => {
             transactions: [transaction("Older expense")],
           });
     });
-    await mount();
+    await mountFinance();
     await act(async () => IntersectionObserverFixture.intersect());
     expect(rowNames()).toEqual(["Coffee"]);
     expect(container.textContent).toContain(
@@ -418,7 +388,7 @@ describe("Finance filters", () => {
             transactions: url.searchParams.has("year") ? [] : data.transactions,
           }),
     );
-    await mount();
+    await mountFinance();
     await click("Previous year");
     expect(container.textContent).toContain("Could not fetch this period.");
     expect(rowNames()).toEqual([]);
@@ -455,7 +425,7 @@ describe("Finance filters", () => {
           : data.transactions,
       });
     });
-    await mount("/finance/categories");
+    await mountFinance("/finance/categories");
     await click("Meals");
     expect(currentPath).toBe("/finance/expenses/category/meals");
     expect(queries.at(-1)?.get("category")).toBe("meals");
@@ -495,7 +465,7 @@ describe("Finance filters", () => {
         transactions: url.searchParams.has("category") ? [] : data.transactions,
       });
     });
-    await mount("/finance/categories");
+    await mountFinance("/finance/categories");
     const row = button("Travel").closest("li");
     if (!row) throw new Error("Missing category row");
     await act(async () => {
@@ -531,7 +501,7 @@ describe("Finance filters", () => {
       queries.push(url.searchParams);
       return Response.json(data);
     });
-    await mount("/finance/expenses/category/meals");
+    await mountFinance("/finance/expenses/category/meals");
     expect(queries.map((query) => query.get("category"))).toEqual(["meals"]);
     expect(button("Category: Meals").getAttribute("aria-pressed")).toBe("true");
     expect(container.querySelector('[aria-current="page"]')?.textContent).toBe(
@@ -545,7 +515,7 @@ describe("Finance filters", () => {
       queries.push(url.searchParams);
       return Response.json(data);
     });
-    await mount("/finance/expenses/category/uncategorized");
+    await mountFinance("/finance/expenses/category/uncategorized");
     expect(queries).toHaveLength(1);
     expect(queries[0]?.get("uncategorized")).toBe("true");
     expect(queries[0]?.has("category")).toBe(false);
@@ -563,7 +533,7 @@ describe("Finance filters", () => {
       queries.push(url.searchParams);
       return Response.json(data);
     });
-    const navigate = await mount();
+    const navigate = await mountFinance();
     await click("Previous year");
     await navigate("/finance/expenses/category/meals");
     expect(queries.at(-1)?.get("category")).toBe("meals");
@@ -578,7 +548,7 @@ describe("Finance filters", () => {
 
   it("explains a category path that matches no category", async () => {
     respond(() => Response.json({ ...data, transactions: [] }));
-    await mount("/finance/expenses/category/dining");
+    await mountFinance("/finance/expenses/category/dining");
     expect(button("Category: dining").getAttribute("aria-pressed")).toBe(
       "true",
     );
@@ -592,7 +562,7 @@ describe("Finance filters", () => {
     respond((_url, init) =>
       init?.method === "PUT" ? save.promise : Response.json(data),
     );
-    await mount();
+    await mountFinance();
     await click("Uncategorized expenses");
     const select = container.querySelector<HTMLSelectElement>(
       '[aria-label="Expense category for Coffee"]',
@@ -616,6 +586,7 @@ describe("Finance filters", () => {
 });
 
 it("polls status without loading history until completion or discarding an in-flight page", async () => {
+  using polls = holdTimers(syncPollMs);
   const older = Promise.withResolvers<Response>();
   let firstPageRequests = 0;
   let statusRequests = 0;
@@ -651,11 +622,9 @@ it("polls status without loading history until completion or discarding an in-fl
     firstPageRequests++;
     return Response.json(finished ? { ...listing, connections: [] } : listing);
   });
-  await mount();
+  await mountFinance();
   await click("Load more transactions");
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 3150));
-  });
+  await polls.fire();
   expect(firstPageRequests).toBe(1);
   await act(async () =>
     older.resolve(
@@ -667,15 +636,11 @@ it("polls status without loading history until completion or discarding an in-fl
     ),
   );
   expect(rowNames()).toEqual(["Coffee", "Supplies", "Older expense"]);
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 3150));
-  });
+  await polls.fire();
   expect(statusRequests).toBe(1);
   expect(firstPageRequests).toBe(1);
   finished = true;
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 3150));
-  });
+  await polls.fire();
   expect(firstPageRequests).toBe(2);
   expect(rowNames()).toEqual(["Coffee", "Supplies", "Older expense"]);
-}, 15_000);
+});

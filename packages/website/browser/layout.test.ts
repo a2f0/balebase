@@ -5,14 +5,9 @@ import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 import { storeBadgeHref, storeListings } from "../src/site";
 
-const { CHROME_PATH } = process.env;
-const chrome =
-  CHROME_PATH ||
-  Bun.which("google-chrome") ||
-  Bun.which("chromium") ||
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const siteRoot = fileURLToPath(new URL("..", import.meta.url));
 const pages = ["/", "/terms/", "/privacy/", "/data-retention/", "/404.html"];
 const publicRoot = join(siteRoot, "public");
@@ -43,23 +38,13 @@ beforeAll(async () => {
     new Response(build.stderr).text(),
   ]);
   if (exitCode !== 0) throw new Error(`Website build failed: ${stderr}`);
-  if (!existsSync(chrome))
-    throw new Error("Chrome is required for the website layout check.");
-  browser = await launch({
-    executablePath: chrome,
-    headless: true,
-    pipe: true,
-    userDataDir: join(work, "profile"),
-    timeout: 10_000,
-    protocolTimeout: 10_000,
-    args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-  });
+  browser = await launch(chromeLaunchOptions());
 }, 120_000);
 
 afterAll(async () => {
   await browser?.close();
   rmSync(work, { recursive: true, force: true });
-});
+}, 30_000);
 
 async function openSite(batches: string[] = []) {
   const page = await browser?.newPage();

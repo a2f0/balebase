@@ -1,9 +1,10 @@
 import { expect, it } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Browser, launch, type Page } from "puppeteer-core";
 import { build } from "vite";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 import type {} from "./offlineAppFixture";
 
 async function withOfflineBrowser(
@@ -11,14 +12,6 @@ async function withOfflineBrowser(
   api: (request: Request) => Response | Promise<Response> = () =>
     Response.json({ error: "Not available" }, { status: 503 }),
 ) {
-  const { CHROME_PATH } = process.env;
-  const chrome =
-    CHROME_PATH ||
-    Bun.which("google-chrome") ||
-    Bun.which("chromium") ||
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  if (!existsSync(chrome))
-    throw new Error("Chrome is required for offline editing tests.");
   const directory = mkdtempSync(join(tmpdir(), "offline-editing-"));
   await build({
     configFile: false,
@@ -55,15 +48,7 @@ async function withOfflineBrowser(
   });
   let browser: Browser | undefined;
   try {
-    browser = await launch({
-      executablePath: chrome,
-      headless: true,
-      pipe: true,
-      userDataDir: join(directory, "profile"),
-      timeout: 10_000,
-      protocolTimeout: 10_000,
-      args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-    });
+    browser = await launch(chromeLaunchOptions());
     const page = await browser.newPage();
     await page.goto(server.url.href);
     await page.waitForFunction(() => Boolean(window.offlineTest));

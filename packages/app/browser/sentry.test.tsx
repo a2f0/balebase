@@ -3,20 +3,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { launch } from "puppeteer-core";
+import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
 
 test("browser reports React and unhandled errors without application content", async () => {
   const directory = await mkdtemp(join(tmpdir(), "balebase-sentry-browser-"));
-  const { CHROME_PATH } = process.env;
-  const browser = await launch({
-    executablePath:
-      CHROME_PATH ||
-      Bun.which("google-chrome") ||
-      Bun.which("chromium") ||
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    headless: true,
-    pipe: true,
-    args: ["--no-sandbox", "--password-store=basic", "--use-mock-keychain"],
-  });
+  const browser = await launch(chromeLaunchOptions());
   const events: string[] = [];
   const entrypoint = join(directory, "index.ts");
   await Bun.write(

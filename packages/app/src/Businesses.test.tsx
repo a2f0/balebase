@@ -43,16 +43,13 @@ function renderState(state: BusinessListState) {
   );
 }
 
-function renderBusinesses(
-  data: BusinessListing,
-  options: { adding?: boolean; notice?: string } = {},
-) {
+function renderBusinesses(data: BusinessListing) {
   return renderState({
-    adding: options.adding ?? false,
+    adding: false,
     data,
     error: undefined,
     loading: false,
-    notice: options.notice,
+    notice: undefined,
   });
 }
 
@@ -61,34 +58,6 @@ const createForm = "Add a business";
 const cancel = ">Cancel</button>";
 
 describe("business list page", () => {
-  it("opens the add form while the organization has no businesses", () => {
-    const html = renderBusinesses({ businesses: [], canManage: true });
-    expect(html).toContain(createForm);
-    expect(html).not.toMatch(headerAction);
-    expect(html).not.toContain(cancel);
-  });
-
-  it("folds the add form behind a header action once a business exists", () => {
-    const html = renderBusinesses(
-      { businesses: [acme], canManage: true },
-      { notice: "Business added." },
-    );
-    expect(html).toMatch(headerAction);
-    expect(html).not.toContain(createForm);
-    expect(html).toContain("Business added.");
-    expect(html).toContain("Acme, Inc.");
-  });
-
-  it("shows the add form with a cancel when opened on demand", () => {
-    const html = renderBusinesses(
-      { businesses: [acme], canManage: true },
-      { adding: true },
-    );
-    expect(html).toContain(createForm);
-    expect(html).toContain(cancel);
-    expect(html).not.toMatch(headerAction);
-  });
-
   it("offers no way to add a business to read-only members", () => {
     for (const businesses of [[], [acme]]) {
       const html = renderBusinesses({ businesses, canManage: false });

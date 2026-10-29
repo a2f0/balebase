@@ -1,82 +1,27 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type { ActivityEvent } from "@balebase/validators/activity";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
 import { Activity } from "./Activity";
 import { ActivityFeed } from "./ActivityFeed";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/activity" });
-const domGlobals = {
-  document: dom.document,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
+const {
+  click,
+  mount,
+  render,
+  respond,
+  settle,
   window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+} = installDom({ url: "http://localhost:5173/activity" });
 let container: HTMLElement;
 
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
-
-async function render(sourceId: string, refreshKey = 0) {
-  if (!root) {
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-  }
-  await act(async () =>
-    root?.render(
-      <ActivityFeed
-        refreshKey={refreshKey}
-        source={{ id: sourceId, type: "audit_run" }}
-      />,
-    ),
-  );
-  await settle();
-}
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
-
-async function click(label: string) {
-  const button = [...container.querySelectorAll("button")].find(
-    (element) => element.textContent === label,
-  );
-  expect(button).toBeDefined();
-  await act(async () => button?.click());
+async function renderFeed(sourceId: string, refreshKey = 0) {
+  ({ container } = await render(
+    <ActivityFeed
+      refreshKey={refreshKey}
+      source={{ id: sourceId, type: "audit_run" }}
+    />,
+  ));
   await settle();
 }
 
@@ -150,20 +95,17 @@ function equipmentEvents(): ActivityEvent[] {
 describe("activity feed, mounted", () => {
   it("keeps the resource filter while paging and refreshing, and resets it on change", async () => {
     const requests: URL[] = [];
-    globalThis.fetch = (async (input) => {
-      const url = new URL(String(input));
+    respond(async (url) => {
       requests.push(url);
       return Response.json({
         events: [event(url.searchParams.has("cursor") ? 50 : 51, "pass")],
         nextCursor: url.searchParams.has("cursor") ? null : "51",
       });
-    }) as typeof fetch;
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () =>
-      root?.render(<Activity canAccessFinance onNavigate={() => {}} />),
+    });
+    const view = await mount(
+      <Activity canAccessFinance onNavigate={() => {}} />,
     );
+    container = view.container;
     await settle();
     const select = container.querySelector("select");
     expect(select).not.toBeNull();
@@ -192,14 +134,12 @@ describe("activity feed, mounted", () => {
     expect(requests.at(-1)?.search).toBe("?resourceType=finance_transaction");
     await choose("finance_connection");
     expect(requests.at(-1)?.search).toBe("?resourceType=finance_connection");
-    await act(async () => root?.render(<Activity onNavigate={() => {}} />));
+    await view.render(<Activity onNavigate={() => {}} />);
     await settle();
     expect(requests.at(-1)?.search).toBe("");
     expect(container.textContent).not.toContain("Transactions");
     expect(container.textContent).not.toContain("Bank connections");
-    await act(async () =>
-      root?.render(<Activity canAccessFinance onNavigate={() => {}} />),
-    );
+    await view.render(<Activity canAccessFinance onNavigate={() => {}} />);
     await settle();
     expect(container.querySelector("select")?.value).toBe("");
     expect(requests.at(-1)?.search).toBe("");
@@ -207,8 +147,8 @@ describe("activity feed, mounted", () => {
 
   it("ignores a response from the previous resource filter", async () => {
     let resolvePrevious: ((response: Response) => void) | undefined;
-    globalThis.fetch = (async (input) => {
-      if (!String(input).includes("resourceType="))
+    respond(async (url) => {
+      if (!url.href.includes("resourceType="))
         return new Promise<Response>((resolve) => {
           resolvePrevious = resolve;
         });
@@ -216,11 +156,8 @@ describe("activity feed, mounted", () => {
         events: [event(5, "Current resource")],
         nextCursor: null,
       });
-    }) as typeof fetch;
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () => root?.render(<Activity onNavigate={() => {}} />));
+    });
+    ({ container } = await mount(<Activity onNavigate={() => {}} />));
     const select = container.querySelector("select");
     await act(async () => {
       if (select) {
@@ -260,20 +197,16 @@ describe("activity feed, mounted", () => {
         root: { type: "organization_member", id: "bob/member", label: "Bob" },
         subject: { type: "organization_member", id: "bob/member" },
       };
-      globalThis.fetch = (async (_input) =>
-        Response.json({ events: [change], nextCursor: null })) as typeof fetch;
-      const navigations: string[] = [];
-      container = document.createElement("div");
-      document.body.append(container);
-      root = createRoot(container);
-      await act(async () =>
-        root?.render(
-          <ActivityFeed
-            compact={compact}
-            onNavigate={(path) => navigations.push(path)}
-          />,
-        ),
+      respond(async () =>
+        Response.json({ events: [change], nextCursor: null }),
       );
+      const navigations: string[] = [];
+      ({ container } = await mount(
+        <ActivityFeed
+          compact={compact}
+          onNavigate={(path) => navigations.push(path)}
+        />,
+      ));
       await settle();
       expect(container.textContent).toContain(
         "Sam changed an organization role",
@@ -308,7 +241,7 @@ describe("activity feed, mounted", () => {
           apiKey: { channel, id: `key-${id}`, name },
         },
       });
-      globalThis.fetch = (async (_input) =>
+      respond(async () =>
         Response.json({
           events: [
             viaKey(3, "mcp", "Claude Desktop"),
@@ -316,11 +249,9 @@ describe("activity feed, mounted", () => {
             event(1, "pass"),
           ],
           nextCursor: null,
-        })) as typeof fetch;
-      container = document.createElement("div");
-      document.body.append(container);
-      root = createRoot(container);
-      await act(async () => root?.render(<ActivityFeed compact={compact} />));
+        }),
+      );
+      ({ container } = await mount(<ActivityFeed compact={compact} />));
       await settle();
       expect(
         [...container.querySelectorAll(".activityHeading")].map(
@@ -343,20 +274,16 @@ describe("activity feed, mounted", () => {
   );
 
   it("shows equipment history and links only to equipment that still exists", async () => {
-    globalThis.fetch = (async (_input) =>
+    respond(async () =>
       Response.json({
         events: equipmentEvents(),
         nextCursor: null,
-      })) as typeof fetch;
-    const navigations: string[] = [];
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () =>
-      root?.render(
-        <Activity onNavigate={(pathname) => navigations.push(pathname)} />,
-      ),
+      }),
     );
+    const navigations: string[] = [];
+    ({ container } = await mount(
+      <Activity onNavigate={(pathname) => navigations.push(pathname)} />,
+    ));
     await settle();
     expect(
       [...container.querySelectorAll(".activityHeading")].map(
@@ -394,21 +321,16 @@ describe("activity feed, mounted", () => {
 
   it("reads one item's history through its equipment", async () => {
     const requests: string[] = [];
-    globalThis.fetch = (async (input) => {
-      requests.push(String(input));
+    respond(async (url) => {
+      requests.push(url.href);
       return Response.json({ events: equipmentEvents(), nextCursor: null });
-    }) as typeof fetch;
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () =>
-      root?.render(
-        <ActivityFeed
-          onNavigate={() => undefined}
-          source={{ id: "laptop/1", type: "equipment" }}
-        />,
-      ),
-    );
+    });
+    ({ container } = await mount(
+      <ActivityFeed
+        onNavigate={() => undefined}
+        source={{ id: "laptop/1", type: "equipment" }}
+      />,
+    ));
     await settle();
     expect(requests).toHaveLength(1);
     expect(requests[0]).toEndWith("/api/equipment/laptop%2F1/activity");
@@ -423,18 +345,13 @@ describe("activity feed, mounted", () => {
     change.details.responseType = "text";
     change.historical = true;
     const navigations: string[] = [];
-    globalThis.fetch = (async (input) => {
-      expect(String(input)).toEndWith("/api/activity");
+    respond(async (url) => {
+      expect(url.href).toEndWith("/api/activity");
       return Response.json({ events: [change], nextCursor: null });
-    }) as typeof fetch;
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () =>
-      root?.render(
-        <Activity onNavigate={(pathname) => navigations.push(pathname)} />,
-      ),
-    );
+    });
+    ({ container } = await mount(
+      <Activity onNavigate={(pathname) => navigations.push(pathname)} />,
+    ));
     await settle();
     expect(container.querySelector(".activityRowCompact")).not.toBeNull();
     expect(container.textContent).toContain("From existing records");
@@ -455,16 +372,16 @@ describe("activity feed, mounted", () => {
 
   it("loads earlier events, refreshes manually, and reloads after a saved mutation", async () => {
     const requests: string[] = [];
-    globalThis.fetch = (async (input, init) => {
+    respond(async (url, init) => {
       expect(init?.credentials).toBe("include");
-      requests.push(String(input));
+      requests.push(url.href);
       return Response.json(
         requests.length === 2
           ? { events: [event(50, "na")], nextCursor: null }
           : { events: [event(51, "fail")], nextCursor: "51" },
       );
-    }) as typeof fetch;
-    await render("audit/id");
+    });
+    await renderFeed("audit/id");
     expect(container.textContent).toContain("Sam changed an answer");
     expect(container.textContent).toContain("sam@example.com");
     expect(container.textContent).toContain("Exits clear");
@@ -478,14 +395,14 @@ describe("activity feed, mounted", () => {
     await click("Refresh activity");
     expect(requests).toHaveLength(3);
     expect(container.querySelectorAll(".activityRow")).toHaveLength(1);
-    await render("audit/id", 1);
+    await renderFeed("audit/id", 1);
     expect(requests).toHaveLength(4);
   });
 
   it("ignores a previous audit's response after navigating to another audit", async () => {
     let resolvePrevious: ((response: Response) => void) | undefined;
-    globalThis.fetch = (async (input) => {
-      if (String(input).includes("/previous/")) {
+    respond(async (url) => {
+      if (url.href.includes("/previous/")) {
         return new Promise<Response>((resolve) => {
           resolvePrevious = resolve;
         });
@@ -494,9 +411,9 @@ describe("activity feed, mounted", () => {
         events: [event(5, "Current answer")],
         nextCursor: null,
       });
-    }) as typeof fetch;
-    await render("previous");
-    await render("current");
+    });
+    await renderFeed("previous");
+    await renderFeed("current");
     await act(async () =>
       resolvePrevious?.(
         Response.json({ events: [event(4, "Stale answer")], nextCursor: null }),
@@ -509,13 +426,13 @@ describe("activity feed, mounted", () => {
 
   it("lets the user retry when loading activity fails", async () => {
     let requests = 0;
-    globalThis.fetch = (async (_input) => {
+    respond(async () => {
       requests += 1;
       return requests === 1
         ? Response.json({ error: "Activity unavailable" }, { status: 500 })
         : Response.json({ events: [], nextCursor: null });
-    }) as typeof fetch;
-    await render("audit-1");
+    });
+    await renderFeed("audit-1");
     expect(container.textContent).toContain("Activity unavailable");
     await click("Refresh activity");
     expect(container.textContent).toContain("No activity yet");
@@ -543,15 +460,11 @@ it("shows annotation changes and links issue events to their issue", async () =>
       details: { title: "Duplicate charge", priority: "high" },
     },
   ];
-  globalThis.fetch = (async (_input) =>
-    Response.json({ events: changes, nextCursor: null })) as typeof fetch;
+  respond(async () => Response.json({ events: changes, nextCursor: null }));
   const paths: string[] = [];
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(<ActivityFeed onNavigate={(path) => paths.push(path)} />),
-  );
+  ({ container } = await mount(
+    <ActivityFeed onNavigate={(path) => paths.push(path)} />,
+  ));
   expect(container.textContent).toContain("updated a transaction annotation");
   expect(container.textContent).toContain("Missing receipt");
   expect(container.textContent).toContain("None");
@@ -597,16 +510,10 @@ it("names who changed an expense category, using the names recorded then", async
       "Sam",
     ),
   ];
-  globalThis.fetch = (async (_input) =>
-    Response.json({ events: changes, nextCursor: null })) as typeof fetch;
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(
-      <ActivityFeed source={{ type: "finance_transaction", id: "txn-1" }} />,
-    ),
-  );
+  respond(async () => Response.json({ events: changes, nextCursor: null }));
+  ({ container } = await mount(
+    <ActivityFeed source={{ type: "finance_transaction", id: "txn-1" }} />,
+  ));
   const rows = [...container.querySelectorAll(".activityRow")].map(
     (row) => row.textContent ?? "",
   );

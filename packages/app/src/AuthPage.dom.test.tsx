@@ -1,73 +1,32 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
-import { Window } from "happy-dom";
+import { afterEach, describe, expect, it } from "bun:test";
 import { act } from "react";
-import type { Root } from "react-dom/client";
 import { AuthPage } from "./AuthPage";
 import { configureHost } from "./host";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/" });
-const domGlobals = {
-  document: dom.document,
-  Element: dom.Element,
-  HTMLElement: dom.HTMLElement,
-  HTMLInputElement: dom.HTMLInputElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
+const {
+  button,
+  click,
+  mount,
+  respond,
   window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+} = installDom({
+  url: "http://localhost:5173/",
+  globals: (window) => ({
+    HTMLInputElement: window.HTMLInputElement,
+  }),
+});
 let container: HTMLElement;
-
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
 
 describe("registration", () => {
   it("moves focus to each new form's heading", async () => {
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () =>
-      root?.render(
-        <AuthPage
-          initialMode="sign-in"
-          onAuthenticated={async () => {}}
-          onLeaveReset={async () => {}}
-        />,
-      ),
-    );
-    const button = (label: string) => {
-      const match = [...container.querySelectorAll("button")].find(
-        (candidate) => candidate.textContent?.trim() === label,
-      );
-      if (!match) throw new Error(`No ${label} button`);
-      return match;
-    };
+    ({ container } = await mount(
+      <AuthPage
+        initialMode="sign-in"
+        onAuthenticated={async () => {}}
+        onLeaveReset={async () => {}}
+      />,
+    ));
     const focusedHeading = () =>
       document.activeElement?.matches("h1")
         ? document.activeElement.textContent
@@ -86,44 +45,34 @@ describe("registration", () => {
     // Two-step verification replaces the sign-in form, and cancelling it
     // brings the sign-in form back.
     const signIns: string[] = [];
-    const savedFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      signIns.push(String(input));
+    respond(async (url) => {
+      signIns.push(url.href);
       return Response.json({ twoFactorRedirect: true });
-    }) as typeof fetch;
-    try {
-      const form = container.querySelector("form");
-      if (!form) throw new Error("No sign-in form");
-      await act(async () =>
-        form.dispatchEvent(
-          new dom.Event("submit", {
-            bubbles: true,
-            cancelable: true,
-          }) as unknown as Event,
-        ),
-      );
-      expect(signIns.some((url) => url.endsWith("/sign-in/email"))).toBe(true);
-      expect(focusedHeading()).toBe("Confirm it’s you");
-      await act(async () => button("Back to sign in").click());
-      expect(focusedHeading()).toBe("Enter your workspace");
-    } finally {
-      globalThis.fetch = savedFetch;
-    }
+    });
+    const form = container.querySelector("form");
+    if (!form) throw new Error("No sign-in form");
+    await act(async () =>
+      form.dispatchEvent(
+        new dom.Event("submit", {
+          bubbles: true,
+          cancelable: true,
+        }) as unknown as Event,
+      ),
+    );
+    expect(signIns.some((url) => url.endsWith("/sign-in/email"))).toBe(true);
+    expect(focusedHeading()).toBe("Confirm it’s you");
+    await act(async () => button("Back to sign in").click());
+    expect(focusedHeading()).toBe("Enter your workspace");
   });
 
   it("shows and hides each password on request", async () => {
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () =>
-      root?.render(
-        <AuthPage
-          initialMode="sign-up"
-          onAuthenticated={async () => {}}
-          onLeaveReset={async () => {}}
-        />,
-      ),
-    );
+    ({ container } = await mount(
+      <AuthPage
+        initialMode="sign-up"
+        onAuthenticated={async () => {}}
+        onLeaveReset={async () => {}}
+      />,
+    ));
     const input = (name: string) => {
       const match = container.querySelector<HTMLInputElement>(
         `input[name="${name}"]`,
@@ -202,22 +151,16 @@ describe("saving passwords in the native app", () => {
         savePassword,
       },
     });
-    globalThis.fetch = (async (input: RequestInfo | URL) =>
-      answer(new URL(String(input)).pathname)) as typeof fetch;
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () =>
-      root?.render(
-        <AuthPage
-          initialMode="sign-in"
-          onAuthenticated={async () => {
-            authenticated += 1;
-          }}
-          onLeaveReset={async () => {}}
-        />,
-      ),
-    );
+    respond(async (url) => answer(url.pathname));
+    ({ container } = await mount(
+      <AuthPage
+        initialMode="sign-in"
+        onAuthenticated={async () => {
+          authenticated += 1;
+        }}
+        onLeaveReset={async () => {}}
+      />,
+    ));
   }
 
   async function fill(
@@ -270,11 +213,6 @@ describe("saving passwords in the native app", () => {
       'input[name="email"]': credentials.email,
       'input[name="password"]': credentials.password,
     });
-
-  const originalFetch = globalThis.fetch;
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
 
   it("offers the password once it signs in", async () => {
     await renderNativeSignIn(() =>
@@ -359,12 +297,6 @@ describe("saving passwords in the native app", () => {
   it("forgets autofill provenance when leaving sign-in", async () => {
     await renderNativeSignIn(() => Response.json({ token: "token", user: {} }));
     await fillSaved();
-    const click = async (label: string) =>
-      act(async () => {
-        [...container.querySelectorAll("button")]
-          .find((b) => b.textContent?.trim() === label)
-          ?.click();
-      });
     await click("Forgot password?");
     await click("Back to sign in");
     await signIn();

@@ -1,45 +1,9 @@
-import { afterAll, afterEach, beforeAll, expect, it } from "bun:test";
+import { expect, it } from "bun:test";
 import { Toast, ToastProvider } from "@balebase/ui/react";
-import { Window } from "happy-dom";
 import { act, StrictMode, useState } from "react";
-import type { Root } from "react-dom/client";
+import { installDom } from "./testing/dom";
 
-const dom = new Window();
-const globals = {
-  document: dom.document,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
-let container: HTMLElement;
-
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(globals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
+const { mount } = installDom();
 
 function Feedback() {
   const [visible, setVisible] = useState(true);
@@ -64,23 +28,18 @@ function Feedback() {
 }
 
 it("shares one viewport outside page containers and cleans up dismissed notices", async () => {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(
-      <StrictMode>
-        <ToastProvider>
-          <Feedback />
-        </ToastProvider>
-      </StrictMode>,
-    ),
+  const view = await mount(
+    <StrictMode>
+      <ToastProvider>
+        <Feedback />
+      </ToastProvider>
+    </StrictMode>,
   );
 
   const region = document.querySelector('[aria-label="Notifications"]');
   expect(region?.parentElement).toBe(document.body);
   expect(region?.querySelectorAll(".toast")).toHaveLength(2);
-  expect(container.textContent).toBe("Page content");
+  expect(view.container.textContent).toBe("Page content");
   expect(region?.querySelector('[role="status"]')?.textContent).toContain(
     "Address copied.",
   );
@@ -94,7 +53,6 @@ it("shares one viewport outside page containers and cleans up dismissed notices"
   expect(region?.textContent).not.toContain("Address copied.");
   expect(region?.textContent).toContain("Upload failed.");
 
-  await act(async () => root?.unmount());
-  root = undefined;
+  await view.unmount();
   expect(document.querySelector('[aria-label="Notifications"]')).toBeNull();
 });

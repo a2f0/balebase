@@ -1,38 +1,24 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { ApiKey } from "@balebase/validators/apiKeys";
-import { Window } from "happy-dom";
 import { act } from "react";
-import type { Root } from "react-dom/client";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/organization/api-keys" });
-const domGlobals = {
-  document: dom.document,
-  Element: dom.Element,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
+const {
+  click,
+  fill,
+  mount,
+  queryButton,
+  respond,
+  settle,
   window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-const originalFetch = globalThis.fetch;
+} = installDom({ url: "http://localhost:5173/organization/api-keys" });
 const copied: string[] = [];
-let createRoot: (container: Element) => Root;
 let OrganizationApiKeys: typeof import("./OrganizationApiKeys").OrganizationApiKeys;
-let root: Root | undefined;
 let container: HTMLElement;
 let clipboardFails = false;
 
 beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
   Object.defineProperty(dom.navigator, "clipboard", {
     configurable: true,
     value: {
@@ -42,25 +28,12 @@ beforeAll(async () => {
       },
     },
   });
-  ({ createRoot } = await import("react-dom/client"));
   ({ OrganizationApiKeys } = await import("./OrganizationApiKeys"));
 });
 
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-  globalThis.fetch = originalFetch;
+afterEach(() => {
   copied.length = 0;
   clipboardFails = false;
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
 });
 
 function apiKey(overrides: Partial<ApiKey>): ApiKey {
@@ -87,8 +60,7 @@ const serverUrl = "http://localhost:8787/mcp";
 function stubApi(initial: ApiKey[], options: { failList?: boolean } = {}) {
   const requests: Array<{ body: unknown; method: string; path: string }> = [];
   let keys = [...initial];
-  globalThis.fetch = (async (input, init) => {
-    const url = new URL(String(input instanceof Request ? input.url : input));
+  respond(async (url, init) => {
     const method = init?.method ?? "GET";
     if (method === "GET") {
       if (options.failList) {
@@ -113,60 +85,18 @@ function stubApi(initial: ApiKey[], options: { failList?: boolean } = {}) {
       status: "revoked" as const,
     };
     return Response.json({ apiKey: revoked });
-  }) as typeof fetch;
+  });
   return requests;
 }
 
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
-
 async function render() {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () =>
-    root?.render(
-      <>
-        <OrganizationApiKeys organizationId="org-1" />
-        <DialogHost />
-      </>,
-    ),
-  );
+  ({ container } = await mount(
+    <>
+      <OrganizationApiKeys organizationId="org-1" />
+      <DialogHost />
+    </>,
+  ));
   await settle();
-}
-
-const button = (scope: ParentNode | null | undefined, label: string) =>
-  [...(scope?.querySelectorAll("button") ?? [])].find(
-    (element) => element.textContent?.trim() === label,
-  ) ?? null;
-
-async function click(element: HTMLElement | null | undefined) {
-  expect(element).toBeTruthy();
-  await act(async () => element?.click());
-  await settle();
-}
-
-async function change(
-  element: HTMLInputElement | HTMLSelectElement | null,
-  value: string,
-) {
-  expect(element).toBeTruthy();
-  await act(async () => {
-    if (!element) return;
-    const prototype =
-      element instanceof dom.HTMLSelectElement
-        ? dom.HTMLSelectElement.prototype
-        : dom.HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(
-      element,
-      value,
-    );
-    element.dispatchEvent(new dom.Event("change", { bubbles: true }) as never);
-    element.dispatchEvent(new dom.Event("input", { bubbles: true }) as never);
-  });
 }
 
 describe("organization API keys", () => {
@@ -199,11 +129,11 @@ describe("organization API keys", () => {
     await render();
     expect(container.textContent).toContain("No API keys yet");
 
-    await change(container.querySelector('input[type="text"]'), " Claude ");
+    await fill(container.querySelector('input[type="text"]'), " Claude ");
     const [access, expiration] = [...container.querySelectorAll("select")];
-    await change(access ?? null, "write");
-    await change(expiration ?? null, "never");
-    await click(button(container, "Create API key"));
+    await fill(access ?? null, "write");
+    await fill(expiration ?? null, "never");
+    await click(queryButton("Create API key", container));
 
     expect(requests).toEqual([
       {
@@ -222,16 +152,16 @@ describe("organization API keys", () => {
     expect(container.textContent).toContain(
       `claude mcp add --transport http balebase http://localhost:8787/mcp --header "Authorization: Bearer ${token}"`,
     );
-    await click(button(container, "Copy key"));
+    await click(queryButton("Copy key", container));
     expect(copied).toEqual([token]);
     expect(container.textContent).toContain("API key copied.");
 
-    await click(button(container, "Copy command"));
+    await click(queryButton("Copy command", container));
     expect(copied.at(-1)).toBe(
       `claude mcp add --transport http balebase ${serverUrl} --header "Authorization: Bearer ${token}"`,
     );
-    await click(button(container, "Codex"));
-    await click(button(container, "Copy configuration"));
+    await click(queryButton("Codex", container));
+    await click(queryButton("Copy configuration", container));
     expect(Bun.TOML.parse(copied.at(-1) ?? "")).toEqual({
       mcp_servers: {
         balebase: {
@@ -240,21 +170,21 @@ describe("organization API keys", () => {
         },
       },
     });
-    await click(button(container, "Generic"));
-    await click(button(container, "Copy header"));
+    await click(queryButton("Generic", container));
+    await click(queryButton("Copy header", container));
     expect(copied.at(-1)).toBe(`Authorization: Bearer ${token}`);
 
-    await click(button(container, "Done"));
+    await click(queryButton("Done", container));
     expect(container.querySelector('input[aria-label="API key"]')).toBeNull();
     expect(container.textContent).not.toContain(token);
-    expect(button(container, "Create API key")).toBeTruthy();
+    expect(queryButton("Create API key", container)).toBeTruthy();
     expect(container.textContent).toContain("1 active key");
-    await click(button(container, "Copy command"));
+    await click(queryButton("Copy command", container));
     expect(copied.at(-1)).toContain("Bearer YOUR_API_KEY");
     expect(copied.at(-1)).not.toContain(token);
-    await click(button(container, "Codex"));
+    await click(queryButton("Codex", container));
     expect(container.textContent).not.toContain(token);
-    await click(button(container, "Generic"));
+    await click(queryButton("Generic", container));
     expect(container.textContent).not.toContain(token);
   });
 
@@ -265,19 +195,19 @@ describe("organization API keys", () => {
     expect(container.textContent).toContain(
       "Existing key secrets cannot be shown again.",
     );
-    await click(button(container, "Copy command"));
+    await click(queryButton("Copy command", container));
     expect(copied.at(-1)).toBe(
       `claude mcp add --transport http balebase ${serverUrl} --header "Authorization: Bearer YOUR_API_KEY"`,
     );
     expect(container.textContent).toContain("Copied to clipboard.");
 
-    await click(button(container, "Codex"));
-    expect(button(container, "Codex")?.getAttribute("aria-selected")).toBe(
+    await click(queryButton("Codex", container));
+    expect(queryButton("Codex", container)?.getAttribute("aria-selected")).toBe(
       "true",
     );
     expect(container.textContent).toContain("~/.codex/config.toml");
     expect(container.textContent).not.toContain("Copied to clipboard.");
-    await click(button(container, "Copy configuration"));
+    await click(queryButton("Copy configuration", container));
     expect(Bun.TOML.parse(copied.at(-1) ?? "")).toEqual({
       mcp_servers: {
         balebase: {
@@ -287,11 +217,11 @@ describe("organization API keys", () => {
       },
     });
 
-    await click(button(container, "Generic"));
+    await click(queryButton("Generic", container));
     expect(container.textContent).toContain("Streamable HTTP");
-    await click(button(container, "Copy server URL"));
+    await click(queryButton("Copy server URL", container));
     expect(copied.at(-1)).toBe(serverUrl);
-    await click(button(container, "Copy header"));
+    await click(queryButton("Copy header", container));
     expect(copied.at(-1)).toBe("Authorization: Bearer YOUR_API_KEY");
     expect(copied.join("\n")).not.toContain("tlk_1234abcd");
     expect(requests).toEqual([]);
@@ -300,7 +230,7 @@ describe("organization API keys", () => {
   it("supports keyboard navigation between configuration tabs", async () => {
     stubApi([apiKey({})]);
     await render();
-    button(container, "Claude Code")?.focus();
+    queryButton("Claude Code", container)?.focus();
     const moves = [
       ["ArrowRight", "Codex"],
       ["End", "Generic"],
@@ -315,7 +245,7 @@ describe("organization API keys", () => {
           new dom.KeyboardEvent("keydown", { bubbles: true, key }) as never,
         );
       });
-      const selected = button(container, label);
+      const selected = queryButton(label, container);
       expect(document.activeElement).toBe(selected);
       expect(selected?.getAttribute("aria-selected")).toBe("true");
       expect(selected?.tabIndex).toBe(0);
@@ -334,9 +264,9 @@ describe("organization API keys", () => {
     stubApi([apiKey({})]);
     await render();
     clipboardFails = true;
-    await click(button(container, "Codex"));
+    await click(queryButton("Codex", container));
     const configuration = container.querySelector("pre")?.textContent;
-    await click(button(container, "Copy configuration"));
+    await click(queryButton("Copy configuration", container));
     expect(container.textContent).toContain(
       "Copy failed. Select it and copy manually.",
     );
@@ -348,11 +278,13 @@ describe("organization API keys", () => {
     const requests = stubApi([apiKey({})]);
     await render();
 
-    await click(button(container, "Revoke"));
+    await click(queryButton("Revoke", container));
     expect(document.querySelector("dialog[open]")?.textContent).toContain(
       "Revoke Reporting?",
     );
-    await click(button(document.querySelector("dialog[open]"), "Revoke key"));
+    await click(
+      queryButton("Revoke key", document.querySelector("dialog[open]")),
+    );
     expect(requests).toEqual([
       {
         body: null,
@@ -362,13 +294,13 @@ describe("organization API keys", () => {
     ]);
     expect(container.textContent).toContain("Revoked");
     expect(container.textContent).toContain("0 active keys");
-    expect(button(container, "Revoke")).toBeNull();
+    expect(queryButton("Revoke", container)).toBeNull();
   });
 
   it("offers a retry when keys cannot be loaded", async () => {
     stubApi([], { failList: true });
     await render();
     expect(container.textContent).toContain("Keys are unavailable.");
-    expect(button(container, "Try again")).toBeTruthy();
+    expect(queryButton("Try again", container)).toBeTruthy();
   });
 });

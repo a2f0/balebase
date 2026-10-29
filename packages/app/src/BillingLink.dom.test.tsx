@@ -1,75 +1,25 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { ApiError } from "@balebase/api-client";
-import { Window } from "happy-dom";
-import { act, type ReactNode } from "react";
-import type { Root } from "react-dom/client";
+import type { ReactNode } from "react";
 import { ErrorToast } from "./ErrorToast";
 import { errorNotice } from "./errors";
 import {
   blockingSeatRequirement,
   OrganizationSeatRequired,
 } from "./OrganizationSeatRequired";
+import { installDom } from "./testing/dom";
 
-const dom = new Window({ url: "http://localhost:5173/audits" });
-const domGlobals = {
-  document: dom.document,
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  navigator: dom.navigator,
-  Node: dom.Node,
-  window: dom,
-};
-const saved = new Map<string, PropertyDescriptor | undefined>();
-let createRoot: (container: Element) => Root;
-let root: Root | undefined;
+const { clickLink, render: renderInDom } = installDom({
+  url: "http://localhost:5173/audits",
+});
 let container: HTMLElement;
 
-beforeAll(async () => {
-  for (const [key, value] of Object.entries(domGlobals)) {
-    saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  }
-  ({ createRoot } = await import("react-dom/client"));
-});
-
-afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
-  root = undefined;
-  container?.remove();
-});
-
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
-
 async function render(element: ReactNode) {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  await act(async () => root?.render(element));
+  ({ container } = await renderInDom(element));
 }
 
 function billingLink() {
   return container.querySelector<HTMLAnchorElement>("a");
-}
-
-function click(link: HTMLAnchorElement, init: { metaKey?: boolean } = {}) {
-  const event = new dom.MouseEvent("click", {
-    bubbles: true,
-    button: 0,
-    cancelable: true,
-    ...init,
-  });
-  link.dispatchEvent(event as unknown as Event);
-  return event.defaultPrevented;
 }
 
 describe("billing links", () => {
@@ -90,9 +40,9 @@ describe("billing links", () => {
     expect(container.textContent).toContain(limit.message);
     expect(link?.textContent).toBe("Go to Billing");
     expect(link?.getAttribute("href")).toBe("/organization/billing");
-    expect(link && click(link)).toBe(true);
+    expect(link && clickLink(link)).toBe(true);
     expect(paths).toEqual(["/organization/billing"]);
-    expect(link && click(link, { metaKey: true })).toBe(false);
+    expect(link && clickLink(link, { metaKey: true })).toBe(false);
     expect(paths).toHaveLength(1);
   });
 
@@ -121,16 +71,14 @@ describe("billing links", () => {
     );
     expect(container.textContent).toContain("Upgrade to Pro");
     const link = billingLink();
-    expect(link && click(link)).toBe(true);
+    expect(link && clickLink(link)).toBe(true);
     expect(paths).toEqual(["/organization/billing"]);
 
-    await act(async () =>
-      root?.render(
-        <OrganizationSeatRequired
-          onNavigate={() => {}}
-          requirement="ask-owner"
-        />,
-      ),
+    await render(
+      <OrganizationSeatRequired
+        onNavigate={() => {}}
+        requirement="ask-owner"
+      />,
     );
     expect(container.textContent).toContain("Ask an owner");
     expect(billingLink()).toBeNull();
