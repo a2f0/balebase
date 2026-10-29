@@ -17,7 +17,7 @@ import type {
 import type { Person } from "@balebase/validators/fields";
 import type { LinkedEmail } from "@balebase/validators/inbox";
 import { useCallback, useState } from "react";
-import { ActivityFeed } from "./ActivityFeed";
+import { ActivityFeed } from "./activity/ActivityFeed";
 import { Assignee, AssigneeSelect } from "./EquipmentAssignee";
 import { EquipmentForm } from "./EquipmentForm";
 import {

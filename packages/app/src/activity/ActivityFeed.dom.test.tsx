@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { ActivityEvent } from "@balebase/validators/activity";
 import { act } from "react";
+import { installDom } from "../testing/dom";
 import { Activity } from "./Activity";
 import { ActivityFeed } from "./ActivityFeed";
-import { installDom } from "./testing/dom";
 
 const {
   click,

@@ -16,11 +16,11 @@ import type {
 } from "@balebase/validators/adminOrganizations";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { useCallback } from "react";
+import { api } from "../shared/apiClient";
+import { countLabel, formatCalendarDate, formatDate } from "../shared/labels";
+import { useLoad } from "../shared/useLoad";
+import { adminOrganizationPath } from "../workspace/workspacePaths";
 import { AdminIdentity } from "./AdminIdentity";
-import { api } from "./shared/apiClient";
-import { countLabel, formatCalendarDate, formatDate } from "./shared/labels";
-import { useLoad } from "./shared/useLoad";
-import { adminOrganizationPath } from "./workspace/workspacePaths";
 
 export function AdminOrganizationDetails({
   onNavigate,

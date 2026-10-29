@@ -1,7 +1,7 @@
 import type { JobRun } from "@balebase/validators/adminJobs";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "./shared/apiClient";
-import { errorMessage } from "./shared/errors";
+import { api } from "../shared/apiClient";
+import { errorMessage } from "../shared/errors";
 
 type History = Awaited<ReturnType<typeof api.adminJobs.runs>>;
 type Query = Parameters<typeof api.adminJobs.runs>[0];

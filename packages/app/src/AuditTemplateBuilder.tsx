@@ -22,7 +22,7 @@ import type {
 } from "@balebase/validators/audits";
 import { auditLimits } from "@balebase/validators/rules";
 import { type ReactNode, useCallback, useState } from "react";
-import { ActivityFeed } from "./ActivityFeed";
+import { ActivityFeed } from "./activity/ActivityFeed";
 import { GlobalAuditControls } from "./GlobalAuditControls";
 import { api } from "./shared/apiClient";
 import { ErrorToast } from "./shared/ErrorToast";

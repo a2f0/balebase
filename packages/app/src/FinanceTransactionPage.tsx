@@ -14,7 +14,7 @@ import type {
   FinanceTransactionAnnotation,
 } from "@balebase/validators/finance";
 import { useCallback, useMemo, useState } from "react";
-import { ActivityFeed } from "./ActivityFeed";
+import { ActivityFeed } from "./activity/ActivityFeed";
 import { FinanceTransactionRow } from "./FinanceTransactionHistory";
 import { FinanceTransactionSourceData } from "./FinanceTransactionSourceData";
 import { IssueList } from "./IssueList";

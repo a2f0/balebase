@@ -3,8 +3,8 @@ import { DialogHost } from "@balebase/ui/react";
 import type { AdminOrganizationDetail } from "@balebase/validators/adminOrganizations";
 import { act } from "react";
 import type { Root } from "react-dom/client";
+import { installDom } from "../testing/dom";
 import { AdminOrganizations } from "./AdminOrganizations";
-import { installDom } from "./testing/dom";
 
 const {
   fill,

@@ -7,8 +7,8 @@ import {
 } from "@balebase/ui/react";
 import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
 import { useEffect, useState } from "react";
+import { InfiniteScroll } from "../shared/InfiniteScroll";
 import { AdminJobHistoryRow } from "./AdminJobHistoryRow";
-import { InfiniteScroll } from "./shared/InfiniteScroll";
 import { useJobHistory } from "./useJobHistory";
 
 type Props = {

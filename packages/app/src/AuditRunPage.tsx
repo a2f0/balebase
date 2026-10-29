@@ -20,7 +20,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { ActivityFeed } from "./ActivityFeed";
 import { AuditChecklist } from "./AuditChecklist";
 import {
   confirmDiscard,
@@ -29,6 +28,7 @@ import {
   RunOverview,
 } from "./AuditRunHeader";
 import { AuditIssuePanel } from "./AuditRunIssues";
+import { ActivityFeed } from "./activity/ActivityFeed";
 import { progressFor } from "./auditProgress";
 import { api } from "./shared/apiClient";
 import { errorMessage } from "./shared/errors";

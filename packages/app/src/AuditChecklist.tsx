@@ -9,8 +9,8 @@ import type {
 import type { Person } from "@balebase/validators/fields";
 import { auditLimits } from "@balebase/validators/rules";
 import { useReducer } from "react";
-import { ApiKeyAttribution } from "./ActivityFeed";
 import { AuditIssueDraftFields, useAuditIssueDraft } from "./AuditRunIssues";
+import { ApiKeyAttribution } from "./activity/ActivityFeed";
 import { auditItems, isAnswered } from "./auditProgress";
 import { countLabel, formatDateTime, formatLabel } from "./shared/labels";
 

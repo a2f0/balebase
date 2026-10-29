@@ -1,7 +1,7 @@
 import { Banner, Button, LoadingState, Toast } from "@balebase/ui/react";
 import { useEffect, useRef, useState } from "react";
-import { api } from "./shared/apiClient";
-import { errorMessage } from "./shared/errors";
+import { api } from "../shared/apiClient";
+import { errorMessage } from "../shared/errors";
 
 type Detail = Awaited<ReturnType<typeof api.adminJobs.detail>>;
 

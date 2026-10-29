@@ -2,8 +2,8 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
 import { act } from "react";
-import { apiUrl } from "./shared/config";
-import { installDom } from "./testing/dom";
+import { apiUrl } from "../shared/config";
+import { installDom } from "../testing/dom";
 
 const { button, mount, respond, settle } = installDom({
   url: "http://localhost:5173/root/global-audits",

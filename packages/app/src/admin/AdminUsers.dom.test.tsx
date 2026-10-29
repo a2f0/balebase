@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import { act } from "react";
+import { installDom } from "../testing/dom";
 import { AdminUsers } from "./AdminUsers";
-import { installDom } from "./testing/dom";
 
 const { button, fill, mount, respond } = installDom({
   url: "http://localhost:5173/root/users",

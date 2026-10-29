@@ -2,8 +2,8 @@ import { ApiError } from "@balebase/api-client";
 import { confirmDialog } from "@balebase/ui/react";
 import type { AdminUser } from "@balebase/validators/adminUsers";
 import { useState } from "react";
-import { api } from "./shared/apiClient";
-import { useAction } from "./shared/useAction";
+import { api } from "../shared/apiClient";
+import { useAction } from "../shared/useAction";
 
 export function useAdminUserDeletion(reload: () => Promise<unknown>) {
   const [userId, setUserId] = useState<string>();

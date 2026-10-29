@@ -17,18 +17,18 @@ import {
   useCallback,
   useState,
 } from "react";
-import { AdminDeletionMenu } from "./AdminDeletionMenu";
-import { AdminIdentity } from "./AdminIdentity";
-import { AdminOrganizationDetails } from "./AdminOrganizationDetails";
-import { AppLink } from "./shared/AppLink";
-import { api } from "./shared/apiClient";
-import { countLabel, formatDate } from "./shared/labels";
-import { useAction } from "./shared/useAction";
-import { useLoad } from "./shared/useLoad";
+import { AppLink } from "../shared/AppLink";
+import { api } from "../shared/apiClient";
+import { countLabel, formatDate } from "../shared/labels";
+import { useAction } from "../shared/useAction";
+import { useLoad } from "../shared/useLoad";
 import {
   adminOrganizationIdForPath,
   adminOrganizationPath,
-} from "./workspace/workspacePaths";
+} from "../workspace/workspacePaths";
+import { AdminDeletionMenu } from "./AdminDeletionMenu";
+import { AdminIdentity } from "./AdminIdentity";
+import { AdminOrganizationDetails } from "./AdminOrganizationDetails";
 
 interface AdminOrganizationAction {
   organizationId: string;

@@ -13,7 +13,7 @@ import {
 } from "@balebase/ui/react";
 import type { Issue, IssueInput } from "@balebase/validators/issues";
 import { useCallback, useState } from "react";
-import { ActivityFeed } from "./ActivityFeed";
+import { ActivityFeed } from "./activity/ActivityFeed";
 import { IssueForm } from "./IssueForm";
 import { IssueImages } from "./IssueImages";
 import { IssueList } from "./IssueList";

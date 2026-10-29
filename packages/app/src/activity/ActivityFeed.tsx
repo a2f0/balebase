@@ -13,17 +13,10 @@ import type {
   ActivityResourceType,
 } from "@balebase/validators/activity";
 import { useCallback } from "react";
-import { assigneeLabel, textValue } from "./activityLabels";
-import { type ActivitySource, listActivity } from "./activitySource";
-import {
-  EquipmentActivityDetails,
-  equipmentActivitySummary,
-} from "./EquipmentActivity";
-import { formatRoles } from "./organizationState";
-import { RecordActivityDetails } from "./RecordActivity";
-import { InfiniteScroll } from "./shared/InfiniteScroll";
-import { formatDateTime } from "./shared/labels";
-import { useCursorPages } from "./shared/useCursorPages";
+import { formatRoles } from "../organizationState";
+import { InfiniteScroll } from "../shared/InfiniteScroll";
+import { formatDateTime } from "../shared/labels";
+import { useCursorPages } from "../shared/useCursorPages";
 import {
   auditRunPath,
   auditTemplatePath,
@@ -32,7 +25,14 @@ import {
   financeTransactionPath,
   issuePath,
   organizationPeoplePath,
-} from "./workspace/workspacePaths";
+} from "../workspace/workspacePaths";
+import { assigneeLabel, textValue } from "./activityLabels";
+import { type ActivitySource, listActivity } from "./activitySource";
+import {
+  EquipmentActivityDetails,
+  equipmentActivitySummary,
+} from "./EquipmentActivity";
+import { RecordActivityDetails } from "./RecordActivity";
 
 const actionLabels: Record<string, string> = {
   "finance.daily_sync_changed": "changed daily sync",

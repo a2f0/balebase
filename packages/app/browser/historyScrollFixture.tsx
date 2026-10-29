@@ -1,7 +1,7 @@
 import type { JobRun } from "@balebase/validators/adminJobs";
 import type { FinanceTransaction } from "@balebase/validators/finance";
 import { createRoot } from "react-dom/client";
-import { AdminJobHistory } from "../src/AdminJobHistory";
+import { AdminJobHistory } from "../src/admin/AdminJobHistory";
 import { Finance } from "../src/Finance";
 
 function run(index: number): JobRun {
