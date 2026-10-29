@@ -14,14 +14,14 @@ import type {
   FinanceTransactionAnnotation,
 } from "@balebase/validators/finance";
 import { useCallback, useMemo, useState } from "react";
-import { ActivityFeed } from "./activity/ActivityFeed";
+import { ActivityFeed } from "../activity/ActivityFeed";
+import { IssueList } from "../issues/IssueList";
+import { api } from "../shared/apiClient";
+import { useAction } from "../shared/useAction";
+import { useLoad } from "../shared/useLoad";
+import { transactionIssuePath } from "../workspace/workspacePaths";
 import { FinanceTransactionRow } from "./FinanceTransactionHistory";
 import { FinanceTransactionSourceData } from "./FinanceTransactionSourceData";
-import { IssueList } from "./issues/IssueList";
-import { api } from "./shared/apiClient";
-import { useAction } from "./shared/useAction";
-import { useLoad } from "./shared/useLoad";
-import { transactionIssuePath } from "./workspace/workspacePaths";
 
 export function FinanceTransactionPage({
   id,

@@ -13,16 +13,19 @@ import type {
 } from "@balebase/validators/inbox";
 import { type FormEvent, useEffect, useState } from "react";
 import {
+  equipmentName,
+  equipmentTypeLabel,
+} from "../equipment/equipmentLabels";
+import { formatMoney } from "../finance/financeFormat";
+import { AppLink } from "../shared/AppLink";
+import { api } from "../shared/apiClient";
+import { errorMessage } from "../shared/errors";
+import { useLoad } from "../shared/useLoad";
+import { equipmentPath, libraryPath } from "../workspace/workspacePaths";
+import {
   describeEmailLink,
   formatTransactionDate,
 } from "./emailLinkDescription";
-import { equipmentName, equipmentTypeLabel } from "./equipment/equipmentLabels";
-import { formatMoney } from "./financeFormat";
-import { AppLink } from "./shared/AppLink";
-import { api } from "./shared/apiClient";
-import { errorMessage } from "./shared/errors";
-import { useLoad } from "./shared/useLoad";
-import { equipmentPath, libraryPath } from "./workspace/workspacePaths";
 
 type LinkTab = "equipment" | "folder" | "transaction";
 

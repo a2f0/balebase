@@ -1,6 +1,6 @@
 import { Banner, Card, PageSection } from "@balebase/ui/react";
-import { api } from "./shared/apiClient";
-import { useAction } from "./shared/useAction";
+import { api } from "../shared/apiClient";
+import { useAction } from "../shared/useAction";
 
 /** Plaid's cursor belongs to the connection, so all of its accounts share this setting. */
 export function FinanceSyncSettings({

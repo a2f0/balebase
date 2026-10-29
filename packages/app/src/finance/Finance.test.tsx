@@ -4,9 +4,9 @@ import type {
   FinanceData,
 } from "@balebase/validators/finance";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { FinancePage } from "../workspace/workspacePaths";
 import { FinanceView } from "./Finance";
 import { initialFilters } from "./useFinanceData";
-import type { FinancePage } from "./workspace/workspacePaths";
 
 const emptyData: FinanceData = {
   accounts: [],

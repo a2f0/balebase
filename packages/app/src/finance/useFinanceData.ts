@@ -1,9 +1,9 @@
 import type { FinanceFilters } from "@balebase/api-client";
 import type { FinanceData } from "@balebase/validators/finance";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { api } from "../shared/apiClient";
+import { errorMessage } from "../shared/errors";
 import { syncPending, syncPollMs } from "./financeConnectionActions";
-import { api } from "./shared/apiClient";
-import { errorMessage } from "./shared/errors";
 
 type CategoryRoute = Pick<FinanceFilters, "categorySlug" | "uncategorized">;
 

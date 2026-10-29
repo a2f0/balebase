@@ -19,7 +19,7 @@ import { AuthPage } from "./auth/AuthPage";
 import type { AuthenticationAction } from "./auth/authActions";
 import { useSessionRefetch } from "./auth/useSessionRefetch";
 import { SigningPage } from "./contracts/SigningPage";
-import { Library } from "./Library";
+import { Library } from "./library/Library";
 import { useOfflineSlot } from "./offlineSlot";
 import { useLinkedOrganization } from "./organizations/linkedOrganization";
 import { OrganizationGate } from "./organizations/OrganizationGate";

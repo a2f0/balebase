@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Issue } from "@balebase/validators/issues";
 import { act, type ReactNode } from "react";
-import { FinanceTransactionPage } from "../FinanceTransactionPage";
+import { FinanceTransactionPage } from "../finance/FinanceTransactionPage";
 import { installDom } from "../testing/dom";
 import { Issues } from "./Issues";
 

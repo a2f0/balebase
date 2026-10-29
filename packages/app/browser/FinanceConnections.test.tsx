@@ -9,7 +9,7 @@ import {
   chromeLaunchOptions,
   closeChrome,
 } from "../../../scripts/testing/chrome";
-import { FinanceConnections } from "../src/FinanceAccounts";
+import { FinanceConnections } from "../src/finance/FinanceAccounts";
 
 const connection = (
   id: string,

@@ -20,16 +20,16 @@ import type {
 import type { LinkedEmail } from "@balebase/validators/inbox";
 import { financeLimits } from "@balebase/validators/rules";
 import { type FormEvent, useState } from "react";
-import { FinanceTransactionFilters } from "./FinanceTransactionFilters";
-import { formatMoney } from "./financeFormat";
-import { AppLink } from "./shared/AppLink";
-import { InfiniteScroll } from "./shared/InfiniteScroll";
-import { formatCalendarDate, formatLabel } from "./shared/labels";
+import { AppLink } from "../shared/AppLink";
+import { InfiniteScroll } from "../shared/InfiniteScroll";
+import { formatCalendarDate, formatLabel } from "../shared/labels";
 import {
   financeTransactionPath,
   inboxEmailPath,
   transactionIssuePath,
-} from "./workspace/workspacePaths";
+} from "../workspace/workspacePaths";
+import { FinanceTransactionFilters } from "./FinanceTransactionFilters";
+import { formatMoney } from "./financeFormat";
 
 interface AnnotationHandlers {
   busy: boolean;

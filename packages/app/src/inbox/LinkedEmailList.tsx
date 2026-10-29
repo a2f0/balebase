@@ -6,9 +6,9 @@ import {
   PageSection,
 } from "@balebase/ui/react";
 import type { LinkedEmail } from "@balebase/validators/inbox";
-import { AppLink } from "./shared/AppLink";
-import { countLabel } from "./shared/labels";
-import { inboxEmailPath } from "./workspace/workspacePaths";
+import { AppLink } from "../shared/AppLink";
+import { countLabel } from "../shared/labels";
+import { inboxEmailPath } from "../workspace/workspacePaths";
 
 /**
  * Inbox messages linked to a record, each opening the message in the Inbox

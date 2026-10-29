@@ -2,10 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { isValidElement, type ReactElement } from "react";
 import { Audits } from "../audits/Audits";
 import { MyDocuments } from "../employeeForms/MyDocuments";
-import { Finance } from "../Finance";
-import { FinanceAccountPage } from "../FinanceAccountPage";
-import { FinanceConnectionPage } from "../FinanceConnectionPage";
-import { FinanceTransactionPage } from "../FinanceTransactionPage";
+import { Finance } from "../finance/Finance";
+import { FinanceAccountPage } from "../finance/FinanceAccountPage";
+import { FinanceConnectionPage } from "../finance/FinanceConnectionPage";
+import { FinanceTransactionPage } from "../finance/FinanceTransactionPage";
 import { Issues } from "../issues/Issues";
 import { workspaceRoute } from "./workspaceRoutes";
 

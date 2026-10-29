@@ -2,9 +2,9 @@ import { describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { FinanceConnectionDetail } from "@balebase/validators/finance";
 import { act } from "react";
+import { holdTimers, installDom } from "../testing/dom";
 import { FinanceConnectionPage } from "./FinanceConnectionPage";
 import { syncPollMs } from "./financeConnectionActions";
-import { holdTimers, installDom } from "./testing/dom";
 
 const { button, click, mount, respond, settle, stubClipboard } = installDom({
   url: "http://localhost:5173/finance/connections/item-1",

@@ -8,7 +8,7 @@ import {
   chromeLaunchOptions,
   closeChrome,
 } from "../../../scripts/testing/chrome";
-import { FinanceCategories } from "../src/FinanceCategories";
+import { FinanceCategories } from "../src/finance/FinanceCategories";
 
 it("opens a category from anywhere on its row except its own buttons", async () => {
   const markup = renderToStaticMarkup(

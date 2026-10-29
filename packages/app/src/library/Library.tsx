@@ -28,19 +28,19 @@ import {
   useRef,
   useState,
 } from "react";
-import { LinkedEmailList } from "./LinkedEmailList";
-import { ApiDownload } from "./shared/ApiDownload";
-import { AppLink } from "./shared/AppLink";
-import { api } from "./shared/apiClient";
-import { countLabel, formatBytes, formatShortDate } from "./shared/labels";
-import { useAction } from "./shared/useAction";
-import { useLoad } from "./shared/useLoad";
-import { useMenuDismissal } from "./shared/useMenuDismissal";
-import type { WorkspaceUser } from "./workspace/WorkspaceShell";
+import { LinkedEmailList } from "../inbox/LinkedEmailList";
+import { ApiDownload } from "../shared/ApiDownload";
+import { AppLink } from "../shared/AppLink";
+import { api } from "../shared/apiClient";
+import { countLabel, formatBytes, formatShortDate } from "../shared/labels";
+import { useAction } from "../shared/useAction";
+import { useLoad } from "../shared/useLoad";
+import { useMenuDismissal } from "../shared/useMenuDismissal";
+import type { WorkspaceUser } from "../workspace/WorkspaceShell";
 import {
   libraryFolderIdForPath,
   libraryPath,
-} from "./workspace/workspacePaths";
+} from "../workspace/workspacePaths";
 
 interface LibraryProps {
   initialNotice?: string | undefined;

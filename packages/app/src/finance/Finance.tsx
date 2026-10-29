@@ -21,6 +21,18 @@ import {
   useRef,
   useState,
 } from "react";
+import { AppLink } from "../shared/AppLink";
+import { api } from "../shared/apiClient";
+import { websiteUrl } from "../shared/config";
+import { errorMessage } from "../shared/errors";
+import { useAction } from "../shared/useAction";
+import {
+  expenseCategoryFiltersFor,
+  type FinancePage,
+  financeOverviewPath,
+  financePageFor,
+  financePages,
+} from "../workspace/workspacePaths";
 import {
   FinanceAccounts,
   FinanceConnectionAlert,
@@ -35,23 +47,11 @@ import {
   syncNotice,
 } from "./financeConnectionActions";
 import { selectFinanceAccount } from "./financeTransactions";
-import { AppLink } from "./shared/AppLink";
-import { api } from "./shared/apiClient";
-import { websiteUrl } from "./shared/config";
-import { errorMessage } from "./shared/errors";
-import { useAction } from "./shared/useAction";
 import {
   type FinanceListingState,
   initialFilters,
   useFinanceData,
 } from "./useFinanceData";
-import {
-  expenseCategoryFiltersFor,
-  type FinancePage,
-  financeOverviewPath,
-  financePageFor,
-  financePages,
-} from "./workspace/workspacePaths";
 
 const linkTokenStorageKey = "balebase.plaid.linkToken";
 

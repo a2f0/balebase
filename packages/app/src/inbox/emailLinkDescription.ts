@@ -1,9 +1,9 @@
 import type { IconName } from "@balebase/ui/react";
 import type { InboundEmailLink } from "@balebase/validators/inbox";
-import { equipmentName, equipmentTypeIcon } from "./equipment/equipmentLabels";
-import { formatMoney } from "./financeFormat";
-import { formatCalendarDate } from "./shared/labels";
-import { equipmentPath, libraryPath } from "./workspace/workspacePaths";
+import { equipmentName, equipmentTypeIcon } from "../equipment/equipmentLabels";
+import { formatMoney } from "../finance/financeFormat";
+import { formatCalendarDate } from "../shared/labels";
+import { equipmentPath, libraryPath } from "../workspace/workspacePaths";
 
 /** The icon, text, and destination of an email's link chip. */
 export function describeEmailLink(link: InboundEmailLink): {

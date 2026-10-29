@@ -4,8 +4,8 @@ import type {
   InboxFolder,
 } from "@balebase/validators/inbox";
 import { act } from "react";
+import { installDom } from "../testing/dom";
 import { Inbox } from "./Inbox";
-import { installDom } from "./testing/dom";
 
 const {
   button,

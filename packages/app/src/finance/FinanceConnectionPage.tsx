@@ -22,6 +22,13 @@ import {
   useEffect,
   useState,
 } from "react";
+import { AppLink } from "../shared/AppLink";
+import { api } from "../shared/apiClient";
+import { errorMessage } from "../shared/errors";
+import { countLabel, formatDateTime, formatLabel } from "../shared/labels";
+import { useAction } from "../shared/useAction";
+import { useLoad } from "../shared/useLoad";
+import { financeAccountPath } from "../workspace/workspacePaths";
 import { connectionTone } from "./FinanceAccounts";
 import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
 import { FinanceSyncSettings } from "./FinanceSyncSettings";
@@ -33,13 +40,6 @@ import {
   syncPollMs,
 } from "./financeConnectionActions";
 import { formatImportedHistory, formatMoney } from "./financeFormat";
-import { AppLink } from "./shared/AppLink";
-import { api } from "./shared/apiClient";
-import { errorMessage } from "./shared/errors";
-import { countLabel, formatDateTime, formatLabel } from "./shared/labels";
-import { useAction } from "./shared/useAction";
-import { useLoad } from "./shared/useLoad";
-import { financeAccountPath } from "./workspace/workspacePaths";
 
 type Connection = FinanceConnectionDetail["connection"];
 

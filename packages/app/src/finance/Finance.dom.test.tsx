@@ -4,10 +4,10 @@ import type {
   FinanceTransaction,
 } from "@balebase/validators/finance";
 import { act } from "react";
+import { holdTimers, installDom } from "../testing/dom";
+import { IntersectionObserverFixture } from "../testing/intersectionObserver";
 import { Finance } from "./Finance";
 import { syncPollMs } from "./financeConnectionActions";
-import { holdTimers, installDom } from "./testing/dom";
-import { IntersectionObserverFixture } from "./testing/intersectionObserver";
 
 const {
   mount,

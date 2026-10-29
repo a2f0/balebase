@@ -1,6 +1,6 @@
 import { Button, Card, Toast } from "@balebase/ui/react";
 import { Fragment } from "react";
-import { useClipboard } from "./shared/useClipboard";
+import { useClipboard } from "../shared/useClipboard";
 
 export interface SourceField {
   label: string;

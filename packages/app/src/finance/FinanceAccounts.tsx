@@ -15,11 +15,11 @@ import type {
   FinanceAccount,
   FinanceConnection,
 } from "@balebase/validators/finance";
+import { AppLink } from "../shared/AppLink";
+import { countLabel, formatDate, formatLabel } from "../shared/labels";
+import { financeConnectionPath } from "../workspace/workspacePaths";
 import { syncPending } from "./financeConnectionActions";
 import { formatMoney } from "./financeFormat";
-import { AppLink } from "./shared/AppLink";
-import { countLabel, formatDate, formatLabel } from "./shared/labels";
-import { financeConnectionPath } from "./workspace/workspacePaths";
 
 interface ConnectionHandlers {
   busy: boolean;

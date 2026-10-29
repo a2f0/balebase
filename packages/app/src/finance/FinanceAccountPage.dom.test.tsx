@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import type { FinanceAccountDetail } from "@balebase/validators/finance";
 import { act } from "react";
+import { installDom } from "../testing/dom";
 import { FinanceAccountPage } from "./FinanceAccountPage";
-import { installDom } from "./testing/dom";
 
 const { clickLink, mount, respond, settle, stubClipboard } = installDom({
   url: "http://localhost:5173/finance/accounts/account-1",
