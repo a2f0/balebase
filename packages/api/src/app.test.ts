@@ -108,12 +108,12 @@ describe("api", () => {
 
   it("exposes response headers needed by the cross-origin client", async () => {
     const response = await app.request(
-      "/api",
+      "/api/me",
       { headers: { Origin: "https://app.test" } },
       authBindings(),
     );
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(401);
     expect(response.headers.get("access-control-allow-origin")).toBe(
       "https://app.test",
     );

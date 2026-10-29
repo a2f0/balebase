@@ -2,8 +2,9 @@ import {
   type FinanceTransactionMatch,
   financeRoutes,
 } from "@balebase/validators/finance";
+import { financeLimits } from "@balebase/validators/rules";
 import type { FinanceContext } from "./financeContext";
-import { respond } from "./respond";
+import { readQuery, respond } from "./respond";
 
 interface TransactionMatchRow {
   account_name: string;
@@ -15,7 +16,6 @@ interface TransactionMatchRow {
   transaction_date: string;
 }
 
-const maxQueryLength = 100;
 const resultLimit = 25;
 
 /**
@@ -24,13 +24,13 @@ const resultLimit = 25;
  * returns the most recent transactions.
  */
 export async function searchTransactions(context: FinanceContext) {
-  const query = (context.req.query("q") ?? "").trim();
-  if (query.length > maxQueryLength) {
-    return context.json(
-      { error: `Searches need ${maxQueryLength} characters or fewer.` },
-      400,
-    );
-  }
+  const search = readQuery(
+    context,
+    financeRoutes.searchTransactions,
+    `Searches need ${financeLimits.search} characters or fewer.`,
+  );
+  if (search instanceof Response) return search;
+  const query = search.q ?? "";
   const pattern = `%${query.replace(/[\\%_]/g, "\\$&")}%`;
   const amount = amountFrom(query);
   const result = await context.env.DB.prepare(

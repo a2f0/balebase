@@ -71,11 +71,20 @@ const TemplateVersionSchema = z.object({
 });
 export type TemplateVersion = z.infer<typeof TemplateVersionSchema>;
 
-/** Picks a version by number; the latest without one. */
-const VersionQuerySchema = z.object({ version: z.string().optional() });
-
 const versionRule = "Choose a template version.";
 const VersionNumberSchema = z.int({ error: versionRule }).min(1, versionRule);
+
+/** Picks a version by number; the latest without one. */
+const VersionQuerySchema = z.object({
+  version: z
+    .string()
+    .regex(/^\d+$/, versionRule)
+    .refine((version) => {
+      const number = Number(version);
+      return Number.isSafeInteger(number) && number >= 1;
+    }, versionRule)
+    .optional(),
+});
 
 /**
  * A template's next version. Roles stand in for signers, so they follow the

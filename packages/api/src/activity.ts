@@ -8,7 +8,7 @@ import type { ApiKeyChannel, ApiKeyPrincipal } from "./apiKeys";
 import type { ApiEnv } from "./authMiddleware";
 import { cursorPage } from "./cursorPagination";
 import { userHasCapability } from "./organizationGroups";
-import { respond } from "./respond";
+import { readQuery, respond } from "./respond";
 
 export interface ActivityRow {
   action: string;
@@ -47,13 +47,16 @@ const pageSize = 50;
 export const activity = new Hono<ApiEnv>();
 
 activity.get("/", async (context) => {
-  const query = activityRoutes.list.query.safeParse(context.req.query());
-  if (!query.success)
-    return context.json({ error: "Invalid activity filters." }, 400);
+  const query = readQuery(
+    context,
+    activityRoutes.list,
+    "Invalid activity filters.",
+  );
+  if (query instanceof Response) return query;
   const page = await findActivity(
     context.env.DB,
     context.get("organizationId"),
-    query.data.cursor,
+    query.cursor,
     undefined,
     await userHasCapability(
       context.env.DB,
@@ -61,7 +64,7 @@ activity.get("/", async (context) => {
       context.get("authSession").user.id,
       "finance",
     ),
-    query.data.resourceType,
+    query.resourceType,
   );
   return page
     ? respond(context, activityRoutes.list, page)

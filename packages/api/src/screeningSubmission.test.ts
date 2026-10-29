@@ -1,6 +1,14 @@
 import { describe, expect, it } from "bun:test";
+import { employeeFormsRoutes } from "@balebase/validators/employeeForms";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { parseScreeningSubmission } from "./screeningSubmission";
+
+/** Reads a form as the submit route does: through the contract, then the API's checks. */
+function submit(body: unknown) {
+  const parsed = employeeFormsRoutes.submitScreening.body.safeParse(body);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+  return parseScreeningSubmission(parsed.data, "TX", "2026-10-19", "shown");
+}
 
 function form(name: { first: string; last: string; signature: string }) {
   return {
@@ -18,6 +26,7 @@ function form(name: { first: string; last: string; signature: string }) {
       zipcode: "94088",
     },
     disclosureFingerprint: "shown",
+    requestRevision: "2026-10-01T00:00:00.000Z",
     residenceState: "TX",
     signature: {
       authorize: true,
@@ -29,15 +38,12 @@ function form(name: { first: string; last: string; signature: string }) {
 
 describe("screening submissions", () => {
   it("accepts accented Latin names and normalizes the details", () => {
-    const parsed = parseScreeningSubmission(
+    const parsed = submit(
       form({
         first: "José  Ñúñez",
         last: "O'Brien-Smith",
         signature: "José Ñúñez O'Brien-Smith",
       }),
-      "TX",
-      "2026-10-19",
-      "shown",
     );
     expect(parsed).toMatchObject({
       candidate: {
@@ -56,9 +62,7 @@ describe("screening submissions", () => {
       { first: "李", last: "雷雷", signature: "李 雷雷" },
       { first: "Nguyen", last: "Van", signature: "Nguyễn Van" },
     ]) {
-      expect(
-        parseScreeningSubmission(form(name), "TX", "2026-10-19", "shown"),
-      ).toHaveProperty("error");
+      expect(submit(form(name))).toHaveProperty("error");
     }
   });
 
@@ -70,11 +74,8 @@ describe("screening submissions", () => {
     const signed = new Set<string>();
     for (let code = 32; code <= 0xffff; code += 1) {
       const name = `Al${String.fromCharCode(code)}x`;
-      const parsed = parseScreeningSubmission(
+      const parsed = submit(
         form({ first: name, last: "Lee", signature: `${name} Lee` }),
-        "TX",
-        "2026-10-19",
-        "shown",
       );
       if ("error" in parsed) continue;
       for (const character of parsed.signatureName +

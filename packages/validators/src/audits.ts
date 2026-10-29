@@ -165,7 +165,6 @@ const AuditIssueImageSchema = z.object({
 export type AuditIssueImage = z.infer<typeof AuditIssueImageSchema>;
 
 const AuditIssuePrioritySchema = IssueSchema.shape.priority;
-export type AuditIssuePriority = z.infer<typeof AuditIssuePrioritySchema>;
 const AuditIssueStatusSchema = IssueSchema.shape.status;
 
 const AuditIssueSchema = z.object({

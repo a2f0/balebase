@@ -4,6 +4,7 @@ import {
   type EmployeeRequirementStatus,
   type EmployeeRequirementUpdate,
   employeeFormsRoutes,
+  screeningMessages,
 } from "@balebase/validators/employeeForms";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "./authMiddleware";
@@ -22,7 +23,6 @@ import {
 } from "./checkrScreening";
 import { checkrTestCandidates } from "./checkrTestCandidates";
 import { normalizeFilename } from "./filenames";
-import { isRecord } from "./jsonInput";
 import { canManage, requireManager } from "./organizationMembers";
 import { readBody, respond } from "./respond";
 import {
@@ -491,20 +491,15 @@ employeeForms.post("/:id/checkr/submit", async (context) => {
       409,
     );
   }
-  const body: unknown = await context.req.json().catch(() => null);
+  const body = await readBody(
+    context,
+    employeeFormsRoutes.submitScreening,
+    "Complete the screening form.",
+  );
+  if (body instanceof Response) return body;
   // The person authorizes the request their form showed, not a newer one.
-  if (
-    !isRecord(body) ||
-    (body as { requestRevision?: unknown }).requestRevision !==
-      subject.checkr_requested_at
-  ) {
-    return context.json(
-      {
-        error:
-          "This background check changed after you opened it. Reload the page to review it again.",
-      },
-      409,
-    );
+  if (body.requestRevision !== subject.checkr_requested_at) {
+    return context.json({ error: screeningMessages.requestChanged }, 409);
   }
   const disclosures = screeningDisclosures(subject.organization_name);
   const submission = parseScreeningSubmission(

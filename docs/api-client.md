@@ -28,8 +28,8 @@ export async function currentUser(apiOrigin: string) {
 
 See `src/session.ts`, `src/transport.ts`, and `src/ApiError.ts` in the client
 package for the signatures and error behavior. `ApiError` exposes `status`,
-`code`, `body`, `data`, and the original `response`. Network or CORS failures
-can reject before an HTTP response exists and need not be `ApiError` instances.
+`code`, and the original `response`. Network or CORS failures can reject
+before an HTTP response exists and need not be `ApiError` instances.
 
 Requests default to `credentials: "include"`; this does not sign the user in.
 The browser must already have a valid API session cookie. The API's CORS

@@ -1,4 +1,4 @@
-import { signingRoutes } from "@balebase/validators/signing";
+import { type Signature, signingRoutes } from "@balebase/validators/signing";
 import { type Context, Hono } from "hono";
 import { sendDeclined } from "./contractMail";
 import { isEmbeddablePng } from "./contractPdf";
@@ -18,7 +18,7 @@ import {
   signingTokenHash,
 } from "./contractTokens";
 import { advanceContract, decodePngDataUrl } from "./contractWorkflow";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 import { storedDownload } from "./storage";
 import type { Bindings } from "./types";
 
@@ -28,7 +28,6 @@ type SigningContext = Context<SigningEnv>;
 
 /** Adopted signatures are small PNGs; this bounds what a signer can store. */
 const maxSignatureDataUrlLength = 400_000;
-const maxTextValueLength = 500;
 
 // A signature or decline only lands while the signer still has their turn
 // and the contract is out for signing; bound as [recipientId, contractId].
@@ -127,13 +126,16 @@ signing.post("/:token/sign", async (context) => {
   const { contract, recipient } = signer;
   if (!signable(contract, recipient))
     return cannotSign(context, contract, recipient);
+  const body = await readBody(
+    context,
+    signingRoutes.sign,
+    "The signature is invalid.",
+  );
+  if (body instanceof Response) return body;
   const fields = (await listFields(context.env.DB, contract.id)).filter(
     ({ recipient_id }) => recipient_id === recipient.id,
   );
-  const submission = submissionInput(
-    await context.req.json().catch(() => null),
-    fields,
-  );
+  const submission = submissionInput(body, fields);
   if (typeof submission === "string") {
     return context.json({ error: submission }, 400);
   }
@@ -204,12 +206,13 @@ signing.post("/:token/decline", async (context) => {
   const { contract, recipient } = signer;
   if (!signable(contract, recipient))
     return cannotSign(context, contract, recipient);
-  const body: unknown = await context.req.json().catch(() => null);
-  const raw =
-    typeof body === "object" && body !== null
-      ? Reflect.get(body, "reason")
-      : "";
-  const reason = typeof raw === "string" ? raw.trim().slice(0, 500) : "";
+  const body = await readBody(
+    context,
+    signingRoutes.decline,
+    "A decline reason must be text.",
+  );
+  if (body instanceof Response) return body;
+  const { reason } = body;
   const database = context.env.DB;
   const now = new Date().toISOString();
   const guard = [recipient.id, contract.id];
@@ -263,34 +266,21 @@ signing.post("/:token/decline", async (context) => {
 });
 
 /**
- * Validates what a signer submits: consent, the images their fields need,
- * and their text fields. Returns a message when something is missing.
+ * Checks a signature against the signer's fields: the images they need and
+ * their required text. Returns a message when something is missing.
  */
-function submissionInput(body: unknown, fields: FieldRow[]) {
-  if (typeof body !== "object" || body === null) {
-    return "The signature is invalid.";
-  }
-  const get = (name: string) => Reflect.get(body, name);
-  if (get("consent") !== true) {
-    return "Agree to use electronic records and signatures to sign.";
-  }
-  const signature = adoptedImage(get("signature"));
-  const initials = adoptedImage(get("initials"));
+function submissionInput(body: Signature, fields: FieldRow[]) {
+  const signature = adoptedImage(body.signature);
+  const initials = adoptedImage(body.initials);
   if (fields.some(({ type }) => type === "signature") && !signature) {
     return "Adopt a signature to sign.";
   }
   if (fields.some(({ type }) => type === "initials") && !initials) {
     return "Adopt your initials to sign.";
   }
-  const values = get("values");
   const textValues = new Map<string, string>();
   for (const field of fields.filter(({ type }) => type === "text")) {
-    const raw =
-      typeof values === "object" && values !== null
-        ? Reflect.get(values, field.id)
-        : undefined;
-    const value = typeof raw === "string" ? raw.trim() : "";
-    if (value.length > maxTextValueLength) return "A field's text is too long.";
+    const value = body.values?.[field.id] ?? "";
     if (field.required && !value) return "Fill in every required field.";
     textValues.set(field.id, value);
   }
@@ -357,8 +347,8 @@ function cannotSign(
 }
 
 /** A PNG data URL within the size limit, or null. */
-function adoptedImage(value: unknown) {
-  if (typeof value !== "string" || value.length > maxSignatureDataUrlLength) {
+function adoptedImage(value: string | undefined) {
+  if (value === undefined || value.length > maxSignatureDataUrlLength) {
     return null;
   }
   return decodePngDataUrl(value) ? value : null;

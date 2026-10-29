@@ -94,14 +94,26 @@ method to the area's client.
 Request rules live in the contract too. `packages/validators/src/rules.ts`
 holds limits and allowed values as plain constants without zod, so the app
 imports them for its form limits and options; issue rules sit beside it in
-`issueRules.ts`. Route body schemas are built
+`issueRules.ts`. Route body and query schemas are built
 from those constants and the shared field schemas in `fields.ts`, such as
 `requiredText`, `optionalText`, and `calendarDate`, and carry the message for
 each rule they enforce. A handler reads its body with
-`readBody(context, route, message)` from `respond.ts`, which answers 400 with
-the first broken rule's message. Only checks that need the database, such as
+`readBody(context, route, message)` and its query with `readQuery` from
+`respond.ts`; both answer 400 with the first broken rule's message. Only
+checks that need the database, the date, or other server state, such as
 whether a record exists, an assignee is still a member, or a version is
 current, stay in the API.
+
+MCP tools call REST routes with the caller's API key. Each entry in a
+`packages/api/src/mcp*Tools.ts` list names its contract route, which sets the
+tool's method and path; its arguments are the route's path parameters plus
+its query and body fields, converted with `z.toJSONSchema`. A tool adds only
+a title, a description, `descriptions` for its arguments (a dotted name such
+as `recipients.email` reaches inside one), and an `omit` list for optional
+fields it leaves out. To add a tool, add such an entry for a route the API
+serves and describe every argument; the MCP tool catalog tests in
+`apiKeys.test.ts` fail when a tool's route is not served or its advertised
+arguments drift from the route's.
 
 Cursor-paginated API lists use `packages/api/src/cursorPagination.ts`. Query one
 extra row in a stable order, then use `cursorPage` to trim the page and derive

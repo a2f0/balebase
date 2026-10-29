@@ -59,7 +59,7 @@ import {
   issueUpdate,
   toIssue,
 } from "./issueRecords";
-import { readBody, respond } from "./respond";
+import { readBody, readQuery, respond } from "./respond";
 
 const audits = new Hono<ApiEnv>();
 
@@ -302,18 +302,20 @@ audits.post("/templates/:id/runs", async (context) => {
 });
 
 audits.get("/runs", async (context) => {
-  const cursorValue = context.req.query("cursor");
+  const query = readQuery(
+    context,
+    auditsRoutes.listRuns,
+    "Invalid audit view.",
+  );
+  if (query instanceof Response) return query;
   const cursor =
-    cursorValue === undefined
+    query.cursor === undefined
       ? undefined
-      : decodeCursor(cursorValue, "createdAt", 2048);
-  if (cursorValue !== undefined && !cursor) {
+      : decodeCursor(query.cursor, "createdAt", 2048);
+  if (query.cursor !== undefined && !cursor) {
     return context.json({ error: "Invalid audit cursor." }, 400);
   }
-  const view = context.req.query("view") ?? "active";
-  if (view !== "active" && view !== "deleted") {
-    return context.json({ error: "Invalid audit view." }, 400);
-  }
+  const view = query.view ?? "active";
   const deletedFilter =
     view === "deleted"
       ? "audit.deleted_at IS NOT NULL"
