@@ -8,12 +8,12 @@ import {
 } from "@balebase/ui/react";
 import { auditLimits } from "@balebase/validators/rules";
 import { useEffect, useRef, useState } from "react";
+import { errorMessage } from "../shared/errors";
+import { guardWorkspaceChange } from "../workspace/navigationGuard";
+import { useUnsavedChanges } from "../workspace/unsavedChanges";
 import { OfflineIssueCreator, OfflineIssueList } from "./OfflineIssues";
 import type { OfflineAudit, OfflineWorkspace } from "./offlineStore";
 import { queueOfflineAudit, saveOfflineAnswer } from "./offlineWork";
-import { errorMessage } from "./shared/errors";
-import { guardWorkspaceChange } from "./workspace/navigationGuard";
-import { useUnsavedChanges } from "./workspace/unsavedChanges";
 
 export function OfflineAuditEditor({
   audit,

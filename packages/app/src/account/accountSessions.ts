@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { lockOfflineWorkspace } from "../offlineStore";
+import { lockOfflineWorkspace } from "../offline/offlineStore";
 import { authClient } from "../shared/authClient";
 import { throwIfRefused } from "../shared/errors";
 

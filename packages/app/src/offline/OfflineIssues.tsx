@@ -1,11 +1,11 @@
 import { Button, Card, Field } from "@balebase/ui/react";
 import { issueImageTypes } from "@balebase/validators/issueRules";
 import { useEffect, useState } from "react";
-import { IssueForm } from "./issues/IssueForm";
+import { IssueForm } from "../issues/IssueForm";
+import { useUnsavedChanges } from "../workspace/unsavedChanges";
+import { issuePath } from "../workspace/workspacePaths";
 import { type OfflineWorkspace, offlineImage } from "./offlineStore";
 import { createOfflineIssue } from "./offlineWork";
-import { useUnsavedChanges } from "./workspace/unsavedChanges";
-import { issuePath } from "./workspace/workspacePaths";
 
 export function OfflineIssueCreator({
   workspace,

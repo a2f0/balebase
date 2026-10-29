@@ -20,14 +20,14 @@ import type { AuthenticationAction } from "./auth/authActions";
 import { useSessionRefetch } from "./auth/useSessionRefetch";
 import { SigningPage } from "./contracts/SigningPage";
 import { Library } from "./library/Library";
-import { useOfflineSlot } from "./offlineSlot";
+import { useOfflineSlot } from "./offline/offlineSlot";
+import { useOfflineRoute } from "./offline/useOfflineRoute";
 import { useLinkedOrganization } from "./organizations/linkedOrganization";
 import { OrganizationGate } from "./organizations/OrganizationGate";
 import { hasRole } from "./organizations/organizationState";
 import { useOrganizationAccess } from "./organizations/useOrganizationAccess";
 import { authClient } from "./shared/authClient";
 import { authCallbackUrl } from "./shared/config";
-import { useOfflineRoute } from "./useOfflineRoute";
 import {
   guardWorkspaceChange,
   useDismissDialogsOnWorkspaceChange,

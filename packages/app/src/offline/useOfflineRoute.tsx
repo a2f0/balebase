@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { signingTokenForPath } from "../workspace/workspacePaths";
 import { OfflineWorkspacePage } from "./OfflineWorkspacePage";
 import {
   activeOfflineKey,
@@ -8,7 +9,6 @@ import {
   offlineScopeKey,
 } from "./offlineStore";
 import { useOfflineWorkspace } from "./useOfflineWorkspace";
-import { signingTokenForPath } from "./workspace/workspacePaths";
 
 interface OfflineSession {
   user: { id: string; name: string; email: string };

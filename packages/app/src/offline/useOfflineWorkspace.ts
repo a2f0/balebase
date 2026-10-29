@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { errorMessage } from "../shared/errors";
 import {
   activeOfflineKey,
   type OfflineWorkspace,
@@ -6,7 +7,6 @@ import {
   readOfflineWorkspace,
 } from "./offlineStore";
 import { syncOfflineWorkspace } from "./offlineSync";
-import { errorMessage } from "./shared/errors";
 
 export function useOfflineWorkspace() {
   const [workspace, setWorkspace] = useState<OfflineWorkspace>();

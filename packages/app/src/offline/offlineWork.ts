@@ -4,7 +4,7 @@ import {
   maxIssueImages,
 } from "@balebase/validators/issueRules";
 import type { IssueInput } from "@balebase/validators/issues";
-import { progressFor } from "./audits/auditProgress";
+import { progressFor } from "../audits/auditProgress";
 import {
   changeOfflineWorkspace,
   type OfflineJob,

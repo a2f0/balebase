@@ -1,4 +1,4 @@
-import { nativeHost } from "./host";
+import { nativeHost } from "../host";
 import {
   activateOfflineWorkspace,
   changeOfflineWorkspace,
