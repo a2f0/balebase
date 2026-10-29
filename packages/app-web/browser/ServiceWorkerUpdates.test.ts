@@ -104,21 +104,25 @@ interface Activation {
   channel: MessageChannel;
   controllerChanged: boolean;
   postedToWaiting: boolean;
+  registration: ServiceWorkerRegistration | undefined;
   replies: unknown[];
 }
 
 /**
  * Asks the waiting worker to activate, as an update from another tab does,
- * and waits for it to control the page. Gives up well before the test's
- * timeout, reporting the registration's workers and the worker's replies.
+ * and waits for it to control the page. Firefox can show the update before
+ * the registration that getRegistration() returns reports its waiting worker,
+ * so the message goes out once that worker appears. Gives up well before the
+ * test's timeout, reporting the registration's workers and the worker's
+ * replies.
  */
 async function activateFromAnotherTab(page: Page) {
   await page.evaluate(async () => {
-    const registration = await navigator.serviceWorker.getRegistration();
     const activation: Activation = {
       channel: new MessageChannel(),
       controllerChanged: false,
-      postedToWaiting: Boolean(registration?.waiting),
+      postedToWaiting: false,
+      registration: await navigator.serviceWorker.getRegistration(),
       replies: [],
     };
     Reflect.set(window, "activation", activation);
@@ -131,13 +135,22 @@ async function activateFromAnotherTab(page: Page) {
       },
       { once: true },
     );
-    registration?.waiting?.postMessage({ type: "ACTIVATE_UPDATE" }, [
-      activation.channel.port2,
-    ]);
   });
   try {
+    // waitForFunction resolves on a returned promise without awaiting it,
+    // so this polls the live registration synchronously.
     await page.waitForFunction(
-      () => (Reflect.get(window, "activation") as Activation).controllerChanged,
+      () => {
+        const activation = Reflect.get(window, "activation") as Activation;
+        const waiting = activation.registration?.waiting;
+        if (waiting && !activation.postedToWaiting) {
+          activation.postedToWaiting = true;
+          waiting.postMessage({ type: "ACTIVATE_UPDATE" }, [
+            activation.channel.port2,
+          ]);
+        }
+        return activation.controllerChanged;
+      },
       undefined,
       { timeout: 15_000 },
     );
