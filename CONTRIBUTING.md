@@ -88,7 +88,12 @@ it.
 - Under `bun test`, `respond` fails a test whose response breaks its schema,
   and `contract.test.ts` checks that the API serves exactly the contract's
   routes.
-- Type routers and contexts with `ApiEnv` from `auth/authMiddleware.ts`.
+- Type routers and contexts with `ApiEnv` from `auth/apiEnv.ts`, which holds
+  only types so any module can import it without reaching the middleware.
+- `auth/auth.ts` configures Better Auth, and `auth/authMiddleware.ts` builds on
+  it, so modules either one imports at runtime must not import route modules;
+  hooks that touch a feature's rows live in a route-free module, as
+  `employeeForms/invitationRequirements.ts` does.
 - Gate owner- and admin-only routes with `requireManager()`, or branch on
   `canManage(context)`, from `organizations/organizationMembers.ts`.
 - Mount platform admin routers below `/api/admin`, where `app.ts` applies the
@@ -295,6 +300,13 @@ commands.
   out instead of adding one. Blank lines are free: use them to separate ideas.
 - Keep exports used and dependencies reachable; both Knip modes run in
   `check`. Explain necessary lint suppressions at the affected line.
+- Biome's `noImportCycles` rejects import cycles, type-only imports included.
+  Break one by moving the shared type or function to a lower module, never
+  with a suppression. Packages depend in one direction: `validators`, `ui`,
+  and `diagnostics` import no other workspace; `api-client` builds on
+  `validators`; `app` on those; the shells (`app-web`, `app-capacitor`) on
+  `app` and the leaf packages; and `api` and `website` on the leaf packages
+  only.
 - Test observable behavior and failure paths. Use the existing tests for
   mechanical moves; add coverage when behavior changes or a gap matters.
 - Treat [audit activity](docs/audit-activity.md) as part of a mutation's

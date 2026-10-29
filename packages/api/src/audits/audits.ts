@@ -5,7 +5,7 @@ import {
 } from "@balebase/validators/audits";
 import type { Issue } from "@balebase/validators/issues";
 import { Hono } from "hono";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import {
   freeFormTemplateLimit,
   organizationPlanLimits,

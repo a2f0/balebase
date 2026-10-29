@@ -4,30 +4,15 @@ import { createMiddleware } from "hono/factory";
 import { organizationUserHasSeat } from "../billing/billingEntitlements";
 import { isOrganizationOwner } from "../organizations/organizationMembers";
 import { isRecord } from "../shared/jsonInput";
-import type { Bindings } from "../types";
+import type { ApiEnv } from "./apiEnv";
 import {
-  type ApiKeyPrincipal,
   apiKeyChannel,
   apiKeyFromHeader,
   apiKeyRouteDenial,
   authenticateApiKey,
   recordApiKeyUse,
 } from "./apiKeys";
-import type { AuthSession } from "./auth";
-import { createAuth } from "./auth";
-
-export interface AuthVariables {
-  /** Set when an API key, rather than a session, authenticated the request. */
-  apiKey?: ApiKeyPrincipal;
-  authSession: AuthSession;
-  organizationId: string;
-  organizationRole: string;
-}
-
-export type ApiEnv = {
-  Bindings: Bindings;
-  Variables: AuthVariables;
-};
+import { type AuthSession, createAuth } from "./auth";
 
 export const requireAuth = createMiddleware<ApiEnv>(async (context, next) => {
   const token = apiKeyFromHeader(context.req.header("Authorization"));

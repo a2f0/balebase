@@ -1,11 +1,11 @@
 import { expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
 import {
   chromeLaunchOptions,
   closeChrome,
 } from "../../../scripts/testing/chrome";
+import { stylesheets } from "./stylesheets";
 
 it("a narrow tab strip shows the current tab and keeps a strip the user scrolled", async () => {
   const bundle = await Bun.build({
@@ -20,16 +20,7 @@ it("a narrow tab strip shows the current tab and keeps a strip the user scrolled
     throw new Error(
       `Page tabs fixture did not bundle: ${bundle.logs.join("\n")}`,
     );
-  const css = ["tokens", "base", "typography", "surfaces"]
-    .map((name) =>
-      readFileSync(
-        fileURLToPath(
-          new URL(`../../ui/src/styles/${name}.css`, import.meta.url),
-        ),
-        "utf8",
-      ),
-    )
-    .join("\n");
+  const css = stylesheets(["tokens", "base", "typography", "surfaces"]);
   let browser: Browser | undefined;
   try {
     browser = await launch(chromeLaunchOptions());

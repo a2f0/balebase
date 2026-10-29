@@ -1,3 +1,10 @@
+import type { Context } from "hono";
+import type { ApiEnv } from "../auth/apiEnv";
+import {
+  cancelOrganizationSubscription,
+  recoverCheckoutAfterFailedDeletion,
+} from "../billing/billingDeletion";
+
 interface OrganizationDeletion {
   deletedAt: string;
   organizationId: string;
@@ -7,7 +14,7 @@ interface OrganizationRestoration {
   organizationId: string;
 }
 
-export async function markOrganizationForDeletion(
+async function markOrganizationForDeletion(
   database: D1Database,
   organizationId: string,
   deletedByUserId: string,
@@ -128,4 +135,60 @@ export async function restoreOrganization(
     .run();
   if (result.meta.changes < 1) return undefined;
   return { organizationId };
+}
+
+/**
+ * Cancels the organization's billing, then marks it for deletion. When the
+ * mark fails or changes nothing, checkout is re-enabled so billing can be
+ * restarted. A failure carries the response the route sends.
+ */
+export async function deleteBilledOrganization(
+  context: Context<ApiEnv>,
+  organizationId: string,
+  deletedByUserId: string,
+): Promise<
+  | { deletion: OrganizationDeletion }
+  | { deletion: undefined }
+  | { response: Response }
+> {
+  let checkoutGuard: string | null;
+  try {
+    ({ checkoutGuard } = await cancelOrganizationSubscription(
+      context.env,
+      organizationId,
+    ));
+  } catch (cause) {
+    console.error("Could not cancel organization billing.", cause);
+    const error =
+      "The Stripe subscription could not be canceled, so the organization was not deleted.";
+    return { response: context.json({ error }, 502) };
+  }
+
+  let deletion: OrganizationDeletion | undefined;
+  try {
+    deletion = await markOrganizationForDeletion(
+      context.env.DB,
+      organizationId,
+      deletedByUserId,
+      checkoutGuard,
+    );
+  } catch (cause) {
+    console.error("Could not record organization deletion.", cause);
+    await recoverCheckoutAfterFailedDeletion(
+      context.env.DB,
+      organizationId,
+      checkoutGuard,
+    );
+    const error =
+      "Billing was canceled, but the organization could not be deleted. Checkout was re-enabled so billing can be restarted.";
+    return { response: context.json({ error }, 500) };
+  }
+  if (!deletion) {
+    await recoverCheckoutAfterFailedDeletion(
+      context.env.DB,
+      organizationId,
+      checkoutGuard,
+    );
+  }
+  return { deletion };
 }

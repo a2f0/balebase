@@ -5,7 +5,7 @@ import {
   type LinkedEmail,
 } from "@balebase/validators/inbox";
 import type { Context } from "hono";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import { userHasCapability } from "../organizations/organizationGroups";
 import { readBody, respond } from "../shared/respond";
 

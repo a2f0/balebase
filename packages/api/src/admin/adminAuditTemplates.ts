@@ -12,7 +12,7 @@ import {
   templateSelect,
   toTemplate,
 } from "../audits/auditTemplates";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import { findActivity, requestActor } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 

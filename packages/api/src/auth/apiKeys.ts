@@ -9,19 +9,8 @@ import {
   requireManager,
 } from "../organizations/organizationMembers";
 import { readBody, respond } from "../shared/respond";
+import type { ApiEnv, ApiKeyChannel, ApiKeyPrincipal } from "./apiEnv";
 import type { AuthSession } from "./auth";
-import type { ApiEnv } from "./authMiddleware";
-
-/** Whether an API-key request came from an MCP tool or straight to REST. */
-export type ApiKeyChannel = "mcp" | "rest";
-
-/** The key behind an API-key request, set beside the creator's session. */
-export interface ApiKeyPrincipal {
-  access: ApiKeyAccess;
-  channel: ApiKeyChannel;
-  id: string;
-  organizationId: string;
-}
 
 type ApiKeysContext = Context<ApiEnv>;
 
@@ -240,7 +229,7 @@ export async function recordApiKeyUse(
  * session that created it was, and only while its creator keeps two-factor
  * authentication enabled; otherwise a later requirement needs a new key.
  */
-function apiKeySession(row: CredentialRow, now: Date) {
+function apiKeySession(row: CredentialRow, now: Date): AuthSession {
   const twoFactorEnabled = Boolean(row.twoFactorEnabled);
   const twoFactorVerified = twoFactorEnabled && row.two_factor_verified === 1;
   return {
@@ -273,7 +262,7 @@ function apiKeySession(row: CredentialRow, now: Date) {
       twoFactorEnabled,
       updatedAt: new Date(row.updatedAt),
     },
-  } as unknown as AuthSession;
+  };
 }
 
 function isBanned(row: CredentialRow, now: Date) {

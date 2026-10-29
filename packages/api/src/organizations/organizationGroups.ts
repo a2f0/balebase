@@ -5,7 +5,7 @@ import {
 } from "@balebase/validators/organizationGroups";
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import { readBody, respond } from "../shared/respond";
 import {
   countOrganizationOwners,

@@ -1,6 +1,6 @@
 import { issuesRoutes } from "@balebase/validators/issues";
 import { Hono } from "hono";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import { listMemberDirectory } from "../organizations/organizationMembers";
 import { activityBatch, findActivity } from "../shared/activity";
 import {

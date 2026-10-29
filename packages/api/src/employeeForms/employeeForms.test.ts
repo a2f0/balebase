@@ -11,7 +11,7 @@ import { streamedUpload } from "../testing/http";
 import {
   assignAcceptedInvitationRequirements,
   assignRenewedInvitationRequirements,
-} from "./employeeForms";
+} from "./invitationRequirements";
 
 describe("employee forms", () => {
   it("assigns invitation requirements and transfers them to the member", async () => {

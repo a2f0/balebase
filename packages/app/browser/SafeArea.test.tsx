@@ -1,21 +1,15 @@
 import { expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
 import {
   chromeLaunchOptions,
   closeChrome,
 } from "../../../scripts/testing/chrome";
+import { stylesheets } from "./stylesheets";
 
-const read = (url: URL) => readFileSync(fileURLToPath(url), "utf8");
-const css = [
-  ...["tokens", "base", "contextMenu", "dialog"].map((name) =>
-    read(new URL(`../../ui/src/styles/${name}.css`, import.meta.url)),
-  ),
-  ...["shell", "auth", "inbox"].map((name) =>
-    read(new URL(`../src/styles/${name}.css`, import.meta.url)),
-  ),
-].join("\n");
+const css = stylesheets(
+  ["tokens", "base", "contextMenu", "dialog"],
+  ["shell", "auth", "inbox"],
+);
 
 const fixtures = {
   shell: `

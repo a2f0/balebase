@@ -1,6 +1,6 @@
 import { adminJobsRoutes } from "@balebase/validators/adminJobs";
 import { type Context, Hono } from "hono";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import { jobRunDetail, listJobRuns } from "../jobs/jobHistory";
 import { toJobRun } from "../jobs/jobRuns";
 import { waitForLegacyJob } from "../jobs/legacyJobRun";

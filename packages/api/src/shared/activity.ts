@@ -4,8 +4,7 @@ import {
   activityRoutes,
 } from "@balebase/validators/activity";
 import { type Context, Hono } from "hono";
-import type { ApiKeyChannel, ApiKeyPrincipal } from "../auth/apiKeys";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv, ApiKeyChannel, ApiKeyPrincipal } from "../auth/apiEnv";
 import { userHasCapability } from "../organizations/organizationGroups";
 import { cursorPage } from "./cursorPagination";
 import { readQuery, respond } from "./respond";

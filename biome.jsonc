@@ -42,6 +42,12 @@
           }
         }
       },
+      "suspicious": {
+        "noImportCycles": {
+          "level": "error",
+          "options": { "ignoreTypes": false }
+        }
+      },
       "style": {
         "noRestrictedImports": {
           "level": "error",

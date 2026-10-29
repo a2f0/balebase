@@ -3,7 +3,7 @@ import {
   adminUsersRoutes,
 } from "@balebase/validators/adminUsers";
 import { Hono } from "hono";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import { readBody, readQuery, respond } from "../shared/respond";
 import {
   cancelUserDeletion,

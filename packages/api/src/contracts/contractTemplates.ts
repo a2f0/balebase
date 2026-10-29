@@ -6,7 +6,7 @@ import {
   type TemplateVersion,
 } from "@balebase/validators/contractTemplates";
 import { type Context, Hono } from "hono";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import { normalizeFilename } from "../shared/filenames";
 import { readBody, readQuery, respond } from "../shared/respond";
 import {

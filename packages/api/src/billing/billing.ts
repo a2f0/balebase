@@ -4,7 +4,7 @@ import {
   type CheckoutOutcome,
 } from "@balebase/validators/billing";
 import { type Context, Hono } from "hono";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import {
   canManage,
   canManageOrganization,
