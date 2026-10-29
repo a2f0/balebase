@@ -1,6 +1,6 @@
 import { type Context, Hono } from "hono";
-import type { AuthSession } from "../auth";
-import type { AuthVariables } from "../authMiddleware";
+import type { AuthSession } from "../auth/auth";
+import type { AuthVariables } from "../auth/authMiddleware";
 import type { Bindings } from "../types";
 
 export type ApiTestEnv = { Bindings: Bindings; Variables: AuthVariables };

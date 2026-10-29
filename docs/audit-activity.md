@@ -65,9 +65,9 @@ unknown editors, previous values, or timestamps from current state.
 For implementation changes, test successful event creation, actor attribution,
 relevant before/after values, no-op or failure behavior, and authorized reads.
 Use rollback and retry tests when those paths affect correctness. Existing
-examples live in the API's `auditActivity.test.ts`, `equipment.test.ts`,
-`apiKeys.test.ts`, `organizationRoleActivity.test.ts`, and
-`issues.test.ts`.
+examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
+`equipment/equipment.test.ts`, `auth/apiKeys.test.ts`,
+`auth/organizationRoleActivity.test.ts`, and `issues/issues.test.ts`.
 
 The repository-owned [audit-trails skill](../skills/audit-trails/SKILL.md)
 reviews mutations, triggers, separate histories, readers, and retention, then

@@ -1,10 +1,10 @@
 import { onTestFinished } from "bun:test";
-import { adminJobs } from "../adminJobs";
-import { adminUsers } from "../adminUsers";
-import { requireRole } from "../authMiddleware";
-import { consumeJobs } from "../jobWorker";
-import { withNativeOrigin } from "../nativeRequest";
-import { userDeletion } from "../userDeletion";
+import { adminJobs } from "../admin/adminJobs";
+import { adminUsers } from "../admin/adminUsers";
+import { requireRole } from "../auth/authMiddleware";
+import { withNativeOrigin } from "../auth/nativeRequest";
+import { consumeJobs } from "../jobs/jobWorker";
+import { userDeletion } from "../users/userDeletion";
 import { testBindings } from "./bindings";
 import { queryHooks, toD1 } from "./d1";
 import { createTestDatabase } from "./database";

@@ -31,8 +31,14 @@ describe("test D1", () => {
   it("leaves no API write that expects exactly one changed row", () => {
     const source = join(import.meta.dir, "..");
     const exact = /meta\.changes\)?\s*[!=]==\s*1\b/;
-    const found = readdirSync(source)
-      .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
+    // Modules sit in feature folders; the test harness is not API source.
+    const found = readdirSync(source, { encoding: "utf8", recursive: true })
+      .filter(
+        (name) =>
+          name.endsWith(".ts") &&
+          !name.endsWith(".test.ts") &&
+          !name.startsWith("testing/"),
+      )
       .flatMap((name) =>
         readFileSync(join(source, name), "utf8")
           .split("\n")

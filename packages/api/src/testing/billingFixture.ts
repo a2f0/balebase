@@ -1,8 +1,8 @@
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
-import type { AuthVariables } from "../authMiddleware";
-import { billing } from "../billing";
-import { handleStripeWebhook } from "../billingWebhook";
+import type { AuthVariables } from "../auth/authMiddleware";
+import { billing } from "../billing/billing";
+import { handleStripeWebhook } from "../billing/billingWebhook";
 import type { Bindings } from "../types";
 import { testBindings } from "./bindings";
 import { toD1 } from "./d1";

@@ -21,7 +21,7 @@ Every workspace lives under `packages/`, and infrastructure lives in
 
 | Change | Start here |
 | --- | --- |
-| API routes, authorization, persistence (Hono on Workers, with D1 and R2) | `packages/api/src` |
+| API routes, authorization, persistence (Hono on Workers, with D1 and R2), in a folder per feature | `packages/api/src` |
 | Request and response schemas for every route | `packages/validators/src` |
 | Typed client for those routes | `packages/api-client/src` |
 | Database schema | `packages/api/migrations` |
@@ -75,55 +75,62 @@ it.
 
 ### API (`packages/api/src`)
 
+- Each feature has a folder, such as `billing/` or `contracts/`, that holds
+  its routes, records, helpers, and tests. Modules that three or more
+  features use live in `shared/`, and the Worker entry points (`index.ts`,
+  `app.ts`, and `types.ts`) stay at the top. Paths below are relative to
+  `packages/api/src`.
 - Send JSON with `respond(context, route, body)`, and read input with
-  `readBody(context, route, message)` and `readQuery` from `respond.ts`, which
-  answer 400 with the first broken rule's message; only checks that need the
-  database, the date, or other server state stay in handlers.
+  `readBody(context, route, message)` and `readQuery` from
+  `shared/respond.ts`, which answer 400 with the first broken rule's message;
+  only checks that need the database, the date, or other server state stay in
+  handlers.
 - Under `bun test`, `respond` fails a test whose response breaks its schema,
   and `contract.test.ts` checks that the API serves exactly the contract's
   routes.
-- Type routers and contexts with `ApiEnv` from `authMiddleware.ts`.
+- Type routers and contexts with `ApiEnv` from `auth/authMiddleware.ts`.
 - Gate owner- and admin-only routes with `requireManager()`, or branch on
-  `canManage(context)`, from `organizationMembers.ts`.
+  `canManage(context)`, from `organizations/organizationMembers.ts`.
 - Mount platform admin routers below `/api/admin`, where `app.ts` applies the
   one `requireAuth` and `requireRole("admin")` guard.
 - A mounted router's `onError` replaces the app's, so a router with its own
-  must end in `respondToUnexpectedError` from `unexpectedError.ts`, or its
-  failures go unreported.
+  must end in `respondToUnexpectedError` from `shared/unexpectedError.ts`, or
+  its failures go unreported.
 - Read untrusted JSON that no contract schema covers with `isRecord` from
-  `jsonInput.ts`.
-- Send mail with `sendMail` from `mailSender.ts`, which names the sender with
-  `productName`.
+  `shared/jsonInput.ts`.
+- Send mail with `sendMail` from `shared/mailSender.ts`, which names the
+  sender with `productName`.
 - Read plan limits with `organizationPlanLimits(env, organizationId)` from
-  `billingEntitlements.ts`; checkout, subscriptions, seats, the webhook,
-  retention, and deletion each have a `billing*.ts` module.
+  `billing/billingEntitlements.ts`; checkout, subscriptions, seats, the
+  webhook, retention, and deletion each have a `billing/billing*.ts` module.
 - Signing links, signer order, recipient notices, and completion
   (`notifyRecipients`, `firstSigners`, `advanceContract`) live in
-  `contractWorkflow.ts`; `contractRecords.ts` holds the row queries.
-- Page lists with `cursorPagination.ts`: query one extra row in a stable order
-  (a date plus a unique ID for date lists), let `cursorPage` trim it and derive
-  the opaque cursor, and filter and authorize in the query before pagination;
-  clients treat cursors as opaque.
+  `contracts/contractWorkflow.ts`; `contracts/contractRecords.ts` holds the
+  row queries.
+- Page lists with `shared/cursorPagination.ts`: query one extra row in a
+  stable order (a date plus a unique ID for date lists), let `cursorPage` trim
+  it and derive the opaque cursor, and filter and authorize in the query
+  before pagination; clients treat cursors as opaque.
 - Read uploads and webhook bodies with `readBoundedForm` and
-  `readBoundedRequest` from `storage.ts`, which refuse an oversized body while
-  it streams, and serve stored files with `storedDownload`, or an object
-  already read with `downloadResponse` (`contentDisposition` builds its
-  header).
+  `readBoundedRequest` from `shared/storage.ts`, which refuse an oversized
+  body while it streams, and serve stored files with `storedDownload`, or an
+  object already read with `downloadResponse` (`contentDisposition` builds
+  its header).
 - Write every new upload with `trackedPut`, which queues its key for cleanup
   before the bytes reach R2; the row that references it must hold
   `uploadStillQueued`, and a migration trigger then deletes the queued record.
-- Each MCP tool in `mcp*Tools.ts` names its contract route, and
-  `mcpToolSchema.ts` generates its arguments from the route's path, query, and
-  body; a tool adds a title, a description, argument `descriptions` (a dotted
-  name such as `recipients.email` reaches inside one), `omit` for optional
-  fields it leaves out, and `require` for optional fields it must insist on,
-  such as `expectedCurrentVersion`.
-- The MCP catalog tests in `apiKeys.test.ts` fail when a tool's route is not
-  served or its arguments drift from the route's.
-- Issues are created in `issues.ts` (general) and `audits.ts` (audit-specific)
-  and replayed by `offlineRecords.ts`; they share the `issues` table and its
-  activity triggers, so change a field in both route families and the offline
-  operation schema, after reading the
+- Each MCP tool in `mcp/mcp*Tools.ts` names its contract route, and
+  `mcp/mcpToolSchema.ts` generates its arguments from the route's path,
+  query, and body; a tool adds a title, a description, argument
+  `descriptions` (a dotted name such as `recipients.email` reaches inside
+  one), `omit` for optional fields it leaves out, and `require` for optional
+  fields it must insist on, such as `expectedCurrentVersion`.
+- The MCP catalog tests in `auth/apiKeys.test.ts` fail when a tool's route is
+  not served or its arguments drift from the route's.
+- Issues are created in `issues/issues.ts` (general) and `audits/audits.ts`
+  (audit-specific) and replayed by `offline/offlineRecords.ts`; they share the
+  `issues` table and its activity triggers, so change a field in both route
+  families and the offline operation schema, after reading the
   [issue](docs/product.md#issues-and-transaction-activity) and
   [offline](docs/product.md#offline-work) behavior.
 
@@ -212,7 +219,7 @@ binding literals:
   outbound HTTP.
 - An area's shared builders live in its `*Fixture.ts`, such as
   `billingFixture.ts`, and a module's tests sit beside it, as
-  `billingCheckout.test.ts` does.
+  `billing/billingCheckout.test.ts` does.
 
 App test names say where a test runs, and `src/testFileNames.test.ts` fails
 when a file's name and environment disagree:

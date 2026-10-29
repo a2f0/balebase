@@ -1,12 +1,12 @@
 import type { Database } from "bun:sqlite";
 import { expect } from "bun:test";
-import { createFinanceRouter } from "../finance";
-import { consumeJobs as consumeFinanceSync } from "../jobWorker";
+import { createFinanceRouter } from "../finance/finance";
 import type {
   PlaidRequest,
   PlaidRequestBody,
   TransactionsSyncResponse,
-} from "../plaid";
+} from "../finance/plaid";
+import { consumeJobs as consumeFinanceSync } from "../jobs/jobWorker";
 import type { Bindings } from "../types";
 import { testBindings } from "./bindings";
 import { queryHooks, toD1 } from "./d1";
