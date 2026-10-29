@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 import { Select } from "@balebase/ui/react";
 import { type Browser, launch } from "puppeteer-core";
 import { renderToStaticMarkup } from "react-dom/server";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 
 const read = (url: URL) => readFileSync(fileURLToPath(url), "utf8");
 const css = [
@@ -107,6 +110,6 @@ it("touch screens get fingertip-sized controls while a mouse keeps compact ones"
       navItem: 38,
     });
   } finally {
-    await browser?.close();
+    await closeChrome(browser);
   }
 }, 20_000);

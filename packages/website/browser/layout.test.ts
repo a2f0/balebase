@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 import { storeBadgeHref, storeListings } from "../src/site";
 
 const siteRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -42,9 +45,9 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-  await browser?.close();
+  await closeChrome(browser);
   rmSync(work, { recursive: true, force: true });
-}, 30_000);
+});
 
 async function openSite(batches: string[] = []) {
   const page = await browser?.newPage();

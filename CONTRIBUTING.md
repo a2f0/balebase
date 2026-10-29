@@ -244,11 +244,12 @@ the evidence with `agent-tool runs list --head <commit>`.
 The full check needs ShellCheck, Terraform, TFLint, and the Ruby bundle.
 Browser tests need Chrome or Chromium; set `CHROME_PATH` to its executable when
 needed. Puppeteer suites launch it with `chromeLaunchOptions` from
-`scripts/testing/chrome.ts`, which gives each browser a disposable profile.
-Tests that create a Git fixture pass `gitFixtureEnv()` from
-`scripts/testing/gitFixture.ts` to its Git commands: hooks export `GIT_DIR` and
-similar variables, and a fixture that inherits them runs against the real
-checkout.
+`scripts/testing/chrome.ts`, which gives each browser a disposable profile,
+and end it with `closeChrome`, which kills Chrome instead of waiting for a
+shutdown that has no time limit. Tests that create a Git fixture pass
+`gitFixtureEnv()` from `scripts/testing/gitFixture.ts` to its Git commands:
+hooks export `GIT_DIR` and similar variables, and a fixture that inherits them
+runs against the real checkout.
 
 The web shell's service worker update suite uses Playwright's Chromium, Firefox,
 and WebKit engines. Run `bun run --cwd packages/app-web browsers:install` once

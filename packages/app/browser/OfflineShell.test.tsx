@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Browser, launch } from "puppeteer-core";
 import { build } from "vite";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 import { offlineShell } from "../../app-web/offlineShell";
 
 it.each(["direct", "redirected"])(
@@ -112,7 +115,7 @@ it.each(["direct", "redirected"])(
         await page.$eval("#status", (element) => element.textContent),
       ).toBe("Offline shell ready");
     } finally {
-      await browser?.close();
+      await closeChrome(browser);
       await server.stop(true);
       rmSync(directory, { recursive: true, force: true });
     }
@@ -217,7 +220,7 @@ it("keeps navigation on the active shell until a waiting upgrade activates", asy
     ).toBe("Version B");
     expect(await reopened.evaluate(() => caches.keys())).toHaveLength(1);
   } finally {
-    await browser?.close();
+    await closeChrome(browser);
     await server.stop(true);
     rmSync(directory, { recursive: true, force: true });
   }

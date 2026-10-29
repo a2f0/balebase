@@ -3,7 +3,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 
 const harness = `
 import { Toast, ToastProvider } from "@balebase/ui/react";
@@ -118,7 +121,7 @@ it("stacks feedback at the viewport bottom without shifting or clipping page con
       await page.close();
     }
   } finally {
-    await browser?.close();
+    await closeChrome(browser);
     rmSync(fixture, { recursive: true, force: true });
   }
 }, 30_000);

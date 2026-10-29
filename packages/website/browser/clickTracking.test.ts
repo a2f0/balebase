@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { initClickTracking } from "@balebase/diagnostics/clickTracking";
 import { type Browser, launch } from "puppeteer-core";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 
 // The shared tracker runs here because diagnostics has no browser suite. The
 // layout test and the web shell's suite check each bundle's own origins.
@@ -40,10 +43,9 @@ beforeAll(async () => {
   );
 }, 30_000);
 
-// Chrome can take longer than Bun's 5 s hook default to exit on a loaded host.
 afterAll(async () => {
-  await browser?.close();
-}, 30_000);
+  await closeChrome(browser);
+});
 
 type Guard =
   | "none"

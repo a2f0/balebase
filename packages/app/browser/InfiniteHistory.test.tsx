@@ -2,7 +2,10 @@ import { expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 
 it("appends job and transaction pages on desktop/mobile scroll and fills a short viewport", async () => {
   const built = await Bun.build({
@@ -91,6 +94,6 @@ it("appends job and transaction pages on desktop/mobile scroll and fills a short
       }
     }
   } finally {
-    await browser?.close();
+    await closeChrome(browser);
   }
 }, 30_000);
