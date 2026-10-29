@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { act } from "react";
-import { version as appVersion } from "../package.json";
+import { version as appVersion } from "../../package.json";
+import { fetchApi } from "../apiVersion";
+import { installDom } from "../testing/dom";
 import { AccountControl } from "./AccountControl";
-import { fetchApi } from "./apiVersion";
-import { installDom } from "./testing/dom";
 
 const { mount, respond } = installDom({ url: "http://localhost:5173/" });
 let container: HTMLElement;

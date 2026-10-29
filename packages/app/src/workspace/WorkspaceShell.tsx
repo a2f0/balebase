@@ -14,8 +14,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { AccountControl } from "../AccountControl";
-import type { AccountSession } from "../accountSessions";
+import { AccountControl } from "../account/AccountControl";
+import type { AccountSession } from "../account/accountSessions";
 import { hasRole, type WorkspaceOrganization } from "../organizationState";
 import { AppLink } from "../shared/AppLink";
 import { useAction } from "../shared/useAction";

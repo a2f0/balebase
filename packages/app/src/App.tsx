@@ -8,15 +8,16 @@ import {
   PageHeader,
 } from "@balebase/ui/react";
 import { type ReactNode, useEffect, useState } from "react";
-import { AuthPage } from "./AuthPage";
 import {
   accountReturnPath,
   addAccountPath,
   invitationIdForPath,
   workspaceContentKey,
-} from "./accountNavigation";
-import { useAccountSessions } from "./accountSessions";
-import type { AuthenticationAction } from "./authActions";
+} from "./account/accountNavigation";
+import { useAccountSessions } from "./account/accountSessions";
+import { AuthPage } from "./auth/AuthPage";
+import type { AuthenticationAction } from "./auth/authActions";
+import { useSessionRefetch } from "./auth/useSessionRefetch";
 import { Library } from "./Library";
 import { useLinkedOrganization } from "./linkedOrganization";
 import { OrganizationGate } from "./OrganizationGate";
@@ -27,7 +28,6 @@ import { authClient } from "./shared/authClient";
 import { authCallbackUrl } from "./shared/config";
 import { useOfflineRoute } from "./useOfflineRoute";
 import { useOrganizationAccess } from "./useOrganizationAccess";
-import { useSessionRefetch } from "./useSessionRefetch";
 import {
   guardWorkspaceChange,
   useDismissDialogsOnWorkspaceChange,

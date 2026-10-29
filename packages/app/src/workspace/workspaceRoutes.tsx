@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
-import { AccountSettings } from "../AccountSettings";
 import { Activity } from "../Activity";
 import { AdminGlobalAudits } from "../AdminGlobalAudits";
 import { AdminJobs } from "../AdminJobs";
 import { AdminOrganizations } from "../AdminOrganizations";
 import { AdminUsers } from "../AdminUsers";
 import { Audits } from "../Audits";
+import { AccountSettings } from "../account/AccountSettings";
 import { Businesses } from "../Businesses";
 import { Contracts } from "../Contracts";
 import { Equipment } from "../Equipment";

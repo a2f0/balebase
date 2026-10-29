@@ -22,7 +22,7 @@ test("renderApp forwards all React root errors to its host", async () => {
       mock.module("@balebase/ui/react", () => ({ DialogHost: () => null, ToastProvider: () => null }));
       mock.module(${JSON.stringify(resolve(import.meta.dir, "App.tsx"))}, () => ({ App: () => null }));
       mock.module(${JSON.stringify(resolve(import.meta.dir, "workspace/AppBoundary.tsx"))}, () => ({ AppBoundary: () => null }));
-      mock.module(${JSON.stringify(resolve(import.meta.dir, "theme.ts"))}, () => ({ startThemeSync() {} }));
+      mock.module(${JSON.stringify(resolve(import.meta.dir, "account/theme.ts"))}, () => ({ startThemeSync() {} }));
       globalThis.document = { getElementById: () => ({}) };
       const { renderApp } = await import(${JSON.stringify(resolve(import.meta.dir, "client.tsx"))});
       test("production root callbacks preserve errors and classification", () => {

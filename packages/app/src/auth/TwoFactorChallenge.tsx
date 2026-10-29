@@ -1,9 +1,9 @@
 import { Button, cx, Field, Toast } from "@balebase/ui/react";
 import { type FormEvent, useState } from "react";
+import { authClient } from "../shared/authClient";
+import { throwIfRefused } from "../shared/errors";
+import { useAction } from "../shared/useAction";
 import { AuthHeading, AuthLayout } from "./AuthLayout";
-import { authClient } from "./shared/authClient";
-import { throwIfRefused } from "./shared/errors";
-import { useAction } from "./shared/useAction";
 
 export function TwoFactorChallenge({
   addingAccount,

@@ -1,11 +1,11 @@
 import { Avatar, Icon, Toast } from "@balebase/ui/react";
 import { useId, useRef, useState } from "react";
-import { version as appVersion } from "../package.json";
+import { version as appVersion } from "../../package.json";
+import { useApiVersion } from "../apiVersion";
+import { errorMessage } from "../shared/errors";
+import { useAction } from "../shared/useAction";
+import { useMenuDismissal } from "../shared/useMenuDismissal";
 import type { AccountSession } from "./accountSessions";
-import { useApiVersion } from "./apiVersion";
-import { errorMessage } from "./shared/errors";
-import { useAction } from "./shared/useAction";
-import { useMenuDismissal } from "./shared/useMenuDismissal";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 
 interface AccountControlProps {

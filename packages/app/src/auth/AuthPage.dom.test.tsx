@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { act } from "react";
+import { configureHost } from "../host";
+import { installDom } from "../testing/dom";
 import { AuthPage } from "./AuthPage";
-import { configureHost } from "./host";
-import { installDom } from "./testing/dom";
 
 const {
   button,

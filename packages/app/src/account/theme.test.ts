@@ -51,7 +51,7 @@ describe("theme preference", () => {
   it("matches the key each shell's pre-paint script reads", async () => {
     for (const shell of ["app-web", "app-capacitor"]) {
       const html = await Bun.file(
-        new URL(`../../${shell}/index.html`, import.meta.url),
+        new URL(`../../../${shell}/index.html`, import.meta.url),
       ).text();
       expect(html).toContain(`localStorage.getItem("${themeStorageKey}")`);
     }

@@ -9,12 +9,12 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import { type FormEvent, useState } from "react";
+import type { WorkspaceOrganization } from "../organizationState";
+import { AppLink } from "../shared/AppLink";
+import { useAction } from "../shared/useAction";
 import { AccountDeletion } from "./AccountDeletion";
 import { AccountSecurity } from "./AccountSecurity";
 import { saveDefaultOrganizationPreference } from "./defaultOrganization";
-import type { WorkspaceOrganization } from "./organizationState";
-import { AppLink } from "./shared/AppLink";
-import { useAction } from "./shared/useAction";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 
 export function AccountSettings({

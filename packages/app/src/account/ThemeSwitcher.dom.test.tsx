@@ -7,7 +7,7 @@ import {
   it,
 } from "bun:test";
 import { act } from "react";
-import { installDom } from "./testing/dom";
+import { installDom } from "../testing/dom";
 import { themeStorageKey } from "./theme";
 
 const {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
+import { installDom } from "../testing/dom";
+import { useDismissDialogsOnWorkspaceChange } from "../workspace/navigationGuard";
 import { AccountSecurity } from "./AccountSecurity";
-import { installDom } from "./testing/dom";
-import { useDismissDialogsOnWorkspaceChange } from "./workspace/navigationGuard";
 
 // Mounts the real security page with the app's dialog host, so the
 // confirmations guard the actual MFA requests.

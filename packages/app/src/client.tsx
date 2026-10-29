@@ -6,7 +6,7 @@ import { App } from "./App";
 import { type AppHost, configureHost } from "./host";
 import { AppBoundary } from "./workspace/AppBoundary";
 import "./styles/app.css";
-import { startThemeSync } from "./theme";
+import { startThemeSync } from "./account/theme";
 
 /** Renders the workspace into the shell's #root with its host services. */
 export function renderApp(host: AppHost = {}, notices?: ReactNode) {

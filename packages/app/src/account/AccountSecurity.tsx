@@ -8,11 +8,11 @@ import {
 } from "@balebase/ui/react";
 import { QRCodeSVG } from "qrcode.react";
 import { type FormEvent, useState } from "react";
-import { authClient } from "./shared/authClient";
-import { throwIfRefused } from "./shared/errors";
-import { saveFile } from "./shared/saveFile";
-import { useAction } from "./shared/useAction";
-import { useClipboard } from "./shared/useClipboard";
+import { authClient } from "../shared/authClient";
+import { throwIfRefused } from "../shared/errors";
+import { saveFile } from "../shared/saveFile";
+import { useAction } from "../shared/useAction";
+import { useClipboard } from "../shared/useClipboard";
 
 interface TotpSetup {
   backupCodes: string[];

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { lockOfflineWorkspace } from "./offlineStore";
-import { authClient } from "./shared/authClient";
-import { throwIfRefused } from "./shared/errors";
+import { lockOfflineWorkspace } from "../offlineStore";
+import { authClient } from "../shared/authClient";
+import { throwIfRefused } from "../shared/errors";
 
 export interface AccountSession {
   token: string;

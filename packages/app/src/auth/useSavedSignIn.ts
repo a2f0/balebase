@@ -1,5 +1,5 @@
 import { type FormEvent, useRef } from "react";
-import { nativeHost } from "./host";
+import { nativeHost } from "../host";
 
 /** Keeps autofill provenance only for this form's lifetime, never in storage. */
 export function useSavedSignIn() {

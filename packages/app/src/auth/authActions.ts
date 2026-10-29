@@ -1,8 +1,8 @@
+import { nativeHost } from "../host";
+import { authClient } from "../shared/authClient";
+import { authCallbackUrl } from "../shared/config";
+import { throwIfRefused } from "../shared/errors";
 import type { AuthMode } from "./AuthFields";
-import { nativeHost } from "./host";
-import { authClient } from "./shared/authClient";
-import { authCallbackUrl } from "./shared/config";
-import { throwIfRefused } from "./shared/errors";
 
 export type AuthenticationAction = "sign-in" | "sign-up";
 

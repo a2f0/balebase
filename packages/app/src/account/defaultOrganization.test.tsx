@@ -1,8 +1,8 @@
 import { describe, expect, it, mock } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { installFetch } from "../testing/fetch";
 import { AccountSettings } from "./AccountSettings";
 import { saveDefaultOrganizationPreference } from "./defaultOrganization";
-import { installFetch } from "./testing/fetch";
 
 const respond = installFetch();
 
