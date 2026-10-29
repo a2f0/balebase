@@ -100,43 +100,10 @@ app.all("/api/auth/*", (context) =>
   ).handler(context.req.raw),
 );
 
-app.get("/", (context) =>
-  context.json({ name: "balebase-api", documentation: "/api" }),
-);
+app.get("/", (context) => context.json({ name: "balebase-api" }));
 
 app.get("/health", (context) =>
   context.json({ status: "ok", timestamp: new Date().toISOString() }),
-);
-
-app.get("/api", (context) =>
-  context.json({
-    endpoints: {
-      adminAuditTemplates: "/api/admin/audit-templates",
-      adminJobs: "/api/admin/jobs",
-      adminOrganizations: "/api/admin/organizations",
-      adminUsers: "/api/admin/users",
-      accountSettings: "/api/account-settings",
-      apiKeys: "/api/organization-settings/api-keys",
-      activity: "/api/activity",
-      issues: "/api/issues",
-      audits: "/api/audits",
-      billing: "/api/billing",
-      businesses: "/api/businesses",
-      contracts: "/api/contracts",
-      equipment: "/api/equipment",
-      employeeForms: "/api/employee-forms",
-      finance: "/api/finance",
-      inbox: "/api/inbox",
-      libraryFolders: "/api/library/folders",
-      mcp: "/mcp",
-      objects: "/api/objects",
-      organizationGroups: "/api/organization-groups",
-      organizationSettings: "/api/organization-settings",
-      session: "/api/me",
-      signing: "/api/signing/:token",
-      health: "/health",
-    },
-  }),
 );
 
 app.get("/api/me", requireAuth, (context) => {

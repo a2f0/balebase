@@ -6,7 +6,6 @@ import { app } from "./app";
 // sign, and the organization leave hook in front of Better Auth.
 const uncontracted = new Set([
   "GET /",
-  "GET /api",
   "GET /health",
   "POST /api/auth/organization/leave",
   "POST /api/billing/webhook",
