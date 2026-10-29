@@ -38,8 +38,7 @@ Use the `update-dependencies` skill installed from the pinned
 - Follow the [Astro major upgrade guide][astro] when changing compiler,
   Markdown, whitespace, or API behavior; verify image handling against the
   [AVIF advisory][astro-advisory] and the selected release.
-- [Commitlint 21][commitlint] runs on Bun here. Its header policy requires
-  Conventional Commits and a maximum of 50 characters; this repository does not
+- [Commitlint 21][commitlint] runs on Bun here; this repository does not
   parse its diagnostics.
 - [Lint-staged 17][lint-staged] runs on Bun here and requires Git 2.32.0.
   Configuration is in package.json, so the optional YAML dependency is not
@@ -135,13 +134,11 @@ integration requires local sockets; provider validation and TFLint require
 the installed provider/plugin runtime. An unavailable platform or service is
 a validation gap, even when unrelated checks pass.
 
-Use the `ship-pr` skill with `chore: update dependencies`. It bumps changed
-API/client packages, independently reviews each changed HEAD, and checks CI and
-the exact reviewed head against a fresh base before merging. Commits must be
-signed; pushes run the normal hooks. Preserve every gate when resuming a held
-upgrade. Keep the upgrade PR's ledger of selected and constrained dependencies,
-audits, checks, warnings, previews, review, merge, and deployment results there;
-promote only ongoing procedures or active constraints into this guide.
+Ship with the `ship-pr` skill and the title `chore: update dependencies`, and
+preserve every gate when resuming a held upgrade. Keep the upgrade PR's ledger
+of selected and constrained dependencies, audits, checks, warnings, previews,
+review, merge, and deployment results there; promote only ongoing procedures
+or active constraints into this guide.
 
 [stripe-js]: https://github.com/stripe/stripe-js/releases/tag/v10.0.0
 [better-auth]: https://www.better-auth.com/docs/guides/1-7-upgrade-guide
