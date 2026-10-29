@@ -48,109 +48,130 @@ caller, fixture, and Turbo input together when relocating a script. Reusable
 Git, GitHub, hook, and validation-report mechanics belong in the pinned
 agent-tool, with repository policy in `agent-tool.json`.
 
-`packages/app` holds every screen and never imports Capacitor. A shell renders
-it with `renderApp` from `@balebase/app/client`, passing the host services in
-`src/host.ts`; the native shell supplies its WebView origin, hosted app URL, and
-share-sheet saver there.
+## Use the shared pieces
 
-In the app, a screen such as `Finance.tsx` owns loading and mutations.
-`FinanceAccounts.tsx` renders connections and account selection;
-`FinanceTransactionHistory.tsx` owns transaction rows and annotation forms.
-`financeFormat.ts` formats amounts. Follow those concrete responsibilities
-when a screen needs to be split.
+Reach for these before writing a helper; each line names the file that owns
+it.
 
-Load with `useLoad`, mutate with `useAction`, and show errors with
-`errorMessage` from `src/errors.ts` or `ErrorToast`. Page cursor lists with
-`useCursorPages` and `InfiniteScroll`.
+### Contract (`packages/validators/src`)
 
-Build paths with the `src/workspacePaths.ts` helpers, read a route's record
-ID with `recordIdForPath`, and link with `AppLink`. A new workspace section
-needs a route in `src/workspaceRoutes.tsx` and a page and sidebar item in
-`WorkspaceShell.tsx`. Format dates with `src/labels.ts`, using
-`formatCalendarDate` for YYYY-MM-DD days, and roles with `hasRole` and
-`formatRoles` from `src/organizationState.ts`.
+- Each route is defined once, as zod schemas for its query, body, and
+  response; to add one, define it in the area's validators file, send its
+  response with `respond`, and add an endpoint to the area's client.
+- `rules.ts` holds zod-free limits and allowed values that the app imports for
+  form limits and options; issue priorities and title, description, and image
+  limits are in `issueRules.ts`.
+- Build body and query schemas from those rules and the fields in `fields.ts`,
+  such as `requiredText`, `optionalText`, `calendarDate`, and `PersonSchema`,
+  each carrying the message for the rule it enforces.
+- Checklist section and item IDs are exact strings: parse them with
+  `ChecklistIdSchema`, which never trims them.
+- Offline receipts hash the parsed operation, so never change how
+  `OfflineOperationSchema` in `offline.ts` parses or normalizes one.
+- Each area client in `@balebase/api-client` lists its endpoints typed by the
+  contract, so a disagreement fails to compile and zod stays out of the app
+  bundle; a refused request throws `ApiError` with the API's message, `code`,
+  and `response`.
 
-Use `Select` from `@balebase/ui/react` for form dropdowns, with `Field` or an
-associated label. Compact inline controls can use `aria-label`. `Select`
-applies the shared control styles and forwards native select
-props, including refs, validation, and change events. Use `className="inputSm"`
-for compact controls; native keyboard and mobile pickers remain available.
+### API (`packages/api/src`)
 
-Every API call goes through `api`, the `ApiClient` in `src/apiClient.ts`. The
-contract in `@balebase/validators` defines each route once, as zod schemas
-for its query, body, and response. The API sends each JSON response with
-`respond(context, route, body)`, which types the body by the contract. Each
-area client in `@balebase/api-client` lists the endpoints it calls: a route's
-method, path, and body kind, typed by the contract, so a disagreement fails to
-compile and zod stays out of the app bundle. A refused request throws an
-`ApiError` with the API's message, code, and response. Under `bun test`,
-`respond` checks each response against its schema and fails the test on a
-mismatch, and `packages/api/src/contract.test.ts` checks that the API serves
-exactly the contract's routes. To add a route, define it in the area's
-validators file, send its response with `respond`, and add an endpoint and
-method to the area's client.
+- Send JSON with `respond(context, route, body)`, and read input with
+  `readBody(context, route, message)` and `readQuery` from `respond.ts`, which
+  answer 400 with the first broken rule's message; only checks that need the
+  database, the date, or other server state stay in handlers.
+- Under `bun test`, `respond` fails a test whose response breaks its schema,
+  and `contract.test.ts` checks that the API serves exactly the contract's
+  routes.
+- Type routers and contexts with `ApiEnv` from `authMiddleware.ts`.
+- Gate owner- and admin-only routes with `requireManager()`, or branch on
+  `canManage(context)`, from `organizationMembers.ts`.
+- Mount platform admin routers below `/api/admin`, where `app.ts` applies the
+  one `requireAuth` and `requireRole("admin")` guard.
+- A mounted router's `onError` replaces the app's, so a router with its own
+  must end in `respondToUnexpectedError` from `unexpectedError.ts`, or its
+  failures go unreported.
+- Read untrusted JSON that no contract schema covers with `isRecord` from
+  `jsonInput.ts`.
+- Send mail with `sendMail` from `mailSender.ts`, which names the sender with
+  `productName`.
+- Read plan limits with `organizationPlanLimits(env, organizationId)` from
+  `billingEntitlements.ts`; checkout, subscriptions, seats, the webhook,
+  retention, and deletion each have a `billing*.ts` module.
+- Signing links, signer order, recipient notices, and completion
+  (`notifyRecipients`, `firstSigners`, `advanceContract`) live in
+  `contractWorkflow.ts`; `contractRecords.ts` holds the row queries.
+- Page lists with `cursorPagination.ts`: query one extra row in a stable order
+  (a date plus a unique ID for date lists), let `cursorPage` trim it and derive
+  the opaque cursor, and filter and authorize in the query before pagination;
+  clients treat cursors as opaque.
+- Read uploads and webhook bodies with `readBoundedForm` and
+  `readBoundedRequest` from `storage.ts`, which refuse an oversized body while
+  it streams, and serve stored files with `storedDownload`, or an object
+  already read with `downloadResponse` (`contentDisposition` builds its
+  header).
+- Write every new upload with `trackedPut`, which queues its key for cleanup
+  before the bytes reach R2; the row that references it must hold
+  `uploadStillQueued`, and a migration trigger then deletes the queued record.
+- Each MCP tool in `mcp*Tools.ts` names its contract route, and
+  `mcpToolSchema.ts` generates its arguments from the route's path, query, and
+  body; a tool adds a title, a description, argument `descriptions` (a dotted
+  name such as `recipients.email` reaches inside one), `omit` for optional
+  fields it leaves out, and `require` for optional fields it must insist on,
+  such as `expectedCurrentVersion`.
+- The MCP catalog tests in `apiKeys.test.ts` fail when a tool's route is not
+  served or its arguments drift from the route's.
+- Issues are created in `issues.ts` (general) and `audits.ts` (audit-specific)
+  and replayed by `offlineRecords.ts`; they share the `issues` table and its
+  activity triggers, so change a field in both route families and the offline
+  operation schema, after reading the
+  [issue](docs/product.md#issues-and-transaction-activity) and
+  [offline](docs/product.md#offline-work) behavior.
 
-Request rules live in the contract too. `packages/validators/src/rules.ts`
-holds limits and allowed values as plain constants without zod, so the app
-imports them for its form limits and options; issue rules sit beside it in
-`issueRules.ts`. Route body and query schemas are built
-from those constants and the shared field schemas in `fields.ts`, such as
-`requiredText`, `optionalText`, and `calendarDate`, and carry the message for
-each rule they enforce. A handler reads its body with
-`readBody(context, route, message)` and its query with `readQuery` from
-`respond.ts`; both answer 400 with the first broken rule's message. Only
-checks that need the database, the date, or other server state, such as
-whether a record exists, an assignee is still a member, or a version is
-current, stay in the API.
+### Database (`packages/api/migrations`)
 
-MCP tools call REST routes with the caller's API key. Each entry in a
-`packages/api/src/mcp*Tools.ts` list names its contract route, which sets the
-tool's method and path; its arguments are the route's path parameters plus
-its query and body fields, converted with `z.toJSONSchema`. A tool adds only
-a title, a description, `descriptions` for its arguments (a dotted name such
-as `recipients.email` reaches inside one), and an `omit` list for optional
-fields it leaves out. To add a tool, add such an entry for a route the API
-serves and describe every argument; the MCP tool catalog tests in
-`apiKeys.test.ts` fail when a tool's route is not served or its advertised
-arguments drift from the route's.
+- D1 counts rows that triggers write in `meta.changes`, and the test D1 does
+  too, so check a guarded write's count as zero or non-zero, never `!== 1`.
+- Migrations run before the new Worker is published
+  ([deploy production](docs/operations.md#deploy-production)), so a migration
+  must not drop a trigger, column, or constraint the previous Worker relies
+  on; drop it a release later.
+- Built-in audit templates are JSON in `packages/api/auditLibrary`, published
+  by generated migrations; see
+  [validation and updates](docs/residential-audit-library.md#validation-and-updates).
 
-Cursor-paginated API lists use `packages/api/src/cursorPagination.ts`. Query one
-extra row in a stable order, then use `cursorPage` to trim the page and derive
-its continuation from the last visible row. Date-based lists sort by the date
-and a unique ID together and use the shared opaque cursor codec; the decoder
-also accepts the earlier JSON and base64 formats. Keep filters and authorization
-in each query before pagination, and treat returned cursors as opaque in clients.
+### App (`packages/app/src`)
 
-API routers share a few primitives. Type routers and contexts with `ApiEnv`
-from `authMiddleware.ts`. Gate owner- and admin-only routes with
-`requireManager()`, or branch on `canManage(context)`, from
-`organizationMembers.ts`. Mount platform admin routers below `/api/admin`,
-where `app.ts` applies the one `requireAuth` and `requireRole("admin")` guard.
-Read untrusted JSON that no contract schema covers yet with `isRecord` from
-`jsonInput.ts`, and send mail with `sendMail` from `mailSender.ts`, which
-names the sender with `productName`.
+- `packages/app` holds every screen and never imports Capacitor; a shell
+  renders it with `renderApp` from `@balebase/app/client`, passing the host
+  services in `host.ts`.
+- Call the API through `api`, the `ApiClient` in `apiClient.ts`;
+  [API client onboarding](docs/api-client.md) covers other hosts.
+- Load with `useLoad`, mutate with `useAction`, and page cursor lists with
+  `useCursorPages` and `InfiniteScroll`.
+- Show errors with `errorMessage` from `errors.ts` or with `ErrorToast`.
+- Add a workspace section with a route in `workspaceRoutes.tsx` and a page and
+  sidebar item in `WorkspaceShell.tsx`.
+- Build paths with the `workspacePaths.ts` helpers, match a section with
+  `isWithin`, read a route's record ID with `recordIdForPath`, and link with
+  `AppLink` or `AppButtonLink`.
+- Format dates with `labels.ts`, using `formatCalendarDate` for YYYY-MM-DD
+  days, and roles with `hasRole` and `formatRoles` from `organizationState.ts`.
+- Use `Select` from [`@balebase/ui/react`](packages/ui/README.md#react-primitives)
+  for dropdowns, labelled by `Field` or an associated label; compact inline
+  controls can use `aria-label` and `className="inputSm"`.
+- Every issue form renders `IssueFields` from `IssueForm.tsx`.
+- Split a screen as Finance is split: `Finance.tsx` owns loading and
+  mutations, `FinanceAccounts.tsx` and `FinanceTransactionHistory.tsx` render
+  their parts, and `financeFormat.ts` formats amounts.
 
-File handling lives in `storage.ts`. Read uploads and webhook bodies with
-`readBoundedForm` and `readBoundedRequest`, which refuse an oversized body
-while it streams, and serve stored files with `storedDownload`. Write every
-new upload with `trackedPut`: it queues the key for the deleted-object cleanup
-before the bytes reach R2. The row that references the upload must hold
-`uploadStillQueued`, and a migration trigger deletes the queued record when
-that row is written.
+### Native and diagnostics
 
-See [API client onboarding](docs/api-client.md) for a public-import example,
-browser credentials and CORS, the shared wrapper, and native host assumptions.
-
-For issue changes, start with the [issue behavior](docs/product.md#issues-and-transaction-activity)
-and [offline behavior](docs/product.md#offline-work). Online
-creation lives in `packages/api/src/issues.ts` (general issues) and
-`audits.ts` (audit-specific routes); offline replay uses
-`offlineRecords.ts`. They share the `issues` table and its activity triggers.
-Check both route families and the offline operation schema when changing a field.
-Issue priorities, title and description limits, and image limits live in the
-zod-free `packages/validators/src/issueRules.ts`, which the API and the app's
-online and offline paths all import; every app issue form renders
-`IssueFields` from `IssueForm.tsx`.
+- `packages/app-capacitor/nativeReleaseTargets.json` defines each store tier
+  once, and `fastlane/lib/release_build_number.rb` picks both stores' build
+  numbers; see [releases](packages/app-capacitor/README.md#releases).
+- `@balebase/diagnostics` holds the private Sentry client options
+  (`clientOptions.ts`), `releaseTier` (`config.ts`), and the one click-tracking
+  module (`clickTracking.ts`).
 
 `bun run mobile:sync` writes the native images into both checked-in Capacitor
 projects and restores the Gradle wrapper JAR from the pinned CLI template.
@@ -178,21 +199,34 @@ fixtures and test bindings; they do not need `.secrets`, Wrangler login, local
 migrations, or a running API. Installing dependencies is still required.
 
 Build API tests from `packages/api/src/testing/`, not local D1 adapters or
-binding literals. `createTestDatabase` applies every migration with foreign
-keys on; only migration tests stop `before` one and call `applyMigrations`.
-`toD1` serves it as D1 with atomic batches, and `queryHooks` inject faults
-that fail the test if they never run. Use `testBindings`, `testApp`, the
-`seed*` builders and `insertBilling` for rows, `requester` for JSON requests,
-and `withFetch` for outbound HTTP.
+binding literals:
 
-App test names say where a test runs. In `packages/app/src`, `*.test.ts`
-checks plain logic and `*.test.tsx` renders on the server with
-`renderToStaticMarkup`. `*.dom.test.ts` and `*.dom.test.tsx` mount in
-happy-dom through `installDom` from `src/testing/dom.ts`, which also stubs
-`fetch` per test; other tests stub it with `installFetch` from
-`src/testing/fetch.ts`. `src/testFileNames.test.ts` fails when a file's name
-and environment disagree. Tests in `packages/app/browser` run in Chrome
-through `bun run --cwd packages/app test:browser`.
+- `createTestDatabase` (`database.ts`) applies every migration with foreign
+  keys on; only migration tests stop `before` one and call `applyMigrations`.
+- `toD1` (`d1.ts`) serves it as D1, with atomic batches and trigger-written
+  rows counted in `meta.changes`, and `queryHooks` inject faults that fail the
+  test if they never run.
+- `testBindings` (`bindings.ts`), `testApp` (`session.ts`), the `seed*`
+  builders and `insertBilling` (`seed.ts`), and `requester` and `withFetch`
+  (`http.ts`) supply bindings, a signed-in app, rows, JSON requests, and
+  outbound HTTP.
+- An area's shared builders live in its `*Fixture.ts`, such as
+  `billingFixture.ts`, and a module's tests sit beside it, as
+  `billingCheckout.test.ts` does.
+
+App test names say where a test runs, and `src/testFileNames.test.ts` fails
+when a file's name and environment disagree:
+
+- In `packages/app/src`, `*.test.ts` checks plain logic and `*.test.tsx`
+  renders on the server with `renderToStaticMarkup`.
+- `*.dom.test.ts` and `*.dom.test.tsx` mount in happy-dom through `installDom`
+  from `src/testing/dom.ts`, whose `respond` stubs `fetch` per test; hold
+  timers with `holdTimers` from the same file, and signal scrolling with
+  `IntersectionObserverFixture` from `src/testing/intersectionObserver.ts`.
+- Other tests stub `fetch` with the `respond` that `installFetch` from
+  `src/testing/fetch.ts` returns.
+- Tests in `packages/app/browser` run in Chrome through
+  `bun run --cwd packages/app test:browser`.
 
 `check:fast` runs Biome, Markdownlint, file-name checks, and all TypeScript
 checks. It needs only the installed JavaScript toolchain. It leaves dependency
@@ -276,6 +310,9 @@ Use a feature branch and a Conventional Commit subject, such as
 and signature policy in `agent-tool.json` and `commitlint.config.mts`. Run
 `bun run hooks:install` after cloning, after hook changes land, and after a
 merge returns the checkout to `main`; `bun run hooks:check` reports drift.
+After a PR is squash-merged, move a branch stacked on it with
+`git rebase --onto origin/main <old-base>`, where `<old-base>` is the commit
+the stacked branch was built on.
 
 For agent-assisted shipping, invoke the `ship-pr` skill, which applies the
 title, required-check, and version policy in `agent-tool.json`. Pushes run the
