@@ -1,174 +1,140 @@
-import { id, type McpTool, nullable, oneOf, text } from "./mcpToolSchema";
+import { inboxRoutes } from "@balebase/validators/inbox";
+import { libraryFoldersRoutes } from "@balebase/validators/libraryFolders";
+import { objectsRoutes } from "@balebase/validators/objects";
+import type { McpTool } from "./mcpToolSchema";
 
-const folderName = text("Folder name, unique in the library.", {
-  maxLength: 80,
-  minLength: 1,
-});
+const folderId = { id: "Folder id from list_library_folders." };
+const folderName = { name: "Folder name, unique in the library." };
+const fileId = { id: "File id from list_library_files." };
 
-const inboxFolder = oneOf(
-  "Which mailbox to read; defaults to inbox. Archived and trashed email is only found in its own folder.",
-  ["inbox", "archived", "trash"],
-);
+const inboxFolder = {
+  folder:
+    "Which mailbox to read; defaults to inbox. Archived and trashed email is only found in its own folder.",
+};
 
-const emailId = id("Email id from list_inbox_emails.");
+const emailId = { id: "Email id from list_inbox_emails." };
 
 export const libraryTools: McpTool[] = [
   {
     description:
       "Lists library folders with their file and linked email counts.",
-    method: "GET",
     name: "list_library_folders",
-    path: "/api/library/folders",
+    route: libraryFoldersRoutes.list,
     title: "List library folders",
   },
   {
     description: "Gets a library folder and the inbox emails linked to it.",
-    method: "GET",
+    descriptions: folderId,
     name: "get_library_folder",
-    params: { id: id("Folder id from list_library_folders.") },
-    path: "/api/library/folders/{id}",
+    route: libraryFoldersRoutes.get,
     title: "Get library folder",
   },
   {
-    body: { properties: { name: folderName }, required: ["name"] },
     description: "Creates a library folder.",
-    method: "POST",
+    descriptions: folderName,
     name: "create_library_folder",
-    path: "/api/library/folders",
+    route: libraryFoldersRoutes.create,
     title: "Create library folder",
   },
   {
-    body: { properties: { name: folderName }, required: ["name"] },
     description: "Renames a library folder.",
-    method: "PATCH",
+    descriptions: { ...folderId, ...folderName },
     name: "rename_library_folder",
-    params: { id: id("Folder id from list_library_folders.") },
-    path: "/api/library/folders/{id}",
+    route: libraryFoldersRoutes.rename,
     title: "Rename library folder",
   },
   {
     description:
       "Deletes a library folder. Its files move to the library root and its email links are removed.",
+    descriptions: folderId,
     destructive: true,
-    method: "DELETE",
     name: "delete_library_folder",
-    params: { id: id("Folder id from list_library_folders.") },
-    path: "/api/library/folders/{id}",
+    route: libraryFoldersRoutes.delete,
     title: "Delete library folder",
   },
   {
     description:
       "Lists up to 100 of the newest library files in one folder, or at the library root when folder is omitted. File contents are not returned.",
-    method: "GET",
+    descriptions: { folder: folderId.id },
     name: "list_library_files",
-    path: "/api/objects",
-    query: { folder: id("Folder id from list_library_folders.") },
+    route: objectsRoutes.list,
     title: "List library files",
   },
   {
-    body: {
-      properties: {
-        folderId: nullable(
-          text("Destination folder id, or null for the library root.", {
-            maxLength: 100,
-            minLength: 1,
-          }),
-        ),
-      },
-      required: ["folderId"],
-    },
     description: "Moves a library file into a folder or back to the root.",
-    method: "PATCH",
+    descriptions: {
+      ...fileId,
+      folderId: "Destination folder id, or null for the library root.",
+    },
     name: "move_library_file",
-    params: { id: id("File id from list_library_files.") },
-    path: "/api/objects/{id}",
+    route: objectsRoutes.move,
     title: "Move library file",
   },
   {
     description: "Permanently deletes a library file.",
+    descriptions: fileId,
     destructive: true,
-    method: "DELETE",
     name: "delete_library_file",
-    params: { id: id("File id from list_library_files.") },
-    path: "/api/objects/{id}",
+    route: objectsRoutes.delete,
     title: "Delete library file",
   },
   {
     description:
       "Lists up to 100 emails in the organization's shared inbox, archive, or trash, newest first, with the inbox's upload address.",
-    method: "GET",
+    descriptions: inboxFolder,
     name: "list_inbox_emails",
-    path: "/api/inbox",
-    query: { folder: inboxFolder },
+    route: inboxRoutes.list,
     title: "List inbox emails",
   },
   {
     description:
       "Reads one email: its text and HTML bodies, attachment list, and links to folders, equipment, and finance transactions.",
-    method: "GET",
+    descriptions: { ...emailId, ...inboxFolder },
     name: "get_inbox_email",
-    params: { id: emailId },
-    path: "/api/inbox/{id}",
-    query: { folder: inboxFolder },
+    route: inboxRoutes.get,
     title: "Get inbox email",
   },
   {
-    body: {
-      properties: {
-        targetId: text("Id of the folder, equipment, or transaction.", {
-          maxLength: 100,
-          minLength: 1,
-        }),
-        targetType: oneOf(
-          "What to link the email to. Finance transactions need the Finance capability.",
-          ["library_folder", "equipment", "finance_transaction"],
-        ),
-      },
-      required: ["targetType", "targetId"],
-    },
     description:
       "Links an email to a library folder, item of equipment, or finance transaction. Linking twice is harmless.",
-    method: "POST",
+    descriptions: {
+      ...emailId,
+      targetId: "Id of the folder, equipment, or transaction.",
+      targetType:
+        "What to link the email to. Finance transactions need the Finance capability.",
+    },
     name: "link_inbox_email",
-    params: { id: emailId },
-    path: "/api/inbox/{id}/links",
+    route: inboxRoutes.link,
     title: "Link inbox email",
   },
   {
     description: "Removes one link from an email.",
-    method: "DELETE",
+    descriptions: { ...emailId, linkId: "Link id from get_inbox_email." },
     name: "unlink_inbox_email",
-    params: {
-      id: emailId,
-      linkId: id("Link id from get_inbox_email."),
-    },
-    path: "/api/inbox/{id}/links/{linkId}",
+    route: inboxRoutes.unlink,
     title: "Unlink inbox email",
   },
   {
     description:
       "Archives an inbox email. Archived email keeps its attachments and links.",
-    method: "POST",
+    descriptions: emailId,
     name: "archive_inbox_email",
-    params: { id: emailId },
-    path: "/api/inbox/{id}/archive",
+    route: inboxRoutes.archive,
     title: "Archive inbox email",
   },
   {
     description:
       "Moves an email to Trash, where it can be restored for 30 days. Linked email cannot be trashed; archive it instead.",
-    method: "DELETE",
+    descriptions: emailId,
     name: "trash_inbox_email",
-    params: { id: emailId },
-    path: "/api/inbox/{id}",
+    route: inboxRoutes.delete,
     title: "Trash inbox email",
   },
   {
     description: "Moves an archived or trashed email back to the inbox.",
-    method: "POST",
+    descriptions: emailId,
     name: "restore_inbox_email",
-    params: { id: emailId },
-    path: "/api/inbox/{id}/restore",
+    route: inboxRoutes.restore,
     title: "Restore inbox email",
   },
 ];

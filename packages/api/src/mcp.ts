@@ -1,5 +1,6 @@
 import { productName } from "@balebase/ui/brand";
 import type { ApiKeyAccess } from "@balebase/validators/apiKeys";
+import type { Route } from "@balebase/validators/route";
 import {
   type CallToolResult,
   createMcpHandler,
@@ -14,7 +15,12 @@ import { contractTools } from "./mcpContractTools";
 import { financeTools } from "./mcpFinanceTools";
 import { issueTools } from "./mcpIssueTools";
 import { libraryTools } from "./mcpLibraryTools";
-import { type McpTool, toolAccess, toolInputSchema } from "./mcpToolSchema";
+import {
+  type McpTool,
+  type ToolInput,
+  toolAccess,
+  toolInput,
+} from "./mcpToolSchema";
 import { workspaceTools } from "./mcpWorkspaceTools";
 
 /** Runs a request through the API itself, with every route's own checks. */
@@ -30,6 +36,9 @@ export const mcpTools: McpTool[] = [
   ...libraryTools,
   ...financeTools,
 ];
+
+// Built once per isolate: every request creates its own server.
+const toolInputs = new Map(mcpTools.map((tool) => [tool, toolInput(tool)]));
 
 /**
  * Serves MCP over Streamable HTTP: the stateless 2026-07-28 revision and,
@@ -76,28 +85,25 @@ function createServer(access: ApiKeyAccess, forward: ForwardedRequest) {
       instructions: serverInstructions(access),
     },
   );
-  for (const tool of mcpTools) {
+  for (const [tool, input] of toolInputs) {
     const toolNeeds = toolAccess(tool);
     if (toolNeeds === "write" && access !== "write") continue;
+    const { method } = tool.route;
     server.registerTool(
       tool.name,
       {
         annotations: {
           destructiveHint: tool.destructive ?? false,
           idempotentHint:
-            tool.method === "GET" ||
-            tool.method === "PUT" ||
-            tool.method === "DELETE",
+            method === "GET" || method === "PUT" || method === "DELETE",
           openWorldHint: tool.openWorld ?? false,
           readOnlyHint: toolNeeds === "read",
         },
         description: tool.description,
-        inputSchema: fromJsonSchema<Record<string, unknown>>(
-          toolInputSchema(tool),
-        ),
+        inputSchema: fromJsonSchema<Record<string, unknown>>(input.schema),
         title: tool.title,
       },
-      (args) => callTool(tool, args, forward),
+      (args) => callTool(tool, input, args, forward),
     );
   }
   return server;
@@ -116,10 +122,13 @@ function serverInstructions(access: ApiKeyAccess) {
 
 async function callTool(
   tool: McpTool,
+  input: ToolInput,
   args: Record<string, unknown>,
   forward: ForwardedRequest,
 ): Promise<CallToolResult> {
-  const response = await forward.dispatch(toolRequest(tool, args, forward));
+  const response = await forward.dispatch(
+    toolRequest(tool.route, input, args, forward),
+  );
   const text = await response.text();
   if (!response.ok) {
     return {
@@ -135,22 +144,24 @@ async function callTool(
 }
 
 function toolRequest(
-  tool: McpTool,
+  route: Route,
+  input: ToolInput,
   args: Record<string, unknown>,
   forward: ForwardedRequest,
 ) {
-  const path = tool.path.replace(/\{(\w+)\}/g, (_match, name: string) =>
+  const path = route.path.replace(/:(\w+)/g, (_match, name: string) =>
     encodeURIComponent(String(args[name])),
   );
   const url = new URL(path, forward.base);
-  for (const name of Object.keys(tool.query ?? {})) {
-    const value = args[name];
-    if (value !== undefined) url.searchParams.set(name, String(value));
+  for (const name of input.query) {
+    for (const value of [args[name] ?? []].flat()) {
+      url.searchParams.append(name, String(value));
+    }
   }
   const headers = new Headers({ Authorization: forward.authorization });
-  if (!tool.body) return new Request(url, { headers, method: tool.method });
+  if (!input.body) return new Request(url, { headers, method: route.method });
   const body = Object.fromEntries(
-    Object.keys(tool.body.properties)
+    input.body
       .filter((name) => args[name] !== undefined)
       .map((name) => [name, args[name]]),
   );
@@ -158,7 +169,7 @@ function toolRequest(
   return new Request(url, {
     body: JSON.stringify(body),
     headers,
-    method: tool.method,
+    method: route.method,
   });
 }
 

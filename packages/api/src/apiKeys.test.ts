@@ -1,10 +1,13 @@
 import { describe, expect, it } from "bun:test";
+import type { Route } from "@balebase/validators/route";
+import { routes } from "@balebase/validators/routes";
+import { z } from "zod";
 import { activityBatch } from "./activity";
 import { apiKeyRouteDenial } from "./apiKeys";
 import { app } from "./app";
 import { createAuth } from "./auth";
 import { mcpTools } from "./mcp";
-import { toolAccess, toolInputSchema } from "./mcpToolSchema";
+import { type McpTool, toolAccess } from "./mcpToolSchema";
 import { testBindings } from "./testing/bindings";
 import { toD1 } from "./testing/d1";
 import { createTestDatabase } from "./testing/database";
@@ -24,7 +27,7 @@ interface ApiKey {
 interface ToolListing {
   tools: Array<{
     annotations?: { destructiveHint?: boolean; readOnlyHint?: boolean };
-    inputSchema: { properties?: Record<string, unknown> };
+    inputSchema: { properties?: Record<string, unknown>; required?: string[] };
     name: string;
   }>;
 }
@@ -996,6 +999,26 @@ describe("MCP endpoint", () => {
     expect(deleted.content[0]?.text).toBe("Done.");
   });
 
+  it("repeats a query parameter for each value in a list argument", async () => {
+    const fixture = await createFixture();
+    const { token } = await fixture.createKey("read");
+    const overview = (accountId: string[]) =>
+      fixture.callTool<{ content: Array<{ text: string }>; isError?: boolean }>(
+        token,
+        "get_finance_overview",
+        { accountId, year: "2026" },
+      );
+    const ids = Array.from({ length: 201 }, (_, index) => `account-${index}`);
+    const allowed = await overview(ids.slice(0, 200));
+    expect(allowed.isError).toBeUndefined();
+    expect(JSON.parse(allowed.content[0]?.text ?? "").transactions).toEqual([]);
+    // The listing refuses more than 200 accounts, so this only fails if each
+    // id arrived as its own accountId parameter.
+    const tooMany = await overview(ids);
+    expect(tooMany.isError).toBe(true);
+    expect(tooMany.content[0]?.text).toContain("status 400");
+  });
+
   it("summarizes audit forms without their full definitions", async () => {
     const fixture = await createFixture();
     const { token } = await fixture.createKey("read");
@@ -1016,40 +1039,131 @@ describe("MCP endpoint", () => {
 });
 
 describe("MCP tool catalog", () => {
-  it("names each tool once and declares every argument", () => {
+  const contractRoutes = new Set<Route>(
+    Object.values(routes).flatMap((area) => Object.values(area)),
+  );
+  const served = new Set(
+    app.routes.map(({ method, path }) => `${method} ${path}`),
+  );
+
+  it("names each tool once", () => {
     const names = mcpTools.map(({ name }) => name);
     expect(new Set(names).size).toBe(names.length);
+    for (const name of names) expect(name).toMatch(/^[a-z][a-z_]{2,63}$/);
+  });
+
+  it("calls a contract route the API serves", () => {
     for (const tool of mcpTools) {
-      expect(tool.name).toMatch(/^[a-z][a-z_]{2,63}$/);
-      const placeholders = [...tool.path.matchAll(/\{(\w+)\}/g)].map(
-        (match) => match[1] ?? "",
+      const { method, path } = tool.route;
+      expect({
+        contract: contractRoutes.has(tool.route),
+        served: served.has(`${method} ${path}`),
+        tool: tool.name,
+      }).toEqual({ contract: true, served: true, tool: tool.name });
+    }
+  });
+
+  it("advertises each route's own arguments, every one described", async () => {
+    const fixture = await createFixture();
+    const { token } = await fixture.createKey("write");
+    const { tools } = await fixture.modernTools(token);
+    expect(tools.map(({ name }) => name).sort()).toEqual(
+      mcpTools.map(({ name }) => name).sort(),
+    );
+    for (const tool of mcpTools) {
+      const { inputSchema } =
+        tools.find(({ name }) => name === tool.name) ?? {};
+      expect({
+        schema: withoutDescriptions(inputSchema),
+        tool: tool.name,
+      }).toEqual({ schema: routeArguments(tool), tool: tool.name });
+      const undescribed = Object.entries(inputSchema?.properties ?? {})
+        .filter(([, field]) => !(field as { description?: string }).description)
+        .map(([name]) => name);
+      expect({ tool: tool.name, undescribed }).toEqual({
+        tool: tool.name,
+        undescribed: [],
+      });
+    }
+  });
+
+  it("leaves out only optional route fields", () => {
+    for (const tool of mcpTools) {
+      const fields = [tool.route.query, tool.route.body].flatMap((schema) =>
+        schema instanceof z.ZodType
+          ? [z.toJSONSchema(schema, { io: "input" })]
+          : [],
       );
-      expect(Object.keys(tool.params ?? {}).sort()).toEqual(
-        placeholders.sort(),
-      );
-      const argumentNames = [
-        ...Object.keys(tool.params ?? {}),
-        ...Object.keys(tool.query ?? {}),
-        ...Object.keys(tool.body?.properties ?? {}),
-      ];
-      expect(new Set(argumentNames).size).toBe(argumentNames.length);
-      for (const required of tool.body?.required ?? []) {
-        expect(Object.keys(tool.body?.properties ?? {})).toContain(required);
+      for (const name of tool.omit ?? []) {
+        expect({
+          offered: fields.some((field) => name in (field.properties ?? {})),
+          required: fields.some((field) => field.required?.includes(name)),
+          tool: `${tool.name}.${name}`,
+        }).toEqual({
+          offered: true,
+          required: false,
+          tool: `${tool.name}.${name}`,
+        });
       }
-      expect(toolInputSchema(tool)).toMatchObject({ type: "object" });
     }
   });
 
   it("only offers routes the key's access level can call", () => {
     for (const tool of mcpTools) {
-      const path = tool.path.replace(/\{\w+\}/g, "id");
+      const path = tool.route.path.replace(/:\w+/g, "id");
       expect({
-        denial: apiKeyRouteDenial(path, tool.method, toolAccess(tool)),
+        denial: apiKeyRouteDenial(path, tool.route.method, toolAccess(tool)),
         tool: tool.name,
       }).toEqual({ denial: undefined, tool: tool.name });
     }
   });
 });
+
+/**
+ * What a tool should advertise for its route, without descriptions: path
+ * parameters, then the query and body fields as zod converts them.
+ */
+function routeArguments(tool: McpTool) {
+  const { body, path, query } = tool.route;
+  const params = [...path.matchAll(/:(\w+)/g)].map(([, name]) => name ?? "");
+  const omitted = new Set(tool.omit);
+  const fields = [query, body].flatMap((schema) =>
+    schema instanceof z.ZodType
+      ? [z.toJSONSchema(schema, { io: "input" })]
+      : [],
+  );
+  return {
+    additionalProperties: false,
+    properties: Object.fromEntries([
+      ...params.map((name) => [name, { minLength: 1, type: "string" }]),
+      ...fields
+        .flatMap((field) => Object.entries(field.properties ?? {}))
+        .filter(([name]) => !omitted.has(name)),
+    ]),
+    required: [
+      ...params,
+      ...fields
+        .flatMap((field) => field.required ?? [])
+        .filter((name) => !omitted.has(name)),
+    ],
+    type: "object",
+  };
+}
+
+/** Drops `description` keywords, keeping fields that happen to share the name. */
+function withoutDescriptions(value: unknown, fields = false): unknown {
+  if (Array.isArray(value))
+    return value.map((item) => withoutDescriptions(item));
+  if (typeof value !== "object" || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => fields || key !== "description")
+      .map(([key, entry]) => [
+        key,
+        withoutDescriptions(entry, !fields && key === "properties"),
+      ]),
+  );
+}
 
 async function createFixture() {
   const database = createTestDatabase();
