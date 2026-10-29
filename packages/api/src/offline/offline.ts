@@ -62,10 +62,11 @@ offline.get("/forms", async (context) => {
       context.env.DB,
       scope.data.organizationId,
     ),
-    // Only forms listed here: a form the organization can no longer use stays
-    // turned on for its projects but is not offered.
+    // Only published forms listed here: a form the organization can no
+    // longer use, or one that is a draft or unpublished, stays turned on for
+    // its projects but is not downloaded.
     projectFormIds: templates.results
-      .filter((row) => onProjects.has(row.id))
+      .filter((row) => row.status === "published" && onProjects.has(row.id))
       .map((row) => row.id),
   });
 });

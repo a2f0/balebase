@@ -1,6 +1,6 @@
 import { projectsRoutes } from "@balebase/validators/projects";
 import { type Context, Hono } from "hono";
-import { visibleTemplateFilter } from "../audits/auditTemplates";
+import { projectFormFilter } from "../audits/auditTemplates";
 import type { ApiEnv } from "../auth/apiEnv";
 import {
   canManage,
@@ -317,7 +317,7 @@ projects.put("/:id/forms/:templateId", requireManager(), async (context) => {
     context.req.param("templateId"),
   );
   if (!form) return formNotFound(context);
-  // The form must still be one the organization can use when this commits.
+  // The form must still be published and usable when this commits.
   const canEnable = {
     bindings: [project.id, organizationId, form.id, organizationId],
     sql: `${projectExists} AND EXISTS (
@@ -325,7 +325,7 @@ projects.put("/:id/forms/:templateId", requireManager(), async (context) => {
       JOIN audit_template_versions AS version
         ON version.template_id = family.id
        AND version.version = family.current_version
-      WHERE family.id = ? AND ${visibleTemplateFilter()})`,
+      WHERE family.id = ? AND ${projectFormFilter()})`,
   };
   const [, inserted] = await activityBatch(database, context.get("apiKey"), [
     projectEvent(

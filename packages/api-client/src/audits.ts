@@ -5,6 +5,7 @@ import type {
   AuditStatus,
   AuditTemplate,
   auditsRoutes,
+  TemplatePublication,
 } from "@balebase/validators/audits";
 import { endpoint } from "./endpoint";
 import type { Transport } from "./transport";
@@ -153,9 +154,13 @@ export function auditsApi(transport: Transport) {
         query: { cursor },
       });
     },
-    updateTemplate(template: AuditTemplate) {
+    /**
+     * Saves the editor's copy of an organization form, publishing or
+     * unpublishing it when asked.
+     */
+    updateTemplate(template: AuditTemplate, status?: TemplatePublication) {
       return transport.call(endpoints.updateTemplate, {
-        body: templateSaveBody(template),
+        body: { ...templateSaveBody(template), status },
         params: { id: template.id },
       });
     },

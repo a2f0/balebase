@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { auditsRoutes } from "./audits";
+import { AuditTemplateListSchema, auditsRoutes } from "./audits";
 import { PersonSchema } from "./fields";
 import { issueLimits, issuePriorities } from "./issueRules";
 import { route } from "./route";
@@ -49,11 +49,11 @@ export const offlineRoutes = {
     method: "GET",
     path: "/api/offline/forms",
     query: OfflineScopeSchema,
-    response: auditsRoutes.listTemplates.response.extend({
+    response: AuditTemplateListSchema.extend({
       members: z.array(PersonSchema),
       /**
-       * The listed forms turned on for projects the person is a member of.
-       * The app downloads these when they sign in.
+       * The listed forms turned on for projects the person is a member of,
+       * while published. The app downloads these when they sign in.
        */
       projectFormIds: z.array(z.string()),
     }),

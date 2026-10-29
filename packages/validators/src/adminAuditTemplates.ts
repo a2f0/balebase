@@ -2,19 +2,21 @@ import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import {
   AuditTemplateCreateSchema,
-  AuditTemplateListSchema,
   AuditTemplateResponseSchema,
   AuditTemplateSaveSchema,
+  AuditTemplateSummaryListSchema,
   AuditTemplateVersionListSchema,
+  TemplatePublicationSchema,
 } from "./audits";
 import { route } from "./route";
 
 /** Global audit templates, which root admins manage outside any organization. */
 export const adminAuditTemplatesRoutes = {
+  /** Audit counts cover every organization. */
   list: route({
     method: "GET",
     path: "/api/admin/audit-templates",
-    response: AuditTemplateListSchema,
+    response: AuditTemplateSummaryListSchema,
   }),
   create: route({
     method: "POST",
@@ -46,17 +48,10 @@ export const adminAuditTemplatesRoutes = {
   update: route({
     method: "PUT",
     path: "/api/admin/audit-templates/:id",
-    body: AuditTemplateSaveSchema.extend({
-      /** Publishes or unpublishes the form; its status is kept otherwise. */
-      status: z
-        .enum(["published", "unpublished"], {
-          error: "Template status is invalid.",
-        })
-        .optional(),
-    }),
+    body: AuditTemplateSaveSchema.extend({ status: TemplatePublicationSchema }),
     response: AuditTemplateResponseSchema,
   }),
-  /** Discards a draft, which then leaves Global Audits. */
+  /** Discards a draft or unpublished form, which then leaves Global Audits. */
   discard: route({
     method: "DELETE",
     path: "/api/admin/audit-templates/:id",

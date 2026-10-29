@@ -87,7 +87,10 @@ export function adminAuditTemplatesApi(transport: Transport) {
         params: { id: template.id },
       });
     },
-    /** Discards a draft, unless it changed since the editor loaded it. */
+    /**
+     * Discards a draft or unpublished form, unless it changed since the
+     * editor loaded it.
+     */
     discard(template: AuditTemplate) {
       return transport.call(endpoints.discard, {
         body: { expectedCurrentVersion: template.currentVersion },

@@ -19,6 +19,7 @@ import type {
   AuditTemplateItem,
   AuditTemplateSection,
   AuditTemplateVersion,
+  TemplatePublication,
 } from "@balebase/validators/audits";
 import { auditLimits } from "@balebase/validators/rules";
 import { type ReactNode, useCallback, useState } from "react";
@@ -33,10 +34,15 @@ import {
   auditTemplatePath,
   globalAuditsPath,
 } from "../workspace/workspacePaths";
-import { GlobalAuditControls } from "./GlobalAuditControls";
+import {
+  GlobalAuditControls,
+  PublicationControls,
+} from "./GlobalAuditControls";
 import { moveEntry, useReorderDrag } from "./useReorderDrag";
 
 interface BuilderProps {
+  /** Whether the person can publish and unpublish the organization's forms. */
+  canPublish?: boolean;
   id: string;
   manageGlobal?: boolean;
   onNavigate: (pathname: string) => void;
@@ -70,18 +76,19 @@ function loadVersions(id: string, manageGlobal: boolean) {
 }
 
 /**
- * Saves the editor's copy as the template's next version. Only Global Audits
- * publishes; an organization's edits to a global form become a form of its own.
+ * Saves the editor's copy as the template's next version, publishing or
+ * unpublishing it when asked. An organization's edits to a global form
+ * become a form of its own.
  */
 function saveTemplate(
   template: AuditTemplate,
   manageGlobal: boolean,
-  status?: "published" | "unpublished",
+  status: TemplatePublication,
 ) {
   if (manageGlobal) return api.adminAuditTemplates.update(template, status);
   return template.scope === "global"
     ? api.audits.copyTemplate(template)
-    : api.audits.updateTemplate(template);
+    : api.audits.updateTemplate(template, status);
 }
 
 function useTemplateBuilder({
@@ -121,7 +128,7 @@ function useTemplateBuilder({
     });
   }
 
-  async function save(status?: "published" | "unpublished") {
+  async function save(status?: TemplatePublication) {
     if (!template) return;
     setNotice(undefined);
     versionLoad.setError(undefined);
@@ -173,6 +180,7 @@ function useTemplateBuilder({
 }
 
 export function AuditTemplateBuilder({
+  canPublish = false,
   id,
   manageGlobal = false,
   onNavigate,
@@ -197,6 +205,7 @@ export function AuditTemplateBuilder({
       <BuilderHeader
         back={back}
         busy={busy}
+        canPublish={canPublish}
         manageGlobal={manageGlobal}
         currentStatus={currentStatus ?? template.status}
         onSave={save}
@@ -374,6 +383,7 @@ function BuilderNotices({
 function BuilderHeader({
   back,
   busy,
+  canPublish,
   currentStatus,
   manageGlobal,
   onSave,
@@ -383,9 +393,10 @@ function BuilderHeader({
 }: {
   back: BackLink;
   busy: boolean;
+  canPublish: boolean;
   currentStatus: string;
   manageGlobal: boolean;
-  onSave: (status?: "published" | "unpublished") => Promise<void>;
+  onSave: (status?: TemplatePublication) => Promise<void>;
   onVersionChange: (version: number) => Promise<void>;
   template: AuditTemplate;
   versions: AuditTemplateVersion[];
@@ -395,7 +406,7 @@ function BuilderHeader({
     <PageHeader
       actions={
         <div className="auditVersionControls">
-          {manageGlobal && (
+          {manageGlobal ? (
             <GlobalAuditControls
               busy={busy}
               onDiscarded={back.onBack}
@@ -403,6 +414,14 @@ function BuilderHeader({
               status={currentStatus}
               template={template}
             />
+          ) : (
+            !customizing && (
+              <PublicationControls
+                busy={busy}
+                onSave={canPublish ? onSave : undefined}
+                status={currentStatus}
+              />
+            )
           )}
           <label className="auditVersionPicker">
             <span className="auditVersionLabel">Version</span>

@@ -267,17 +267,6 @@ describe("global audit templates", () => {
     expect(existing.body).toMatchObject({
       audit: { templateId: id, templateVersion: 1 },
     });
-    expect(
-      (
-        await jsonRequest(
-          fixture,
-          `/admin/audit-templates/${id}`,
-          "DELETE",
-          { expectedCurrentVersion: 2 },
-          admin,
-        )
-      ).status,
-    ).toBe(409);
     expect((await save("published", 1)).status).toBe(409);
     expect((await save("published", 2)).body.template).toMatchObject({
       status: "published",
@@ -297,6 +286,61 @@ describe("global audit templates", () => {
         )
       ).status,
     ).toBe(409);
+  });
+
+  it("discards an unpublished global form, but not a published one", async () => {
+    const fixture = createFixture();
+    const admin = { role: "admin" };
+    const global = await publishedGlobalTemplate(fixture);
+    const { id } = global.body.template;
+    const discard = (expectedCurrentVersion: number) =>
+      jsonRequest(
+        fixture,
+        `/admin/audit-templates/${id}`,
+        "DELETE",
+        { expectedCurrentVersion },
+        admin,
+      );
+    const published = await discard(2);
+    expect(published.status).toBe(409);
+    expect(published.body).toEqual({
+      error:
+        "Only draft or unpublished forms can be discarded. Unpublish this form first.",
+    });
+    await jsonRequest(
+      fixture,
+      `/admin/audit-templates/${id}`,
+      "PUT",
+      {
+        ...global.body.template,
+        expectedCurrentVersion: 2,
+        status: "unpublished",
+      },
+      admin,
+    );
+    expect((await discard(2)).status).toBe(409);
+    expect((await discard(3)).status).toBe(200);
+    const listed = await jsonRequest<TemplateListResponse>(
+      fixture,
+      "/admin/audit-templates",
+      "GET",
+      undefined,
+      admin,
+    );
+    expect(listed.body.templates.map((template) => template.id)).not.toContain(
+      id,
+    );
+    expect(
+      (
+        await jsonRequest(
+          fixture,
+          `/admin/audit-templates/${id}`,
+          "GET",
+          undefined,
+          admin,
+        )
+      ).status,
+    ).toBe(404);
   });
 
   it("keeps global drafts private and discards them with a version guard", async () => {

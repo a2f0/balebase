@@ -4,9 +4,9 @@ import type {
   ProjectSummary,
 } from "@balebase/validators/projects";
 import {
+  projectFormFilter,
   type TemplateRow,
   templateSelect,
-  visibleTemplateFilter,
 } from "../audits/auditTemplates";
 
 interface ProjectRow {
@@ -22,8 +22,8 @@ interface ProjectRow {
 }
 
 // People count only while they belong to the organization, as `current`
-// requires. Forms count only while the organization can still use them: a global form
-// that is unpublished stays turned on but is not offered or downloaded.
+// requires. Forms count only while published: a form that is unpublished, or
+// an organization draft, stays turned on but is not listed or downloaded.
 /** Whether the `person` project membership's user is in its organization. */
 const currentMember = `EXISTS (
   SELECT 1 FROM member
@@ -42,7 +42,7 @@ const projectSelect = `
             ON version.template_id = family.id
            AND version.version = family.current_version
           WHERE enabled.project_id = project.id
-            AND ${visibleTemplateFilter("project.organization_id")}
+            AND ${projectFormFilter("project.organization_id")}
          ) AS form_count,
          EXISTS (SELECT 1 FROM project_members AS person
                  WHERE person.project_id = project.id AND person.user_id = ?
@@ -104,7 +104,7 @@ export async function findProject(
       .prepare(
         `${templateSelect}
          JOIN project_audit_forms AS enabled ON enabled.template_id = family.id
-         WHERE enabled.project_id = ? AND ${visibleTemplateFilter()}
+         WHERE enabled.project_id = ? AND ${projectFormFilter()}
          ORDER BY version.name COLLATE NOCASE, family.id`,
       )
       .bind(id, organizationId)
@@ -117,7 +117,7 @@ export async function findProject(
   };
 }
 
-/** Every audit form the organization can turn on for a project. */
+/** Every published audit form the organization can turn on for a project. */
 export async function listAvailableForms(
   database: D1Database,
   organizationId: string,
@@ -125,7 +125,7 @@ export async function listAvailableForms(
   const { results } = await database
     .prepare(
       `${templateSelect}
-       WHERE ${visibleTemplateFilter()}
+       WHERE ${projectFormFilter()}
        ORDER BY version.name COLLATE NOCASE, family.id`,
     )
     .bind(organizationId)
@@ -133,16 +133,14 @@ export async function listAvailableForms(
   return results.map(toProjectForm);
 }
 
-/** One form the organization can use, or null. */
+/** One published form the organization can turn on for a project, or null. */
 export async function findAvailableForm(
   database: D1Database,
   organizationId: string,
   templateId: string,
 ) {
   const row = await database
-    .prepare(
-      `${templateSelect} WHERE family.id = ? AND ${visibleTemplateFilter()}`,
-    )
+    .prepare(`${templateSelect} WHERE family.id = ? AND ${projectFormFilter()}`)
     .bind(templateId, organizationId)
     .first<TemplateRow>();
   return row ? toProjectForm(row) : null;

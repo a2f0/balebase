@@ -4,6 +4,7 @@ import {
   type AuditTemplate,
   type AuditTemplateSaveSchema,
   type AuditTemplateScope,
+  type AuditTemplateSummary,
   type AuditTemplateVersion,
 } from "@balebase/validators/audits";
 import type { Person } from "@balebase/validators/fields";
@@ -55,13 +56,32 @@ const templateColumns = `
   creator.name AS version_created_by_name,
   creator.email AS version_created_by_email`;
 
-export const templateSelect = `
-  SELECT ${templateColumns}
+const templateFrom = `
   FROM audit_template_families AS family
   JOIN audit_template_versions AS version
     ON version.template_id = family.id
    AND version.version = family.current_version
   JOIN user AS creator ON creator.id = version.created_by`;
+
+export const templateSelect = `
+  SELECT ${templateColumns}
+  ${templateFrom}`;
+
+/**
+ * `templateSelect` with each form's `audit_count`: audits started from any of
+ * its versions that were not discarded. With `organization`, the SQL naming
+ * an organization ID, only that organization's audits count; otherwise every
+ * organization's do.
+ */
+export function templateSummarySelect(organization?: string) {
+  const owner = organization ? `AND run.organization_id = ${organization}` : "";
+  return `
+  SELECT ${templateColumns},
+         (SELECT COUNT(*) FROM audits AS run
+          WHERE run.template_family_id = family.id
+            AND run.deleted_at IS NULL ${owner}) AS audit_count
+  ${templateFrom}`;
+}
 
 /**
  * Limits `templateSelect` to the forms an organization can use: published
@@ -71,6 +91,17 @@ export const templateSelect = `
 export function visibleTemplateFilter(organization = "?") {
   return `((family.scope = 'global' AND version.status = 'published')
     OR family.organization_id = ${organization})`;
+}
+
+/**
+ * Limits `templateSelect` to the forms an organization can turn on for its
+ * projects: published global forms and its own published forms. Members
+ * download these for offline work, so drafts and unpublished forms are left
+ * out.
+ */
+export function projectFormFilter(organization = "?") {
+  return `(version.status = 'published'
+    AND (family.scope = 'global' OR family.organization_id = ${organization}))`;
 }
 
 export const staleTemplateError =
@@ -351,6 +382,12 @@ export function toTemplate(row: TemplateRow): AuditTemplate {
     updatedAt: row.updated_at,
     version: row.version,
   };
+}
+
+export function toTemplateSummary(
+  row: TemplateRow & { audit_count: number },
+): AuditTemplateSummary {
+  return { ...toTemplate(row), auditCount: row.audit_count };
 }
 
 function toTemplateVersion(row: TemplateVersionRow): AuditTemplateVersion {

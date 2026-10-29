@@ -340,18 +340,21 @@ type if that type is later retired.
 The organization-scoped Projects page at `/projects` groups members around the
 audit forms they use. Each project has a name, an optional description, members,
 and the audit forms turned on for it: published global forms and the
-organization's own. A form stays turned on as it gets new versions, so members
-always receive its current version. Every member can view projects; organization
-owners and admins create, edit, and delete them, add and remove members, and
-turn forms on and off. A person who leaves or is removed from the organization
-drops out of its projects' members without the projects being changed, and
-appears in them again on rejoining. Editing a project's name or description
-requires `expectedRevision` from its latest response; an edit made from an older
-revision returns 409. Turned-on global forms that are later unpublished are no
-longer offered or counted. Signing in downloads the forms of the signed-in
-member's projects for offline work (see [Offline work](#offline-work)).
-Creating, editing, and deleting a project, membership changes, and form changes
-are recorded in Activity, which keeps a deleted project's history. Migration
+organization's own published forms. A form stays turned on as it gets new
+versions, so members always receive its current version. Every member can view
+projects; organization owners and admins create, edit, and delete them, add and
+remove members, and turn forms on and off. A person who leaves or is removed
+from the organization drops out of its projects' members without the projects
+being changed, and appears in them again on rejoining. Editing a project's name
+or description requires `expectedRevision` from its latest response; an edit
+made from an older revision returns 409. Drafts and unpublished forms are not
+offered, and turned-on forms that are later unpublished or discarded stay turned
+on but are no longer listed, counted, or downloaded; publishing an unpublished
+form again restores it. Signing in downloads the published forms of the
+signed-in member's projects for offline work (see [Offline
+work](#offline-work)); copies already on a device stay there. Creating, editing,
+and deleting a project, membership changes, and form changes are recorded in
+Activity, which keeps a deleted project's history. Migration
 `0078_create_projects.sql` adds the project tables.
 
 ## Contracts and e-signature
@@ -434,12 +437,21 @@ The Cloudflare Images binding validates image structure, type, and dimensions
 and normalizes uploads to a single non-animated frame before anything is written
 to storage.
 Audit runs snapshot their template so later template edits do not rewrite
-history.
+history. Each forms list shows how many audits were started from each form,
+from any of its versions, not counting discarded audits: the active
+organization's audits on the Audits page, and every organization's in
+**Global Audits**.
+Organization forms start as drafts. Organization owners and admins publish and
+unpublish them from the form's editor; publication saves a new version like any
+other save, and later saves keep the form's status. Only published forms can be
+turned on for [projects](#projects); drafts and unpublished forms stay usable
+within the organization.
 Root admins manage global forms in **Global Audits**. New forms are private
 drafts until published. Published forms can be unpublished and published again;
 unpublishing hides them from organizations and prevents new runs and copies,
-while preserving versions and existing audit runs. Only drafts can be discarded.
-Discarded drafts leave the admin list but remain stored with their history.
+while preserving versions and existing audit runs. Drafts and unpublished forms
+can be discarded; published forms must be unpublished first. Discarded forms
+leave the admin list but remain stored with their history.
 Publication changes save a new version, including the editor's current changes,
 and reject stale versions just like other template saves. Organizations can only
 read published versions and their activity; draft and unpublished history stays

@@ -7,7 +7,11 @@ describe("audit routes", () => {
     for (const pathname of ["/audits/runs/%E0", "/audits/templates/%E0"]) {
       expect(() =>
         renderToStaticMarkup(
-          <Audits onNavigate={() => undefined} pathname={pathname} />,
+          <Audits
+            canPublish
+            onNavigate={() => undefined}
+            pathname={pathname}
+          />,
         ),
       ).not.toThrow();
     }

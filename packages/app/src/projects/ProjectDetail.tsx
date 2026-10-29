@@ -304,7 +304,7 @@ function ProjectForms({
           {countLabel(enabled.length, "form")} on
         </span>
       }
-      description="Turn on the audit forms this project uses."
+      description="Turn on the audit forms this project uses. Only published forms are listed and downloaded."
       title="Audit forms"
     >
       {forms.length ? (
@@ -332,7 +332,17 @@ function ProjectForms({
           </div>
         </Card>
       ) : (
-        <EmptyState compact icon="audits" title="No audit forms turned on" />
+        <EmptyState
+          compact
+          icon="audits"
+          title={
+            canManage ? "No published audit forms" : "No audit forms turned on"
+          }
+        >
+          {canManage
+            ? "Publish an organization form, or wait for a published global form, to turn it on here."
+            : undefined}
+        </EmptyState>
       )}
     </PageSection>
   );
