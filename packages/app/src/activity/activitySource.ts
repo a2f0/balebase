@@ -9,6 +9,7 @@ export type ActivitySource =
         | "audit_template"
         | "equipment"
         | "issue"
+        | "project"
         | "finance_transaction"
         | "global_audit_template";
     }
@@ -38,5 +39,7 @@ export function listActivity(
       return api.adminAuditTemplates.activity(id, cursor);
     case "issue":
       return api.issues.activity(id, cursor);
+    case "project":
+      return api.projects.activity(id, cursor);
   }
 }

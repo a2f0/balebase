@@ -16,6 +16,11 @@ export const equipmentLimits = {
   serialNumber: 100,
 } as const;
 
+export const projectLimits = {
+  description: 1000,
+  name: 120,
+} as const;
+
 export const businessLimits = {
   city: 100,
   name: 120,

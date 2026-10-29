@@ -39,6 +39,7 @@ import {
   requireCapability,
 } from "./organizations/organizationGroups";
 import { organizationSettings } from "./organizations/organizationSettings";
+import { projects } from "./projects/projects";
 import { activity } from "./shared/activity";
 import { respond } from "./shared/respond";
 import { respondToUnexpectedError } from "./shared/unexpectedError";
@@ -187,6 +188,10 @@ app.route("/api/signing", signing);
 app.use("/api/equipment", requireAuth, requireOrganization);
 app.use("/api/equipment/*", requireAuth, requireOrganization);
 app.route("/api/equipment", equipment);
+
+app.use("/api/projects", requireAuth, requireOrganization);
+app.use("/api/projects/*", requireAuth, requireOrganization);
+app.route("/api/projects", projects);
 
 // Checkr signs these with the account API key; no session is involved.
 app.post("/api/checkr/webhook", handleCheckrWebhook);

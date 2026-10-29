@@ -1,11 +1,14 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { signingTokenForPath } from "../workspace/workspacePaths";
 import { OfflineWorkspacePage } from "./OfflineWorkspacePage";
+import { hydrateProjectForms } from "./offlineHydration";
 import {
   activeOfflineKey,
   lockOfflineWorkspace,
   lockOtherOfflineWorkspace,
+  type OfflineIdentity,
   type OfflineWorkspace,
+  offlineAccessEpoch,
   offlineScopeKey,
 } from "./offlineStore";
 import { useOfflineWorkspace } from "./useOfflineWorkspace";
@@ -66,6 +69,9 @@ export function useOfflineRoute(
   const excluded =
     ["/add-account", "/reset-password"].includes(pathname) ||
     Boolean(signingTokenForPath(pathname));
+  // After the lock effect above, so an identity change locks before this
+  // takes its access epoch in the same commit.
+  useProjectFormHydration(excluded ? undefined : identity, offline.online);
   const local = matchingWorkspace(
     offline.workspace,
     user,
@@ -125,4 +131,46 @@ function matchingWorkspace(
   )
     return undefined;
   return saved;
+}
+
+/**
+ * Downloads the forms of the person's projects after sign-in confirms their
+ * account and organization, and again after a failure once the device
+ * reconnects. Each confirmed identity takes the access epoch once, when it
+ * appears: a sign-out or account switch that starts later stops its download
+ * before it unlocks the device, and signing in again starts afresh.
+ */
+function useProjectFormHydration(
+  identity: OfflineIdentity | undefined,
+  online: boolean,
+) {
+  const attempt = useRef<{
+    epoch: string;
+    key: string;
+    state: "idle" | "running" | "done";
+  }>(undefined);
+  useEffect(() => {
+    const key = identity && offlineScopeKey(identity.scope);
+    if (attempt.current?.key !== key)
+      attempt.current = key
+        ? { epoch: offlineAccessEpoch(), key, state: "idle" }
+        : undefined;
+    const current = attempt.current;
+    if (!identity || !online || current?.state !== "idle") return;
+    current.state = "running";
+    hydrateProjectForms(identity, current.epoch).then(
+      () => {
+        current.state = "done";
+      },
+      (cause: unknown) => {
+        // Retried when the device reconnects; Offline work also offers
+        // these downloads by hand.
+        current.state = "idle";
+        console.warn(
+          "Could not download project forms for offline work.",
+          cause,
+        );
+      },
+    );
+  }, [identity, online]);
 }

@@ -51,6 +51,11 @@ export const offlineRoutes = {
     query: OfflineScopeSchema,
     response: auditsRoutes.listTemplates.response.extend({
       members: z.array(PersonSchema),
+      /**
+       * The listed forms turned on for projects the person is a member of.
+       * The app downloads these when they sign in.
+       */
+      projectFormIds: z.array(z.string()),
     }),
   }),
   apply: route({

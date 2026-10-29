@@ -115,6 +115,43 @@ it("rejects wrong account and organization, invalid answers, and inaccessible te
   ).toBe(403);
 });
 
+it("names the listed forms turned on for the person's projects", async () => {
+  const f = fixture();
+  const forms = async () =>
+    (
+      await f.request<{
+        projectFormIds: string[];
+        templates: { id: string }[];
+      }>("GET", "/forms?userId=user-1&organizationId=org_user-1")
+    ).body;
+  expect((await forms()).projectFormIds).toEqual([]);
+  f.db.exec(`
+    INSERT INTO projects (id, organization_id, name, created_at, updated_at)
+    VALUES ('mine', 'org_user-1', 'Mine', '2026-10-01', '2026-10-01'),
+           ('theirs', 'org_user-1', 'Theirs', '2026-10-01', '2026-10-01'),
+           ('elsewhere', 'org_user-2', 'Elsewhere', '2026-10-01', '2026-10-01');
+    INSERT INTO project_members (project_id, organization_id, user_id, added_at)
+    VALUES ('mine', 'org_user-1', 'user-1', '2026-10-01'),
+           ('theirs', 'org_user-1', 'user-2', '2026-10-01');
+    INSERT INTO audit_template_families
+      (id, scope, organization_id, current_version, created_by, created_at, updated_at)
+    VALUES ('hidden', 'global', NULL, 1, 'user-1', '2026-10-01', '2026-10-01');
+    INSERT INTO audit_template_versions
+      (id, template_id, version, name, description, definition, status, created_by, created_at)
+    VALUES ('hidden-1', 'hidden', 1, 'Draft', '', '{}', 'draft', 'user-1', '2026-10-01');
+    INSERT INTO project_audit_forms (project_id, organization_id, template_id, added_at)
+    VALUES ('mine', 'org_user-1', 'form', '2026-10-01'),
+           ('mine', 'org_user-1', 'hidden', '2026-10-01'),
+           ('theirs', 'org_user-1', 'nfpa70e_global', '2026-10-01');
+  `);
+  const listed = await forms();
+  // Not another member's project, and not a form the organization cannot use.
+  expect(listed.projectFormIds).toEqual(["form"]);
+  expect(listed.templates.map((template) => template.id)).toContain(
+    "nfpa70e_global",
+  );
+});
+
 it("rolls back receipts and domain writes if history fails, then retries successfully", async () => {
   const f = fixture();
   const operation = audit();

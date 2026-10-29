@@ -83,6 +83,7 @@ const ActivityResourceTypeSchema = z.enum([
   "finance_transaction",
   "finance_connection",
   "issue",
+  "project",
 ]);
 export type ActivityResourceType = z.infer<typeof ActivityResourceTypeSchema>;
 

@@ -20,6 +20,7 @@ import { objectsApi } from "./objects";
 import { offlineApi } from "./offline";
 import { organizationGroupsApi } from "./organizationGroups";
 import { organizationSettingsApi } from "./organizationSettings";
+import { projectsApi } from "./projects";
 import { sessionApi } from "./session";
 import { signingApi } from "./signing";
 import { Transport } from "./transport";
@@ -51,6 +52,7 @@ export class ApiClient extends Transport {
   readonly offline = offlineApi(this);
   readonly organizationGroups = organizationGroupsApi(this);
   readonly organizationSettings = organizationSettingsApi(this);
+  readonly projects = projectsApi(this);
   readonly session = sessionApi(this);
   readonly signing = signingApi(this);
 }

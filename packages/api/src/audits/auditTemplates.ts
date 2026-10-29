@@ -63,6 +63,16 @@ export const templateSelect = `
    AND version.version = family.current_version
   JOIN user AS creator ON creator.id = version.created_by`;
 
+/**
+ * Limits `templateSelect` to the forms an organization can use: published
+ * global forms and its own. `organization` is the SQL naming the
+ * organization ID; by default a parameter to bind.
+ */
+export function visibleTemplateFilter(organization = "?") {
+  return `((family.scope = 'global' AND version.status = 'published')
+    OR family.organization_id = ${organization})`;
+}
+
 export const staleTemplateError =
   "This template has a newer version. Reload it before saving.";
 

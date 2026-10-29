@@ -9,6 +9,7 @@ import {
   type TemplateRow,
   templateSelect,
   toTemplate,
+  visibleTemplateFilter,
 } from "../audits/auditTemplates";
 import type { ApiEnv } from "../auth/apiEnv";
 import type { IssueContext } from "../issues/issueRecords";
@@ -40,16 +41,32 @@ offline.get("/forms", async (context) => {
       403,
     );
   const templates = await context.env.DB.prepare(`${templateSelect}
-    WHERE (family.scope = 'global' AND version.status = 'published') OR family.organization_id = ?
+    WHERE ${visibleTemplateFilter()}
     ORDER BY family.updated_at DESC`)
     .bind(scope.data.organizationId)
     .all<TemplateRow>();
+  const projectForms = await context.env.DB.prepare(
+    `SELECT DISTINCT enabled.template_id
+     FROM project_audit_forms AS enabled
+     JOIN project_members AS person ON person.project_id = enabled.project_id
+     WHERE enabled.organization_id = ? AND person.user_id = ?`,
+  )
+    .bind(scope.data.organizationId, scope.data.userId)
+    .all<{ template_id: string }>();
+  const onProjects = new Set(
+    projectForms.results.map(({ template_id }) => template_id),
+  );
   return respond(context, offlineRoutes.forms, {
     templates: templates.results.map(toTemplate),
     members: await listMemberDirectory(
       context.env.DB,
       scope.data.organizationId,
     ),
+    // Only forms listed here: a form the organization can no longer use stays
+    // turned on for its projects but is not offered.
+    projectFormIds: templates.results
+      .filter((row) => onProjects.has(row.id))
+      .map((row) => row.id),
   });
 });
 

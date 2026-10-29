@@ -25,6 +25,7 @@ import {
   financeTransactionPath,
   issuePath,
   organizationPeoplePath,
+  projectPath,
 } from "../workspace/workspacePaths";
 import { assigneeLabel, textValue } from "./activityLabels";
 import { type ActivitySource, listActivity } from "./activitySource";
@@ -32,6 +33,7 @@ import {
   EquipmentActivityDetails,
   equipmentActivitySummary,
 } from "./EquipmentActivity";
+import { projectActivitySummary } from "./projectActivity";
 import { RecordActivityDetails } from "./RecordActivity";
 
 const actionLabels: Record<string, string> = {
@@ -66,6 +68,13 @@ const actionLabels: Record<string, string> = {
   "equipment.deleted": "deleted equipment",
   "equipment.updated": "edited equipment",
   "organization.member_role_changed": "changed an organization role",
+  "project.created": "created a project",
+  "project.deleted": "deleted a project",
+  "project.form_disabled": "turned off an audit form",
+  "project.form_enabled": "turned on an audit form",
+  "project.member_added": "added a project member",
+  "project.member_removed": "removed a project member",
+  "project.updated": "edited a project",
 };
 
 export function ActivityFeed({
@@ -241,6 +250,7 @@ function activitySummary(event: ActivityEvent) {
   }
   if (event.root.type === "equipment") return equipmentActivitySummary(event);
   if (event.root.type === "api_key") return apiKeySummary(event);
+  if (event.root.type === "project") return projectActivitySummary(event);
   if (event.action === "organization.member_role_changed") {
     return `${memberLabel(event)} · ${formatRoles(textValue(details.before))} → ${formatRoles(textValue(details.after))}`;
   }
@@ -303,6 +313,9 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
   }
   if (event.root.type === "api_key") {
     return <p className="activityDetails">{apiKeySummary(event)}</p>;
+  }
+  if (event.root.type === "project") {
+    return <p className="activityDetails">{projectActivitySummary(event)}</p>;
   }
   if (
     event.action === "finance.transaction_annotated" ||
@@ -449,6 +462,11 @@ function activityPath(event: ActivityEvent) {
   }
   if (event.root.type === "organization_member")
     return organizationPeoplePath(event.root.id);
+  // A deleted project has no page to open.
+  if (event.root.type === "project")
+    return event.action === "project.deleted"
+      ? undefined
+      : projectPath(event.root.id);
   if (event.root.type === "audit_run") return auditRunPath(event.root.id);
   if (event.root.type === "audit_template")
     return auditTemplatePath(event.root.id);
@@ -462,6 +480,7 @@ function activityLinkLabel(event: ActivityEvent) {
   if (event.root.type === "finance_transaction") return "Open transaction";
   if (event.root.type === "equipment") return "Open equipment";
   if (event.root.type === "organization_member") return "Open member";
+  if (event.root.type === "project") return "Open project";
   return event.root.type === "audit_run" ? "Open audit" : "Open form";
 }
 
