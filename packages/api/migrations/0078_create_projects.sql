@@ -17,6 +17,8 @@ CREATE TABLE projects (
 CREATE INDEX projects_organization_name_idx
 ON projects (organization_id, name COLLATE NOCASE);
 
+-- A membership counts only while the person belongs to the organization:
+-- leaving it hides them from its projects without changing this record.
 CREATE TABLE project_members (
   project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
   organization_id TEXT NOT NULL
@@ -45,12 +47,3 @@ CREATE TABLE project_audit_forms (
 
 CREATE INDEX project_audit_forms_template_idx
 ON project_audit_forms (template_id);
-
--- Projects keep only current organization members: leaving or being removed
--- from the organization removes a person from its projects.
-CREATE TRIGGER remove_project_members_on_member_removal
-AFTER DELETE ON member
-BEGIN
-  DELETE FROM project_members
-  WHERE organization_id = OLD.organizationId AND user_id = OLD.userId;
-END;

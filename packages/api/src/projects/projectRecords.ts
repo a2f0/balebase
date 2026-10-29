@@ -21,13 +21,21 @@ interface ProjectRow {
   updated_at: string;
 }
 
-// Forms count only while the organization can still use them: a global form
+// People count only while they belong to the organization, as `current`
+// requires. Forms count only while the organization can still use them: a global form
 // that is unpublished stays turned on but is not offered or downloaded.
+/** Whether the `person` project membership's user is in its organization. */
+const currentMember = `EXISTS (
+  SELECT 1 FROM member
+  WHERE member.organizationId = person.organization_id
+    AND member.userId = person.user_id)`;
+
 const projectSelect = `
   SELECT project.id, project.name, project.description, project.revision,
          project.created_at, project.updated_at,
          (SELECT COUNT(*) FROM project_members AS person
-          WHERE person.project_id = project.id) AS member_count,
+          WHERE person.project_id = project.id AND ${currentMember}
+         ) AS member_count,
          (SELECT COUNT(*) FROM project_audit_forms AS enabled
           JOIN audit_template_families AS family ON family.id = enabled.template_id
           JOIN audit_template_versions AS version
@@ -37,8 +45,8 @@ const projectSelect = `
             AND ${visibleTemplateFilter("project.organization_id")}
          ) AS form_count,
          EXISTS (SELECT 1 FROM project_members AS person
-                 WHERE person.project_id = project.id AND person.user_id = ?)
-           AS is_member
+                 WHERE person.project_id = project.id AND person.user_id = ?
+                   AND ${currentMember}) AS is_member
   FROM projects AS project`;
 
 /** The organization's projects, by name, marking the ones `userId` is on. */
@@ -87,7 +95,7 @@ export async function findProject(
         `SELECT user.id, user.name, user.email
          FROM project_members AS person
          JOIN user ON user.id = person.user_id
-         WHERE person.project_id = ?
+         WHERE person.project_id = ? AND ${currentMember}
          ORDER BY user.name COLLATE NOCASE, user.id`,
       )
       .bind(id)

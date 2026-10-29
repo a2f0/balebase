@@ -338,19 +338,19 @@ type if that type is later retired.
 ## Projects
 
 The organization-scoped Projects page at `/projects` groups members around the
-audit forms they use. Each project has a name, an optional description,
-members, and the audit forms turned on for it: published global forms and the
+audit forms they use. Each project has a name, an optional description, members,
+and the audit forms turned on for it: published global forms and the
 organization's own. A form stays turned on as it gets new versions, so members
-always receive its current version. Every member can view projects;
-organization owners and admins create, edit, and delete them, add and remove
-members, and turn forms on and off. Leaving or being removed from the
-organization removes a person from its projects. Editing a project's name or
-description requires `expectedRevision` from its latest response; an edit made
-from an older revision returns 409. Turned-on global forms that
-are later unpublished are no longer offered or counted. Creating, editing, and
-deleting a project, membership changes, and form changes are recorded in
-Activity, which keeps a deleted project's history. Migration
-`0078_create_projects.sql` adds the project tables.
+always receive its current version. Every member can view projects; organization
+owners and admins create, edit, and delete them, add and remove members, and
+turn forms on and off. A person who leaves or is removed from the organization
+drops out of its projects' members without the projects being changed, and
+appears in them again on rejoining. Editing a project's name or description
+requires `expectedRevision` from its latest response; an edit made from an older
+revision returns 409. Turned-on global forms that are later unpublished are no
+longer offered or counted. Creating, editing, and deleting a project, membership
+changes, and form changes are recorded in Activity, which keeps a deleted
+project's history. Migration `0078_create_projects.sql` adds the project tables.
 
 ## Contracts and e-signature
 

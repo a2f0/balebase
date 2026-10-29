@@ -323,15 +323,45 @@ describe("projects", () => {
     expect(events().map((event) => event.action)).toEqual(["project.created"]);
   });
 
-  it("drops people from projects when they leave the organization", async () => {
-    const { as, run } = fixture();
+  it("counts people only while they belong to the organization, without rewriting the project", async () => {
+    const { as, events, run } = fixture();
     const owner = as("owner-user", "owner");
     const id = await createProject(owner);
     await owner("PUT", `/api/projects/${id}/members/member-user`);
     run("DELETE FROM member WHERE userId = 'member-user'").run();
-    expect(
-      (await owner<Detail>("GET", `/api/projects/${id}`)).body.project.members,
-    ).toEqual([]);
+    const detail = (await owner<Detail>("GET", `/api/projects/${id}`)).body;
+    expect(detail.project).toMatchObject({ memberCount: 0, members: [] });
+    // Nothing changed that would need history.
+    expect(run("SELECT user_id FROM project_members").all()).toEqual([
+      { user_id: "member-user" },
+    ]);
+    expect(events().map((event) => event.action)).toEqual([
+      "project.created",
+      "project.member_added",
+    ]);
+  });
+
+  it("names a turned-off global form as the organization last saw it", async () => {
+    const { as, events, run } = fixture();
+    const owner = as("owner-user", "owner");
+    const id = await createProject(owner);
+    await owner("PUT", `/api/projects/${id}/forms/global-published`);
+    // A root admin saves an unpublished draft as the form's next version.
+    run(
+      `INSERT INTO audit_template_versions
+         (id, template_id, version, name, description, definition, status,
+          created_by, created_at)
+       VALUES ('draft-2', 'global-published', 2, 'Secret draft name', '',
+               '{"version":1,"sections":[]}', 'draft', 'owner-user', '2026-10-02')`,
+    ).run();
+    run(
+      "UPDATE audit_template_families SET current_version = 2 WHERE id = 'global-published'",
+    ).run();
+    await owner("DELETE", `/api/projects/${id}/forms/global-published`);
+    expect(events().at(-1)).toMatchObject({
+      action: "project.form_disabled",
+      details: { templateId: "global-published", title: "NFPA 70E" },
+    });
   });
 
   it("rolls the change back when its history cannot be recorded", async () => {

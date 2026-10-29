@@ -378,17 +378,22 @@ projects.delete("/:id/forms/:templateId", requireManager(), async (context) => {
   );
   if (!project) return projectNotFound(context);
   const templateId = context.req.param("templateId");
-  // A form keeps the name it has now, even when it is no longer offered.
+  // Named as the organization last saw it: an unpublished global form's
+  // later drafts stay private to root admins.
   const form = await database
     .prepare(
-      `SELECT version.name FROM audit_template_families AS family
-       JOIN audit_template_versions AS version
-         ON version.template_id = family.id
-        AND version.version = family.current_version
-       WHERE family.id = ?`,
+      `SELECT family.id, (
+         SELECT version.name FROM audit_template_versions AS version
+         WHERE version.template_id = family.id
+           AND (family.organization_id = ? OR version.status = 'published')
+         ORDER BY version.version DESC LIMIT 1
+       ) AS name
+       FROM audit_template_families AS family
+       WHERE family.id = ?
+         AND (family.scope = 'global' OR family.organization_id = ?)`,
     )
-    .bind(templateId)
-    .first<{ name: string }>();
+    .bind(organizationId, templateId, organizationId)
+    .first<{ id: string; name: string | null }>();
   if (form) {
     const enabled = {
       bindings: [project.id, templateId],
@@ -401,7 +406,7 @@ projects.delete("/:id/forms/:templateId", requireManager(), async (context) => {
         project.id,
         {
           action: "project.form_disabled",
-          details: { templateId, title: form.name },
+          details: { templateId, title: form.name ?? "" },
           subject: { id: templateId, type: "audit_template" },
         },
         enabled,

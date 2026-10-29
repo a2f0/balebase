@@ -30,7 +30,7 @@ function useProjectDetail(id: string, onNavigate: (pathname: string) => void) {
     useCallback(() => api.projects.get(id), [id]),
     "Could not load the project.",
   );
-  const { setData } = loaded;
+  const { reload, setData } = loaded;
   const action = useAction("Could not update the project.");
   // The project as it was when editing began: later refreshes, such as a
   // member change, must not move the edit onto a revision it never showed.
@@ -41,6 +41,21 @@ function useProjectDetail(id: string, onNavigate: (pathname: string) => void) {
       const project = await work();
       setData((current) => (current ? { ...current, project } : current));
     }, message);
+
+  async function saveEdit(
+    base: Project,
+    input: { description: string; name: string },
+  ) {
+    const saved = await change(
+      () => api.projects.update(id, editedFields(base, input)),
+      "Project updated.",
+    );
+    // A refused edit keeps the editor's text; reloading lets the next edit
+    // start from the latest revision.
+    if (saved) setEditing(undefined);
+    else void reload();
+    return saved;
+  }
 
   async function remove(project: Project) {
     const confirmed = await confirmDialog({
@@ -65,6 +80,7 @@ function useProjectDetail(id: string, onNavigate: (pathname: string) => void) {
     error: action.error ?? loaded.error,
     notice: action.notice,
     remove,
+    saveEdit,
     setEditing,
   };
 }
@@ -76,11 +92,19 @@ export function ProjectDetailPage({
   id: string;
   onNavigate: (pathname: string) => void;
 }) {
-  const { busy, change, detail, editing, error, notice, remove, setEditing } =
-    useProjectDetail(id, onNavigate);
+  const {
+    busy,
+    change,
+    detail,
+    editing,
+    error,
+    notice,
+    remove,
+    saveEdit,
+    setEditing,
+  } = useProjectDetail(id, onNavigate);
   const project = detail?.project;
   const canEdit = Boolean(detail?.canManage && project && !editing);
-  const stopEditing = () => setEditing(undefined);
   let title = "Loading…";
   if (project) title = project.name;
   else if (error) title = "Project unavailable";
@@ -133,15 +157,8 @@ export function ProjectDetailPage({
             {editing && (
               <ProjectForm
                 initial={editing}
-                onCancel={stopEditing}
-                onSave={async (input) => {
-                  const saved = await change(
-                    () => api.projects.update(id, editedFields(editing, input)),
-                    "Project updated.",
-                  );
-                  if (saved) stopEditing();
-                  return saved;
-                }}
+                onCancel={() => setEditing(undefined)}
+                onSave={(input) => saveEdit(editing, input)}
               />
             )}
             <ProjectMembers

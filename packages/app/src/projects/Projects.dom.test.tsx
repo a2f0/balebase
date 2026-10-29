@@ -55,8 +55,15 @@ function stubApi(canManage: boolean, elsewhere: Partial<Project> = {}) {
       });
     writes.push(`${method} ${url.pathname}`);
     if (method === "PATCH") {
-      const changes = JSON.parse(String(init?.body)) as Partial<Project>;
-      edits.push(changes);
+      const { expectedRevision, ...changes } = JSON.parse(
+        String(init?.body),
+      ) as Partial<Project> & { expectedRevision: number };
+      edits.push({ expectedRevision, ...changes });
+      if (expectedRevision !== project.revision)
+        return Response.json(
+          { error: "This project changed. Reload it before saving." },
+          { status: 409 },
+        );
       project = { ...project, ...changes, revision: project.revision + 1 };
       return Response.json({ project });
     }
@@ -81,7 +88,11 @@ function stubApi(canManage: boolean, elsewhere: Partial<Project> = {}) {
     }
     return Response.json({ project });
   });
-  return writes;
+  /** Saves another manager's edit on the server only. */
+  const editElsewhere = (changes: Partial<Project>) => {
+    project = { ...project, ...changes, revision: project.revision + 1 };
+  };
+  return { editElsewhere, writes };
 }
 
 async function render() {
@@ -103,7 +114,7 @@ function checkbox(container: HTMLElement, label: string) {
 
 describe("project detail", () => {
   it("lets a manager add members and turn audit forms on and off", async () => {
-    const writes = stubApi(true);
+    const { writes } = stubApi(true);
     const container = await render();
     expect(container.textContent).toContain("Hospital renovation");
     expect(container.textContent).toContain("No members yet");
@@ -165,10 +176,43 @@ describe("project detail", () => {
     await click(queryButton("Save changes", container));
     await settle();
     expect(edits).toEqual([{ expectedRevision: 0, name: "Clinic renovation" }]);
+    expect(container.textContent).toContain("Reload it before saving");
+    // The refusal reloads the project, so the next edit starts from it.
+    await click(queryButton("Cancel", container));
+    await click(queryButton("Edit", container));
+    await fill(container.querySelector("form input"), "Clinic renovation");
+    await click(queryButton("Save changes", container));
+    await settle();
+    expect(edits.at(-1)).toEqual({
+      expectedRevision: 4,
+      name: "Clinic renovation",
+    });
+    expect(container.textContent).toContain("Project updated.");
+  });
+
+  it("reloads a project whose edit was refused so the next edit can save", async () => {
+    const { editElsewhere } = stubApi(true);
+    const container = await render();
+    await click(queryButton("Edit", container));
+    editElsewhere({ description: "Their notes" });
+    await fill(container.querySelector("form input"), "Clinic renovation");
+    await click(queryButton("Save changes", container));
+    await settle();
+    expect(container.textContent).toContain("Reload it before saving");
+    expect(container.textContent).toContain("Their notes");
+    await click(queryButton("Cancel", container));
+    await click(queryButton("Edit", container));
+    await fill(container.querySelector("form input"), "Clinic renovation");
+    await click(queryButton("Save changes", container));
+    await settle();
+    expect(edits).toEqual([
+      { expectedRevision: 0, name: "Clinic renovation" },
+      { expectedRevision: 1, name: "Clinic renovation" },
+    ]);
   });
 
   it("shows members a read-only view", async () => {
-    const writes = stubApi(false);
+    const { writes } = stubApi(false);
     const container = await render();
     expect(container.textContent).toContain("Hospital renovation");
     expect(container.querySelector("select")).toBeNull();
