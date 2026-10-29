@@ -291,7 +291,7 @@ async function persistSubscription(
         subscription.id,
       )
       .run();
-    return Number(persisted.meta.changes) === 1;
+    return Number(persisted.meta.changes) > 0;
   }
   const persisted = await environment.DB.prepare(
     `INSERT INTO organization_billing
@@ -339,7 +339,7 @@ async function persistSubscription(
       now,
     )
     .run();
-  return Number(persisted.meta.changes) === 1;
+  return Number(persisted.meta.changes) > 0;
 }
 
 export async function cancelStripeSubscription(

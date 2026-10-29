@@ -591,7 +591,7 @@ async function refreshAuditIssueImageUploadLease(
         image.uploadToken,
       )
       .run();
-    if (Number(metadata.meta.changes) !== 1) {
+    if (!Number(metadata.meta.changes)) {
       throw new Error("Issue image reservation is no longer available.");
     }
   } catch (cause) {

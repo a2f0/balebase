@@ -175,7 +175,7 @@ employeeForms.post("/", requireManager(), async (context) => {
       ),
     ),
   );
-  if (inserted.some((result) => result.meta.changes !== 1)) {
+  if (inserted.some((result) => !result.meta.changes)) {
     return context.json(
       { error: "The invitation or membership changed. Please try again." },
       409,

@@ -179,7 +179,7 @@ inbox.delete("/:id", async (context) => {
       context.get("organizationId"),
     )
     .run();
-  if (result.meta.changes !== 1) {
+  if (!result.meta.changes) {
     const activeEmail = await context.env.DB.prepare(
       `SELECT id FROM inbound_emails
        WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`,
@@ -216,7 +216,7 @@ inbox.post("/:id/archive", async (context) => {
       context.get("organizationId"),
     )
     .run();
-  if (result.meta.changes !== 1) {
+  if (!result.meta.changes) {
     return context.json({ error: "Inbox email not found." }, 404);
   }
   return respond(context, inboxRoutes.archive, {
@@ -233,7 +233,7 @@ inbox.post("/:id/restore", async (context) => {
   )
     .bind(context.req.param("id"), context.get("organizationId"))
     .run();
-  if (result.meta.changes !== 1) {
+  if (!result.meta.changes) {
     return context.json({ error: "Trashed or archived email not found." }, 404);
   }
   return respond(context, inboxRoutes.restore, {

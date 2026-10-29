@@ -637,7 +637,7 @@ async function copyGlobalTemplate(
         id,
       ),
   ]);
-  if (Number(results[0]?.meta.changes) !== 1) return null;
+  if (!Number(results[0]?.meta.changes)) return null;
   const saved = await findTemplate(database, organizationId, id);
   if (!saved) throw new Error("Copied template could not be loaded.");
   return saved;

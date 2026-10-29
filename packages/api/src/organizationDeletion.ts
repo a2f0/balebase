@@ -99,7 +99,7 @@ export async function markOrganizationForDeletion(
       ),
   ]);
 
-  if (results[0]?.meta.changes !== 1) return undefined;
+  if (!results[0]?.meta.changes) return undefined;
   return { deletedAt, organizationId };
 }
 

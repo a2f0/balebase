@@ -59,7 +59,7 @@ async function purgeDeletedObject(
   )
     .bind(object.id, cleanupToken)
     .run();
-  return Number(deleted.meta.changes) === 1;
+  return Number(deleted.meta.changes) > 0;
 }
 
 /** Delete R2 bytes whose D1 object rows were removed by a cascade. */

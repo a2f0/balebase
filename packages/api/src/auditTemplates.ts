@@ -132,7 +132,7 @@ export async function createTemplate(
         id,
       ),
   ]);
-  if (Number(results[0]?.meta.changes) !== 1) return null;
+  if (!Number(results[0]?.meta.changes)) return null;
   const template = await findTemplate(database, input.organizationId, id);
   if (!template) throw new Error("Created template could not be loaded.");
   return template;

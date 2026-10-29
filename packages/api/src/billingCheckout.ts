@@ -72,8 +72,7 @@ export async function claimCheckout(
   return {
     id: claimId,
     owned:
-      Number(claimed.meta.changes) === 1 &&
-      record?.checkout_claim_id === claimId,
+      Number(claimed.meta.changes) > 0 && record?.checkout_claim_id === claimId,
     record,
   };
 }
@@ -157,7 +156,7 @@ export async function storePendingCheckout(
       checkout.id,
     )
     .run();
-  return Number(stored.meta.changes) === 1;
+  return Number(stored.meta.changes) > 0;
 }
 
 export async function clearPendingCheckoutIfCurrent(

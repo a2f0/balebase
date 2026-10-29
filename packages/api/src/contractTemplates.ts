@@ -136,7 +136,7 @@ contractTemplates.post("/", async (context) => {
     await context.env.STORAGE.delete(objectKey);
     throw cause;
   }
-  if (created[0]?.meta.changes !== 1) {
+  if (!created[0]?.meta.changes) {
     await context.env.STORAGE.delete(objectKey);
     return context.json({ error: uploadExpired }, 409);
   }
@@ -264,7 +264,7 @@ contractTemplates.post("/:id/versions", async (context) => {
       expected,
     ),
   ]);
-  if (saved[0]?.meta.changes !== 1)
+  if (!saved[0]?.meta.changes)
     return context.json(
       {
         error:
