@@ -164,35 +164,10 @@ describe("organizations", () => {
     ).toEqual({ memberCount: 0, status: "pending" });
   });
 
-  it("invites a user, accepts after sign-up, and safely leaves", async () => {
+  it("renews a pending invitation, keeping its forms and emailing the new link", async () => {
     const fixture = await createFixture();
-    await post(fixture.auth, "/sign-up/email", {
-      email,
-      name: "Example Person",
-      password: originalPassword,
-      termsAccepted: true,
-    });
-    const ownerSignIn = await post(fixture.auth, "/sign-in/email", {
-      email,
-      password: originalPassword,
-    });
-    const ownerCookie = ownerSignIn.headers.get("set-cookie");
-    const organization = fixture.database
-      .query(
-        `SELECT organization.id, organization.name
-         FROM organization
-         JOIN user ON user.defaultOrganizationId = organization.id
-         WHERE user.email = ?`,
-      )
-      .get(email) as { id: string; name: string };
+    const { organization, ownerCookie } = await proOrganizationOwner(fixture);
     const invitedEmail = "invitee@example.com";
-
-    insertBilling(fixture.database, organization.id, {
-      seat_quantity: 1,
-      stripe_event_created: 1,
-      stripe_price_id: "price_pro_test",
-      stripe_status: "active",
-    });
 
     const firstInvite = await post(
       fixture.auth,
@@ -259,6 +234,38 @@ describe("organizations", () => {
       `${origin}/invite?id=${invitation.id}`,
     );
     expect(invitationMessage?.text).toContain("with the admin role");
+  });
+
+  it("transfers an invitation's forms when the invitee accepts after sign-up", async () => {
+    const fixture = await createFixture();
+    const { organization, ownerCookie } = await proOrganizationOwner(fixture);
+    const invitedEmail = "invitee@example.com";
+
+    const invite = await post(
+      fixture.auth,
+      "/organization/invite-member",
+      {
+        email: invitedEmail,
+        organizationId: organization.id,
+        role: "admin",
+      },
+      ownerCookie,
+    );
+    expect(invite.status).toBe(200);
+    const invitation = (await invite.json()) as { id: string };
+    fixture.database
+      .query(`INSERT INTO employee_requirements
+        (id, organization_id, invitation_id, target_email, kind, title,
+         due_date, created_at, updated_at)
+        VALUES ('renewed-form', ?, ?, ?, 'form', 'W-4', '2026-10-01', ?, ?)`)
+      .run(
+        organization.id,
+        invitation.id,
+        invitedEmail,
+        new Date().toISOString(),
+        new Date().toISOString(),
+      );
+    await Promise.all(fixture.pending);
 
     const inviteeSignUp = await post(fixture.auth, "/sign-up/email", {
       email: invitedEmail,
@@ -307,6 +314,41 @@ describe("organizations", () => {
         )
         .get(),
     ).toEqual({ member_id: invitedMember.id, invitation_id: null });
+    expect(
+      fixture.database
+        .query(
+          `SELECT user.defaultOrganizationId, invitation.status
+           FROM user JOIN invitation ON invitation.email = user.email
+           WHERE user.email = ? AND invitation.id = ?`,
+        )
+        .get(invitedEmail, invitation.id),
+    ).toEqual({
+      defaultOrganizationId: organization.id,
+      status: "accepted",
+    });
+    const session = await fixture.auth.handler(
+      new Request(`${baseURL}/api/auth/get-session`, {
+        headers: { cookie: inviteeCookie ?? "", origin },
+      }),
+    );
+    expect(await session.json()).toMatchObject({
+      session: { activeOrganizationId: organization.id },
+      user: { defaultOrganizationId: organization.id },
+    });
+  });
+
+  it("lets the owner, but not an invited admin, change roles", async () => {
+    const fixture = await createFixture();
+    const { invitedEmail, inviteeCookie, organization, ownerCookie } =
+      await invitedAdmin(fixture);
+    const invitedMember = fixture.database
+      .query(
+        `SELECT member.id, member.role
+         FROM member
+         JOIN user ON user.id = member.userId
+         WHERE user.email = ? AND member.organizationId = ?`,
+      )
+      .get(invitedEmail, organization.id) as { id: string; role: string };
     const ownerMember = fixture.database
       .query(
         `SELECT member.id
@@ -342,27 +384,12 @@ describe("organizations", () => {
         .query("SELECT role FROM member WHERE id = ?")
         .get(invitedMember.id),
     ).toEqual({ role: "member" });
-    expect(
-      fixture.database
-        .query(
-          `SELECT user.defaultOrganizationId, invitation.status
-           FROM user JOIN invitation ON invitation.email = user.email
-           WHERE user.email = ? AND invitation.id = ?`,
-        )
-        .get(invitedEmail, invitation.id),
-    ).toEqual({
-      defaultOrganizationId: organization.id,
-      status: "accepted",
-    });
-    const session = await fixture.auth.handler(
-      new Request(`${baseURL}/api/auth/get-session`, {
-        headers: { cookie: inviteeCookie ?? "", origin },
-      }),
-    );
-    expect(await session.json()).toMatchObject({
-      session: { activeOrganizationId: organization.id },
-      user: { defaultOrganizationId: organization.id },
-    });
+  });
+
+  it("keeps the accepted organization as the default while sessions switch", async () => {
+    const fixture = await createFixture();
+    const { invitedEmail, inviteeCookie, organization } =
+      await invitedAdmin(fixture);
     const personalOrganization = fixture.database
       .query(
         `SELECT member.organizationId AS id
@@ -407,6 +434,23 @@ describe("organizations", () => {
         )
       ).status,
     ).toBe(200);
+  });
+
+  it("returns a member who leaves to their personal organization", async () => {
+    const fixture = await createFixture();
+    const { invitedEmail, inviteeCookie, organization } =
+      await invitedAdmin(fixture);
+    const personalOrganization = fixture.database
+      .query(
+        `SELECT member.organizationId AS id
+         FROM member JOIN user ON user.id = member.userId
+         WHERE user.email = ? AND member.organizationId != ?`,
+      )
+      .get(invitedEmail, organization.id) as { id: string };
+    await post(fixture.auth, "/sign-in/email", {
+      email: invitedEmail,
+      password: originalPassword,
+    });
 
     const leave = await post(
       fixture.auth,
@@ -643,3 +687,74 @@ describe("organizations", () => {
     ).toEqual({ name: "Existing User's Organization", role: "owner" });
   });
 });
+
+/** Signs up an owner whose default organization pays for Pro. */
+async function proOrganizationOwner(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+) {
+  await post(fixture.auth, "/sign-up/email", {
+    email,
+    name: "Example Person",
+    password: originalPassword,
+    termsAccepted: true,
+  });
+  const ownerSignIn = await post(fixture.auth, "/sign-in/email", {
+    email,
+    password: originalPassword,
+  });
+  const ownerCookie = ownerSignIn.headers.get("set-cookie");
+  const organization = fixture.database
+    .query(
+      `SELECT organization.id, organization.name
+       FROM organization
+       JOIN user ON user.defaultOrganizationId = organization.id
+       WHERE user.email = ?`,
+    )
+    .get(email) as { id: string; name: string };
+
+  insertBilling(fixture.database, organization.id, {
+    seat_quantity: 1,
+    stripe_event_created: 1,
+    stripe_price_id: "price_pro_test",
+    stripe_status: "active",
+  });
+  return { organization, ownerCookie };
+}
+
+/** An invitee who signed up and accepted an admin invitation. */
+async function invitedAdmin(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+) {
+  const { organization, ownerCookie } = await proOrganizationOwner(fixture);
+  const invitedEmail = "invitee@example.com";
+  const invite = await post(
+    fixture.auth,
+    "/organization/invite-member",
+    {
+      email: invitedEmail,
+      organizationId: organization.id,
+      role: "admin",
+    },
+    ownerCookie,
+  );
+  const invitation = (await invite.json()) as { id: string };
+  await Promise.all(fixture.pending);
+  await post(fixture.auth, "/sign-up/email", {
+    email: invitedEmail,
+    name: "Invited Person",
+    password: originalPassword,
+    termsAccepted: true,
+  });
+  const inviteeSignIn = await post(fixture.auth, "/sign-in/email", {
+    email: invitedEmail,
+    password: originalPassword,
+  });
+  const inviteeCookie = inviteeSignIn.headers.get("set-cookie");
+  await post(
+    fixture.auth,
+    "/organization/accept-invitation",
+    { invitationId: invitation.id },
+    inviteeCookie,
+  );
+  return { invitedEmail, inviteeCookie, organization, ownerCookie };
+}

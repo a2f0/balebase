@@ -459,7 +459,7 @@ describe("password authentication", () => {
     ]);
   });
 
-  it("enrolls in TOTP MFA and requires a second factor at sign-in", async () => {
+  it("enrolls in TOTP only once its first code is verified", async () => {
     const fixture = await createFixture();
     await post(fixture.auth, "/sign-up/email", {
       email,
@@ -537,6 +537,11 @@ describe("password authentication", () => {
         await get(fixture.auth, "/get-session", enrollmentCookies.header())
       ).json(),
     ).toMatchObject({ session: { twoFactorVerified: true } });
+  });
+
+  it("requires a TOTP code after the password at sign-in", async () => {
+    const fixture = await createFixture();
+    const setup = await enrolledInTotp(fixture);
 
     const loginCookies = new CookieJar();
     const passwordStep = await post(fixture.auth, "/sign-in/email", {
@@ -594,6 +599,11 @@ describe("password authentication", () => {
       loginCookies.header(),
     );
     expect(signedOut.status).toBe(200);
+  });
+
+  it("accepts each backup code only once", async () => {
+    const fixture = await createFixture();
+    const setup = await enrolledInTotp(fixture);
 
     const backupLoginCookies = new CookieJar();
     const backupPasswordStep = await post(fixture.auth, "/sign-in/email", {
@@ -888,4 +898,41 @@ async function activeEmail(
   const response = await get(auth, "/get-session", cookies.header());
   const session = (await response.json()) as { user: { email: string } };
   return session.user.email;
+}
+
+/** Signs the person up and enrolls them in TOTP, returning its setup. */
+async function enrolledInTotp(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+) {
+  await post(fixture.auth, "/sign-up/email", {
+    email,
+    name: "Example Person",
+    password: originalPassword,
+    termsAccepted: true,
+  });
+  const enrollmentCookies = new CookieJar();
+  enrollmentCookies.absorb(
+    await post(fixture.auth, "/sign-in/email", {
+      email,
+      password: originalPassword,
+    }),
+  );
+  const enabled = await post(
+    fixture.auth,
+    "/two-factor/enable",
+    { method: "totp", password: originalPassword },
+    enrollmentCookies.header(),
+  );
+  const setup = (await enabled.json()) as {
+    backupCodes: string[];
+    method: string;
+    totpURI: string;
+  };
+  await post(
+    fixture.auth,
+    "/two-factor/verify-totp",
+    { code: await totpCode(setup.totpURI) },
+    enrollmentCookies.header(),
+  );
+  return setup;
 }
