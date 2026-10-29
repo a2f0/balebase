@@ -75,7 +75,9 @@ function stubApi(form = globalForm, failure?: string) {
         template: { ...form, ...body, currentVersion: 2, version: 2 },
       });
     }
-    if (url === admin) return Response.json({ templates: [globalForm] });
+    if (url === admin) {
+      return Response.json({ templates: [{ ...globalForm, auditCount: 3 }] });
+    }
     if (url.endsWith("/versions")) return Response.json({ versions: [] });
     if (url.includes("/activity")) {
       return Response.json({ events: [], nextCursor: null });
@@ -101,17 +103,19 @@ async function render(pathname: string) {
 }
 
 describe("Global Audits", () => {
-  it("unpublishes and republishes a form without offering deletion", async () => {
+  it("unpublishes and republishes a form, offering to discard it only while unpublished", async () => {
     const requests = stubApi();
     await render("/root/global-audits/fire%2Fsafety");
-    expect(container.textContent).not.toContain("Discard draft");
+    expect(container.textContent).not.toContain("Discard");
     await act(async () => button("Unpublish").click());
     await settle(30);
     expect(container.textContent).toContain("Form unpublished.");
+    expect(container.textContent).toContain("Discard form");
     expect(container.textContent).not.toContain("Discard draft");
     await act(async () => button("Publish").click());
     await settle(30);
     expect(container.textContent).toContain("Form published.");
+    expect(container.textContent).not.toContain("Discard");
     expect(
       requests.filter((request) => request.startsWith("PUT")),
     ).toHaveLength(2);
@@ -134,6 +138,22 @@ describe("Global Audits", () => {
     );
     expect(confirm).not.toBeNull();
     await act(async () => confirm?.click());
+    await settle(30);
+    expect(requests).toContain(`DELETE ${admin}/fire%2Fsafety`);
+    expect(paths).toEqual(["/root/global-audits"]);
+  });
+
+  it("confirms discarding an unpublished form and returns to Global Audits", async () => {
+    const requests = stubApi({ ...globalForm, status: "unpublished" });
+    const paths = await render("/root/global-audits/fire%2Fsafety");
+    await act(async () => button("Discard form").click());
+    const dialog = document.querySelector('[role="alertdialog"]');
+    expect(dialog?.textContent).toContain(
+      "This unpublished form will be removed from Global Audits.",
+    );
+    await act(async () =>
+      dialog?.querySelector<HTMLButtonElement>(".buttonDanger")?.click(),
+    );
     await settle(30);
     expect(requests).toContain(`DELETE ${admin}/fire%2Fsafety`);
     expect(paths).toEqual(["/root/global-audits"]);
@@ -165,6 +185,7 @@ describe("Global Audits", () => {
     expect(container.querySelector("h1")?.textContent).toBe("Global Audits");
     const row = container.querySelector(".auditTemplateRow");
     expect(row?.textContent).toContain("Fire safety");
+    expect(row?.textContent).toContain("3 audits");
     expect(row?.textContent).not.toContain("Start audit");
     const manage = row?.querySelector<HTMLAnchorElement>("a");
     expect(manage?.textContent).toBe("Manage");

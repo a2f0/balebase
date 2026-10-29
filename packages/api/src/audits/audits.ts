@@ -17,6 +17,7 @@ import {
   issueUpdate,
   toIssue,
 } from "../issues/issueRecords";
+import { canManage } from "../organizations/organizationMembers";
 import {
   type ActivityActor,
   type ActivityRow,
@@ -61,8 +62,10 @@ import {
   storedDefinition,
   type TemplateRow,
   type TemplateSaveInput,
-  templateSelect,
+  templateSummarySelect,
   toTemplate,
+  toTemplateSummary,
+  visibleTemplateFilter,
 } from "./auditTemplates";
 
 const audits = new Hono<ApiEnv>();
@@ -76,16 +79,16 @@ interface MemberRow {
 const auditRunPageSize = 100;
 audits.get("/templates", async (context) => {
   const organizationId = context.get("organizationId");
+  // Counts only this organization's audits, global forms included.
   const result = await context.env.DB.prepare(
-    `${templateSelect}
-     WHERE (family.scope = 'global' AND version.status = 'published')
-        OR family.organization_id = ?
+    `${templateSummarySelect("?")}
+     WHERE ${visibleTemplateFilter()}
      ORDER BY family.updated_at DESC`,
   )
-    .bind(organizationId)
-    .all<TemplateRow>();
+    .bind(organizationId, organizationId)
+    .all<TemplateRow & { audit_count: number }>();
   return respond(context, auditsRoutes.listTemplates, {
-    templates: result.results.map(toTemplate),
+    templates: result.results.map(toTemplateSummary),
   });
 });
 
@@ -254,18 +257,32 @@ audits.put("/templates/:id", async (context) => {
       403,
     );
   }
-  const input = await readBody(
+  const body = await readBody(
     context,
     auditsRoutes.updateTemplate,
     "The template definition is invalid.",
   );
-  if (input instanceof Response) return input;
+  if (body instanceof Response) return body;
+  const { status, ...input } = body;
+  if (status !== undefined && !canManage(context)) {
+    return context.json(
+      { error: "Only organization managers can publish or unpublish forms." },
+      403,
+    );
+  }
+  if (status === "unpublished" && current.status !== "published") {
+    return context.json(
+      { error: "Only published forms can be unpublished." },
+      409,
+    );
+  }
   const saved = await saveTemplateVersion(
     context.env.DB,
     organizationId,
     current,
     requestActor(context),
     input,
+    status,
   );
   return saved === "stale"
     ? context.json({ error: staleTemplateError }, 409)

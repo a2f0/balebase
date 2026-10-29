@@ -17,12 +17,14 @@ export interface TemplateResponse {
     id: string;
     name: string;
     scope: "global" | "organization";
+    status: string;
     version: number;
   };
 }
 
 export interface TemplateListResponse {
   templates: Array<{
+    auditCount: number;
     definition: AuditDefinition;
     id: string;
     name: string;
@@ -55,6 +57,8 @@ export interface IssueImageResponse {
 
 export interface TestIdentity {
   organizationId?: string;
+  /** The organization role; owner unless given. */
+  organizationRole?: string;
   role?: string;
   userId?: string;
 }
@@ -192,7 +196,8 @@ export function createFixture(migrations: { before?: string } = {}) {
     (context) => ({
       organizationId:
         context.req.header("x-test-organization-id") ?? "org_user-1",
-      organizationRole: "owner",
+      organizationRole:
+        context.req.header("x-test-organization-role") ?? "owner",
       role: context.req.header("x-test-role") ?? "user",
       userId: context.req.header("x-test-user-id") ?? "user-1",
     }),
@@ -232,6 +237,9 @@ export async function jsonRequest<T = unknown>(
   const headers: Record<string, string> = {};
   if (identity?.organizationId) {
     headers["x-test-organization-id"] = identity.organizationId;
+  }
+  if (identity?.organizationRole) {
+    headers["x-test-organization-role"] = identity.organizationRole;
   }
   if (identity?.role) headers["x-test-role"] = identity.role;
   if (identity?.userId) headers["x-test-user-id"] = identity.userId;

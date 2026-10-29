@@ -86,7 +86,12 @@ export const auditTools: McpTool[] = [
   {
     description:
       "Saves a new version of an organization form. Existing audits keep the version they started from.",
-    descriptions: { ...templateId, ...templateSave },
+    descriptions: {
+      ...templateId,
+      ...templateSave,
+      status:
+        "published or unpublished to change the form's publication (organization managers only); omit to keep it. Only published forms can be turned on for projects.",
+    },
     name: "save_audit_template",
     require: ["expectedCurrentVersion"],
     route: auditsRoutes.updateTemplate,

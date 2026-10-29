@@ -79,9 +79,13 @@ function stubApi() {
   return saves;
 }
 
-async function render() {
+async function render(canPublish = false) {
   ({ container } = await mount(
-    <AuditTemplateBuilder id="t1" onNavigate={() => {}} />,
+    <AuditTemplateBuilder
+      canPublish={canPublish}
+      id="t1"
+      onNavigate={() => {}}
+    />,
   ));
   await settle(30);
 }
@@ -141,6 +145,41 @@ async function pointer(
     );
   });
 }
+
+describe("organization form publication", () => {
+  it("lets managers publish a draft with the editor's changes", async () => {
+    const saves = stubApi();
+    await render(true);
+    const header = () => container.querySelector(".auditVersionControls");
+    expect(header()?.textContent).toContain("Draft");
+    const publish = [
+      ...container.querySelectorAll<HTMLButtonElement>("button"),
+    ].find((button) => button.textContent === "Publish");
+    await act(async () => publish?.click());
+    await settle(30);
+    expect(saves).toEqual([
+      expect.objectContaining({
+        expectedCurrentVersion: 1,
+        status: "published",
+      }),
+    ]);
+    expect(container.textContent).toContain("Form published.");
+    expect(header()?.textContent).toContain("Published");
+    expect(header()?.textContent).toContain("Unpublish");
+  });
+
+  it("shows other members the status without publication controls", async () => {
+    stubApi();
+    await render();
+    const header = container.querySelector(".auditVersionControls");
+    expect(header?.textContent).toContain("Draft");
+    expect(
+      [...container.querySelectorAll("button")].map(
+        (button) => button.textContent,
+      ),
+    ).not.toContain("Publish");
+  });
+});
 
 describe("reordering the audit form", () => {
   it("moves a question from its number's menu and saves the new order", async () => {

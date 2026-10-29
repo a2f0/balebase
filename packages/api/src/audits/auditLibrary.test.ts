@@ -149,10 +149,13 @@ describe("starter template seeding", () => {
       updatedAt: template.publishedAt,
       version: template.version,
     }));
+    // Lists add how many audits each form has; none have started yet.
     const list = JSON.stringify({
-      templates: templates.toSorted((first, second) =>
-        second.updatedAt.localeCompare(first.updatedAt),
-      ),
+      templates: templates
+        .toSorted((first, second) =>
+          second.updatedAt.localeCompare(first.updatedAt),
+        )
+        .map((template) => ({ ...template, auditCount: 0 })),
     });
     expect(await (await send("/templates")).text()).toBe(list);
     expect(await (await send("/admin/audit-templates", "admin")).text()).toBe(
