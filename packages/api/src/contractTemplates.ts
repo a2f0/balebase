@@ -2,20 +2,21 @@ import {
   type ContractTemplate,
   type ContractTemplateSummary,
   contractTemplatesRoutes,
+  type TemplateDefinition,
   type TemplateVersion,
 } from "@balebase/validators/contractTemplates";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "./authMiddleware";
-import { draftStatements } from "./contractDraft";
+import {
+  draftStatements,
+  fieldsOnDocument,
+  offPageError,
+} from "./contractDraft";
 import { InvalidPdfError, inspectPdf, sha256Hex } from "./contractPdf";
 import { eventStatement } from "./contractRecords";
-import {
-  mappedDraft,
-  type TemplateDefinition,
-  templateInput,
-} from "./contractTemplateDefinition";
+import { mappedDraft } from "./contractTemplateDefinition";
 import { normalizeFilename } from "./filenames";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 import {
   readBoundedForm,
   storedDownload,
@@ -207,26 +208,21 @@ contractTemplates.get("/:id/document", async (context) => {
 
 // Saving always appends a version, and guards against overwriting a newer save.
 contractTemplates.post("/:id/versions", async (context) => {
-  const body: unknown = await context.req.json().catch(() => null);
-  if (!body || typeof body !== "object")
-    return context.json({ error: "The template is invalid." }, 400);
-  const sourceVersion = Reflect.get(body, "sourceVersion");
-  const expected = Reflect.get(body, "expectedCurrentVersion");
-  if (
-    !Number.isSafeInteger(sourceVersion) ||
-    sourceVersion < 1 ||
-    !Number.isSafeInteger(expected) ||
-    expected < 1
-  )
-    return context.json({ error: "Choose a template version." }, 400);
+  const input = await readBody(
+    context,
+    contractTemplatesRoutes.saveVersion,
+    "The template is invalid.",
+  );
+  if (input instanceof Response) return input;
+  const { expectedCurrentVersion: expected, sourceVersion } = input;
   const source = await findVersion(
     context,
     context.req.param("id"),
     sourceVersion,
   );
   if (!source) return notFound(context);
-  const input = templateInput(body, source.document_page_count);
-  if (typeof input === "string") return context.json({ error: input }, 400);
+  if (!fieldsOnDocument(input.definition.fields, source.document_page_count))
+    return context.json({ error: offPageError }, 400);
   const now = new Date().toISOString();
   const saved = await context.env.DB.batch([
     context.env.DB.prepare(
@@ -280,12 +276,17 @@ contractTemplates.post("/:id/versions", async (context) => {
 });
 
 contractTemplates.post("/:id/contracts", async (context) => {
-  const body: unknown = await context.req.json().catch(() => null);
-  const selected =
-    body && typeof body === "object" ? Reflect.get(body, "version") : undefined;
-  if (!Number.isSafeInteger(selected) || selected < 1)
-    return context.json({ error: "Choose a template version." }, 400);
-  const source = await findVersion(context, context.req.param("id"), selected);
+  const body = await readBody(
+    context,
+    contractTemplatesRoutes.createContract,
+    "Choose a template version.",
+  );
+  if (body instanceof Response) return body;
+  const source = await findVersion(
+    context,
+    context.req.param("id"),
+    body.version,
+  );
   if (!source) return notFound(context);
   const definition = JSON.parse(source.definition_json) as TemplateDefinition;
   const draft = mappedDraft(

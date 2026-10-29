@@ -15,9 +15,9 @@ import type {
   AuditDefinition,
   AuditIssue,
   AuditIssueUpdate,
-  AuditPerson,
   AuditTemplateItem,
 } from "@balebase/validators/audits";
+import type { Person } from "@balebase/validators/fields";
 import {
   issueImageProblem,
   issueImageTypes,
@@ -59,7 +59,7 @@ export function AuditIssuePanel({
   auditId: string;
   definition: AuditDefinition;
   issues: AuditIssue[];
-  members: AuditPerson[];
+  members: Person[];
   onChange: () => Promise<void>;
   responses: Record<string, string>;
 }) {
@@ -116,7 +116,7 @@ function AuditIssueForm({
 }: {
   auditId: string;
   items: AuditTemplateItem[];
-  members: AuditPerson[];
+  members: Person[];
   onCreated: (warning?: string) => Promise<void>;
   responses: Record<string, string>;
 }) {
@@ -214,7 +214,7 @@ export function AuditIssueDraftFields({
   members,
 }: {
   draft: AuditIssueDraft;
-  members: AuditPerson[];
+  members: Person[];
 }) {
   return (
     <>
@@ -297,7 +297,7 @@ function AuditIssueList({
   onError,
 }: {
   issues: AuditIssue[];
-  members: AuditPerson[];
+  members: Person[];
   onChange: () => Promise<void>;
   onError: (error: string | undefined) => void;
 }) {
@@ -332,7 +332,7 @@ function AuditIssueCard({
   onError,
 }: {
   issue: AuditIssue;
-  members: AuditPerson[];
+  members: Person[];
   onChange: () => Promise<void>;
   onError: (error: string | undefined) => void;
 }) {
@@ -386,7 +386,7 @@ function AuditIssueCardActions({
 }: {
   busy: boolean;
   issue: AuditIssue;
-  members: AuditPerson[];
+  members: Person[];
   onUpdate: (update: AuditIssueUpdate) => Promise<void>;
 }) {
   const assignedMemberIsMissing =

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PersonSchema } from "./fields";
 import { route } from "./route";
 
 /** The API key behind an event, and whether MCP or REST called it. */
@@ -9,12 +10,9 @@ const ActivityApiKeySchema = z.object({
   name: z.string(),
 });
 
-export const ActivityActorSchema = z.object({
+export const ActivityActorSchema = PersonSchema.extend({
   /** Set when the person acted through an API key. */
   apiKey: ActivityApiKeySchema.nullish(),
-  email: z.string(),
-  id: z.string(),
-  name: z.string(),
 });
 export type ActivityActor = z.infer<typeof ActivityActorSchema>;
 

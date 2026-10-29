@@ -2,27 +2,13 @@ import type { Issue, IssueTargetType } from "@balebase/validators/issues";
 import type { Context } from "hono";
 import { storedDefinition } from "./auditTemplates";
 import type { ApiEnv } from "./authMiddleware";
-import { isRecord, validText } from "./jsonInput";
 import { userHasCapability } from "./organizationGroups";
 
 export type IssueContext = Context<ApiEnv>;
-export type IssueField =
-  | "assignedTo"
-  | "description"
-  | "priority"
-  | "status"
-  | "title";
 export interface IssueTarget {
   type: IssueTargetType;
   id: string | null;
   itemId: string | null;
-}
-export interface IssueInput {
-  title: string;
-  description: string;
-  priority: string;
-  assignedTo: string | null;
-  status: string;
 }
 export interface IssueRow {
   id: string;
@@ -112,37 +98,6 @@ export function toIssue(row: IssueRow): Issue {
   };
 }
 
-export function parseIssueInput(body: unknown): IssueInput | null {
-  if (!isRecord<IssueField>(body) || !validText(body.title, 300)) return null;
-  if (typeof body.description !== "string" || body.description.length > 2000)
-    return null;
-  if (!["low", "medium", "high", "critical"].includes(String(body.priority)))
-    return null;
-  if (body.assignedTo !== null && !validText(body.assignedTo, 200)) return null;
-  if (body.status !== "open" && body.status !== "resolved") return null;
-  return {
-    title: body.title.trim(),
-    description: body.description.trim(),
-    priority: String(body.priority),
-    assignedTo: body.assignedTo as string | null,
-    status: body.status,
-  };
-}
-
-export function parseIssueTarget(value: unknown): IssueTarget | null {
-  if (value === undefined) return { type: "workspace", id: null, itemId: null };
-  if (!isRecord<"id" | "itemId">(value)) return null;
-  const { type } = value;
-  if (type === "workspace" && value.id == null && value.itemId == null)
-    return { type: "workspace", id: null, itemId: null };
-  if (!validText(value.id, 200)) return null;
-  if (type === "finance_transaction" && value.itemId == null)
-    return { type: type, id: value.id, itemId: null };
-  if (type === "audit_run" && validText(value.itemId, 100))
-    return { type: type, id: value.id, itemId: value.itemId };
-  return null;
-}
-
 export async function issueTargetAvailable(
   context: IssueContext,
   target: IssueTarget,
@@ -175,3 +130,99 @@ export const issueTargetWritable = `(target_type = 'workspace'
     WHERE audits.id = issues.target_id AND audits.organization_id = issues.organization_id AND deleted_at IS NULL))
   OR (target_type = 'finance_transaction' AND EXISTS (SELECT 1 FROM plaid_transactions
     WHERE plaid_transactions.id = issues.target_id AND plaid_transactions.organization_id = issues.organization_id AND source_status = 'active')))`;
+
+// Checked in the write itself, so a member removed meanwhile cannot be
+// assigned.
+const isMember =
+  "EXISTS (SELECT 1 FROM member WHERE organizationId = ? AND userId = ?)";
+
+/** A new issue, with its fields as the contract parsed them. */
+export interface NewIssue {
+  assignedTo?: string | null | undefined;
+  description: string;
+  id: string;
+  priority: Issue["priority"];
+  target: IssueTarget;
+  title: string;
+}
+
+/**
+ * Inserts an open issue. It inserts nothing if the assignee is not a member,
+ * and fails if the target is unavailable.
+ */
+export function issueInsert(context: IssueContext, issue: NewIssue) {
+  const organizationId = context.get("organizationId");
+  const assignedTo = issue.assignedTo ?? null;
+  const now = new Date().toISOString();
+  return context.env.DB.prepare(`INSERT INTO issues
+    (id, organization_id, target_type, target_id, item_id, title, description, priority, status, assigned_to, created_by, created_at, updated_at)
+    SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?
+    WHERE ? IS NULL OR ${isMember}`).bind(
+    issue.id,
+    organizationId,
+    issue.target.type,
+    issue.target.id,
+    issue.target.itemId,
+    issue.title,
+    issue.description,
+    issue.priority,
+    assignedTo,
+    context.get("authSession").user.id,
+    now,
+    now,
+    assignedTo,
+    organizationId,
+    assignedTo,
+  );
+}
+
+export interface IssueChanges {
+  assignedTo?: string | null | undefined;
+  description?: string | undefined;
+  priority?: Issue["priority"] | undefined;
+  status?: Issue["status"] | undefined;
+  title?: string | undefined;
+}
+
+const changeColumns = {
+  assignedTo: "assigned_to",
+  description: "description",
+  priority: "priority",
+  status: "status",
+  title: "title",
+} as const;
+
+/**
+ * Updates the fields given, and the revision, where `guard` holds. It
+ * changes nothing if a new assignee is not a member; an unchanged assignee
+ * may stay after leaving.
+ */
+export function issueUpdate(
+  context: IssueContext,
+  id: string,
+  changes: IssueChanges & { updatedAt: string },
+  guard: { bindings: (number | string)[]; sql: string },
+) {
+  const organizationId = context.get("organizationId");
+  const assignedTo = changes.assignedTo ?? null;
+  const set = Object.entries(changeColumns).flatMap(([field, column]) => {
+    const value = changes[field as keyof IssueChanges];
+    return value === undefined ? [] : [{ column, value }];
+  });
+  return context.env.DB.prepare(`UPDATE issues
+    SET ${set.map(({ column }) => `${column} = ?, `).join("")}updated_at = ?,
+      activity_actor_id = ?, revision = revision + 1
+    WHERE id = ? AND organization_id = ? AND ${guard.sql}
+      AND (? IS NULL OR ? IS assigned_to OR ${isMember})`).bind(
+    ...set.map(({ value }) => value),
+    changes.updatedAt,
+    context.get("authSession").user.id,
+    id,
+    organizationId,
+    ...guard.bindings,
+    assignedTo,
+    assignedTo,
+    organizationId,
+    assignedTo,
+  );
+}

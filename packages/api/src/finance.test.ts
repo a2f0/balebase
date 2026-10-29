@@ -214,6 +214,66 @@ describe("finance", () => {
     }
   });
 
+  it("rejects malformed exchanges and annotations", async () => {
+    const fixture = await createFixture();
+    for (const body of [
+      {},
+      { publicToken: "  " },
+      { institutionName: "x".repeat(201), publicToken: "public-sandbox-test" },
+      { institutionId: 7, publicToken: "public-sandbox-test" },
+    ]) {
+      expect(
+        await jsonRequest(
+          fixture.app,
+          fixture.bindings,
+          "/exchange",
+          "POST",
+          body,
+        ),
+      ).toMatchObject({
+        body: { error: "A Plaid public token is required." },
+        status: 400,
+      });
+    }
+    const valid = { labels: [], note: "", reviewed: false };
+    for (const body of [
+      null,
+      { ...valid, note: "x".repeat(2001) },
+      {
+        ...valid,
+        labels: Array.from({ length: 13 }, (_, index) => `${index}`),
+      },
+      { ...valid, labels: ["x".repeat(51)] },
+      { ...valid, labels: [7] },
+      { ...valid, reviewed: "yes" },
+    ]) {
+      expect(
+        await jsonRequest(
+          fixture.app,
+          fixture.bindings,
+          "/transactions/missing/annotation",
+          "PATCH",
+          body,
+        ),
+      ).toMatchObject({
+        body: { error: "A valid annotation is required." },
+        status: 400,
+      });
+    }
+    expect(
+      await jsonRequest(
+        fixture.app,
+        fixture.bindings,
+        "/connections/missing/sync-settings",
+        "PATCH",
+        { dailySync: "yes" },
+      ),
+    ).toMatchObject({
+      body: { error: "dailySync must be a boolean." },
+      status: 400,
+    });
+  });
+
   it("retains and reconciles imported history after a disconnect", async () => {
     const fixture = await createFixture();
     const linkToken = await jsonRequest(
@@ -772,7 +832,10 @@ describe("expense categories", () => {
         "POST",
         { name },
       );
-      expect(invalid.status).toBe(400);
+      expect(invalid).toMatchObject({
+        body: { error: "Category names need 1 to 60 characters." },
+        status: 400,
+      });
     }
 
     const renamed = await jsonRequest<{ category: Category }>(
@@ -994,7 +1057,10 @@ describe("expense categories", () => {
         "PUT",
         body,
       );
-      expect(invalid.status).toBe(400);
+      expect(invalid).toMatchObject({
+        body: { error: "A category or null is required." },
+        status: 400,
+      });
     }
     const unknownCategory = await jsonRequest(
       fixture.app,

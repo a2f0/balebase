@@ -1,13 +1,14 @@
-import type {
-  AuditDefinition,
-  AuditPerson,
-  AuditTemplate,
-  AuditTemplateScope,
-  AuditTemplateVersion,
+import {
+  type AuditDefinition,
+  AuditDefinitionSchema,
+  type AuditTemplate,
+  type AuditTemplateSaveSchema,
+  type AuditTemplateScope,
+  type AuditTemplateVersion,
 } from "@balebase/validators/audits";
+import type { Person } from "@balebase/validators/fields";
+import type { z } from "zod";
 import { type ActivityActor, activityBatch } from "./activity";
-import { parseAuditDefinition } from "./auditDefinition";
-import { isRecord, validText } from "./jsonInput";
 
 export interface TemplateRow {
   created_at: string;
@@ -35,12 +36,7 @@ interface TemplateVersionRow {
   version: number;
 }
 
-export interface TemplateSaveInput {
-  definition: AuditDefinition;
-  description: string;
-  expectedCurrentVersion: unknown;
-  name: string;
-}
+export type TemplateSaveInput = z.output<typeof AuditTemplateSaveSchema>;
 
 const templateColumns = `
   family.id,
@@ -294,28 +290,6 @@ async function loadTemplate(
     : statement.bind(id, organizationId).first<TemplateRow>();
 }
 
-export function templateSaveInput(value: unknown): TemplateSaveInput | string {
-  if (
-    !isRecord<keyof TemplateSaveInput>(value) ||
-    !validText(value.name, 200)
-  ) {
-    return "A template name is required.";
-  }
-  const definition = parseAuditDefinition(value.definition);
-  if (!definition) return "The template definition is invalid.";
-  const description =
-    typeof value.description === "string" ? value.description.trim() : "";
-  if (description.length > 2_000) {
-    return "Descriptions are limited to 2,000 characters.";
-  }
-  return {
-    definition,
-    description,
-    expectedCurrentVersion: value.expectedCurrentVersion,
-    name: value.name.trim(),
-  };
-}
-
 export function positiveInteger(value: string) {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
@@ -342,9 +316,10 @@ function blankDefinition(): AuditDefinition {
 }
 
 export function storedDefinition(value: string) {
-  const definition = parseAuditDefinition(JSON.parse(value));
-  if (!definition) throw new Error("Stored audit definition is invalid.");
-  return definition;
+  const definition = AuditDefinitionSchema.safeParse(JSON.parse(value));
+  if (!definition.success)
+    throw new Error("Stored audit definition is invalid.");
+  return definition.data;
 }
 
 export function toTemplate(row: TemplateRow): AuditTemplate {
@@ -380,6 +355,6 @@ function toTemplateVersion(row: TemplateVersionRow): AuditTemplateVersion {
   };
 }
 
-function templateActor(id: string, name: string, email: string): AuditPerson {
+function templateActor(id: string, name: string, email: string): Person {
   return id === auditLibraryActor.id ? auditLibraryActor : { email, id, name };
 }

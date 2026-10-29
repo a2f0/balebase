@@ -42,7 +42,11 @@ describe("default organization settings", () => {
       .run("2026-09-23T00:00:00Z", "shared");
 
     expect((await fixture.request("member", "shared")).status).toBe(403);
-    expect((await fixture.request("member", 123)).status).toBe(400);
+    for (const organizationId of [123, ""])
+      expect(await fixture.request("member", organizationId)).toMatchObject({
+        body: { error: "An organization is required." },
+        status: 400,
+      });
     expect(fixture.defaultFor("member")).toEqual({
       defaultOrganizationId: "org_member",
       defaultOrganizationPinned: 0,

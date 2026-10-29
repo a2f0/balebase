@@ -18,6 +18,7 @@ import type {
   FinanceTransactionAnnotation,
 } from "@balebase/validators/finance";
 import type { LinkedEmail } from "@balebase/validators/inbox";
+import { financeLimits } from "@balebase/validators/rules";
 import { type FormEvent, useState } from "react";
 import { AppLink } from "./AppLink";
 import { FinanceTransactionFilters } from "./FinanceTransactionFilters";
@@ -458,7 +459,7 @@ function TransactionAnnotationForm({
         <Field label="Note">
           <textarea
             className="textarea"
-            maxLength={2000}
+            maxLength={financeLimits.annotationNote}
             onChange={(event) => setNote(event.target.value)}
             placeholder="Add context to this transaction…"
             rows={3}

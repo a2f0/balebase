@@ -1,25 +1,31 @@
 import { z } from "zod";
+import { PersonSchema } from "./fields";
 import { route } from "./route";
+import {
+  apiKeyAccessLevels,
+  apiKeyExpirationDays,
+  apiKeyNameMaxLength,
+} from "./rules";
 
-const ApiKeyAccessSchema = z.enum(["read", "write"]);
+const ApiKeyAccessSchema = z.enum(apiKeyAccessLevels, {
+  error: 'Access must be "read" or "write".',
+});
 export type ApiKeyAccess = z.infer<typeof ApiKeyAccessSchema>;
 
 /** Days until a new key expires, or null for a key that never does. */
 const ApiKeyExpirationSchema = z
-  .union([z.literal(30), z.literal(90), z.literal(365)])
+  .literal(apiKeyExpirationDays, {
+    error: `Expiration must be ${apiKeyExpirationDays.join(", ")} days, or null for no expiration.`,
+  })
   .nullable();
 export type ApiKeyExpiration = z.infer<typeof ApiKeyExpirationSchema>;
 
-const ApiKeyPersonSchema = z.object({
-  email: z.string(),
-  id: z.string(),
-  name: z.string(),
-});
+const nameRule = `Name the API key with 1 to ${apiKeyNameMaxLength} characters.`;
 
 const ApiKeySchema = z.object({
   access: ApiKeyAccessSchema,
   createdAt: z.string(),
-  createdBy: ApiKeyPersonSchema,
+  createdBy: PersonSchema,
   expiresAt: z.string().nullable(),
   id: z.string(),
   lastUsedAt: z.string().nullable(),
@@ -27,17 +33,25 @@ const ApiKeySchema = z.object({
   /** The token's first characters, enough to recognize it. */
   prefix: z.string(),
   revokedAt: z.string().nullable(),
-  revokedBy: ApiKeyPersonSchema.nullable(),
+  revokedBy: PersonSchema.nullable(),
   /** `inactive` keys belong to someone who no longer manages the organization. */
   status: z.enum(["active", "expired", "inactive", "revoked"]),
 });
 export type ApiKey = z.infer<typeof ApiKeySchema>;
 
-const ApiKeyInputSchema = z.object({
-  access: ApiKeyAccessSchema,
-  expiresInDays: ApiKeyExpirationSchema,
-  name: z.string(),
-});
+// Fields in the order their messages should take precedence.
+const ApiKeyInputSchema = z.object(
+  {
+    name: z
+      .string({ error: nameRule })
+      .trim()
+      .min(1, nameRule)
+      .max(apiKeyNameMaxLength, nameRule),
+    access: ApiKeyAccessSchema,
+    expiresInDays: ApiKeyExpirationSchema,
+  },
+  { error: "A name, access level, and expiration are required." },
+);
 export type ApiKeyInput = z.infer<typeof ApiKeyInputSchema>;
 
 export const apiKeysRoutes = {

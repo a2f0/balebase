@@ -8,7 +8,7 @@ import {
   toSyncJob,
 } from "./financeSyncJobs";
 import { delay, waitForRun } from "./legacyJobRun";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 
 async function requestSync(context: FinanceContext) {
   return enqueueSync(
@@ -90,11 +90,12 @@ export async function legacySyncConnection(context: FinanceContext) {
 }
 
 export async function updateSyncSettings(context: FinanceContext) {
-  const input = financeRoutes.updateSyncSettings.body.safeParse(
-    await context.req.json().catch(() => null),
+  const input = await readBody(
+    context,
+    financeRoutes.updateSyncSettings,
+    "dailySync must be a boolean.",
   );
-  if (!input.success)
-    return context.json({ error: "dailySync must be a boolean." }, 400);
+  if (input instanceof Response) return input;
   const id = context.req.param("id") ?? "";
   const organizationId = context.get("organizationId");
   const row =
@@ -107,13 +108,13 @@ export async function updateSyncSettings(context: FinanceContext) {
       { error: "Connection not found or disconnected." },
       404,
     );
-  if (Boolean(row.daily_sync) === input.data.dailySync)
-    return respond(context, financeRoutes.updateSyncSettings, input.data);
+  if (Boolean(row.daily_sync) === input.dailySync)
+    return respond(context, financeRoutes.updateSyncSettings, input);
   const now = new Date().toISOString();
   const [result] = await activityBatch(context.env.DB, context.get("apiKey"), [
     context.env.DB.prepare(`UPDATE plaid_items SET daily_sync = ?, updated_at = ?
       WHERE id = ? AND organization_id = ? AND daily_sync = ? AND status IN ('active', 'error')`).bind(
-      input.data.dailySync ? 1 : 0,
+      input.dailySync ? 1 : 0,
       now,
       id,
       organizationId,
@@ -134,7 +135,7 @@ export async function updateSyncSettings(context: FinanceContext) {
         subject: { id, type: "finance_connection" },
         details: {
           before: Boolean(row.daily_sync),
-          after: input.data.dailySync,
+          after: input.dailySync,
         },
       },
       { sql: "changes() > 0", bindings: [] },
@@ -145,5 +146,5 @@ export async function updateSyncSettings(context: FinanceContext) {
       { error: "Connection changed. Reload and try again." },
       409,
     );
-  return respond(context, financeRoutes.updateSyncSettings, input.data);
+  return respond(context, financeRoutes.updateSyncSettings, input);
 }

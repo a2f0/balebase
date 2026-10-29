@@ -2,10 +2,11 @@ import {
   type LibraryFolder,
   libraryFoldersRoutes,
 } from "@balebase/validators/libraryFolders";
+import { libraryFolderNameMaxLength } from "@balebase/validators/rules";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "./authMiddleware";
 import { listLinkedEmails, toLinkedEmail } from "./inboundEmailLinks";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 
 type LibraryContext = Context<ApiEnv>;
 
@@ -17,7 +18,7 @@ interface FolderRow {
   name: string;
 }
 
-const maxFolderNameLength = 80;
+const invalidName = `Folder names need 1 to ${libraryFolderNameMaxLength} characters.`;
 
 const folderSelect = `
   SELECT folder.id, folder.name, folder.created_at,
@@ -49,8 +50,13 @@ libraryFolders.get("/", async (context) => {
 });
 
 libraryFolders.post("/", async (context) => {
-  const name = await folderName(context);
-  if (!name) return invalidName(context);
+  const input = await readBody(
+    context,
+    libraryFoldersRoutes.create,
+    invalidName,
+  );
+  if (input instanceof Response) return input;
+  const { name } = input;
   const organizationId = context.get("organizationId");
   if (await nameTaken(context.env.DB, organizationId, name)) {
     return duplicateName(context);
@@ -94,8 +100,13 @@ libraryFolders.get("/:id", async (context) => {
 
 libraryFolders.patch("/:id", async (context) => {
   const id = context.req.param("id");
-  const name = await folderName(context);
-  if (!name) return invalidName(context);
+  const input = await readBody(
+    context,
+    libraryFoldersRoutes.rename,
+    invalidName,
+  );
+  if (input instanceof Response) return input;
+  const { name } = input;
   const organizationId = context.get("organizationId");
   if (!(await findLibraryFolder(context.env.DB, organizationId, id))) {
     return folderNotFound(context);
@@ -169,15 +180,6 @@ async function nameTaken(
   return Boolean(existing && existing.id !== exceptId);
 }
 
-async function folderName(context: LibraryContext) {
-  const input: unknown = await context.req.json().catch(() => null);
-  if (typeof input !== "object" || input === null) return null;
-  const name = Reflect.get(input, "name");
-  if (typeof name !== "string") return null;
-  const trimmed = name.replaceAll("\0", "").trim().replace(/\s+/g, " ");
-  return trimmed && trimmed.length <= maxFolderNameLength ? trimmed : null;
-}
-
 function toFolder(row: FolderRow): LibraryFolder {
   return {
     createdAt: row.created_at,
@@ -186,13 +188,6 @@ function toFolder(row: FolderRow): LibraryFolder {
     id: row.id,
     name: row.name,
   };
-}
-
-function invalidName(context: LibraryContext) {
-  return context.json(
-    { error: `Folder names need 1 to ${maxFolderNameLength} characters.` },
-    400,
-  );
 }
 
 function duplicateName(context: LibraryContext) {

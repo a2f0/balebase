@@ -1,11 +1,13 @@
-import { type ApiKey, apiKeysRoutes } from "@balebase/validators/apiKeys";
+import {
+  type ApiKey,
+  type ApiKeyAccess,
+  apiKeysRoutes,
+} from "@balebase/validators/apiKeys";
 import { type Context, Hono } from "hono";
 import type { AuthSession } from "./auth";
 import type { ApiEnv } from "./authMiddleware";
 import { canManageOrganization, requireManager } from "./organizationMembers";
-import { respond } from "./respond";
-
-export type ApiKeyAccess = "read" | "write";
+import { readBody, respond } from "./respond";
 
 /** Whether an API-key request came from an MCP tool or straight to REST. */
 export type ApiKeyChannel = "mcp" | "rest";
@@ -74,9 +76,7 @@ const tokenPrefix = "tlk_";
 const tokenPattern = /^tlk_[0-9a-f]{64}$/;
 // "tlk_" and eight hex digits: enough to tell keys apart, useless to guess.
 const displayPrefixLength = 12;
-const maxNameLength = 100;
 const maxActiveKeys = 50;
-const expirationDays = [30, 90, 365] as const;
 const lastUsedPrecisionMs = 60 * 1000;
 const dayMs = 24 * 60 * 60 * 1000;
 
@@ -305,8 +305,12 @@ apiKeys.post("/", async (context) => {
       403,
     );
   }
-  const input = parseApiKeyInput(await context.req.json().catch(() => null));
-  if (typeof input === "string") return context.json({ error: input }, 400);
+  const input = await readBody(
+    context,
+    apiKeysRoutes.create,
+    "A name, access level, and expiration are required.",
+  );
+  if (input instanceof Response) return input;
   const organizationId = context.get("organizationId");
   const now = new Date();
   const id = crypto.randomUUID();
@@ -440,31 +444,6 @@ function apiKeyStatus(row: ApiKeyRow, now: Date): ApiKey["status"] {
     return "inactive";
   }
   return "active";
-}
-
-function parseApiKeyInput(value: unknown) {
-  if (typeof value !== "object" || value === null) {
-    return "A name, access level, and expiration are required.";
-  }
-  const { access, expiresInDays, name } = value as Record<string, unknown>;
-  const trimmedName = typeof name === "string" ? name.trim() : "";
-  if (!trimmedName || trimmedName.length > maxNameLength) {
-    return `Name the API key with 1 to ${maxNameLength} characters.`;
-  }
-  if (access !== "read" && access !== "write") {
-    return 'Access must be "read" or "write".';
-  }
-  if (
-    expiresInDays !== null &&
-    !expirationDays.some((days) => days === expiresInDays)
-  ) {
-    return `Expiration must be ${expirationDays.join(", ")} days, or null for no expiration.`;
-  }
-  return {
-    access: access as ApiKeyAccess,
-    expiresInDays: expiresInDays as (typeof expirationDays)[number] | null,
-    name: trimmedName,
-  };
 }
 
 function newToken() {

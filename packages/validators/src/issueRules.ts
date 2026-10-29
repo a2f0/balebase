@@ -3,6 +3,8 @@
 
 export const issuePriorities = ["low", "medium", "high", "critical"] as const;
 
+export const issueLimits = { description: 2000, title: 300 } as const;
+
 /** The image formats the API stores. */
 export const issueImageTypes: readonly string[] = [
   "image/gif",

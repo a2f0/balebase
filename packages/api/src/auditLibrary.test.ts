@@ -2,9 +2,9 @@ import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { AuditDefinitionSchema } from "@balebase/validators/audits";
 import residentialData from "../auditLibrary/residential.json";
 import { adminAuditTemplates } from "./adminAuditTemplates";
-import { parseAuditDefinition } from "./auditDefinition";
 import {
   residentialLibraryStats,
   type StarterTemplate,
@@ -32,7 +32,7 @@ describe("residential audit library", () => {
   it("keeps every control attributable and structurally valid", () => {
     expect(validateResidentialLibrary()).toEqual([]);
     for (const { definition } of starterTemplates()) {
-      expect(parseAuditDefinition(definition)).toEqual(definition);
+      expect(AuditDefinitionSchema.parse(definition)).toEqual(definition);
     }
   });
 

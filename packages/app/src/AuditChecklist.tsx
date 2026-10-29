@@ -2,11 +2,12 @@ import { Button, Card, cx, Icon, PageSection, Toast } from "@balebase/ui/react";
 import type {
   AuditDefinition,
   AuditIssue,
-  AuditPerson,
   AuditRun,
   AuditTemplateItem,
   AuditTemplateSection,
 } from "@balebase/validators/audits";
+import type { Person } from "@balebase/validators/fields";
+import { auditLimits } from "@balebase/validators/rules";
 import { useReducer } from "react";
 import { ApiKeyAttribution } from "./ActivityFeed";
 import { AuditIssueDraftFields, useAuditIssueDraft } from "./AuditRunIssues";
@@ -29,7 +30,7 @@ interface IssueContext {
   audit: AuditRun;
   auditId: string;
   issues: AuditIssue[];
-  members: AuditPerson[];
+  members: Person[];
   onCreated: () => Promise<void>;
 }
 
@@ -178,7 +179,7 @@ function AuditQuestion({
         <textarea
           aria-labelledby={promptId}
           className="textarea runAnswer"
-          maxLength={2000}
+          maxLength={auditLimits.answer}
           onChange={(event) => onChange(event.target.value)}
           placeholder="Enter response"
           rows={3}
@@ -299,7 +300,7 @@ export function FailedItemIssue({
 }: {
   auditId: string;
   item: AuditTemplateItem;
-  members: AuditPerson[];
+  members: Person[];
   onCreated: (offer: number, warning?: string) => Promise<void>;
   onSkipChange: (skip: boolean) => void;
   openIssueCount: number;

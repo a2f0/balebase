@@ -3,6 +3,7 @@ import {
   type AuditIssue,
   auditsRoutes,
 } from "@balebase/validators/audits";
+import type { Issue } from "@balebase/validators/issues";
 import { Hono } from "hono";
 import {
   type ActivityActor,
@@ -42,7 +43,6 @@ import {
   storedDefinition,
   type TemplateRow,
   type TemplateSaveInput,
-  templateSaveInput,
   templateSelect,
   toTemplate,
 } from "./auditTemplates";
@@ -52,28 +52,16 @@ import {
   organizationPlanLimits,
 } from "./billingEntitlements";
 import { cursorPage, decodeCursor, encodeCursor } from "./cursorPagination";
-import type { IssueField } from "./issueRecords";
-import { isRecord, validText } from "./jsonInput";
-import { respond } from "./respond";
+import {
+  type IssueRow,
+  issueInsert,
+  issueSelect,
+  issueUpdate,
+  toIssue,
+} from "./issueRecords";
+import { readBody, respond } from "./respond";
 
 const audits = new Hono<ApiEnv>();
-
-interface IssueRow {
-  assigned_to: string | null;
-  assignee_email: string | null;
-  assignee_name: string | null;
-  created_at: string;
-  created_by_email: string;
-  created_by_id: string;
-  created_by_name: string;
-  description: string;
-  id: string;
-  item_id: string;
-  priority: AuditIssue["priority"];
-  status: AuditIssue["status"];
-  title: string;
-  updated_at: string;
-}
 
 interface MemberRow {
   email: string;
@@ -98,14 +86,12 @@ audits.get("/templates", async (context) => {
 });
 
 audits.post("/templates", async (context) => {
-  const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord<"name" | "scope">(body) || !validText(body.name, 200)) {
-    return context.json({ error: "A template name is required." }, 400);
-  }
-  // Global templates are created through Global Audits.
-  if (body.scope !== undefined && body.scope !== "organization") {
-    return context.json({ error: "Template scope is invalid." }, 400);
-  }
+  const body = await readBody(
+    context,
+    auditsRoutes.createTemplate,
+    "A template name is required.",
+  );
+  if (body instanceof Response) return body;
   const organizationId = context.get("organizationId");
   const { formTemplates: templateLimit } = await organizationPlanLimits(
     context.env,
@@ -113,7 +99,7 @@ audits.post("/templates", async (context) => {
   );
   const template = await createTemplate(context.env.DB, {
     actor: requestActor(context),
-    name: body.name.trim(),
+    name: body.name,
     organizationId,
     templateLimit,
   });
@@ -143,8 +129,12 @@ audits.post("/templates/:id/copies", async (context) => {
   if (source?.scope !== "global") {
     return context.json({ error: "Global template not found." }, 404);
   }
-  const input = templateSaveInput(await context.req.json().catch(() => null));
-  if (typeof input === "string") return context.json({ error: input }, 400);
+  const input = await readBody(
+    context,
+    auditsRoutes.copyTemplate,
+    "The template definition is invalid.",
+  );
+  if (input instanceof Response) return input;
   if (
     input.expectedCurrentVersion !== undefined &&
     input.expectedCurrentVersion !== source.current_version
@@ -260,8 +250,12 @@ audits.put("/templates/:id", async (context) => {
       403,
     );
   }
-  const input = templateSaveInput(await context.req.json().catch(() => null));
-  if (typeof input === "string") return context.json({ error: input }, 400);
+  const input = await readBody(
+    context,
+    auditsRoutes.updateTemplate,
+    "The template definition is invalid.",
+  );
+  if (input instanceof Response) return input;
   const saved = await saveTemplateVersion(
     context.env.DB,
     organizationId,
@@ -383,8 +377,8 @@ audits.get("/runs/:id", async (context) => {
   const imagesByIssue = groupImagesByIssue(images);
   return respond(context, auditsRoutes.getRun, {
     audit: { ...toAudit(audit), answerActivity },
-    issues: issues.map((issue) =>
-      toIssue(issue, imagesByIssue.get(issue.id) ?? []),
+    issues: issues.map((row) =>
+      toAuditIssue(toIssue(row), imagesByIssue.get(row.id) ?? []),
     ),
     members: members.map((member) => ({ ...member })),
   });
@@ -422,19 +416,12 @@ audits.patch("/runs/:id", async (context) => {
   if (!audit) return context.json({ error: "Audit not found." }, 404);
   if (audit.deleted_at)
     return context.json({ error: discardedAuditError }, 409);
-  const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord<"expectedRevision" | "responses" | "status">(body))
-    return context.json({ error: "Invalid audit update." }, 400);
-  if (
-    typeof body.expectedRevision !== "number" ||
-    !Number.isSafeInteger(body.expectedRevision) ||
-    body.expectedRevision < 0
-  ) {
-    return context.json(
-      { error: "A valid audit revision is required. Reload it before saving." },
-      400,
-    );
-  }
+  const body = await readBody(
+    context,
+    auditsRoutes.saveRun,
+    "Invalid audit update.",
+  );
+  if (body instanceof Response) return body;
   if (body.expectedRevision !== audit.revision) {
     return context.json(
       { error: "This audit has changed. Reload it before saving." },
@@ -446,9 +433,6 @@ audits.patch("/runs/:id", async (context) => {
   if (!responses)
     return context.json({ error: "Invalid audit responses." }, 400);
   const status = body.status ?? audit.status;
-  if (status !== "completed" && status !== "in_progress") {
-    return context.json({ error: "Invalid audit status." }, 400);
-  }
   if (status === "completed" && !allRequiredAnswered(definition, responses)) {
     return context.json({ error: "Complete every required item first." }, 400);
   }
@@ -496,58 +480,39 @@ audits.post("/runs/:id/issues", async (context) => {
   if (!audit) return context.json({ error: "Audit not found." }, 404);
   if (audit.deleted_at)
     return context.json({ error: discardedAuditError }, 409);
-  const body: unknown = await context.req.json().catch(() => null);
-  const issueInput = await parseIssueInput(
-    context.env.DB,
-    organizationId,
-    storedDefinition(audit.definition),
-    body,
+  const input = await readBody(
+    context,
+    auditsRoutes.createIssue,
+    "Invalid issue details.",
   );
-  if (!issueInput)
+  if (input instanceof Response) return input;
+  if (!definitionItemIds(storedDefinition(audit.definition)).has(input.itemId))
     return context.json({ error: "Invalid issue details." }, 400);
   const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  const insert = context.env.DB.prepare(
-    `INSERT INTO issues
-     (id, organization_id, target_type, target_id, item_id, title, description, priority,
-      status, assigned_to, created_by, created_at, updated_at)
-     SELECT ?, ?, 'audit_run', ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?
-     WHERE EXISTS (
-       SELECT 1 FROM audits
-       WHERE id = ? AND organization_id = ? AND deleted_at IS NULL
-     )`,
-  ).bind(
-    id,
-    organizationId,
-    audit.id,
-    issueInput.itemId,
-    issueInput.title,
-    issueInput.description,
-    issueInput.priority,
-    issueInput.assignedTo,
-    context.get("authSession").user.id,
-    now,
-    now,
-    audit.id,
-    organizationId,
-  );
-  const [inserted] = await activityBatch(
-    context.env.DB,
-    context.get("apiKey"),
-    [insert],
-  );
-  if (Number(inserted?.meta.changes) === 0) {
-    return (await findAudit(context.env.DB, organizationId, audit.id))
-      ? context.json({ error: discardedAuditError }, 409)
-      : context.json({ error: "Audit not found." }, 404);
+  const target = {
+    type: "audit_run" as const,
+    id: audit.id,
+    itemId: input.itemId,
+  };
+  try {
+    const [inserted] = await activityBatch(
+      context.env.DB,
+      context.get("apiKey"),
+      [issueInsert(context, { ...input, id, target })],
+    );
+    if (!Number(inserted?.meta.changes))
+      return context.json({ error: "Issue assignee is not a member." }, 400);
+  } catch (cause) {
+    const current = await findAudit(context.env.DB, organizationId, audit.id);
+    if (!current) return context.json({ error: "Audit not found." }, 404);
+    if (current.deleted_at)
+      return context.json({ error: discardedAuditError }, 409);
+    throw cause;
   }
   return respond(context, auditsRoutes.createIssue, { issueId: id }, 201);
 });
 
 audits.patch("/issues/:id", async (context) => {
-  const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord<"assignedTo" | "status">(body))
-    return context.json({ error: "Invalid issue update." }, 400);
   const organizationId = context.get("organizationId");
   const issue = await findIssueForUpdate(
     context.env.DB,
@@ -557,67 +522,34 @@ audits.patch("/issues/:id", async (context) => {
   if (!issue) return context.json({ error: "Issue not found." }, 404);
   if (issue.audit_deleted_at)
     return context.json({ error: discardedAuditError }, 409);
-  const changesStatus = body.status !== undefined;
-  const changesAssignee = body.assignedTo !== undefined;
-  if (!changesStatus && !changesAssignee) {
-    return context.json({ error: "No issue changes were provided." }, 400);
-  }
-  if (
-    body.status !== undefined &&
-    body.status !== "open" &&
-    body.status !== "resolved"
-  ) {
-    return context.json(
-      { error: "Issue status must be open or resolved." },
-      400,
-    );
-  }
-  const assignedTo = changesAssignee
-    ? parseAssignee(body.assignedTo)
-    : issue.assigned_to;
-  // Only a new assignee can be invalid; the stored one is a user or null.
-  if (assignedTo === undefined) {
-    return context.json({ error: "Issue assignee is invalid." }, 400);
-  }
-  const status =
-    body.status === "open" || body.status === "resolved"
-      ? body.status
-      : issue.status;
-  const now = new Date().toISOString();
-  const update = context.env.DB.prepare(
-    `UPDATE issues
-     SET status = CASE WHEN ? = 1 THEN ? ELSE status END,
-         assigned_to = CASE WHEN ? = 1 THEN ? ELSE assigned_to END,
-         updated_at = ?, activity_actor_id = ?, revision = revision + 1
-     WHERE id = ? AND organization_id = ? AND target_type = 'audit_run'
-       AND (? = 0 OR ? IS NULL OR EXISTS (
-         SELECT 1 FROM member WHERE organizationId = ? AND userId = ?
-       ))
-       AND NOT EXISTS (
-         SELECT 1 FROM audits
-         WHERE audits.id = issues.target_id AND audits.deleted_at IS NOT NULL
-       )`,
-  ).bind(
-    changesStatus ? 1 : 0,
-    status,
-    changesAssignee ? 1 : 0,
-    assignedTo ?? null,
-    now,
-    context.get("authSession").user.id,
-    issue.id,
-    organizationId,
-    changesAssignee ? 1 : 0,
-    assignedTo ?? null,
-    organizationId,
-    assignedTo ?? null,
+  const changes = await readBody(
+    context,
+    auditsRoutes.updateIssue,
+    "Invalid issue update.",
   );
+  if (changes instanceof Response) return changes;
+  const now = new Date().toISOString();
   const [result] = await activityBatch(context.env.DB, context.get("apiKey"), [
-    update,
+    issueUpdate(
+      context,
+      issue.id,
+      { ...changes, updatedAt: now },
+      {
+        bindings: [],
+        sql: `target_type = 'audit_run' AND NOT EXISTS (
+        SELECT 1 FROM audits
+        WHERE audits.id = issues.target_id AND audits.deleted_at IS NOT NULL
+      )`,
+      },
+    ),
   ]);
   if (Number(result?.meta.changes) > 0) {
     return respond(context, auditsRoutes.updateIssue, {
-      assignedTo,
-      status,
+      assignedTo:
+        changes.assignedTo === undefined
+          ? issue.assigned_to
+          : changes.assignedTo,
+      status: changes.status ?? issue.status,
       updatedAt: now,
     });
   }
@@ -625,7 +557,7 @@ audits.patch("/issues/:id", async (context) => {
     context.env.DB,
     organizationId,
     issue.id,
-    changesAssignee ? assignedTo : null,
+    changes.assignedTo,
   );
   return context.json({ error: rejected.error }, rejected.status);
 });
@@ -709,11 +641,6 @@ async function copyGlobalTemplate(
   return saved;
 }
 
-function parseAssignee(value: unknown) {
-  if (value === null || value === "") return null;
-  return validText(value, 100) ? value.trim() : undefined;
-}
-
 async function findIssues(
   database: D1Database,
   organizationId: string,
@@ -721,15 +648,7 @@ async function findIssues(
 ) {
   const result = await database
     .prepare(
-      `SELECT issue.id, issue.item_id, issue.title, issue.description,
-              issue.priority, issue.status, issue.assigned_to, issue.created_at,
-              issue.updated_at, assignee.name AS assignee_name,
-              creator.id AS created_by_id, creator.name AS created_by_name,
-              creator.email AS created_by_email,
-              assignee.email AS assignee_email
-       FROM issues AS issue
-       JOIN user AS creator ON creator.id = issue.created_by
-       LEFT JOIN user AS assignee ON assignee.id = issue.assigned_to
+      `${issueSelect}
        WHERE issue.target_type = 'audit_run' AND issue.target_id = ? AND issue.organization_id = ?
        ORDER BY issue.created_at DESC`,
     )
@@ -748,38 +667,6 @@ async function findMembers(database: D1Database, organizationId: string) {
     .bind(organizationId)
     .all<MemberRow>();
   return result.results;
-}
-
-async function parseIssueInput(
-  database: D1Database,
-  organizationId: string,
-  definition: AuditDefinition,
-  value: unknown,
-) {
-  if (!isRecord<IssueField | "itemId">(value) || !validText(value.itemId, 100))
-    return null;
-  if (!validText(value.title, 300)) return null;
-  if (!definitionItemIds(definition).has(value.itemId)) return null;
-  const description =
-    typeof value.description === "string" ? value.description.trim() : "";
-  if (description.length > 2_000) return null;
-  const priority = ["low", "medium", "high", "critical"].includes(
-    String(value.priority),
-  )
-    ? String(value.priority)
-    : "medium";
-  const assignedTo =
-    typeof value.assignedTo === "string" ? value.assignedTo : null;
-  if (assignedTo && !(await isMember(database, organizationId, assignedTo))) {
-    return null;
-  }
-  return {
-    assignedTo,
-    description,
-    itemId: value.itemId,
-    priority,
-    title: value.title.trim(),
-  };
 }
 
 async function isMember(
@@ -813,25 +700,22 @@ function groupImagesByIssue(images: AuditIssueImageRow[]) {
   return grouped;
 }
 
-function toIssue(row: IssueRow, images: AuditIssueImageRow[]): AuditIssue {
+/** An audit lists its issues with the assignee flattened and their images. */
+function toAuditIssue(issue: Issue, images: AuditIssueImageRow[]): AuditIssue {
   return {
-    assignedTo: row.assigned_to,
-    assigneeEmail: row.assignee_email,
-    assigneeName: row.assignee_name,
-    createdAt: row.created_at,
-    createdBy: {
-      email: row.created_by_email,
-      id: row.created_by_id,
-      name: row.created_by_name,
-    },
-    description: row.description,
-    id: row.id,
+    assignedTo: issue.assignedTo?.id ?? null,
+    assigneeEmail: issue.assignedTo?.email ?? null,
+    assigneeName: issue.assignedTo?.name ?? null,
+    createdAt: issue.createdAt,
+    createdBy: issue.createdBy,
+    description: issue.description,
+    id: issue.id,
     images: images.map(toAuditIssueImage),
-    itemId: row.item_id,
-    priority: row.priority,
-    status: row.status,
-    title: row.title,
-    updatedAt: row.updated_at,
+    itemId: issue.target.itemId ?? "",
+    priority: issue.priority,
+    status: issue.status,
+    title: issue.title,
+    updatedAt: issue.updatedAt,
   };
 }
 

@@ -2,8 +2,9 @@ import { Button, Card, Field, Select } from "@balebase/ui/react";
 import type {
   EquipmentInput,
   EquipmentItem,
-  EquipmentMember,
 } from "@balebase/validators/equipment";
+import type { Person } from "@balebase/validators/fields";
+import { equipmentLimits } from "@balebase/validators/rules";
 import {
   type FormEvent,
   type RefObject,
@@ -22,7 +23,7 @@ export function EquipmentForm({
   types,
 }: {
   initial?: EquipmentItem;
-  members: EquipmentMember[];
+  members: Person[];
   onCancel: () => void;
   onSave: (input: EquipmentInput) => Promise<boolean>;
   types: string[];
@@ -100,7 +101,7 @@ function EquipmentFields({
 }: {
   firstField: RefObject<HTMLSelectElement | null>;
   form: EquipmentInput;
-  members: EquipmentMember[];
+  members: Person[];
   set: <Key extends keyof EquipmentInput>(
     key: Key,
     value: EquipmentInput[Key],
@@ -135,7 +136,7 @@ function EquipmentFields({
       <Field label="Make">
         <input
           className="input"
-          maxLength={80}
+          maxLength={equipmentLimits.make}
           onChange={(event) => set("make", event.target.value)}
           placeholder="Apple"
           required
@@ -145,7 +146,7 @@ function EquipmentFields({
       <Field label="Model">
         <input
           className="input"
-          maxLength={120}
+          maxLength={equipmentLimits.model}
           onChange={(event) => set("model", event.target.value)}
           placeholder="MacBook Pro 14-inch"
           required
@@ -156,7 +157,7 @@ function EquipmentFields({
         <input
           autoCapitalize="characters"
           className="input mono"
-          maxLength={100}
+          maxLength={equipmentLimits.serialNumber}
           onChange={(event) => set("serialNumber", event.target.value)}
           spellCheck={false}
           value={form.serialNumber ?? ""}

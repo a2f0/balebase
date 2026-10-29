@@ -16,6 +16,10 @@ import type {
   ApiKeyAccess,
   ApiKeyExpiration,
 } from "@balebase/validators/apiKeys";
+import {
+  apiKeyExpirationDays,
+  apiKeyNameMaxLength,
+} from "@balebase/validators/rules";
 import { type FormEvent, useCallback, useState } from "react";
 import { api } from "./apiClient";
 import { formatDate } from "./labels";
@@ -163,7 +167,7 @@ function CreateApiKeyCard({
           <input
             className="input"
             disabled={busy}
-            maxLength={100}
+            maxLength={apiKeyNameMaxLength}
             onChange={(event) => setName(event.target.value)}
             placeholder="Claude"
             required
@@ -372,10 +376,7 @@ function usageSummary(apiKey: ApiKey) {
 }
 
 function expirationDays(value: string): ApiKeyExpiration {
-  if (value === "30" || value === "90" || value === "365") {
-    return Number(value) as ApiKeyExpiration;
-  }
-  return null;
+  return apiKeyExpirationDays.find((days) => String(days) === value) ?? null;
 }
 
 function confirmRevoke(name: string) {

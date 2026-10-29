@@ -9,9 +9,9 @@ import { uploadAuditIssueImage } from "./auditIssueImageUploads";
 import { type TemplateRow, templateSelect, toTemplate } from "./auditTemplates";
 import type { ApiEnv } from "./authMiddleware";
 import type { IssueContext } from "./issueRecords";
-import { offlineStatements } from "./offlineRecords";
+import { formerAssigneeError, offlineStatements } from "./offlineRecords";
 import { listMemberDirectory } from "./organizationMembers";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 
 export const offline = new Hono<ApiEnv>();
 
@@ -50,12 +50,13 @@ offline.get("/forms", async (context) => {
 });
 
 offline.post("/operations", async (context) => {
-  const parsed = offlineRoutes.apply.body.safeParse(
-    await context.req.json().catch(() => null),
+  const parsed = await readBody(
+    context,
+    offlineRoutes.apply,
+    "Invalid offline operation.",
   );
-  if (!parsed.success)
-    return context.json({ error: "Invalid offline operation." }, 400);
-  const { operation, ...scope } = parsed.data;
+  if (parsed instanceof Response) return parsed;
+  const { operation, ...scope } = parsed;
   if (!matchesScope(context, scope))
     return context.json(
       {
@@ -83,18 +84,29 @@ offline.post("/operations", async (context) => {
   if (typeof statements === "string")
     return context.json({ error: statements }, 409);
   try {
-    await activityBatch(context.env.DB, context.get("apiKey"), [
+    // The receipt comes last and only with the record it reports, so an
+    // issue insert that skipped a former assignee commits nothing.
+    const results = await activityBatch(context.env.DB, context.get("apiKey"), [
+      ...statements,
       context.env.DB.prepare(
-        "INSERT INTO offline_operations (organization_id, user_id, id, digest, created_at) VALUES (?, ?, ?, ?, ?)",
+        `INSERT INTO offline_operations (organization_id, user_id, id, digest, created_at)
+         SELECT ?, ?, ?, ?, ?
+         WHERE EXISTS (SELECT 1 FROM issues WHERE id = ? AND organization_id = ?)
+            OR EXISTS (SELECT 1 FROM audits WHERE id = ? AND organization_id = ?)`,
       ).bind(
         scope.organizationId,
         scope.userId,
         operation.id,
         digest,
         new Date().toISOString(),
+        operation.id,
+        scope.organizationId,
+        operation.id,
+        scope.organizationId,
       ),
-      ...statements,
     ]);
+    if (!Number(results.at(-1)?.meta.changes))
+      return context.json({ error: formerAssigneeError }, 409);
   } catch (cause) {
     // A second tab or a response lost after commit is the same operation.
     const committed = await receipt();

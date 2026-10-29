@@ -3,7 +3,6 @@ import {
   type FinanceAccount,
   type FinanceConnection,
   type FinanceTransaction,
-  type FinanceTransactionAnnotation,
   type FinanceTransactionSource,
   financeRoutes,
 } from "@balebase/validators/finance";
@@ -40,10 +39,9 @@ import {
 } from "./financeSyncRoutes";
 import { searchTransactions } from "./financeTransactionSearch";
 import { listLinkedEmails, toLinkedEmail } from "./inboundEmailLinks";
-import { isRecord, validText } from "./jsonInput";
 import { PlaidApiError, type PlaidRequest, plaidRequest } from "./plaid";
 import { decryptToken, encryptToken } from "./plaidCrypto";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 import type { Bindings } from "./types";
 import { respondToUnexpectedError } from "./unexpectedError";
 
@@ -103,19 +101,6 @@ interface ExchangeResponse {
 interface LinkTokenResponse {
   expiration: string;
   link_token: string;
-}
-
-interface FinanceInput {
-  institutionId?: unknown;
-  institutionName?: unknown;
-  publicToken?: unknown;
-  [key: string]: unknown;
-}
-
-interface AnnotationInput {
-  labels?: unknown;
-  note?: unknown;
-  reviewed?: unknown;
 }
 
 interface LinkTokenRequest extends Record<string, unknown> {
@@ -307,10 +292,12 @@ async function exchangePublicToken(
   context: FinanceContext,
   requestPlaid: PlaidRequest,
 ) {
-  const input = await financeInput(context);
-  if (!validText(input?.publicToken, 1_000)) {
-    return context.json({ error: "A Plaid public token is required." }, 400);
-  }
+  const input = await readBody(
+    context,
+    financeRoutes.exchangePublicToken,
+    "A Plaid public token is required.",
+  );
+  if (input instanceof Response) return input;
   const secret = requireEncryptionKey(context.env);
   const result = await requestPlaid<ExchangeResponse>(
     context.env,
@@ -517,15 +504,13 @@ async function deleteConnectionData(context: FinanceContext) {
 }
 
 async function updateTransactionAnnotation(context: FinanceContext) {
-  const transactionId = context.req.param("id");
-  const input = await annotationInput(context);
-  if (!transactionId || !input) {
-    return context.json({ error: "A valid annotation is required." }, 400);
-  }
-  const annotation = normalizeAnnotation(input);
-  if (!annotation) {
-    return context.json({ error: "A valid annotation is required." }, 400);
-  }
+  const transactionId = context.req.param("id") ?? "";
+  const annotation = await readBody(
+    context,
+    financeRoutes.updateTransactionAnnotation,
+    "A valid annotation is required.",
+  );
+  if (annotation instanceof Response) return annotation;
   const organizationId = context.get("organizationId");
   const transaction = await context.env.DB.prepare(
     `SELECT id FROM plaid_transactions
@@ -568,7 +553,10 @@ async function updateTransactionAnnotation(context: FinanceContext) {
 
 async function insertConnection(
   context: FinanceContext,
-  input: FinanceInput,
+  input: {
+    institutionId?: string | null | undefined;
+    institutionName?: string | null | undefined;
+  },
   exchange: ExchangeResponse,
   encrypted: { ciphertext: string; iv: string },
   id: string,
@@ -587,8 +575,8 @@ async function insertConnection(
       exchange.item_id,
       encrypted.ciphertext,
       encrypted.iv,
-      optionalText(input.institutionId, 100),
-      optionalText(input.institutionName, 200),
+      input.institutionId ?? null,
+      input.institutionName ?? null,
       context.get("authSession").user.id,
       now,
       now,
@@ -763,44 +751,6 @@ function clientUserId(organizationId: string, userId: string) {
   return `${organizationId}:${userId}`.slice(0, 128);
 }
 
-async function financeInput(
-  context: FinanceContext,
-): Promise<FinanceInput | null> {
-  const input: unknown = await context.req.json().catch(() => null);
-  return isRecord(input) ? input : null;
-}
-
-async function annotationInput(context: FinanceContext) {
-  const input: unknown = await context.req.json().catch(() => null);
-  return isRecord(input) ? (input as AnnotationInput) : null;
-}
-
-function normalizeAnnotation(
-  input: AnnotationInput,
-): FinanceTransactionAnnotation | null {
-  if (
-    typeof input.note !== "string" ||
-    input.note.length > 2_000 ||
-    !Array.isArray(input.labels) ||
-    input.labels.length > 12 ||
-    input.labels.some(
-      (label) => typeof label !== "string" || label.trim().length > 50,
-    ) ||
-    typeof input.reviewed !== "boolean"
-  ) {
-    return null;
-  }
-  return {
-    labels: [
-      ...new Set(
-        input.labels.map((label) => (label as string).trim()).filter(Boolean),
-      ),
-    ],
-    note: input.note.trim(),
-    reviewed: input.reviewed,
-  };
-}
-
 function parseLabels(value: string | null) {
   if (!value) return [];
   try {
@@ -811,12 +761,6 @@ function parseLabels(value: string | null) {
   } catch {
     return [];
   }
-}
-
-function optionalText(value: unknown, maxLength: number) {
-  return typeof value === "string" && value.trim().length <= maxLength
-    ? value.trim() || null
-    : null;
 }
 
 export const finance = createFinanceRouter();

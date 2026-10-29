@@ -1,6 +1,7 @@
 import { Banner, Button, Field, Select } from "@balebase/ui/react";
-import { issuePriorities } from "@balebase/validators/issueRules";
-import type { IssueInput, IssueMember } from "@balebase/validators/issues";
+import type { Person } from "@balebase/validators/fields";
+import { issueLimits, issuePriorities } from "@balebase/validators/issueRules";
+import type { IssueInput } from "@balebase/validators/issues";
 import { type FormEvent, useCallback, useState } from "react";
 import { api } from "./apiClient";
 import { errorMessage } from "./errors";
@@ -28,7 +29,7 @@ export function IssueForm({
   onError?: (message: string) => void;
   label?: string;
   disabled?: boolean;
-  offlineMembers?: IssueMember[];
+  offlineMembers?: Person[];
   onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [input, setInput] = useState(initial);
@@ -95,7 +96,7 @@ export function IssueFields({
   onChange,
 }: {
   input: IssueInput;
-  members: IssueMember[];
+  members: Person[];
   membersUnavailable?: boolean;
   onChange: (input: IssueInput) => void;
 }) {
@@ -104,7 +105,7 @@ export function IssueFields({
       <Field label="Title">
         <input
           className="input"
-          maxLength={300}
+          maxLength={issueLimits.title}
           onChange={(event) =>
             onChange({ ...input, title: event.target.value })
           }
@@ -115,7 +116,7 @@ export function IssueFields({
       <Field label="Description" optional>
         <textarea
           className="textarea"
-          maxLength={2000}
+          maxLength={issueLimits.description}
           onChange={(event) =>
             onChange({ ...input, description: event.target.value })
           }
@@ -169,7 +170,7 @@ export function IssueFields({
   );
 }
 
-function useIssueMembers(offlineMembers: IssueMember[] | undefined) {
+function useIssueMembers(offlineMembers: Person[] | undefined) {
   const online = !offlineMembers;
   const { data, error } = useLoad(
     useCallback(

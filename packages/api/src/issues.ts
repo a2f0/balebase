@@ -8,16 +8,15 @@ import {
   findIssue,
   type IssueContext,
   type IssueRow,
+  issueInsert,
   issueSelect,
   issueTargetAvailable,
   issueTargetWritable,
-  parseIssueInput,
-  parseIssueTarget,
+  issueUpdate,
   toIssue,
 } from "./issueRecords";
-import { isRecord } from "./jsonInput";
 import { listMemberDirectory } from "./organizationMembers";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 
 export const issues = new Hono<ApiEnv>();
 const issuePageSize = 50;
@@ -82,17 +81,9 @@ async function listIssues(context: IssueContext) {
 }
 
 function issueFilters(context: IssueContext) {
-  const status = context.req.query("status") ?? "open";
-  const type = context.req.query("type") ?? "all";
-  const targetId = context.req.query("targetId");
-  const query = context.req.query("q")?.trim() ?? "";
-  if (
-    !["open", "resolved", "all"].includes(status) ||
-    !["all", "audit_run", "finance_transaction", "workspace"].includes(type) ||
-    query.length > 200 ||
-    (targetId !== undefined && (!targetId || targetId.length > 200))
-  )
-    return null;
+  const query = issuesRoutes.list.query.safeParse(context.req.query());
+  if (!query.success) return null;
+  const { cursor: value, q, status, targetId, type } = query.data;
   const conditions: string[] = [];
   const bindings: string[] = [];
   if (status !== "all") {
@@ -107,11 +98,10 @@ function issueFilters(context: IssueContext) {
     conditions.push("issue.target_id = ?");
     bindings.push(targetId);
   }
-  if (query) {
+  if (q) {
     conditions.push("issue.title LIKE ? ESCAPE '\\'");
-    bindings.push(`%${query.replace(/[\\%_]/g, "\\$&")}%`);
+    bindings.push(`%${q.replace(/[\\%_]/g, "\\$&")}%`);
   }
-  const value = context.req.query("cursor");
   if (value !== undefined) {
     const cursor = parseCursor(value);
     if (!cursor) return null;
@@ -133,50 +123,25 @@ function parseCursor(value: string) {
 }
 
 async function createIssue(context: IssueContext) {
-  const body: unknown = await context.req.json().catch(() => null);
-  if (!isRecord(body))
-    return context.json({ error: "Invalid issue details." }, 400);
-  const input = parseIssueInput({
-    status: "open",
-    description: "",
-    priority: "medium",
-    assignedTo: null,
-    ...body,
-  });
-  const { target: rawTarget } = body;
-  const target = parseIssueTarget(rawTarget);
-  if (!input || !target || input.status !== "open")
-    return context.json({ error: "Invalid issue details." }, 400);
+  const input = await readBody(
+    context,
+    issuesRoutes.create,
+    "Invalid issue details.",
+  );
+  if (input instanceof Response) return input;
+  const target = {
+    type: input.target?.type ?? "workspace",
+    id: input.target?.id ?? null,
+    itemId: input.target?.itemId ?? null,
+  };
   if (!(await issueTargetAvailable(context, target)))
     return context.json({ error: "Issue target not found." }, 404);
   const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  const organizationId = context.get("organizationId");
-  const insert = context.env.DB.prepare(`INSERT INTO issues
-    (id, organization_id, target_type, target_id, item_id, title, description, priority, status, assigned_to, created_by, created_at, updated_at)
-    SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?
-    WHERE ? IS NULL OR EXISTS (SELECT 1 FROM member WHERE organizationId = ? AND userId = ?)`).bind(
-    id,
-    organizationId,
-    target.type,
-    target.id,
-    target.itemId,
-    input.title,
-    input.description,
-    input.priority,
-    input.assignedTo,
-    context.get("authSession").user.id,
-    now,
-    now,
-    input.assignedTo,
-    organizationId,
-    input.assignedTo,
-  );
   try {
     const [result] = await activityBatch(
       context.env.DB,
       context.get("apiKey"),
-      [insert],
+      [issueInsert(context, { ...input, id, target })],
     );
     if (!Number(result?.meta.changes))
       return context.json({ error: "Issue assignee is not a member." }, 400);
@@ -194,45 +159,23 @@ async function createIssue(context: IssueContext) {
 async function updateIssue(context: IssueContext) {
   const issue = await findIssue(context, context.req.param("id") ?? "");
   if (!issue) return context.json({ error: "Issue not found." }, 404);
-  const body: unknown = await context.req.json().catch(() => null);
-  if (
-    !isRecord<"expectedRevision">(body) ||
-    !Number.isSafeInteger(body.expectedRevision) ||
-    Number(body.expectedRevision) < 0
-  )
-    return context.json({ error: "A valid issue revision is required." }, 400);
-  const input = parseIssueInput({
-    title: issue.title,
-    description: issue.description,
-    priority: issue.priority,
-    status: issue.status,
-    assignedTo: issue.assigned_to,
-    ...body,
-  });
-  if (!input) return context.json({ error: "Invalid issue details." }, 400);
-  const organizationId = context.get("organizationId");
-  const update =
-    context.env.DB.prepare(`UPDATE issues SET title = ?, description = ?, priority = ?, status = ?, assigned_to = ?,
-      updated_at = ?, activity_actor_id = ?, revision = revision + 1
-    WHERE id = ? AND organization_id = ? AND revision = ? AND ${issueTargetWritable}
-      AND (? IS NULL OR ? IS assigned_to OR EXISTS (SELECT 1 FROM member WHERE organizationId = ? AND userId = ?))`).bind(
-      input.title,
-      input.description,
-      input.priority,
-      input.status,
-      input.assignedTo,
-      new Date().toISOString(),
-      context.get("authSession").user.id,
-      issue.id,
-      organizationId,
-      body.expectedRevision,
-      input.assignedTo,
-      input.assignedTo,
-      organizationId,
-      input.assignedTo,
-    );
+  const input = await readBody(
+    context,
+    issuesRoutes.update,
+    "Invalid issue details.",
+  );
+  if (input instanceof Response) return input;
+  const { expectedRevision, ...changes } = input;
   const [result] = await activityBatch(context.env.DB, context.get("apiKey"), [
-    update,
+    issueUpdate(
+      context,
+      issue.id,
+      { ...changes, updatedAt: new Date().toISOString() },
+      {
+        bindings: [expectedRevision],
+        sql: `revision = ? AND ${issueTargetWritable}`,
+      },
+    ),
   ]);
   if (!Number(result?.meta.changes))
     return context.json(

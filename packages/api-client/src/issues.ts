@@ -3,6 +3,7 @@ import type {
   IssueTargetType,
   IssueUpdate,
   issuesRoutes,
+  NewIssueTarget,
 } from "@balebase/validators/issues";
 import { endpoint } from "./endpoint";
 import type { Transport } from "./transport";
@@ -68,10 +69,7 @@ export function issuesApi(transport: Transport) {
         query: { cursor },
       });
     },
-    create(
-      input: IssueInput,
-      target?: { id: string; itemId?: string; type: IssueTargetType },
-    ) {
+    create(input: IssueInput, target?: NewIssueTarget) {
       return transport.call(endpoints.create, {
         body: { ...input, target },
       });

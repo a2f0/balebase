@@ -91,6 +91,18 @@ exactly the contract's routes. To add a route, define it in the area's
 validators file, send its response with `respond`, and add an endpoint and
 method to the area's client.
 
+Request rules live in the contract too. `packages/validators/src/rules.ts`
+holds limits and allowed values as plain constants without zod, so the app
+imports them for its form limits and options; issue rules sit beside it in
+`issueRules.ts`. Route body schemas are built
+from those constants and the shared field schemas in `fields.ts`, such as
+`requiredText`, `optionalText`, and `calendarDate`, and carry the message for
+each rule they enforce. A handler reads its body with
+`readBody(context, route, message)` from `respond.ts`, which answers 400 with
+the first broken rule's message. Only checks that need the database, such as
+whether a record exists, an assignee is still a member, or a version is
+current, stay in the API.
+
 Cursor-paginated API lists use `packages/api/src/cursorPagination.ts`. Query one
 extra row in a stable order, then use `cursorPage` to trim the page and derive
 its continuation from the last visible row. Date-based lists sort by the date
@@ -103,9 +115,9 @@ from `authMiddleware.ts`. Gate owner- and admin-only routes with
 `requireManager()`, or branch on `canManage(context)`, from
 `organizationMembers.ts`. Mount platform admin routers below `/api/admin`,
 where `app.ts` applies the one `requireAuth` and `requireRole("admin")` guard.
-Read untrusted JSON with `isRecord` and `validText` from `jsonInput.ts`, and
-send mail with `sendMail` from `mailSender.ts`, which names the sender with
-`productName`.
+Read untrusted JSON that no contract schema covers yet with `isRecord` from
+`jsonInput.ts`, and send mail with `sendMail` from `mailSender.ts`, which
+names the sender with `productName`.
 
 File handling lives in `storage.ts`. Read uploads and webhook bodies with
 `readBoundedForm` and `readBoundedRequest`, which refuse an oversized body
@@ -124,10 +136,10 @@ creation lives in `packages/api/src/issues.ts` (general issues) and
 `audits.ts` (audit-specific routes); offline replay uses
 `offlineRecords.ts`. They share the `issues` table and its activity triggers.
 Check both route families and the offline operation schema when changing a field.
-Issue priorities and image limits live in the zod-free
-`packages/validators/src/issueRules.ts`, which the API and the app's online and
-offline paths all import; every app issue form renders `IssueFields` from
-`IssueForm.tsx`.
+Issue priorities, title and description limits, and image limits live in the
+zod-free `packages/validators/src/issueRules.ts`, which the API and the app's
+online and offline paths all import; every app issue form renders
+`IssueFields` from `IssueForm.tsx`.
 
 The logo and every image generated from it are described in the
 [UI package's images section](packages/ui/README.md#images).

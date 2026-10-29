@@ -49,9 +49,11 @@ describe("library folders", () => {
       ).status,
     ).toBe(409);
     expect(
-      (await fixture.json("POST", "/api/library/folders", { name: " " }))
-        .status,
-    ).toBe(400);
+      await fixture.json("POST", "/api/library/folders", { name: " \0 " }),
+    ).toMatchObject({
+      body: { error: "Folder names need 1 to 80 characters." },
+      status: 400,
+    });
     expect(
       (
         await fixture.json("POST", "/api/library/folders", {
@@ -169,12 +171,13 @@ describe("library folders", () => {
       ).status,
     ).toBe(404);
     expect(
-      (
-        await fixture.json("PATCH", `/api/objects/${rootFile.body.object.id}`, {
-          folder: folderId,
-        })
-      ).status,
-    ).toBe(400);
+      await fixture.json("PATCH", `/api/objects/${rootFile.body.object.id}`, {
+        folder: folderId,
+      }),
+    ).toMatchObject({
+      body: { error: "A folder or null is required." },
+      status: 400,
+    });
     expect(
       (
         await fixture

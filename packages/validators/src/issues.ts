@@ -1,9 +1,16 @@
 import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
-import { issuePriorities } from "./issueRules";
+import {
+  ChecklistIdSchema,
+  type FormInput,
+  optionalText,
+  PersonSchema,
+  requiredText,
+} from "./fields";
+import { issueLimits, issuePriorities } from "./issueRules";
 import { route } from "./route";
 
-export const IssueTargetTypeSchema = z.enum([
+const IssueTargetTypeSchema = z.enum([
   "audit_run",
   "finance_transaction",
   "workspace",
@@ -13,17 +20,10 @@ export type IssueTargetType = z.infer<typeof IssueTargetTypeSchema>;
 const IssuePrioritySchema = z.enum(issuePriorities);
 const IssueStatusSchema = z.enum(["open", "resolved"]);
 
-export const IssueMemberSchema = z.object({
-  email: z.string(),
-  id: z.string(),
-  name: z.string(),
-});
-export type IssueMember = z.infer<typeof IssueMemberSchema>;
-
 export const IssueSchema = z.object({
-  assignedTo: IssueMemberSchema.nullable(),
+  assignedTo: PersonSchema.nullable(),
   createdAt: z.string(),
-  createdBy: IssueMemberSchema,
+  createdBy: PersonSchema,
   description: z.string(),
   id: z.string(),
   priority: IssuePrioritySchema,
@@ -49,36 +49,75 @@ export type IssuePage = z.infer<typeof IssuePageSchema>;
 
 const IssueListQuerySchema = z.object({
   cursor: z.string().optional(),
-  q: z.string().optional(),
-  status: z.enum(["all", "open", "resolved"]).optional(),
-  targetId: z.string().optional(),
-  type: z.enum(["all", ...IssueTargetTypeSchema.options]).optional(),
+  /** Matches part of the title. */
+  q: z.string().trim().max(200).optional(),
+  status: z.enum(["all", "open", "resolved"]).default("open"),
+  targetId: z.string().min(1).max(200).optional(),
+  type: z.enum(["all", ...IssueTargetTypeSchema.options]).default("all"),
 });
 
+/**
+ * What people write on every issue, wherever it is raised. A blank or null
+ * assignee leaves the issue unassigned.
+ */
 const IssueFieldsSchema = z.object({
-  assignedTo: z.string().nullable(),
-  description: z.string(),
+  assignedTo: optionalText(z.string().trim().max(200)),
+  description: z.string().trim().max(issueLimits.description),
   priority: IssuePrioritySchema,
-  title: z.string(),
+  title: requiredText(issueLimits.title),
 });
-export type IssueInput = z.infer<typeof IssueFieldsSchema>;
+export type IssueInput = FormInput<typeof IssueFieldsSchema>;
 
-const IssueCreateSchema = IssueFieldsSchema.partial().extend({
+/** A new issue: unassigned, medium, and without details unless given. */
+export const NewIssueSchema = IssueFieldsSchema.extend({
+  description: IssueFieldsSchema.shape.description.default(""),
+  priority: IssuePrioritySchema.default("medium"),
+});
+
+const targetId = z.string().trim().min(1).max(200);
+
+const IssueCreateSchema = NewIssueSchema.extend({
+  /** A new issue is always open. */
+  status: z.literal("open").optional(),
+  /** The record the issue is about; a workspace issue when left out. */
   target: z
-    .object({
-      id: z.string(),
-      itemId: z.string().optional(),
-      type: IssueTargetTypeSchema,
-    })
+    .discriminatedUnion("type", [
+      z.object({
+        id: z.null().optional(),
+        itemId: z.null().optional(),
+        type: z.literal("workspace"),
+      }),
+      z.object({
+        id: targetId,
+        itemId: z.null().optional(),
+        type: z.literal("finance_transaction"),
+      }),
+      z.object({
+        id: targetId,
+        /** The audit checklist item the issue is about. */
+        itemId: ChecklistIdSchema,
+        type: z.literal("audit_run"),
+      }),
+    ])
     .optional(),
-  title: z.string(),
 });
 
-const IssueUpdateSchema = IssueFieldsSchema.partial().extend({
-  expectedRevision: z.number(),
-  status: IssueStatusSchema.optional(),
-});
-export type IssueUpdate = z.infer<typeof IssueUpdateSchema>;
+export type NewIssueTarget = NonNullable<
+  z.input<typeof IssueCreateSchema>["target"]
+>;
+
+const revisionRule = "A valid issue revision is required.";
+
+// The revision comes first so its message wins over the other fields'.
+const IssueUpdateSchema = z.object(
+  {
+    expectedRevision: z.int({ error: revisionRule }).min(0, revisionRule),
+    ...IssueFieldsSchema.partial().shape,
+    status: IssueStatusSchema.optional(),
+  },
+  { error: revisionRule },
+);
+export type IssueUpdate = z.input<typeof IssueUpdateSchema>;
 
 const IssueResponseSchema = z.object({ issue: IssueSchema });
 
@@ -92,7 +131,7 @@ export const issuesRoutes = {
   members: route({
     method: "GET",
     path: "/api/issues/members",
-    response: z.object({ members: z.array(IssueMemberSchema) }),
+    response: z.object({ members: z.array(PersonSchema) }),
   }),
   get: route({
     method: "GET",

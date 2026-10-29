@@ -1,10 +1,19 @@
 import { z } from "zod";
 import {
   ContractDocumentSchema,
+  ContractTitleSchema,
+  DraftDetailsSchema,
   DraftFieldSchema,
+  FieldPlacementSchema,
+  fieldList,
+  placedField,
+  RoutingOrderSchema,
+  SignerKeySchema,
   SigningOrderSchema,
+  signerList,
 } from "./contracts";
 import { route } from "./route";
+import { contractLimits } from "./rules";
 
 /** Who signs, without naming a person; each use maps it to someone. */
 const TemplateRoleSchema = z.object({
@@ -65,37 +74,109 @@ export type TemplateVersion = z.infer<typeof TemplateVersionSchema>;
 /** Picks a version by number; the latest without one. */
 const VersionQuerySchema = z.object({ version: z.string().optional() });
 
-const TemplateVersionBodySchema = z.object({
-  definition: TemplateDefinitionSchema.partial({
-    message: true,
-    reminderIntervalDays: true,
-  }).extend({
-    fields: z.array(
-      TemplateFieldSchema.partial({ label: true, required: true }),
-    ),
-  }),
-  description: z.string(),
-  /** The latest version the save builds on; a newer one refuses it. */
-  expectedCurrentVersion: z.number(),
-  name: z.string(),
-  /** The version whose document the new version keeps. */
-  sourceVersion: z.number(),
-});
+const versionRule = "Choose a template version.";
+const VersionNumberSchema = z.int({ error: versionRule }).min(1, versionRule);
+
+/**
+ * A template's next version. Roles stand in for signers, so they follow the
+ * same rules, and every role needs its own label.
+ */
+const TemplateVersionBodySchema = z.object(
+  {
+    /** The latest version the save builds on; a newer one refuses it. */
+    expectedCurrentVersion: VersionNumberSchema,
+    /** The version whose document the new version keeps. */
+    sourceVersion: VersionNumberSchema,
+    name: ContractTitleSchema,
+    description: z
+      .string({ error: "Keep the description to 2,000 characters." })
+      .max(
+        contractLimits.description,
+        "Keep the description to 2,000 characters.",
+      )
+      .trim(),
+    definition: z
+      .object(
+        {
+          ...DraftDetailsSchema.shape,
+          roles: signerList(
+            z.object(
+              {
+                key: SignerKeySchema,
+                label: z
+                  .string({ error: "Give every signer role a label." })
+                  .trim()
+                  .min(1, "Give every signer role a label.")
+                  .max(
+                    contractLimits.signerName,
+                    "Signer names can be up to 120 characters.",
+                  ),
+                routingOrder: RoutingOrderSchema,
+              },
+              { error: "A signer is invalid." },
+            ),
+            "Add at least one signer role.",
+          ).min(1, "Add at least one signer role."),
+          fields: fieldList(
+            placedField(
+              FieldPlacementSchema.extend({
+                roleKey: z.string({
+                  error: "Every field must belong to a signer.",
+                }),
+              }),
+            ),
+            "The template fields are invalid.",
+          ),
+        },
+        { error: "The template definition is invalid." },
+      )
+      .superRefine((definition, context) => {
+        const keys = new Set(definition.roles.map(({ key }) => key));
+        const labels = new Set(
+          definition.roles.map(({ label }) => label.toLowerCase()),
+        );
+        if (keys.size !== definition.roles.length)
+          context.addIssue("Each signer needs a unique key.");
+        else if (labels.size !== definition.roles.length)
+          context.addIssue("Give each signer role a different label.");
+        else if (definition.fields.some(({ roleKey }) => !keys.has(roleKey)))
+          context.addIssue("Every field must belong to a signer.");
+      }),
+  },
+  { error: "The template is invalid." },
+);
 export type TemplateVersionInput = Pick<
   z.input<typeof TemplateVersionBodySchema>,
   "definition" | "description" | "name"
 >;
 
-const TemplateContractBodySchema = z.object({
-  dueDate: z.string().nullish(),
-  /** One person for each of the version's roles. */
-  recipients: z.array(
-    z.object({ email: z.string(), name: z.string(), roleKey: z.string() }),
-  ),
-  /** The template's name when left out. */
-  title: z.string().optional(),
-  version: z.number(),
-});
+/**
+ * A contract from a template version. The API maps each person to one of
+ * that version's roles and checks the result as a draft.
+ */
+const TemplateContractBodySchema = z.object(
+  {
+    version: VersionNumberSchema,
+    dueDate: z.string({ error: "The due date is invalid." }).nullish(),
+    /** One person for each of the version's roles. */
+    recipients: z.array(
+      z.object(
+        {
+          email: z.string({ error: "A signer is invalid." }).default(""),
+          name: z.string({ error: "A signer is invalid." }).default(""),
+          roleKey: z.string({ error: "Map every signer role exactly once." }),
+        },
+        { error: "A signer is invalid." },
+      ),
+      { error: "Map every signer role to a person." },
+    ),
+    /** The template's name when left out. */
+    title: z
+      .string({ error: "Give the contract a title of up to 200 characters." })
+      .nullish(),
+  },
+  { error: versionRule },
+);
 export type TemplateContractInput = z.input<typeof TemplateContractBodySchema>;
 
 // Null only when the template was deleted while the request ran.

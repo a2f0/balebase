@@ -2848,6 +2848,189 @@ describe("audit discarding", () => {
   });
 });
 
+describe("audit request rules", () => {
+  it("keeps each rule's message for template and answer saves", async () => {
+    const fixture = createFixture();
+    const admin = { role: "admin" };
+    const { auditId, templateId } = await createActivityAudit(fixture);
+    const template = await jsonRequest<TemplateResponse>(
+      fixture,
+      `/templates/${templateId}`,
+      "GET",
+    );
+    const { definition, name } = template.body.template;
+    const shared = await jsonRequest<TemplateResponse>(
+      fixture,
+      "/admin/audit-templates",
+      "POST",
+      { name: "Shared form" },
+      admin,
+    );
+    const sharedId = shared.body.template.id;
+    const longPrompt = structuredClone(definition);
+    const firstItem = longPrompt.sections[0]?.items[0];
+    if (firstItem) firstItem.prompt = "x".repeat(501);
+    const cases: Array<[string, string, unknown, string, TestIdentity?]> = [
+      ["POST", "/templates", { name: " " }, "A template name is required."],
+      [
+        "POST",
+        "/templates",
+        { name: "Form", scope: "global" },
+        "Template scope is invalid.",
+      ],
+      [
+        "PUT",
+        `/templates/${templateId}`,
+        { definition: longPrompt, name },
+        "The template definition is invalid.",
+      ],
+      [
+        "PUT",
+        `/templates/${templateId}`,
+        { definition: { ...definition, sections: [] }, name },
+        "The template definition is invalid.",
+      ],
+      [
+        "PUT",
+        `/templates/${templateId}`,
+        { definition, description: "x".repeat(2001), name },
+        "Descriptions are limited to 2,000 characters.",
+      ],
+      [
+        "PATCH",
+        `/runs/${auditId}`,
+        { expectedRevision: -1, responses: {} },
+        "A valid audit revision is required. Reload it before saving.",
+      ],
+      [
+        "PATCH",
+        `/runs/${auditId}`,
+        { expectedRevision: 0, responses: { check: 1 } },
+        "Invalid audit responses.",
+      ],
+      [
+        "PATCH",
+        `/runs/${auditId}`,
+        { expectedRevision: 0, responses: {}, status: "done" },
+        "Invalid audit status.",
+      ],
+      [
+        "PUT",
+        `/admin/audit-templates/${sharedId}`,
+        { definition, name, status: "draft" },
+        "Template status is invalid.",
+        admin,
+      ],
+      [
+        "DELETE",
+        `/admin/audit-templates/${sharedId}`,
+        {},
+        "The current template version is required.",
+        admin,
+      ],
+    ];
+    for (const [method, path, body, error, identity] of cases) {
+      expect({
+        path,
+        response: await jsonRequest(fixture, path, method, body, identity),
+      }).toMatchObject({ path, response: { body: { error }, status: 400 } });
+    }
+  });
+});
+
+describe("audit issue writes", () => {
+  it("rejects an unknown priority instead of defaulting it", async () => {
+    const fixture = createFixture();
+    const { auditId } = await createActivityAudit(fixture);
+    const rejected = await jsonRequest(
+      fixture,
+      `/runs/${auditId}/issues`,
+      "POST",
+      {
+        itemId: "check",
+        priority: "urgent",
+        title: "Loose rail",
+      },
+    );
+    expect(rejected).toMatchObject({
+      body: { error: "Invalid issue details." },
+      status: 400,
+    });
+
+    const raised = await jsonRequest<{ issueId: string }>(
+      fixture,
+      `/runs/${auditId}/issues`,
+      "POST",
+      { assignedTo: " ", itemId: "check", title: " Loose rail " },
+    );
+    expect(raised.status).toBe(201);
+    expect(
+      fixture.database
+        .query(
+          "SELECT assigned_to, description, priority, title FROM issues WHERE id = ?",
+        )
+        .get(raised.body.issueId),
+    ).toEqual({
+      assigned_to: null,
+      description: "",
+      priority: "medium",
+      title: "Loose rail",
+    });
+  });
+
+  it("keeps a checklist item ID exactly as the form defines it", async () => {
+    const fixture = createFixture();
+    const { auditId } = await createActivityAudit(fixture, " check ");
+    const raised = await jsonRequest<{ issueId: string }>(
+      fixture,
+      `/runs/${auditId}/issues`,
+      "POST",
+      { itemId: " check ", title: "Loose rail" },
+    );
+    expect(raised.status).toBe(201);
+    expect(
+      fixture.database
+        .query("SELECT item_id FROM issues WHERE id = ?")
+        .get(raised.body.issueId),
+    ).toEqual({ item_id: " check " });
+  });
+
+  it("refuses an assignee who leaves after the initial read", async () => {
+    const fixture = createFixture();
+    const { auditId } = await createActivityAudit(fixture);
+    fixture.database
+      .query(
+        `INSERT INTO member (id, organizationId, userId, role, createdAt)
+         VALUES ('member-user-2-org-1', 'org_user-1', 'user-2', 'member', ?)`,
+      )
+      .run("2026-08-25T12:00:00.000Z");
+    fixture.hooks.before(
+      "INSERT INTO issues",
+      () => fixtureMemberDeletion(fixture.database, "org_user-1", "user-2"),
+      { method: "batch" },
+    );
+    const raised = await jsonRequest(
+      fixture,
+      `/runs/${auditId}/issues`,
+      "POST",
+      {
+        assignedTo: "user-2",
+        itemId: "check",
+        title: "Loose rail",
+      },
+    );
+    expect(raised).toMatchObject({
+      body: { error: "Issue assignee is not a member." },
+      status: 400,
+    });
+    expect(
+      fixture.database
+        .query("SELECT COUNT(*) AS count FROM issues WHERE target_id = ?")
+        .get(auditId),
+    ).toEqual({ count: 0 });
+  });
+});
+
 describe("audit activity", () => {
   it("records creators, every answer change, completion, and reopening without duplicate no-op events", async () => {
     const fixture = createFixture();
@@ -3455,7 +3638,10 @@ describe("audit activity", () => {
   });
 });
 
-async function createActivityAudit(fixture: ReturnType<typeof createFixture>) {
+async function createActivityAudit(
+  fixture: ReturnType<typeof createFixture>,
+  checkId = "check",
+) {
   const created = await jsonRequest<TemplateResponse>(
     fixture,
     "/templates",
@@ -3471,7 +3657,7 @@ async function createActivityAudit(fixture: ReturnType<typeof createFixture>) {
         title: "Questions",
         items: [
           {
-            id: "check",
+            id: checkId,
             prompt: "Check question",
             required: true,
             responseType: "check",

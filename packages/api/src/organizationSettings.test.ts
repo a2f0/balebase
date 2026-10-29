@@ -337,6 +337,17 @@ describe("organization member security", () => {
       memberId: "target-member",
       required: true,
     });
+    const invalid = await fixture
+      .app("owner-user", "owner")
+      .request("/people/target-member/two-factor-required", {
+        body: JSON.stringify({ required: "yes" }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({
+      error: "A required boolean is required.",
+    });
     expect(
       fixture.database
         .query("SELECT twoFactorRequired FROM member WHERE id = ?")

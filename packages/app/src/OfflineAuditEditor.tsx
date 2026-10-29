@@ -6,6 +6,7 @@ import {
   PageSection,
   Select,
 } from "@balebase/ui/react";
+import { auditLimits } from "@balebase/validators/rules";
 import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "./errors";
 import { guardWorkspaceChange } from "./navigationGuard";
@@ -74,7 +75,7 @@ export function OfflineAuditEditor({
                 {item.responseType === "text" ? (
                   <textarea
                     className="textarea"
-                    maxLength={2000}
+                    maxLength={auditLimits.answer}
                     disabled={audit.queued || sealing}
                     value={responses[item.id] ?? ""}
                     onChange={(event) =>

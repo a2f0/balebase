@@ -1,9 +1,11 @@
 import type { AuditTemplate } from "@balebase/validators/audits";
-import type { IssueMember } from "@balebase/validators/issues";
+import type { Person } from "@balebase/validators/fields";
+
 import type {
   OfflineOperation,
   OfflineScope,
 } from "@balebase/validators/offline";
+
 import { apiUrl } from "./config";
 
 export interface OfflineAudit {
@@ -34,14 +36,14 @@ export interface OfflineJob {
 /** Who offline work belongs to, and the organization it was prepared in. */
 export interface OfflineIdentity {
   scope: OfflineScope;
-  user: IssueMember;
+  user: Person;
   organizationName: string;
 }
 
 export interface OfflineWorkspace extends OfflineIdentity {
   key: string;
   templates: AuditTemplate[];
-  members: IssueMember[];
+  members: Person[];
   audits: OfflineAudit[];
   issues: OfflineIssue[];
   jobs: OfflineJob[];

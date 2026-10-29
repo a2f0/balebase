@@ -122,10 +122,17 @@ describe("equipment", () => {
       { purchaseDate: "2026-02-30" },
       { serialNumber: "x".repeat(101) },
     ]) {
-      expect(
-        (await owner.json("POST", "/api/equipment", { ...laptop, ...change }))
-          .status,
-      ).toBe(400);
+      const rejected = await owner.json("POST", "/api/equipment", {
+        ...laptop,
+        ...change,
+      });
+      expect(rejected).toMatchObject({
+        body: {
+          error:
+            "Equipment details are invalid. Choose a type and enter a make, model, and, optionally, a serial number and valid purchase date.",
+        },
+        status: 400,
+      });
     }
     const outsider = await owner.json<{ error: string }>(
       "POST",

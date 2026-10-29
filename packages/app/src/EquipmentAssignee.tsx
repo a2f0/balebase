@@ -1,7 +1,7 @@
 import { Avatar, Select } from "@balebase/ui/react";
-import type { EquipmentMember } from "@balebase/validators/equipment";
+import type { Person } from "@balebase/validators/fields";
 
-export function Assignee({ member }: { member: EquipmentMember | null }) {
+export function Assignee({ member }: { member: Person | null }) {
   if (!member) {
     return (
       <span className="equipmentAssignee equipmentUnassigned">Unassigned</span>
@@ -27,7 +27,7 @@ export function AssigneeSelect({
   compact?: boolean;
   disabled?: boolean;
   label: string;
-  members: EquipmentMember[];
+  members: Person[];
   onChange: (assigneeId: string | null) => void;
   value: string | null;
 }) {

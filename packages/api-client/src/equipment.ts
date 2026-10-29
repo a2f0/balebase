@@ -1,6 +1,7 @@
 import type {
   EquipmentInput,
   equipmentRoutes,
+  NewEquipment,
 } from "@balebase/validators/equipment";
 import { endpoint } from "./endpoint";
 import type { Transport } from "./transport";
@@ -55,7 +56,7 @@ export function equipmentApi(transport: Transport) {
         query: { cursor },
       });
     },
-    async create(input: EquipmentInput) {
+    async create(input: NewEquipment) {
       const { equipment } = await transport.call(endpoints.create, {
         body: input,
       });

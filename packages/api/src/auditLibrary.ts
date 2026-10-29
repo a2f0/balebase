@@ -1,8 +1,10 @@
-import type { AuditDefinition } from "@balebase/validators/audits";
+import {
+  type AuditDefinition,
+  AuditDefinitionSchema,
+} from "@balebase/validators/audits";
 import { z } from "zod";
 import nfpa70eData from "../auditLibrary/nfpa70e.json";
 import residentialData from "../auditLibrary/residential.json";
-import { parseAuditDefinition } from "./auditDefinition";
 import { auditLibraryActor } from "./auditTemplates";
 
 /**
@@ -341,7 +343,7 @@ function compileStarter(
     })),
     version: 1,
   };
-  const served = parseAuditDefinition(definition);
+  const served = AuditDefinitionSchema.safeParse(definition).data;
   if (JSON.stringify(served) !== JSON.stringify(definition)) {
     throw new Error(`The audit API would reject or alter ${template.id}.`);
   }

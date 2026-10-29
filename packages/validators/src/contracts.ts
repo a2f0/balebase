@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { calendarDate, optionalText, requiredText } from "./fields";
 import { route } from "./route";
+import { contractLimits } from "./rules";
 
 export const ContractStatusSchema = z.enum([
   "completed",
@@ -142,6 +144,7 @@ export const DraftFieldSchema = FieldBoxSchema.extend({
   required: z.boolean(),
   type: FieldTypeSchema,
 });
+export type DraftField = z.infer<typeof DraftFieldSchema>;
 
 const ContractDraftSchema = z.object({
   dueDate: z.string().nullable(),
@@ -154,17 +157,181 @@ const ContractDraftSchema = z.object({
 });
 export type ContractDraft = z.infer<typeof ContractDraftSchema>;
 
-/** A draft save; signers may be half filled in until the contract is sent. */
-const DraftBodySchema = ContractDraftSchema.partial({
-  dueDate: true,
-  message: true,
-  reminderIntervalDays: true,
-}).extend({
-  fields: z.array(DraftFieldSchema.partial({ label: true, required: true })),
-  recipients: z.array(
-    DraftRecipientSchema.partial({ email: true, name: true }),
-  ),
+const signerRule = "A signer is invalid.";
+const routingRule = "A signer's signing order is invalid.";
+const edgeRule = "A field extends past the edge of its page.";
+const ownerRule = "Every field must belong to a signer.";
+
+/** The signing step, for sequential contracts. */
+export const RoutingOrderSchema = z
+  .int({ error: routingRule })
+  .min(1, routingRule)
+  .max(contractLimits.signers, routingRule);
+
+/** What identifies a signer, or a template's role, within one request. */
+export const SignerKeySchema = z
+  .string({ error: signerRule })
+  .min(1, signerRule)
+  .max(100, signerRule);
+
+const fraction = z.number({ error: edgeRule }).min(0, edgeRule);
+
+const pageRule = "A field is on a page the document doesn't have.";
+const labelRule = "A field label is invalid.";
+
+/** A field's type, page, box, and label, before it is given an owner. */
+export const FieldPlacementSchema = z.object(
+  {
+    type: z.enum(FieldTypeSchema.options, {
+      error: "A field type is invalid.",
+    }),
+    page: z.int({ error: pageRule }).min(1, pageRule),
+    x: fraction.lt(1, edgeRule),
+    y: fraction.lt(1, edgeRule),
+    width: z.number({ error: edgeRule }).gt(0, edgeRule),
+    height: z.number({ error: edgeRule }).gt(0, edgeRule),
+    label: z
+      .string({ error: labelRule })
+      .max(contractLimits.fieldLabel, labelRule)
+      .nullish()
+      .transform((label) => label?.trim() || null),
+    required: z.boolean().optional(),
+  },
+  { error: "A field is invalid." },
+);
+
+/**
+ * A placed field with its owner. Its box, in fractions of the page, stays
+ * within the page; only text fields can be optional.
+ */
+export function placedField<
+  Field extends z.ZodType<z.output<typeof FieldPlacementSchema>>,
+>(field: Field) {
+  return field
+    .refine(
+      // A little slack for boxes dragged flush against the edge.
+      (placed) =>
+        placed.x + placed.width <= 1.0001 && placed.y + placed.height <= 1.0001,
+      edgeRule,
+    )
+    .transform((placed) => ({
+      ...placed,
+      required: placed.type === "text" ? placed.required !== false : true,
+    }));
+}
+
+const signersRule = `Add up to ${contractLimits.signers} signers.`;
+const fieldsRule = `Place up to ${contractLimits.fields} fields.`;
+const reminderRule = `Reminders can repeat every 1 to ${contractLimits.reminderDays} days.`;
+
+/** What every contract draft and template says about how it is signed. */
+export const DraftDetailsSchema = z.object({
+  message: z
+    .string({ error: "Keep the message to 2,000 characters." })
+    .trim()
+    .max(contractLimits.message, "Keep the message to 2,000 characters.")
+    .nullish()
+    .transform((message) => message ?? ""),
+  reminderIntervalDays: z
+    .int({ error: reminderRule })
+    .min(1, reminderRule)
+    .max(contractLimits.reminderDays, reminderRule)
+    .nullish()
+    .transform((days) => days ?? null),
+  signingOrder: z.enum(SigningOrderSchema.options, {
+    error: "Choose whether signers sign in any order or one after another.",
+  }),
 });
+
+/** Signers or roles, up to the limit; `missing` is for anything else. */
+export function signerList<Item extends z.ZodType>(
+  item: Item,
+  missing = signersRule,
+) {
+  return z
+    .array(item, { error: missing })
+    .max(contractLimits.signers, signersRule);
+}
+
+/** Placed fields, up to the limit; `missing` is for anything else. */
+export function fieldList<Item extends z.ZodType>(
+  item: Item,
+  missing = fieldsRule,
+) {
+  return z
+    .array(item, { error: missing })
+    .max(contractLimits.fields, fieldsRule);
+}
+
+export const ContractTitleSchema = requiredText(
+  contractLimits.title,
+  "Give the contract a title of up to 200 characters.",
+);
+
+/**
+ * A draft save. Signers may be half filled in while the draft is edited;
+ * sending requires a name and a valid email for each.
+ */
+const DraftBodySchema = z
+  .object(
+    {
+      title: ContractTitleSchema,
+      ...DraftDetailsSchema.shape,
+      dueDate: optionalText(
+        calendarDate("The due date is invalid."),
+        "The due date is invalid.",
+      ).transform((date) => date ?? null),
+      recipients: signerList(
+        z.object(
+          {
+            key: SignerKeySchema,
+            name: z
+              .string({ error: signerRule })
+              .trim()
+              .max(
+                contractLimits.signerName,
+                "Signer names can be up to 120 characters.",
+              )
+              .nullish()
+              .transform((name) => name ?? ""),
+            email: z
+              .string({ error: signerRule })
+              .trim()
+              .max(
+                contractLimits.signerEmail,
+                "Signer emails can be up to 254 characters.",
+              )
+              .nullish()
+              .transform((email) => email ?? ""),
+            routingOrder: RoutingOrderSchema,
+          },
+          { error: signerRule },
+        ),
+      ),
+      fields: fieldList(
+        placedField(
+          FieldPlacementSchema.extend({
+            recipientKey: z.string({ error: ownerRule }),
+          }),
+        ),
+      ),
+    },
+    { error: "The contract draft is invalid." },
+  )
+  .superRefine((draft, context) => {
+    const keys = new Set<string>();
+    const emails = new Set<string>();
+    for (const { email, key } of draft.recipients) {
+      if (keys.has(key))
+        return void context.addIssue("Each signer needs a unique key.");
+      keys.add(key);
+      if (email && emails.has(email.toLowerCase()))
+        return void context.addIssue(`${email} is listed more than once.`);
+      emails.add(email.toLowerCase());
+    }
+    if (draft.fields.some(({ recipientKey }) => !keys.has(recipientKey)))
+      context.addIssue(ownerRule);
+  });
 export type ContractDraftInput = z.input<typeof DraftBodySchema>;
 
 // Null only when the contract was deleted while the request ran.
@@ -221,7 +388,13 @@ export const contractsRoutes = {
   void: route({
     method: "POST",
     path: "/api/contracts/:id/void",
-    body: z.object({ reason: z.string().optional() }),
+    // A longer reason is cut to 500 characters rather than refused.
+    body: z.object({
+      reason: z
+        .string()
+        .optional()
+        .transform((reason) => (reason ?? "").trim().slice(0, 500)),
+    }),
     response: ChangedContractSchema,
   }),
   delete: route({

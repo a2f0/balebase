@@ -3,6 +3,7 @@ import type {
   ContractDetail,
   DraftRecipient,
 } from "@balebase/validators/contracts";
+import { contractLimits } from "@balebase/validators/rules";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./apiClient";
 import { ContractPages } from "./ContractDocument";
@@ -314,7 +315,7 @@ function DraftDetails({ editor }: { editor: Editor }) {
         <Field label="Title">
           <input
             className="input"
-            maxLength={200}
+            maxLength={contractLimits.title}
             onChange={(event) => set("title", event.target.value)}
             value={draft.title}
           />
@@ -326,7 +327,7 @@ function DraftDetails({ editor }: { editor: Editor }) {
         >
           <textarea
             className="textarea"
-            maxLength={2000}
+            maxLength={contractLimits.message}
             onChange={(event) => set("message", event.target.value)}
             rows={3}
             value={draft.message}
@@ -438,7 +439,7 @@ function SignerRow({
         <input
           aria-label={`Signer ${index + 1} name`}
           className="input inputSm"
-          maxLength={120}
+          maxLength={contractLimits.signerName}
           onChange={(event) =>
             editor.changeRecipient(recipient.key, { name: event.target.value })
           }
@@ -448,7 +449,7 @@ function SignerRow({
         <input
           aria-label={`Signer ${index + 1} email`}
           className="input inputSm"
-          maxLength={254}
+          maxLength={contractLimits.signerEmail}
           onChange={(event) =>
             editor.changeRecipient(recipient.key, { email: event.target.value })
           }

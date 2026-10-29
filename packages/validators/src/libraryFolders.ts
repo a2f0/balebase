@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { lineName } from "./fields";
 import { LinkedEmailSchema } from "./inbox";
 import { route } from "./route";
+import { libraryFolderNameMaxLength } from "./rules";
 
 const LibraryFolderSchema = z.object({
   createdAt: z.string(),
@@ -18,7 +20,11 @@ const LibraryFolderDetailSchema = z.object({
 });
 export type LibraryFolderDetail = z.infer<typeof LibraryFolderDetailSchema>;
 
-const FolderNameSchema = z.object({ name: z.string() });
+const folderNameRule = `Folder names need 1 to ${libraryFolderNameMaxLength} characters.`;
+const FolderNameSchema = z.object(
+  { name: lineName(libraryFolderNameMaxLength, folderNameRule) },
+  { error: folderNameRule },
+);
 
 export const libraryFoldersRoutes = {
   list: route({

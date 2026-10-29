@@ -15,8 +15,9 @@ import {
 import type {
   EquipmentInput,
   EquipmentItem,
-  EquipmentMember,
 } from "@balebase/validators/equipment";
+import type { Person } from "@balebase/validators/fields";
+import { isEquipmentType } from "@balebase/validators/rules";
 import { useCallback, useState } from "react";
 import { AppLink } from "./AppLink";
 import { api } from "./apiClient";
@@ -65,10 +66,12 @@ function useEquipmentListing() {
   const action = useAction("Could not add the equipment.");
   const [adding, setAdding] = useState(false);
 
-  const add = (input: EquipmentInput) =>
+  // The form offers only the listed types when adding.
+  const add = async ({ type, ...input }: EquipmentInput) =>
+    isEquipmentType(type) &&
     action.run(
       async () => {
-        const created = await api.equipment.create(input);
+        const created = await api.equipment.create({ ...input, type });
         setData((current) =>
           current
             ? { ...current, equipment: [created, ...current.equipment] }
@@ -193,7 +196,7 @@ function EquipmentFilters({
   types,
 }: {
   assignee: AssigneeFilter;
-  members: EquipmentMember[];
+  members: Person[];
   onAssigneeChange: (assignee: AssigneeFilter) => void;
   onTypeChange: (type: string) => void;
   type: string;

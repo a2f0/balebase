@@ -13,8 +13,8 @@ import {
 import type {
   EquipmentInput,
   EquipmentItem,
-  EquipmentMember,
 } from "@balebase/validators/equipment";
+import type { Person } from "@balebase/validators/fields";
 import type { LinkedEmail } from "@balebase/validators/inbox";
 import { useCallback, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
@@ -221,7 +221,7 @@ function EquipmentDetails({
   busy: boolean;
   canManage: boolean;
   item: EquipmentItem;
-  members: EquipmentMember[];
+  members: Person[];
   onAssign: (assigneeId: string | null) => void;
 }) {
   return (

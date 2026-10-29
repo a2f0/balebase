@@ -1,10 +1,9 @@
 import {
   type OrganizationCapability,
-  OrganizationCapabilitySchema,
   type OrganizationGroup,
   organizationGroupsRoutes,
 } from "@balebase/validators/organizationGroups";
-import { type Context, Hono } from "hono";
+import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { ApiEnv } from "./authMiddleware";
 import {
@@ -12,9 +11,10 @@ import {
   listOrganizationMembers,
   requireManager,
 } from "./organizationMembers";
-import { respond } from "./respond";
+import { readBody, respond } from "./respond";
 
-const supportedCapabilities = OrganizationCapabilitySchema.options;
+const invalidGroup =
+  "A valid group name, members, and capabilities are required.";
 
 interface GroupRow {
   created_at: string;
@@ -38,14 +38,6 @@ interface GroupInput {
   name: string;
   userIds: string[];
 }
-
-interface RawGroupInput {
-  capabilities?: unknown;
-  name?: unknown;
-  userIds?: unknown;
-}
-
-type OrganizationContext = Context<ApiEnv>;
 
 const organizationGroups = new Hono<ApiEnv>();
 
@@ -94,8 +86,12 @@ organizationGroups.get("/", requireManager(), async (context) => {
 });
 
 organizationGroups.post("/", requireManager(), async (context) => {
-  const input = await groupInput(context);
-  if (!input) return invalidGroup(context);
+  const input = await readBody(
+    context,
+    organizationGroupsRoutes.create,
+    invalidGroup,
+  );
+  if (input instanceof Response) return input;
   const organizationId = context.get("organizationId");
   if (
     !(await membersBelongToOrganization(
@@ -126,9 +122,13 @@ organizationGroups.post("/", requireManager(), async (context) => {
 });
 
 organizationGroups.patch("/:id", requireManager(), async (context) => {
-  const groupId = context.req.param("id");
-  const input = await groupInput(context);
-  if (!groupId || !input) return invalidGroup(context);
+  const groupId = context.req.param("id") ?? "";
+  const input = await readBody(
+    context,
+    organizationGroupsRoutes.update,
+    invalidGroup,
+  );
+  if (input instanceof Response) return input;
   const organizationId = context.get("organizationId");
   if (!(await groupExists(context.env.DB, organizationId, groupId))) {
     return context.json({ error: "Group not found." }, 404);
@@ -280,38 +280,6 @@ async function listGroupMembers(database: D1Database, organizationId: string) {
   return result.results;
 }
 
-async function groupInput(context: OrganizationContext) {
-  const value: unknown = await context.req.json().catch(() => null);
-  if (!isGroupInputRecord(value) || typeof value.name !== "string") return null;
-  const name = value.name.trim();
-  const capabilities = uniqueStrings(value.capabilities);
-  const userIds = uniqueStrings(value.userIds);
-  if (
-    !name ||
-    name.length > 100 ||
-    !capabilities ||
-    !userIds ||
-    userIds.length > 100 ||
-    capabilities.some((item) => !isCapability(item))
-  ) {
-    return null;
-  }
-  return { capabilities, name, userIds } as GroupInput;
-}
-
-function uniqueStrings(value: unknown) {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-    return null;
-  }
-  return [
-    ...new Set(value.map((item) => (item as string).trim()).filter(Boolean)),
-  ];
-}
-
-function isCapability(value: string): value is OrganizationCapability {
-  return (supportedCapabilities as readonly string[]).includes(value);
-}
-
 async function membersBelongToOrganization(
   database: D1Database,
   organizationId: string,
@@ -423,19 +391,8 @@ async function writeGroup(
   await database.batch(statements);
 }
 
-function invalidGroup(context: OrganizationContext) {
-  return context.json(
-    { error: "A valid group name, members, and capabilities are required." },
-    400,
-  );
-}
-
 function capabilityLabel(capability: OrganizationCapability) {
   return capability[0]?.toUpperCase() + capability.slice(1);
-}
-
-function isGroupInputRecord(value: unknown): value is RawGroupInput {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export { organizationGroups };

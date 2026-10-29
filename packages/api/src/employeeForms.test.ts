@@ -152,6 +152,61 @@ describe("employee forms", () => {
     expect(malformedCheckRevision.status).toBe(400);
   });
 
+  it("explains why a requirement request or update is refused", async () => {
+    const fixture = await createFixture();
+    const owner = fixture.app("owner", "owner");
+    const requirement = { kind: "form", title: "W-4", dueDate: "2026-10-02" };
+    const create = async (body: unknown) => {
+      const response = await owner.request("/", jsonPost(body));
+      expect(response.status).toBe(400);
+      return ((await response.json()) as { error: string }).error;
+    };
+    expect(await create(null)).toBe("A target and requirements are required.");
+    for (const target of [
+      {},
+      { invitationId: "invite", memberId: "employee-member" },
+      { memberId: 7 },
+    ]) {
+      expect(await create({ ...target, requirements: [requirement] })).toBe(
+        "Choose one member or invitation.",
+      );
+    }
+    for (const requirements of [
+      [],
+      Array.from({ length: 21 }, () => requirement),
+      [{ ...requirement, kind: "tax_return" }],
+      [{ ...requirement, title: "   " }],
+      [{ ...requirement, title: "W".repeat(101) }],
+      [{ ...requirement, dueDate: "2026-02-30" }],
+      ["W-4"],
+    ]) {
+      expect(await create({ memberId: "employee-member", requirements })).toBe(
+        "Choose 1 to 20 valid requirements.",
+      );
+    }
+
+    const id = await createRequirement(fixture, "form", "W-4");
+    const update = async (body: unknown) => {
+      const response = await owner.request(`/${id}`, {
+        body: JSON.stringify(body),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+      expect(response.status).toBe(400);
+      return ((await response.json()) as { error: string }).error;
+    };
+    expect(await update([])).toBe("Invalid update.");
+    for (const body of [
+      {},
+      { status: "approved" },
+      { dueDate: "2026-13-01" },
+      { dueDate: "2026-10-10", documentRevision: -1 },
+      { dueDate: "2026-10-10", documentRevision: 1.5 },
+    ]) {
+      expect(await update(body)).toBe("Invalid status or due date.");
+    }
+  });
+
   it("rejects an invitation accepted during requirement assignment", async () => {
     const fixture = await createFixture();
     fixture.hooks.before("INSERT INTO employee_requirements", () => {
@@ -724,7 +779,18 @@ describe("employee forms", () => {
     expect(
       (await request(id, { state: "CA" }, "employee", "member")).status,
     ).toBe(403);
-    expect((await request(id, { state: "ZZ" })).status).toBe(400);
+    for (const body of [
+      { state: "ZZ" },
+      { state: "ca" },
+      { city: "S".repeat(101), state: "CA" },
+      { city: 7, state: "CA" },
+    ]) {
+      const refused = await request(id, body);
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toEqual({
+        error: "A US work state and optional city are required.",
+      });
+    }
     expect((await request(credit, { state: "CA" })).status).toBe(404);
     delete fixture.bindings.CHECKR_BACKGROUND_PACKAGE;
     expect((await request(id, { state: "CA" })).status).toBe(503);

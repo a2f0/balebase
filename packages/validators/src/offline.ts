@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { auditsRoutes } from "./audits";
-import { issuePriorities } from "./issueRules";
-import { IssueMemberSchema } from "./issues";
+import { PersonSchema } from "./fields";
+import { issueLimits, issuePriorities } from "./issueRules";
 import { route } from "./route";
+import { auditLimits } from "./rules";
 
 export const OfflineScopeSchema = z.object({
   organizationId: z.string().min(1).max(200),
@@ -20,15 +21,18 @@ export const OfflineOperationSchema = z.discriminatedUnion("type", [
     completedAt: z.iso.datetime().optional(),
     responses: z.record(z.string().max(100), z.string().max(2000)),
   }),
+  // A receipt's digest is of the parsed operation, so these fields keep the
+  // keys, order, and normalization of earlier releases: a retry of work
+  // synced before an upgrade must hash the same.
   z.object({
     id: z.uuid(),
     type: z.literal("issue"),
-    title: z.string().trim().min(1).max(300),
-    description: z.string().max(2000),
+    title: z.string().trim().min(1).max(issueLimits.title),
+    description: z.string().max(issueLimits.description),
     priority: z.enum(issuePriorities),
     assignedTo: z.string().min(1).max(200).nullable(),
     auditId: z.uuid().optional(),
-    itemId: z.string().min(1).max(100).optional(),
+    itemId: z.string().min(1).max(auditLimits.itemId).optional(),
   }),
 ]);
 export type OfflineOperation = z.infer<typeof OfflineOperationSchema>;
@@ -46,7 +50,7 @@ export const offlineRoutes = {
     path: "/api/offline/forms",
     query: OfflineScopeSchema,
     response: auditsRoutes.listTemplates.response.extend({
-      members: z.array(IssueMemberSchema),
+      members: z.array(PersonSchema),
     }),
   }),
   apply: route({

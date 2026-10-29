@@ -165,13 +165,14 @@ describe("inbound email links", () => {
       ).status,
     ).toBe(404);
     expect(
-      (
-        await financeMember.json("POST", "/api/inbox/email-1/links", {
-          targetId: "folder-1",
-          targetType: "audit",
-        })
-      ).status,
-    ).toBe(400);
+      await financeMember.json("POST", "/api/inbox/email-1/links", {
+        targetId: "folder-1",
+        targetType: "audit",
+      }),
+    ).toMatchObject({
+      body: { error: "A link target type and id are required." },
+      status: 400,
+    });
 
     await financeMember.json("POST", "/api/inbox/email-1/links", {
       targetId: "folder-1",

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RecordIdSchema } from "./fields";
 import { route } from "./route";
 
 /** A library document, at the root or in a folder. */
@@ -40,7 +41,7 @@ export const objectsRoutes = {
     method: "PATCH",
     path: "/api/objects/:id",
     /** A folder's id, or null for the library root. */
-    body: z.object({ folderId: z.string().nullable() }),
+    body: z.object({ folderId: RecordIdSchema.nullable() }),
     response: StoredObjectResponseSchema,
   }),
   delete: route({

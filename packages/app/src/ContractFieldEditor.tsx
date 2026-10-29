@@ -1,5 +1,6 @@
 import { Button, Card, cx, Field, Icon, Select } from "@balebase/ui/react";
 import type { FieldType } from "@balebase/validators/contracts";
+import { contractLimits } from "@balebase/validators/rules";
 import {
   type KeyboardEvent,
   type MouseEvent,
@@ -202,7 +203,7 @@ export function SelectedField({ editor }: { editor: Editor }) {
             <Field label="Label" optional>
               <input
                 className="input inputSm"
-                maxLength={100}
+                maxLength={contractLimits.fieldLabel}
                 onChange={(event) =>
                   editor.changeField(field.key, { label: event.target.value })
                 }
