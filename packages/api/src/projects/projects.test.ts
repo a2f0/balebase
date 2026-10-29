@@ -1,7 +1,7 @@
 import type { Database, SQLQueryBindings } from "bun:sqlite";
 import { afterEach, describe, expect, it } from "bun:test";
 import type { Project, ProjectSummary } from "@balebase/validators/projects";
-import { activity } from "../shared/activity";
+import { activity } from "../activity/activity";
 import { testBindings } from "../testing/bindings";
 import { queryHooks, toD1 } from "../testing/d1";
 import { createTestDatabase } from "../testing/database";

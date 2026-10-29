@@ -100,6 +100,28 @@ async function confirmUpdate(page: Page) {
   await page.getByRole("button", { name: "Update and reload" }).click();
 }
 
+/**
+ * Records when the next update's installing worker fails. Playwright's
+ * waitForFunction resolves on a returned promise without awaiting it, so
+ * tests wait on a flag this sets instead of an async registration read.
+ */
+async function watchFailedInstall(page: Page) {
+  await page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.getRegistration();
+    Reflect.set(window, "installFailed", false);
+    registration?.addEventListener("updatefound", () => {
+      const worker = registration.installing;
+      const record = () => {
+        if (worker?.state === "redundant") {
+          Reflect.set(window, "installFailed", true);
+        }
+      };
+      worker?.addEventListener("statechange", record);
+      record();
+    });
+  });
+}
+
 interface Activation {
   channel: MessageChannel;
   controllerChanged: boolean;
@@ -302,13 +324,11 @@ for (const engine of [chromium, firefox, webkit]) {
       });
       await page.clock.install();
       await ready(page, app.url);
+      await watchFailedInstall(page);
       app.deploy(true);
       await checkForUpdate(page, "focus");
       await app.assetFailure;
-      await page.waitForFunction(
-        async () =>
-          !(await navigator.serviceWorker.getRegistration())?.installing,
-      );
+      await page.waitForFunction(() => Reflect.get(window, "installFailed"));
       expect(
         await page.getByText("Update available", { exact: true }).count(),
       ).toBe(0);

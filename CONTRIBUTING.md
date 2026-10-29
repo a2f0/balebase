@@ -80,6 +80,13 @@ it.
   features use live in `shared/`, and the Worker entry points (`index.ts`,
   `app.ts`, and `types.ts`) stay at the top. Paths below are relative to
   `packages/api/src`.
+- `shared/` sits below every feature in both the API and the app: Biome's
+  `noRestrictedImports` overrides in `biome.jsonc` let shared modules import
+  only each other and the entry-point types (`types.ts` and `auth/apiEnv.ts`
+  here, `host.ts` and `apiVersion.ts` in the app). Code that needs a feature
+  belongs in that feature, as the activity feed route does in
+  `activity/activity.ts` while the recording helpers stay in
+  `shared/activity.ts`.
 - Send JSON with `respond(context, route, body)`, and read input with
   `readBody(context, route, message)` and `readQuery` from
   `shared/respond.ts`, which answer 400 with the first broken rule's message;
@@ -167,7 +174,8 @@ it.
 - Load with `useLoad`, mutate with `useAction`, and page cursor lists with
   `useCursorPages` and `InfiniteScroll`, all in `shared/`.
 - Show errors with `errorMessage` from `shared/errors.ts` or with
-  `ErrorToast`.
+  `ErrorToast` from `billing/ErrorToast.tsx`, which links to Billing when an
+  upgrade resolves the error.
 - Add a workspace section with a route in `workspace/workspaceRoutes.tsx` and
   a page and sidebar item in `workspace/WorkspaceShell.tsx`.
 - Build paths with the `workspace/workspacePaths.ts` helpers, match a section
