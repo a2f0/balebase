@@ -5,7 +5,7 @@ import { z } from "zod";
  * client branches on, such as `UPGRADE_REQUIRED`. Some errors add fields of
  * their own, such as the invitation a failed assignment left behind.
  */
-export const ErrorBodySchema = z.looseObject({
+const ErrorBodySchema = z.looseObject({
   code: z.string().optional(),
   error: z.string(),
 });
@@ -54,7 +54,7 @@ type ParamNames<Path extends string> =
       ? Name
       : never;
 
-export type PathParams<Path extends string> = {
+type PathParams<Path extends string> = {
   [Name in ParamNames<Path>]: string;
 };
 

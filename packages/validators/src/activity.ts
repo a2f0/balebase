@@ -53,7 +53,7 @@ const ActivityDetailsSchema = z
   })
   .catchall(z.unknown());
 
-export const ActivityEventSchema = z.object({
+const ActivityEventSchema = z.object({
   action: z.string(),
   actor: ActivityActorSchema,
   details: ActivityDetailsSchema,
@@ -74,7 +74,7 @@ export type ActivityPage = z.infer<typeof ActivityPageSchema>;
 /** Every activity history pages with the last event's cursor. */
 export const ActivityQuerySchema = z.object({ cursor: z.string().optional() });
 
-export const ActivityResourceTypeSchema = z.enum([
+const ActivityResourceTypeSchema = z.enum([
   "audit_run",
   "audit_template",
   "equipment",

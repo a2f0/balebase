@@ -39,6 +39,7 @@ interface PackageWorkspace {
   // Production mode starts only from shipped code and checks no other files.
   production: string[];
   ignoreDependencies?: string[];
+  includeEntryExports?: boolean;
 }
 
 const defaultPackage = {
@@ -56,6 +57,9 @@ const packageWorkspaces: Record<string, PackageWorkspace> = {
     project: [...defaultPackage.project, "scripts/**/*.ts"],
     production: [...defaultPackage.production, "!src/testing/**"],
   },
+  // Every validators file is a package entry, and knip skips unused exports
+  // of entries unless told to check them.
+  "packages/validators": { ...defaultPackage, includeEntryExports: true },
   "packages/app": {
     entry: ["browser/**/*.test.tsx"],
     project: ["src/**/*.{css,ts,tsx}", "browser/**/*.tsx"],

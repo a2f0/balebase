@@ -73,7 +73,6 @@ const BusinessDetailSchema = z.object({
   business: BusinessSchema,
   canManage: z.boolean(),
 });
-export type BusinessDetail = z.infer<typeof BusinessDetailSchema>;
 
 const BusinessResponseSchema = z.object({ business: BusinessSchema });
 
