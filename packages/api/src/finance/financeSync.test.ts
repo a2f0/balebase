@@ -1,7 +1,7 @@
 import { describe, expect, it, spyOn } from "bun:test";
-import { jobRunDetail } from "../jobHistory";
-import { scheduleJobs } from "../jobScheduler";
-import { consumeJobs as consumeFinanceSync } from "../jobWorker";
+import { jobRunDetail } from "../jobs/jobHistory";
+import { scheduleJobs } from "../jobs/jobScheduler";
+import { consumeJobs as consumeFinanceSync } from "../jobs/jobWorker";
 import { findActivity } from "../shared/activity";
 import {
   createFixture,

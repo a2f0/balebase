@@ -1,9 +1,9 @@
-import { isSyncJob } from "./finance/financeSyncJobs";
-import { runSyncPage } from "./finance/financeSyncWorker";
-import { type PlaidRequest, plaidRequest } from "./finance/plaid";
+import { isSyncJob } from "../finance/financeSyncJobs";
+import { runSyncPage } from "../finance/financeSyncWorker";
+import { type PlaidRequest, plaidRequest } from "../finance/plaid";
+import type { Bindings } from "../types";
 import { claimJob } from "./jobRuns";
 import { maintenanceTasks, runMaintenanceJob } from "./maintenance";
-import type { Bindings } from "./types";
 
 export async function consumeJobs(
   batch: MessageBatch<{ jobId: string }>,

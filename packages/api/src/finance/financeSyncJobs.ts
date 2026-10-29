@@ -1,5 +1,5 @@
 import type { FinanceSyncJob } from "@balebase/validators/finance";
-import { dispatchJob, type JobRow } from "../jobRuns";
+import { dispatchJob, type JobRow } from "../jobs/jobRuns";
 import {
   type ActivityActor,
   activityBatch,

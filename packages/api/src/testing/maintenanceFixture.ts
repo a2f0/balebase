@@ -3,7 +3,7 @@ import { adminJobs } from "../admin/adminJobs";
 import { adminUsers } from "../admin/adminUsers";
 import { requireRole } from "../auth/authMiddleware";
 import { withNativeOrigin } from "../auth/nativeRequest";
-import { consumeJobs } from "../jobWorker";
+import { consumeJobs } from "../jobs/jobWorker";
 import { userDeletion } from "../users/userDeletion";
 import { testBindings } from "./bindings";
 import { queryHooks, toD1 } from "./d1";

@@ -1,6 +1,6 @@
-import { scheduleFinanceSync } from "./finance/financeSyncJobs";
+import { scheduleFinanceSync } from "../finance/financeSyncJobs";
+import type { Bindings } from "../types";
 import { recoverJobs } from "./jobRuns";
-import type { Bindings } from "./types";
 
 export async function scheduleJobs(env: Bindings, timestamp = Date.now()) {
   // An unavailable outbox or retention cleanup must not skip daily scheduling,

@@ -6,7 +6,7 @@ import type {
   PlaidRequestBody,
   TransactionsSyncResponse,
 } from "../finance/plaid";
-import { consumeJobs as consumeFinanceSync } from "../jobWorker";
+import { consumeJobs as consumeFinanceSync } from "../jobs/jobWorker";
 import type { Bindings } from "../types";
 import { testBindings } from "./bindings";
 import { queryHooks, toD1 } from "./d1";

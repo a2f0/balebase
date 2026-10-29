@@ -1,5 +1,5 @@
 import { expect, it } from "bun:test";
-import { applyMigrations, createTestDatabase } from "./testing/database";
+import { applyMigrations, createTestDatabase } from "../testing/database";
 
 it("migrates active and completed bank jobs without losing checkpoints, retry budgets, or deletion ownership", async () => {
   const database = createTestDatabase({ before: "0073" });

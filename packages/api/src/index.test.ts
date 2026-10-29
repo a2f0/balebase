@@ -2,9 +2,9 @@ import { expect, it } from "bun:test";
 
 it("routes the finance cron independently from hourly maintenance and exposes the queue consumer", async () => {
   const { spyOn } = await import("bun:test");
-  const jobs = await import("./jobScheduler");
-  const consumer = await import("./jobWorker");
-  const maintenance = await import("./maintenance");
+  const jobs = await import("./jobs/jobScheduler");
+  const consumer = await import("./jobs/jobWorker");
+  const maintenance = await import("./jobs/maintenance");
   const worker = (await import("./index")).default;
   const finance = spyOn(jobs, "scheduleJobs").mockResolvedValue({
     scheduled: 0,
@@ -62,9 +62,9 @@ it("routes the finance cron independently from hourly maintenance and exposes th
 
 it("attempts both queue recovery and daily scheduling when either fails", async () => {
   const { spyOn } = await import("bun:test");
-  const jobs = await import("./jobRuns");
+  const jobs = await import("./jobs/jobRuns");
   const finance = await import("./finance/financeSyncJobs");
-  const { scheduleJobs } = await import("./jobScheduler");
+  const { scheduleJobs } = await import("./jobs/jobScheduler");
   const recover = spyOn(jobs, "recoverJobs").mockResolvedValue(1);
   const daily = spyOn(finance, "scheduleFinanceSync").mockResolvedValue(2);
   const environment = {} as import("./types").Bindings;

@@ -1,4 +1,4 @@
-import { dispatchJob } from "../jobRuns";
+import { dispatchJob } from "../jobs/jobRuns";
 import type { Bindings } from "../types";
 import { type PlaidItemRow, syncPlaidPage } from "./financeSync";
 import type { SyncJobRow } from "./financeSyncJobs";

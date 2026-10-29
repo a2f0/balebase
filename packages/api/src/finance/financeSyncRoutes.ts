@@ -1,5 +1,5 @@
 import { financeRoutes } from "@balebase/validators/finance";
-import { delay, waitForRun } from "../legacyJobRun";
+import { delay, waitForRun } from "../jobs/legacyJobRun";
 import {
   activityBatch,
   activityStatement,

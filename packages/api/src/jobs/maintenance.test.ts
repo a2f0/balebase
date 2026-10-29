@@ -1,4 +1,5 @@
 import { expect, it, spyOn } from "bun:test";
+import { fixture, post } from "../testing/maintenanceFixture";
 import { claimJob, recoverJobs } from "./jobRuns";
 import { waitForLegacyJob } from "./legacyJobRun";
 import {
@@ -6,7 +7,6 @@ import {
   runMaintenanceJob,
   runScheduledMaintenance,
 } from "./maintenance";
-import { fixture, post } from "./testing/maintenanceFixture";
 
 it("requires root admin access, trusted origin, a known job, and explicit confirmation", async () => {
   const regular = fixture("user");
@@ -325,7 +325,7 @@ it("tells older clients that queued work continues without claiming completion",
 
 it("reports caught and interrupted maintenance failures and treats cancellation neutrally", async () => {
   const f = fixture();
-  const diagnostics = await import("./shared/diagnostics");
+  const diagnostics = await import("../shared/diagnostics");
   const report = spyOn(diagnostics, "captureApiError").mockResolvedValue(
     undefined,
   );

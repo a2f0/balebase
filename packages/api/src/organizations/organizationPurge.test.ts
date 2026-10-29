@@ -1,6 +1,6 @@
 import { expect, it, spyOn } from "bun:test";
+import { enqueueMaintenance } from "../jobs/maintenance";
 import { purgeDeletedObjects } from "../library/deletedObjectCleanup";
-import { enqueueMaintenance } from "../maintenance";
 import { fixture, now, post } from "../testing/maintenanceFixture";
 import { purgeDeletedOrganizations } from "./organizationPurge";
 

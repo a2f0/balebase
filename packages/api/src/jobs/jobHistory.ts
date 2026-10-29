@@ -3,12 +3,12 @@ import {
   JobLogDetailsSchema,
 } from "@balebase/validators/adminJobs";
 import type { RouteInput, RouteOutput } from "@balebase/validators/route";
-import { type JobRow, toJobRun } from "./jobRuns";
 import {
   cursorPage,
   decodeCursor,
   encodeCursor,
-} from "./shared/cursorPagination";
+} from "../shared/cursorPagination";
+import { type JobRow, toJobRun } from "./jobRuns";
 
 const runPageSize = 50;
 const logPageSize = 200;

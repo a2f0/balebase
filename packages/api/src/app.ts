@@ -135,7 +135,7 @@ app.all(
   async (context) => {
     // The SDK preloads its schemas when it loads; importing it on first use
     // keeps that work out of every isolate's startup.
-    const { handleMcpRequest } = await import("./mcp");
+    const { handleMcpRequest } = await import("./mcp/mcp");
     return handleMcpRequest(context, (request) =>
       app.fetch(mcpToolRequest(request), context.env, context.executionCtx),
     );

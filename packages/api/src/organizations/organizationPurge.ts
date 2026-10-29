@@ -1,4 +1,4 @@
-import { MaintenanceFailure } from "../maintenanceFailure";
+import { MaintenanceFailure } from "../jobs/maintenanceFailure";
 import type { Bindings } from "../types";
 
 /** Each organization's cascades and durable file cleanup commit together. */

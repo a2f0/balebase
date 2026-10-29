@@ -8,8 +8,8 @@ import {
   McpServer,
 } from "@modelcontextprotocol/server";
 import type { Context } from "hono";
-import { version } from "../package.json";
-import type { ApiEnv } from "./auth/authMiddleware";
+import { version } from "../../package.json";
+import type { ApiEnv } from "../auth/authMiddleware";
 import { auditTools } from "./mcpAuditTools";
 import { contractTools } from "./mcpContractTools";
 import { financeTools } from "./mcpFinanceTools";
