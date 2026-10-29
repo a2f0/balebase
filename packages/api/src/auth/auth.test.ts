@@ -709,6 +709,62 @@ describe("password authentication", () => {
     });
   });
 
+  it("keeps platform role changes off Better Auth's admin endpoints", async () => {
+    const fixture = await createFixture();
+    for (const address of [email, "other@example.com"]) {
+      expect(
+        (
+          await post(fixture.auth, "/sign-up/email", {
+            email: address,
+            name: "Example Person",
+            password: originalPassword,
+            termsAccepted: true,
+          })
+        ).status,
+      ).toBe(200);
+    }
+    fixture.database
+      .query('UPDATE "user" SET role = ? WHERE email IN (?, ?)')
+      .run("admin", email, "other@example.com");
+    const signIn = await post(fixture.auth, "/sign-in/email", {
+      email,
+      password: originalPassword,
+    });
+    const cookie = signIn.headers.get("set-cookie") ?? "";
+    const roles = () =>
+      fixture.database
+        .query(
+          'SELECT email, role FROM "user" WHERE email LIKE ? ORDER BY email',
+        )
+        .all("%@example.com");
+    const before = roles();
+    const other = fixture.database
+      .query('SELECT id FROM "user" WHERE email = ?')
+      .get("other@example.com") as { id: string };
+    const attempts: Array<[string, unknown]> = [
+      ["/admin/set-role", { userId: other.id, role: "user" }],
+      ["/admin/update-user", { userId: other.id, data: { role: "user" } }],
+      [
+        "/admin/create-user",
+        {
+          email: "new@example.com",
+          name: "New",
+          password: originalPassword,
+          role: "admin",
+        },
+      ],
+    ];
+    for (const [path, body] of attempts) {
+      const response = await post(fixture.auth, path, body, cookie);
+      expect(response.status).toBe(404);
+    }
+    expect(roles()).toEqual(before);
+    // Listing stays available to admins.
+    expect(
+      (await get(fixture.auth, "/admin/list-users?limit=1", cookie)).status,
+    ).toBe(200);
+  });
+
   it("records when a signed-in user was last active", async () => {
     const fixture = await createFixture();
     await post(fixture.auth, "/sign-up/email", {

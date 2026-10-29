@@ -67,7 +67,10 @@ bun run auth:set-role person@example.com admin
 ```
 
 Pass `--local` as the third argument to update the local D1 database instead.
-Later role changes can use Better Auth's admin API. Public account registration
+Later role changes use `auth:set-role` or, for revoking another root admin, the
+Users page. Better Auth's `/admin/set-role`, `/admin/update-user`, and
+`/admin/create-user` endpoints are disabled because they change roles without
+the revocation route's self-guard and history. Public account registration
 is enabled for now. The client includes sign-up, sign-in, sign-out, reset
 request, and new-password screens. Object-storage endpoints require an
 authenticated session, and each organization's upload library is isolated in
