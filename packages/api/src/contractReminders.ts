@@ -62,7 +62,7 @@ export async function resumeStalledContracts(
       )
       .bind(now.toISOString(), id, leaseExpired)
       .run();
-    if (claim.meta.changes !== 1) continue;
+    if (!claim.meta.changes) continue;
     try {
       await advanceContract(environment, id);
       resumed += 1;
@@ -112,7 +112,7 @@ export async function sendContractReminders(
       )
       .bind(now.toISOString(), recipient.id, recipient.last_emailed_at)
       .run();
-    if (claim.meta.changes !== 1) continue;
+    if (!claim.meta.changes) continue;
     const ids = claimed.get(recipient.contract_id) ?? new Set<string>();
     ids.add(recipient.id);
     claimed.set(recipient.contract_id, ids);

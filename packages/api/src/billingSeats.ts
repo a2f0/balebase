@@ -231,7 +231,7 @@ async function claimSubscriptionSyncLock(
         nowSeconds,
       )
       .run();
-    if (Number(claimed.meta.changes) === 1) return;
+    if (Number(claimed.meta.changes) > 0) return;
     if (!waitForLock || Date.now() >= waitDeadline) {
       throw new Error(
         "Stripe subscription synchronization is already running.",

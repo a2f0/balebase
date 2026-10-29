@@ -151,7 +151,7 @@ async function claimWebhookEvent(database: D1Database, event: StripeEvent) {
     )
     .bind(event.id, event.type, event.created, now)
     .run();
-  if (Number(inserted.meta.changes) === 1) return "claimed" as const;
+  if (Number(inserted.meta.changes) > 0) return "claimed" as const;
   const existing = await database
     .prepare(`SELECT processed_at FROM stripe_webhook_events WHERE id = ?`)
     .bind(event.id)
@@ -168,7 +168,7 @@ async function claimWebhookEvent(database: D1Database, event: StripeEvent) {
     )
     .bind(now, event.id, staleBefore)
     .run();
-  if (Number(reclaimed.meta.changes) === 1) return "claimed" as const;
+  if (Number(reclaimed.meta.changes) > 0) return "claimed" as const;
   const completed = await database
     .prepare(`SELECT processed_at FROM stripe_webhook_events WHERE id = ?`)
     .bind(event.id)

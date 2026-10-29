@@ -239,7 +239,7 @@ contracts.put("/:id/draft", async (context) => {
   const saved = await database.batch(
     draftStatements(database, contract, draft, new Date().toISOString()),
   );
-  if (saved[0]?.meta.changes !== 1) return notDraft(context);
+  if (!saved[0]?.meta.changes) return notDraft(context);
   return respond(context, contractsRoutes.saveDraft, {
     contract: await detailFor(context, contract.id),
   });
@@ -274,7 +274,7 @@ contracts.post("/:id/send", async (context) => {
     )
     .bind(now, userId, now, contract.id, organizationId, contract.revision)
     .run();
-  if (sent.meta.changes !== 1) {
+  if (!sent.meta.changes) {
     return context.json(
       { error: "The draft changed while it was being sent. Send it again." },
       409,
@@ -334,7 +334,7 @@ contracts.post("/:id/remind", async (context) => {
       )
       .bind(now.toISOString(), recipient.id, threshold.toISOString())
       .run();
-    if (claim.meta.changes === 1) due.push(recipient);
+    if (claim.meta.changes) due.push(recipient);
   }
   if (awaiting.length > 0 && due.length === 0) {
     return context.json(
@@ -380,7 +380,7 @@ contracts.post("/:id/void", async (context) => {
     )
     .bind(now, reason || null, now, contract.id, organizationId)
     .run();
-  if (voided.meta.changes !== 1) {
+  if (!voided.meta.changes) {
     return context.json(
       { error: "Only contracts awaiting signatures can be voided." },
       409,

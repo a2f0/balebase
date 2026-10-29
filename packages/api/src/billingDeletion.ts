@@ -100,7 +100,7 @@ export async function recoverCheckoutAfterFailedDeletion(
       organizationId,
     )
     .run();
-  return Number(recovered.meta.changes) === 1;
+  return Number(recovered.meta.changes) > 0;
 }
 
 async function resolvePendingCheckoutForDeletion(

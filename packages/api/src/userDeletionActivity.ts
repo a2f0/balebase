@@ -53,7 +53,7 @@ export async function requestUserDeletion(
         requestId,
       ),
   ]);
-  return result?.meta.changes === 1 ? requestedAt : null;
+  return result?.meta.changes ? requestedAt : null;
 }
 
 export async function cancelUserDeletion(
@@ -81,5 +81,5 @@ export async function cancelUserDeletion(
       .prepare("DELETE FROM user_deletion_requests WHERE user_id = ?")
       .bind(userId),
   ]);
-  return result?.meta.changes === 1;
+  return Boolean(result?.meta.changes);
 }

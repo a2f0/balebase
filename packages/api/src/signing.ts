@@ -50,7 +50,7 @@ signing.get("/:token", async (context) => {
     )
       .bind(new Date().toISOString(), recipient.id)
       .run();
-    if (viewed.meta.changes === 1) {
+    if (viewed.meta.changes) {
       await recordEvent(context.env.DB, {
         contractId: contract.id,
         ip: clientIp(context),
@@ -186,7 +186,7 @@ signing.post("/:token/sign", async (context) => {
       )
       .bind(now, ip, userAgent, signature, initials, recipient.id, ...guard),
   ]);
-  if (results.at(-1)?.meta.changes !== 1) {
+  if (!results.at(-1)?.meta.changes) {
     return cannotSign(context, contract, recipient);
   }
   // The signature is recorded; routing and completion are retried by the
@@ -249,7 +249,7 @@ signing.post("/:token/decline", async (context) => {
       )
       .bind(now, contract.id),
   ]);
-  if (results[1]?.meta.changes !== 1) {
+  if (!results[1]?.meta.changes) {
     return cannotSign(context, contract, recipient);
   }
   try {

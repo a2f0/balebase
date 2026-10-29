@@ -101,7 +101,7 @@ export async function notifyRecipients(
         )
         .bind(nonce, await signingTokenHash(token), now, recipient.id)
         .run();
-      if (issued.meta.changes !== 1) continue;
+      if (!issued.meta.changes) continue;
       link = signingUrl(environment, token);
     } else {
       if (reminder) {

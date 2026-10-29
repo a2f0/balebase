@@ -96,7 +96,7 @@ businesses.post("/", requireBusinessManager, async (context) => {
       timestamp,
     )
     .run();
-  if (result.meta.changes !== 1) {
+  if (!result.meta.changes) {
     return duplicateIdentifier(context, id, {
       duns: input.duns ?? null,
       ein: input.ein ?? null,
@@ -177,7 +177,7 @@ businesses.patch("/:id", requireBusinessManager, async (context) => {
       context.get("organizationId"),
     )
     .run();
-  if (result.meta.changes !== 1) {
+  if (!result.meta.changes) {
     return duplicateIdentifier(context, id, { duns, ein });
   }
   const updated = await context.env.DB.prepare(
@@ -201,7 +201,7 @@ businesses.delete("/:id", requireBusinessManager, async (context) => {
   )
     .bind(context.req.param("id"), context.get("organizationId"))
     .run();
-  if (result.meta.changes !== 1) {
+  if (!result.meta.changes) {
     return context.json({ error: "Business not found." }, 404);
   }
   return context.body(null, 204);
