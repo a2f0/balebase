@@ -1,13 +1,13 @@
 import type { OrganizationCapability } from "@balebase/validators/organizationGroups";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "../shared/apiClient";
+import { errorMessage } from "../shared/errors";
 import {
   type OrganizationSeatRequirement,
   type OrganizationTwoFactorRequirement,
   seatRequirementFrom,
   twoFactorRequirementFrom,
 } from "./organizationAccessErrors";
-import { api } from "./shared/apiClient";
-import { errorMessage } from "./shared/errors";
 
 interface AccessState {
   capabilities: OrganizationCapability[];

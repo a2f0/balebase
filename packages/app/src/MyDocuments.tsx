@@ -22,7 +22,7 @@ import {
   downloadEmployeeForm,
   downloadScreeningConsent,
 } from "./employeeFormDownloads";
-import type { WorkspaceOrganization } from "./organizationState";
+import type { WorkspaceOrganization } from "./organizations/organizationState";
 import {
   localDate,
   type PersonalGroup,

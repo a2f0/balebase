@@ -4,10 +4,10 @@ import type { ReactNode } from "react";
 import {
   blockingSeatRequirement,
   OrganizationSeatRequired,
-} from "./OrganizationSeatRequired";
-import { ErrorToast } from "./shared/ErrorToast";
-import { errorNotice } from "./shared/errors";
-import { installDom } from "./testing/dom";
+} from "../organizations/OrganizationSeatRequired";
+import { ErrorToast } from "../shared/ErrorToast";
+import { errorNotice } from "../shared/errors";
+import { installDom } from "../testing/dom";
 
 const { clickLink, render: renderInDom } = installDom({
   url: "http://localhost:5173/audits",

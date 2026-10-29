@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Stripe } from "@stripe/stripe-js";
+import { installDom } from "../testing/dom";
 import { type CheckoutSummary, mountCheckout } from "./stripeCheckout";
-import { installDom } from "./testing/dom";
 
 const { window: dom } = installDom({
   globals: (window) => ({ MutationObserver: window.MutationObserver }),

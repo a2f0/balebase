@@ -13,9 +13,9 @@ import type { OrganizationGroup } from "@balebase/validators/organizationGroups"
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { groupLimits } from "@balebase/validators/rules";
 import { type FormEvent, useCallback, useState } from "react";
-import { api } from "./shared/apiClient";
-import { useAction } from "./shared/useAction";
-import { useLoad } from "./shared/useLoad";
+import { api } from "../shared/apiClient";
+import { useAction } from "../shared/useAction";
+import { useLoad } from "../shared/useLoad";
 
 export function OrganizationAccessSettings({
   onAccessChanged,

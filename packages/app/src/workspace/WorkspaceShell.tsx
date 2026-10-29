@@ -16,7 +16,10 @@ import {
 } from "react";
 import { AccountControl } from "../account/AccountControl";
 import type { AccountSession } from "../account/accountSessions";
-import { hasRole, type WorkspaceOrganization } from "../organizationState";
+import {
+  hasRole,
+  type WorkspaceOrganization,
+} from "../organizations/organizationState";
 import { AppLink } from "../shared/AppLink";
 import { useAction } from "../shared/useAction";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";

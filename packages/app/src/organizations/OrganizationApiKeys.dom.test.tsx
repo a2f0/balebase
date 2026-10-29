@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { ApiKey } from "@balebase/validators/apiKeys";
 import { act } from "react";
-import { installDom } from "./testing/dom";
+import { installDom } from "../testing/dom";
 
 const {
   click,

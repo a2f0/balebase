@@ -7,6 +7,8 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type { ReactNode } from "react";
+import { useAction } from "../shared/useAction";
+import { organizationPathRequiresAccess } from "../workspace/workspacePaths";
 import {
   blockingSeatRequirement,
   OrganizationSeatRequired,
@@ -15,8 +17,6 @@ import type {
   OrganizationSeatRequirement,
   OrganizationTwoFactorRequirement,
 } from "./organizationAccessErrors";
-import { useAction } from "./shared/useAction";
-import { organizationPathRequiresAccess } from "./workspace/workspacePaths";
 
 /**
  * Shows what the organization requires before its pages can load:

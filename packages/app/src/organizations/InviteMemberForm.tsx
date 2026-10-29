@@ -1,20 +1,20 @@
 import { Button, Card, Field, Select, Toast } from "@balebase/ui/react";
 import { type FormEvent, type Ref, useEffect, useRef, useState } from "react";
-import { RequirementDraftEditor } from "./EmployeeForms";
+import { RequirementDraftEditor } from "../EmployeeForms";
 import {
   inviteWithRequirements,
   RequirementAssignmentError,
   type RequirementDraft,
-} from "./employeeOnboarding";
+} from "../employeeOnboarding";
+import { api } from "../shared/apiClient";
+import { authClient } from "../shared/authClient";
+import { ErrorToast } from "../shared/ErrorToast";
+import { useAction } from "../shared/useAction";
 import {
   assignableOrganizationRoles,
   formatRoles,
   type OrganizationInvitationRole,
 } from "./organizationState";
-import { api } from "./shared/apiClient";
-import { authClient } from "./shared/authClient";
-import { ErrorToast } from "./shared/ErrorToast";
-import { useAction } from "./shared/useAction";
 
 export function InviteMemberForm({
   memberRole,

@@ -13,7 +13,7 @@ import type {
   ActivityResourceType,
 } from "@balebase/validators/activity";
 import { useCallback } from "react";
-import { formatRoles } from "../organizationState";
+import { formatRoles } from "../organizations/organizationState";
 import { InfiniteScroll } from "../shared/InfiniteScroll";
 import { formatDateTime } from "../shared/labels";
 import { useCursorPages } from "../shared/useCursorPages";

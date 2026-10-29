@@ -1,7 +1,7 @@
 import { Button, Card, Toast } from "@balebase/ui/react";
 import type { InlineCheckoutSession } from "@balebase/validators/billing";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { errorMessage } from "./shared/errors";
+import { errorMessage } from "../shared/errors";
 import {
   type CheckoutSummary,
   type MountedCheckout,

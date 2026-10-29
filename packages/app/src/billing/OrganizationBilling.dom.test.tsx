@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, mock } from "bun:test";
 import type { BillingStatus } from "@balebase/validators/billing";
 import { act } from "react";
-import { installDom } from "./testing/dom";
+import { installDom } from "../testing/dom";
 
 const {
   mount,

@@ -9,7 +9,7 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import { type FormEvent, useState } from "react";
-import type { WorkspaceOrganization } from "../organizationState";
+import type { WorkspaceOrganization } from "../organizations/organizationState";
 import { AppLink } from "../shared/AppLink";
 import { useAction } from "../shared/useAction";
 import { AccountDeletion } from "./AccountDeletion";

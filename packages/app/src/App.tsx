@@ -19,15 +19,15 @@ import { AuthPage } from "./auth/AuthPage";
 import type { AuthenticationAction } from "./auth/authActions";
 import { useSessionRefetch } from "./auth/useSessionRefetch";
 import { Library } from "./Library";
-import { useLinkedOrganization } from "./linkedOrganization";
-import { OrganizationGate } from "./OrganizationGate";
 import { useOfflineSlot } from "./offlineSlot";
-import { hasRole } from "./organizationState";
+import { useLinkedOrganization } from "./organizations/linkedOrganization";
+import { OrganizationGate } from "./organizations/OrganizationGate";
+import { hasRole } from "./organizations/organizationState";
+import { useOrganizationAccess } from "./organizations/useOrganizationAccess";
 import { SigningPage } from "./SigningPage";
 import { authClient } from "./shared/authClient";
 import { authCallbackUrl } from "./shared/config";
 import { useOfflineRoute } from "./useOfflineRoute";
-import { useOrganizationAccess } from "./useOrganizationAccess";
 import {
   guardWorkspaceChange,
   useDismissDialogsOnWorkspaceChange,

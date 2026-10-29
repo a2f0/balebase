@@ -5,7 +5,7 @@ import type {
   OrganizationMember,
   OrganizationPeopleData,
 } from "@balebase/validators/organizationSettings";
-import { installDom } from "./testing/dom";
+import { installDom } from "../testing/dom";
 
 const { click, fill, mount, queryButton, respond, settle } = installDom({
   url: "http://localhost:5173/organization/people",

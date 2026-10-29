@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { installDom } from "../testing/dom";
 import { useLinkedOrganization } from "./linkedOrganization";
-import { installDom } from "./testing/dom";
 
 const { mount, window: dom } = installDom({ url: "http://localhost:5173/" });
 

@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import type { BillingStatus } from "@balebase/validators/billing";
 import { act, useState } from "react";
-import { installDom } from "./testing/dom";
+import { installDom } from "../testing/dom";
 
 const {
   clickLink,
@@ -25,7 +25,9 @@ const freeStatus: BillingStatus = {
 
 beforeAll(async () => {
   const { OrganizationGate } = await import("./OrganizationGate");
-  const { OrganizationBilling } = await import("./OrganizationBilling");
+  const { OrganizationBilling } = await import(
+    "../billing/OrganizationBilling"
+  );
   const { useOrganizationAccess } = await import("./useOrganizationAccess");
   // The workspace wiring from App: the real access hook gates each page, and
   // Billing refreshes that access after Checkout, as OrganizationSettings does.

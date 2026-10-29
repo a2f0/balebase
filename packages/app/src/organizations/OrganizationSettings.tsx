@@ -12,8 +12,17 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import { type FormEvent, useState } from "react";
+import { OrganizationBilling } from "../billing/OrganizationBilling";
+import { AppLink } from "../shared/AppLink";
+import { api } from "../shared/apiClient";
+import { authClient } from "../shared/authClient";
+import { throwIfRefused } from "../shared/errors";
+import { useAction } from "../shared/useAction";
+import {
+  organizationMemberIdForPath,
+  organizationSettingsPage,
+} from "../workspace/workspacePaths";
 import { OrganizationApiKeys } from "./OrganizationApiKeys";
-import { OrganizationBilling } from "./OrganizationBilling";
 import { OrganizationAccessSettings } from "./OrganizationGroups";
 import { OrganizationMemberDetail } from "./OrganizationMemberDetail";
 import { OrganizationPeople } from "./OrganizationPeople";
@@ -24,15 +33,6 @@ import {
   formatRoles,
   type WorkspaceOrganization,
 } from "./organizationState";
-import { AppLink } from "./shared/AppLink";
-import { api } from "./shared/apiClient";
-import { authClient } from "./shared/authClient";
-import { throwIfRefused } from "./shared/errors";
-import { useAction } from "./shared/useAction";
-import {
-  organizationMemberIdForPath,
-  organizationSettingsPage,
-} from "./workspace/workspacePaths";
 
 type OrganizationGeneralAction = "delete" | "leave" | "save";
 

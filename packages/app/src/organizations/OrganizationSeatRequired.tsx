@@ -1,7 +1,7 @@
 import { EmptyState, Page, PageBody, PageHeader } from "@balebase/ui/react";
-import { BillingLink } from "./BillingLink";
+import { BillingLink } from "../billing/BillingLink";
+import { billingPath } from "../workspace/workspacePaths";
 import type { OrganizationSeatRequirement } from "./organizationAccessErrors";
-import { billingPath } from "./workspace/workspacePaths";
 
 /** The seat requirement that blocks `pathname`; owners keep Billing open. */
 export function blockingSeatRequirement(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { installDom } from "../testing/dom";
 import { readCheckoutAppearance } from "./checkoutAppearance";
-import { installDom } from "./testing/dom";
 
 const { window: dom } = installDom();
 

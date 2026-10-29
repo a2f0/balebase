@@ -16,11 +16,11 @@ import type {
   InlineCheckoutSession,
 } from "@balebase/validators/billing";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "../shared/apiClient";
+import { errorMessage } from "../shared/errors";
+import { countLabel, formatLabel } from "../shared/labels";
 import { openCurrentBillingSession } from "./billingSession";
 import { InlineCheckout } from "./InlineCheckout";
-import { api } from "./shared/apiClient";
-import { errorMessage } from "./shared/errors";
-import { countLabel, formatLabel } from "./shared/labels";
 
 type BillingRedirect = "checkout" | "portal";
 

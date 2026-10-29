@@ -4,7 +4,7 @@ import {
   createOrganizationSlug,
   resolveActiveOrganizationId,
   type WorkspaceOrganization,
-} from "../organizationState";
+} from "../organizations/organizationState";
 import { api } from "../shared/apiClient";
 import { authClient } from "../shared/authClient";
 

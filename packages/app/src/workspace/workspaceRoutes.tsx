@@ -16,10 +16,10 @@ import { FinanceTransactionPage } from "../FinanceTransactionPage";
 import { Inbox } from "../Inbox";
 import { Issues } from "../issues/Issues";
 import { MyDocuments } from "../MyDocuments";
-import { OrganizationInvitation } from "../OrganizationInvitation";
-import { OrganizationSettings } from "../OrganizationSettings";
-import type { WorkspaceOrganization } from "../organizationState";
-import type { useOrganizationAccess } from "../useOrganizationAccess";
+import { OrganizationInvitation } from "../organizations/OrganizationInvitation";
+import { OrganizationSettings } from "../organizations/OrganizationSettings";
+import type { WorkspaceOrganization } from "../organizations/organizationState";
+import type { useOrganizationAccess } from "../organizations/useOrganizationAccess";
 import type { WorkspacePage } from "./WorkspaceShell";
 import {
   adminOrganizationPath,

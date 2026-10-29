@@ -9,7 +9,13 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
-import { EmployeeForms } from "./EmployeeForms";
+import { EmployeeForms } from "../EmployeeForms";
+import { AppButtonLink } from "../shared/AppLink";
+import { formatDate } from "../shared/labels";
+import {
+  myDocumentsPath,
+  organizationPeoplePath,
+} from "../workspace/workspacePaths";
 import {
   MemberRoleControl,
   MemberTwoFactorControl,
@@ -26,12 +32,6 @@ import {
   type OrganizationInvitationRole,
   type WorkspaceOrganization,
 } from "./organizationState";
-import { AppButtonLink } from "./shared/AppLink";
-import { formatDate } from "./shared/labels";
-import {
-  myDocumentsPath,
-  organizationPeoplePath,
-} from "./workspace/workspacePaths";
 
 /**
  * One member: who they are, their role and two-factor requirement, and, for
