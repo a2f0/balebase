@@ -741,7 +741,7 @@ describe("password authentication", () => {
     const other = fixture.database
       .query('SELECT id FROM "user" WHERE email = ?')
       .get("other@example.com") as { id: string };
-    const attempts: Array<[string, unknown]> = [
+    const attempts: Array<[string, Record<string, unknown>]> = [
       ["/admin/set-role", { userId: other.id, role: "user" }],
       ["/admin/update-user", { userId: other.id, data: { role: "user" } }],
       [
