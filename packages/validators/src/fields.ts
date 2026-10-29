@@ -3,12 +3,13 @@ import { auditLimits } from "./rules";
 
 /**
  * A checklist section or item ID, kept exactly as sent: answers and issues
- * refer to it, so it is never trimmed.
+ * refer to it, so it is never trimmed. Its length is checked without the
+ * padding, as earlier releases did, so stored forms still read.
  */
-export const ChecklistIdSchema = z
-  .string()
-  .max(auditLimits.itemId)
-  .refine((id) => id.trim() !== "");
+export const ChecklistIdSchema = z.string().refine((id) => {
+  const visible = id.trim();
+  return visible !== "" && visible.length <= auditLimits.itemId;
+});
 
 /** A person a record names, such as its creator or assignee. */
 export const PersonSchema = z.object({

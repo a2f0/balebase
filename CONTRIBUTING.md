@@ -115,10 +115,9 @@ from `authMiddleware.ts`. Gate owner- and admin-only routes with
 `requireManager()`, or branch on `canManage(context)`, from
 `organizationMembers.ts`. Mount platform admin routers below `/api/admin`,
 where `app.ts` applies the one `requireAuth` and `requireRole("admin")` guard.
-Read untrusted JSON that no contract schema covers yet with `isRecord` and
-`validText` from `jsonInput.ts`, and
-send mail with `sendMail` from `mailSender.ts`, which names the sender with
-`productName`.
+Read untrusted JSON that no contract schema covers yet with `isRecord` from
+`jsonInput.ts`, and send mail with `sendMail` from `mailSender.ts`, which
+names the sender with `productName`.
 
 File handling lives in `storage.ts`. Read uploads and webhook bodies with
 `readBoundedForm` and `readBoundedRequest`, which refuse an oversized body
