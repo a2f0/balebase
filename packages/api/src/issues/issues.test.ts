@@ -237,28 +237,7 @@ describe("workspace issues", () => {
     "can edit %s issues after an assignee leaves, but rejects new nonmember assignments",
     async (type) => {
       const f = await fixture();
-      const definition = JSON.stringify({
-        version: 1,
-        sections: [
-          {
-            id: "section",
-            title: "Checks",
-            items: [
-              {
-                id: "check",
-                prompt: "Exits clear?",
-                required: true,
-                responseType: "check",
-              },
-            ],
-          },
-        ],
-      });
-      f.db
-        .query(
-          `INSERT INTO audits (id, organization_id, template_name, definition, responses, status, started_by, created_at, updated_at) VALUES ('audit', 'org_user-1', 'Inspection', ?, '{}', 'in_progress', 'user-1', ?, ?)`,
-        )
-        .run(definition, now, now);
+      seedCheckAudit(f.db);
       const target =
         type === "workspace"
           ? undefined
@@ -418,28 +397,7 @@ describe("workspace issues", () => {
 
   it("validates audit targets and records generic edits in the audit history", async () => {
     const f = await fixture();
-    const definition = JSON.stringify({
-      version: 1,
-      sections: [
-        {
-          id: "section",
-          title: "Checks",
-          items: [
-            {
-              id: "check",
-              prompt: "Exits clear?",
-              required: true,
-              responseType: "check",
-            },
-          ],
-        },
-      ],
-    });
-    f.db
-      .query(
-        `INSERT INTO audits (id, organization_id, template_name, definition, responses, status, started_by, created_at, updated_at) VALUES ('audit', 'org_user-1', 'Inspection', ?, '{}', 'in_progress', 'user-1', ?, ?)`,
-      )
-      .run(definition, now, now);
+    seedCheckAudit(f.db);
     const target = { type: "audit_run", id: "audit", itemId: "check" };
     expect(
       (
@@ -800,6 +758,30 @@ describe("transaction annotation activity", () => {
     ).toEqual([]);
   });
 });
+
+/** An in-progress audit, `audit`, with one required check item, `check`. */
+function seedCheckAudit(db: Database) {
+  const definition = JSON.stringify({
+    version: 1,
+    sections: [
+      {
+        id: "section",
+        title: "Checks",
+        items: [
+          {
+            id: "check",
+            prompt: "Exits clear?",
+            required: true,
+            responseType: "check",
+          },
+        ],
+      },
+    ],
+  });
+  db.query(
+    `INSERT INTO audits (id, organization_id, template_name, definition, responses, status, started_by, created_at, updated_at) VALUES ('audit', 'org_user-1', 'Inspection', ?, '{}', 'in_progress', 'user-1', ?, ?)`,
+  ).run(definition, now, now);
+}
 
 function fixture(legacy = false) {
   const db = createTestDatabase({
