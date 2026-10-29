@@ -6,7 +6,7 @@ import { adminAuditTemplates } from "./admin/adminAuditTemplates";
 import { adminJobs } from "./admin/adminJobs";
 import { adminOrganizations } from "./admin/adminOrganizations";
 import { adminUsers } from "./admin/adminUsers";
-import { audits } from "./audits";
+import { audits } from "./audits/audits";
 import { apiKeys, mcpToolRequest } from "./auth/apiKeys";
 import { createAuth } from "./auth/auth";
 import {
@@ -29,10 +29,10 @@ import { employeeForms } from "./employeeForms";
 import { equipment } from "./equipment/equipment";
 import { finance } from "./finance";
 import { inbox } from "./inbox";
-import { issues } from "./issues";
+import { issues } from "./issues/issues";
 import { libraryFolders } from "./libraryFolders";
 import { objects } from "./objects";
-import { offline } from "./offline";
+import { offline } from "./offline/offline";
 import {
   organizationGroups,
   requireCapability,

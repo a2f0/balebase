@@ -1,6 +1,14 @@
 import { issuesRoutes } from "@balebase/validators/issues";
 import { Hono } from "hono";
-import type { ApiEnv } from "./auth/authMiddleware";
+import type { ApiEnv } from "../auth/authMiddleware";
+import { listMemberDirectory } from "../organizations/organizationMembers";
+import { activityBatch, findActivity } from "../shared/activity";
+import {
+  cursorPage,
+  decodeCursor,
+  encodeCursor,
+} from "../shared/cursorPagination";
+import { readBody, respond } from "../shared/respond";
 import {
   canSeeFinanceIssues,
   findIssue,
@@ -13,14 +21,6 @@ import {
   issueUpdate,
   toIssue,
 } from "./issueRecords";
-import { listMemberDirectory } from "./organizations/organizationMembers";
-import { activityBatch, findActivity } from "./shared/activity";
-import {
-  cursorPage,
-  decodeCursor,
-  encodeCursor,
-} from "./shared/cursorPagination";
-import { readBody, respond } from "./shared/respond";
 
 export const issues = new Hono<ApiEnv>();
 const issuePageSize = 50;

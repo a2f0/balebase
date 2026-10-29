@@ -3,15 +3,19 @@ import {
   offlineRoutes,
 } from "@balebase/validators/offline";
 import { Hono } from "hono";
-import { findIssueImages } from "./auditIssueImageRecords";
-import { uploadAuditIssueImage } from "./auditIssueImageUploads";
-import { type TemplateRow, templateSelect, toTemplate } from "./auditTemplates";
-import type { ApiEnv } from "./auth/authMiddleware";
-import type { IssueContext } from "./issueRecords";
+import { findIssueImages } from "../audits/auditIssueImageRecords";
+import { uploadAuditIssueImage } from "../audits/auditIssueImageUploads";
+import {
+  type TemplateRow,
+  templateSelect,
+  toTemplate,
+} from "../audits/auditTemplates";
+import type { ApiEnv } from "../auth/authMiddleware";
+import type { IssueContext } from "../issues/issueRecords";
+import { listMemberDirectory } from "../organizations/organizationMembers";
+import { activityBatch } from "../shared/activity";
+import { readBody, respond } from "../shared/respond";
 import { formerAssigneeError, offlineStatements } from "./offlineRecords";
-import { listMemberDirectory } from "./organizations/organizationMembers";
-import { activityBatch } from "./shared/activity";
-import { readBody, respond } from "./shared/respond";
 
 export const offline = new Hono<ApiEnv>();
 

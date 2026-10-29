@@ -11,7 +11,7 @@ import {
   type TemplateListResponse,
   type TemplateResponse,
   type TestIdentity,
-} from "./testing/auditFixture";
+} from "../testing/auditFixture";
 
 describe("audits", () => {
   it("paginates every retained audit run with a stable cursor", async () => {

@@ -9,7 +9,7 @@ import {
   jsonRequest,
   pngBytes,
   type RunListResponse,
-} from "./testing/auditFixture";
+} from "../testing/auditFixture";
 
 interface DiscardedRunListResponse {
   audits: Array<{

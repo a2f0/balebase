@@ -3,9 +3,9 @@ import { offlineRoutes } from "@balebase/validators/offline";
 import {
   findAuditIssueImage,
   toAuditIssueImage,
-} from "./auditIssueImageRecords";
-import type { IssueContext } from "./issueRecords";
-import { respond } from "./shared/respond";
+} from "../audits/auditIssueImageRecords";
+import type { IssueContext } from "../issues/issueRecords";
+import { respond } from "../shared/respond";
 
 export async function replayOfflineImage(
   context: IssueContext,

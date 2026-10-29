@@ -11,7 +11,7 @@ import {
   type TemplateRow,
   templateSelect,
   toTemplate,
-} from "../auditTemplates";
+} from "../audits/auditTemplates";
 import type { ApiEnv } from "../auth/authMiddleware";
 import { findActivity, requestActor } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";

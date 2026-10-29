@@ -10,8 +10,8 @@ import {
   jsonRequest,
   pngBytes,
   type TemplateResponse,
-} from "./testing/auditFixture";
-import { applyMigrations } from "./testing/database";
+} from "../testing/auditFixture";
+import { applyMigrations } from "../testing/database";
 
 interface ActivityRunResponse {
   audit: {

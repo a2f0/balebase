@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { purgePendingAuditIssueImages } from "./auditIssueImageCleanup";
-import { purgeDeletedObjects } from "./deletedObjectCleanup";
+import { purgeDeletedObjects } from "../deletedObjectCleanup";
 import {
   createAuditIssue,
   createFixture,
@@ -10,7 +9,8 @@ import {
   imagesFor,
   imageUpload,
   pngBytes,
-} from "./testing/auditFixture";
+} from "../testing/auditFixture";
+import { purgePendingAuditIssueImages } from "./auditIssueImageCleanup";
 
 describe("audit issue images", () => {
   it("normalizes and stores every supported issue image format", async () => {

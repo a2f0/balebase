@@ -1,8 +1,8 @@
 import type { Issue, IssueTargetType } from "@balebase/validators/issues";
 import type { Context } from "hono";
-import { storedDefinition } from "./auditTemplates";
-import type { ApiEnv } from "./auth/authMiddleware";
-import { userHasCapability } from "./organizations/organizationGroups";
+import { storedDefinition } from "../audits/auditTemplates";
+import type { ApiEnv } from "../auth/authMiddleware";
+import { userHasCapability } from "../organizations/organizationGroups";
 
 export type IssueContext = Context<ApiEnv>;
 export interface IssueTarget {

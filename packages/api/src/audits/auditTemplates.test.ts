@@ -7,9 +7,9 @@ import {
   type RunResponse,
   type TemplateResponse,
   type TemplateVersionsResponse,
-} from "./testing/auditFixture";
-import { applyMigrations } from "./testing/database";
-import { insertBilling } from "./testing/seed";
+} from "../testing/auditFixture";
+import { applyMigrations } from "../testing/database";
+import { insertBilling } from "../testing/seed";
 
 describe("audit templates", () => {
   it("migrates existing templates and audit provenance into version one", async () => {

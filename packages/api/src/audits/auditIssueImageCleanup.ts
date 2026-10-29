@@ -1,5 +1,5 @@
-import { auditIssueImageUploadGraceMilliseconds } from "./objectLifecycle";
-import type { Bindings } from "./types";
+import { auditIssueImageUploadGraceMilliseconds } from "../objectLifecycle";
+import type { Bindings } from "../types";
 
 const pendingCleanupBatchSize = 100;
 

@@ -2,8 +2,8 @@ import {
   issueImageTypeAccepted,
   maxIssueImageBytes,
 } from "@balebase/validators/issueRules";
-import { maxFilenameBytes, normalizeFilename } from "./shared/filenames";
-import { BodyReadTimeoutError, readBodyWithLimit } from "./shared/storage";
+import { maxFilenameBytes, normalizeFilename } from "../shared/filenames";
+import { BodyReadTimeoutError, readBodyWithLimit } from "../shared/storage";
 
 export const maxImageReadMilliseconds = 60_000;
 const maxImageDimension = 12_000;

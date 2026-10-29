@@ -1,12 +1,12 @@
 import type { OfflineOperation } from "@balebase/validators/offline";
-import { allRequiredAnswered, parseResponses } from "./auditDefinition";
-import { findTemplate, storedDefinition } from "./auditTemplates";
+import { allRequiredAnswered, parseResponses } from "../audits/auditDefinition";
+import { findTemplate, storedDefinition } from "../audits/auditTemplates";
 import {
   type IssueContext,
   issueInsert,
   issueTargetAvailable,
-} from "./issueRecords";
-import { activityStatement } from "./shared/activity";
+} from "../issues/issueRecords";
+import { activityStatement } from "../shared/activity";
 
 /**
  * Why an operation's writes did not happen though their batch succeeded: an

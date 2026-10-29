@@ -1,17 +1,17 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, describe, expect, it } from "bun:test";
 import type { ActivityPage } from "@balebase/validators/activity";
-import { audits } from "./audits";
-import { createFinanceRouter } from "./finance";
+import { audits } from "../audits/audits";
+import { createFinanceRouter } from "../finance";
+import { requireCapability } from "../organizations/organizationGroups";
+import { activity } from "../shared/activity";
+import { testBindings } from "../testing/bindings";
+import { queryHooks, toD1 } from "../testing/d1";
+import { applyMigrations, createTestDatabase } from "../testing/database";
+import { requester } from "../testing/http";
+import { seedAccount, seedMember } from "../testing/seed";
+import { testApp } from "../testing/session";
 import { issues } from "./issues";
-import { requireCapability } from "./organizations/organizationGroups";
-import { activity } from "./shared/activity";
-import { testBindings } from "./testing/bindings";
-import { queryHooks, toD1 } from "./testing/d1";
-import { applyMigrations, createTestDatabase } from "./testing/database";
-import { requester } from "./testing/http";
-import { seedAccount, seedMember } from "./testing/seed";
-import { testApp } from "./testing/session";
 
 const databases: Database[] = [];
 const now = "2026-10-01T12:00:00.000Z";

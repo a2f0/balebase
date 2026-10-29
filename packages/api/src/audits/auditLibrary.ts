@@ -3,8 +3,8 @@ import {
   AuditDefinitionSchema,
 } from "@balebase/validators/audits";
 import { z } from "zod";
-import nfpa70eData from "../auditLibrary/nfpa70e.json";
-import residentialData from "../auditLibrary/residential.json";
+import nfpa70eData from "../../auditLibrary/nfpa70e.json";
+import residentialData from "../../auditLibrary/residential.json";
 import { auditLibraryActor } from "./auditTemplates";
 
 /**

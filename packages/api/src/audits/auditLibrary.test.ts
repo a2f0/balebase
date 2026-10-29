@@ -3,8 +3,20 @@ import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AuditDefinitionSchema } from "@balebase/validators/audits";
-import residentialData from "../auditLibrary/residential.json";
-import { adminAuditTemplates } from "./admin/adminAuditTemplates";
+import residentialData from "../../auditLibrary/residential.json";
+import { adminAuditTemplates } from "../admin/adminAuditTemplates";
+import {
+  createFixture,
+  jsonRequest,
+  legacyDatabase,
+  type TemplateListResponse,
+  type TemplateResponse,
+} from "../testing/auditFixture";
+import { testBindings } from "../testing/bindings";
+import { toD1 } from "../testing/d1";
+import { applyMigrations, createTestDatabase } from "../testing/database";
+import { seedUser } from "../testing/seed";
+import { testApp } from "../testing/session";
 import {
   residentialLibraryStats,
   type StarterTemplate,
@@ -16,18 +28,6 @@ import {
   validateResidentialLibrary,
 } from "./auditLibrary";
 import { audits } from "./audits";
-import {
-  createFixture,
-  jsonRequest,
-  legacyDatabase,
-  type TemplateListResponse,
-  type TemplateResponse,
-} from "./testing/auditFixture";
-import { testBindings } from "./testing/bindings";
-import { toD1 } from "./testing/d1";
-import { applyMigrations, createTestDatabase } from "./testing/database";
-import { seedUser } from "./testing/seed";
-import { testApp } from "./testing/session";
 
 const libraryActor = {
   email: "audit-library@system.invalid",
@@ -104,7 +104,7 @@ describe("residential audit library", () => {
 
 describe("starter template seeding", () => {
   it("seeds each starter's current version with its generated SQL", () => {
-    const directory = join(import.meta.dir, "../migrations");
+    const directory = join(import.meta.dir, "../../migrations");
     const seeded = seededStarterVersions(
       readdirSync(directory)
         .filter((filename) => filename.endsWith(".sql"))

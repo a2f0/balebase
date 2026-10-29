@@ -7,7 +7,7 @@ import {
   imageUpload,
   jsonRequest,
   pngBytes,
-} from "./testing/auditFixture";
+} from "../testing/auditFixture";
 
 it("replays offline image uploads after lost responses and removal without duplicate storage or history", async () => {
   const f = createFixture();
