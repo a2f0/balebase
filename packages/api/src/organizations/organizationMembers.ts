@@ -100,6 +100,23 @@ export function canManage(context: Context<ApiEnv>) {
   return canManageOrganization(context.get("organizationRole"));
 }
 
+/**
+ * Holds while `userId` is still an owner or admin of the organization, read
+ * inside the write's transaction: a manager demoted after the request began
+ * cannot complete it.
+ */
+export function stillManages(organizationId: string, userId: string) {
+  const roles = "(',' || replace(acting.role, ' ', '') || ',')";
+  return {
+    bindings: [organizationId, userId],
+    sql: `EXISTS (
+      SELECT 1 FROM member AS acting
+      WHERE acting.organizationId = ? AND acting.userId = ?
+        AND (instr(${roles}, ',owner,') > 0 OR instr(${roles}, ',admin,') > 0)
+    )`,
+  };
+}
+
 export function requireManager(
   error = "Organization manager access required.",
 ) {

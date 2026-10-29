@@ -18,6 +18,7 @@ import {
   assignAcceptedInvitationRequirements,
   assignRenewedInvitationRequirements,
 } from "../employeeForms/invitationRequirements";
+import { groupCreatedActivity } from "../organizations/groupActivity";
 import { sendMail } from "../shared/mailSender";
 import type { Bindings } from "../types";
 import { organizationRoleActivity } from "./organizationRoleActivity";
@@ -77,6 +78,17 @@ const roleChangePaths = [
   "/admin/create-user",
 ];
 
+// Groups (Better Auth teams) change only through the recorded
+// /api/organization-groups routes. These would grant and revoke group access,
+// including Finance, with no history. Listing teams stays available.
+const groupChangePaths = [
+  "/organization/create-team",
+  "/organization/update-team",
+  "/organization/remove-team",
+  "/organization/add-team-member",
+  "/organization/remove-team-member",
+];
+
 export function createAuth(env: Bindings, waitUntil: WaitUntil) {
   return betterAuth({
     advanced: {
@@ -88,7 +100,7 @@ export function createAuth(env: Bindings, waitUntil: WaitUntil) {
     baseURL: env.BETTER_AUTH_URL,
     database: env.DB,
     databaseHooks: authDatabaseHooks(env),
-    disabledPaths: roleChangePaths,
+    disabledPaths: [...roleChangePaths, ...groupChangePaths],
     emailAndPassword: {
       autoSignIn: false,
       customSyntheticUser: ({ coreFields, additionalFields, id }) => ({
@@ -217,6 +229,27 @@ function configuredOrganizationPlugin(env: Bindings, waitUntil: WaitUntil) {
     membershipLimit: async (_user, organization) =>
       (await organizationPlanLimits(env, organization.id)).seats,
     organizationHooks: {
+      // Invitations never carry group access: accepting one would add the
+      // invitee to the group with no history. Managers add people to groups
+      // from Organization access once they join.
+      beforeCreateInvitation: async ({ invitation }) => {
+        if (invitation.teamId) {
+          throw new APIError("BAD_REQUEST", {
+            message: "Invitations cannot add people to groups.",
+          });
+        }
+      },
+      // Better Auth reads the invitation's groups back after this hook, so
+      // clearing them here keeps an older invitation from granting access.
+      beforeAcceptInvitation: async ({ invitation }) => {
+        if (invitation.teamId) {
+          await env.DB.prepare(
+            'UPDATE invitation SET "teamId" = NULL WHERE id = ?',
+          )
+            .bind(invitation.id)
+            .run();
+        }
+      },
       afterCreateInvitation: async ({ invitation, organization }) => {
         await assignRenewedInvitationRequirements(
           env.DB,
@@ -359,37 +392,37 @@ async function createDefaultFinanceGroup(
   organizationId: string,
   userId: string,
 ) {
-  const teamId = crypto.randomUUID();
+  const groupId = crypto.randomUUID();
   const now = new Date().toISOString();
-  await runStatement(
-    database,
-    `INSERT INTO "team"
-     ("id", "name", "organizationId", "memberCount", "createdAt", "updatedAt")
-     VALUES (?, 'Finance', ?, 1, ?, ?)`,
-    [teamId, organizationId, now, now],
-  );
-  await runStatement(
-    database,
-    `INSERT INTO "teamMember"
-     ("id", "teamId", "userId", "membershipKey", "createdAt")
-     VALUES (?, ?, ?, NULL, ?)`,
-    [crypto.randomUUID(), teamId, userId, now],
-  );
-  await runStatement(
-    database,
-    `INSERT INTO "organization_group_capability"
-     ("organization_id", "team_id", "capability") VALUES (?, ?, 'finance')`,
-    [organizationId, teamId],
-  );
-}
-
-async function runStatement(
-  database: D1Database,
-  query: string,
-  values: string[],
-) {
-  const statement = database.prepare(query);
-  await statement.bind(...values).run();
+  await database.batch([
+    database
+      .prepare(
+        `INSERT INTO "team"
+         ("id", "name", "organizationId", "memberCount", "createdAt", "updatedAt")
+         VALUES (?, 'Finance', ?, 1, ?, ?)`,
+      )
+      .bind(groupId, organizationId, now, now),
+    database
+      .prepare(
+        `INSERT INTO "teamMember"
+         ("id", "teamId", "userId", "membershipKey", "createdAt")
+         VALUES (?, ?, ?, NULL, ?)`,
+      )
+      .bind(crypto.randomUUID(), groupId, userId, now),
+    database
+      .prepare(
+        `INSERT INTO "organization_group_capability"
+         ("organization_id", "team_id", "capability") VALUES (?, ?, 'finance')`,
+      )
+      .bind(organizationId, groupId),
+    // The organization's creator grants themselves Finance access.
+    groupCreatedActivity(database, {
+      actorId: userId,
+      groupId,
+      occurredAt: now,
+      organizationId,
+    }),
+  ]);
 }
 
 async function prepareSession(

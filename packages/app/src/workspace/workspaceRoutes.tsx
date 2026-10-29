@@ -83,6 +83,7 @@ const routes: WorkspaceRoute[] = [
     render: ({ access, navigate }) => (
       <Activity
         canAccessFinance={access.can("finance")}
+        canManage={canManageOrganization(access.memberRole)}
         onNavigate={navigate}
       />
     ),

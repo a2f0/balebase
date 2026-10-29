@@ -4,6 +4,7 @@ import {
 } from "@balebase/validators/organizationSettings";
 import { Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
+import { activityBatch, requestActor } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import { deleteBilledOrganization } from "./organizationDeletion";
 import {
@@ -11,6 +12,7 @@ import {
   isOrganizationOwner,
   listOrganizationMembers,
   requireManager,
+  stillManages,
 } from "./organizationMembers";
 
 interface OrganizationRow {
@@ -73,21 +75,62 @@ organizationSettings.patch(
     );
     if (body instanceof Response) return body;
     const organizationId = context.get("organizationId");
-    const memberId = context.req.param("memberId");
-    const member = await context.env.DB.prepare(
-      `SELECT id FROM member WHERE id = ? AND organizationId = ?`,
-    )
-      .bind(memberId, organizationId)
-      .first<{ id: string }>();
-    if (!member) {
-      return context.json({ error: "Organization member not found." }, 404);
+    const memberId = context.req.param("memberId") ?? "";
+    const actor = requestActor(context);
+    const required = body.required ? 1 : 0;
+    const guard = stillManages(organizationId, actor.userId);
+    const database = context.env.DB;
+    // The event reads the stored flag in the same transaction, so a repeat
+    // records nothing and concurrent changes each record their own transition.
+    const [, updated] = await activityBatch(database, actor.apiKey, [
+      database
+        .prepare(
+          `INSERT INTO activity_events (
+             organization_id, root_type, root_id, root_label, subject_type,
+             subject_id, action, actor_user_id, actor_name, actor_email,
+             occurred_at, details
+           )
+           SELECT member.organizationId, 'organization_member', member.id,
+                  affected.name, 'organization_member', member.id,
+                  'organization.member_two_factor_requirement_changed',
+                  actor.id, actor.name, actor.email, ?,
+                  json_object(
+                    'before', json(CASE WHEN member.twoFactorRequired
+                                        THEN 'true' ELSE 'false' END),
+                    'after', json(?),
+                    'userId', affected.id, 'userName', affected.name,
+                    'userEmail', affected.email)
+           FROM member
+           JOIN user AS affected ON affected.id = member.userId
+           JOIN user AS actor ON actor.id = ?
+           WHERE member.id = ? AND member.organizationId = ?
+             AND member.twoFactorRequired <> ? AND ${guard.sql}`,
+        )
+        .bind(
+          new Date().toISOString(),
+          required ? "true" : "false",
+          actor.userId,
+          memberId,
+          organizationId,
+          required,
+          ...guard.bindings,
+        ),
+      database
+        .prepare(
+          `UPDATE member SET twoFactorRequired = ?
+           WHERE id = ? AND organizationId = ? AND ${guard.sql}`,
+        )
+        .bind(required, memberId, organizationId, ...guard.bindings),
+    ]);
+    if (!updated?.meta.changes) {
+      const member = await database
+        .prepare(`SELECT id FROM member WHERE id = ? AND organizationId = ?`)
+        .bind(memberId, organizationId)
+        .first<{ id: string }>();
+      return member
+        ? context.json({ error: "Organization manager access required." }, 403)
+        : context.json({ error: "Organization member not found." }, 404);
     }
-    await context.env.DB.prepare(
-      `UPDATE member SET twoFactorRequired = ?
-       WHERE id = ? AND organizationId = ?`,
-    )
-      .bind(body.required, memberId, organizationId)
-      .run();
     return respond(
       context,
       organizationSettingsRoutes.updateMemberTwoFactorRequirement,

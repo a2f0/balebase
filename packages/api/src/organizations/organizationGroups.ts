@@ -3,18 +3,27 @@ import {
   type OrganizationGroup,
   organizationGroupsRoutes,
 } from "@balebase/validators/organizationGroups";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { ApiEnv } from "../auth/apiEnv";
+import { activityBatch, requestActor } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
+import {
+  groupCreatedActivity,
+  groupDeletedActivity,
+  groupUpdatedActivity,
+  type SqlFragment,
+} from "./groupActivity";
 import {
   countOrganizationOwners,
   listOrganizationMembers,
   requireManager,
+  stillManages,
 } from "./organizationMembers";
 
 const invalidGroup =
   "A valid group name, members, and capabilities are required.";
+const managerRequired = "Organization manager access required.";
 
 interface GroupRow {
   created_at: string;
@@ -112,7 +121,9 @@ organizationGroups.post("/", requireManager(), async (context) => {
     );
   }
   const groupId = crypto.randomUUID();
-  await writeGroup(context.env.DB, organizationId, groupId, input, true);
+  if (!(await createGroup(context, groupId, input))) {
+    return context.json({ error: managerRequired }, 403);
+  }
   return respond(
     context,
     organizationGroupsRoutes.create,
@@ -153,7 +164,9 @@ organizationGroups.patch("/:id", requireManager(), async (context) => {
       409,
     );
   }
-  await writeGroup(context.env.DB, organizationId, groupId, input, false);
+  if (!(await updateGroup(context, groupId, input))) {
+    return groupWriteRefused(context, groupId);
+  }
   return respond(context, organizationGroupsRoutes.update, { id: groupId });
 });
 
@@ -166,18 +179,9 @@ organizationGroups.delete("/:id", requireManager(), async (context) => {
   ) {
     return context.json({ error: "Group not found." }, 404);
   }
-  await context.env.DB.batch([
-    context.env.DB.prepare(
-      `DELETE FROM organization_group_capability
-         WHERE organization_id = ? AND team_id = ?`,
-    ).bind(organizationId, groupId),
-    context.env.DB.prepare('DELETE FROM "teamMember" WHERE "teamId" = ?').bind(
-      groupId,
-    ),
-    context.env.DB.prepare(
-      'DELETE FROM "team" WHERE "id" = ? AND "organizationId" = ?',
-    ).bind(groupId, organizationId),
-  ]);
+  if (!(await deleteGroup(context, groupId))) {
+    return groupWriteRefused(context, groupId);
+  }
   return context.body(null, 204);
 });
 
@@ -327,68 +331,205 @@ async function groupExists(
   );
 }
 
-async function writeGroup(
-  database: D1Database,
-  organizationId: string,
+/** A write that changed nothing: the group is gone or the actor demoted. */
+async function groupWriteRefused(context: Context<ApiEnv>, groupId: string) {
+  return (await groupExists(
+    context.env.DB,
+    context.get("organizationId"),
+    groupId,
+  ))
+    ? context.json({ error: managerRequired }, 403)
+    : context.json({ error: "Group not found." }, 404);
+}
+
+/** The database, the event's identity, and the acting manager's guard. */
+function groupWrite(context: Context<ApiEnv>, groupId: string) {
+  const actor = requestActor(context);
+  const organizationId = context.get("organizationId");
+  return {
+    actor,
+    database: context.env.DB,
+    event: {
+      actorId: actor.userId,
+      groupId,
+      occurredAt: new Date().toISOString(),
+      organizationId,
+    },
+    guard: stillManages(organizationId, actor.userId),
+    organizationId,
+  };
+}
+
+/** Whether the group belongs to the organization and the actor manages it. */
+function writableGroup(write: ReturnType<typeof groupWrite>): SqlFragment {
+  return {
+    bindings: [
+      write.event.groupId,
+      write.organizationId,
+      ...write.guard.bindings,
+    ],
+    sql: `EXISTS (SELECT 1 FROM "team" WHERE "id" = ? AND "organizationId" = ?)
+          AND ${write.guard.sql}`,
+  };
+}
+
+async function createGroup(
+  context: Context<ApiEnv>,
   groupId: string,
   input: GroupInput,
-  create: boolean,
 ) {
-  const now = new Date().toISOString();
-  const statements: D1PreparedStatement[] = create
-    ? [
-        database
-          .prepare(
-            `INSERT INTO "team"
-             ("id", "name", "organizationId", "memberCount", "createdAt", "updatedAt")
-             VALUES (?, ?, ?, ?, ?, ?)`,
-          )
-          .bind(
-            groupId,
-            input.name,
-            organizationId,
-            input.userIds.length,
-            now,
-            now,
-          ),
-      ]
-    : [
-        database
-          .prepare(
-            `UPDATE "team" SET "name" = ?, "memberCount" = ?, "updatedAt" = ?
-             WHERE "id" = ? AND "organizationId" = ?`,
-          )
-          .bind(input.name, input.userIds.length, now, groupId, organizationId),
-        database
-          .prepare(
-            `DELETE FROM organization_group_capability
-             WHERE organization_id = ? AND team_id = ?`,
-          )
-          .bind(organizationId, groupId),
-        database
-          .prepare('DELETE FROM "teamMember" WHERE "teamId" = ?')
-          .bind(groupId),
-      ];
-  statements.push(
-    ...input.capabilities.map((capability) =>
-      database
-        .prepare(
-          `INSERT INTO organization_group_capability
-           (organization_id, team_id, capability) VALUES (?, ?, ?)`,
-        )
-        .bind(organizationId, groupId, capability),
-    ),
+  const write = groupWrite(context, groupId);
+  const { database, event, guard, organizationId } = write;
+  const [created] = await activityBatch(database, write.actor.apiKey, [
+    database
+      .prepare(
+        `INSERT INTO "team"
+         ("id", "name", "organizationId", "memberCount", "createdAt", "updatedAt")
+         SELECT ?, ?, ?, ?, ?, ? WHERE ${guard.sql}`,
+      )
+      .bind(
+        groupId,
+        input.name,
+        organizationId,
+        input.userIds.length,
+        event.occurredAt,
+        event.occurredAt,
+        ...guard.bindings,
+      ),
+    ...grantStatements(write, input),
+    groupCreatedActivity(database, event),
+  ]);
+  return Boolean(created?.meta.changes);
+}
+
+async function updateGroup(
+  context: Context<ApiEnv>,
+  groupId: string,
+  input: GroupInput,
+) {
+  const write = groupWrite(context, groupId);
+  const { database, event, guard, organizationId } = write;
+  const writable = writableGroup(write);
+  const [, updated] = await activityBatch(database, write.actor.apiKey, [
+    groupUpdatedActivity(database, event, input, guard),
+    database
+      .prepare(
+        `UPDATE "team" SET "name" = ?, "memberCount" = ?, "updatedAt" = ?
+         WHERE "id" = ? AND "organizationId" = ? AND ${guard.sql}`,
+      )
+      .bind(
+        input.name,
+        input.userIds.length,
+        event.occurredAt,
+        groupId,
+        organizationId,
+        ...guard.bindings,
+      ),
+    // Unchanged members and capabilities keep their rows.
+    database
+      .prepare(
+        `DELETE FROM organization_group_capability
+         WHERE organization_id = ? AND team_id = ?
+           AND capability NOT IN (SELECT value FROM json_each(?))
+           AND ${writable.sql}`,
+      )
+      .bind(
+        organizationId,
+        groupId,
+        JSON.stringify(input.capabilities),
+        ...writable.bindings,
+      ),
+    database
+      .prepare(
+        `DELETE FROM "teamMember"
+         WHERE "teamId" = ? AND "userId" NOT IN (SELECT value FROM json_each(?))
+           AND ${writable.sql}`,
+      )
+      .bind(groupId, JSON.stringify(input.userIds), ...writable.bindings),
+    ...grantStatements(write, input),
+  ]);
+  return Boolean(updated?.meta.changes);
+}
+
+async function deleteGroup(context: Context<ApiEnv>, groupId: string) {
+  const write = groupWrite(context, groupId);
+  const { database, event, guard, organizationId } = write;
+  const writable = writableGroup(write);
+  const results = await activityBatch(database, write.actor.apiKey, [
+    groupDeletedActivity(database, event, guard),
+    database
+      .prepare(
+        `DELETE FROM organization_group_capability
+         WHERE organization_id = ? AND team_id = ? AND ${writable.sql}`,
+      )
+      .bind(organizationId, groupId, ...writable.bindings),
+    database
+      .prepare(
+        `DELETE FROM "teamMember" WHERE "teamId" = ? AND ${writable.sql}`,
+      )
+      .bind(groupId, ...writable.bindings),
+    database
+      .prepare(
+        `DELETE FROM "team"
+         WHERE "id" = ? AND "organizationId" = ? AND ${guard.sql}`,
+      )
+      .bind(groupId, organizationId, ...guard.bindings),
+  ]);
+  return Boolean(results.at(-1)?.meta.changes);
+}
+
+/** Adds the capabilities and current members the group does not have yet. */
+function grantStatements(
+  write: ReturnType<typeof groupWrite>,
+  input: GroupInput,
+) {
+  const { database, event, organizationId } = write;
+  const writable = writableGroup(write);
+  return [
+    database
+      .prepare(
+        `INSERT INTO organization_group_capability
+         (organization_id, team_id, capability)
+         SELECT ?, ?, input.value FROM json_each(?) AS input
+         WHERE NOT EXISTS (
+           SELECT 1 FROM organization_group_capability
+           WHERE team_id = ? AND capability = input.value
+         ) AND ${writable.sql}`,
+      )
+      .bind(
+        organizationId,
+        event.groupId,
+        JSON.stringify(input.capabilities),
+        event.groupId,
+        ...writable.bindings,
+      ),
     ...input.userIds.map((userId) =>
       database
         .prepare(
           `INSERT INTO "teamMember"
            ("id", "teamId", "userId", "membershipKey", "createdAt")
-           VALUES (?, ?, ?, NULL, ?)`,
+           SELECT ?, ?, ?, NULL, ?
+           WHERE NOT EXISTS (
+             SELECT 1 FROM "teamMember" WHERE "teamId" = ? AND "userId" = ?
+           )
+           AND EXISTS (
+             SELECT 1 FROM member WHERE organizationId = ? AND userId = ?
+           )
+           AND ${writable.sql}`,
         )
-        .bind(crypto.randomUUID(), groupId, userId, now),
+        .bind(
+          crypto.randomUUID(),
+          event.groupId,
+          userId,
+          event.occurredAt,
+          event.groupId,
+          userId,
+          organizationId,
+          userId,
+          ...writable.bindings,
+        ),
     ),
-  );
-  await database.batch(statements);
+  ];
 }
 
 function capabilityLabel(capability: OrganizationCapability) {

@@ -2,9 +2,10 @@
 
 Activity is the shared history of consequential changes across Balebase. The
 checklist Audits feature is one producer alongside equipment, projects, issues,
-organization roles, API keys, and transaction annotations, categories, and bank
-connection sync settings. The workspace page is `/activity`; individual records
-can expose the same events in their own history. Contract signing also has a
+organization roles, group access, members' two-factor requirements, API keys,
+and transaction annotations, categories, and bank connection sync settings.
+The workspace page is `/activity`; individual records can expose the same
+events in their own history. Contract signing also has a
 separate history. Coverage is incremental: an empty shared feed does not prove
 no changes occurred.
 
@@ -42,11 +43,13 @@ actor model, never a fabricated human identity.
 `GET /api/activity` reads the active organization's events newest first, with
 cursor pagination. Its optional `resourceType` filter selects the root type
 before pagination. The Activity page offers all resources, audits, forms,
-workspace issues, equipment, projects, people, API keys, transactions, and bank
-connections. Audit and transaction filters include issues attached to those
+workspace issues, equipment, projects, people, groups, API keys, transactions,
+and bank connections. Audit and transaction filters include issues attached to those
 roots; workspace issues are standalone issues. Transaction and bank connection
 activity requires Finance capability even when a caller supplies the filter
-directly. The MCP `list_activity` tool accepts the same optional
+directly. Group events and two-factor requirement changes are visible only to
+organization owners and admins, as group details and member security settings
+already are. The MCP `list_activity` tool accepts the same optional
 `resourceType`; keep that filter when passing the next cursor.
 
 Resource history routes authorize the resource before using `findActivity`.
@@ -60,6 +63,19 @@ audit run or form removes that root's history. Historical imports must be
 marked as such and contain only facts actually retained. Do not reconstruct
 unknown editors, previous values, or timestamps from current state.
 
+## Group access
+
+Groups grant capabilities such as Finance. Their creation, deletion, renames,
+and each save's granted and revoked members and capabilities are recorded
+against the group's stored state in the same batch as the write; a save that
+changes nothing records nothing, and deletion keeps the group's history until
+the organization is purged. Better Auth's team endpoints that would change
+groups (`create-team`, `update-team`, `remove-team`, `add-team-member`,
+`remove-team-member`) are disabled, and invitations cannot carry a group
+(older ones lose theirs on acceptance), so `/api/organization-groups` is the
+only writer. Group and two-factor requirement writes re-check in the transaction
+that the actor is still an owner or admin.
+
 ## Reviewing coverage
 
 For implementation changes, test successful event creation, actor attribution,
@@ -67,7 +83,8 @@ relevant before/after values, no-op or failure behavior, and authorized reads.
 Use rollback and retry tests when those paths affect correctness. Existing
 examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `equipment/equipment.test.ts`, `projects/projects.test.ts`, `auth/apiKeys.test.ts`,
-`auth/organizationRoleActivity.test.ts`, and `issues/issues.test.ts`.
+`auth/organizationRoleActivity.test.ts`,
+`organizations/accessActivity.test.ts`, and `issues/issues.test.ts`.
 
 The repository-owned [audit-trails skill](../skills/audit-trails/SKILL.md)
 reviews mutations, triggers, separate histories, readers, and retention, then

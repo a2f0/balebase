@@ -19,6 +19,7 @@ import { authClient } from "../shared/authClient";
 import { throwIfRefused } from "../shared/errors";
 import { useAction } from "../shared/useAction";
 import {
+  organizationAccessPath,
   organizationMemberIdForPath,
   organizationSettingsPage,
 } from "../workspace/workspacePaths";
@@ -199,7 +200,7 @@ function OrganizationSettingsNavigation({
           {
             label: "Access",
             page: "access",
-            path: "/organization/access",
+            path: organizationAccessPath,
           },
           {
             label: "API keys",

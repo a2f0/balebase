@@ -24,6 +24,7 @@ import {
   financeConnectionPath,
   financeTransactionPath,
   issuePath,
+  organizationAccessPath,
   organizationPeoplePath,
   projectPath,
 } from "../workspace/workspacePaths";
@@ -33,6 +34,7 @@ import {
   EquipmentActivityDetails,
   equipmentActivitySummary,
 } from "./EquipmentActivity";
+import { groupActivitySummary } from "./groupActivity";
 import { projectActivitySummary } from "./projectActivity";
 import { RecordActivityDetails } from "./RecordActivity";
 
@@ -67,7 +69,12 @@ const actionLabels: Record<string, string> = {
   "equipment.created": "added equipment",
   "equipment.deleted": "deleted equipment",
   "equipment.updated": "edited equipment",
+  "organization.group_created": "created a group",
+  "organization.group_deleted": "deleted a group",
+  "organization.group_updated": "changed a group",
   "organization.member_role_changed": "changed an organization role",
+  "organization.member_two_factor_requirement_changed":
+    "changed a two-factor requirement",
   "project.created": "created a project",
   "project.deleted": "deleted a project",
   "project.form_disabled": "turned off an audit form",
@@ -239,6 +246,24 @@ function CompactActivityRow({
   );
 }
 
+/** One-line summaries for roots whose events share a format. */
+const rootSummaries: Partial<Record<string, (event: ActivityEvent) => string>> =
+  {
+    api_key: apiKeySummary,
+    equipment: equipmentActivitySummary,
+    organization_group: groupActivitySummary,
+    organization_member: memberSummary,
+    project: projectActivitySummary,
+  };
+
+function memberSummary(event: ActivityEvent) {
+  const change =
+    event.action === "organization.member_two_factor_requirement_changed"
+      ? twoFactorSummary(event)
+      : `${formatRoles(textValue(event.details.before))} → ${formatRoles(textValue(event.details.after))}`;
+  return `${memberLabel(event)} · ${change}`;
+}
+
 function activitySummary(event: ActivityEvent) {
   const { details } = event;
   if (event.action === "finance.daily_sync_changed")
@@ -248,12 +273,8 @@ function activitySummary(event: ActivityEvent) {
   if (event.action === "finance.transaction_categorized") {
     return `${categoryLabel(details.before, details.beforeName)} → ${categoryLabel(details.after, details.afterName)}`;
   }
-  if (event.root.type === "equipment") return equipmentActivitySummary(event);
-  if (event.root.type === "api_key") return apiKeySummary(event);
-  if (event.root.type === "project") return projectActivitySummary(event);
-  if (event.action === "organization.member_role_changed") {
-    return `${memberLabel(event)} · ${formatRoles(textValue(details.before))} → ${formatRoles(textValue(details.after))}`;
-  }
+  const rootSummary = rootSummaries[event.root.type];
+  if (rootSummary) return rootSummary(event);
   if (event.action === "audit.answer_changed") {
     return `${textValue(details.prompt)} · ${answerLabel(details.before, details.responseType)} → ${answerLabel(details.after, details.responseType)}`;
   }
@@ -317,6 +338,9 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
   if (event.root.type === "project") {
     return <p className="activityDetails">{projectActivitySummary(event)}</p>;
   }
+  if (event.root.type === "organization_group") {
+    return <p className="activityDetails">{groupActivitySummary(event)}</p>;
+  }
   if (
     event.action === "finance.transaction_annotated" ||
     event.action === "issue.updated"
@@ -333,6 +357,15 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
       );
     case "organization.member_role_changed":
       return <MemberRoleDetails event={event} />;
+    case "organization.member_two_factor_requirement_changed":
+      return (
+        <div className="activityDetails">
+          <p>
+            {memberLabel(event)} · {textValue(details.userEmail)}
+          </p>
+          <p>{twoFactorSummary(event)}</p>
+        </div>
+      );
     case "finance.transaction_categorized":
       return (
         <div className="activityDetails">
@@ -431,6 +464,11 @@ function MemberRoleDetails({ event }: { event: ActivityEvent }) {
   );
 }
 
+function twoFactorSummary({ details }: ActivityEvent) {
+  const label = (required: unknown) => (required ? "Required" : "Not required");
+  return `Two-factor: ${label(details.before)} → ${label(details.after)}`;
+}
+
 function answerLabel(value: unknown, responseType: unknown) {
   if (value == null || value === "") return "Unanswered";
   if (responseType === "check") {
@@ -460,8 +498,8 @@ function activityPath(event: ActivityEvent) {
       ? undefined
       : equipmentPath(event.root.id);
   }
-  if (event.root.type === "organization_member")
-    return organizationPeoplePath(event.root.id);
+  if (event.root.type.startsWith("organization_"))
+    return organizationActivityPath(event);
   // A deleted project has no page to open.
   if (event.root.type === "project")
     return event.action === "project.deleted"
@@ -473,6 +511,17 @@ function activityPath(event: ActivityEvent) {
   return undefined;
 }
 
+function organizationActivityPath(event: ActivityEvent) {
+  if (event.root.type === "organization_member")
+    return organizationPeoplePath(event.root.id);
+  // Groups have no page of their own; deleted ones have nowhere to go.
+  if (event.root.type === "organization_group")
+    return event.action === "organization.group_deleted"
+      ? undefined
+      : organizationAccessPath;
+  return undefined;
+}
+
 function activityLinkLabel(event: ActivityEvent) {
   if (event.subject.type === "issue" || event.subject.type === "audit_issue")
     return "Open issue";
@@ -480,6 +529,7 @@ function activityLinkLabel(event: ActivityEvent) {
   if (event.root.type === "finance_transaction") return "Open transaction";
   if (event.root.type === "equipment") return "Open equipment";
   if (event.root.type === "organization_member") return "Open member";
+  if (event.root.type === "organization_group") return "Open groups";
   if (event.root.type === "project") return "Open project";
   return event.root.type === "audit_run" ? "Open audit" : "Open form";
 }
