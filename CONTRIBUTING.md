@@ -268,7 +268,14 @@ runs against the real checkout.
 
 The web shell's service worker update suite uses Playwright's Chromium, Firefox,
 and WebKit engines. Run `bun run --cwd packages/app-web browsers:install` once
-before its browser tests; CI installs them automatically.
+before its browser tests; CI installs them automatically. The web shell's
+suites launch Chromium, or the Chrome at `CHROME_PATH`, with `launchChromium`
+from `packages/app-web/browser/chromium.ts`, and end it with `closeChromium`.
+That closes it within a measured budget and past it kills it with a warning,
+so teardown fits Bun's default hook timeout. Its `--disable-features` repeats
+Playwright's list, because Chrome reads only the last one, and adds
+`UnexportableKeyDeletion`, without which Google Chrome on macOS spends about
+5 s in the keychain after the suite's private contexts close.
 
 The `test:deploy` and `test:env` steps inside `bun run test` exercise local
 fixtures and command stubs. They do not deploy, contact a live service, or use

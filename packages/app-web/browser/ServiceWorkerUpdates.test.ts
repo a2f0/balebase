@@ -2,9 +2,17 @@ import { expect, it } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium, firefox, type Page, webkit } from "playwright";
+import {
+  type Browser,
+  type BrowserType,
+  chromium,
+  firefox,
+  type Page,
+  webkit,
+} from "playwright";
 import { build } from "vite";
 import { offlineShell } from "../offlineShell";
+import { closeChromium, launchChromium } from "./chromium";
 
 async function buildVersion(directory: string, version: string) {
   const root = join(directory, version);
@@ -161,13 +169,21 @@ async function activateFromAnotherTab(page: Page) {
   }
 }
 
+// Chromium closes within a budget and is killed past it (chromium.ts).
+// Firefox and WebKit closed in under 0.4 s even with the host's load average
+// at 40.
+function launch(engine: BrowserType) {
+  return engine === chromium ? launchChromium() : engine.launch();
+}
+
+function close(engine: BrowserType, browser: Browser) {
+  return engine === chromium ? closeChromium(browser) : browser.close();
+}
+
 for (const engine of [chromium, firefox, webkit]) {
-  const { CHROME_PATH } = process.env;
-  const launchOptions =
-    engine === chromium && CHROME_PATH ? { executablePath: CHROME_PATH } : {};
   it(`${engine.name()}: offers a saved update, protects other tabs, and reloads once`, async () => {
     const app = await fixture();
-    const browser = await engine.launch(launchOptions);
+    const browser = await launch(engine);
     const context = await browser.newContext();
     const page = await context.newPage();
     const errors: string[] = [];
@@ -248,14 +264,14 @@ for (const engine of [chromium, firefox, webkit]) {
       );
       expect(errors).toEqual([]);
     } finally {
-      await browser.close();
+      await close(engine, browser);
       await app.close();
     }
   }, 60_000);
 
   it(`${engine.name()}: failed downloads preserve the shell and reconnect retries`, async () => {
     const app = await fixture();
-    const browser = await engine.launch(launchOptions);
+    const browser = await launch(engine);
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
@@ -316,14 +332,14 @@ for (const engine of [chromium, firefox, webkit]) {
         () => document.querySelector("#version")?.textContent === "B",
       );
     } finally {
-      await browser.close();
+      await close(engine, browser);
       await app.close();
     }
   }, 60_000);
 
   it(`${engine.name()}: updates survive an app crash and external activation waits for consent`, async () => {
     const app = await fixture();
-    const browser = await engine.launch(launchOptions);
+    const browser = await launch(engine);
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
@@ -358,14 +374,14 @@ for (const engine of [chromium, firefox, webkit]) {
         "2",
       );
     } finally {
-      await browser.close();
+      await close(engine, browser);
       await app.close();
     }
   }, 60_000);
 
   it(`${engine.name()}: failed messages stay visible and a delayed activation still reloads once`, async () => {
     const app = await fixture();
-    const browser = await engine.launch(launchOptions);
+    const browser = await launch(engine);
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
@@ -424,7 +440,7 @@ for (const engine of [chromium, firefox, webkit]) {
         "2",
       );
     } finally {
-      await browser.close();
+      await close(engine, browser);
       await app.close();
     }
   }, 60_000);

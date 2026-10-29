@@ -46,6 +46,10 @@ Use the `update-dependencies` skill installed from the pinned
 - [Knip][knip] reports exports used only in their declaring file. Keep
   those declarations private, preserve both full and production analysis,
   and include CSS in project patterns for the font import compiler.
+- The web shell's `packages/app-web/browser/chromium.ts` repeats the
+  features Playwright disables (its `chromiumSwitches`), because Chrome reads
+  only the last `--disable-features`. Its `chromium.test.ts` fails when a
+  Playwright upgrade changes that list; copy the new one.
 
 ## Native builds
 
