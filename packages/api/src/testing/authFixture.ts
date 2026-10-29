@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { createAuth } from "../auth";
+import { createAuth } from "../auth/auth";
 import { testBindings } from "./bindings";
 import { toD1 } from "./d1";
 import { createTestDatabase } from "./database";

@@ -36,9 +36,10 @@ The browser must already have a valid API session cookie. The API's CORS
 middleware accepts the configured `CORS_ORIGIN` exactly, enables credentials,
 and exposes `API-Version` and other response headers
 (`packages/api/src/app.ts`). Authentication also checks trusted origins
-(`packages/api/src/auth.ts`). An arbitrary new shell origin is not automatically
-authorized. Check its origin, cookie policy, and sign-in flow against a local
-or staging API before treating this example as a working integration.
+(`packages/api/src/auth/auth.ts`). An arbitrary new shell origin is not
+automatically authorized. Check its origin, cookie policy, and sign-in flow
+against a local or staging API before treating this example as a working
+integration.
 The production origin is declared in `packages/api/wrangler.jsonc`; staging
 sets it in `scripts/deploy/createStagingConfigs.ts`. These are configured
 values, not proof of the settings currently deployed to a live Worker.
@@ -54,9 +55,9 @@ configure their hosts and entrypoints.
 
 The native shell supplies its host in `packages/app-capacitor/src/host.ts`
 and enables `CapacitorHttp` in `capacitor.config.ts`. The shared wrapper and
-`packages/api/src/nativeRequest.ts` handle the native origin marker. That marker
-is not authentication and is deliberately excluded from browser CORS headers.
-Do not add it to an ordinary browser request.
+`packages/api/src/auth/nativeRequest.ts` handle the native origin marker.
+That marker is not authentication and is deliberately excluded from browser
+CORS headers. Do not add it to an ordinary browser request.
 
 Outside a browser, default `fetch` does not provide a browser session cookie
 jar. `ApiClientOptions.fetch` can supply a transport, but the caller must

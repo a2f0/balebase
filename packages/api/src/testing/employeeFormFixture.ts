@@ -1,13 +1,13 @@
 import type { Database } from "bun:sqlite";
 import { expect } from "bun:test";
 import { Hono } from "hono";
-import type { AuthVariables } from "../authMiddleware";
-import { handleCheckrWebhook } from "../checkrSync";
-import { employeeForms } from "../employeeForms";
+import type { AuthVariables } from "../auth/authMiddleware";
+import { handleCheckrWebhook } from "../employeeForms/checkrSync";
+import { employeeForms } from "../employeeForms/employeeForms";
 import {
   disclosureFingerprint,
   screeningDisclosures,
-} from "../screeningDisclosures";
+} from "../employeeForms/screeningDisclosures";
 import type { Bindings } from "../types";
 import { testBindings } from "./bindings";
 import { queryHooks, toD1 } from "./d1";

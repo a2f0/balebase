@@ -78,7 +78,7 @@ rather than converting missing evidence into a pass.
 
 ## Validation and updates
 
-`packages/api/src/auditLibrary.test.ts` checks the following before
+`packages/api/src/audits/auditLibrary.test.ts` checks the following before
 publication:
 
 - the data's shape, rejecting unknown fields;
