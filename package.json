@@ -7,8 +7,8 @@
     "agent-tool": "agent-tool",
     "agent:logs": "bunx --bun --no-install agent-tool logs",
     "agent:run": "bunx --bun --no-install agent-tool run",
-    "agents:check": "bun run agent-tool skills check",
-    "agents:sync": "bun run agent-tool skills install --apply",
+    "agents:check": "bun run agent-tool skills check && bun run agent-tool permissions check",
+    "agents:sync": "bun run agent-tool skills install --apply && bun run agent-tool permissions install --apply",
     "auth:set-role": "bash scripts/admin/setUserRole.sh",
     "build": "bunx --bun --no-install turbo run build",
     "check": "OPENSSL_CONF=/dev/null agent-tool run-group scripts/testing/check.json",
@@ -83,7 +83,7 @@
     "*.md": "bun --bun x markdownlint-cli2 --fix"
   },
   "devDependencies": {
-    "@a2f0/agent-tool": "0.1.23",
+    "@a2f0/agent-tool": "0.1.25",
     "@azure/storage-blob": "12.30.0",
     "@biomejs/biome": "2.5.15",
     "@commitlint/cli": "21.2.3",

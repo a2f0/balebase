@@ -336,10 +336,14 @@ normal hooks with your usual environment and credentials, so review script and
 dependency changes before pushing them.
 
 The skills in `.claude/skills` and `.agents/skills` are installed from the
-pinned `@a2f0/agent-tool` package; do not edit them. After changing the pin,
-run `bun run agents:sync` and commit the lockfile, skills, and
-`.agent-tool-skills.json` together; `check` runs `bun run agents:check`, so
-drifted skills fail CI.
+pinned `@a2f0/agent-tool` package; do not edit them. The pinned package also
+generates the Claude Code and Codex permission rules in `.claude/settings.json`
+and `.codex/rules/agent-tool.rules` from the `permissions` section of
+`agent-tool.json`; do not edit those rules either. After changing the pin or
+that section, run `bun run agents:sync` and commit the lockfile, skills,
+permission rules, `.agent-tool-skills.json`, and `.agent-tool-permissions.json`
+together; `check` runs `bun run agents:check`, so drifted skills or permission
+rules fail CI.
 
 Use [the dependency upgrade workflow](docs/dependency-upgrades.md) when changing
 tool or package versions; it says what belongs in that guide and what belongs
