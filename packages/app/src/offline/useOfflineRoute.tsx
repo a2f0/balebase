@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { signingTokenForPath } from "../workspace/workspacePaths";
 import { OfflineWorkspacePage } from "./OfflineWorkspacePage";
 import { hydrateProjectForms } from "./offlineHydration";
@@ -59,7 +59,6 @@ export function useOfflineRoute(
       organizationName,
     ],
   );
-  useProjectFormHydration(identity, offline.online);
   useEffect(() => {
     // An expired cookie pauses API access, not local editing. Explicit sign-out
     // locks in accountSessions; changing identities also locks cached work here.
@@ -70,6 +69,9 @@ export function useOfflineRoute(
   const excluded =
     ["/add-account", "/reset-password"].includes(pathname) ||
     Boolean(signingTokenForPath(pathname));
+  // After the lock effect above, so an identity change locks before this
+  // takes its access epoch in the same commit.
+  useProjectFormHydration(excluded ? undefined : identity, offline.online);
   const local = matchingWorkspace(
     offline.workspace,
     user,
@@ -131,27 +133,39 @@ function matchingWorkspace(
   return saved;
 }
 
-/** Identities whose project forms this app load has already downloaded. */
-const hydrated = new Set<string>();
-
 /**
- * Once per identity and page load, after sign-in confirms the account and
- * organization, downloads the forms of the person's projects. The epoch is
- * taken when the identity is first confirmed, so a sign-out or account
- * switch that starts meanwhile stops it before it unlocks the device.
+ * Downloads the forms of the person's projects after sign-in confirms their
+ * account and organization, and again after a failure once the device
+ * reconnects. Each confirmed identity takes the access epoch once, when it
+ * appears: a sign-out or account switch that starts later stops its download
+ * before it unlocks the device, and signing in again starts afresh.
  */
 function useProjectFormHydration(
   identity: OfflineIdentity | undefined,
   online: boolean,
 ) {
+  const attempt = useRef<{
+    epoch: string;
+    key: string;
+    state: "idle" | "running" | "done";
+  }>(undefined);
   useEffect(() => {
-    if (!identity || !online) return;
-    const key = offlineScopeKey(identity.scope);
-    if (hydrated.has(key)) return;
-    hydrated.add(key);
-    hydrateProjectForms(identity, offlineAccessEpoch()).catch(
+    const key = identity && offlineScopeKey(identity.scope);
+    if (attempt.current?.key !== key)
+      attempt.current = key
+        ? { epoch: offlineAccessEpoch(), key, state: "idle" }
+        : undefined;
+    const current = attempt.current;
+    if (!identity || !online || current?.state !== "idle") return;
+    current.state = "running";
+    hydrateProjectForms(identity, current.epoch).then(
+      () => {
+        current.state = "done";
+      },
       (cause: unknown) => {
-        // The Offline work page still offers these downloads by hand.
+        // Retried when the device reconnects; Offline work also offers
+        // these downloads by hand.
+        current.state = "idle";
         console.warn(
           "Could not download project forms for offline work.",
           cause,
