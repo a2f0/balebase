@@ -1,5 +1,5 @@
-import { MaintenanceFailure } from "./maintenanceFailure";
-import type { Bindings } from "./types";
+import { MaintenanceFailure } from "../maintenanceFailure";
+import type { Bindings } from "../types";
 
 /** Each organization's cascades and durable file cleanup commit together. */
 export async function purgeDeletedOrganizations(

@@ -4,7 +4,7 @@ import type { ActivityPage } from "@balebase/validators/activity";
 import { audits } from "./audits";
 import { createFinanceRouter } from "./finance";
 import { issues } from "./issues";
-import { requireCapability } from "./organizationGroups";
+import { requireCapability } from "./organizations/organizationGroups";
 import { activity } from "./shared/activity";
 import { testBindings } from "./testing/bindings";
 import { queryHooks, toD1 } from "./testing/d1";

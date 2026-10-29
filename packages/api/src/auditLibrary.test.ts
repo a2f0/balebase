@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AuditDefinitionSchema } from "@balebase/validators/audits";
 import residentialData from "../auditLibrary/residential.json";
-import { adminAuditTemplates } from "./adminAuditTemplates";
+import { adminAuditTemplates } from "./admin/adminAuditTemplates";
 import {
   residentialLibraryStats,
   type StarterTemplate,

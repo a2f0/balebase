@@ -1,5 +1,5 @@
 import { expect, it } from "bun:test";
-import { fixture, now, origin, post } from "./testing/maintenanceFixture";
+import { fixture, now, origin, post } from "../testing/maintenanceFixture";
 import { purgeRequestedUsers } from "./userDeletion";
 
 it("only purges requested, aged accounts without active memberships or protected roles", async () => {

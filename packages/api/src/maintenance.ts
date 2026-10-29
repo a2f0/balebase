@@ -8,10 +8,10 @@ import { maintainContracts } from "./contractReminders";
 import { purgeDeletedObjects } from "./deletedObjectCleanup";
 import { dispatchJob, type JobRow } from "./jobRuns";
 import { MaintenanceFailure } from "./maintenanceFailure";
-import { purgeDeletedOrganizations } from "./organizationPurge";
+import { purgeDeletedOrganizations } from "./organizations/organizationPurge";
 import { captureApiError } from "./shared/diagnostics";
 import type { Bindings } from "./types";
-import { purgeRequestedUsers } from "./userDeletion";
+import { purgeRequestedUsers } from "./users/userDeletion";
 
 export const maintenanceJobs = [
   {

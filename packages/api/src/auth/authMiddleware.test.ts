@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
+import { testBindings } from "../testing/bindings";
+import { testApp } from "../testing/session";
 import {
   requireBillingOrganization,
   requireOrganization,
   requireOrganizationPluginAccess,
 } from "./authMiddleware";
-import { testBindings } from "./testing/bindings";
-import { testApp } from "./testing/session";
 
 describe("organization middleware", () => {
   it("uses the session's one active organization", async () => {

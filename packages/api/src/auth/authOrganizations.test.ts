@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { app } from "./app";
+import { app } from "../app";
 import {
   baseURL,
   createFixture,
@@ -10,9 +10,9 @@ import {
   origin,
   originalPassword,
   post,
-} from "./testing/authFixture";
-import { applyMigrations, createTestDatabase } from "./testing/database";
-import { insertBilling, seedUser } from "./testing/seed";
+} from "../testing/authFixture";
+import { applyMigrations, createTestDatabase } from "../testing/database";
+import { insertBilling, seedUser } from "../testing/seed";
 
 describe("organizations", () => {
   it("only lets owners rename their organization", async () => {

@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { deletePendingAuditIssueObject } from "./auditIssueImageCleanup";
 import { findAuditIssueImage } from "./auditIssueImageRecords";
 import { discardedAuditError, imageAuditNotDiscarded } from "./auditRunRecords";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiEnv } from "./auth/authMiddleware";
 import { activityBatch, activityStatement } from "./shared/activity";
 import { respond } from "./shared/respond";
 

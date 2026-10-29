@@ -4,7 +4,7 @@ import {
   type CheckoutOutcome,
 } from "@balebase/validators/billing";
 import { type Context, Hono } from "hono";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiEnv } from "./auth/authMiddleware";
 import {
   activePendingCheckout,
   checkoutDeletionInProgress,
@@ -32,7 +32,7 @@ import {
   canManage,
   canManageOrganization,
   requireManager,
-} from "./organizationMembers";
+} from "./organizations/organizationMembers";
 import { respond } from "./shared/respond";
 import {
   StripeApiError,

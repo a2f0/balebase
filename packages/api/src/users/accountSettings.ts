@@ -1,7 +1,7 @@
 import { accountSettingsRoutes } from "@balebase/validators/accountSettings";
 import { Hono } from "hono";
-import type { ApiEnv } from "./authMiddleware";
-import { readBody, respond } from "./shared/respond";
+import type { ApiEnv } from "../auth/authMiddleware";
+import { readBody, respond } from "../shared/respond";
 
 const accountSettings = new Hono<ApiEnv>();
 

@@ -5,7 +5,6 @@ import {
 } from "@balebase/validators/issueRules";
 import { offlineRoutes } from "@balebase/validators/offline";
 import type { Context } from "hono";
-import type { ApiKeyPrincipal } from "./apiKeys";
 import { attemptPendingObjectCleanup } from "./auditIssueImageCleanup";
 import {
   maxImageReadMilliseconds,
@@ -22,7 +21,8 @@ import {
   issueAuditDiscarded,
   issueAuditNotDiscarded,
 } from "./auditRunRecords";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiKeyPrincipal } from "./auth/apiKeys";
+import type { ApiEnv } from "./auth/authMiddleware";
 import { auditIssueImageUploadGraceMilliseconds } from "./objectLifecycle";
 import { replayOfflineImage } from "./offlineImages";
 import { activityBatch } from "./shared/activity";

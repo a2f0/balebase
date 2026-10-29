@@ -1,7 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { app } from "./app";
-import type { createAuth } from "./auth";
-import { withNativeOrigin } from "./nativeRequest";
+import { app } from "../app";
 import {
   baseURL,
   CookieJar,
@@ -13,9 +11,11 @@ import {
   origin,
   originalPassword,
   post,
-} from "./testing/authFixture";
-import { applyMigrations, createTestDatabase } from "./testing/database";
-import { seedUser } from "./testing/seed";
+} from "../testing/authFixture";
+import { applyMigrations, createTestDatabase } from "../testing/database";
+import { seedUser } from "../testing/seed";
+import type { createAuth } from "./auth";
+import { withNativeOrigin } from "./nativeRequest";
 
 const replacementPassword = "new correct horse battery staple";
 

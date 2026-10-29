@@ -5,7 +5,7 @@ import {
   discardRejection,
   findAudit,
 } from "./auditRunRecords";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiEnv } from "./auth/authMiddleware";
 import { activityBatch, activityStatement } from "./shared/activity";
 import { respond } from "./shared/respond";
 

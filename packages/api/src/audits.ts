@@ -37,7 +37,7 @@ import {
   templateSelect,
   toTemplate,
 } from "./auditTemplates";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiEnv } from "./auth/authMiddleware";
 import {
   freeFormTemplateLimit,
   organizationPlanLimits,

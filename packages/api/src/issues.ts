@@ -1,6 +1,6 @@
 import { issuesRoutes } from "@balebase/validators/issues";
 import { Hono } from "hono";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiEnv } from "./auth/authMiddleware";
 import {
   canSeeFinanceIssues,
   findIssue,
@@ -13,7 +13,7 @@ import {
   issueUpdate,
   toIssue,
 } from "./issueRecords";
-import { listMemberDirectory } from "./organizationMembers";
+import { listMemberDirectory } from "./organizations/organizationMembers";
 import { activityBatch, findActivity } from "./shared/activity";
 import {
   cursorPage,

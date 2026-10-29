@@ -1,10 +1,10 @@
 import { expect, it } from "bun:test";
+import { testBindings } from "../testing/bindings";
+import { toD1 } from "../testing/d1";
+import { createTestDatabase } from "../testing/database";
+import { requester } from "../testing/http";
+import { testApp } from "../testing/session";
 import { adminJobs } from "./adminJobs";
-import { testBindings } from "./testing/bindings";
-import { toD1 } from "./testing/d1";
-import { createTestDatabase } from "./testing/database";
-import { requester } from "./testing/http";
-import { testApp } from "./testing/session";
 
 function fixture() {
   return requester(

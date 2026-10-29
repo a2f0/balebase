@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { app } from "./app";
-import { findActivity } from "./shared/activity";
+import { app } from "../app";
+import { findActivity } from "../shared/activity";
 import {
   CookieJar,
   createFixture,
@@ -8,8 +8,8 @@ import {
   executionContext,
   originalPassword,
   post,
-} from "./testing/authFixture";
-import { insertBilling } from "./testing/seed";
+} from "../testing/authFixture";
+import { insertBilling } from "../testing/seed";
 
 describe("organization role activity", () => {
   it("records the actor, affected user, role transition and time in the organization's feed", async () => {

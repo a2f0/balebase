@@ -1,13 +1,13 @@
 import { expect, it, spyOn } from "bun:test";
+import { testBindings } from "../testing/bindings";
+import { toD1 } from "../testing/d1";
+import { createTestDatabase } from "../testing/database";
+import { requester } from "../testing/http";
+import { fixture, origin, post } from "../testing/maintenanceFixture";
+import { seedUser } from "../testing/seed";
+import { testApp } from "../testing/session";
+import { purgeRequestedUsers } from "../users/userDeletion";
 import { adminUsers } from "./adminUsers";
-import { testBindings } from "./testing/bindings";
-import { toD1 } from "./testing/d1";
-import { createTestDatabase } from "./testing/database";
-import { requester } from "./testing/http";
-import { fixture, origin, post } from "./testing/maintenanceFixture";
-import { seedUser } from "./testing/seed";
-import { testApp } from "./testing/session";
-import { purgeRequestedUsers } from "./userDeletion";
 
 it("lets root admins mark and cancel users with durable actor history", async () => {
   const f = fixture();

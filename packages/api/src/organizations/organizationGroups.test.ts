@@ -1,13 +1,13 @@
 import { describe, expect, it } from "bun:test";
+import { testBindings } from "../testing/bindings";
+import { toD1 } from "../testing/d1";
+import { createTestDatabase } from "../testing/database";
+import { requester } from "../testing/http";
+import { seedAccount, seedUser } from "../testing/seed";
+import { testApp } from "../testing/session";
+import type { Bindings } from "../types";
 import { organizationGroups, requireCapability } from "./organizationGroups";
 import { organizationSettings } from "./organizationSettings";
-import { testBindings } from "./testing/bindings";
-import { toD1 } from "./testing/d1";
-import { createTestDatabase } from "./testing/database";
-import { requester } from "./testing/http";
-import { seedAccount, seedUser } from "./testing/seed";
-import { testApp } from "./testing/session";
-import type { Bindings } from "./types";
 
 const organizationId = "org_owner-user";
 

@@ -1,5 +1,5 @@
 import type { AuditDefinition } from "@balebase/validators/audits";
-import { adminAuditTemplates } from "../adminAuditTemplates";
+import { adminAuditTemplates } from "../admin/adminAuditTemplates";
 import { audits } from "../audits";
 import { offline } from "../offline";
 import { activity } from "../shared/activity";

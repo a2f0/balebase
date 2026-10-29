@@ -6,10 +6,10 @@ import { Hono } from "hono";
 import { findIssueImages } from "./auditIssueImageRecords";
 import { uploadAuditIssueImage } from "./auditIssueImageUploads";
 import { type TemplateRow, templateSelect, toTemplate } from "./auditTemplates";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiEnv } from "./auth/authMiddleware";
 import type { IssueContext } from "./issueRecords";
 import { formerAssigneeError, offlineStatements } from "./offlineRecords";
-import { listMemberDirectory } from "./organizationMembers";
+import { listMemberDirectory } from "./organizations/organizationMembers";
 import { activityBatch } from "./shared/activity";
 import { readBody, respond } from "./shared/respond";
 

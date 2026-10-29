@@ -1,11 +1,11 @@
 import { adminJobsRoutes } from "@balebase/validators/adminJobs";
 import { type Context, Hono } from "hono";
-import type { ApiEnv } from "./authMiddleware";
-import { jobRunDetail, listJobRuns } from "./jobHistory";
-import { toJobRun } from "./jobRuns";
-import { waitForLegacyJob } from "./legacyJobRun";
-import { enqueueMaintenance, maintenanceJobs } from "./maintenance";
-import { readBody, readQuery, respond } from "./shared/respond";
+import type { ApiEnv } from "../auth/authMiddleware";
+import { jobRunDetail, listJobRuns } from "../jobHistory";
+import { toJobRun } from "../jobRuns";
+import { waitForLegacyJob } from "../legacyJobRun";
+import { enqueueMaintenance, maintenanceJobs } from "../maintenance";
+import { readBody, readQuery, respond } from "../shared/respond";
 
 const adminJobs = new Hono<ApiEnv>();
 adminJobs.get("/", (context) =>

@@ -12,15 +12,15 @@ import {
   organization,
   twoFactor,
 } from "better-auth/plugins";
-import { organizationPlanLimits } from "./billingEntitlements";
-import { syncOrganizationSeats } from "./billingSeats";
+import { organizationPlanLimits } from "../billingEntitlements";
+import { syncOrganizationSeats } from "../billingSeats";
 import {
   assignAcceptedInvitationRequirements,
   assignRenewedInvitationRequirements,
-} from "./employeeForms";
+} from "../employeeForms";
+import { sendMail } from "../shared/mailSender";
+import type { Bindings } from "../types";
 import { organizationRoleActivity } from "./organizationRoleActivity";
-import { sendMail } from "./shared/mailSender";
-import type { Bindings } from "./types";
 
 type WaitUntil = (promise: Promise<unknown>) => void;
 type AuthUserRecord = User &

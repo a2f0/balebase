@@ -7,8 +7,8 @@ import {
   type TemplateListResponse,
   type TemplateResponse,
   type TemplateVersionsResponse,
-} from "./testing/auditFixture";
-import { applyMigrations } from "./testing/database";
+} from "../testing/auditFixture";
+import { applyMigrations } from "../testing/database";
 
 describe("global audit templates", () => {
   it("preserves legacy shared global forms when publication controls are introduced", async () => {

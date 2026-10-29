@@ -3,8 +3,8 @@ import {
   businessesRoutes,
 } from "@balebase/validators/businesses";
 import { type Context, Hono } from "hono";
-import type { ApiEnv } from "./authMiddleware";
-import { canManage, requireManager } from "./organizationMembers";
+import type { ApiEnv } from "./auth/authMiddleware";
+import { canManage, requireManager } from "./organizations/organizationMembers";
 import { readBody, respond } from "./shared/respond";
 
 interface BusinessRow {

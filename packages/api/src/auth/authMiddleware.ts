@@ -1,6 +1,10 @@
 import { productName } from "@balebase/ui/brand";
 import type { Context, Next } from "hono";
 import { createMiddleware } from "hono/factory";
+import { organizationUserHasSeat } from "../billingEntitlements";
+import { isOrganizationOwner } from "../organizations/organizationMembers";
+import { isRecord } from "../shared/jsonInput";
+import type { Bindings } from "../types";
 import {
   type ApiKeyPrincipal,
   apiKeyChannel,
@@ -11,10 +15,6 @@ import {
 } from "./apiKeys";
 import type { AuthSession } from "./auth";
 import { createAuth } from "./auth";
-import { organizationUserHasSeat } from "./billingEntitlements";
-import { isOrganizationOwner } from "./organizationMembers";
-import { isRecord } from "./shared/jsonInput";
-import type { Bindings } from "./types";
 
 export interface AuthVariables {
   /** Set when an API key, rather than a session, authenticated the request. */

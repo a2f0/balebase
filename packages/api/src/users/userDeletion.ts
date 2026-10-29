@@ -1,8 +1,8 @@
 import { accountSettingsRoutes } from "@balebase/validators/accountSettings";
 import { Hono } from "hono";
-import type { ApiEnv } from "./authMiddleware";
-import { readBody, respond } from "./shared/respond";
-import type { Bindings } from "./types";
+import type { ApiEnv } from "../auth/authMiddleware";
+import { readBody, respond } from "../shared/respond";
+import type { Bindings } from "../types";
 import {
   cancelUserDeletion,
   requestUserDeletion,

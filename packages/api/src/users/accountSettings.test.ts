@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
+import { testBindings } from "../testing/bindings";
+import { toD1 } from "../testing/d1";
+import { createTestDatabase } from "../testing/database";
+import { requester } from "../testing/http";
+import { seedAccount, seedMember, seedOrganization } from "../testing/seed";
+import { testApp } from "../testing/session";
 import { accountSettings } from "./accountSettings";
-import { testBindings } from "./testing/bindings";
-import { toD1 } from "./testing/d1";
-import { createTestDatabase } from "./testing/database";
-import { requester } from "./testing/http";
-import { seedAccount, seedMember, seedOrganization } from "./testing/seed";
-import { testApp } from "./testing/session";
 
 describe("default organization settings", () => {
   it("saves an explicit choice from the user's active memberships", async () => {

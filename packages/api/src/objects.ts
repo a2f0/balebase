@@ -1,6 +1,6 @@
 import { objectsRoutes } from "@balebase/validators/objects";
 import { type Context, Hono } from "hono";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiEnv } from "./auth/authMiddleware";
 import { findLibraryFolder } from "./libraryFolders";
 import { maxFilenameBytes, normalizeFilename } from "./shared/filenames";
 import { readBody, respond } from "./shared/respond";

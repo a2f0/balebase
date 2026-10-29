@@ -2,14 +2,13 @@ import { sessionRoutes } from "@balebase/validators/session";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { version as apiVersion } from "../package.json";
-import { accountSettings } from "./accountSettings";
-import { adminAuditTemplates } from "./adminAuditTemplates";
-import { adminJobs } from "./adminJobs";
-import { adminOrganizations } from "./adminOrganizations";
-import { adminUsers } from "./adminUsers";
-import { apiKeys, mcpToolRequest } from "./apiKeys";
+import { adminAuditTemplates } from "./admin/adminAuditTemplates";
+import { adminJobs } from "./admin/adminJobs";
+import { adminOrganizations } from "./admin/adminOrganizations";
+import { adminUsers } from "./admin/adminUsers";
 import { audits } from "./audits";
-import { createAuth } from "./auth";
+import { apiKeys, mcpToolRequest } from "./auth/apiKeys";
+import { createAuth } from "./auth/auth";
 import {
   type ApiEnv,
   requireApiKey,
@@ -18,7 +17,8 @@ import {
   requireOrganization,
   requireOrganizationPluginAccess,
   requireRole,
-} from "./authMiddleware";
+} from "./auth/authMiddleware";
+import { withNativeOrigin } from "./auth/nativeRequest";
 import { billing } from "./billing";
 import { syncOrganizationSeats } from "./billingSeats";
 import { handleStripeWebhook } from "./billingWebhook";
@@ -31,16 +31,19 @@ import { finance } from "./finance";
 import { inbox } from "./inbox";
 import { issues } from "./issues";
 import { libraryFolders } from "./libraryFolders";
-import { withNativeOrigin } from "./nativeRequest";
 import { objects } from "./objects";
 import { offline } from "./offline";
-import { organizationGroups, requireCapability } from "./organizationGroups";
-import { organizationSettings } from "./organizationSettings";
+import {
+  organizationGroups,
+  requireCapability,
+} from "./organizations/organizationGroups";
+import { organizationSettings } from "./organizations/organizationSettings";
 import { activity } from "./shared/activity";
 import { respond } from "./shared/respond";
 import { respondToUnexpectedError } from "./shared/unexpectedError";
 import { signing } from "./signing";
-import { userDeletion } from "./userDeletion";
+import { accountSettings } from "./users/accountSettings";
+import { userDeletion } from "./users/userDeletion";
 
 const apiVersionHeader = "API-Version";
 

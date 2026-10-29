@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { version } from "../package.json";
 import { app } from "./app";
-import { createAuth } from "./auth";
+import { createAuth } from "./auth/auth";
 import { testBindings } from "./testing/bindings";
 import { toD1 } from "./testing/d1";
 import { createTestDatabase } from "./testing/database";

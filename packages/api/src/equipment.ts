@@ -4,13 +4,13 @@ import {
 } from "@balebase/validators/equipment";
 import { equipmentTypes, isEquipmentType } from "@balebase/validators/rules";
 import { type Context, Hono } from "hono";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiEnv } from "./auth/authMiddleware";
 import { listLinkedEmails, toLinkedEmail } from "./inboundEmailLinks";
 import {
   canManage,
   listMemberDirectory,
   requireManager,
-} from "./organizationMembers";
+} from "./organizations/organizationMembers";
 import { activityBatch, findActivity } from "./shared/activity";
 import { readBody, respond } from "./shared/respond";
 

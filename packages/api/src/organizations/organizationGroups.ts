@@ -5,13 +5,13 @@ import {
 } from "@balebase/validators/organizationGroups";
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiEnv } from "../auth/authMiddleware";
+import { readBody, respond } from "../shared/respond";
 import {
   countOrganizationOwners,
   listOrganizationMembers,
   requireManager,
 } from "./organizationMembers";
-import { readBody, respond } from "./shared/respond";
 
 const invalidGroup =
   "A valid group name, members, and capabilities are required.";

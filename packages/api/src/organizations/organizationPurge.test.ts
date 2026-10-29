@@ -1,8 +1,8 @@
 import { expect, it, spyOn } from "bun:test";
-import { purgeDeletedObjects } from "./deletedObjectCleanup";
-import { enqueueMaintenance } from "./maintenance";
+import { purgeDeletedObjects } from "../deletedObjectCleanup";
+import { enqueueMaintenance } from "../maintenance";
+import { fixture, now, post } from "../testing/maintenanceFixture";
 import { purgeDeletedOrganizations } from "./organizationPurge";
-import { fixture, now, post } from "./testing/maintenanceFixture";
 
 it("purges only organizations past 30 days and honors a restore or renewed deletion before execution", async () => {
   const f = fixture();

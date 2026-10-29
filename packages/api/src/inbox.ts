@@ -6,7 +6,7 @@ import {
 } from "@balebase/validators/inbox";
 import { type Context, Hono } from "hono";
 import PostalMime from "postal-mime";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiEnv } from "./auth/authMiddleware";
 import { organizationInboxAddress } from "./inboundEmailAddress";
 import {
   createEmailLink,

@@ -2,15 +2,15 @@ import { describe, expect, it } from "bun:test";
 import type { Route } from "@balebase/validators/route";
 import { routes } from "@balebase/validators/routes";
 import { z } from "zod";
+import { app } from "../app";
+import { mcpTools } from "../mcp";
+import { type McpTool, toolAccess } from "../mcpToolSchema";
+import { activityBatch } from "../shared/activity";
+import { testBindings } from "../testing/bindings";
+import { toD1 } from "../testing/d1";
+import { createTestDatabase } from "../testing/database";
 import { apiKeyRouteDenial } from "./apiKeys";
-import { app } from "./app";
 import { createAuth } from "./auth";
-import { mcpTools } from "./mcp";
-import { type McpTool, toolAccess } from "./mcpToolSchema";
-import { activityBatch } from "./shared/activity";
-import { testBindings } from "./testing/bindings";
-import { toD1 } from "./testing/d1";
-import { createTestDatabase } from "./testing/database";
 
 interface ApiKey {
   access: "read" | "write";

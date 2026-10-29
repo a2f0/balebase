@@ -8,7 +8,7 @@ import {
 } from "@balebase/validators/finance";
 import type { LinkedEmail } from "@balebase/validators/inbox";
 import { Hono } from "hono";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiEnv } from "./auth/authMiddleware";
 import { accountDetail } from "./financeAccountDetail";
 import {
   addDefaultCategories,

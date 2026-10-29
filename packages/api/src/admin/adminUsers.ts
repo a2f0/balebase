@@ -3,12 +3,12 @@ import {
   adminUsersRoutes,
 } from "@balebase/validators/adminUsers";
 import { Hono } from "hono";
-import type { ApiEnv } from "./authMiddleware";
-import { readBody, readQuery, respond } from "./shared/respond";
+import type { ApiEnv } from "../auth/authMiddleware";
+import { readBody, readQuery, respond } from "../shared/respond";
 import {
   cancelUserDeletion,
   requestUserDeletion,
-} from "./userDeletionActivity";
+} from "../users/userDeletionActivity";
 
 interface AdminUserRow extends Omit<AdminUser, "banned" | "emailVerified"> {
   banned: number;

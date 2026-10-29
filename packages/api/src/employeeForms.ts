@@ -7,7 +7,7 @@ import {
   screeningMessages,
 } from "@balebase/validators/employeeForms";
 import { type Context, Hono } from "hono";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiEnv } from "./auth/authMiddleware";
 import {
   CheckrRequestError,
   checkrConfigured,
@@ -22,7 +22,7 @@ import {
   submitCheckrScreening,
 } from "./checkrScreening";
 import { checkrTestCandidates } from "./checkrTestCandidates";
-import { canManage, requireManager } from "./organizationMembers";
+import { canManage, requireManager } from "./organizations/organizationMembers";
 import {
   disclosureFingerprint,
   screeningDisclosures,

@@ -4,18 +4,18 @@ import {
   adminOrganizationsRoutes,
 } from "@balebase/validators/adminOrganizations";
 import { Hono } from "hono";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiEnv } from "../auth/authMiddleware";
 import {
   cancelOrganizationSubscription,
   recoverCheckoutAfterFailedDeletion,
-} from "./billingDeletion";
+} from "../billingDeletion";
 import {
   markOrganizationForDeletion,
   restoreOrganization,
-} from "./organizationDeletion";
-import { listOrganizationMembers } from "./organizationMembers";
-import { respond } from "./shared/respond";
-import type { Bindings } from "./types";
+} from "../organizations/organizationDeletion";
+import { listOrganizationMembers } from "../organizations/organizationMembers";
+import { respond } from "../shared/respond";
+import type { Bindings } from "../types";
 
 const adminOrganizations = new Hono<ApiEnv>();
 

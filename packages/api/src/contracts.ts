@@ -7,7 +7,7 @@ import {
   contractsRoutes,
 } from "@balebase/validators/contracts";
 import { type Context, Hono } from "hono";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiEnv } from "./auth/authMiddleware";
 import {
   draftStatements,
   fieldsOnDocument,

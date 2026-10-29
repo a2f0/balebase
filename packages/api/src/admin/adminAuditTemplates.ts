@@ -11,10 +11,10 @@ import {
   type TemplateRow,
   templateSelect,
   toTemplate,
-} from "./auditTemplates";
-import type { ApiEnv } from "./authMiddleware";
-import { findActivity, requestActor } from "./shared/activity";
-import { readBody, respond } from "./shared/respond";
+} from "../auditTemplates";
+import type { ApiEnv } from "../auth/authMiddleware";
+import { findActivity, requestActor } from "../shared/activity";
+import { readBody, respond } from "../shared/respond";
 
 /**
  * Global audit templates, shared by every organization. Platform admins
