@@ -16,6 +16,17 @@ function required(workspace: OfflineWorkspace | undefined) {
   return workspace;
 }
 
+// Every edit saves a new form version, so a download is current when the
+// device holds the listed version (or a later one listed by a stale page).
+export function offlineDownloadState(
+  saved: readonly AuditTemplate[] | undefined,
+  available: Pick<AuditTemplate, "id" | "version">,
+) {
+  const download = saved?.find((entry) => entry.id === available.id);
+  if (!download) return "missing";
+  return download.version < available.version ? "outdated" : "current";
+}
+
 export function startOfflineAudit(key: string, template: AuditTemplate) {
   const id = crypto.randomUUID();
   return changeOfflineWorkspace(key, (current) => {

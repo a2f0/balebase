@@ -607,6 +607,120 @@ it("does not unlock cached work when downloads remount during a pending sign-out
   );
 }, 30_000);
 
+it("offers a download only for forms whose listed version is not on the device", async () => {
+  const user = {
+    id: "user-1",
+    name: "Inspector",
+    email: "inspector@example.com",
+    emailVerified: true,
+  };
+  // The seeded device holds version 1 of "form"; each edit saves a new version.
+  const form = (id: string, name: string, version: number) => ({
+    id,
+    name,
+    description: "Offline checklist",
+    scope: "organization",
+    status: "draft",
+    version,
+    currentVersion: version,
+    createdAt: "2026-10-01T00:00:00.000Z",
+    savedAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-01T00:00:00.000Z",
+    savedBy: user,
+    definition: { version: 1, sections: [] },
+  });
+  let listed = [form("form", "Safety inspection", 1), form("new", "Roof", 1)];
+  const button = (page: Page, label: string) =>
+    page.evaluate(
+      (text) =>
+        [...document.querySelectorAll("button")]
+          .filter((entry) => entry.textContent?.trim() === text)
+          .map((entry) => entry.disabled),
+      label,
+    );
+  await withOfflineBrowser(
+    async (page) => {
+      await page.evaluate(async () => {
+        await window.offlineTest.seed();
+        history.replaceState(null, "", "/offline");
+        window.offlineAppTest.mount();
+      });
+      await page.waitForFunction(
+        () =>
+          document.body.textContent?.includes("Roof · v1") &&
+          !document.body.textContent?.includes("Loading available forms"),
+        { polling: 100 },
+      );
+      expect(await button(page, "Downloaded")).toEqual([true]);
+      expect(await button(page, "Update download")).toEqual([]);
+      await press(page, "Download");
+      await page.waitForFunction(
+        async () => (await window.offlineTest.read())?.templates.length === 2,
+        { polling: 100 },
+      );
+      await page.waitForFunction(
+        () =>
+          ![...document.querySelectorAll("button")].some(
+            (entry) => entry.textContent?.trim() === "Download",
+          ),
+        { polling: 100 },
+      );
+      expect(await button(page, "Downloaded")).toEqual([true, true]);
+
+      listed = [form("form", "Safety inspection", 2), form("new", "Roof", 1)];
+      await page.reload();
+      await page.waitForFunction(() => Boolean(window.offlineAppTest));
+      await page.evaluate(() => {
+        history.replaceState(null, "", "/offline");
+        window.offlineAppTest.mount();
+      });
+      await press(page, "Update download");
+      await page.waitForFunction(
+        async () =>
+          (await window.offlineTest.read())?.templates.find(
+            (entry) => entry.id === "form",
+          )?.version === 2,
+        { polling: 100 },
+      );
+      await page.waitForFunction(
+        () =>
+          ![...document.querySelectorAll("button")].some(
+            (entry) => entry.textContent?.trim() === "Update download",
+          ),
+        { polling: 100 },
+      );
+      expect(await button(page, "Downloaded")).toEqual([true, true]);
+    },
+    (request) => {
+      const path = new URL(request.url).pathname;
+      if (path === "/api/auth/get-session")
+        return Response.json({
+          user,
+          session: {
+            id: "session",
+            token: "fixture",
+            userId: user.id,
+            activeOrganizationId: "org-1",
+            expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+          },
+        });
+      if (path === "/api/organization-settings/organizations")
+        return Response.json({
+          organizations: [{ id: "org-1", name: "Test team" }],
+        });
+      if (path === "/api/organization-groups/access")
+        return Response.json({
+          capabilities: [],
+          memberRole: "owner",
+          ownerCount: 1,
+        });
+      if (path === "/api/offline/forms")
+        return Response.json({ templates: listed, members: [user] });
+      return Response.json([]);
+    },
+  );
+}, 30_000);
+
 it("guards opening a synced issue without relying on browser beforeunload protection", async () => {
   await withOfflineBrowser(
     async (page, _browser, directory) => {
