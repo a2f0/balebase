@@ -25,7 +25,17 @@ import {
   offlineAccessEpoch,
   offlineScopeKey,
 } from "./offlineStore";
-import { retryOfflineWork, startOfflineAudit } from "./offlineWork";
+import {
+  offlineDownloadState,
+  retryOfflineWork,
+  startOfflineAudit,
+} from "./offlineWork";
+
+const downloadLabels = {
+  missing: "Download",
+  outdated: "Update download",
+  current: "Downloaded",
+} satisfies Record<ReturnType<typeof offlineDownloadState>, string>;
 
 export function OfflineWorkspacePage({
   workspace,
@@ -310,18 +320,22 @@ function OfflineDownloads({
   return (
     <PageSection title="Download forms">
       {templates ? (
-        templates.map((template) => (
-          <div className="cluster" key={template.id}>
-            <span>
-              {template.name} · v{template.version}
-            </span>
-            <Button disabled={busy} onClick={() => void download(template.id)}>
-              {workspace?.templates.some((saved) => saved.id === template.id)
-                ? "Update download"
-                : "Download"}
-            </Button>
-          </div>
-        ))
+        templates.map((template) => {
+          const state = offlineDownloadState(workspace?.templates, template);
+          return (
+            <div className="cluster" key={template.id}>
+              <span>
+                {template.name} · v{template.version}
+              </span>
+              <Button
+                disabled={busy || state === "current"}
+                onClick={() => void download(template.id)}
+              >
+                {downloadLabels[state]}
+              </Button>
+            </div>
+          );
+        })
       ) : (
         <LoadingState label="Loading available forms…" />
       )}

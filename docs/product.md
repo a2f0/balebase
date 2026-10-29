@@ -484,7 +484,10 @@ licensing, validation, and jurisdiction-overlay rules.
 
 Open **Offline work** in the sidebar while connected to prepare the device and
 download checklists. Downloads include the form's exact version and the current
-assignee directory. Updating a download affects future audits; audits already
+assignee directory. Each saved edit gives a form a new version; a form whose
+listed version is already on the device shows **Downloaded**, and **Update
+download** appears only once a newer version is listed. Updating a download
+affects future audits; audits already
 started on the device keep their original form. The web shell must finish
 downloading before the device is ready. Native apps already bundle that shell.
 

@@ -1,5 +1,25 @@
 import { expect, it } from "bun:test";
-import { createOfflineIssue } from "./offlineWork";
+import type { AuditTemplate } from "@balebase/validators/audits";
+import { createOfflineIssue, offlineDownloadState } from "./offlineWork";
+
+it("treats a downloaded form as current until a newer version is listed", () => {
+  const saved = [{ id: "form", version: 3 }] as AuditTemplate[];
+  expect(offlineDownloadState(undefined, { id: "form", version: 1 })).toBe(
+    "missing",
+  );
+  expect(offlineDownloadState(saved, { id: "other", version: 3 })).toBe(
+    "missing",
+  );
+  expect(offlineDownloadState(saved, { id: "form", version: 3 })).toBe(
+    "current",
+  );
+  expect(offlineDownloadState(saved, { id: "form", version: 2 })).toBe(
+    "current",
+  );
+  expect(offlineDownloadState(saved, { id: "form", version: 4 })).toBe(
+    "outdated",
+  );
+});
 
 it("refuses photos the API would refuse before saving an issue on the device", async () => {
   const issue = {
