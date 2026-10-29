@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import { errorNotice } from "../shared/errors";
 import {
   canCompleteRequirement,
   inviteWithRequirements,
   reviewRevisionForStatus,
 } from "./employeeOnboarding";
-import { errorNotice } from "./shared/errors";
 
 describe("employee onboarding", () => {
   it("requires approval of the downloaded form version", () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { api } from "./shared/apiClient";
-import { apiUrl } from "./shared/config";
-import { installFetch } from "./testing/fetch";
+import { api } from "../shared/apiClient";
+import { apiUrl } from "../shared/config";
+import { installFetch } from "../testing/fetch";
 
 const respond = installFetch();
 

@@ -9,7 +9,7 @@ import {
   isRenderCancellation,
   openPdf,
   renderPdfPage,
-} from "./shared/pdfDocument";
+} from "../shared/pdfDocument";
 
 /** A page's size in PDF points as displayed, after any /Rotate. */
 export interface PageSize {

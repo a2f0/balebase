@@ -2,6 +2,11 @@ import { describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { ContractTemplate } from "@balebase/validators/contractTemplates";
 import { act, useState } from "react";
+import { installDom } from "../testing/dom";
+import {
+  canNavigate,
+  guardWorkspaceChange,
+} from "../workspace/navigationGuard";
 import {
   EditorOverlay,
   FieldHelp,
@@ -11,8 +16,6 @@ import {
 } from "./ContractFieldEditor";
 import { Contracts } from "./Contracts";
 import type { DraftInput } from "./contractFields";
-import { installDom } from "./testing/dom";
-import { canNavigate, guardWorkspaceChange } from "./workspace/navigationGuard";
 
 const {
   button,

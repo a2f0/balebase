@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { ContractDetail } from "@balebase/validators/contracts";
 import { act } from "react";
+import { holdTimers, installDom } from "../testing/dom";
+import { canNavigate } from "../workspace/navigationGuard";
 import { autosaveDelayMs } from "./ContractEditor";
 import { Contracts } from "./Contracts";
-import { holdTimers, installDom } from "./testing/dom";
-import { canNavigate } from "./workspace/navigationGuard";
 
 const { button, click, fill, mount, respond, settle } = installDom({
   url: "http://localhost:5173/contracts/c1",

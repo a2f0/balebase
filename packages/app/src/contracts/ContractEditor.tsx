@@ -5,6 +5,10 @@ import type {
 } from "@balebase/validators/contracts";
 import { contractLimits } from "@balebase/validators/rules";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "../shared/apiClient";
+import { useAction } from "../shared/useAction";
+import { addNavigationGuard } from "../workspace/navigationGuard";
+import { confirmDiscardChanges } from "../workspace/unsavedChanges";
 import { ContractPages } from "./ContractDocument";
 import {
   EditorOverlay,
@@ -20,10 +24,6 @@ import {
   recipientTone,
   reminderOptions,
 } from "./contractFields";
-import { api } from "./shared/apiClient";
-import { useAction } from "./shared/useAction";
-import { addNavigationGuard } from "./workspace/navigationGuard";
-import { confirmDiscardChanges } from "./workspace/unsavedChanges";
 
 type Editor = ReturnType<typeof useDraftEditor>;
 

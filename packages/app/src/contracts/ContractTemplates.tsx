@@ -18,19 +18,19 @@ import type {
   TemplateVersion,
 } from "@balebase/validators/contractTemplates";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ContractTemplateEditor } from "./ContractTemplateEditor";
-import { ContractTemplateMapping } from "./ContractTemplateMapping";
-import { AppLink } from "./shared/AppLink";
-import { api } from "./shared/apiClient";
-import { formatDate } from "./shared/labels";
-import { useAction } from "./shared/useAction";
-import { useLoad } from "./shared/useLoad";
-import { confirmDiscardChanges } from "./workspace/unsavedChanges";
+import { AppLink } from "../shared/AppLink";
+import { api } from "../shared/apiClient";
+import { formatDate } from "../shared/labels";
+import { useAction } from "../shared/useAction";
+import { useLoad } from "../shared/useLoad";
+import { confirmDiscardChanges } from "../workspace/unsavedChanges";
 import {
   contractPath,
   contractTemplateIdForPath,
   contractTemplatePath,
-} from "./workspace/workspacePaths";
+} from "../workspace/workspacePaths";
+import { ContractTemplateEditor } from "./ContractTemplateEditor";
+import { ContractTemplateMapping } from "./ContractTemplateMapping";
 
 export function ContractTemplates({
   pathname,

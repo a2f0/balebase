@@ -9,7 +9,7 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
-import { EmployeeForms } from "../EmployeeForms";
+import { EmployeeForms } from "../employeeForms/EmployeeForms";
 import { AppButtonLink } from "../shared/AppLink";
 import { formatDate } from "../shared/labels";
 import {

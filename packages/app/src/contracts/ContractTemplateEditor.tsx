@@ -12,6 +12,10 @@ import type {
 } from "@balebase/validators/contractTemplates";
 import { contractLimits } from "@balebase/validators/rules";
 import { useCallback, useRef, useState } from "react";
+import { api } from "../shared/apiClient";
+import { countLabel } from "../shared/labels";
+import { useAction } from "../shared/useAction";
+import { useUnsavedChanges } from "../workspace/unsavedChanges";
 import { ContractPages } from "./ContractDocument";
 import {
   EditorOverlay,
@@ -21,10 +25,6 @@ import {
   useContractFieldEditor,
 } from "./ContractFieldEditor";
 import { type DraftInput, reminderOptions } from "./contractFields";
-import { api } from "./shared/apiClient";
-import { countLabel } from "./shared/labels";
-import { useAction } from "./shared/useAction";
-import { useUnsavedChanges } from "./workspace/unsavedChanges";
 
 export function ContractTemplateEditor({
   template,

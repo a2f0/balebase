@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import type { ScreeningForm as ScreeningFormData } from "@balebase/validators/employeeForms";
 import { act } from "react";
+import { installDom } from "../testing/dom";
 import { ScreeningForm } from "./ScreeningForm";
-import { installDom } from "./testing/dom";
 
 const { button, mount, respond } = installDom({
   url: "http://localhost:5173/me/screening/check",

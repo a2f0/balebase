@@ -12,7 +12,7 @@ import {
   EmployeeForms,
   inRequirementScope,
   type RequirementScope,
-} from "../EmployeeForms";
+} from "../employeeForms/EmployeeForms";
 import { AppButtonLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";

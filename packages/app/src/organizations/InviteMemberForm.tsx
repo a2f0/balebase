@@ -1,11 +1,11 @@
 import { Button, Card, Field, Select, Toast } from "@balebase/ui/react";
 import { type FormEvent, type Ref, useEffect, useRef, useState } from "react";
-import { RequirementDraftEditor } from "../EmployeeForms";
+import { RequirementDraftEditor } from "../employeeForms/EmployeeForms";
 import {
   inviteWithRequirements,
   RequirementAssignmentError,
   type RequirementDraft,
-} from "../employeeOnboarding";
+} from "../employeeForms/employeeOnboarding";
 import { api } from "../shared/apiClient";
 import { authClient } from "../shared/authClient";
 import { ErrorToast } from "../shared/ErrorToast";

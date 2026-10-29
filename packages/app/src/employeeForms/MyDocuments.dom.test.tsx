@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { act } from "react";
+import { installDom } from "../testing/dom";
 import { MyDocuments } from "./MyDocuments";
-import { installDom } from "./testing/dom";
 
 const {
   mount,

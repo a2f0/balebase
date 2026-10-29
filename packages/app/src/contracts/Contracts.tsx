@@ -15,6 +15,17 @@ import type {
   ContractSummary as ContractListItem,
 } from "@balebase/validators/contracts";
 import { useCallback, useRef, useState } from "react";
+import { AppLink } from "../shared/AppLink";
+import { api } from "../shared/apiClient";
+import { countLabel, formatCalendarDate } from "../shared/labels";
+import { useAction } from "../shared/useAction";
+import { useLoad } from "../shared/useLoad";
+import {
+  contractIdForPath,
+  contractPath,
+  contractTemplatePath,
+  isWithin,
+} from "../workspace/workspacePaths";
 import { ContractEditor } from "./ContractEditor";
 import { ContractStatusBadge, ContractSummary } from "./ContractSummary";
 import { ContractTemplates } from "./ContractTemplates";
@@ -23,17 +34,6 @@ import {
   contractFilters,
   matchesFilter,
 } from "./contractFields";
-import { AppLink } from "./shared/AppLink";
-import { api } from "./shared/apiClient";
-import { countLabel, formatCalendarDate } from "./shared/labels";
-import { useAction } from "./shared/useAction";
-import { useLoad } from "./shared/useLoad";
-import {
-  contractIdForPath,
-  contractPath,
-  contractTemplatePath,
-  isWithin,
-} from "./workspace/workspacePaths";
 
 export function Contracts({
   onNavigate,
