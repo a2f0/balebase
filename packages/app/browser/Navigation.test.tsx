@@ -9,7 +9,9 @@ import {
 it("guarded Back, Forward, and links ask first and keep history entries", async () => {
   const bundle = await Bun.build({
     entrypoints: [
-      fileURLToPath(new URL("../src/navigationGuard.ts", import.meta.url)),
+      fileURLToPath(
+        new URL("../src/workspace/navigationGuard.ts", import.meta.url),
+      ),
     ],
     target: "browser",
   });

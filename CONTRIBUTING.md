@@ -26,7 +26,7 @@ Every workspace lives under `packages/`, and infrastructure lives in
 | Typed client for those routes | `packages/api-client/src` |
 | Database schema | `packages/api/migrations` |
 | Built-in audit templates and their seed migrations | `packages/api/auditLibrary`, [residential audit library](docs/residential-audit-library.md) |
-| Application screens and the host interface each shell fills in | `packages/app/src` |
+| Application screens, in one folder per feature, and the host interface each shell fills in | `packages/app/src` |
 | Web shell and its Worker | `packages/app-web` |
 | Native shell, mobile projects, and Fastlane lanes | [`packages/app-capacitor`](packages/app-capacitor/README.md) (store tiers in `nativeReleaseTargets.json`), `scripts/dev/run*.sh`, `scripts/lib/nativeRelease.sh` |
 | Error diagnostics, release maps and tiers, click tracking | `packages/diagnostics`, `scripts/deploy/*Sentry*.ts`, `scripts/lib/sentryRelease.ts` |
@@ -151,23 +151,31 @@ it.
 - `packages/app` holds every screen and never imports Capacitor; a shell
   renders it with `renderApp` from `@balebase/app/client`, passing the host
   services in `host.ts`.
-- Call the API through `api`, the `ApiClient` in `apiClient.ts`;
+- Each feature has one folder, such as `audits/`, `finance/`, or
+  `organizations/`, holding its screens, state, helpers, and tests.
+  `workspace/` holds the shell, routes, paths, and navigation guard, and
+  `shared/` the feature-neutral hooks and primitives that several features
+  use. The entry points (`App.tsx`, `client.tsx`, and the exported `host.ts`
+  and `apiVersion.ts`), `styles/`, and `testing/` stay at the root.
+- Call the API through `api`, the `ApiClient` in `shared/apiClient.ts`;
   [API client onboarding](docs/api-client.md) covers other hosts.
 - Load with `useLoad`, mutate with `useAction`, and page cursor lists with
-  `useCursorPages` and `InfiniteScroll`.
-- Show errors with `errorMessage` from `errors.ts` or with `ErrorToast`.
-- Add a workspace section with a route in `workspaceRoutes.tsx` and a page and
-  sidebar item in `WorkspaceShell.tsx`.
-- Build paths with the `workspacePaths.ts` helpers, match a section with
-  `isWithin`, read a route's record ID with `recordIdForPath`, and link with
-  `AppLink` or `AppButtonLink`.
-- Format dates with `labels.ts`, using `formatCalendarDate` for YYYY-MM-DD
-  days, and roles with `hasRole` and `formatRoles` from `organizationState.ts`.
+  `useCursorPages` and `InfiniteScroll`, all in `shared/`.
+- Show errors with `errorMessage` from `shared/errors.ts` or with
+  `ErrorToast`.
+- Add a workspace section with a route in `workspace/workspaceRoutes.tsx` and
+  a page and sidebar item in `workspace/WorkspaceShell.tsx`.
+- Build paths with the `workspace/workspacePaths.ts` helpers, match a section
+  with `isWithin`, read a route's record ID with `recordIdForPath`, and link
+  with `AppLink` or `AppButtonLink` from `shared/AppLink.tsx`.
+- Format dates with `shared/labels.ts`, using `formatCalendarDate` for
+  YYYY-MM-DD days, and roles with `hasRole` and `formatRoles` from
+  `organizations/organizationState.ts`.
 - Use `Select` from [`@balebase/ui/react`](packages/ui/README.md#react-primitives)
   for dropdowns, labelled by `Field` or an associated label; compact inline
   controls can use `aria-label` and `className="inputSm"`.
-- Every issue form renders `IssueFields` from `IssueForm.tsx`.
-- Split a screen as Finance is split: `Finance.tsx` owns loading and
+- Every issue form renders `IssueFields` from `issues/IssueForm.tsx`.
+- Split a screen as Finance is split: `finance/Finance.tsx` owns loading and
   mutations, `FinanceAccounts.tsx` and `FinanceTransactionHistory.tsx` render
   their parts, and `financeFormat.ts` formats amounts.
 
@@ -195,7 +203,7 @@ RuboCop and `test` runs the lane tests through it.
 
 ```sh
 bun run check:fast
-bun run --cwd packages/app test src/Finance.test.tsx
+bun run --cwd packages/app test src/finance/Finance.test.tsx
 bun run --cwd packages/api test src/app.test.ts
 ```
 

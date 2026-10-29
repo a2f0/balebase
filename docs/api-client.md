@@ -46,12 +46,12 @@ values, not proof of the settings currently deployed to a live Worker.
 
 ## Existing application and native hosts
 
-Inside `packages/app`, use the existing `api` from `src/apiClient.ts` rather
-than making another client. Its `fetchApi` wrapper records `API-Version` and
-adds the native origin marker when a native host is present. Offline API
-requests also receive a 90-second timeout. The shared screens live in
-`packages/app`; `packages/app-web` and `packages/app-capacitor` configure their
-hosts and entrypoints.
+Inside `packages/app`, use the existing `api` from `src/shared/apiClient.ts`
+rather than making another client. Its `fetchApi` wrapper records
+`API-Version` and adds the native origin marker when a native host is
+present. Offline API requests also receive a 90-second timeout. The shared
+screens live in `packages/app`; `packages/app-web` and `packages/app-capacitor`
+configure their hosts and entrypoints.
 
 The native shell supplies its host in `packages/app-capacitor/src/host.ts`
 and enables `CapacitorHttp` in `capacitor.config.ts`. The shared wrapper and

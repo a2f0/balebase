@@ -2,8 +2,7 @@ import { DialogHost } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { useWorkspaceNavigation } from "../src/navigationGuard";
-import { OfflineWorkspacePage } from "../src/OfflineWorkspacePage";
+import { OfflineWorkspacePage } from "../src/offline/OfflineWorkspacePage";
 import {
   activateOfflineWorkspace,
   activeOfflineKey,
@@ -12,16 +11,17 @@ import {
   offlineImage,
   offlineScopeKey,
   readOfflineWorkspace,
-} from "../src/offlineStore";
-import { syncOfflineWorkspace } from "../src/offlineSync";
+} from "../src/offline/offlineStore";
+import { syncOfflineWorkspace } from "../src/offline/offlineSync";
 import {
   createOfflineIssue,
   queueOfflineAudit,
   retryOfflineWork,
   saveOfflineAnswer,
   startOfflineAudit,
-} from "../src/offlineWork";
-import { useOfflineWorkspace } from "../src/useOfflineWorkspace";
+} from "../src/offline/offlineWork";
+import { useOfflineWorkspace } from "../src/offline/useOfflineWorkspace";
+import { useWorkspaceNavigation } from "../src/workspace/navigationGuard";
 
 const user = {
   id: "user-1",

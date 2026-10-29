@@ -67,7 +67,9 @@ it("never scrolls past the page while a lifted entry rests at the edge", async (
     writeFileSync(
       entry,
       harness(
-        fileURLToPath(new URL("../src/useReorderDrag.ts", import.meta.url)),
+        fileURLToPath(
+          new URL("../src/audits/useReorderDrag.ts", import.meta.url),
+        ),
       ),
     );
     const bundle = await Bun.build({

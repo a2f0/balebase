@@ -8,44 +8,44 @@ import {
   PageHeader,
 } from "@balebase/ui/react";
 import { type ReactNode, useEffect, useState } from "react";
-import { AuthPage } from "./AuthPage";
 import {
   accountReturnPath,
   addAccountPath,
   invitationIdForPath,
   workspaceContentKey,
-} from "./accountNavigation";
-import { useAccountSessions } from "./accountSessions";
-import type { AuthenticationAction } from "./authActions";
-import { authClient } from "./authClient";
-import { authCallbackUrl } from "./config";
-import { Library } from "./Library";
-import { useLinkedOrganization } from "./linkedOrganization";
+} from "./account/accountNavigation";
+import { useAccountSessions } from "./account/accountSessions";
+import { AuthPage } from "./auth/AuthPage";
+import type { AuthenticationAction } from "./auth/authActions";
+import { useSessionRefetch } from "./auth/useSessionRefetch";
+import { SigningPage } from "./contracts/SigningPage";
+import { Library } from "./library/Library";
+import { useOfflineSlot } from "./offline/offlineSlot";
+import { useOfflineRoute } from "./offline/useOfflineRoute";
+import { useLinkedOrganization } from "./organizations/linkedOrganization";
+import { OrganizationGate } from "./organizations/OrganizationGate";
+import { hasRole } from "./organizations/organizationState";
+import { useOrganizationAccess } from "./organizations/useOrganizationAccess";
+import { authClient } from "./shared/authClient";
+import { authCallbackUrl } from "./shared/config";
 import {
   guardWorkspaceChange,
   useDismissDialogsOnWorkspaceChange,
   useWorkspaceNavigation,
-} from "./navigationGuard";
-import { OrganizationGate } from "./OrganizationGate";
-import { useOfflineSlot } from "./offlineSlot";
-import { hasRole } from "./organizationState";
-import { SigningPage } from "./SigningPage";
-import { useOfflineRoute } from "./useOfflineRoute";
-import { useOrganizationAccess } from "./useOrganizationAccess";
-import { useSessionRefetch } from "./useSessionRefetch";
+} from "./workspace/navigationGuard";
 import {
   type OrganizationSession,
   useWorkspaceOrganizations,
-} from "./useWorkspaceOrganizations";
-import { WorkspaceShell, type WorkspaceUser } from "./WorkspaceShell";
+} from "./workspace/useWorkspaceOrganizations";
+import { WorkspaceShell, type WorkspaceUser } from "./workspace/WorkspaceShell";
 import {
   isRootAdminPath,
   isWithin,
   movedWorkspacePath,
   organizationPathRequiresAccess,
   signingTokenForPath,
-} from "./workspacePaths";
-import { workspaceRoute } from "./workspaceRoutes";
+} from "./workspace/workspacePaths";
+import { workspaceRoute } from "./workspace/workspaceRoutes";
 
 export function App() {
   const { data: session, error, isPending, refetch } = authClient.useSession();

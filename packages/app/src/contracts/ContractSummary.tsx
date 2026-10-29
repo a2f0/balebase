@@ -1,0 +1,330 @@
+import {
+  Badge,
+  Banner,
+  Button,
+  Card,
+  cx,
+  PageSection,
+  promptDialog,
+  Toast,
+} from "@balebase/ui/react";
+import type { ContractDetail } from "@balebase/validators/contracts";
+import { ApiDownload } from "../shared/ApiDownload";
+import { api } from "../shared/apiClient";
+import { formatCalendarDate, formatDateTime } from "../shared/labels";
+import { useAction } from "../shared/useAction";
+import { contractPath } from "../workspace/workspacePaths";
+import { boxStyle, ContractPages } from "./ContractDocument";
+import {
+  confirmContractDeletion,
+  contractStatus,
+  describeContractEvent,
+  fieldTypeLabel,
+  isOverdue,
+  recipientStatus,
+  recipientTone,
+  reminderOptions,
+} from "./contractFields";
+
+/** A contract that has been sent: its progress, actions, and history. */
+export function ContractSummary({
+  contract,
+  onChanged,
+  onNavigate,
+}: {
+  contract: ContractDetail;
+  onChanged: (contract: ContractDetail | null) => void;
+  onNavigate: (pathname: string) => void;
+}) {
+  const actions = useSummaryActions(contract, onChanged, onNavigate);
+  return (
+    <div className="contractSummary">
+      {actions.error && <Toast tone="danger">{actions.error}</Toast>}
+      {actions.notice && <Toast tone="success">{actions.notice}</Toast>}
+      <StatusBanner contract={contract} />
+      <div className="contractSummaryGrid">
+        <div className="stack">
+          <SummaryActions actions={actions} contract={contract} />
+          <Signers contract={contract} />
+          <Activity contract={contract} />
+        </div>
+        <PageSection
+          title={
+            contract.status === "completed" ? "Signed document" : "Document"
+          }
+        >
+          <ContractPages
+            key={contract.status}
+            load={() =>
+              (contract.status === "completed"
+                ? api.contracts.final(contract.id)
+                : api.contracts.document(contract.id)
+              ).then((response) => response.arrayBuffer())
+            }
+            renderOverlay={(page) =>
+              contract.status === "completed"
+                ? null
+                : contract.fields
+                    .filter((field) => field.page === page.number)
+                    .map((field) => (
+                      <span
+                        className={cx(
+                          "contractField contractFieldStatic",
+                          recipientTone(
+                            contract.recipients.findIndex(
+                              ({ id }) => id === field.recipientId,
+                            ),
+                          ),
+                        )}
+                        key={field.id}
+                        style={boxStyle(field)}
+                      >
+                        <span className="contractFieldLabel">
+                          {fieldTypeLabel(field.type)}
+                        </span>
+                      </span>
+                    ))
+            }
+          />
+        </PageSection>
+      </div>
+    </div>
+  );
+}
+
+function useSummaryActions(
+  contract: ContractDetail,
+  onChanged: (contract: ContractDetail | null) => void,
+  onNavigate: (pathname: string) => void,
+) {
+  const { busy, error, notice, run } = useAction(
+    "Could not update the contract.",
+  );
+  return {
+    busy,
+    error,
+    notice,
+    remind: () =>
+      run(
+        async () => {
+          const result = await api.contracts.remind(contract.id);
+          onChanged(result.contract);
+          if (result.reminded === 0)
+            throw new Error("No reminder could be delivered. See Activity.");
+          return result.reminded;
+        },
+        (reminded) =>
+          reminded === 1
+            ? "Reminder sent to 1 signer."
+            : `Reminders sent to ${reminded} signers.`,
+      ),
+    remove: async () => {
+      if (!(await confirmContractDeletion(contract.title))) return;
+      void run(async () => {
+        await api.contracts.delete(contract.id);
+        onNavigate(contractPath());
+      });
+    },
+    voidIt: async () => {
+      const reason = await askVoidReason(contract.title);
+      if (reason === null) return;
+      void run(async () => {
+        onChanged(await api.contracts.void(contract.id, reason));
+      }, "Contract voided.");
+    },
+  };
+}
+
+function StatusBanner({ contract }: { contract: ContractDetail }) {
+  const signed = contract.recipients.filter(
+    ({ status }) => status === "signed",
+  ).length;
+  if (contract.status === "completed") {
+    return (
+      <Banner icon="success" title="Completed" tone="success">
+        Everyone signed. The signed copy, with its certificate of completion,
+        was emailed to every signer.
+      </Banner>
+    );
+  }
+  if (contract.status === "declined") {
+    const decliner = contract.recipients.find(
+      ({ status }) => status === "declined",
+    );
+    return (
+      <Banner icon="error" title="Declined" tone="danger">
+        {decliner?.name ?? "A signer"} declined to sign
+        {decliner?.declineReason ? `: “${decliner.declineReason}”` : "."}
+      </Banner>
+    );
+  }
+  if (contract.status === "voided") {
+    return (
+      <Banner icon="void" title="Voided" tone="neutral">
+        This contract was voided
+        {contract.voidReason ? `: “${contract.voidReason}”` : "."}
+      </Banner>
+    );
+  }
+  return (
+    <Banner
+      icon={isOverdue(contract) ? "alert" : "send"}
+      title={isOverdue(contract) ? "Overdue" : "Waiting for signatures"}
+      tone={isOverdue(contract) ? "warning" : "info"}
+    >
+      {signed} of {contract.recipients.length} signed
+      {contract.dueDate ? ` · due ${formatCalendarDate(contract.dueDate)}` : ""}
+      {" · "}
+      {reminderOptions.find(
+        ({ value }) => value === contract.reminderIntervalDays,
+      )?.label ?? "Custom reminders"}
+    </Banner>
+  );
+}
+
+function SummaryActions({
+  actions,
+  contract,
+}: {
+  actions: ReturnType<typeof useSummaryActions>;
+  contract: ContractDetail;
+}) {
+  return (
+    <div className="contractSummaryActions">
+      {contract.status === "sent" && (
+        <>
+          <Button
+            busy={actions.busy}
+            icon="reminder"
+            onClick={() => void actions.remind()}
+          >
+            Send reminder
+          </Button>
+          <Button
+            disabled={actions.busy}
+            icon="void"
+            onClick={actions.voidIt}
+            variant="danger"
+          >
+            Void
+          </Button>
+        </>
+      )}
+      {contract.status === "completed" && (
+        <ApiDownload
+          filename={`signed-${contract.document.filename}`}
+          href={api.contracts.finalUrl(contract.id)}
+          icon="download"
+          variant="primary"
+        >
+          Download signed PDF
+        </ApiDownload>
+      )}
+      <ApiDownload
+        filename={contract.document.filename}
+        href={api.contracts.documentUrl(contract.id)}
+        icon="download"
+      >
+        Original
+      </ApiDownload>
+      {contract.status !== "sent" && (
+        <Button
+          disabled={actions.busy}
+          icon="trash"
+          onClick={actions.remove}
+          variant="ghost"
+        >
+          Delete
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function Signers({ contract }: { contract: ContractDetail }) {
+  const ordered = contract.signingOrder === "sequential";
+  return (
+    <Card flush title={ordered ? "Signers, in order" : "Signers"}>
+      <ul className="rowList">
+        {contract.recipients.map((recipient, index) => {
+          const status = recipientStatus(recipient.status);
+          return (
+            <li
+              className={cx("row contractSignerRow", recipientTone(index))}
+              key={recipient.id}
+            >
+              <span aria-hidden="true" className="contractSignerSwatch" />
+              <span className="rowMain">
+                <span className="rowTitle truncate">
+                  {ordered ? `${recipient.routingOrder}. ` : ""}
+                  {recipient.name}
+                </span>
+                <span className="rowMeta truncate">
+                  {recipient.email}
+                  {recipient.signedAt
+                    ? ` · signed ${formatDateTime(recipient.signedAt)}`
+                    : ""}
+                  {!recipient.signedAt && recipient.viewedAt
+                    ? ` · opened ${formatDateTime(recipient.viewedAt)}`
+                    : ""}
+                </span>
+              </span>
+              <Badge dot tone={status.tone}>
+                {status.label}
+              </Badge>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
+function Activity({ contract }: { contract: ContractDetail }) {
+  const names = new Map(contract.recipients.map(({ id, name }) => [id, name]));
+  return (
+    <Card title="Activity">
+      <ol className="contractActivity">
+        {[...contract.events].reverse().map((event) => (
+          <li
+            className={cx(
+              event.type === "delivery_failed" && "contractActivityProblem",
+            )}
+            key={event.id}
+          >
+            <span>{describeContractEvent(event, names)}</span>
+            <time dateTime={event.createdAt}>
+              {formatDateTime(event.createdAt)}
+            </time>
+          </li>
+        ))}
+      </ol>
+    </Card>
+  );
+}
+
+/** The status badge shown in lists and headers. */
+export function ContractStatusBadge({
+  contract,
+}: {
+  contract: Pick<ContractDetail, "dueDate" | "status">;
+}) {
+  const status = contractStatus(contract);
+  return (
+    <Badge dot tone={status.tone}>
+      {status.label}
+    </Badge>
+  );
+}
+
+function askVoidReason(title: string) {
+  return promptDialog({
+    confirmLabel: "Void contract",
+    label: "Reason (optional)",
+    maxLength: 500,
+    message: "Signers will be told it no longer needs signing.",
+    multiline: true,
+    title: `Void “${title}”?`,
+    tone: "danger",
+  });
+}
