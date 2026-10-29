@@ -19,6 +19,11 @@ const endpoints = {
     path: "/api/admin/users/:userId/deletion",
     response: "json",
   }),
+  revokeAdmin: endpoint<typeof adminUsersRoutes.revokeAdmin>({
+    method: "DELETE",
+    path: "/api/admin/users/:userId/admin",
+    response: "json",
+  }),
 };
 
 export function adminUsersApi(transport: Transport) {
@@ -34,6 +39,9 @@ export function adminUsersApi(transport: Transport) {
     },
     cancelDeletion(userId: string) {
       return transport.call(endpoints.cancelDeletion, { params: { userId } });
+    },
+    revokeAdmin(userId: string) {
+      return transport.call(endpoints.revokeAdmin, { params: { userId } });
     },
   };
 }

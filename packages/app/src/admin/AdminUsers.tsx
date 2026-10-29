@@ -26,7 +26,11 @@ interface UserListing {
   users: AdminUser[];
 }
 
-export function AdminUsers() {
+export function AdminUsers({
+  currentUserId,
+}: {
+  currentUserId?: string | undefined;
+}) {
   const [page, setPage] = useState(0);
   const {
     data: listing,
@@ -69,6 +73,7 @@ export function AdminUsers() {
         <UserSection
           busy={busy}
           hasError={Boolean(error)}
+          currentUserId={currentUserId}
           lifecycle={lifecycle}
           listing={listing}
           onPageChange={setPage}
@@ -81,6 +86,7 @@ export function AdminUsers() {
 
 function UserSection({
   busy,
+  currentUserId,
   hasError,
   listing,
   lifecycle,
@@ -88,6 +94,7 @@ function UserSection({
   page,
 }: {
   busy: boolean;
+  currentUserId: string | undefined;
   hasError: boolean;
   listing?: UserListing | undefined;
   lifecycle: ReturnType<typeof useAdminUserDeletion>;
@@ -105,7 +112,11 @@ function UserSection({
     >
       {listing && listing.users.length > 0 ? (
         <div className="stack stackMd">
-          <UserTable lifecycle={lifecycle} users={listing.users} />
+          <UserTable
+            currentUserId={currentUserId}
+            lifecycle={lifecycle}
+            users={listing.users}
+          />
           <Pagination
             disabled={lifecycle.userId !== undefined}
             onPageChange={onPageChange}
@@ -123,9 +134,11 @@ function UserSection({
 }
 
 function UserTable({
+  currentUserId,
   users,
   lifecycle,
 }: {
+  currentUserId: string | undefined;
   users: AdminUser[];
   lifecycle: ReturnType<typeof useAdminUserDeletion>;
 }) {
@@ -147,7 +160,12 @@ function UserTable({
         </thead>
         <tbody>
           {users.map((user) => (
-            <UserRow key={user.id} user={user} lifecycle={lifecycle} />
+            <UserRow
+              currentUserId={currentUserId}
+              key={user.id}
+              lifecycle={lifecycle}
+              user={user}
+            />
           ))}
         </tbody>
       </table>
@@ -156,13 +174,16 @@ function UserTable({
 }
 
 function UserRow({
+  currentUserId,
   user,
   lifecycle,
 }: {
+  currentUserId: string | undefined;
   user: AdminUser;
   lifecycle: ReturnType<typeof useAdminUserDeletion>;
 }) {
   const status = statusFor(user);
+  const isAdmin = hasRole(user.role, "admin");
   return (
     <tr>
       <td>
@@ -186,9 +207,21 @@ function UserRow({
       <td className="adminActions">
         <AdminDeletionMenu
           busy={lifecycle.userId === user.id}
-          disabled={
-            lifecycle.userId !== undefined ||
-            (!user.deletionRequestedAt && hasRole(user.role, "admin"))
+          deletionDisabled={!user.deletionRequestedAt && isAdmin}
+          disabled={lifecycle.userId !== undefined}
+          extraItems={
+            isAdmin
+              ? [
+                  {
+                    // Revoking your own access would lock you out.
+                    disabled: user.id === currentUserId,
+                    icon: "lock",
+                    id: "revoke-admin",
+                    label: "Revoke root admin",
+                    onSelect: () => void lifecycle.revokeAdmin(user),
+                  },
+                ]
+              : []
           }
           label={
             user.deletionRequestedAt ? "Cancel deletion" : "Mark for deletion"

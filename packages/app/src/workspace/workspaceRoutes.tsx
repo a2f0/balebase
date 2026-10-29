@@ -37,6 +37,7 @@ interface RouteContext {
   onSecurityChanged: () => Promise<unknown>;
   pathname: string;
   user: {
+    id: string;
     defaultOrganizationId?: string | null | undefined;
     twoFactorEnabled?: boolean | null | undefined;
   };
@@ -149,7 +150,7 @@ const routes: WorkspaceRoute[] = [
   {
     matches: exactly("/root/users"),
     page: "rootUsers",
-    render: () => <AdminUsers />,
+    render: ({ user }) => <AdminUsers currentUserId={user.id} />,
   },
   {
     matches: within(globalAuditsPath()),
