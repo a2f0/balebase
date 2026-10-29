@@ -23,8 +23,8 @@ import type {
 import { auditLimits } from "@balebase/validators/rules";
 import { type ReactNode, useCallback, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
+import { ErrorToast } from "../billing/ErrorToast";
 import { api } from "../shared/apiClient";
-import { ErrorToast } from "../shared/ErrorToast";
 import type { ErrorNotice } from "../shared/errors";
 import { countLabel, formatDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";

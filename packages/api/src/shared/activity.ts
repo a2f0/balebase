@@ -1,13 +1,10 @@
-import {
-  type ActivityEvent,
-  type ActivityResourceType,
-  activityRoutes,
+import type {
+  ActivityEvent,
+  ActivityResourceType,
 } from "@balebase/validators/activity";
-import { type Context, Hono } from "hono";
+import type { Context } from "hono";
 import type { ApiEnv, ApiKeyChannel, ApiKeyPrincipal } from "../auth/apiEnv";
-import { userHasCapability } from "../organizations/organizationGroups";
 import { cursorPage } from "./cursorPagination";
-import { readQuery, respond } from "./respond";
 
 export interface ActivityRow {
   action: string;
@@ -42,33 +39,6 @@ export interface ActivityActor {
 }
 
 const pageSize = 50;
-
-export const activity = new Hono<ApiEnv>();
-
-activity.get("/", async (context) => {
-  const query = readQuery(
-    context,
-    activityRoutes.list,
-    "Invalid activity filters.",
-  );
-  if (query instanceof Response) return query;
-  const page = await findActivity(
-    context.env.DB,
-    context.get("organizationId"),
-    query.cursor,
-    undefined,
-    await userHasCapability(
-      context.env.DB,
-      context.get("organizationId"),
-      context.get("authSession").user.id,
-      "finance",
-    ),
-    query.resourceType,
-  );
-  return page
-    ? respond(context, activityRoutes.list, page)
-    : context.json({ error: "Invalid activity cursor." }, 400);
-});
 
 /**
  * An organization's activity, or global activity when the organization is

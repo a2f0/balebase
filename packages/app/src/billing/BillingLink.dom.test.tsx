@@ -5,9 +5,9 @@ import {
   blockingSeatRequirement,
   OrganizationSeatRequired,
 } from "../organizations/OrganizationSeatRequired";
-import { ErrorToast } from "../shared/ErrorToast";
 import { errorNotice } from "../shared/errors";
 import { installDom } from "../testing/dom";
+import { ErrorToast } from "./ErrorToast";
 
 const { clickLink, render: renderInDom } = installDom({
   url: "http://localhost:5173/audits",

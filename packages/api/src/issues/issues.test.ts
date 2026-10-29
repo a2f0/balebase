@@ -1,10 +1,10 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, describe, expect, it } from "bun:test";
 import type { ActivityPage } from "@balebase/validators/activity";
+import { activity } from "../activity/activity";
 import { audits } from "../audits/audits";
 import { createFinanceRouter } from "../finance/finance";
 import { requireCapability } from "../organizations/organizationGroups";
-import { activity } from "../shared/activity";
 import { testBindings } from "../testing/bindings";
 import { queryHooks, toD1 } from "../testing/d1";
 import { applyMigrations, createTestDatabase } from "../testing/database";

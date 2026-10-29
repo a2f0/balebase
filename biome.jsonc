@@ -84,6 +84,70 @@
         }
       }
     },
+    // API shared modules stay below features: they import only Worker types.
+    {
+      "includes": [
+        "packages/api/src/shared/**",
+        "!**/*.test.ts",
+        "!**/*.test.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                // Overrides replace rule options, so repeat the root paths.
+                "paths": {
+                  "@balebase/api": "Do not import from the API Worker package",
+                  "@balebase/app-capacitor": "Do not import from the native app shell",
+                  "@balebase/app-web": "Do not import from the web app shell",
+                  "@balebase/website": "Do not import from the website deployment target"
+                },
+                "patterns": [
+                  {
+                    "group": ["../**", "!../types", "!../auth/apiEnv"],
+                    "message": "shared/ sits below the features; move this code into the feature that owns it."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    // App shared modules stay below features: they import only the host interface.
+    {
+      "includes": [
+        "packages/app/src/shared/**",
+        "!**/*.test.ts",
+        "!**/*.test.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                // Overrides replace rule options, so repeat the root paths.
+                "paths": {
+                  "@balebase/api": "Do not import from the API Worker package",
+                  "@balebase/app-capacitor": "Do not import from the native app shell",
+                  "@balebase/app-web": "Do not import from the web app shell",
+                  "@balebase/website": "Do not import from the website deployment target"
+                },
+                "patterns": [
+                  {
+                    "group": ["../**", "!../host", "!../apiVersion"],
+                    "message": "shared/ sits below the features; move this code into the feature that owns it."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     // App components get a lower cognitive complexity limit than other source.
     {
       "includes": ["packages/app/src/**/*.tsx"],

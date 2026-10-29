@@ -2,6 +2,7 @@ import { sessionRoutes } from "@balebase/validators/session";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { version as apiVersion } from "../package.json";
+import { activity } from "./activity/activity";
 import { adminAuditTemplates } from "./admin/adminAuditTemplates";
 import { adminJobs } from "./admin/adminJobs";
 import { adminOrganizations } from "./admin/adminOrganizations";
@@ -40,7 +41,6 @@ import {
 } from "./organizations/organizationGroups";
 import { organizationSettings } from "./organizations/organizationSettings";
 import { projects } from "./projects/projects";
-import { activity } from "./shared/activity";
 import { respond } from "./shared/respond";
 import { respondToUnexpectedError } from "./shared/unexpectedError";
 import { accountSettings } from "./users/accountSettings";
