@@ -1,6 +1,6 @@
 import type { Database, SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { inbox } from "../inbox";
+import { inbox } from "../inbox/inbox";
 import { activity } from "../shared/activity";
 import { testBindings } from "../testing/bindings";
 import { toD1 } from "../testing/d1";

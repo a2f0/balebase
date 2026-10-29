@@ -1,8 +1,8 @@
 import type { Attachment } from "postal-mime";
 import PostalMime from "postal-mime";
+import { normalizeFilename } from "../shared/filenames";
+import type { Bindings } from "../types";
 import { organizationIdForInboundAddress } from "./inboundEmailAddress";
-import { normalizeFilename } from "./shared/filenames";
-import type { Bindings } from "./types";
 
 const maxEmailBytes = 25 * 1024 * 1024;
 const maxHeaderTextLength = 1_000;

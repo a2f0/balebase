@@ -1,20 +1,20 @@
 import { describe, expect, it, spyOn } from "bun:test";
-import { jobRunDetail } from "./jobHistory";
-import { scheduleJobs } from "./jobScheduler";
-import { consumeJobs as consumeFinanceSync } from "./jobWorker";
-import {
-  PlaidApiError,
-  type PlaidRequest,
-  type PlaidRequestBody,
-} from "./plaid";
-import { findActivity } from "./shared/activity";
+import { jobRunDetail } from "../jobHistory";
+import { scheduleJobs } from "../jobScheduler";
+import { consumeJobs as consumeFinanceSync } from "../jobWorker";
+import { findActivity } from "../shared/activity";
 import {
   createFixture,
   jsonRequest,
   testApp,
   transactionPage,
-} from "./testing/financeFixture";
-import type { Bindings } from "./types";
+} from "../testing/financeFixture";
+import type { Bindings } from "../types";
+import {
+  PlaidApiError,
+  type PlaidRequest,
+  type PlaidRequestBody,
+} from "./plaid";
 
 async function queuedFixture() {
   const fixture = await createFixture();

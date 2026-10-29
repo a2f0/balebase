@@ -1,5 +1,5 @@
-import { isRecord } from "./shared/jsonInput";
-import type { Bindings } from "./types";
+import { isRecord } from "../shared/jsonInput";
+import type { Bindings } from "../types";
 
 export interface PlaidAccount {
   account_id: string;

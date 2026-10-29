@@ -1,3 +1,4 @@
+import type { Bindings } from "../types";
 import {
   type PlaidAccount,
   PlaidApiError,
@@ -6,7 +7,6 @@ import {
   type TransactionsSyncResponse,
 } from "./plaid";
 import { decryptToken } from "./plaidCrypto";
-import type { Bindings } from "./types";
 
 export interface PlaidItemRow {
   access_token_ciphertext: string;

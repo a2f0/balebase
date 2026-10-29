@@ -5,7 +5,7 @@ import {
 import { equipmentTypes, isEquipmentType } from "@balebase/validators/rules";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/authMiddleware";
-import { listLinkedEmails, toLinkedEmail } from "../inboundEmailLinks";
+import { listLinkedEmails, toLinkedEmail } from "../inbox/inboundEmailLinks";
 import {
   canManage,
   listMemberDirectory,

@@ -3,9 +3,9 @@ import {
   type FinanceConnectionDetail,
   financeRoutes,
 } from "@balebase/validators/finance";
+import { respond } from "../shared/respond";
 import type { FinanceContext } from "./financeContext";
 import { latestSyncJob } from "./financeSyncJobs";
-import { respond } from "./shared/respond";
 
 interface ConnectionRow {
   daily_sync: number;

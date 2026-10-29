@@ -7,7 +7,7 @@ import { offlineRoutes } from "@balebase/validators/offline";
 import type { Context } from "hono";
 import type { ApiKeyPrincipal } from "../auth/apiKeys";
 import type { ApiEnv } from "../auth/authMiddleware";
-import { auditIssueImageUploadGraceMilliseconds } from "../objectLifecycle";
+import { auditIssueImageUploadGraceMilliseconds } from "../library/objectLifecycle";
 import { replayOfflineImage } from "../offline/offlineImages";
 import { activityBatch } from "../shared/activity";
 import { normalizeFilename } from "../shared/filenames";

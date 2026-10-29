@@ -1,8 +1,8 @@
-import { isSyncJob } from "./financeSyncJobs";
-import { runSyncPage } from "./financeSyncWorker";
+import { isSyncJob } from "./finance/financeSyncJobs";
+import { runSyncPage } from "./finance/financeSyncWorker";
+import { type PlaidRequest, plaidRequest } from "./finance/plaid";
 import { claimJob } from "./jobRuns";
 import { maintenanceTasks, runMaintenanceJob } from "./maintenance";
-import { type PlaidRequest, plaidRequest } from "./plaid";
 import type { Bindings } from "./types";
 
 export async function consumeJobs(

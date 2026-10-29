@@ -6,15 +6,15 @@ import {
 } from "@balebase/validators/inbox";
 import { type Context, Hono } from "hono";
 import PostalMime from "postal-mime";
-import type { ApiEnv } from "./auth/authMiddleware";
+import type { ApiEnv } from "../auth/authMiddleware";
+import { respond } from "../shared/respond";
+import { storedDownload } from "../shared/storage";
 import { organizationInboxAddress } from "./inboundEmailAddress";
 import {
   createEmailLink,
   deleteEmailLink,
   listEmailLinks,
 } from "./inboundEmailLinks";
-import { respond } from "./shared/respond";
-import { storedDownload } from "./shared/storage";
 
 const inbox = new Hono<ApiEnv>();
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { testBindings } from "../testing/bindings";
 import { handleEmail } from "./email";
-import { testBindings } from "./testing/bindings";
 
 const organizationId = "organization-1";
 const inboundEmailDomain = "inbox.balebase.com";

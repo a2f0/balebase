@@ -1,12 +1,12 @@
 import type { FinanceSyncJob } from "@balebase/validators/finance";
-import { dispatchJob, type JobRow } from "./jobRuns";
-import { PlaidApiError } from "./plaid";
+import { dispatchJob, type JobRow } from "../jobRuns";
 import {
   type ActivityActor,
   activityBatch,
   activityStatement,
-} from "./shared/activity";
-import type { Bindings } from "./types";
+} from "../shared/activity";
+import type { Bindings } from "../types";
+import { PlaidApiError } from "./plaid";
 
 export interface SyncJobRow extends JobRow {
   connection_id: string;

@@ -1,12 +1,12 @@
+import { dispatchJob } from "../jobRuns";
+import type { Bindings } from "../types";
 import { type PlaidItemRow, syncPlaidPage } from "./financeSync";
 import type { SyncJobRow } from "./financeSyncJobs";
-import { dispatchJob } from "./jobRuns";
 import {
   PlaidApiError,
   type PlaidRequest,
   type TransactionsSyncResponse,
 } from "./plaid";
-import type { Bindings } from "./types";
 
 export async function runSyncPage(
   env: Bindings,

@@ -3,8 +3,8 @@ import {
   type ExpenseReportCurrency,
   financeRoutes,
 } from "@balebase/validators/finance";
+import { readQuery, respond } from "../shared/respond";
 import type { FinanceContext } from "./financeContext";
-import { readQuery, respond } from "./shared/respond";
 
 /*
  * Expense reporting rules (Plaid amounts are positive for money leaving an

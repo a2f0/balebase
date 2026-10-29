@@ -19,7 +19,7 @@ test("production Worker entrypoints report failures without changing their behav
       const emailError = new TypeError("email failure");
       const scheduledError = new TypeError("scheduled failure");
       mock.module(${JSON.stringify(resolve(import.meta.dir, "diagnostics.ts"))}, () => ({ captureApiError: async (error, source) => { reports.push({ error, source }); } }));
-      mock.module(${JSON.stringify(resolve(import.meta.dir, "../email.ts"))}, () => ({ handleEmail: async () => { throw emailError; } }));
+      mock.module(${JSON.stringify(resolve(import.meta.dir, "../inbox/email.ts"))}, () => ({ handleEmail: async () => { throw emailError; } }));
       mock.module(${JSON.stringify(resolve(import.meta.dir, "../maintenance.ts"))}, () => ({ ...maintenance, maintenanceTasks: () => [], runScheduledMaintenance: async () => { throw scheduledError; } }));
       const { app } = await import(${JSON.stringify(resolve(import.meta.dir, "../app.ts"))});
       const { default: worker } = await import(${JSON.stringify(resolve(import.meta.dir, "../index.ts"))});
@@ -35,7 +35,7 @@ test("production Worker entrypoints report failures without changing their behav
       });
       test("routers with their own error handlers still report unexpected errors", async () => {
         const { Hono } = await import("hono");
-        const { createFinanceRouter } = await import(${JSON.stringify(resolve(import.meta.dir, "../finance.ts"))});
+        const { createFinanceRouter } = await import(${JSON.stringify(resolve(import.meta.dir, "../finance/finance.ts"))});
         const { employeeForms } = await import(${JSON.stringify(resolve(import.meta.dir, "../employeeForms/employeeForms.ts"))});
         const plaidError = new TypeError("Plaid transport failure");
         const databaseError = new Error("database unavailable");

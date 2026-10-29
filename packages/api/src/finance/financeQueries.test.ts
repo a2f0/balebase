@@ -1,11 +1,11 @@
 import { expect, it } from "bun:test";
+import { testBindings } from "../testing/bindings";
+import { toD1 } from "../testing/d1";
+import { createTestDatabase } from "../testing/database";
+import { requester } from "../testing/http";
+import { seedAccount } from "../testing/seed";
+import { testApp } from "../testing/session";
 import { finance } from "./finance";
-import { testBindings } from "./testing/bindings";
-import { toD1 } from "./testing/d1";
-import { createTestDatabase } from "./testing/database";
-import { requester } from "./testing/http";
-import { seedAccount } from "./testing/seed";
-import { testApp } from "./testing/session";
 
 function fixture() {
   const database = createTestDatabase();

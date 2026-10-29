@@ -1,5 +1,5 @@
+import type { Bindings } from "../types";
 import { auditIssueImageUploadGraceMilliseconds } from "./objectLifecycle";
-import type { Bindings } from "./types";
 
 const cleanupBatchSize = 25;
 const abandonedClaimMilliseconds = 5 * 60 * 1000;

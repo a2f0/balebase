@@ -1,4 +1,4 @@
-import { scheduleFinanceSync } from "./financeSyncJobs";
+import { scheduleFinanceSync } from "./finance/financeSyncJobs";
 import { recoverJobs } from "./jobRuns";
 import type { Bindings } from "./types";
 

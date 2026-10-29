@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { purgeDeletedObjects } from "../deletedObjectCleanup";
+import { purgeDeletedObjects } from "../library/deletedObjectCleanup";
 import {
   createFixture,
   createRequirement,

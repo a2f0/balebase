@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { PDFDocument } from "pdf-lib";
-import { purgeDeletedObjects } from "../deletedObjectCleanup";
+import { purgeDeletedObjects } from "../library/deletedObjectCleanup";
 import {
   type Contract,
   createFixture,

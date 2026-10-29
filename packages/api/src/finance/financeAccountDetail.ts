@@ -2,8 +2,8 @@ import {
   type FinanceAccountDetail,
   financeRoutes,
 } from "@balebase/validators/finance";
+import { respond } from "../shared/respond";
 import type { FinanceContext } from "./financeContext";
-import { respond } from "./shared/respond";
 
 /** How many of the newest transactions the account page lists. */
 const recentTransactionLimit = 10;

@@ -1,18 +1,18 @@
 import { objectsRoutes } from "@balebase/validators/objects";
 import { type Context, Hono } from "hono";
-import type { ApiEnv } from "./auth/authMiddleware";
-import { findLibraryFolder } from "./libraryFolders";
-import { maxFilenameBytes, normalizeFilename } from "./shared/filenames";
-import { readBody, respond } from "./shared/respond";
+import type { ApiEnv } from "../auth/authMiddleware";
+import { maxFilenameBytes, normalizeFilename } from "../shared/filenames";
+import { readBody, respond } from "../shared/respond";
 import {
   readBoundedForm,
   storedDownload,
   trackedPut,
   uploadExpired,
   uploadStillQueued,
-} from "./shared/storage";
-import type { Bindings, StoredObjectRow } from "./types";
-import { toStoredObject } from "./types";
+} from "../shared/storage";
+import type { Bindings, StoredObjectRow } from "../types";
+import { toStoredObject } from "../types";
+import { findLibraryFolder } from "./libraryFolders";
 
 const objects = new Hono<ApiEnv>();
 const maxUploadBytes = 25 * 1024 * 1024;

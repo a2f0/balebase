@@ -1,4 +1,11 @@
 import { financeRoutes } from "@balebase/validators/finance";
+import { delay, waitForRun } from "../legacyJobRun";
+import {
+  activityBatch,
+  activityStatement,
+  requestActor,
+} from "../shared/activity";
+import { readBody, respond } from "../shared/respond";
 import type { FinanceContext } from "./financeContext";
 import {
   enqueueSync,
@@ -6,13 +13,6 @@ import {
   type SyncJobRow,
   toSyncJob,
 } from "./financeSyncJobs";
-import { delay, waitForRun } from "./legacyJobRun";
-import {
-  activityBatch,
-  activityStatement,
-  requestActor,
-} from "./shared/activity";
-import { readBody, respond } from "./shared/respond";
 
 async function requestSync(context: FinanceContext) {
   return enqueueSync(

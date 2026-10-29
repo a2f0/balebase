@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import { memoryStorage, testBindings } from "../testing/bindings";
+import { toD1 } from "../testing/d1";
+import { applyMigrations, createTestDatabase } from "../testing/database";
+import { seedUser } from "../testing/seed";
+import { testApp } from "../testing/session";
 import { inbox } from "./inbox";
-import { memoryStorage, testBindings } from "./testing/bindings";
-import { toD1 } from "./testing/d1";
-import { applyMigrations, createTestDatabase } from "./testing/database";
-import { seedUser } from "./testing/seed";
-import { testApp } from "./testing/session";
 
 const organizationId = "org_owner-user";
 const otherOrganizationId = "org_other-user";

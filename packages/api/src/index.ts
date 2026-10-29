@@ -1,5 +1,5 @@
 import { app } from "./app";
-import { handleEmail } from "./email";
+import { handleEmail } from "./inbox/email";
 import { scheduleJobs } from "./jobScheduler";
 import { consumeJobs } from "./jobWorker";
 import { runScheduledMaintenance } from "./maintenance";

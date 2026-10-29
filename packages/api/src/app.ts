@@ -28,11 +28,11 @@ import { signing } from "./contracts/signing";
 import { handleCheckrWebhook } from "./employeeForms/checkrSync";
 import { employeeForms } from "./employeeForms/employeeForms";
 import { equipment } from "./equipment/equipment";
-import { finance } from "./finance";
-import { inbox } from "./inbox";
+import { finance } from "./finance/finance";
+import { inbox } from "./inbox/inbox";
 import { issues } from "./issues/issues";
-import { libraryFolders } from "./libraryFolders";
-import { objects } from "./objects";
+import { libraryFolders } from "./library/libraryFolders";
+import { objects } from "./library/objects";
 import { offline } from "./offline/offline";
 import {
   organizationGroups,

@@ -1,14 +1,14 @@
 import type { Database, SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { createFinanceRouter } from "./finance";
+import { createFinanceRouter } from "../finance/finance";
+import { libraryFolders } from "../library/libraryFolders";
+import { testBindings } from "../testing/bindings";
+import { queryHooks, toD1 } from "../testing/d1";
+import { createTestDatabase } from "../testing/database";
+import { requester } from "../testing/http";
+import { seedGroup, seedOrganization, seedUser } from "../testing/seed";
+import { testApp } from "../testing/session";
 import { inbox } from "./inbox";
-import { libraryFolders } from "./libraryFolders";
-import { testBindings } from "./testing/bindings";
-import { queryHooks, toD1 } from "./testing/d1";
-import { createTestDatabase } from "./testing/database";
-import { requester } from "./testing/http";
-import { seedGroup, seedOrganization, seedUser } from "./testing/seed";
-import { testApp } from "./testing/session";
 
 const timestamp = "2026-09-20T12:00:00.000Z";
 const rawEmail = [

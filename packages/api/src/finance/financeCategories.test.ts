@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { applyMigrations, createTestDatabase } from "./testing/database";
+import { applyMigrations, createTestDatabase } from "../testing/database";
 import {
   type Category,
   createCategory,
@@ -9,9 +9,9 @@ import {
   jsonRequest,
   seedTransactions,
   testApp,
-} from "./testing/financeFixture";
-import { seedOrganization } from "./testing/seed";
-import type { Bindings } from "./types";
+} from "../testing/financeFixture";
+import { seedOrganization } from "../testing/seed";
+import type { Bindings } from "../types";
 
 describe("expense categories", () => {
   it("manages organization categories with case-insensitive unique names", async () => {

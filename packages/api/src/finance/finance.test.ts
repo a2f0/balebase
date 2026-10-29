@@ -1,10 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import {
-  PlaidApiError,
-  type PlaidRequest,
-  type PlaidRequestBody,
-} from "./plaid";
-import {
   createCategory,
   createFixture,
   type FinanceListing,
@@ -13,8 +8,13 @@ import {
   mockPlaid,
   seedTransactions,
   testApp,
-} from "./testing/financeFixture";
-import type { Bindings } from "./types";
+} from "../testing/financeFixture";
+import type { Bindings } from "../types";
+import {
+  PlaidApiError,
+  type PlaidRequest,
+  type PlaidRequestBody,
+} from "./plaid";
 
 describe("finance", () => {
   it("filters the full history by multiple accounts and calendar year before paging", async () => {
