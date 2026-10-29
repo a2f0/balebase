@@ -4,8 +4,8 @@ import type {
   AuditTemplateScope,
 } from "@balebase/validators/audits";
 import { act } from "react";
+import { installDom } from "../testing/dom";
 import { AuditHome } from "./AuditHome";
-import { installDom } from "./testing/dom";
 
 // Mounts the real page in happy-dom so the layout switch renders and the
 // choice round-trips through the page's own storage.

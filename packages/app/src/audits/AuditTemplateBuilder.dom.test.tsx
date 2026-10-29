@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import type { AuditTemplate } from "@balebase/validators/audits";
 import { act } from "react";
-import { installDom } from "./testing/dom";
+import { installDom } from "../testing/dom";
 
 const {
   mount,

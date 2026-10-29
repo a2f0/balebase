@@ -1,7 +1,7 @@
 import { Button, Card, Field } from "@balebase/ui/react";
 import { issueImageTypes } from "@balebase/validators/issueRules";
 import { useEffect, useState } from "react";
-import { IssueForm } from "./IssueForm";
+import { IssueForm } from "./issues/IssueForm";
 import { type OfflineWorkspace, offlineImage } from "./offlineStore";
 import { createOfflineIssue } from "./offlineWork";
 import { useUnsavedChanges } from "./workspace/unsavedChanges";

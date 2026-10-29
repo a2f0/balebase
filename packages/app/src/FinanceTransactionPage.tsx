@@ -17,7 +17,7 @@ import { useCallback, useMemo, useState } from "react";
 import { ActivityFeed } from "./activity/ActivityFeed";
 import { FinanceTransactionRow } from "./FinanceTransactionHistory";
 import { FinanceTransactionSourceData } from "./FinanceTransactionSourceData";
-import { IssueList } from "./IssueList";
+import { IssueList } from "./issues/IssueList";
 import { api } from "./shared/apiClient";
 import { useAction } from "./shared/useAction";
 import { useLoad } from "./shared/useLoad";

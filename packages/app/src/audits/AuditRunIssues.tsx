@@ -25,6 +25,13 @@ import {
 } from "@balebase/validators/issueRules";
 import type { IssueInput } from "@balebase/validators/issues";
 import { useEffect, useMemo, useState } from "react";
+import { IssueFields } from "../issues/IssueForm";
+import { ApiDownload } from "../shared/ApiDownload";
+import { ApiImage } from "../shared/ApiImage";
+import { api } from "../shared/apiClient";
+import { errorMessage } from "../shared/errors";
+import { formatDateTime, formatLabel } from "../shared/labels";
+import { useAction } from "../shared/useAction";
 import {
   appendIssueImageSelection,
   createIssueWithImages,
@@ -32,13 +39,6 @@ import {
   uploadIssueImagesSequentially,
 } from "./auditIssueImages";
 import { auditItems } from "./auditProgress";
-import { IssueFields } from "./IssueForm";
-import { ApiDownload } from "./shared/ApiDownload";
-import { ApiImage } from "./shared/ApiImage";
-import { api } from "./shared/apiClient";
-import { errorMessage } from "./shared/errors";
-import { formatDateTime, formatLabel } from "./shared/labels";
-import { useAction } from "./shared/useAction";
 
 const priorityTones: Record<string, BadgeTone> = {
   critical: "danger",

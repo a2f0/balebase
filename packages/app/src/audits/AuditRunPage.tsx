@@ -20,6 +20,11 @@ import {
   useRef,
   useState,
 } from "react";
+import { ActivityFeed } from "../activity/ActivityFeed";
+import { api } from "../shared/apiClient";
+import { errorMessage } from "../shared/errors";
+import { countLabel, formatDate } from "../shared/labels";
+import { useAction } from "../shared/useAction";
 import { AuditChecklist } from "./AuditChecklist";
 import {
   confirmDiscard,
@@ -28,12 +33,7 @@ import {
   RunOverview,
 } from "./AuditRunHeader";
 import { AuditIssuePanel } from "./AuditRunIssues";
-import { ActivityFeed } from "./activity/ActivityFeed";
 import { progressFor } from "./auditProgress";
-import { api } from "./shared/apiClient";
-import { errorMessage } from "./shared/errors";
-import { countLabel, formatDate } from "./shared/labels";
-import { useAction } from "./shared/useAction";
 
 interface AuditRunPageProps {
   id: string;

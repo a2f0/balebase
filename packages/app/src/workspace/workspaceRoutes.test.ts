@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { isValidElement, type ReactElement } from "react";
-import { Audits } from "../Audits";
+import { Audits } from "../audits/Audits";
 import { Finance } from "../Finance";
 import { FinanceAccountPage } from "../FinanceAccountPage";
 import { FinanceConnectionPage } from "../FinanceConnectionPage";
 import { FinanceTransactionPage } from "../FinanceTransactionPage";
-import { Issues } from "../Issues";
+import { Issues } from "../issues/Issues";
 import { MyDocuments } from "../MyDocuments";
 import { workspaceRoute } from "./workspaceRoutes";
 

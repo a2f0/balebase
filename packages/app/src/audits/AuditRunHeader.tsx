@@ -10,7 +10,7 @@ import {
   PageHeader,
 } from "@balebase/ui/react";
 import type { AuditRun } from "@balebase/validators/audits";
-import { formatDateTime, formatLabel } from "./shared/labels";
+import { formatDateTime, formatLabel } from "../shared/labels";
 
 // The audit run page's header, status line, and loading state.
 

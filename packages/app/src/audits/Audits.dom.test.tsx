@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { AuditDetail, AuditTemplate } from "@balebase/validators/audits";
+import { installDom } from "../testing/dom";
 import { Audits } from "./Audits";
-import { installDom } from "./testing/dom";
 
 const { render, respond, settle } = installDom({
   url: "http://localhost:5173/audits",

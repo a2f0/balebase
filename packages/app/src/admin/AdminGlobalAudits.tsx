@@ -12,8 +12,8 @@ import {
 } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
 import { useCallback } from "react";
-import { TemplateStats, templateStatusTone } from "../AuditHome";
-import { AuditTemplateBuilder } from "../AuditTemplateBuilder";
+import { TemplateStats, templateStatusTone } from "../audits/AuditHome";
+import { AuditTemplateBuilder } from "../audits/AuditTemplateBuilder";
 import { AppButtonLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
 import { countLabel, formatLabel } from "../shared/labels";

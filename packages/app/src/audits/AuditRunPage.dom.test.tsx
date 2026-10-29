@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { AuditDetail } from "@balebase/validators/audits";
+import { installDom } from "../testing/dom";
 import { AuditRunPage } from "./AuditRunPage";
-import { installDom } from "./testing/dom";
 
 const { button, click, mount, respond, settle } = installDom({
   url: "http://localhost:5173/audits/run-1",

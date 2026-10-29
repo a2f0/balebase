@@ -13,19 +13,19 @@ import {
 } from "@balebase/ui/react";
 import type { Issue, IssueInput } from "@balebase/validators/issues";
 import { useCallback, useState } from "react";
-import { ActivityFeed } from "./activity/ActivityFeed";
-import { IssueForm } from "./IssueForm";
-import { IssueImages } from "./IssueImages";
-import { IssueList } from "./IssueList";
-import { api } from "./shared/apiClient";
-import { errorMessage } from "./shared/errors";
-import { useLoad } from "./shared/useLoad";
+import { ActivityFeed } from "../activity/ActivityFeed";
+import { api } from "../shared/apiClient";
+import { errorMessage } from "../shared/errors";
+import { useLoad } from "../shared/useLoad";
 import {
   auditRunPath,
   financeTransactionPath,
   issuePath,
   recordIdForPath,
-} from "./workspace/workspacePaths";
+} from "../workspace/workspacePaths";
+import { IssueForm } from "./IssueForm";
+import { IssueImages } from "./IssueImages";
+import { IssueList } from "./IssueList";
 
 export function Issues({
   pathname,
