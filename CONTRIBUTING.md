@@ -3,11 +3,10 @@
 Start with the [quick start](README.md#quick-start). Run commands from the
 repository root unless a command specifies `--cwd`.
 
-`.mise.toml` pins Bun and Ruby to the CI versions. With mise installed, run
-`mise install` and activate mise in your shell. For one command, use
-`mise exec -- bun run check:fast`. In agent shells, prepend the pinned binary
-directories under `~/.local/share/mise/installs` to PATH without running
-`mise trust`.
+`.mise.toml` pins Bun and Ruby to the CI versions. To run one command without
+activating mise, use `mise exec -- bun run check:fast`. In agent shells,
+prepend the pinned binary directories under `~/.local/share/mise/installs` to
+PATH without running `mise trust`.
 
 Bun manages dependencies and runs all JavaScript tooling, including commitlint,
 lint-staged, and Wrangler. Commands use `--bun` to keep that runtime even when
@@ -153,9 +152,6 @@ zod-free `packages/validators/src/issueRules.ts`, which the API and the app's
 online and offline paths all import; every app issue form renders
 `IssueFields` from `IssueForm.tsx`.
 
-The logo and every image generated from it are described in the
-[UI package's images section](packages/ui/README.md#images).
-
 `bun run mobile:sync` writes the native images into both checked-in Capacitor
 projects and restores the Gradle wrapper JAR from the pinned CLI template.
 Commit native source and configuration; generated web bundles, images, Android plugin
@@ -163,9 +159,9 @@ paths, signing material, and build products remain ignored. After changing Capac
 dependencies, sync and commit the updated iOS Swift package manifest, which pins
 the plugin paths resolved by Bun. CI builds and syncs
 the mobile bundle; native SDK builds are described in the operations guide.
-The Fastlane lanes need the pinned Ruby (`mise install`) and
-`bundle install` in `packages/app-capacitor`; `check` runs RuboCop and `test`
-runs the lane tests through that bundle.
+The Fastlane lanes need the
+[shell's Ruby bundle](packages/app-capacitor/README.md#set-up); `check` runs
+RuboCop and `test` runs the lane tests through it.
 
 ## Check a change
 
@@ -215,14 +211,10 @@ The full check needs ShellCheck, Terraform, TFLint, and the Ruby bundle.
 Browser tests need Chrome or Chromium; set `CHROME_PATH` to its executable when
 needed. Puppeteer suites launch it with `chromeLaunchOptions` from
 `scripts/testing/chrome.ts`, which gives each browser a disposable profile.
-Git's pre-commit hook fixes staged formatting; pre-push runs `check` and
-`test`.
-
-Git exports `GIT_DIR` and similar variables to hooks, and a test fixture that
-inherits them runs its Git commands against the checkout under test. Pre-push
-clears them before its suites, and repository tests that create a Git fixture
-pass `gitFixtureEnv()` from `scripts/testing/gitFixture.ts` to its Git
-commands.
+Tests that create a Git fixture pass `gitFixtureEnv()` from
+`scripts/testing/gitFixture.ts` to its Git commands: hooks export `GIT_DIR` and
+similar variables, and a fixture that inherits them runs against the real
+checkout.
 
 The web shell's service worker update suite uses Playwright's Chromium, Firefox,
 and WebKit engines. Run `bun run --cwd packages/app-web browsers:install` once
@@ -232,8 +224,7 @@ The `test:deploy` and `test:env` steps inside `bun run test` exercise local
 fixtures and command stubs. They do not deploy, contact a live service, or use
 real cloud credentials. Live verification, such as
 `bun run deploy:staging:verify`, and Scope assessments are separate opt-in
-commands. The offline `test:scope` tooling tests run in `verify`, and so in CI,
-rather than in every `bun run test`.
+commands.
 
 ## Keep changes readable
 
@@ -266,12 +257,9 @@ rather than in every `bun run test`.
 
 ## Scope evaluations
 
-Use the [Scope guide](docs/scope.md) for the local CLI/container setup,
-Claude worker, calibrated Codex judge, and versioned agent-readiness tasks.
-The assessment measures repository discoverability against committed snapshots;
-its inspection tasks do not establish clean-bootstrap or implementation success.
-See the [assessment summary](docs/agent-readiness.md) for the last measured
-result.
+The [Scope guide](docs/scope.md) sets up and runs the local agent-readiness
+assessment, and the [assessment summary](docs/agent-readiness.md) records the
+last measured result.
 
 ## Editor setup
 
@@ -289,22 +277,17 @@ and signature policy in `agent-tool.json` and `commitlint.config.mts`. Run
 `bun run hooks:install` after cloning, after hook changes land, and after a
 merge returns the checkout to `main`; `bun run hooks:check` reports drift.
 
-For agent-assisted shipping, invoke the `ship-pr` skill. The skills in
-`.claude/skills` and `.agents/skills` are installed from the pinned
-`@a2f0/agent-tool` package; do not edit them. `agent-tool.json` also holds the
-title policy, the required CI check, and the versioned packages; a change to
-one of those packages ships with a patch bump from `agent-tool versions prepare`.
-Pushes run the normal hooks with your usual environment and credentials, so
-review script and dependency changes before pushing them.
+For agent-assisted shipping, invoke the `ship-pr` skill, which applies the
+title, required-check, and version policy in `agent-tool.json`. Pushes run the
+normal hooks with your usual environment and credentials, so review script and
+dependency changes before pushing them.
 
-After changing the `@a2f0/agent-tool` pin, run `bun run agents:sync` and commit
-the lockfile, skills, and `.agent-tool-skills.json` together. CI runs
-`bun run agents:check`, so drifted skills fail the required check.
+The skills in `.claude/skills` and `.agents/skills` are installed from the
+pinned `@a2f0/agent-tool` package; do not edit them. After changing the pin,
+run `bun run agents:sync` and commit the lockfile, skills, and
+`.agent-tool-skills.json` together; `check` runs `bun run agents:check`, so
+drifted skills fail CI.
 
 Use [the dependency upgrade workflow](docs/dependency-upgrades.md) when changing
-tool or package versions. That guide holds reusable upgrade procedures, active
-constraints, override rationale, and removal conditions; keep README to purpose,
-setup, and safe usage. Put each upgrade's version inventory, migrations,
-audit, test, and preview results, and skipped groups in its PR, not in an
-accumulating documentation journal. Attribute historical findings to their PR
-and recheck them before claiming current status.
+tool or package versions; it says what belongs in that guide and what belongs
+in the upgrade's PR.
