@@ -1,13 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { purgeStripeWebhookReceipts } from "./billingWebhook";
 import {
   createFixture,
   organizationId,
   sendWebhook,
   subscriptionEvent,
   webhookSignature,
-} from "./testing/billingFixture";
-import { withFetch } from "./testing/http";
+} from "../testing/billingFixture";
+import { withFetch } from "../testing/http";
+import { purgeStripeWebhookReceipts } from "./billingWebhook";
 
 describe("billing webhook", () => {
   it("uses signed, idempotent, ordered webhooks as the entitlement source", async () => {

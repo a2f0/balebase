@@ -12,8 +12,8 @@ import {
   organization,
   twoFactor,
 } from "better-auth/plugins";
-import { organizationPlanLimits } from "../billingEntitlements";
-import { syncOrganizationSeats } from "../billingSeats";
+import { organizationPlanLimits } from "../billing/billingEntitlements";
+import { syncOrganizationSeats } from "../billing/billingSeats";
 import {
   assignAcceptedInvitationRequirements,
   assignRenewedInvitationRequirements,

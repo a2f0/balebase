@@ -6,9 +6,9 @@ import {
   proPriceId,
   sendWebhook,
   subscriptionEvent,
-} from "./testing/billingFixture";
-import { type FetchCall, withFetch } from "./testing/http";
-import { insertBilling } from "./testing/seed";
+} from "../testing/billingFixture";
+import { type FetchCall, withFetch } from "../testing/http";
+import { insertBilling } from "../testing/seed";
 
 describe("billing checkout", () => {
   it("reports Free entitlements and creates per-seat Checkout", async () => {

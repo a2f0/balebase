@@ -1,4 +1,4 @@
-import type { Bindings } from "./types";
+import type { Bindings } from "../types";
 
 const stripeApiVersion = "2026-06-24.dahlia";
 const webhookToleranceSeconds = 5 * 60;

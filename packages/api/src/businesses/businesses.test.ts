@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
+import { testBindings } from "../testing/bindings";
+import { toD1 } from "../testing/d1";
+import { applyMigrations, createTestDatabase } from "../testing/database";
+import { seedAccount, seedMember, seedUser } from "../testing/seed";
+import { testApp } from "../testing/session";
+import type { Bindings } from "../types";
 import { businesses } from "./businesses";
-import { testBindings } from "./testing/bindings";
-import { toD1 } from "./testing/d1";
-import { applyMigrations, createTestDatabase } from "./testing/database";
-import { seedAccount, seedMember, seedUser } from "./testing/seed";
-import { testApp } from "./testing/session";
-import type { Bindings } from "./types";
 
 interface BusinessMutationBody {
   city?: string | null;

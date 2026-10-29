@@ -1,3 +1,4 @@
+import type { Bindings } from "../types";
 import {
   attachCheckoutSessionToClaim,
   checkoutDeletionInProgress,
@@ -25,7 +26,6 @@ import {
   type StripeExpandable,
   type StripeSubscription,
 } from "./stripePayload";
-import type { Bindings } from "./types";
 
 export const terminalSubscriptionStatuses = new Set([
   "canceled",

@@ -1,6 +1,6 @@
+import type { Bindings } from "../types";
 import { type BillingRow, findBilling } from "./billingRecords";
 import type { StripeSubscription } from "./stripePayload";
-import type { Bindings } from "./types";
 
 export const freeFormTemplateLimit = 5;
 export const freeRetentionDays = 30;

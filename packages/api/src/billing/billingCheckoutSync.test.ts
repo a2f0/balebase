@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { reconcilePendingCheckoutEntitlements } from "./billingCheckoutSync";
 import {
   createFixture,
   insertStalePendingCheckout,
@@ -7,9 +6,10 @@ import {
   reserveCheckout,
   sendWebhook,
   subscriptionEvent,
-} from "./testing/billingFixture";
-import { type FetchCall, withFetch } from "./testing/http";
-import { insertBilling, seedOrganization } from "./testing/seed";
+} from "../testing/billingFixture";
+import { type FetchCall, withFetch } from "../testing/http";
+import { insertBilling, seedOrganization } from "../testing/seed";
+import { reconcilePendingCheckoutEntitlements } from "./billingCheckoutSync";
 
 describe("billing checkout sync", () => {
   it("requires billing access to confirm a Checkout session", async () => {

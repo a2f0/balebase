@@ -1,3 +1,4 @@
+import type { Bindings } from "../types";
 import { paidStatusList } from "./billingEntitlements";
 import {
   type BillingRow,
@@ -10,7 +11,6 @@ import {
   parseStripeCheckoutSession,
   type StripeCheckoutSession,
 } from "./stripePayload";
-import type { Bindings } from "./types";
 
 const checkoutDurationSeconds = 35 * 60;
 

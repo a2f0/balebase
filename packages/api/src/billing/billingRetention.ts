@@ -1,10 +1,10 @@
+import type { Bindings } from "../types";
 import { reconcilePendingCheckoutEntitlements } from "./billingCheckoutSync";
 import {
   freeRetentionDays,
   lapsedRetentionGraceDays,
   paidStatusList,
 } from "./billingEntitlements";
-import type { Bindings } from "./types";
 
 const retentionBatchSize = 100;
 const retentionBatchesPerInvocation = 5;

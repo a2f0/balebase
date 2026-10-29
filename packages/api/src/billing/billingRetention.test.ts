@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { purgeExpiredFreeAuditRuns } from "./billingRetention";
 import {
   createFixture,
   insertAudit,
@@ -8,9 +7,10 @@ import {
   proPriceId,
   sendWebhook,
   subscriptionEvent,
-} from "./testing/billingFixture";
-import { type FetchCall, withFetch } from "./testing/http";
-import { insertBilling } from "./testing/seed";
+} from "../testing/billingFixture";
+import { type FetchCall, withFetch } from "../testing/http";
+import { insertBilling } from "../testing/seed";
+import { purgeExpiredFreeAuditRuns } from "./billingRetention";
 
 describe("billing retention", () => {
   it("purges old Free audit history without touching Pro history", async () => {

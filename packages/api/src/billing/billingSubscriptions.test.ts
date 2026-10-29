@@ -1,5 +1,4 @@
 import { describe, expect, it, setSystemTime } from "bun:test";
-import { purgeExpiredFreeAuditRuns } from "./billingRetention";
 import {
   createFixture,
   insertAudit,
@@ -8,10 +7,11 @@ import {
   reserveCheckout,
   sendWebhook,
   subscriptionEvent,
-} from "./testing/billingFixture";
-import { applyMigrations, createTestDatabase } from "./testing/database";
-import { withFetch } from "./testing/http";
-import { insertBilling, seedAccount } from "./testing/seed";
+} from "../testing/billingFixture";
+import { applyMigrations, createTestDatabase } from "../testing/database";
+import { withFetch } from "../testing/http";
+import { insertBilling, seedAccount } from "../testing/seed";
+import { purgeExpiredFreeAuditRuns } from "./billingRetention";
 
 describe("billing subscriptions", () => {
   it("serializes concurrent same-second subscription refreshes", async () => {

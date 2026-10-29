@@ -8,7 +8,7 @@ import type { ApiEnv } from "../auth/authMiddleware";
 import {
   cancelOrganizationSubscription,
   recoverCheckoutAfterFailedDeletion,
-} from "../billingDeletion";
+} from "../billing/billingDeletion";
 import {
   markOrganizationForDeletion,
   restoreOrganization,

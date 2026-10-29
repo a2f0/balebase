@@ -41,7 +41,7 @@ import type { ApiEnv } from "./auth/authMiddleware";
 import {
   freeFormTemplateLimit,
   organizationPlanLimits,
-} from "./billingEntitlements";
+} from "./billing/billingEntitlements";
 import {
   type IssueRow,
   issueInsert,

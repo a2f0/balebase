@@ -1,3 +1,4 @@
+import type { Bindings } from "../types";
 import {
   isPaidBilling,
   type ProPriceEnvironment,
@@ -6,7 +7,6 @@ import {
 import { type BillingRow, countMembers, findBilling } from "./billingRecords";
 import { StripeApiError, stripeGet, stripePost } from "./stripe";
 import { parseStripeSeatItemResponse } from "./stripePayload";
-import type { Bindings } from "./types";
 
 const subscriptionSeatReconciliationLimit = 25;
 const subscriptionSyncClaimSeconds = 2 * 60;

@@ -1,22 +1,22 @@
 import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import {
-  reconcileSubscriptionSeats,
-  syncOrganizationSeats,
-} from "./billingSeats";
-import {
   createFixture,
   organizationId,
   proPriceId,
-} from "./testing/billingFixture";
-import { queryHooks, toD1 } from "./testing/d1";
-import { type FetchCall, withFetch } from "./testing/http";
+} from "../testing/billingFixture";
+import { queryHooks, toD1 } from "../testing/d1";
+import { type FetchCall, withFetch } from "../testing/http";
 import {
   insertBilling,
   seedMember,
   seedOrganization,
   seedUser,
-} from "./testing/seed";
+} from "../testing/seed";
+import {
+  reconcileSubscriptionSeats,
+  syncOrganizationSeats,
+} from "./billingSeats";
 
 describe("billing seats", () => {
   it("synchronizes Stripe quantity to active organization members", async () => {

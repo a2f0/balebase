@@ -1,7 +1,7 @@
 import { productName } from "@balebase/ui/brand";
 import type { Context, Next } from "hono";
 import { createMiddleware } from "hono/factory";
-import { organizationUserHasSeat } from "../billingEntitlements";
+import { organizationUserHasSeat } from "../billing/billingEntitlements";
 import { isOrganizationOwner } from "../organizations/organizationMembers";
 import { isRecord } from "../shared/jsonInput";
 import type { Bindings } from "../types";

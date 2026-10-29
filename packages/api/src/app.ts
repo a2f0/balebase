@@ -19,14 +19,14 @@ import {
   requireRole,
 } from "./auth/authMiddleware";
 import { withNativeOrigin } from "./auth/nativeRequest";
-import { billing } from "./billing";
-import { syncOrganizationSeats } from "./billingSeats";
-import { handleStripeWebhook } from "./billingWebhook";
-import { businesses } from "./businesses";
+import { billing } from "./billing/billing";
+import { syncOrganizationSeats } from "./billing/billingSeats";
+import { handleStripeWebhook } from "./billing/billingWebhook";
+import { businesses } from "./businesses/businesses";
 import { handleCheckrWebhook } from "./checkrSync";
 import { contracts } from "./contracts";
 import { employeeForms } from "./employeeForms";
-import { equipment } from "./equipment";
+import { equipment } from "./equipment/equipment";
 import { finance } from "./finance";
 import { inbox } from "./inbox";
 import { issues } from "./issues";

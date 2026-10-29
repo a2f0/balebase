@@ -1,10 +1,11 @@
 import type { Context } from "hono";
-import type { ApiEnv } from "./auth/authMiddleware";
+import type { ApiEnv } from "../auth/authMiddleware";
+import { readBoundedRequest } from "../shared/storage";
+import type { Bindings } from "../types";
 import {
   refreshSubscription,
   type SubscriptionEnvironment,
 } from "./billingSubscriptions";
-import { readBoundedRequest } from "./shared/storage";
 import { StripeConfigurationError, verifyStripeWebhook } from "./stripe";
 import {
   optionalExpandableId,
@@ -14,7 +15,6 @@ import {
   stripeObjectId,
   validEvent,
 } from "./stripePayload";
-import type { Bindings } from "./types";
 
 const maxStripeWebhookBytes = 256 * 1024;
 const webhookClaimTimeoutMilliseconds = 5 * 60 * 1000;

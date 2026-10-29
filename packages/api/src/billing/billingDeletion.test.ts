@@ -1,13 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { cancelOrganizationSubscription } from "./billingDeletion";
 import {
   createFixture,
   organizationId,
   proPriceId,
   subscriptionEvent,
-} from "./testing/billingFixture";
-import { type FetchCall, withFetch } from "./testing/http";
-import { insertBilling } from "./testing/seed";
+} from "../testing/billingFixture";
+import { type FetchCall, withFetch } from "../testing/http";
+import { insertBilling } from "../testing/seed";
+import { cancelOrganizationSubscription } from "./billingDeletion";
 
 describe("billing deletion", () => {
   it("invalidates an in-flight Checkout before organization deletion", async () => {

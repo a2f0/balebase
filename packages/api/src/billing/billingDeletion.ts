@@ -1,3 +1,4 @@
+import type { Bindings } from "../types";
 import { expireOrReloadCheckoutSession } from "./billingCheckout";
 import {
   type BillingRow,
@@ -16,7 +17,6 @@ import {
   optionalExpandableId,
   parseStripeCheckoutSession,
 } from "./stripePayload";
-import type { Bindings } from "./types";
 
 const checkoutDeletionLeaseSeconds = 5 * 60;
 
