@@ -115,9 +115,17 @@ both themes, so `.onDark` regions need no theme-specific styles.
   `ToastProvider` so notifications share a fixed bottom viewport, stack without
   overlapping, and stay visible while scrolling. `Toast` also works alone.
 - `EmptyState` (`icon`, `title`, `actions`, `compact`, `plain`) and `LoadingState`.
-- `Field` wraps a control with its label, hint, and an `optional` marker.
-- `Icon` renders a name from `@balebase/ui/icons`; `Avatar` and `Logo`
-  render identity.
+- `Field` wraps a control with its label, hint, and an `optional` marker;
+  `PasswordField` adds a show/hide toggle.
+- `Select` is the styled dropdown. It forwards native select props, including
+  refs, validation, and change events, so native keyboard and mobile pickers
+  still work.
+- `confirmDialog` and `promptDialog` ask in the app's own dialog, which
+  `DialogHost`, mounted once at the root, shows; `dismissDialogs` answers
+  every open one with no when the page that asked is gone.
+- `ContextMenu` attaches a menu of actions to an existing element.
+- `Icon` renders a name from `@balebase/ui/icons`; `Avatar`, `BrandMark`, and
+  `Logo` render identity.
 
 ## Images
 
