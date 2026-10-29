@@ -5,7 +5,10 @@ import { fileURLToPath } from "node:url";
 import type { Business } from "@balebase/validators/businesses";
 import { type Browser, launch } from "puppeteer-core";
 import { renderToStaticMarkup } from "react-dom/server";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 import { BusinessListView } from "../src/Businesses";
 import {
   type BusinessListState,
@@ -114,6 +117,6 @@ it("business notification layout stays at the bottom without moving content", as
       });
     }
   } finally {
-    await browser?.close();
+    await closeChrome(browser);
   }
 }, 30_000);

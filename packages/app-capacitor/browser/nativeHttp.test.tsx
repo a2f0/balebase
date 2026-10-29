@@ -4,7 +4,10 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "puppeteer-core";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 
 it("preserves native CSRF markers through Capacitor's real browser fetch patch", async () => {
   const browser = await launch(chromeLaunchOptions());
@@ -223,6 +226,6 @@ it("preserves native CSRF markers through Capacitor's real browser fetch patch",
       String(writes[1]?.options.path).replace(/\/[^/]+$/, ""),
     );
   } finally {
-    await browser.close();
+    await closeChrome(browser);
   }
 }, 15_000);

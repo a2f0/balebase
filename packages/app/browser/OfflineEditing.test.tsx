@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Browser, launch, type Page } from "puppeteer-core";
 import { build } from "vite";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 import type {} from "./offlineAppFixture";
 
 async function withOfflineBrowser(
@@ -54,7 +57,7 @@ async function withOfflineBrowser(
     await page.waitForFunction(() => Boolean(window.offlineTest));
     await run(page, browser, directory);
   } finally {
-    await browser?.close();
+    await closeChrome(browser);
     await server.stop(true);
     rmSync(directory, { recursive: true, force: true });
   }

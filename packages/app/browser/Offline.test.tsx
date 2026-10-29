@@ -1,6 +1,9 @@
 import { expect, it } from "bun:test";
 import { type Browser, launch } from "puppeteer-core";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 import type {} from "./offlineFixture";
 
 it("persists audits and photos across reload, retries in dependency order, and isolates tabs and accounts", async () => {
@@ -155,7 +158,7 @@ it("persists audits and photos across reload, retries in dependency order, and i
       ),
     ).toBe(true);
   } finally {
-    await browser?.close();
+    await closeChrome(browser);
     await server.stop(true);
   }
 }, 30_000);
