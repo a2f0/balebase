@@ -3,7 +3,7 @@ import {
   businessesRoutes,
 } from "@balebase/validators/businesses";
 import { type Context, Hono } from "hono";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import {
   canManage,
   requireManager,

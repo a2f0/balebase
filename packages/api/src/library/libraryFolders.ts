@@ -4,7 +4,7 @@ import {
 } from "@balebase/validators/libraryFolders";
 import { libraryFolderNameMaxLength } from "@balebase/validators/rules";
 import { type Context, Hono } from "hono";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import { listLinkedEmails, toLinkedEmail } from "../inbox/inboundEmailLinks";
 import { readBody, respond } from "../shared/respond";
 

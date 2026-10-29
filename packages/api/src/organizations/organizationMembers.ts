@@ -1,7 +1,7 @@
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 
 interface OrganizationMemberRow {
   created_at: string;

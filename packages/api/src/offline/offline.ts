@@ -10,7 +10,7 @@ import {
   templateSelect,
   toTemplate,
 } from "../audits/auditTemplates";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import type { IssueContext } from "../issues/issueRecords";
 import { listMemberDirectory } from "../organizations/organizationMembers";
 import { activityBatch } from "../shared/activity";

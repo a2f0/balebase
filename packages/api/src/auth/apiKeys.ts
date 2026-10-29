@@ -9,19 +9,8 @@ import {
   requireManager,
 } from "../organizations/organizationMembers";
 import { readBody, respond } from "../shared/respond";
+import type { ApiEnv, ApiKeyChannel, ApiKeyPrincipal } from "./apiEnv";
 import type { AuthSession } from "./auth";
-import type { ApiEnv } from "./authMiddleware";
-
-/** Whether an API-key request came from an MCP tool or straight to REST. */
-export type ApiKeyChannel = "mcp" | "rest";
-
-/** The key behind an API-key request, set beside the creator's session. */
-export interface ApiKeyPrincipal {
-  access: ApiKeyAccess;
-  channel: ApiKeyChannel;
-  id: string;
-  organizationId: string;
-}
 
 type ApiKeysContext = Context<ApiEnv>;
 

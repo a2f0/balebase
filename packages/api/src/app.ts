@@ -7,10 +7,10 @@ import { adminJobs } from "./admin/adminJobs";
 import { adminOrganizations } from "./admin/adminOrganizations";
 import { adminUsers } from "./admin/adminUsers";
 import { audits } from "./audits/audits";
+import type { ApiEnv } from "./auth/apiEnv";
 import { apiKeys, mcpToolRequest } from "./auth/apiKeys";
 import { createAuth } from "./auth/auth";
 import {
-  type ApiEnv,
   requireApiKey,
   requireAuth,
   requireBillingOrganization,

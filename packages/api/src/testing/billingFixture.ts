@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
-import type { AuthVariables } from "../auth/authMiddleware";
+import type { AuthVariables } from "../auth/apiEnv";
 import { billing } from "../billing/billing";
 import { handleStripeWebhook } from "../billing/billingWebhook";
 import type { Bindings } from "../types";

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import { contentDisposition, downloadResponse } from "../shared/storage";
 import { findAuditIssueImage } from "./auditIssueImageRecords";
 import { uploadAuditIssueImage } from "./auditIssueImageUploads";

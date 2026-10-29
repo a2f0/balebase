@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { expect } from "bun:test";
 import { Hono } from "hono";
-import type { AuthVariables } from "../auth/authMiddleware";
+import type { AuthVariables } from "../auth/apiEnv";
 import { handleCheckrWebhook } from "../employeeForms/checkrSync";
 import { employeeForms } from "../employeeForms/employeeForms";
 import {

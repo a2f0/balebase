@@ -9,7 +9,7 @@ import {
 } from "@modelcontextprotocol/server";
 import type { Context } from "hono";
 import { version } from "../../package.json";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import { auditTools } from "./mcpAuditTools";
 import { contractTools } from "./mcpContractTools";
 import { financeTools } from "./mcpFinanceTools";

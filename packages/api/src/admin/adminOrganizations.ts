@@ -4,7 +4,7 @@ import {
   adminOrganizationsRoutes,
 } from "@balebase/validators/adminOrganizations";
 import { Hono } from "hono";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import {
   cancelOrganizationSubscription,
   recoverCheckoutAfterFailedDeletion,

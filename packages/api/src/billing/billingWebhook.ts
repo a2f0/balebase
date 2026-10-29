@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import type { ApiEnv } from "../auth/authMiddleware";
+import type { ApiEnv } from "../auth/apiEnv";
 import { readBoundedRequest } from "../shared/storage";
 import type { Bindings } from "../types";
 import {
