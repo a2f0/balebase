@@ -23,6 +23,11 @@ export interface McpTool {
   omit?: string[];
   /** Reaches people or services outside Balebase, such as email or Checkr. */
   openWorld?: boolean;
+  /**
+   * Optional route fields a model must send anyway, such as the version that
+   * keeps a save from overwriting newer edits.
+   */
+  require?: string[];
   route: Route;
   title: string;
   /** Trims a large REST response to what a model needs. */
@@ -74,6 +79,11 @@ export function toolInput(tool: McpTool): ToolInput {
     }
     properties[name] = schema;
   }
+  for (const name of tool.require ?? []) {
+    if (!(name in properties)) {
+      throw new Error(`${tool.name} cannot require missing ${name}.`);
+    }
+  }
   const schema = {
     additionalProperties: false,
     properties,
@@ -81,9 +91,20 @@ export function toolInput(tool: McpTool): ToolInput {
       ...params,
       ...(queryFields.required ?? []),
       ...(bodyFields.required ?? []),
+      ...(tool.require ?? []),
     ],
     type: "object",
   };
+  describeArguments(tool, schema);
+  return {
+    ...(body ? { body: Object.keys(bodyFields.properties ?? {}) } : {}),
+    params,
+    query: Object.keys(queryFields.properties ?? {}),
+    schema: schema as JsonSchemaType,
+  };
+}
+
+function describeArguments(tool: McpTool, schema: SchemaNode) {
   for (const [name, description] of Object.entries(tool.descriptions ?? {})) {
     const fields = fieldsAt(schema, name.split("."));
     if (fields.length === 0) {
@@ -91,12 +112,6 @@ export function toolInput(tool: McpTool): ToolInput {
     }
     for (const field of fields) field.description = description;
   }
-  return {
-    ...(body ? { body: Object.keys(bodyFields.properties ?? {}) } : {}),
-    params,
-    query: Object.keys(queryFields.properties ?? {}),
-    schema: schema as JsonSchemaType,
-  };
 }
 
 /** A contract schema's fields as clients send them, less `omitted`. */

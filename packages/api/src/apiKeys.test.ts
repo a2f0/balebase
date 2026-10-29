@@ -1108,6 +1108,69 @@ describe("MCP tool catalog", () => {
     }
   });
 
+  it("requires only optional route fields it offers", () => {
+    for (const tool of mcpTools) {
+      const fields = [tool.route.query, tool.route.body].flatMap((schema) =>
+        schema instanceof z.ZodType
+          ? [z.toJSONSchema(schema, { io: "input" })]
+          : [],
+      );
+      for (const name of tool.require ?? []) {
+        expect({
+          offered: fields.some((field) => name in (field.properties ?? {})),
+          required: fields.some((field) => field.required?.includes(name)),
+          tool: `${tool.name}.${name}`,
+        }).toEqual({
+          offered: true,
+          required: false,
+          tool: `${tool.name}.${name}`,
+        });
+      }
+    }
+  });
+
+  it("saves an audit form only from the version a model last read", async () => {
+    const fixture = await createFixture();
+    const { token } = await fixture.createKey("write");
+    const created = await fixture.withKey<{
+      template: { id: string; version: number };
+    }>(token, "POST", "/api/audits/templates", { name: "Key form" });
+    const { id, version } = created.body.template;
+    const definition = {
+      sections: [
+        {
+          id: "section",
+          items: [
+            {
+              id: "check",
+              prompt: "Check",
+              required: true,
+              responseType: "check",
+            },
+          ],
+          title: "Checks",
+        },
+      ],
+      version: 1,
+    };
+    const save = (args: Record<string, unknown>) =>
+      fixture.callTool<{ content: Array<{ text: string }>; isError?: boolean }>(
+        token,
+        "save_audit_template",
+        { definition, id, name: "Key form", ...args },
+      );
+    const unversioned = await save({});
+    expect(unversioned.isError).toBe(true);
+    expect(unversioned.content[0]?.text).toContain("expectedCurrentVersion");
+
+    expect((await save({ expectedCurrentVersion: version })).isError).toBe(
+      undefined,
+    );
+    const stale = await save({ expectedCurrentVersion: version });
+    expect(stale.isError).toBe(true);
+    expect(stale.content[0]?.text).toContain("newer version");
+  });
+
   it("only offers routes the key's access level can call", () => {
     for (const tool of mcpTools) {
       const path = tool.route.path.replace(/:\w+/g, "id");
@@ -1145,6 +1208,7 @@ function routeArguments(tool: McpTool) {
       ...fields
         .flatMap((field) => field.required ?? [])
         .filter((name) => !omitted.has(name)),
+      ...(tool.require ?? []),
     ],
     type: "object",
   };
