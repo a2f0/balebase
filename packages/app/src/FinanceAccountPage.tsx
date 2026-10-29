@@ -28,7 +28,7 @@ import { useLoad } from "./shared/useLoad";
 import {
   financeConnectionPath,
   financeTransactionPath,
-} from "./workspacePaths";
+} from "./workspace/workspacePaths";
 
 export function FinanceAccountPage({
   id,

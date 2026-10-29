@@ -1,7 +1,7 @@
 import { AuditHome } from "./AuditHome";
 import { AuditRunPage } from "./AuditRunPage";
 import { AuditTemplateBuilder } from "./AuditTemplateBuilder";
-import { recordIdForPath } from "./workspacePaths";
+import { recordIdForPath } from "./workspace/workspacePaths";
 
 interface AuditsProps {
   onNavigate: (pathname: string) => void;

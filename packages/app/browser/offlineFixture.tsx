@@ -2,7 +2,6 @@ import { DialogHost } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { useWorkspaceNavigation } from "../src/navigationGuard";
 import { OfflineWorkspacePage } from "../src/OfflineWorkspacePage";
 import {
   activateOfflineWorkspace,
@@ -22,6 +21,7 @@ import {
   startOfflineAudit,
 } from "../src/offlineWork";
 import { useOfflineWorkspace } from "../src/useOfflineWorkspace";
+import { useWorkspaceNavigation } from "../src/workspace/navigationGuard";
 
 const user = {
   id: "user-1",

@@ -1,7 +1,7 @@
 import { DialogHost, ToastProvider } from "@balebase/ui/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { AppBoundary } from "../../app/src/AppBoundary";
+import { AppBoundary } from "../../app/src/workspace/AppBoundary";
 import { WebUpdates } from "../src/WebUpdates";
 
 export function mount(version: string) {

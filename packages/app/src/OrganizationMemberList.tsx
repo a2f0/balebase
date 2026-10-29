@@ -17,7 +17,7 @@ import {
 } from "./organizationState";
 import { AppLink } from "./shared/AppLink";
 import { formatDate } from "./shared/labels";
-import { organizationPeoplePath } from "./workspacePaths";
+import { organizationPeoplePath } from "./workspace/workspacePaths";
 
 interface MemberControlsProps {
   busy: boolean;

@@ -32,7 +32,7 @@ import {
   financeTransactionPath,
   issuePath,
   organizationPeoplePath,
-} from "./workspacePaths";
+} from "./workspace/workspacePaths";
 
 const actionLabels: Record<string, string> = {
   "finance.daily_sync_changed": "changed daily sync",

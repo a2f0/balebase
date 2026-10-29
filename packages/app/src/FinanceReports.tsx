@@ -25,7 +25,7 @@ import { formatMoney } from "./financeFormat";
 import { api } from "./shared/apiClient";
 import { errorMessage } from "./shared/errors";
 import { countLabel, formatCalendarDate } from "./shared/labels";
-import { financeOverviewPath } from "./workspacePaths";
+import { financeOverviewPath } from "./workspace/workspacePaths";
 
 export function FinanceReports({
   onNavigate,

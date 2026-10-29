@@ -34,7 +34,7 @@ import { api } from "./shared/apiClient";
 import { countLabel } from "./shared/labels";
 import { useAction } from "./shared/useAction";
 import { useLoad } from "./shared/useLoad";
-import { equipmentIdForPath, equipmentPath } from "./workspacePaths";
+import { equipmentIdForPath, equipmentPath } from "./workspace/workspacePaths";
 
 export function Equipment({
   onNavigate,

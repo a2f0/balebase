@@ -51,7 +51,7 @@ import {
   financeOverviewPath,
   financePageFor,
   financePages,
-} from "./workspacePaths";
+} from "./workspace/workspacePaths";
 
 const linkTokenStorageKey = "balebase.plaid.linkToken";
 

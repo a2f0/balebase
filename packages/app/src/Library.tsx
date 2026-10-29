@@ -36,8 +36,11 @@ import { countLabel, formatBytes, formatShortDate } from "./shared/labels";
 import { useAction } from "./shared/useAction";
 import { useLoad } from "./shared/useLoad";
 import { useMenuDismissal } from "./shared/useMenuDismissal";
-import type { WorkspaceUser } from "./WorkspaceShell";
-import { libraryFolderIdForPath, libraryPath } from "./workspacePaths";
+import type { WorkspaceUser } from "./workspace/WorkspaceShell";
+import {
+  libraryFolderIdForPath,
+  libraryPath,
+} from "./workspace/workspacePaths";
 
 interface LibraryProps {
   initialNotice?: string | undefined;

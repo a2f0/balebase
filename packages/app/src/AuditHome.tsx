@@ -32,7 +32,7 @@ import { countLabel, formatDate, formatLabel } from "./shared/labels";
 import { useAction } from "./shared/useAction";
 import { useCursorPages } from "./shared/useCursorPages";
 import { useLoad } from "./shared/useLoad";
-import { auditRunPath, auditTemplatePath } from "./workspacePaths";
+import { auditRunPath, auditTemplatePath } from "./workspace/workspacePaths";
 
 export function AuditHome({
   onNavigate,

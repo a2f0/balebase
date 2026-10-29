@@ -35,7 +35,10 @@ import { api } from "./shared/apiClient";
 import { formatCalendarDate, formatDate } from "./shared/labels";
 import { useAction } from "./shared/useAction";
 import { useLoad } from "./shared/useLoad";
-import { myDocumentsPath, myScreeningIdForPath } from "./workspacePaths";
+import {
+  myDocumentsPath,
+  myScreeningIdForPath,
+} from "./workspace/workspacePaths";
 
 type Action = (work: () => Promise<unknown>, success: string) => Promise<void>;
 

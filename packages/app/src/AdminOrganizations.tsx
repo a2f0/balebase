@@ -28,7 +28,7 @@ import { useLoad } from "./shared/useLoad";
 import {
   adminOrganizationIdForPath,
   adminOrganizationPath,
-} from "./workspacePaths";
+} from "./workspace/workspacePaths";
 
 interface AdminOrganizationAction {
   organizationId: string;

@@ -8,7 +8,7 @@ import {
   offlineScopeKey,
 } from "./offlineStore";
 import { useOfflineWorkspace } from "./useOfflineWorkspace";
-import { signingTokenForPath } from "./workspacePaths";
+import { signingTokenForPath } from "./workspace/workspacePaths";
 
 interface OfflineSession {
   user: { id: string; name: string; email: string };

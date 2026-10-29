@@ -39,7 +39,7 @@ import { errorMessage } from "./shared/errors";
 import { countLabel, formatDateTime, formatLabel } from "./shared/labels";
 import { useAction } from "./shared/useAction";
 import { useLoad } from "./shared/useLoad";
-import { financeAccountPath } from "./workspacePaths";
+import { financeAccountPath } from "./workspace/workspacePaths";
 
 type Connection = FinanceConnectionDetail["connection"];
 

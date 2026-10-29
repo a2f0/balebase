@@ -25,12 +25,12 @@ import { api } from "./shared/apiClient";
 import { formatDate } from "./shared/labels";
 import { useAction } from "./shared/useAction";
 import { useLoad } from "./shared/useLoad";
-import { confirmDiscardChanges } from "./unsavedChanges";
+import { confirmDiscardChanges } from "./workspace/unsavedChanges";
 import {
   contractPath,
   contractTemplateIdForPath,
   contractTemplatePath,
-} from "./workspacePaths";
+} from "./workspace/workspacePaths";
 
 export function ContractTemplates({
   pathname,

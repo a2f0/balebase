@@ -28,7 +28,10 @@ import {
 } from "./organizationState";
 import { AppButtonLink } from "./shared/AppLink";
 import { formatDate } from "./shared/labels";
-import { myDocumentsPath, organizationPeoplePath } from "./workspacePaths";
+import {
+  myDocumentsPath,
+  organizationPeoplePath,
+} from "./workspace/workspacePaths";
 
 /**
  * One member: who they are, their role and two-factor requirement, and, for

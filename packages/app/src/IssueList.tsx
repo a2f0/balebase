@@ -13,7 +13,7 @@ import { api } from "./shared/apiClient";
 import { InfiniteScroll } from "./shared/InfiniteScroll";
 import { formatLabel } from "./shared/labels";
 import { useCursorPages } from "./shared/useCursorPages";
-import { issuePath } from "./workspacePaths";
+import { issuePath } from "./workspace/workspacePaths";
 
 export function IssueList({
   filters,

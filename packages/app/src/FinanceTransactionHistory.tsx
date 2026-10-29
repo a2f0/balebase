@@ -29,7 +29,7 @@ import {
   financeTransactionPath,
   inboxEmailPath,
   transactionIssuePath,
-} from "./workspacePaths";
+} from "./workspace/workspacePaths";
 
 interface AnnotationHandlers {
   busy: boolean;

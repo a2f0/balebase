@@ -1,5 +1,5 @@
 import { AppButtonLink } from "./shared/AppLink";
-import { billingPath } from "./workspacePaths";
+import { billingPath } from "./workspace/workspacePaths";
 
 /** Opens Billing in place; a modified click opens it in a new tab. */
 export function BillingLink({

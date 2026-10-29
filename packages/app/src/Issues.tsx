@@ -25,7 +25,7 @@ import {
   financeTransactionPath,
   issuePath,
   recordIdForPath,
-} from "./workspacePaths";
+} from "./workspace/workspacePaths";
 
 export function Issues({
   pathname,

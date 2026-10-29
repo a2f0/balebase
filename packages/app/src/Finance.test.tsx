@@ -6,7 +6,7 @@ import type {
 import { renderToStaticMarkup } from "react-dom/server";
 import { FinanceView } from "./Finance";
 import { initialFilters } from "./useFinanceData";
-import type { FinancePage } from "./workspacePaths";
+import type { FinancePage } from "./workspace/workspacePaths";
 
 const emptyData: FinanceData = {
   accounts: [],

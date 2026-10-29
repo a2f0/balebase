@@ -4,8 +4,8 @@ import type { ContractDetail } from "@balebase/validators/contracts";
 import { act } from "react";
 import { autosaveDelayMs } from "./ContractEditor";
 import { Contracts } from "./Contracts";
-import { canNavigate } from "./navigationGuard";
 import { holdTimers, installDom } from "./testing/dom";
+import { canNavigate } from "./workspace/navigationGuard";
 
 const { button, click, fill, mount, respond, settle } = installDom({
   url: "http://localhost:5173/contracts/c1",

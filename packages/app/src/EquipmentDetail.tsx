@@ -30,7 +30,7 @@ import { api } from "./shared/apiClient";
 import { countLabel, formatCalendarDate } from "./shared/labels";
 import { useAction } from "./shared/useAction";
 import { useLoad } from "./shared/useLoad";
-import { equipmentPath } from "./workspacePaths";
+import { equipmentPath } from "./workspace/workspacePaths";
 
 function useEquipmentDetail(
   id: string,

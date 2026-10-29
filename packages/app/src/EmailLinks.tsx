@@ -22,7 +22,7 @@ import { AppLink } from "./shared/AppLink";
 import { api } from "./shared/apiClient";
 import { errorMessage } from "./shared/errors";
 import { useLoad } from "./shared/useLoad";
-import { equipmentPath, libraryPath } from "./workspacePaths";
+import { equipmentPath, libraryPath } from "./workspace/workspacePaths";
 
 type LinkTab = "equipment" | "folder" | "transaction";
 

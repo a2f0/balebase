@@ -33,7 +33,7 @@ import { errorMessage } from "./shared/errors";
 import { formatCalendarDate } from "./shared/labels";
 import { useFocusWhenFolded } from "./shared/useFocusWhenFolded";
 import { useLoad } from "./shared/useLoad";
-import { businessPath } from "./workspacePaths";
+import { businessPath } from "./workspace/workspacePaths";
 
 export function BusinessDetailPage({
   id,

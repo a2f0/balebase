@@ -24,7 +24,7 @@ import { ApiDownload } from "./shared/ApiDownload";
 import { api } from "./shared/apiClient";
 import { formatCalendarDate, formatDateTime } from "./shared/labels";
 import { useAction } from "./shared/useAction";
-import { contractPath } from "./workspacePaths";
+import { contractPath } from "./workspace/workspacePaths";
 
 /** A contract that has been sent: its progress, actions, and history. */
 export function ContractSummary({

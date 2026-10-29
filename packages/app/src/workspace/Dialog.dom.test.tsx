@@ -6,12 +6,12 @@ import {
   promptDialog,
 } from "@balebase/ui/react";
 import { act, type ReactNode } from "react";
+import { installDom } from "../testing/dom";
 import {
   addNavigationGuard,
   useDismissDialogsOnWorkspaceChange,
   useWorkspaceNavigation,
 } from "./navigationGuard";
-import { installDom } from "./testing/dom";
 import { confirmDiscardChanges } from "./unsavedChanges";
 
 const {

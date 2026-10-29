@@ -47,7 +47,7 @@ import { api } from "./shared/apiClient";
 import { errorMessage } from "./shared/errors";
 import { countLabel, formatCalendarDate } from "./shared/labels";
 import { useFocusWhenFolded } from "./shared/useFocusWhenFolded";
-import { businessIdForPath, businessPath } from "./workspacePaths";
+import { businessIdForPath, businessPath } from "./workspace/workspacePaths";
 
 export function Businesses({
   onNavigate,

@@ -16,7 +16,7 @@ import type {
   OrganizationTwoFactorRequirement,
 } from "./organizationAccessErrors";
 import { useAction } from "./shared/useAction";
-import { organizationPathRequiresAccess } from "./workspacePaths";
+import { organizationPathRequiresAccess } from "./workspace/workspacePaths";
 
 /**
  * Shows what the organization requires before its pages can load:

@@ -22,7 +22,7 @@ import { useLoad } from "./shared/useLoad";
 import {
   globalAuditsPath,
   globalAuditTemplateIdForPath,
-} from "./workspacePaths";
+} from "./workspace/workspacePaths";
 
 /**
  * Root admin's home for global forms: every organization can run or copy

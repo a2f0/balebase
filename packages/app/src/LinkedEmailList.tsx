@@ -8,7 +8,7 @@ import {
 import type { LinkedEmail } from "@balebase/validators/inbox";
 import { AppLink } from "./shared/AppLink";
 import { countLabel } from "./shared/labels";
-import { inboxEmailPath } from "./workspacePaths";
+import { inboxEmailPath } from "./workspace/workspacePaths";
 
 /**
  * Inbox messages linked to a record, each opening the message in the Inbox

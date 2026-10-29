@@ -33,7 +33,7 @@ import {
   contractPath,
   contractTemplatePath,
   isWithin,
-} from "./workspacePaths";
+} from "./workspace/workspacePaths";
 
 export function Contracts({
   onNavigate,

@@ -11,8 +11,8 @@ import {
 } from "./ContractFieldEditor";
 import { Contracts } from "./Contracts";
 import type { DraftInput } from "./contractFields";
-import { canNavigate, guardWorkspaceChange } from "./navigationGuard";
 import { installDom } from "./testing/dom";
+import { canNavigate, guardWorkspaceChange } from "./workspace/navigationGuard";
 
 const {
   button,

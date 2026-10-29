@@ -21,7 +21,7 @@ import { IssueList } from "./IssueList";
 import { api } from "./shared/apiClient";
 import { useAction } from "./shared/useAction";
 import { useLoad } from "./shared/useLoad";
-import { transactionIssuePath } from "./workspacePaths";
+import { transactionIssuePath } from "./workspace/workspacePaths";
 
 export function FinanceTransactionPage({
   id,

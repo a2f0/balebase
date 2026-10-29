@@ -32,7 +32,7 @@ import { useAction } from "./shared/useAction";
 import {
   organizationMemberIdForPath,
   organizationSettingsPage,
-} from "./workspacePaths";
+} from "./workspace/workspacePaths";
 
 type OrganizationGeneralAction = "delete" | "leave" | "save";
 

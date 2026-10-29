@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { IssueForm } from "./IssueForm";
 import { type OfflineWorkspace, offlineImage } from "./offlineStore";
 import { createOfflineIssue } from "./offlineWork";
-import { useUnsavedChanges } from "./unsavedChanges";
-import { issuePath } from "./workspacePaths";
+import { useUnsavedChanges } from "./workspace/unsavedChanges";
+import { issuePath } from "./workspace/workspacePaths";
 
 export function OfflineIssueCreator({
   workspace,

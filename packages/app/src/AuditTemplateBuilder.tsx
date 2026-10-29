@@ -31,7 +31,10 @@ import { countLabel, formatDate } from "./shared/labels";
 import { useAction } from "./shared/useAction";
 import { useLoad } from "./shared/useLoad";
 import { moveEntry, useReorderDrag } from "./useReorderDrag";
-import { auditTemplatePath, globalAuditsPath } from "./workspacePaths";
+import {
+  auditTemplatePath,
+  globalAuditsPath,
+} from "./workspace/workspacePaths";
 
 interface BuilderProps {
   id: string;

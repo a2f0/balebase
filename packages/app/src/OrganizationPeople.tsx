@@ -31,7 +31,7 @@ import { AppButtonLink } from "./shared/AppLink";
 import { api } from "./shared/apiClient";
 import { errorMessage } from "./shared/errors";
 import { useFocusWhenFolded } from "./shared/useFocusWhenFolded";
-import { myDocumentsPath } from "./workspacePaths";
+import { myDocumentsPath } from "./workspace/workspacePaths";
 
 /**
  * The first invitation is sent from an open form. Once anyone else has joined

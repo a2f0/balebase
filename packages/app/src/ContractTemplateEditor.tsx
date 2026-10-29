@@ -24,7 +24,7 @@ import { type DraftInput, reminderOptions } from "./contractFields";
 import { api } from "./shared/apiClient";
 import { countLabel } from "./shared/labels";
 import { useAction } from "./shared/useAction";
-import { useUnsavedChanges } from "./unsavedChanges";
+import { useUnsavedChanges } from "./workspace/unsavedChanges";
 
 export function ContractTemplateEditor({
   template,

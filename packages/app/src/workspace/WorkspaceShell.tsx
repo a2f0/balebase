@@ -14,12 +14,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { AccountControl } from "./AccountControl";
-import type { AccountSession } from "./accountSessions";
-import { hasRole, type WorkspaceOrganization } from "./organizationState";
+import { AccountControl } from "../AccountControl";
+import type { AccountSession } from "../accountSessions";
+import { hasRole, type WorkspaceOrganization } from "../organizationState";
+import { AppLink } from "../shared/AppLink";
+import { useAction } from "../shared/useAction";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
-import { AppLink } from "./shared/AppLink";
-import { useAction } from "./shared/useAction";
 import { readSidebarWidth } from "./sidebarWidth";
 
 export interface WorkspaceUser {

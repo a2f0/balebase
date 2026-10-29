@@ -20,10 +20,10 @@ import {
   recipientTone,
   reminderOptions,
 } from "./contractFields";
-import { addNavigationGuard } from "./navigationGuard";
 import { api } from "./shared/apiClient";
 import { useAction } from "./shared/useAction";
-import { confirmDiscardChanges } from "./unsavedChanges";
+import { addNavigationGuard } from "./workspace/navigationGuard";
+import { confirmDiscardChanges } from "./workspace/unsavedChanges";
 
 type Editor = ReturnType<typeof useDraftEditor>;
 

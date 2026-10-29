@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { lockOfflineWorkspace } from "./offlineStore";
+import { lockOfflineWorkspace } from "../offlineStore";
 import {
   createOrganizationSlug,
   resolveActiveOrganizationId,
   type WorkspaceOrganization,
-} from "./organizationState";
-import { api } from "./shared/apiClient";
-import { authClient } from "./shared/authClient";
+} from "../organizationState";
+import { api } from "../shared/apiClient";
+import { authClient } from "../shared/authClient";
 
 export interface OrganizationSession {
   session: { activeOrganizationId?: string | null | undefined };

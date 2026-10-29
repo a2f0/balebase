@@ -19,11 +19,6 @@ import { useAccountSessions } from "./accountSessions";
 import type { AuthenticationAction } from "./authActions";
 import { Library } from "./Library";
 import { useLinkedOrganization } from "./linkedOrganization";
-import {
-  guardWorkspaceChange,
-  useDismissDialogsOnWorkspaceChange,
-  useWorkspaceNavigation,
-} from "./navigationGuard";
 import { OrganizationGate } from "./OrganizationGate";
 import { useOfflineSlot } from "./offlineSlot";
 import { hasRole } from "./organizationState";
@@ -34,18 +29,23 @@ import { useOfflineRoute } from "./useOfflineRoute";
 import { useOrganizationAccess } from "./useOrganizationAccess";
 import { useSessionRefetch } from "./useSessionRefetch";
 import {
+  guardWorkspaceChange,
+  useDismissDialogsOnWorkspaceChange,
+  useWorkspaceNavigation,
+} from "./workspace/navigationGuard";
+import {
   type OrganizationSession,
   useWorkspaceOrganizations,
-} from "./useWorkspaceOrganizations";
-import { WorkspaceShell, type WorkspaceUser } from "./WorkspaceShell";
+} from "./workspace/useWorkspaceOrganizations";
+import { WorkspaceShell, type WorkspaceUser } from "./workspace/WorkspaceShell";
 import {
   isRootAdminPath,
   isWithin,
   movedWorkspacePath,
   organizationPathRequiresAccess,
   signingTokenForPath,
-} from "./workspacePaths";
-import { workspaceRoute } from "./workspaceRoutes";
+} from "./workspace/workspacePaths";
+import { workspaceRoute } from "./workspace/workspaceRoutes";
 
 export function App() {
   const { data: session, error, isPending, refetch } = authClient.useSession();
