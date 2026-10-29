@@ -146,7 +146,13 @@ D1 database operators. History remains after cancellation and is removed when
 the target account is purged.
 
 Root admins can revoke another account's root admin role from the **Users** row
-menu after a confirmation. The API refuses to revoke the caller's own role.
+menu after a confirmation. The API refuses to revoke the caller's own role,
+and a revocation takes effect only while the caller still holds the role, so two
+admins cannot revoke each other. Each revocation records the actor, target,
+time, and previous and new roles in `user_role_events` in the same transaction;
+like deletion history, it is readable by D1 operators and removed when the
+target account is purged. Apply migration `0077_record_user_role_activity.sql`
+before deploying.
 
 Users can request or cancel account deletion under **Account settings → General**.
 Apply migration `0048_create_user_deletion_requests.sql` before deploying this

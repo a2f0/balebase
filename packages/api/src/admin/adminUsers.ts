@@ -152,14 +152,41 @@ adminUsers.delete("/:userId/admin", async (context) => {
   if (!roles.includes("admin")) {
     return context.json({ error: "User is not a root admin." }, 409);
   }
-  const remaining = roles.filter((role) => role !== "admin");
-  // Guarded on the stored role so a concurrent change is not overwritten.
-  const result = await context.env.DB.prepare(
-    "UPDATE user SET role = ? WHERE id = ? AND role IS ?",
-  )
-    .bind(remaining.join(",") || "user", userId, user.role)
-    .run();
-  if (!result.meta.changes) {
+  const remaining = roles.filter((role) => role !== "admin").join(",");
+  const actor = context.get("authSession").user;
+  const newRole = remaining || "user";
+  // Both statements apply the same guard on the stored roles of the target and
+  // the actor, so a concurrent change, including the actor losing admin (two
+  // admins revoking each other), makes them no-ops. The event is inserted first so the update cannot be recorded
+  // without its history; the batch is one transaction.
+  const guard = `FROM user WHERE id = ? AND role IS ?
+    AND EXISTS (SELECT 1 FROM user WHERE id = ?
+      AND instr(',' || replace(COALESCE(role, ''), ' ', '') || ',', ',admin,') > 0)`;
+  const [, result] = await context.env.DB.batch([
+    context.env.DB.prepare(
+      `INSERT INTO user_role_events
+       (id, user_id, action, occurred_at, previous_role, new_role,
+        actor_user_id, actor_name, actor_email)
+       SELECT ?, id, 'admin_revoked', ?, role, ?, ?, ?, ? ${guard}`,
+    ).bind(
+      crypto.randomUUID(),
+      new Date().toISOString(),
+      newRole,
+      actor.id,
+      actor.name,
+      actor.email,
+      userId,
+      user.role,
+      actor.id,
+    ),
+    context.env.DB.prepare(
+      `UPDATE user SET role = ?
+       WHERE id = ? AND role IS ?
+         AND EXISTS (SELECT 1 FROM user WHERE id = ?
+           AND instr(',' || replace(COALESCE(role, ''), ' ', '') || ',', ',admin,') > 0)`,
+    ).bind(newRole, userId, user.role, actor.id),
+  ]);
+  if (!result?.meta.changes) {
     return context.json({ error: "User is not a root admin." }, 409);
   }
   return respond(context, adminUsersRoutes.revokeAdmin, { ok: true });

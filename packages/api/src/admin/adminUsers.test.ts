@@ -287,6 +287,23 @@ it("lets root admins revoke another root admin but never themselves", async () =
   expect((await revoke("peer")).status).toBe(200);
   expect(roleOf("peer")).toEqual({ role: "user" });
   expect((await revoke("peer")).status).toBe(409);
+  expect(
+    f.database
+      .query(
+        "SELECT user_id, action, previous_role, new_role, actor_user_id, actor_name, actor_email FROM user_role_events",
+      )
+      .all(),
+  ).toEqual([
+    {
+      user_id: "peer",
+      action: "admin_revoked",
+      previous_role: "user, admin",
+      new_role: "user",
+      actor_user_id: "actor",
+      actor_name: "Admin Actor",
+      actor_email: "actor@example.com",
+    },
+  ]);
   for (const f2 of [fixture("user"), fixture("admin", "impersonator")]) {
     f2.insertUser("peer", undefined, "user, admin");
     expect(
@@ -297,6 +314,46 @@ it("lets root admins revoke another root admin but never themselves", async () =
         })
       ).status,
     ).toBe(403);
+  }
+});
+
+it("does not revoke when the actor no longer holds root admin, so two admins cannot revoke each other", async () => {
+  const f = fixture();
+  f.insertUser("actor", undefined, "user");
+  f.insertUser("peer", undefined, "user, admin");
+  const response = await f.request("/users/peer/admin", {
+    method: "DELETE",
+    headers: { Origin: origin },
+  });
+  expect(response.status).toBe(409);
+  expect(
+    f.database.query("SELECT role FROM user WHERE id = 'peer'").get(),
+  ).toEqual({ role: "user, admin" });
+  expect(f.database.query("SELECT * FROM user_role_events").all()).toEqual([]);
+});
+
+it("keeps the role when recording the revocation fails", async () => {
+  const f = fixture();
+  f.insertUser("actor", undefined, "user, admin");
+  f.insertUser("peer", undefined, "user, admin");
+  f.database.exec(
+    "CREATE TRIGGER reject_user_role_event BEFORE INSERT ON user_role_events BEGIN SELECT RAISE(ABORT, 'history unavailable'); END",
+  );
+  const error = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(
+      (
+        await f.request("/users/peer/admin", {
+          method: "DELETE",
+          headers: { Origin: origin },
+        })
+      ).status,
+    ).toBe(500);
+    expect(
+      f.database.query("SELECT role FROM user WHERE id = 'peer'").get(),
+    ).toEqual({ role: "user, admin" });
+  } finally {
+    error.mockRestore();
   }
 });
 
