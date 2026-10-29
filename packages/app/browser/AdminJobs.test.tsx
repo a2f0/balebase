@@ -1,11 +1,11 @@
 import { expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
 import {
   chromeLaunchOptions,
   closeChrome,
 } from "../../../scripts/testing/chrome";
+import { stylesheets } from "./stylesheets";
 
 it("keeps long job descriptions beside actions and expands run details in place", async () => {
   const bundle = await Bun.build({
@@ -18,14 +18,10 @@ it("keeps long job descriptions beside actions and expands run details in place"
   const source = await bundle.outputs[0]?.text();
   if (!bundle.success || !source)
     throw new Error(`Jobs fixture did not bundle: ${bundle.logs.join("\n")}`);
-  const css = [
-    ...["tokens", "base", "typography", "controls", "surfaces"].map(
-      (name) => new URL(`../../ui/src/styles/${name}.css`, import.meta.url),
-    ),
-    new URL("../src/styles/admin.css", import.meta.url),
-  ]
-    .map((url) => readFileSync(fileURLToPath(url), "utf8"))
-    .join("\n");
+  const css = stylesheets(
+    ["tokens", "base", "typography", "controls", "surfaces"],
+    ["admin"],
+  );
   let browser: Browser | undefined;
   try {
     browser = await launch(chromeLaunchOptions());

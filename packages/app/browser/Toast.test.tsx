@@ -1,5 +1,5 @@
 import { expect, it } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
@@ -7,6 +7,7 @@ import {
   chromeLaunchOptions,
   closeChrome,
 } from "../../../scripts/testing/chrome";
+import { stylesheets } from "./stylesheets";
 
 const harness = `
 import { Toast, ToastProvider } from "@balebase/ui/react";
@@ -50,12 +51,7 @@ it("stacks feedback at the viewport bottom without shifting or clipping page con
       );
     const source = await bundle.outputs[0]?.text();
     if (!source) throw new Error("Toast fixture is empty.");
-    const styleRoot = fileURLToPath(
-      new URL("../../ui/src/styles/", import.meta.url),
-    );
-    const css = ["tokens", "base", "surfaces"]
-      .map((name) => readFileSync(join(styleRoot, `${name}.css`), "utf8"))
-      .join("\n");
+    const css = stylesheets(["tokens", "base", "surfaces"]);
     browser = await launch(chromeLaunchOptions());
     for (const width of [1200, 375]) {
       const page = await browser.newPage();

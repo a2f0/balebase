@@ -1,7 +1,4 @@
 import { expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { Business } from "@balebase/validators/businesses";
 import { type Browser, launch } from "puppeteer-core";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -15,6 +12,7 @@ import {
   businessListReducer,
   initialBusinessListState,
 } from "../src/businesses/businessState";
+import { stylesheets } from "./stylesheets";
 
 const acme: Business = {
   city: null,
@@ -56,12 +54,7 @@ it("business notification layout stays at the bottom without moving content", as
   });
   const before = renderState(state);
   const after = renderState(state, true);
-  const styleRoot = fileURLToPath(
-    new URL("../../ui/src/styles/", import.meta.url),
-  );
-  const css = ["tokens", "base", "surfaces"]
-    .map((name) => readFileSync(join(styleRoot, `${name}.css`), "utf8"))
-    .join("\n");
+  const css = stylesheets(["tokens", "base", "surfaces"]);
   let browser: Browser | undefined;
   try {
     browser = await launch(chromeLaunchOptions());

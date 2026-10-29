@@ -1,11 +1,11 @@
 import { expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
 import {
   chromeLaunchOptions,
   closeChrome,
 } from "../../../scripts/testing/chrome";
+import { stylesheets } from "./stylesheets";
 
 it("appends job and transaction pages on desktop/mobile scroll and fills a short viewport", async () => {
   const built = await Bun.build({
@@ -18,16 +18,10 @@ it("appends job and transaction pages on desktop/mobile scroll and fills a short
   const source = await built.outputs[0]?.text();
   if (!built.success || !source)
     throw new Error("Could not bundle infinite history fixture");
-  const css = [
-    ...["tokens", "base", "typography", "controls", "surfaces"].map(
-      (name) => new URL(`../../ui/src/styles/${name}.css`, import.meta.url),
-    ),
-    ...["admin", "finance"].map(
-      (name) => new URL(`../src/styles/${name}.css`, import.meta.url),
-    ),
-  ]
-    .map((url) => readFileSync(url, "utf8"))
-    .join("\n");
+  const css = stylesheets(
+    ["tokens", "base", "typography", "controls", "surfaces"],
+    ["admin", "finance"],
+  );
   let browser: Browser | undefined;
   try {
     browser = await launch(chromeLaunchOptions());

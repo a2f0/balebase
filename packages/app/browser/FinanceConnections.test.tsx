@@ -1,7 +1,4 @@
 import { expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { FinanceConnection } from "@balebase/validators/finance";
 import { type Browser, launch } from "puppeteer-core";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -10,6 +7,7 @@ import {
   closeChrome,
 } from "../../../scripts/testing/chrome";
 import { FinanceConnections } from "../src/finance/FinanceAccounts";
+import { stylesheets } from "./stylesheets";
 
 const connection = (
   id: string,
@@ -45,17 +43,10 @@ it("opens a connection from anywhere on its row except its own buttons", async (
       onSync={async () => undefined}
     />,
   );
-  const styleRoot = fileURLToPath(
-    new URL("../../ui/src/styles/", import.meta.url),
+  const css = stylesheets(
+    ["tokens", "base", "controls", "surfaces"],
+    ["finance"],
   );
-  const css = [
-    ...["tokens", "base", "controls", "surfaces"].map((name) =>
-      join(styleRoot, `${name}.css`),
-    ),
-    fileURLToPath(new URL("../src/styles/finance.css", import.meta.url)),
-  ]
-    .map((path) => readFileSync(path, "utf8"))
-    .join("\n");
   let browser: Browser | undefined;
   try {
     browser = await launch(chromeLaunchOptions());

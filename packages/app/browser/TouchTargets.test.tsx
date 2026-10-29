@@ -1,6 +1,4 @@
 import { expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { Select } from "@balebase/ui/react";
 import { type Browser, launch } from "puppeteer-core";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -8,14 +6,9 @@ import {
   chromeLaunchOptions,
   closeChrome,
 } from "../../../scripts/testing/chrome";
+import { stylesheets } from "./stylesheets";
 
-const read = (url: URL) => readFileSync(fileURLToPath(url), "utf8");
-const css = [
-  ...["tokens", "base", "controls", "surfaces"].map((name) =>
-    read(new URL(`../../ui/src/styles/${name}.css`, import.meta.url)),
-  ),
-  read(new URL("../src/styles/shell.css", import.meta.url)),
-].join("\n");
+const css = stylesheets(["tokens", "base", "controls", "surfaces"], ["shell"]);
 
 const fixture = `
   <button class="button buttonSm" id="small">Edit</button>

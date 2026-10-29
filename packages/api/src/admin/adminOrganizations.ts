@@ -6,11 +6,7 @@ import {
 import { Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
 import {
-  cancelOrganizationSubscription,
-  recoverCheckoutAfterFailedDeletion,
-} from "../billing/billingDeletion";
-import {
-  markOrganizationForDeletion,
+  deleteBilledOrganization,
   restoreOrganization,
 } from "../organizations/organizationDeletion";
 import { listOrganizationMembers } from "../organizations/organizationMembers";
@@ -168,51 +164,14 @@ async function listAdminRequirements(
 adminOrganizations.delete("/:organizationId", async (context) => {
   const organizationId = context.req.param("organizationId");
   const actor = context.get("authSession").user;
-  let checkoutGuard: string | null;
-  try {
-    ({ checkoutGuard } = await cancelOrganizationSubscription(
-      context.env,
-      organizationId,
-    ));
-  } catch (cause) {
-    console.error("Could not cancel organization billing.", cause);
-    return context.json(
-      {
-        error:
-          "The Stripe subscription could not be canceled, so the organization was not deleted.",
-      },
-      502,
-    );
-  }
-  let deletion: Awaited<ReturnType<typeof markOrganizationForDeletion>>;
-  try {
-    deletion = await markOrganizationForDeletion(
-      context.env.DB,
-      organizationId,
-      actor.id,
-      checkoutGuard,
-    );
-  } catch (cause) {
-    console.error("Could not record organization deletion.", cause);
-    await recoverCheckoutAfterFailedDeletion(
-      context.env.DB,
-      organizationId,
-      checkoutGuard,
-    );
-    return context.json(
-      {
-        error:
-          "Billing was canceled, but the organization could not be deleted. Checkout was re-enabled so billing can be restarted.",
-      },
-      500,
-    );
-  }
+  const result = await deleteBilledOrganization(
+    context,
+    organizationId,
+    actor.id,
+  );
+  if ("response" in result) return result.response;
+  const { deletion } = result;
   if (!deletion) {
-    await recoverCheckoutAfterFailedDeletion(
-      context.env.DB,
-      organizationId,
-      checkoutGuard,
-    );
     const organization = await context.env.DB.prepare(
       "SELECT deletedAt FROM organization WHERE id = ?",
     )

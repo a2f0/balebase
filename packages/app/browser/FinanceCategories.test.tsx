@@ -1,7 +1,4 @@
 import { expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -9,6 +6,7 @@ import {
   closeChrome,
 } from "../../../scripts/testing/chrome";
 import { FinanceCategories } from "../src/finance/FinanceCategories";
+import { stylesheets } from "./stylesheets";
 
 it("opens a category from anywhere on its row except its own buttons", async () => {
   const markup = renderToStaticMarkup(
@@ -21,12 +19,7 @@ it("opens a category from anywhere on its row except its own buttons", async () 
       onShowTransactions={() => undefined}
     />,
   );
-  const styleRoot = fileURLToPath(
-    new URL("../../ui/src/styles/", import.meta.url),
-  );
-  const css = ["tokens", "base", "controls", "surfaces"]
-    .map((name) => readFileSync(join(styleRoot, `${name}.css`), "utf8"))
-    .join("\n");
+  const css = stylesheets(["tokens", "base", "controls", "surfaces"]);
   let browser: Browser | undefined;
   try {
     browser = await launch(chromeLaunchOptions());
