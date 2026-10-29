@@ -3,9 +3,11 @@ import {
   ContractStatusSchema,
   FieldBoxSchema,
   FieldTypeSchema,
+  ReasonSchema,
   RecipientStatusSchema,
 } from "./contracts";
 import { route } from "./route";
+import { contractLimits } from "./rules";
 
 /** A field the signer fills; other signers' fields are left out. */
 const SigningFieldSchema = FieldBoxSchema.extend({
@@ -41,15 +43,29 @@ const SigningViewSchema = z.object({
 });
 export type SigningView = z.infer<typeof SigningViewSchema>;
 
+const consentRule = "Agree to use electronic records and signatures to sign.";
+const fieldValueRule = "A field's text is too long.";
+
+/**
+ * A signature. Which images and values it needs depends on the signer's
+ * fields, so the API checks those.
+ */
 const SignatureSchema = z.object({
-  /** Agreement to sign electronically; the API refuses a signature without it. */
-  consent: z.boolean(),
+  /** Agreement to sign electronically. */
+  consent: z
+    .boolean({ error: consentRule })
+    .refine((consent) => consent, consentRule),
   /** Adopted initials as a PNG data URL, when the signer has initials fields. */
   initials: z.string().optional(),
   /** The adopted signature as a PNG data URL. */
   signature: z.string().optional(),
-  /** Text field values by field id. */
-  values: z.record(z.string(), z.string()).optional(),
+  /** Text field values by field id, trimmed. */
+  values: z
+    .record(
+      z.string(),
+      z.string().trim().max(contractLimits.fieldValue, fieldValueRule),
+    )
+    .optional(),
 });
 export type Signature = z.infer<typeof SignatureSchema>;
 
@@ -87,7 +103,7 @@ export const signingRoutes = {
     method: "POST",
     credentials: "omit",
     path: "/api/signing/:token/decline",
-    body: z.object({ reason: z.string().optional() }),
+    body: ReasonSchema,
     response: z.object({ status: z.literal("declined") }),
   }),
 };

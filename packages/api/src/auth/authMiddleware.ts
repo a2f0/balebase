@@ -1,0 +1,482 @@
+import { productName } from "@balebase/ui/brand";
+import type { Context, Next } from "hono";
+import { createMiddleware } from "hono/factory";
+import { organizationUserHasSeat } from "../billing/billingEntitlements";
+import { isOrganizationOwner } from "../organizations/organizationMembers";
+import { isRecord } from "../shared/jsonInput";
+import type { Bindings } from "../types";
+import {
+  type ApiKeyPrincipal,
+  apiKeyChannel,
+  apiKeyFromHeader,
+  apiKeyRouteDenial,
+  authenticateApiKey,
+  recordApiKeyUse,
+} from "./apiKeys";
+import type { AuthSession } from "./auth";
+import { createAuth } from "./auth";
+
+export interface AuthVariables {
+  /** Set when an API key, rather than a session, authenticated the request. */
+  apiKey?: ApiKeyPrincipal;
+  authSession: AuthSession;
+  organizationId: string;
+  organizationRole: string;
+}
+
+export type ApiEnv = {
+  Bindings: Bindings;
+  Variables: AuthVariables;
+};
+
+export const requireAuth = createMiddleware<ApiEnv>(async (context, next) => {
+  const token = apiKeyFromHeader(context.req.header("Authorization"));
+  if (token !== undefined) {
+    const failure = await authenticateRequestApiKey(context, token);
+    if (failure) return failure;
+    const denial = apiKeyRouteDenial(
+      context.req.path,
+      context.req.method,
+      context.get("apiKey")?.access ?? "read",
+    );
+    if (denial) return context.json({ error: denial }, 403);
+    return next();
+  }
+  const auth = createAuth(context.env, (promise) =>
+    context.executionCtx.waitUntil(promise),
+  );
+  const session = await auth.api.getSession({
+    headers: context.req.raw.headers,
+  });
+
+  if (!session) {
+    return context.json({ error: "Authentication required." }, 401);
+  }
+
+  context.set("authSession", session as AuthSession);
+  // An admin impersonating someone should not make that user look active.
+  if (!session.session.impersonatedBy) {
+    context.executionCtx.waitUntil(
+      recordUserActivity(context.env.DB, session.user.id, new Date()),
+    );
+  }
+  return next();
+});
+
+/**
+ * Authenticates the MCP endpoint, which accepts only API keys: tools reach the
+ * workspace through the same per-route API-key policy as REST calls.
+ */
+export const requireApiKey = createMiddleware<ApiEnv>(async (context, next) => {
+  const token = apiKeyFromHeader(context.req.header("Authorization"));
+  if (token === undefined) {
+    context.header("WWW-Authenticate", `Bearer realm="${productName}"`);
+    return context.json(
+      { error: "An API key is required. Send it as a Bearer token." },
+      401,
+    );
+  }
+  const failure = await authenticateRequestApiKey(context, token);
+  return failure ?? next();
+});
+
+async function authenticateRequestApiKey(
+  context: Context<ApiEnv>,
+  token: string,
+) {
+  const now = new Date();
+  const result = await authenticateApiKey(context.env.DB, token, now);
+  if (!result.ok) {
+    if (result.status === 401) {
+      context.header(
+        "WWW-Authenticate",
+        `Bearer realm="${productName}", error="invalid_token"`,
+      );
+    }
+    return context.json({ error: result.error }, result.status);
+  }
+  context.set("apiKey", {
+    ...result.principal,
+    channel: apiKeyChannel(context.req.raw),
+  });
+  context.set("authSession", result.session);
+  // Integration traffic is not the creator being active, so only the key's
+  // own last use is recorded.
+  if (result.stale) {
+    context.executionCtx.waitUntil(
+      recordApiKeyUse(context.env.DB, result.principal.id, now),
+    );
+  }
+  return undefined;
+}
+
+async function recordUserActivity(
+  database: D1Database,
+  userId: string,
+  activeAt: Date,
+) {
+  const timestamp = activeAt.toISOString();
+  try {
+    // Writes finish out of order under concurrency; never move the clock back.
+    await database
+      .prepare(
+        `UPDATE "user" SET "lastActiveAt" = ?
+         WHERE "id" = ? AND ("lastActiveAt" IS NULL OR "lastActiveAt" < ?)`,
+      )
+      .bind(timestamp, userId, timestamp)
+      .run();
+  } catch (cause) {
+    console.error("Could not record user activity.", cause);
+  }
+}
+
+function requireSessionOrganization(requiresSeat: (role: string) => boolean) {
+  return createMiddleware<ApiEnv>(async (context, next) => {
+    const session = context.get("authSession");
+    // A key belongs to one organization; it never falls back to another.
+    const apiKey = context.get("apiKey");
+    const candidates = apiKey
+      ? [apiKey.organizationId]
+      : organizationCandidates(
+          session.session.activeOrganizationId,
+          session.user.defaultOrganizationId,
+        );
+    return authorizeOrganization(context, next, candidates, requiresSeat);
+  });
+}
+
+export const requireOrganization = requireSessionOrganization(() => true);
+
+/** Every owner keeps billing access so a Free organization can upgrade. */
+export const requireBillingOrganization = requireSessionOrganization(
+  (role) => !isOrganizationOwner(role),
+);
+
+const organizationPluginAccessExemptPaths = new Set([
+  "/api/auth/organization/accept-invitation",
+  "/api/auth/organization/check-slug",
+  "/api/auth/organization/create",
+  "/api/auth/organization/get-invitation",
+  "/api/auth/organization/list",
+  "/api/auth/organization/list-user-invitations",
+  "/api/auth/organization/reject-invitation",
+  "/api/auth/organization/set-active",
+]);
+
+export const requireOrganizationPluginAccess = createMiddleware<ApiEnv>(
+  async (context, next) => {
+    if (organizationPluginAccessExemptPaths.has(context.req.path)) {
+      return next();
+    }
+    const session = context.get("authSession");
+    if (listsCurrentUsersTeamsAcrossOrganizations(context, session.user.id)) {
+      return filterTeamsRequiringAccess(context, next);
+    }
+    const requestedOrganizationIds = await organizationIdsFromRequest(
+      context,
+      session.session.activeTeamId,
+    );
+    if (requestedOrganizationIds.length > 1) {
+      return context.json(
+        { error: "Conflicting organization references are not allowed." },
+        400,
+      );
+    }
+    const requestedOrganizationId = requestedOrganizationIds[0];
+    const candidates = requestedOrganizationId
+      ? [requestedOrganizationId]
+      : organizationCandidates(
+          session.session.activeOrganizationId,
+          session.user.defaultOrganizationId,
+        );
+    // A member without a Free-plan seat can still leave the organization.
+    const requiresSeat = context.req.path !== "/api/auth/organization/leave";
+    return authorizeOrganization(context, next, candidates, () => requiresSeat);
+  },
+);
+
+function listsCurrentUsersTeamsAcrossOrganizations(
+  context: Context<ApiEnv>,
+  currentUserId: string,
+) {
+  if (
+    context.req.path !== "/api/auth/organization/list-user-teams" ||
+    context.req.method !== "GET"
+  ) {
+    return false;
+  }
+  const searchParams = new URL(context.req.url).searchParams;
+  return (
+    !searchParams.has("organizationId") &&
+    (!searchParams.has("userId") ||
+      searchParams.get("userId") === currentUserId)
+  );
+}
+
+async function filterTeamsRequiringAccess(
+  context: Context<ApiEnv>,
+  next: Next,
+) {
+  const session = context.get("authSession");
+  const memberships = await context.env.DB.prepare(
+    `SELECT member."organizationId", member."twoFactorRequired"
+       FROM "member"
+       JOIN "organization"
+         ON organization.id = member."organizationId"
+       WHERE member."userId" = ?
+         AND organization."deletedAt" IS NULL`,
+  )
+    .bind(session.user.id)
+    .all<{ organizationId: string; twoFactorRequired: boolean | number }>();
+  const allowedOrganizationIds = new Set<string>();
+  for (const membership of memberships.results) {
+    if (
+      membership.twoFactorRequired &&
+      (!session.user.twoFactorEnabled || !session.session.twoFactorVerified)
+    ) {
+      continue;
+    }
+    if (
+      await organizationUserHasSeat(
+        context.env,
+        membership.organizationId,
+        session.user.id,
+      )
+    ) {
+      allowedOrganizationIds.add(membership.organizationId);
+    }
+  }
+  await next();
+  const response = context.res;
+  if (!response.ok) return;
+  const teams: unknown = await response
+    .clone()
+    .json()
+    .catch(() => null);
+  if (!Array.isArray(teams)) return;
+  const filteredTeams = teams.filter(
+    (team) =>
+      isRecord(team) &&
+      allowedOrganizationIds.has(stringProperty(team, "organizationId") ?? ""),
+  );
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  context.res = new Response(JSON.stringify(filteredTeams), {
+    headers,
+    status: response.status,
+    statusText: response.statusText,
+  });
+}
+
+async function authorizeOrganization(
+  context: Context<ApiEnv>,
+  next: Next,
+  candidates: string[],
+  requiresSeat: (role: string) => boolean,
+) {
+  const session = context.get("authSession");
+  if (candidates.length === 0) {
+    return context.json({ error: "A default organization is required." }, 409);
+  }
+  const placeholders = candidates.map(() => "?").join(", ");
+  const memberships = await context.env.DB.prepare(
+    `SELECT member."organizationId", member."role",
+              member."twoFactorRequired"
+       FROM "member"
+       JOIN "organization"
+         ON organization.id = member."organizationId"
+       WHERE member."userId" = ?
+         AND member."organizationId" IN (${placeholders})
+         AND organization."deletedAt" IS NULL`,
+  )
+    .bind(session.user.id, ...candidates)
+    .all<{
+      organizationId: string;
+      role: string;
+      twoFactorRequired: boolean | number;
+    }>();
+  const membershipByOrganization = new Map(
+    memberships.results.map((membership) => [
+      membership.organizationId,
+      membership,
+    ]),
+  );
+  const membership = candidates
+    .map((candidate) => membershipByOrganization.get(candidate))
+    .find((candidate) => candidate !== undefined);
+  if (!membership) {
+    return context.json({ error: "Organization membership required." }, 403);
+  }
+  if (membership.twoFactorRequired) {
+    if (!session.user.twoFactorEnabled) {
+      return context.json(
+        {
+          code: "TWO_FACTOR_SETUP_REQUIRED",
+          error:
+            "Set up two-factor authentication before using this organization.",
+        },
+        403,
+      );
+    }
+    if (!session.session.twoFactorVerified) {
+      return context.json(
+        {
+          code: "TWO_FACTOR_VERIFICATION_REQUIRED",
+          error:
+            "Sign in with two-factor authentication before using this organization.",
+        },
+        403,
+      );
+    }
+  }
+  if (
+    requiresSeat(membership.role) &&
+    !(await organizationUserHasSeat(
+      context.env,
+      membership.organizationId,
+      session.user.id,
+    ))
+  ) {
+    const owner = isOrganizationOwner(membership.role);
+    // The code tells the client whether this user can fix it on Billing.
+    return context.json(
+      {
+        code: owner ? "UPGRADE_REQUIRED" : "SEAT_UNAVAILABLE",
+        error: owner
+          ? "This organization's Free plan includes one user. Upgrade to Pro on the Billing page to restore your access."
+          : "This organization's Free plan includes one user. Ask an owner to upgrade or remove another member.",
+      },
+      403,
+    );
+  }
+  context.set("organizationId", membership.organizationId);
+  context.set("organizationRole", membership.role);
+  return next();
+}
+
+async function organizationIdsFromRequest(
+  context: Context<ApiEnv>,
+  activeTeamId: string | null | undefined,
+) {
+  const organizationIds: string[] = [];
+  const addOrganizationId = (organizationId: string | undefined) => {
+    if (organizationId && !organizationIds.includes(organizationId)) {
+      organizationIds.push(organizationId);
+    }
+  };
+  const searchParams = new URL(context.req.url).searchParams;
+  addOrganizationId(searchParams.get("organizationId") ?? undefined);
+  const queryOrganizationSlug = searchParams.get("organizationSlug");
+  if (queryOrganizationSlug) {
+    addOrganizationId(
+      await organizationIdForSlug(context.env.DB, queryOrganizationSlug),
+    );
+  }
+  for (const [table, key] of organizationResourceSelectors) {
+    const resourceId = searchParams.get(key);
+    if (resourceId) {
+      addOrganizationId(
+        await organizationIdForRecord(context.env.DB, table, resourceId),
+      );
+    }
+  }
+  if (
+    activeTeamId &&
+    organizationPluginPathsUsingActiveTeam.has(context.req.path) &&
+    !searchParams.has("teamId")
+  ) {
+    addOrganizationId(
+      await organizationIdForRecord(context.env.DB, "team", activeTeamId),
+    );
+  }
+  const body = await context.req.raw
+    .clone()
+    .json()
+    .catch(() => null);
+  if (!isRecord(body)) return organizationIds;
+  await addBodyOrganizationIds(body);
+  const data = Reflect.get(body, "data");
+  if (isRecord(data)) {
+    await addBodyOrganizationIds(data);
+  }
+  return organizationIds;
+
+  async function addBodyOrganizationIds(record: Record<string, unknown>) {
+    addOrganizationId(stringProperty(record, "organizationId"));
+    const organizationSlug = stringProperty(record, "organizationSlug");
+    if (organizationSlug) {
+      addOrganizationId(
+        await organizationIdForSlug(context.env.DB, organizationSlug),
+      );
+    }
+    for (const [table, key] of organizationResourceSelectors) {
+      const resourceId = stringProperty(record, key);
+      if (resourceId) {
+        addOrganizationId(
+          await organizationIdForRecord(context.env.DB, table, resourceId),
+        );
+      }
+    }
+  }
+}
+
+const organizationResourceSelectors = [
+  ["invitation", "invitationId"],
+  ["member", "memberId"],
+  ["team", "teamId"],
+] as const;
+
+const organizationPluginPathsUsingActiveTeam = new Set([
+  "/api/auth/organization/get-active-team",
+  "/api/auth/organization/list-team-members",
+]);
+
+function stringProperty(value: Record<string, unknown>, key: string) {
+  const property = value[key];
+  return typeof property === "string" && property ? property : undefined;
+}
+
+async function organizationIdForRecord(
+  database: D1Database,
+  table: "invitation" | "member" | "team",
+  id: string,
+) {
+  const record = await database
+    .prepare(`SELECT organizationId FROM "${table}" WHERE id = ?`)
+    .bind(id)
+    .first<{ organizationId: string }>();
+  return record?.organizationId;
+}
+
+async function organizationIdForSlug(database: D1Database, slug: string) {
+  const record = await database
+    .prepare("SELECT id AS organizationId FROM organization WHERE slug = ?")
+    .bind(slug)
+    .first<{ organizationId: string }>();
+  return record?.organizationId;
+}
+
+function organizationCandidates(
+  activeOrganizationId: string | null | undefined,
+  defaultOrganizationId: string | null | undefined,
+) {
+  const candidates: string[] = [];
+  for (const organizationId of [activeOrganizationId, defaultOrganizationId]) {
+    if (organizationId && !candidates.includes(organizationId)) {
+      candidates.push(organizationId);
+    }
+  }
+  return candidates;
+}
+
+export function requireRole(role: "admin" | "user") {
+  return createMiddleware<ApiEnv>(async (context, next) => {
+    const roles = context.get("authSession").user.role.split(",");
+
+    if (!roles.includes(role)) {
+      return context.json({ error: "Insufficient permissions." }, 403);
+    }
+
+    return next();
+  });
+}

@@ -2,21 +2,15 @@ import type { ErrorBody } from "@balebase/validators/route";
 
 /** A response the API refused or failed, with the message it gave. */
 export class ApiError extends Error {
-  /** The API's error body, when it sent one. */
-  readonly body: ErrorBody | null;
-  /** The response's JSON whatever its shape, or null when it had none. */
-  readonly data: unknown;
   /** A code the client branches on, such as `UPGRADE_REQUIRED`. */
   readonly code: string | undefined;
   /** The response itself, for its status and headers such as Retry-After. */
   readonly response: Response;
 
   constructor(response: Response, data: unknown) {
-    const body = isErrorBody(data) ? data : null;
+    const body = isErrorBody(data) ? data : undefined;
     super(body?.error ?? `Request failed with status ${response.status}.`);
     this.name = "ApiError";
-    this.body = body;
-    this.data = data;
     this.code = body?.code;
     this.response = response;
   }

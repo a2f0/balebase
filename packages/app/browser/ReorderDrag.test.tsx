@@ -3,12 +3,15 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 
-// Three tall entries in a 600px viewport. The first is lifted and held at the
-// bottom edge, where the page scrolls a frame at a time. Its transform grows
-// the page as it follows the pointer, so only the limit taken when the drag
-// began keeps the scroll from running on into empty space.
+// Three 400px entries in a 600px viewport. The first is lifted and held at the
+// bottom edge, where the page scrolls 16px a frame. Its transform grows the
+// page as it follows the pointer, so only the limit taken when the drag began
+// keeps the scroll from running on into empty space.
 const harness = (hook: string) => `
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -28,7 +31,7 @@ function App() {
             data-reorder-item=""
             key={entry}
             style={{
-              height: 1200,
+              height: 400,
               position: "relative",
               transform: state.dragging
                 ? \`translateY(\${state.offset}px)\`
@@ -64,7 +67,9 @@ it("never scrolls past the page while a lifted entry rests at the edge", async (
     writeFileSync(
       entry,
       harness(
-        fileURLToPath(new URL("../src/useReorderDrag.ts", import.meta.url)),
+        fileURLToPath(
+          new URL("../src/audits/useReorderDrag.ts", import.meta.url),
+        ),
       ),
     );
     const bundle = await Bun.build({
@@ -107,16 +112,31 @@ it("never scrolls past the page while a lifted entry rests at the edge", async (
     await page.mouse.move(bounds.x + 4, bounds.y + 4);
     await page.mouse.down();
     await page.mouse.move(bounds.x + 4, 595, { steps: 5 });
-    // At 16px a frame, four seconds would pass the limit without the clamp.
-    await new Promise((resolve) => setTimeout(resolve, 4000));
-    const scrolled = await page.evaluate(() => window.scrollY);
+    // Count frames, not seconds: a busy host draws as few as ten frames a
+    // second. Wait until the scroll has held still for ten frames, or until
+    // it passes the limit, as it would every frame without the clamp.
+    const scrolled = await page.evaluate(
+      (end) =>
+        new Promise<number>((resolve) => {
+          let last = window.scrollY;
+          let still = 0;
+          const frame = () => {
+            const y = window.scrollY;
+            still = y === last ? still + 1 : 0;
+            last = y;
+            if (y > end || still === 10) resolve(y);
+            else requestAnimationFrame(frame);
+          };
+          requestAnimationFrame(frame);
+        }),
+      limit,
+    );
     await page.mouse.up();
 
-    expect(limit).toBe(3000);
-    expect(scrolled).toBeGreaterThan(limit - 32);
-    expect(scrolled).toBeLessThanOrEqual(limit);
+    expect(limit).toBe(600);
+    expect(scrolled).toBe(limit);
   } finally {
-    await browser?.close();
+    await closeChrome(browser);
     rmSync(fixture, { force: true, recursive: true });
   }
 }, 30_000);

@@ -1,12 +1,17 @@
 import { expect, it } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 
 it("guarded Back, Forward, and links ask first and keep history entries", async () => {
   const bundle = await Bun.build({
     entrypoints: [
-      fileURLToPath(new URL("../src/navigationGuard.ts", import.meta.url)),
+      fileURLToPath(
+        new URL("../src/workspace/navigationGuard.ts", import.meta.url),
+      ),
     ],
     target: "browser",
   });
@@ -142,6 +147,6 @@ it("guarded Back, Forward, and links ask first and keep history entries", async 
     await settled("/library", 8);
     expect(await page.evaluate(() => history.length)).toBe(historyLength + 3);
   } finally {
-    await browser?.close();
+    await closeChrome(browser);
   }
 }, 20_000);

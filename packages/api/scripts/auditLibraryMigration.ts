@@ -6,7 +6,7 @@ import {
   starterSeedKey,
   starterTemplateSql,
   starterTemplates,
-} from "../src/auditLibrary";
+} from "../src/audits/auditLibrary";
 
 // Writes the next migration for every starter template version in
 // packages/api/auditLibrary that no committed migration seeds yet.

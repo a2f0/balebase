@@ -1,0 +1,205 @@
+import {
+  Banner,
+  Button,
+  Card,
+  Field,
+  PageSection,
+  Select,
+} from "@balebase/ui/react";
+import { auditLimits } from "@balebase/validators/rules";
+import { useEffect, useRef, useState } from "react";
+import { errorMessage } from "../shared/errors";
+import { guardWorkspaceChange } from "../workspace/navigationGuard";
+import { useUnsavedChanges } from "../workspace/unsavedChanges";
+import { OfflineIssueCreator, OfflineIssueList } from "./OfflineIssues";
+import type { OfflineAudit, OfflineWorkspace } from "./offlineStore";
+import { queueOfflineAudit, saveOfflineAnswer } from "./offlineWork";
+
+export function OfflineAuditEditor({
+  audit,
+  workspace,
+  onBack,
+  onNavigate,
+}: {
+  audit: OfflineAudit;
+  workspace: OfflineWorkspace;
+  onBack: () => void;
+  onNavigate: (path: string) => void;
+}) {
+  const [issueItem, setIssueItem] = useState<string>();
+  const { responses, pending, sealing, error, answer, save } =
+    useOfflineAnswers(audit, workspace.key);
+  return (
+    <PageSection
+      title={`${audit.template.name} · v${audit.template.version}`}
+      actions={
+        <Button
+          disabled={pending > 0}
+          onClick={() => void guardWorkspaceChange(async () => onBack())()}
+        >
+          Back to offline work
+        </Button>
+      }
+    >
+      {error && (
+        <Banner
+          tone="danger"
+          actions={
+            <Button
+              disabled={pending > 0 || audit.queued}
+              onClick={() => void save(false)}
+            >
+              Retry saving draft
+            </Button>
+          }
+        >
+          {error}
+        </Banner>
+      )}
+      <p role="status">
+        {pending
+          ? "Saving on this device…"
+          : error
+            ? "Some changes have not been saved."
+            : audit.queued
+              ? "Completed and queued for sync. Open the synced audit to make further changes."
+              : "Draft saved on this device"}
+      </p>
+      {audit.template.definition.sections.map((section) => (
+        <Card key={section.id} title={section.title}>
+          {section.items.map((item) => (
+            <div key={item.id} className="stack">
+              <Field
+                label={`${item.prompt}${item.required ? " (required)" : ""}`}
+              >
+                {item.responseType === "text" ? (
+                  <textarea
+                    className="textarea"
+                    maxLength={auditLimits.answer}
+                    disabled={audit.queued || sealing}
+                    value={responses[item.id] ?? ""}
+                    onChange={(event) =>
+                      void answer(item.id, event.target.value)
+                    }
+                  />
+                ) : (
+                  <Select
+                    disabled={audit.queued || sealing}
+                    value={responses[item.id] ?? ""}
+                    onChange={(event) =>
+                      void answer(item.id, event.target.value)
+                    }
+                  >
+                    <option value="" disabled>
+                      Choose an answer
+                    </option>
+                    <option value="pass">Pass</option>
+                    <option value="fail">Fail</option>
+                    <option value="na">N/A</option>
+                  </Select>
+                )}
+              </Field>
+              <Button
+                onClick={() =>
+                  void guardWorkspaceChange(async () =>
+                    setIssueItem(issueItem === item.id ? undefined : item.id),
+                  )()
+                }
+              >
+                Raise issue
+              </Button>
+              {issueItem === item.id && (
+                <OfflineIssueCreator
+                  workspace={workspace}
+                  target={{ auditId: audit.id, itemId: item.id }}
+                  onSaved={() => setIssueItem(undefined)}
+                />
+              )}
+            </div>
+          ))}
+        </Card>
+      ))}
+      {!audit.queued && (
+        <Button
+          busy={pending > 0}
+          disabled={pending > 0}
+          variant="primary"
+          onClick={() => void save(true)}
+        >
+          Complete and queue audit
+        </Button>
+      )}
+      <OfflineIssueList
+        workspace={workspace}
+        auditId={audit.id}
+        onNavigate={onNavigate}
+      />
+    </PageSection>
+  );
+}
+
+function useOfflineAnswers(audit: OfflineAudit, key: string) {
+  const [responses, setResponses] = useState(audit.responses);
+  const dirty = useRef<Record<string, { value: string }>>({});
+  const writes = useRef(Promise.resolve());
+  const [pending, setPending] = useState(0);
+  const [error, setError] = useState<string>();
+  const [sealing, setSealing] = useState(false);
+  useUnsavedChanges(
+    pending > 0 || Boolean(error),
+    "Some audit answers have not been saved on this device.",
+  );
+  useEffect(() => {
+    setResponses({
+      ...audit.responses,
+      ...Object.fromEntries(
+        Object.entries(dirty.current).map(([id, edit]) => [id, edit.value]),
+      ),
+    });
+  }, [audit.responses]);
+  function write(itemId: string, edit: { value: string }) {
+    const result = writes.current.then(async () => {
+      await saveOfflineAnswer(key, audit.id, itemId, edit.value);
+      if (dirty.current[itemId] === edit) delete dirty.current[itemId];
+    });
+    // Preserve typing order within this tab, including after a failed write.
+    writes.current = result.catch(() => undefined);
+    return result;
+  }
+  async function answer(itemId: string, value: string) {
+    const edit = { value };
+    dirty.current[itemId] = edit;
+    setResponses((current) => ({ ...current, [itemId]: value }));
+    setPending((count) => count + 1);
+    try {
+      await write(itemId, edit);
+    } catch (cause) {
+      setError(
+        errorMessage(
+          cause,
+          "Answer not saved. Check device storage and retry.",
+        ),
+      );
+    } finally {
+      setPending((count) => count - 1);
+    }
+  }
+  async function save(complete: boolean) {
+    setSealing(true);
+    setPending((count) => count + 1);
+    try {
+      // Retry only unsaved edits. Already-saved answers may have been updated
+      // by another tab; completion seals the latest durable snapshot.
+      for (const [id, edit] of Object.entries(dirty.current))
+        await write(id, edit);
+      if (complete) await queueOfflineAudit(key, audit.id);
+      setError(undefined);
+    } catch (cause) {
+      setError(errorMessage(cause, "Could not queue audit."));
+    } finally {
+      setSealing(false);
+      setPending((count) => count - 1);
+    }
+  }
+  return { responses, pending, sealing, error, answer, save };
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { version } from "../package.json";
 import { app } from "./app";
-import { createAuth } from "./auth";
+import { createAuth } from "./auth/auth";
 import { testBindings } from "./testing/bindings";
 import { toD1 } from "./testing/d1";
 import { createTestDatabase } from "./testing/database";
@@ -108,12 +108,12 @@ describe("api", () => {
 
   it("exposes response headers needed by the cross-origin client", async () => {
     const response = await app.request(
-      "/api",
+      "/api/me",
       { headers: { Origin: "https://app.test" } },
       authBindings(),
     );
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(401);
     expect(response.headers.get("access-control-allow-origin")).toBe(
       "https://app.test",
     );

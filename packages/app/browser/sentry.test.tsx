@@ -3,7 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { launch } from "puppeteer-core";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 
 test("browser reports React and unhandled errors without application content", async () => {
   const directory = await mkdtemp(join(tmpdir(), "balebase-sentry-browser-"));
@@ -102,7 +105,7 @@ test("browser reports React and unhandled errors without application content", a
     expect(await page.evaluate("window.flush()")).toBe(false);
     expect(events).toHaveLength(3);
   } finally {
-    await browser.close();
+    await closeChrome(browser);
     await server.stop(true);
     await rm(directory, { recursive: true, force: true });
   }

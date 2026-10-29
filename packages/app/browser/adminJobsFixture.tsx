@@ -1,6 +1,6 @@
 import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
 import { createRoot } from "react-dom/client";
-import { AdminJobs } from "../src/AdminJobs";
+import { AdminJobs } from "../src/admin/AdminJobs";
 
 const jobs: JobDefinition[] = [
   {

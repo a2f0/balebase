@@ -144,7 +144,6 @@ export const DraftFieldSchema = FieldBoxSchema.extend({
   required: z.boolean(),
   type: FieldTypeSchema,
 });
-export type DraftField = z.infer<typeof DraftFieldSchema>;
 
 const ContractDraftSchema = z.object({
   dueDate: z.string().nullable(),
@@ -339,6 +338,16 @@ const ChangedContractSchema = z.object({
   contract: ContractDetailSchema.nullable(),
 });
 
+/** Why a contract ends early; a longer reason is cut short, not refused. */
+export const ReasonSchema = z.object({
+  reason: z
+    .string()
+    .optional()
+    .transform((reason) =>
+      (reason ?? "").trim().slice(0, contractLimits.reason),
+    ),
+});
+
 export const contractsRoutes = {
   list: route({
     method: "GET",
@@ -388,13 +397,7 @@ export const contractsRoutes = {
   void: route({
     method: "POST",
     path: "/api/contracts/:id/void",
-    // A longer reason is cut to 500 characters rather than refused.
-    body: z.object({
-      reason: z
-        .string()
-        .optional()
-        .transform((reason) => (reason ?? "").trim().slice(0, 500)),
-    }),
+    body: ReasonSchema,
     response: ChangedContractSchema,
   }),
   delete: route({

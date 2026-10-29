@@ -45,7 +45,6 @@ const IssuePageSchema = z.object({
   issues: z.array(IssueSchema),
   nextCursor: z.string().nullable(),
 });
-export type IssuePage = z.infer<typeof IssuePageSchema>;
 
 const IssueListQuerySchema = z.object({
   cursor: z.string().optional(),

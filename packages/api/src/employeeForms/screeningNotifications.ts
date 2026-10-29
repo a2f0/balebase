@@ -1,0 +1,142 @@
+import type { Bindings } from "../types";
+import { sendScreeningComplete } from "./screeningMail";
+
+interface Notification {
+  requirement_id: string;
+  report_id: string;
+  organization_id: string;
+  organization_name: string;
+  email: string;
+  name: string;
+  title: string;
+  attempts: number;
+}
+
+// Recheck the report, organization, and original recipient at delivery time.
+// Never fall back to an old address after a person leaves the organization.
+const eligibleNotification = `
+  FROM employee_screening_notifications AS notification
+  JOIN employee_requirements AS requirement
+    ON requirement.id = notification.requirement_id
+    AND requirement.checkr_report_id = notification.report_id
+  JOIN organization ON organization.id = requirement.organization_id
+  JOIN member ON member.id = requirement.member_id
+    AND member.organizationId = organization.id
+    AND member.userId = notification.user_id
+  JOIN user ON user.id = member.userId
+  WHERE notification.sent_at IS NULL AND organization.deletedAt IS NULL
+    AND notification.abandoned_at IS NULL
+    AND requirement.status = 'complete'
+    AND requirement.checkr_refresh_requested_at IS NULL
+    AND requirement.checkr_report_status = 'complete'`;
+
+/** Deliver new completions and retry failed mail without changing report state. */
+export async function sendPendingScreeningNotifications(
+  env: Bindings,
+  requirementId?: string,
+) {
+  const delivery = {
+    sent: 0,
+    failed: 0,
+    abandoned: 0,
+    queueUnavailable: false,
+  };
+  try {
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60_000).toISOString();
+    const expired = await env.DB.prepare(
+      `UPDATE employee_screening_notifications SET abandoned_at = ?
+       WHERE sent_at IS NULL AND abandoned_at IS NULL AND next_attempt_at <= ?
+         AND (attempts >= 10 OR created_at < ?)
+         AND (? IS NULL OR requirement_id = ?)`,
+    )
+      .bind(
+        now.toISOString(),
+        now.toISOString(),
+        cutoff,
+        requirementId ?? null,
+        requirementId ?? null,
+      )
+      .run();
+    delivery.abandoned = expired.meta.changes;
+    const { results } = await env.DB.prepare(
+      `SELECT notification.requirement_id, notification.report_id, notification.attempts
+       ${eligibleNotification}
+         AND notification.next_attempt_at <= ?
+         AND notification.attempts < 10 AND notification.created_at >= ?
+         AND (? IS NULL OR notification.requirement_id = ?)
+       ORDER BY notification.next_attempt_at LIMIT 24`,
+    )
+      .bind(
+        new Date().toISOString(),
+        cutoff,
+        requirementId ?? null,
+        requirementId ?? null,
+      )
+      .all<Pick<Notification, "requirement_id" | "report_id" | "attempts">>();
+    for (const notification of results) {
+      try {
+        if (await deliverNotification(env, notification)) delivery.sent += 1;
+      } catch (cause) {
+        delivery.failed += 1;
+        console.error("Could not email a screening completion.", cause);
+      }
+    }
+  } catch (cause) {
+    delivery.queueUnavailable = true;
+    console.error("Could not read pending screening notifications.", cause);
+  }
+  return delivery;
+}
+
+async function deliverNotification(
+  env: Bindings,
+  notification: Pick<Notification, "requirement_id" | "report_id" | "attempts">,
+) {
+  const token = crypto.randomUUID();
+  const now = new Date();
+  // Retry transient failures without letting dead addresses dominate each run.
+  const delay = Math.min(
+    24 * 60 * 60_000,
+    5 * 60_000 * 2 ** Math.min(notification.attempts, 9),
+  );
+  const claim = await env.DB.prepare(
+    `UPDATE employee_screening_notifications
+     SET claim_token = ?, next_attempt_at = ?, attempts = attempts + 1
+     WHERE requirement_id = ? AND report_id = ?
+       AND sent_at IS NULL AND next_attempt_at <= ?`,
+  )
+    .bind(
+      token,
+      new Date(now.getTime() + delay).toISOString(),
+      notification.requirement_id,
+      notification.report_id,
+      now.toISOString(),
+    )
+    .run();
+  if (!claim.meta.changes) return;
+  const current = await env.DB.prepare(
+    `SELECT notification.requirement_id, notification.report_id,
+            requirement.organization_id, requirement.title,
+            organization.name AS organization_name, user.email, user.name
+     ${eligibleNotification} AND notification.claim_token = ?`,
+  )
+    .bind(token)
+    .first<Omit<Notification, "attempts">>();
+  if (!current) return;
+  await sendScreeningComplete(env, {
+    organizationId: current.organization_id,
+    organizationName: current.organization_name,
+    recipient: { email: current.email, name: current.name },
+    requirementId: current.requirement_id,
+    title: current.title,
+  });
+  // The provider has no idempotency key: a lost send response can cause a retry.
+  await env.DB.prepare(
+    `UPDATE employee_screening_notifications
+     SET sent_at = ?, claim_token = NULL WHERE claim_token = ?`,
+  )
+    .bind(new Date().toISOString(), token)
+    .run();
+  return true;
+}

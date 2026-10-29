@@ -677,8 +677,9 @@ submission carries a fingerprint of the exact disclosures its form showed,
 including the organization name, and the request it answered; the API rejects
 it if either has since changed, and orders nothing once the person leaves the
 organization.
-The disclosure wording in `packages/api/src/screeningDisclosures.ts` is a draft
-that counsel and Checkr must review before production use; Checkr also reviews
+The disclosure wording in
+`packages/api/src/employeeForms/screeningDisclosures.ts` is a draft that
+counsel and Checkr must review before production use; Checkr also reviews
 the flow before credentialing a production account. Checkr does not support
 credit screenings in this flow, so managers track credit checks manually.
 
@@ -754,8 +755,9 @@ account; any other candidate's report stays `pending` indefinitely. While the
 Worker uses Checkr staging, the screening form shows those candidates, with
 the result each produces, in a **Test candidates** panel like Stripe's test
 cards: **Fill** enters a candidate's details exactly and varies only the phone
-number. The candidates are in `packages/api/src/checkrTestCandidates.ts`, and
-production never returns them.
+number. The candidates are in
+`packages/api/src/employeeForms/checkrTestCandidates.ts`, and production
+never returns them.
 
 ## Billing and plans
 

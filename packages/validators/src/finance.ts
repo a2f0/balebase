@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
-import { lineName, optionalText, RecordIdSchema, requiredText } from "./fields";
+import {
+  calendarDate,
+  lineName,
+  optionalText,
+  RecordIdSchema,
+  requiredText,
+} from "./fields";
 import { LinkedEmailSchema } from "./inbox";
 import { route } from "./route";
 import { financeLimits } from "./rules";
@@ -255,6 +261,17 @@ const CategoriesResponseSchema = z.object({
   categories: z.array(ExpenseCategorySchema),
 });
 
+const searchRule = `Searches need ${financeLimits.search} characters or fewer.`;
+
+const reportRangeRule = "Use YYYY-MM-DD dates with from on or before to.";
+/** An empty day leaves that end of the range open. */
+const ReportDaySchema = z
+  .union([z.literal(""), calendarDate(reportRangeRule)])
+  .optional();
+const ReportRangeSchema = z
+  .object({ from: ReportDaySchema, to: ReportDaySchema })
+  .refine(({ from, to }) => !from || !to || from <= to, reportRangeRule);
+
 export const financeRoutes = {
   listing: route({
     method: "GET",
@@ -333,7 +350,9 @@ export const financeRoutes = {
   searchTransactions: route({
     method: "GET",
     path: "/api/finance/transactions",
-    query: z.object({ q: z.string().optional() }),
+    query: z.object({
+      q: z.string().trim().max(financeLimits.search, searchRule).optional(),
+    }),
     response: z.object({
       transactions: z.array(FinanceTransactionMatchSchema),
     }),
@@ -405,7 +424,7 @@ export const financeRoutes = {
   expenseReport: route({
     method: "GET",
     path: "/api/finance/reports/expenses",
-    query: z.object({ from: z.string().optional(), to: z.string().optional() }),
+    query: ReportRangeSchema,
     response: ExpenseReportSchema,
   }),
 };

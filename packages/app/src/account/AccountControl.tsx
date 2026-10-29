@@ -1,0 +1,200 @@
+import { Avatar, Icon, Toast } from "@balebase/ui/react";
+import { useId, useRef, useState } from "react";
+import { version as appVersion } from "../../package.json";
+import { useApiVersion } from "../apiVersion";
+import { errorMessage } from "../shared/errors";
+import { useAction } from "../shared/useAction";
+import { useMenuDismissal } from "../shared/useMenuDismissal";
+import type { AccountSession } from "./accountSessions";
+import { ThemeSwitcher } from "./ThemeSwitcher";
+
+interface AccountControlProps {
+  accounts: AccountSession[];
+  activeSessionToken: string;
+  loadError: string | undefined;
+  onAddAccount: () => void;
+  onRefreshAccounts: () => Promise<void>;
+  onSettings: () => void;
+  onSignOut: () => Promise<void>;
+  onSwitchAccount: (sessionToken: string) => Promise<void>;
+  user: { email: string; name: string };
+}
+
+export function AccountControl({
+  accounts,
+  activeSessionToken,
+  loadError,
+  onAddAccount,
+  onRefreshAccounts,
+  onSettings,
+  onSignOut,
+  onSwitchAccount,
+  user,
+}: AccountControlProps) {
+  const action = useAction("Could not update accounts.");
+  const { error, setError } = action;
+  const [busy, setBusy] = useState<string>();
+  const [open, setOpen] = useState(false);
+  const menu = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  useMenuDismissal(open, menu, trigger, () => setOpen(false));
+
+  async function run(work: () => Promise<void>, busyKey: string) {
+    setBusy(busyKey);
+    if (await action.run(work)) setOpen(false);
+    setBusy(undefined);
+  }
+
+  function toggleMenu() {
+    const nextOpen = !open;
+    setError(undefined);
+    setOpen(nextOpen);
+    if (nextOpen) {
+      void onRefreshAccounts().catch((cause) =>
+        setError(errorMessage(cause, "Could not load your accounts.")),
+      );
+    }
+  }
+
+  return (
+    <div className="accountControl" ref={menu}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={`Account menu for ${user.name}`}
+        className="accountTrigger"
+        disabled={Boolean(busy)}
+        onClick={toggleMenu}
+        ref={trigger}
+        type="button"
+      >
+        <Avatar name={user.name} />
+        <span className="accountIdentity">
+          <strong className="truncate">{user.name}</strong>
+          <span className="truncate">{user.email}</span>
+        </span>
+        <Icon className="accountTriggerIcon" name="more" size={18} />
+      </button>
+      {open && (
+        <AccountMenu
+          accounts={accounts}
+          activeSessionToken={activeSessionToken}
+          busy={busy}
+          error={error ?? loadError}
+          onAddAccount={onAddAccount}
+          onSettings={() => {
+            setOpen(false);
+            onSettings();
+          }}
+          onSignOut={() => run(onSignOut, "sign-out")}
+          onSwitchAccount={(token) => run(() => onSwitchAccount(token), token)}
+        />
+      )}
+    </div>
+  );
+}
+
+function AccountMenu({
+  accounts,
+  activeSessionToken,
+  busy,
+  error,
+  onAddAccount,
+  onSignOut,
+  onSettings,
+  onSwitchAccount,
+}: {
+  accounts: AccountSession[];
+  activeSessionToken: string;
+  busy: string | undefined;
+  error: string | undefined;
+  onAddAccount: () => void;
+  onSignOut: () => Promise<void>;
+  onSettings: () => void;
+  onSwitchAccount: (token: string) => Promise<void>;
+}) {
+  const themeLabel = useId();
+  return (
+    <div className="popover accountMenu" role="menu">
+      <p className="menuLabel">Accounts</p>
+      {error && <Toast tone="danger">{error}</Toast>}
+      <div className="accountChoices">
+        {accounts.map((account) => {
+          const active = account.token === activeSessionToken;
+          return (
+            <button
+              aria-checked={active}
+              className="accountChoice"
+              disabled={Boolean(busy) || active}
+              key={account.user.id}
+              onClick={() => void onSwitchAccount(account.token)}
+              role="menuitemradio"
+              type="button"
+            >
+              <Avatar name={account.user.name} size="sm" />
+              <span className="accountIdentity">
+                <strong className="truncate">{account.user.name}</strong>
+                <span className="truncate">{account.user.email}</span>
+              </span>
+              <span className="accountChoiceStatus">
+                {busy === account.token ? (
+                  <span aria-hidden="true" className="spinner" />
+                ) : (
+                  active && <Icon label="Active account" name="check" />
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <hr className="menuSeparator" />
+      <button
+        className="menuItem"
+        disabled={Boolean(busy)}
+        onClick={onSettings}
+        role="menuitem"
+        type="button"
+      >
+        <Icon name="security" /> Account settings
+      </button>
+      <button
+        className="menuItem"
+        disabled={Boolean(busy)}
+        onClick={onAddAccount}
+        role="menuitem"
+        type="button"
+      >
+        <Icon name="userAdd" /> Add another account
+      </button>
+      <hr className="menuSeparator" />
+      <p className="menuLabel" id={themeLabel}>
+        Theme
+      </p>
+      <ThemeSwitcher labelledBy={themeLabel} menu />
+      <hr className="menuSeparator" />
+      <button
+        className="menuItem"
+        disabled={Boolean(busy)}
+        onClick={() => void onSignOut()}
+        role="menuitem"
+        type="button"
+      >
+        <Icon name="signOut" />
+        {busy === "sign-out" ? "Signing out…" : "Sign out of this account"}
+      </button>
+      <hr className="menuSeparator" />
+      <AppVersions />
+    </div>
+  );
+}
+
+// The API version follows a deploy: it is whatever the latest response named.
+function AppVersions() {
+  const apiVersion = useApiVersion();
+  return (
+    <p className="menuMeta">
+      App v{appVersion} · API{" "}
+      {apiVersion === null ? "version unknown" : `v${apiVersion}`}
+    </p>
+  );
+}

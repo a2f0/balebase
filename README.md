@@ -40,9 +40,8 @@ and run the native apps, see the
 
 ## Layout
 
-Every workspace lives under `packages/`, and infrastructure lives in
-`terraform/`. [Find the code](CONTRIBUTING.md#find-the-code) maps each kind of
-change to its package or script directory.
+[Find the code](CONTRIBUTING.md#find-the-code) maps each kind of change to
+its package, script, or infrastructure directory.
 
 Release builds report filtered errors to Sentry, with separate projects for
 web, API, Android, and iOS in staging and production. Development builds stay
@@ -56,8 +55,10 @@ fields, administrator access, and opt-outs.
 
 ## Common commands
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for focused checks, editor setup, code
-organization, and the pull request workflow.
+[Check a change](CONTRIBUTING.md#check-a-change) covers focused checks and the
+tools the full check and browser suites need; the rest of
+[CONTRIBUTING.md](CONTRIBUTING.md) covers code organization, editor setup, and
+pull requests.
 
 ```sh
 bun run check:fast # format, lint source, and type-check (no infrastructure tools)
@@ -68,9 +69,9 @@ bun run build     # production builds
 bun run format    # apply source and Markdown fixes
 ```
 
-The full `check` also needs ShellCheck, Terraform, TFLint, and the Fastlane
-Ruby bundle; browser suites need Chrome. Provisioning and deploys read their
-Cloudflare credentials from `.secrets`, as the deployment guide describes.
+Provisioning and deploys read their Cloudflare credentials from `.secrets`, as
+the [deployment guide](docs/operations.md#provision-cloudflare-resources)
+describes.
 
 ## Reference
 

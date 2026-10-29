@@ -2,7 +2,10 @@ import { expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Browser, launch } from "puppeteer-core";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
 
 const read = (url: URL) => readFileSync(fileURLToPath(url), "utf8");
 const css = [
@@ -179,6 +182,6 @@ it("keeps the app clear of the system bars it draws under", async () => {
     expect(web.topBar).toEqual({ atRest: 0, scrolled: 0 });
     expect(web.mainPadding).toEqual(["0px", "0px", "0px"]);
   } finally {
-    await browser?.close();
+    await closeChrome(browser);
   }
 }, 20_000);

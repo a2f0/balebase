@@ -37,13 +37,11 @@ const EquipmentContextSchema = z.object({
 const EquipmentListingSchema = EquipmentContextSchema.extend({
   equipment: z.array(EquipmentItemSchema),
 });
-export type EquipmentListing = z.infer<typeof EquipmentListingSchema>;
 
 const EquipmentDetailSchema = EquipmentContextSchema.extend({
   emails: z.array(LinkedEmailSchema),
   equipment: EquipmentItemSchema,
 });
-export type EquipmentDetail = z.infer<typeof EquipmentDetailSchema>;
 
 const EquipmentFieldsSchema = z.object({
   /** The user ID of an organization member; null unassigns. */

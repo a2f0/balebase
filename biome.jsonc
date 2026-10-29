@@ -78,8 +78,7 @@
         }
       }
     },
-    // Existing large files may shrink, but should not grow. Remove an override
-    // once its file fits the default budget; extract responsibilities to get there.
+    // App components get a lower cognitive complexity limit than other source.
     {
       "includes": ["packages/app/src/**/*.tsx"],
       "linter": {

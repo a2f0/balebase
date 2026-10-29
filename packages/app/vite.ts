@@ -8,7 +8,8 @@ import type { Plugin } from "vite";
  * pdf.js fetches its image decoders (JBIG2, JPEG 2000), colour profiles,
  * character maps, and standard fonts at runtime from a base URL, so they are
  * served from /pdfjs/ rather than bundled. Keep the list in sync with the
- * URLs passed to getDocument in src/pdfDocument.ts. Both shells install it.
+ * URLs passed to getDocument in src/shared/pdfDocument.ts. Both shells
+ * install it.
  */
 export function pdfjsAssets(): Plugin {
   const root = dirname(

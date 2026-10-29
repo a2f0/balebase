@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { calendarDate, optionalText, requiredText } from "./fields";
 import { route } from "./route";
-import { employeeRequirementLimits, usStateCodes } from "./rules";
+import {
+  employeeRequirementLimits,
+  isUsStateCode,
+  usStateCodes,
+} from "./rules";
 
 export const EmployeeRequirementKindSchema = z.enum([
   "form",
@@ -166,38 +170,196 @@ const ScreeningFormSchema = z.object({
 });
 export type ScreeningForm = z.infer<typeof ScreeningFormSchema>;
 
-/** Blank optional fields may be sent empty. */
-const ScreeningSubmissionSchema = z.object({
-  acknowledgments: z.object({
-    disclosure: z.boolean(),
-    /** Each state notice the form showed for the work and home states. */
-    stateNotices: z.array(z.string()).optional(),
-    summaryOfRights: z.boolean(),
-  }),
-  candidate: z.object({
-    dob: z.string(),
-    driverLicenseNumber: z.string().nullish(),
-    driverLicenseState: z.string().nullish(),
-    firstName: z.string(),
-    lastName: z.string(),
-    middleName: z.string().optional(),
-    noMiddleName: z.boolean().optional(),
-    phone: z.string().nullish(),
-    ssn: z.string(),
-    zipcode: z.string(),
-  }),
-  copyRequested: z.boolean().optional(),
-  /** Identifies the exact wording the person read; the API requires it. */
-  disclosureFingerprint: z.string(),
-  requestRevision: z.string(),
-  residenceState: z.string(),
-  signature: z.object({
-    authorize: z.boolean(),
-    electronicRecords: z.boolean(),
-    name: z.string(),
-  }),
-});
-export type ScreeningSubmission = z.infer<typeof ScreeningSubmissionSchema>;
+// Checkr's candidate API accepts names only in these characters, documented as
+// [a-zA-Z0-9ªµºÀ-ÖØ-öø-ÿ\-'., ]: other scripts, such as Vietnamese "ễ", are
+// rejected by Checkr itself. The signed authorization PDF draws every one of
+// them, so no accepted name is altered in it.
+const checkrName =
+  /^[A-Za-z0-9\u00AA\u00B5\u00BA\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF '.,-]+$/;
+const checkrLetter =
+  /[A-Za-z\u00AA\u00B5\u00BA\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF]/;
+
+/** Messages the API also answers with, for the checks it makes itself. */
+export const screeningMessages = {
+  birthDate: "Enter a valid date of birth.",
+  disclosuresChanged:
+    "These disclosures changed after you opened the form. Reload the page to review the current version.",
+  requestChanged:
+    "This background check changed after you opened it. Reload the page to review it again.",
+  stateNotices: "Acknowledge each state notice before submitting.",
+};
+
+const acknowledgeRule =
+  "Acknowledge the summary of your rights and the disclosure before submitting.";
+const nameRule =
+  "Enter your legal first and last name, and your middle name or that you have none. Checkr accepts letters A–Z and accented letters such as é or ñ.";
+const birthDateRule = screeningMessages.birthDate;
+const ssnRule = "Enter a 9-digit Social Security number.";
+const phoneRule = "Enter a 10-digit phone number.";
+const licenseRule =
+  "Enter both your driver's license number and its state, or leave both blank.";
+const signRule =
+  "Agree to sign electronically and authorize the background check to submit.";
+const signatureNameRule = "Type your full legal name to sign.";
+const residenceRule = "Choose the state you live in.";
+
+/** Trims text and makes each run of whitespace one space. */
+const oneLine = (text: string) => text.trim().replace(/\s+/g, " ");
+
+/** A part of a legal name as Checkr accepts it. */
+function checkrNamePart(minimum: number) {
+  return z
+    .string({ error: nameRule })
+    .overwrite(oneLine)
+    .min(minimum, nameRule)
+    .max(50, nameRule)
+    .regex(checkrLetter, nameRule)
+    .regex(checkrName, nameRule);
+}
+
+/** A checkbox the person must tick. */
+function agreed(rule: string) {
+  return z.boolean({ error: rule }).refine((ticked) => ticked, rule);
+}
+
+/** Both blank, or a license number with its issuing state. */
+function driverLicense(number?: string | null, state?: string | null) {
+  if (!number && !state) return { number: null, state: null };
+  const trimmed = number?.trim() ?? "";
+  if (
+    !state ||
+    !isUsStateCode(state) ||
+    !/^[A-Za-z0-9*-]{1,30}$/.test(trimmed)
+  ) {
+    return null;
+  }
+  return { number: trimmed.toUpperCase(), state };
+}
+
+/** The person's details as Checkr takes them. */
+const ScreeningCandidateSchema = z
+  .object(
+    {
+      firstName: checkrNamePart(1),
+      lastName: checkrNamePart(2),
+      /** Checked only when the person has a middle name. */
+      middleName: z.string({ error: nameRule }).optional(),
+      noMiddleName: z.boolean().optional(),
+      /** The API also refuses today and later. */
+      dob: calendarDate(birthDateRule).refine(
+        (dob) => dob >= "1900-01-01",
+        birthDateRule,
+      ),
+      ssn: z.string({ error: ssnRule }).transform((ssn, context) => {
+        const digits = ssn.replace(/[\s-]/g, "");
+        if (/^\d{9}$/.test(digits)) {
+          return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+        }
+        context.addIssue({ code: "custom", message: ssnRule });
+        return z.NEVER;
+      }),
+      zipcode: z
+        .string({ error: "Enter your 5-digit ZIP code." })
+        .regex(/^\d{5}$/, "Enter your 5-digit ZIP code."),
+      /** Ten digits, or null when left blank. */
+      phone: z
+        .string({ error: phoneRule })
+        .nullish()
+        .transform((phone, context) => {
+          if (!phone) return null;
+          const digits = phone.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+          if (/^\d{10}$/.test(digits)) return digits;
+          context.addIssue({ code: "custom", message: phoneRule });
+          return z.NEVER;
+        }),
+      driverLicenseNumber: z.string({ error: licenseRule }).nullish(),
+      driverLicenseState: z.string({ error: licenseRule }).nullish(),
+    },
+    { error: nameRule },
+  )
+  .transform(
+    (
+      {
+        driverLicenseNumber,
+        driverLicenseState,
+        middleName,
+        noMiddleName,
+        ...candidate
+      },
+      context,
+    ) => {
+      const middle = noMiddleName
+        ? { data: null, success: true as const }
+        : checkrNamePart(1).safeParse(middleName);
+      const license = driverLicense(driverLicenseNumber, driverLicenseState);
+      if (!middle.success || !license) {
+        context.addIssue({
+          code: "custom",
+          message: middle.success ? licenseRule : nameRule,
+        });
+        return z.NEVER;
+      }
+      return {
+        ...candidate,
+        driverLicenseNumber: license.number,
+        driverLicenseState: license.state,
+        middleName: middle.data,
+      };
+    },
+  );
+
+/**
+ * A completed screening form. The API checks the rest: the disclosures and
+ * request it answers, the date of birth against today, and the state
+ * notices its work location requires. Blank optional fields may be empty.
+ */
+const ScreeningSubmissionSchema = z
+  .object({
+    acknowledgments: z.object(
+      {
+        disclosure: agreed(acknowledgeRule),
+        /** Each state notice the form showed for the work and home states. */
+        stateNotices: z
+          .array(z.string(), { error: screeningMessages.stateNotices })
+          .optional(),
+        summaryOfRights: agreed(acknowledgeRule),
+      },
+      { error: acknowledgeRule },
+    ),
+    candidate: ScreeningCandidateSchema,
+    copyRequested: z.boolean().optional(),
+    /** Identifies the exact wording the person read. */
+    disclosureFingerprint: z.string({
+      error: screeningMessages.disclosuresChanged,
+    }),
+    requestRevision: z.string({ error: screeningMessages.requestChanged }),
+    residenceState: z
+      .string({ error: residenceRule })
+      .refine(isUsStateCode, residenceRule),
+    signature: z.object(
+      {
+        authorize: agreed(signRule),
+        electronicRecords: agreed(signRule),
+        name: z
+          .string({ error: signatureNameRule })
+          .overwrite(oneLine)
+          .min(1, signatureNameRule)
+          .max(200, signatureNameRule)
+          .regex(checkrName, signatureNameRule),
+      },
+      { error: signRule },
+    ),
+  })
+  // The typed signature must include the legal first and last name.
+  .refine(
+    ({ candidate, signature }) =>
+      [candidate.firstName, candidate.lastName].every((part) =>
+        signature.name.toLowerCase().includes(part.toLowerCase()),
+      ),
+    { message: signatureNameRule, path: ["signature", "name"] },
+  );
+/** What a client sends; the API reads it with names and numbers normalized. */
+export type ScreeningSubmission = z.input<typeof ScreeningSubmissionSchema>;
 
 const OkSchema = z.object({ ok: z.literal(true) });
 

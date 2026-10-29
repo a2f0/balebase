@@ -5,8 +5,11 @@ import { fileURLToPath } from "node:url";
 import type { FinanceConnection } from "@balebase/validators/finance";
 import { type Browser, launch } from "puppeteer-core";
 import { renderToStaticMarkup } from "react-dom/server";
-import { chromeLaunchOptions } from "../../../scripts/testing/chrome";
-import { FinanceConnections } from "../src/FinanceAccounts";
+import {
+  chromeLaunchOptions,
+  closeChrome,
+} from "../../../scripts/testing/chrome";
+import { FinanceConnections } from "../src/finance/FinanceAccounts";
 
 const connection = (
   id: string,
@@ -117,6 +120,6 @@ it("opens a connection from anywhere on its row except its own buttons", async (
       ]);
     }
   } finally {
-    await browser?.close();
+    await closeChrome(browser);
   }
 }, 30_000);
