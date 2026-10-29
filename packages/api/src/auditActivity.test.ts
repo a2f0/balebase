@@ -25,9 +25,9 @@ interface ActivityRunResponse {
 }
 
 describe("audit activity", () => {
-  it("records creators, every answer change, completion, and reopening without duplicate no-op events", async () => {
+  it("attributes a form's creation and each saved version", async () => {
     const fixture = createFixture();
-    const { auditId, templateId } = await createActivityAudit(fixture);
+    const { templateId } = await createActivityAudit(fixture);
     const templateHistory = await jsonRequest<ActivityResponse>(
       fixture,
       `/templates/${templateId}/activity`,
@@ -42,22 +42,11 @@ describe("audit activity", () => {
       ["audit.template_version_saved", "user-2"],
       ["audit.template_created", "user-1"],
     ]);
-    await jsonRequest(
-      fixture,
-      `/runs/${auditId}`,
-      "PATCH",
-      {
-        expectedRevision: 0,
-        responses: { check: "pass", text: "Initial note" },
-        status: "in_progress",
-      },
-      { userId: "user-2" },
-    );
-    await jsonRequest(fixture, `/runs/${auditId}`, "PATCH", {
-      expectedRevision: 1,
-      responses: { check: "fail" },
-      status: "in_progress",
-    });
+  });
+
+  it("records every answer change with its editor and previous value", async () => {
+    const fixture = createFixture();
+    const auditId = await answeredAudit(fixture);
     const beforeComplete = await jsonRequest<ActivityResponse>(
       fixture,
       `/runs/${auditId}/activity`,
@@ -107,6 +96,11 @@ describe("audit activity", () => {
       check: { actor: { id: "user-1" } },
       text: { actor: { id: "user-1" } },
     });
+  });
+
+  it("records completion once and reopening with durable actor snapshots", async () => {
+    const fixture = createFixture();
+    const auditId = await answeredAudit(fixture);
     await jsonRequest(
       fixture,
       `/runs/${auditId}`,
@@ -630,3 +624,25 @@ describe("audit activity", () => {
     });
   });
 });
+
+/** An audit whose answers user-2 set and user-1 then changed or cleared. */
+async function answeredAudit(fixture: ReturnType<typeof createFixture>) {
+  const { auditId } = await createActivityAudit(fixture);
+  await jsonRequest(
+    fixture,
+    `/runs/${auditId}`,
+    "PATCH",
+    {
+      expectedRevision: 0,
+      responses: { check: "pass", text: "Initial note" },
+      status: "in_progress",
+    },
+    { userId: "user-2" },
+  );
+  await jsonRequest(fixture, `/runs/${auditId}`, "PATCH", {
+    expectedRevision: 1,
+    responses: { check: "fail" },
+    status: "in_progress",
+  });
+  return auditId;
+}

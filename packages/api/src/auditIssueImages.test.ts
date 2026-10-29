@@ -2,9 +2,11 @@ import { describe, expect, it } from "bun:test";
 import { purgePendingAuditIssueImages } from "./auditIssueImageCleanup";
 import { purgeDeletedObjects } from "./deletedObjectCleanup";
 import {
+  createAuditIssue,
   createFixture,
   decodeImageFixture,
   type IssueImageResponse,
+  imageActivation,
   imagesFor,
   imageUpload,
   pngBytes,
@@ -509,6 +511,478 @@ describe("audit issue images", () => {
         .get(),
     ).toBeNull();
   });
+
+  it("refuses invalid, truncated, and oversized images without storing them", async () => {
+    const fixture = createFixture();
+    const { issue } = await createAuditIssue(fixture);
+    const invalidImage = await fixture.request(
+      `/issues/${issue.body.issueId}/images?filename=fake.png`,
+      imageUpload("not an image"),
+    );
+    expect(invalidImage.status).toBe(400);
+    expect(fixture.stored.size).toBe(0);
+
+    const truncatedImage = await fixture.request(
+      `/issues/${issue.body.issueId}/images?filename=truncated.png`,
+      imageUpload(
+        new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      ),
+    );
+    expect(truncatedImage.status).toBe(400);
+    expect(fixture.stored.size).toBe(0);
+
+    fixture.bindings.IMAGES = imagesFor({ width: 12_001 });
+    const oversizedDimensions = await fixture.request(
+      `/issues/${issue.body.issueId}/images?filename=too-wide.png`,
+      imageUpload(pngBytes(), "application/octet-stream"),
+    );
+    expect(oversizedDimensions.status).toBe(400);
+    expect(fixture.stored.size).toBe(0);
+
+    fixture.bindings.IMAGES = imagesFor({
+      normalizedBytes: new Uint8Array(10 * 1024 * 1024 + 1),
+    });
+    const oversizedNormalizedImage = await fixture.request(
+      `/issues/${issue.body.issueId}/images?filename=oversized-output.png`,
+      imageUpload(pngBytes()),
+    );
+    expect(oversizedNormalizedImage.status).toBe(413);
+    expect(fixture.stored.size).toBe(0);
+    expect(
+      fixture.database
+        .query(`SELECT COUNT(*) AS count FROM audit_issue_images`)
+        .get(),
+    ).toEqual({ count: 0 });
+  });
+
+  it("normalizes an image's type and name and serves it privately with a thumbnail", async () => {
+    const fixture = createFixture();
+    const { issue } = await createAuditIssue(fixture);
+    const uploaded = await fixture.request(
+      `/issues/${issue.body.issueId}/images?filename=electrical-panel.jpg`,
+      imageUpload(pngBytes(), "image/jpeg"),
+    );
+    expect(uploaded.status).toBe(201);
+    const uploadedBody = (await uploaded.json()) as IssueImageResponse;
+    expect(uploadedBody.image).toMatchObject({
+      contentType: "image/png",
+      filename: "electrical-panel.png",
+    });
+
+    const hiddenImage = await fixture.request(
+      `/issues/${issue.body.issueId}/images/${uploadedBody.image.id}`,
+      {
+        headers: {
+          "x-test-organization-id": "org_user-2",
+          "x-test-user-id": "user-2",
+        },
+      },
+    );
+    expect(hiddenImage.status).toBe(404);
+
+    const image = await fixture.request(
+      `/issues/${issue.body.issueId}/images/${uploadedBody.image.id}`,
+      undefined,
+    );
+    expect(image.status).toBe(200);
+    expect(image.headers.get("cache-control")).toBe("no-store");
+    expect(image.headers.get("content-type")).toBe("image/png");
+    expect(image.headers.get("content-disposition")).toContain("inline");
+
+    let thumbnailTransform: Record<string, unknown> | undefined;
+    fixture.bindings.IMAGES = imagesFor({
+      onTransform: (options) => {
+        thumbnailTransform = options;
+      },
+    });
+    const thumbnail = await fixture.request(
+      `/issues/${issue.body.issueId}/images/${uploadedBody.image.id}?variant=thumbnail`,
+      undefined,
+    );
+    expect(thumbnail.status).toBe(200);
+    expect(thumbnail.headers.get("cache-control")).toBe("no-store");
+    expect(thumbnail.headers.get("content-type")).toBe("image/webp");
+    expect(thumbnailTransform).toEqual({
+      fit: "scale-down",
+      height: 480,
+      width: 480,
+    });
+  });
+
+  it("keeps an image whose activation committed but lost its response", async () => {
+    const fixture = createFixture();
+    const { issue } = await createAuditIssue(fixture);
+    const lostActivation = fixture.hooks.after(imageActivation, () => {
+      throw new Error("D1 activation response was lost after commit");
+    });
+    const pendingUpdate = fixture.hooks.before(
+      "SET deletion_pending = 1",
+      failPendingUpdate,
+    );
+    const committedWithoutResponse = await fixture.request(
+      `/issues/${issue.body.issueId}/images?filename=committed-without-response.png`,
+      imageUpload(pngBytes()),
+    );
+    expect(committedWithoutResponse.status).toBe(201);
+    const committedWithoutResponseBody =
+      (await committedWithoutResponse.json()) as IssueImageResponse;
+    expect(
+      fixture.database
+        .query(
+          `SELECT deletion_pending FROM objects
+           WHERE filename = 'committed-without-response.png'`,
+        )
+        .get(),
+    ).toEqual({ deletion_pending: 0 });
+    expect(fixture.stored.size).toBe(1);
+    const retainedCommittedImage = await fixture.request(
+      `/issues/${issue.body.issueId}/images/${committedWithoutResponseBody.image.id}`,
+      undefined,
+    );
+    expect(retainedCommittedImage.status).toBe(200);
+    expect(lostActivation.calls).toBe(1);
+    expect(pendingUpdate.calls).toBe(0);
+    pendingUpdate.remove();
+    const deletedCommittedImage = await fixture.request(
+      `/issues/${issue.body.issueId}/images/${committedWithoutResponseBody.image.id}`,
+      { method: "DELETE" },
+    );
+    expect(deletedCommittedImage.status).toBe(204);
+    expect(fixture.stored.size).toBe(0);
+  });
+
+  it("keeps a leased upload from cleanup while its bytes are written", async () => {
+    const fixture = createFixture();
+    const { issue } = await createAuditIssue(fixture);
+    fixture.storageControl.beforeNextPut = async () => {
+      fixture.database
+        .query(
+          `UPDATE objects SET created_at = '2000-01-01T00:00:00.000Z'
+           WHERE filename = 'lease-protected.png'`,
+        )
+        .run();
+      expect(await purgePendingAuditIssueImages(fixture.bindings)).toBe(0);
+      expect(
+        fixture.database
+          .query(
+            `SELECT cleanup_token, upload_token,
+                    datetime(upload_lease_expires_at) > datetime('now') AS leased
+             FROM objects WHERE filename = 'lease-protected.png'`,
+          )
+          .get(),
+      ).toEqual({
+        cleanup_token: null,
+        leased: 1,
+        upload_token: expect.any(String),
+      });
+    };
+    const leaseProtectedUpload = await fixture.request(
+      `/issues/${issue.body.issueId}/images?filename=lease-protected.png`,
+      imageUpload(pngBytes()),
+    );
+    expect(leaseProtectedUpload.status).toBe(201);
+    const leaseProtectedBody =
+      (await leaseProtectedUpload.json()) as IssueImageResponse;
+    const deletedLeaseProtectedImage = await fixture.request(
+      `/issues/${issue.body.issueId}/images/${leaseProtectedBody.image.id}`,
+      { method: "DELETE" },
+    );
+    expect(deletedLeaseProtectedImage.status).toBe(204);
+    expect(fixture.stored.size).toBe(0);
+  });
+
+  it("refuses an upload whose lease expired while its bytes were written", async () => {
+    const fixture = createFixture();
+    const { issue } = await createAuditIssue(fixture);
+    fixture.storageControl.beforeNextPut = async () => {
+      fixture.database
+        .query(
+          `UPDATE objects
+           SET created_at = '2000-01-01T00:00:00.000Z',
+               upload_lease_expires_at = '2000-01-01T00:00:00.000Z'
+           WHERE filename = 'expired-mid-write.png'`,
+        )
+        .run();
+      expect(
+        await purgePendingAuditIssueImages(
+          fixture.bindings,
+          "9999-12-31T23:59:59.999Z",
+          "9999-12-31T23:59:59.999Z",
+        ),
+      ).toBe(1);
+    };
+    const expiredMidWriteUpload = await fixture.request(
+      `/issues/${issue.body.issueId}/images?filename=expired-mid-write.png`,
+      imageUpload(pngBytes()),
+    );
+    expect(expiredMidWriteUpload.status).toBe(500);
+    expect(fixture.stored.size).toBe(0);
+    expect(
+      fixture.database
+        .query(
+          `SELECT id FROM objects WHERE filename = 'expired-mid-write.png'`,
+        )
+        .get(),
+    ).toBeNull();
+  });
+
+  it("retries a failed upload's cleanup and spares an object reclaimed meanwhile", async () => {
+    const fixture = createFixture();
+    const { issue } = await createAuditIssue(fixture);
+    fixture.hooks.before(imageActivation, () => {
+      throw new Error("Transient D1 image activation failure");
+    });
+    fixture.storageControl.failNextDelete = true;
+    const failedUploadCleanup = await fixture.request(
+      `/issues/${issue.body.issueId}/images?filename=cleanup-retry.png`,
+      imageUpload(pngBytes()),
+    );
+    expect(failedUploadCleanup.status).toBe(500);
+    expect(fixture.stored.size).toBe(1);
+    expect(
+      fixture.database
+        .query(
+          `SELECT COUNT(*) AS count FROM objects
+           WHERE deletion_pending = 1 AND kind = 'audit_issue_image'`,
+        )
+        .get(),
+    ).toEqual({ count: 1 });
+    expect(await purgePendingAuditIssueImages(fixture.bindings)).toBe(0);
+    fixture.hooks.before(
+      "SET cleanup_token = ?",
+      ({ values }) => {
+        const objectId = values[2];
+        if (typeof objectId !== "string") {
+          throw new Error("Cleanup claim object id missing");
+        }
+        fixture.database
+          .query(
+            `UPDATE objects
+             SET deletion_pending = 0, cleanup_token = NULL,
+                 cleanup_claimed_at = NULL, upload_token = NULL,
+                 upload_lease_expires_at = NULL
+             WHERE id = ?`,
+          )
+          .run(objectId);
+      },
+      { method: "first" },
+    );
+    expect(
+      await purgePendingAuditIssueImages(
+        fixture.bindings,
+        "9999-12-31T23:59:59.999Z",
+      ),
+    ).toBe(0);
+    expect(fixture.stored.size).toBe(1);
+    expect(
+      fixture.database
+        .query(
+          `SELECT cleanup_token, deletion_pending FROM objects
+           WHERE filename = 'cleanup-retry.png'`,
+        )
+        .get(),
+    ).toEqual({ cleanup_token: null, deletion_pending: 0 });
+    fixture.database
+      .query(
+        `UPDATE objects SET deletion_pending = 1
+         WHERE filename = 'cleanup-retry.png'`,
+      )
+      .run();
+    expect(
+      await purgePendingAuditIssueImages(
+        fixture.bindings,
+        "9999-12-31T23:59:59.999Z",
+      ),
+    ).toBe(1);
+    expect(fixture.stored.size).toBe(0);
+  });
+
+  it("admits one upload to an issue at a time and caps it at ten images", async () => {
+    const fixture = createFixture();
+    const { auditId, issue } = await createAuditIssue(fixture);
+    const uploaded = await fixture.request(
+      `/issues/${issue.body.issueId}/images?filename=electrical-panel.jpg`,
+      imageUpload(pngBytes(), "image/jpeg"),
+    );
+    expect(uploaded.status).toBe(201);
+
+    let processedConcurrentUploads = 0;
+    fixture.bindings.IMAGES = imagesFor({
+      onInfo: () => {
+        processedConcurrentUploads += 1;
+      },
+    });
+    const concurrentUploads = await Promise.all(
+      Array.from({ length: 10 }, (_, index) =>
+        fixture.request(
+          `/issues/${issue.body.issueId}/images?filename=concurrent-${index}.png`,
+          imageUpload(pngBytes()),
+        ),
+      ),
+    );
+    expect(
+      concurrentUploads.filter(({ status }) => status === 201),
+    ).toHaveLength(1);
+    expect(
+      concurrentUploads.filter(({ status }) => status === 429),
+    ).toHaveLength(9);
+    expect(
+      concurrentUploads
+        .filter(({ status }) => status === 429)
+        .every((response) => response.headers.get("retry-after") === "1"),
+    ).toBe(true);
+    const retriedUploads: Response[] = [];
+    for (let index = 0; index < 9; index += 1) {
+      retriedUploads.push(
+        await fixture.request(
+          `/issues/${issue.body.issueId}/images?filename=retry-${index}.png`,
+          imageUpload(pngBytes()),
+        ),
+      );
+    }
+    expect(retriedUploads.filter(({ status }) => status === 201)).toHaveLength(
+      8,
+    );
+    expect(retriedUploads.filter(({ status }) => status === 409)).toHaveLength(
+      1,
+    );
+    expect(processedConcurrentUploads).toBe(9);
+    expect(fixture.stored.size).toBe(10);
+    expect(
+      fixture.database
+        .query(`SELECT COUNT(*) AS count FROM audit_issue_images`)
+        .get(),
+    ).toEqual({ count: 10 });
+    expect(
+      fixture.database.query(`SELECT COUNT(*) AS count FROM objects`).get(),
+    ).toEqual({ count: 10 });
+    expect(
+      fixture.database.query(`SELECT DISTINCT kind FROM objects`).all(),
+    ).toEqual([{ kind: "audit_issue_image" }]);
+
+    const rejectedBeforeProcessing = await fixture.request(
+      `/issues/${issue.body.issueId}/images?filename=invalid.png`,
+      imageUpload("not an image"),
+    );
+    expect(rejectedBeforeProcessing.status).toBe(409);
+    expect(fixture.stored.size).toBe(10);
+
+    const detail = await fixture.request(`/runs/${auditId}`, undefined);
+    const detailBody = (await detail.json()) as {
+      issues: Array<{
+        images: Array<{
+          contentType: string;
+          filename: string;
+          id: string;
+          uploadedBy: { id: string };
+        }>;
+      }>;
+    };
+    expect(detailBody.issues[0]?.images).toHaveLength(10);
+    expect(detailBody.issues[0]?.images).toContainEqual(
+      expect.objectContaining({
+        contentType: "image/png",
+        filename: "electrical-panel.png",
+        uploadedBy: expect.objectContaining({ id: "user-1" }),
+      }),
+    );
+
+    const deletedImages = await Promise.all(
+      (detailBody.issues[0]?.images ?? []).map(({ id }) =>
+        fixture.request(`/issues/${issue.body.issueId}/images/${id}`, {
+          method: "DELETE",
+        }),
+      ),
+    );
+    expect(deletedImages.every(({ status }) => status === 204)).toBe(true);
+    expect(fixture.stored.size).toBe(0);
+  });
+
+  it("keeps an image when marking it for deletion fails", async () => {
+    const fixture = createFixture();
+    const { issue } = await createAuditIssue(fixture);
+    const uploaded = await fixture.request(
+      `/issues/${issue.body.issueId}/images?filename=electrical-panel.jpg`,
+      imageUpload(pngBytes(), "image/jpeg"),
+    );
+    expect(uploaded.status).toBe(201);
+    const uploadedBody = (await uploaded.json()) as IssueImageResponse;
+    fixture.hooks.before("SET deletion_pending = 1", failPendingUpdate);
+    const failedMetadataDelete = await fixture.request(
+      `/issues/${issue.body.issueId}/images/${uploadedBody.image.id}`,
+      { method: "DELETE" },
+    );
+    expect(failedMetadataDelete.status).toBe(500);
+    expect(fixture.stored.size).toBe(1);
+    const retainedImage = await fixture.request(
+      `/issues/${issue.body.issueId}/images/${uploadedBody.image.id}`,
+      undefined,
+    );
+    expect(retainedImage.status).toBe(200);
+  });
+
+  it("hides an image whose bytes could not be deleted and purges them later", async () => {
+    const fixture = createFixture();
+    const { issue } = await createAuditIssue(fixture);
+    const uploaded = await fixture.request(
+      `/issues/${issue.body.issueId}/images?filename=electrical-panel.jpg`,
+      imageUpload(pngBytes(), "image/jpeg"),
+    );
+    expect(uploaded.status).toBe(201);
+    const uploadedBody = (await uploaded.json()) as IssueImageResponse;
+
+    const uploadedObject = fixture.database
+      .query(`SELECT id FROM objects WHERE filename = 'electrical-panel.png'`)
+      .get() as { id: string };
+    fixture.storageControl.failNextDelete = true;
+    const failedImageDelete = await fixture.request(
+      `/issues/${issue.body.issueId}/images/${uploadedBody.image.id}`,
+      { method: "DELETE" },
+    );
+    expect(failedImageDelete.status).toBe(202);
+    expect(fixture.stored.size).toBe(1);
+    expect(
+      fixture.database
+        .query(
+          `SELECT deletion_pending FROM objects
+           WHERE id = ? AND kind = 'audit_issue_image'`,
+        )
+        .get(uploadedObject.id),
+    ).toEqual({ deletion_pending: 1 });
+    expect(
+      fixture.database
+        .query(`SELECT id FROM audit_issue_images WHERE id = ?`)
+        .get(uploadedBody.image.id),
+    ).toBeNull();
+    const pendingImage = await fixture.request(
+      `/issues/${issue.body.issueId}/images/${uploadedBody.image.id}`,
+      undefined,
+    );
+    expect(pendingImage.status).toBe(404);
+    const replacementImage = await fixture.request(
+      `/issues/${issue.body.issueId}/images?filename=replacement.png`,
+      imageUpload(pngBytes()),
+    );
+    expect(replacementImage.status).toBe(201);
+    const replacementImageBody =
+      (await replacementImage.json()) as IssueImageResponse;
+    expect(fixture.stored.size).toBe(2);
+    expect(await purgePendingAuditIssueImages(fixture.bindings)).toBe(0);
+    expect(
+      await purgePendingAuditIssueImages(
+        fixture.bindings,
+        "9999-12-31T23:59:59.999Z",
+      ),
+    ).toBe(1);
+    expect(fixture.stored.size).toBe(1);
+
+    const deletedReplacement = await fixture.request(
+      `/issues/${issue.body.issueId}/images/${replacementImageBody.image.id}`,
+      { method: "DELETE" },
+    );
+    expect(deletedReplacement.status).toBe(204);
+    expect(fixture.stored.size).toBe(0);
+  });
 });
 
 function jpegBytes() {
@@ -525,4 +999,8 @@ function webpBytes() {
   return decodeImageFixture(
     "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA",
   );
+}
+
+function failPendingUpdate(): never {
+  throw new Error("Transient D1 update failure");
 }

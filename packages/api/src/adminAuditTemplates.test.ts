@@ -393,7 +393,7 @@ describe("global audit templates", () => {
     ).toEqual({ count: 3 });
   });
 
-  it("shares global templates without exposing organization templates", async () => {
+  it("keeps global templates out of the organization create and update routes", async () => {
     const fixture = createFixture();
     for (const role of ["user", "admin"]) {
       const denied = await jsonRequest(
@@ -406,26 +406,29 @@ describe("global audit templates", () => {
       expect(denied.status).toBe(400);
     }
 
-    const global = await jsonRequest<TemplateResponse>(
-      fixture,
-      "/admin/audit-templates",
-      "POST",
-      { name: "Shared safety form" },
-      { role: "admin" },
-    );
+    const global = await publishedGlobalTemplate(fixture);
+
+    for (const role of ["user", "admin"]) {
+      const deniedUpdate = await jsonRequest(
+        fixture,
+        `/templates/${global.body.template.id}`,
+        "PUT",
+        {
+          definition: global.body.template.definition,
+          expectedCurrentVersion: 2,
+          name: "Organization safety form",
+        },
+        { role },
+      );
+      expect(deniedUpdate.status).toBe(403);
+    }
+  });
+
+  it("shares a published global template, but no organization's own templates", async () => {
+    const fixture = createFixture();
+    const global = await publishedGlobalTemplate(fixture);
     expect(global.status).toBe(201);
     expect(global.body.template.scope).toBe("global");
-    await jsonRequest(
-      fixture,
-      `/admin/audit-templates/${global.body.template.id}`,
-      "PUT",
-      {
-        ...global.body.template,
-        expectedCurrentVersion: 1,
-        status: "published",
-      },
-      { role: "admin" },
-    );
 
     const local = await jsonRequest<TemplateResponse>(
       fixture,
@@ -454,20 +457,19 @@ describe("global audit templates", () => {
       otherOrganization.body.templates.map(({ name }) => name),
     ).not.toContain("Private form");
 
-    for (const role of ["user", "admin"]) {
-      const deniedUpdate = await jsonRequest(
-        fixture,
-        `/templates/${global.body.template.id}`,
-        "PUT",
-        {
-          definition: global.body.template.definition,
-          expectedCurrentVersion: 2,
-          name: "Organization safety form",
-        },
-        { role },
-      );
-      expect(deniedUpdate.status).toBe(403);
-    }
+    const privateRun = await jsonRequest(
+      fixture,
+      `/templates/${local.body.template.id}/runs`,
+      "POST",
+      undefined,
+      { organizationId: "org_user-2", userId: "user-2" },
+    );
+    expect(privateRun.status).toBe(404);
+  });
+
+  it("copies a global template into an organization without changing it", async () => {
+    const fixture = createFixture();
+    const global = await publishedGlobalTemplate(fixture);
 
     const organizationCopy = await jsonRequest<TemplateResponse>(
       fixture,
@@ -500,6 +502,20 @@ describe("global audit templates", () => {
       version: 2,
     });
 
+    const copiedRun = await jsonRequest(
+      fixture,
+      `/templates/${organizationCopy.body.template.id}/runs`,
+      "POST",
+      undefined,
+      { organizationId: "org_user-2", userId: "user-2" },
+    );
+    expect(copiedRun.status).toBe(404);
+  });
+
+  it("starts other organizations' audits from the latest global version", async () => {
+    const fixture = createFixture();
+    const global = await publishedGlobalTemplate(fixture);
+
     const adminUpdate = await jsonRequest<TemplateResponse>(
       fixture,
       `/admin/audit-templates/${global.body.template.id}`,
@@ -517,24 +533,6 @@ describe("global audit templates", () => {
       scope: "global",
       version: 3,
     });
-
-    const privateRun = await jsonRequest(
-      fixture,
-      `/templates/${local.body.template.id}/runs`,
-      "POST",
-      undefined,
-      { organizationId: "org_user-2", userId: "user-2" },
-    );
-    expect(privateRun.status).toBe(404);
-
-    const copiedRun = await jsonRequest(
-      fixture,
-      `/templates/${organizationCopy.body.template.id}/runs`,
-      "POST",
-      undefined,
-      { organizationId: "org_user-2", userId: "user-2" },
-    );
-    expect(copiedRun.status).toBe(404);
 
     const globalRun = await jsonRequest<RunResponse>(
       fixture,
@@ -560,17 +558,9 @@ describe("global audit templates", () => {
     });
   });
 
-  it("manages global templates from root admin without organization templates", async () => {
+  it("creates global templates with trimmed, required names and lists only global ones", async () => {
     const fixture = createFixture();
     const admin = { role: "admin" };
-    const local = await jsonRequest<TemplateResponse>(
-      fixture,
-      "/templates",
-      "POST",
-      { name: "Private form" },
-    );
-    expect(local.body.template.scope).toBe("organization");
-
     const created = await jsonRequest<TemplateResponse>(
       fixture,
       "/admin/audit-templates",
@@ -612,6 +602,18 @@ describe("global audit templates", () => {
     expect(listed.body.templates.every(({ scope }) => scope === "global")).toBe(
       true,
     );
+  });
+
+  it("hides organization templates from the admin console", async () => {
+    const fixture = createFixture();
+    const admin = { role: "admin" };
+    const local = await jsonRequest<TemplateResponse>(
+      fixture,
+      "/templates",
+      "POST",
+      { name: "Private form" },
+    );
+    expect(local.body.template.scope).toBe("organization");
 
     for (const [path, method] of [
       [`/admin/audit-templates/${local.body.template.id}`, "GET"],
@@ -634,6 +636,19 @@ describe("global audit templates", () => {
       );
       expect(hidden.status).toBe(404);
     }
+  });
+
+  it("versions a global template with a stale-write guard and shares the published version", async () => {
+    const fixture = createFixture();
+    const admin = { role: "admin" };
+    const created = await jsonRequest<TemplateResponse>(
+      fixture,
+      "/admin/audit-templates",
+      "POST",
+      { name: "  Shared ladder form  " },
+      admin,
+    );
+    const id = created.body.template.id;
 
     const stale = await jsonRequest(
       fixture,
@@ -718,3 +733,28 @@ describe("global audit templates", () => {
     expect(organizationView.body.template.name).toBe("Shared ladder form v2");
   });
 });
+
+/** A global template the admin console created and published as version 2. */
+async function publishedGlobalTemplate(
+  fixture: ReturnType<typeof createFixture>,
+) {
+  const global = await jsonRequest<TemplateResponse>(
+    fixture,
+    "/admin/audit-templates",
+    "POST",
+    { name: "Shared safety form" },
+    { role: "admin" },
+  );
+  await jsonRequest(
+    fixture,
+    `/admin/audit-templates/${global.body.template.id}`,
+    "PUT",
+    {
+      ...global.body.template,
+      expectedCurrentVersion: 1,
+      status: "published",
+    },
+    { role: "admin" },
+  );
+  return global;
+}

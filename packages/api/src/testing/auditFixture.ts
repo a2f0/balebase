@@ -121,6 +121,26 @@ export async function createActivityAudit(
   return { auditId: started.body.auditId, templateId };
 }
 
+/** An audit run with a high-priority issue assigned to user-1. */
+export async function createAuditIssue(
+  fixture: ReturnType<typeof createFixture>,
+) {
+  const { auditId } = await createActivityAudit(fixture);
+  const issue = await jsonRequest<IssueResponse>(
+    fixture,
+    `/runs/${auditId}/issues`,
+    "POST",
+    {
+      assignedTo: "user-1",
+      description: "Correct before the next shift.",
+      itemId: "check",
+      priority: "high",
+      title: "Check question",
+    },
+  );
+  return { auditId, issue };
+}
+
 /** The statement that activates an uploaded issue image. */
 export const imageActivation = "SET size = ?, deletion_pending = 0";
 
