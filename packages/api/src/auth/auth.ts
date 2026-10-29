@@ -68,6 +68,15 @@ const sessionAdditionalFields = {
   },
 } as const;
 
+// Platform roles change only through the guarded, recorded Users page routes
+// or `auth:set-role`. These admin endpoints would let any admin set roles,
+// including their own, with no history.
+const roleChangePaths = [
+  "/admin/set-role",
+  "/admin/update-user",
+  "/admin/create-user",
+];
+
 export function createAuth(env: Bindings, waitUntil: WaitUntil) {
   return betterAuth({
     advanced: {
@@ -79,6 +88,7 @@ export function createAuth(env: Bindings, waitUntil: WaitUntil) {
     baseURL: env.BETTER_AUTH_URL,
     database: env.DB,
     databaseHooks: authDatabaseHooks(env),
+    disabledPaths: roleChangePaths,
     emailAndPassword: {
       autoSignIn: false,
       customSyntheticUser: ({ coreFields, additionalFields, id }) => ({
