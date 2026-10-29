@@ -4,7 +4,7 @@ import {
   financeRoutes,
 } from "@balebase/validators/finance";
 import type { FinanceContext } from "./financeContext";
-import { respond } from "./respond";
+import { readQuery, respond } from "./respond";
 
 /*
  * Expense reporting rules (Plaid amounts are positive for money leaving an
@@ -45,13 +45,13 @@ interface ReportRange {
 }
 
 export async function expenseReport(context: FinanceContext) {
-  const range = reportRange(context.req.query("from"), context.req.query("to"));
-  if (!range) {
-    return context.json(
-      { error: "Use YYYY-MM-DD dates with from on or before to." },
-      400,
-    );
-  }
+  const query = readQuery(
+    context,
+    financeRoutes.expenseReport,
+    "Use YYYY-MM-DD dates with from on or before to.",
+  );
+  if (query instanceof Response) return query;
+  const range = { from: query.from || null, to: query.to || null };
   const database = context.env.DB;
   const organizationId = context.get("organizationId");
   const [expenses, transfers, categories] = await Promise.all([
@@ -107,17 +107,6 @@ function summarizeExpenses(
       ),
     };
   });
-}
-
-function reportRange(
-  from: string | undefined,
-  to: string | undefined,
-): ReportRange | null {
-  const start = from || null;
-  const end = to || null;
-  if ((start && !isDate(start)) || (end && !isDate(end))) return null;
-  if (start && end && start > end) return null;
-  return { from: start, to: end };
 }
 
 async function expenseRows(
@@ -188,12 +177,6 @@ function categoryTotal(
       0,
     ),
   };
-}
-
-function isDate(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(date.valueOf()) && date.toISOString().startsWith(value);
 }
 
 function cents(value: number) {

@@ -4,7 +4,7 @@ import {
 } from "@balebase/validators/adminUsers";
 import { Hono } from "hono";
 import type { ApiEnv } from "./authMiddleware";
-import { respond } from "./respond";
+import { readBody, readQuery, respond } from "./respond";
 import {
   cancelUserDeletion,
   requestUserDeletion,
@@ -33,9 +33,12 @@ adminUsers.use("*", async (context, next) => {
 });
 
 adminUsers.get("/", async (context) => {
-  const query = adminUsersRoutes.list.query.safeParse(context.req.query());
-  if (!query.success)
-    return context.json({ error: "Invalid user pagination." }, 400);
+  const query = readQuery(
+    context,
+    adminUsersRoutes.list,
+    "Invalid user pagination.",
+  );
+  if (query instanceof Response) return query;
   const [users, count] = await context.env.DB.batch([
     context.env.DB.prepare(
       `SELECT user.id, user.name, user.email, user.emailVerified, user.createdAt,
@@ -47,7 +50,7 @@ adminUsers.get("/", async (context) => {
        FROM user LEFT JOIN user_deletion_requests AS request ON request.user_id = user.id
        WHERE user.id NOT LIKE 'system:%'
        ORDER BY user.createdAt DESC, user.id LIMIT ? OFFSET ?`,
-    ).bind(query.data.limit, query.data.offset),
+    ).bind(query.limit, query.offset),
     context.env.DB.prepare(
       "SELECT COUNT(*) AS total FROM user WHERE id NOT LIKE 'system:%'",
     ),
@@ -85,14 +88,16 @@ adminUsers.post("/:userId/deletion", async (context) => {
       403,
     );
   }
-  const input = adminUsersRoutes.markForDeletion.body.safeParse(
-    await context.req.json().catch(() => null),
+  const confirmation =
+    "Confirm the user's email to mark this account for deletion.";
+  const input = await readBody(
+    context,
+    adminUsersRoutes.markForDeletion,
+    confirmation,
   );
-  if (!input.success || input.data.confirm !== user.email) {
-    return context.json(
-      { error: "Confirm the user's email to mark this account for deletion." },
-      400,
-    );
+  if (input instanceof Response) return input;
+  if (input.confirm !== user.email) {
+    return context.json({ error: confirmation }, 400);
   }
   const requestedAt = await requestUserDeletion(
     context.env.DB,

@@ -16,7 +16,7 @@ import { InvalidPdfError, inspectPdf, sha256Hex } from "./contractPdf";
 import { eventStatement } from "./contractRecords";
 import { mappedDraft } from "./contractTemplateDefinition";
 import { normalizeFilename } from "./filenames";
-import { readBody, respond } from "./respond";
+import { readBody, readQuery, respond } from "./respond";
 import {
   readBoundedForm,
   storedDownload,
@@ -150,13 +150,16 @@ contractTemplates.post("/", async (context) => {
 });
 
 contractTemplates.get("/:id", async (context) => {
-  const selected = context.req.query("version");
-  if (selected !== undefined && !positiveInteger(selected))
-    return context.json({ error: "Choose a template version." }, 400);
+  const query = readQuery(
+    context,
+    contractTemplatesRoutes.get,
+    "Choose a template version.",
+  );
+  if (query instanceof Response) return query;
   const version = await findVersion(
     context,
     context.req.param("id"),
-    selected ? Number(selected) : undefined,
+    query.version ? Number(query.version) : undefined,
   );
   if (!version) return notFound(context);
   return respond(context, contractTemplatesRoutes.get, {
@@ -183,13 +186,16 @@ contractTemplates.get("/:id/versions", async (context) => {
 });
 
 contractTemplates.get("/:id/document", async (context) => {
-  const selected = context.req.query("version");
-  if (selected !== undefined && !positiveInteger(selected))
-    return context.json({ error: "Choose a template version." }, 400);
+  const query = readQuery(
+    context,
+    contractTemplatesRoutes.document,
+    "Choose a template version.",
+  );
+  if (query instanceof Response) return query;
   const version = await findVersion(
     context,
     context.req.param("id"),
-    selected ? Number(selected) : undefined,
+    query.version ? Number(query.version) : undefined,
   );
   if (!version) return notFound(context);
   const download = await storedDownload(
@@ -428,14 +434,6 @@ async function readDocument(file: unknown): Promise<DocumentInput | string> {
     if (cause instanceof InvalidPdfError) return cause.message;
     throw cause;
   }
-}
-
-function positiveInteger(value: string) {
-  return (
-    /^\d+$/.test(value) &&
-    Number.isSafeInteger(Number(value)) &&
-    Number(value) >= 1
-  );
 }
 
 function notFound(context: TemplateContext) {

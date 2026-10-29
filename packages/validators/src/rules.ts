@@ -34,6 +34,7 @@ export const financeLimits = {
   annotationLabels: 12,
   annotationNote: 2000,
   categoryName: 60,
+  search: 100,
 } as const;
 
 /** What membership in a group can grant. */
@@ -58,8 +59,12 @@ export const contractLimits = {
   /** Of a contract template. */
   description: 2000,
   fieldLabel: 100,
+  /** What a signer types into a text field. */
+  fieldValue: 500,
   fields: 500,
   message: 2000,
+  /** Why a contract is voided or declined; a longer one is cut short. */
+  reason: 500,
   reminderDays: 30,
   signerEmail: 254,
   signerName: 120,
