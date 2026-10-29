@@ -19,7 +19,28 @@ export async function readBody<Body extends z.ZodType>(
   invalid: string,
 ): Promise<z.output<Body> | Response> {
   const body: unknown = await context.req.json().catch(() => null);
-  const parsed = contract.body.safeParse(body, { error: () => invalid });
+  return parse(context, contract.body, body, invalid);
+}
+
+/**
+ * Reads a route's query parameters through its contract, as `readBody`
+ * reads a body. A parameter sent more than once counts once.
+ */
+export function readQuery<Query extends z.ZodType>(
+  context: Context,
+  contract: Route & { query: Query },
+  invalid: string,
+): z.output<Query> | Response {
+  return parse(context, contract.query, context.req.query(), invalid);
+}
+
+function parse<Schema extends z.ZodType>(
+  context: Context,
+  schema: Schema,
+  value: unknown,
+  invalid: string,
+): z.output<Schema> | Response {
+  const parsed = schema.safeParse(value, { error: () => invalid });
   if (parsed.success) return parsed.data;
   return context.json(
     { error: parsed.error.issues[0]?.message ?? invalid },

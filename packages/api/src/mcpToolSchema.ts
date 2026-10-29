@@ -1,113 +1,158 @@
 import type { ApiKeyAccess } from "@balebase/validators/apiKeys";
+import type { Route } from "@balebase/validators/route";
 import type { JsonSchemaType } from "@modelcontextprotocol/server";
+import { z } from "zod";
 
 /**
- * An MCP tool that calls one REST route. Path parameters, query parameters,
- * and JSON body fields share the tool's flat argument object; the REST route
+ * An MCP tool that calls one contract route. Its arguments are the route's
+ * path parameters, query parameters, and JSON body fields in one flat
+ * object, with schemas generated from the contract; the REST route
  * validates them and its error message becomes the tool error.
  */
 export interface McpTool {
-  body?: { properties: Record<string, JsonSchemaType>; required?: string[] };
   description: string;
+  /**
+   * What each argument means to a model, by name. A dotted name, such as
+   * `recipients.email`, describes a field inside an argument.
+   */
+  descriptions?: Record<string, string>;
   /** Deletes or irreversibly changes data. */
   destructive?: boolean;
-  method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
   name: string;
+  /** Query parameters and body fields the tool does not offer. */
+  omit?: string[];
   /** Reaches people or services outside Balebase, such as email or Checkr. */
   openWorld?: boolean;
-  params?: Record<string, JsonSchemaType>;
-  /** A REST path with `{name}` placeholders for `params`. */
-  path: string;
-  query?: Record<string, JsonSchemaType>;
+  /**
+   * Optional route fields a model must send anyway, such as the version that
+   * keeps a save from overwriting newer edits.
+   */
+  require?: string[];
+  route: Route;
   title: string;
   /** Trims a large REST response to what a model needs. */
   transform?: (body: unknown) => unknown;
 }
 
-/** Reads are available to every key; anything else needs a write key. */
-export function toolAccess(tool: McpTool): ApiKeyAccess {
-  return tool.method === "GET" ? "read" : "write";
+/** Where each argument goes in the REST request, and the schema clients see. */
+export interface ToolInput {
+  /** Absent when the route takes no JSON body. */
+  body?: string[];
+  params: string[];
+  query: string[];
+  schema: JsonSchemaType;
 }
 
-export function toolInputSchema(tool: McpTool): JsonSchemaType {
-  return {
+interface SchemaNode {
+  [keyword: string]: unknown;
+  anyOf?: SchemaNode[];
+  description?: string;
+  items?: SchemaNode;
+  oneOf?: SchemaNode[];
+  properties?: Record<string, SchemaNode>;
+  required?: string[];
+}
+
+/** Reads are available to every key; anything else needs a write key. */
+export function toolAccess(tool: McpTool): ApiKeyAccess {
+  return tool.route.method === "GET" ? "read" : "write";
+}
+
+export function toolInput(tool: McpTool): ToolInput {
+  const { body, path, query } = tool.route;
+  if (body === "file" || body === "form") {
+    throw new Error(`${tool.name} cannot send a ${body} body.`);
+  }
+  const omitted = new Set(tool.omit);
+  const params = [...path.matchAll(/:(\w+)/g)].map((match) => match[1] ?? "");
+  const queryFields = contractFields(query, omitted);
+  const bodyFields = contractFields(body, omitted);
+  const properties: Record<string, SchemaNode> = Object.fromEntries(
+    params.map((name) => [name, { minLength: 1, type: "string" }]),
+  );
+  for (const [name, schema] of [
+    ...Object.entries(queryFields.properties ?? {}),
+    ...Object.entries(bodyFields.properties ?? {}),
+  ]) {
+    if (name in properties) {
+      throw new Error(`${tool.name} has two arguments named ${name}.`);
+    }
+    properties[name] = schema;
+  }
+  for (const name of tool.require ?? []) {
+    if (!(name in properties)) {
+      throw new Error(`${tool.name} cannot require missing ${name}.`);
+    }
+  }
+  const schema = {
     additionalProperties: false,
-    properties: {
-      ...tool.params,
-      ...tool.query,
-      ...tool.body?.properties,
-    },
+    properties,
     required: [
-      ...Object.keys(tool.params ?? {}),
-      ...(tool.body?.required ?? []),
+      ...params,
+      ...(queryFields.required ?? []),
+      ...(bodyFields.required ?? []),
+      ...(tool.require ?? []),
     ],
     type: "object",
   };
-}
-
-export function text(
-  description: string,
-  limits: { maxLength?: number; minLength?: number; pattern?: string } = {},
-): JsonSchemaType {
-  return { description, type: "string", ...limits };
-}
-
-export function id(description: string): JsonSchemaType {
-  return { description, minLength: 1, type: "string" };
-}
-
-export function oneOf(
-  description: string,
-  values: readonly string[],
-): JsonSchemaType {
-  return { description, enum: [...values], type: "string" };
-}
-
-export function integer(
-  description: string,
-  limits: { maximum?: number; minimum?: number } = {},
-): JsonSchemaType {
-  return { description, type: "integer", ...limits };
-}
-
-export function boolean(description: string): JsonSchemaType {
-  return { description, type: "boolean" };
-}
-
-export function date(description: string): JsonSchemaType {
-  return { description, pattern: "^\\d{4}-\\d{2}-\\d{2}$", type: "string" };
-}
-
-/** Allows null alongside a scalar schema, which usually clears the value. */
-export function nullable(schema: JsonSchemaType): JsonSchemaType {
-  if (typeof schema !== "object" || typeof schema.type !== "string") {
-    throw new Error("Only scalar schemas can be made nullable.");
-  }
-  const { enum: values, ...rest } = schema;
+  describeArguments(tool, schema);
   return {
-    ...rest,
-    ...(values ? { enum: [...values, null] } : {}),
-    type: [schema.type, "null"],
+    ...(body ? { body: Object.keys(bodyFields.properties ?? {}) } : {}),
+    params,
+    query: Object.keys(queryFields.properties ?? {}),
+    schema: schema as JsonSchemaType,
   };
 }
 
-export function list(
-  description: string,
-  items: JsonSchemaType,
-  limits: { maxItems?: number; minItems?: number } = {},
-): JsonSchemaType {
-  return { description, items, type: "array", ...limits };
+function describeArguments(tool: McpTool, schema: SchemaNode) {
+  for (const [name, description] of Object.entries(tool.descriptions ?? {})) {
+    const fields = fieldsAt(schema, name.split("."));
+    if (fields.length === 0) {
+      throw new Error(`${tool.name} has no argument ${name}.`);
+    }
+    for (const field of fields) field.description = description;
+  }
 }
 
-export function object(
-  description: string,
-  properties: Record<string, JsonSchemaType>,
-  required: string[] = [],
-): JsonSchemaType {
-  return { description, properties, required, type: "object" };
+/** A contract schema's fields as clients send them, less `omitted`. */
+function contractFields(
+  schema: z.ZodType | undefined,
+  omitted: ReadonlySet<string>,
+): SchemaNode {
+  if (!schema) return {};
+  // The round trip detaches any node zod shares between fields, so a
+  // description given to one field never lands on another.
+  const { properties = {}, required = [] }: SchemaNode = JSON.parse(
+    JSON.stringify(z.toJSONSchema(schema, { io: "input" })),
+  );
+  return {
+    properties: Object.fromEntries(
+      Object.entries(properties).filter(([name]) => !omitted.has(name)),
+    ),
+    required: required.filter((name) => !omitted.has(name)),
+  };
 }
 
-export const activityCursor = text(
-  "The nextCursor from the previous page; omit for the newest events.",
-  { pattern: "^[1-9]\\d{0,15}$" },
-);
+/** The fields at a path of names, looking inside arrays and unions. */
+function fieldsAt(schema: SchemaNode, path: string[]) {
+  let nodes = [schema];
+  for (const name of path) {
+    nodes = nodes.flatMap(objectsWithin).flatMap((node) => {
+      const field = node.properties?.[name];
+      return field ? [field] : [];
+    });
+  }
+  return nodes;
+}
+
+function objectsWithin(node: SchemaNode): SchemaNode[] {
+  return [
+    ...(node.properties ? [node] : []),
+    ...(node.items ? objectsWithin(node.items) : []),
+    ...[...(node.anyOf ?? []), ...(node.oneOf ?? [])].flatMap(objectsWithin),
+  ];
+}
+
+export const activityCursor = {
+  cursor: "The nextCursor from the previous page; omit for the newest events.",
+};

@@ -1,160 +1,126 @@
-import {
-  boolean,
-  date,
-  id,
-  list,
-  type McpTool,
-  nullable,
-  text,
-} from "./mcpToolSchema";
+import { financeRoutes } from "@balebase/validators/finance";
+import type { McpTool } from "./mcpToolSchema";
 
-const categoryName = text(
-  "Category name, unique in the organization; repeated spaces collapse.",
-  { maxLength: 60, minLength: 1 },
-);
-const transactionId = id(
-  "Transaction id from get_finance_overview or search_finance_transactions.",
-);
-const categoryId = id("Category id from list_expense_categories.");
+const categoryName = {
+  name: "Category name, unique in the organization; repeated spaces collapse.",
+};
+const transactionId = {
+  id: "Transaction id from get_finance_overview or search_finance_transactions.",
+};
+const categoryId = { id: "Category id from list_expense_categories." };
+const connectionId = { id: "Connection id from get_finance_overview." };
 
 export const financeTools: McpTool[] = [
   {
     description:
-      "Gets connected bank institutions, accounts and balances, expense categories, and the 250 newest transactions with notes, labels, categories, and linked emails.",
-    method: "GET",
+      "Gets connected bank institutions, accounts and balances, expense categories, and the 250 newest transactions with notes, labels, categories, and linked emails. Filters narrow the transactions; pass nextCursor for the next 250.",
+    descriptions: {
+      accountId: "Account id, or a list of them; omit for every account.",
+      category: "Expense category slug from list_expense_categories.",
+      cursor: "The nextCursor from the previous page; omit for the newest.",
+      uncategorized: '"true" for uncategorized spending only.',
+      year: "Four-digit year of the transaction date, such as 2026.",
+    },
     name: "get_finance_overview",
-    path: "/api/finance",
+    // Clients before 0.1.52 filter by category id; category replaces it.
+    omit: ["categoryId"],
+    route: financeRoutes.listing,
     title: "Get finance overview",
   },
   {
     description:
       "Finds up to 25 recent transactions whose name or merchant contains the query, or whose amount matches it (for example 42.50 or $1,200).",
-    method: "GET",
+    descriptions: { q: "Search text or amount; empty returns the newest." },
     name: "search_finance_transactions",
-    path: "/api/finance/transactions",
-    query: {
-      q: text("Search text or amount; empty returns the newest.", {
-        maxLength: 100,
-      }),
-    },
+    route: financeRoutes.searchTransactions,
     title: "Search finance transactions",
   },
   {
     description:
       "Lists expense categories with their URL slugs and how many transactions each has.",
-    method: "GET",
     name: "list_expense_categories",
-    path: "/api/finance/categories",
+    route: financeRoutes.listCategories,
     title: "List expense categories",
   },
   {
     description:
       "Totals posted spending by category and currency for an inclusive date range. Refunds reduce their category; uncategorized transfers and loan payments are reported separately.",
-    method: "GET",
-    name: "get_expense_report",
-    path: "/api/finance/reports/expenses",
-    query: {
-      from: date("First day, YYYY-MM-DD; omit for no lower bound."),
-      to: date("Last day, YYYY-MM-DD; omit for no upper bound."),
+    descriptions: {
+      from: "First day, YYYY-MM-DD; omit for no lower bound.",
+      to: "Last day, YYYY-MM-DD; omit for no upper bound.",
     },
+    name: "get_expense_report",
+    route: financeRoutes.expenseReport,
     title: "Get expense report",
   },
   {
     description:
       "Queues a durable background sync from Plaid for one bank connection and returns its job. Use get_finance_sync_status to check completion; leaving the session does not stop it.",
-    method: "POST",
+    descriptions: connectionId,
     name: "sync_finance_connection",
     openWorld: true,
-    params: {
-      id: id("Connection id from get_finance_overview."),
-    },
-    path: "/api/finance/connections/{id}/sync-jobs",
+    route: financeRoutes.startSync,
     title: "Sync finance connection",
   },
   {
     description:
       "Gets the latest background sync job and connection status without loading transactions.",
-    method: "GET",
+    descriptions: connectionId,
     name: "get_finance_sync_status",
-    params: { id: id("Connection id from get_finance_overview.") },
-    path: "/api/finance/connections/{id}/sync-status",
+    route: financeRoutes.syncStatus,
     title: "Get finance sync status",
   },
   {
-    body: {
-      properties: {
-        labels: list(
-          "Labels; this replaces the current labels.",
-          text("A label.", { maxLength: 50 }),
-          { maxItems: 12 },
-        ),
-        note: text("Note; this replaces the current note.", {
-          maxLength: 2000,
-        }),
-        reviewed: boolean("Whether the transaction has been reviewed."),
-      },
-      required: ["note", "labels", "reviewed"],
-    },
     description:
       "Replaces a transaction's note, labels, and reviewed flag. Send the current values for anything that should stay.",
-    method: "PATCH",
+    descriptions: {
+      ...transactionId,
+      labels: "Labels; this replaces the current labels.",
+      note: "Note; this replaces the current note.",
+      reviewed: "Whether the transaction has been reviewed.",
+    },
     name: "annotate_finance_transaction",
-    params: { id: transactionId },
-    path: "/api/finance/transactions/{id}/annotation",
+    route: financeRoutes.updateTransactionAnnotation,
     title: "Annotate finance transaction",
   },
   {
-    body: {
-      properties: {
-        categoryId: nullable(
-          text("Category id, or null to uncategorize.", {
-            maxLength: 100,
-            minLength: 1,
-          }),
-        ),
-      },
-      required: ["categoryId"],
-    },
     description: "Assigns a transaction to an expense category.",
-    method: "PUT",
+    descriptions: {
+      ...transactionId,
+      categoryId: "Category id, or null to uncategorize.",
+    },
     name: "categorize_finance_transaction",
-    params: { id: transactionId },
-    path: "/api/finance/transactions/{id}/category",
+    route: financeRoutes.setTransactionCategory,
     title: "Categorize finance transaction",
   },
   {
-    body: { properties: { name: categoryName }, required: ["name"] },
     description: "Creates an expense category.",
-    method: "POST",
+    descriptions: categoryName,
     name: "create_expense_category",
-    path: "/api/finance/categories",
+    route: financeRoutes.createCategory,
     title: "Create expense category",
   },
   {
     description:
       "Adds the common set of expense categories, skipping names that already exist.",
-    method: "POST",
     name: "add_default_expense_categories",
-    path: "/api/finance/categories/defaults",
+    route: financeRoutes.addDefaultCategories,
     title: "Add default expense categories",
   },
   {
-    body: { properties: { name: categoryName }, required: ["name"] },
     description: "Renames an expense category.",
-    method: "PATCH",
+    descriptions: { ...categoryId, ...categoryName },
     name: "rename_expense_category",
-    params: { id: categoryId },
-    path: "/api/finance/categories/{id}",
+    route: financeRoutes.renameCategory,
     title: "Rename expense category",
   },
   {
     description:
       "Deletes an expense category; its transactions become uncategorized.",
+    descriptions: categoryId,
     destructive: true,
-    method: "DELETE",
     name: "delete_expense_category",
-    params: { id: categoryId },
-    path: "/api/finance/categories/{id}",
+    route: financeRoutes.deleteCategory,
     title: "Delete expense category",
   },
 ];

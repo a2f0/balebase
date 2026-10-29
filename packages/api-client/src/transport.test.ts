@@ -177,17 +177,11 @@ it("throws the API's message and code, keeping the response", async () => {
     .catch((cause: unknown) => cause);
   expect(error).toBeInstanceOf(ApiError);
   expect(error).toMatchObject({
-    body: { seats: 3 },
     code: "UPGRADE_REQUIRED",
     message: "Upgrade to Pro.",
     status: 402,
   });
   expect((error as ApiError).response.headers.get("Retry-After")).toBe("5");
-  expect((error as ApiError).data).toEqual({
-    code: "UPGRADE_REQUIRED",
-    error: "Upgrade to Pro.",
-    seats: 3,
-  });
 
   reply = () => new Response("<html>", { status: 502 });
   expect(

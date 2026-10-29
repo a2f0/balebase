@@ -5,7 +5,7 @@ import { jobRunDetail, listJobRuns } from "./jobHistory";
 import { toJobRun } from "./jobRuns";
 import { waitForLegacyJob } from "./legacyJobRun";
 import { enqueueMaintenance, maintenanceJobs } from "./maintenance";
-import { respond } from "./respond";
+import { readBody, readQuery, respond } from "./respond";
 
 const adminJobs = new Hono<ApiEnv>();
 adminJobs.get("/", (context) =>
@@ -34,21 +34,27 @@ adminJobs.get("/", (context) =>
   }),
 );
 adminJobs.get("/runs", async (context) => {
-  const input = adminJobsRoutes.runs.query.safeParse(context.req.query());
-  if (!input.success)
-    return context.json({ error: "Invalid history filter." }, 400);
-  const history = await listJobRuns(context.env.DB, input.data);
+  const query = readQuery(
+    context,
+    adminJobsRoutes.runs,
+    "Invalid history filter.",
+  );
+  if (query instanceof Response) return query;
+  const history = await listJobRuns(context.env.DB, query);
   if (!history) return context.json({ error: "Invalid history cursor." }, 400);
   return respond(context, adminJobsRoutes.runs, history);
 });
 adminJobs.get("/runs/:runId", async (context) => {
-  const input = adminJobsRoutes.detail.query.safeParse(context.req.query());
-  if (!input.success)
-    return context.json({ error: "Invalid log cursor." }, 400);
+  const query = readQuery(
+    context,
+    adminJobsRoutes.detail,
+    "Invalid log cursor.",
+  );
+  if (query instanceof Response) return query;
   const detail = await jobRunDetail(
     context.env.DB,
     context.req.param("runId"),
-    input.data.before,
+    query.before,
   );
   if (!detail) return context.json({ error: "Job run not found." }, 404);
   return respond(context, adminJobsRoutes.detail, detail);
@@ -64,11 +70,15 @@ async function startMaintenance(context: Context<ApiEnv>, legacy: boolean) {
     ({ id }) => id === context.req.param("jobId"),
   );
   if (!job) return context.json({ error: "Unknown maintenance job." }, 404);
-  const input = adminJobsRoutes.run.body.safeParse(
-    await context.req.json().catch(() => null),
+  const confirmation = "Confirm the job ID to run this job.";
+  const input = await readBody(
+    context,
+    legacy ? adminJobsRoutes.run : adminJobsRoutes.start,
+    confirmation,
   );
-  if (!input.success || input.data.confirm !== job.id) {
-    return context.json({ error: "Confirm the job ID to run this job." }, 400);
+  if (input instanceof Response) return input;
+  if (input.confirm !== job.id) {
+    return context.json({ error: confirmation }, 400);
   }
   if (!context.env.FINANCE_SYNC_QUEUE)
     return context.json({ error: "Background jobs are not configured." }, 503);
