@@ -1,5 +1,5 @@
 import type { AuditDefinition } from "@balebase/validators/audits";
-import { isRecord } from "./jsonInput";
+import { isRecord } from "./shared/jsonInput";
 
 export function parseResponses(value: unknown, definition: AuditDefinition) {
   if (!isRecord(value) || Object.keys(value).length > 5_000) return null;

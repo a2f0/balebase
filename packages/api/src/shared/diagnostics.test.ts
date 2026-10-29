@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 
 test("compiled Worker errors retain bundle positions and finish their reports", async () => {
-  const root = resolve(import.meta.dir, "../../..");
+  const root = resolve(import.meta.dir, "../../../..");
   const parent = resolve(root, "packages/api/.wrangler");
   await mkdir(parent, { recursive: true });
   const directory = await mkdtemp(resolve(parent, "diagnostics-test-"));

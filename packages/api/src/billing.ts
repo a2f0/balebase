@@ -33,7 +33,7 @@ import {
   canManageOrganization,
   requireManager,
 } from "./organizationMembers";
-import { respond } from "./respond";
+import { respond } from "./shared/respond";
 import {
   StripeApiError,
   StripeConfigurationError,

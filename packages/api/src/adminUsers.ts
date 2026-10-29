@@ -4,7 +4,7 @@ import {
 } from "@balebase/validators/adminUsers";
 import { Hono } from "hono";
 import type { ApiEnv } from "./authMiddleware";
-import { readBody, readQuery, respond } from "./respond";
+import { readBody, readQuery, respond } from "./shared/respond";
 import {
   cancelUserDeletion,
   requestUserDeletion,

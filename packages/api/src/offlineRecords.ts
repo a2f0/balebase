@@ -1,5 +1,4 @@
 import type { OfflineOperation } from "@balebase/validators/offline";
-import { activityStatement } from "./activity";
 import { allRequiredAnswered, parseResponses } from "./auditDefinition";
 import { findTemplate, storedDefinition } from "./auditTemplates";
 import {
@@ -7,6 +6,7 @@ import {
   issueInsert,
   issueTargetAvailable,
 } from "./issueRecords";
+import { activityStatement } from "./shared/activity";
 
 /**
  * Why an operation's writes did not happen though their batch succeeded: an

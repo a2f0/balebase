@@ -1,4 +1,4 @@
-import { sendMail } from "./mailSender";
+import { sendMail } from "./shared/mailSender";
 import type { Bindings } from "./types";
 
 type MailEnvironment = Pick<

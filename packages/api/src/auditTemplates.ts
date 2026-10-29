@@ -8,7 +8,7 @@ import {
 } from "@balebase/validators/audits";
 import type { Person } from "@balebase/validators/fields";
 import type { z } from "zod";
-import { type ActivityActor, activityBatch } from "./activity";
+import { type ActivityActor, activityBatch } from "./shared/activity";
 
 export interface TemplateRow {
   created_at: string;

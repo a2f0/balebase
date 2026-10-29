@@ -28,7 +28,7 @@ import {
   signingToken,
   signingTokenHash,
 } from "./contractTokens";
-import { trackedPut, uploadStillQueued } from "./storage";
+import { trackedPut, uploadStillQueued } from "./shared/storage";
 import type { Bindings } from "./types";
 
 export type ContractEnvironment = Pick<

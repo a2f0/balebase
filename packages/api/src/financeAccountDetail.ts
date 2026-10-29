@@ -3,7 +3,7 @@ import {
   financeRoutes,
 } from "@balebase/validators/finance";
 import type { FinanceContext } from "./financeContext";
-import { respond } from "./respond";
+import { respond } from "./shared/respond";
 
 /** How many of the newest transactions the account page lists. */
 const recentTransactionLimit = 10;

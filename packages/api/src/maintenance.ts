@@ -6,10 +6,10 @@ import { purgeStripeWebhookReceipts } from "./billingWebhook";
 import { refreshActiveCheckrScreenings } from "./checkrSync";
 import { maintainContracts } from "./contractReminders";
 import { purgeDeletedObjects } from "./deletedObjectCleanup";
-import { captureApiError } from "./diagnostics";
 import { dispatchJob, type JobRow } from "./jobRuns";
 import { MaintenanceFailure } from "./maintenanceFailure";
 import { purgeDeletedOrganizations } from "./organizationPurge";
+import { captureApiError } from "./shared/diagnostics";
 import type { Bindings } from "./types";
 import { purgeRequestedUsers } from "./userDeletion";
 

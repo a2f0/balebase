@@ -1,8 +1,8 @@
 import type { Database, SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
-import { activity } from "./activity";
 import { equipment } from "./equipment";
 import { inbox } from "./inbox";
+import { activity } from "./shared/activity";
 import { testBindings } from "./testing/bindings";
 import { toD1 } from "./testing/d1";
 import { applyMigrations, createTestDatabase } from "./testing/database";

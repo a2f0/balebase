@@ -15,7 +15,7 @@ import {
   listOrganizationMembers,
   requireManager,
 } from "./organizationMembers";
-import { readBody, respond } from "./respond";
+import { readBody, respond } from "./shared/respond";
 
 interface OrganizationRow {
   id: string;

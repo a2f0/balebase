@@ -18,8 +18,8 @@ import {
   signingTokenHash,
 } from "./contractTokens";
 import { advanceContract, decodePngDataUrl } from "./contractWorkflow";
-import { readBody, respond } from "./respond";
-import { storedDownload } from "./storage";
+import { readBody, respond } from "./shared/respond";
+import { storedDownload } from "./shared/storage";
 import type { Bindings } from "./types";
 
 /** Public routes a signer reaches through their emailed link; no account. */

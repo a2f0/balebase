@@ -1,5 +1,5 @@
 import { afterEach } from "bun:test";
-import { collectContractMismatches } from "../respond";
+import { collectContractMismatches } from "../shared/respond";
 
 // Every response a test receives through `respond` must match its route's
 // contract, so the client's types describe what the API really sends.

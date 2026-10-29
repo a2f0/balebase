@@ -1,4 +1,4 @@
-import { isRecord } from "./jsonInput";
+import { isRecord } from "./shared/jsonInput";
 import type { Bindings } from "./types";
 
 export interface PlaidAccount {

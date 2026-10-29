@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { findAuditIssueImage } from "./auditIssueImageRecords";
 import { uploadAuditIssueImage } from "./auditIssueImageUploads";
 import type { ApiEnv } from "./authMiddleware";
-import { contentDisposition, downloadResponse } from "./storage";
+import { contentDisposition, downloadResponse } from "./shared/storage";
 
 const auditIssueImages = new Hono<ApiEnv>();
 

@@ -7,9 +7,9 @@ import {
   refreshCheckrScreening,
   reportSettleMs,
 } from "./checkrScreening";
-import { isRecord } from "./jsonInput";
 import { sendPendingScreeningNotifications } from "./screeningNotifications";
-import { readBoundedRequest } from "./storage";
+import { isRecord } from "./shared/jsonInput";
+import { readBoundedRequest } from "./shared/storage";
 import type { Bindings } from "./types";
 
 const maxCheckrWebhookBytes = 1024 * 1024;

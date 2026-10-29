@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { findActivity } from "./activity";
 import { app } from "./app";
+import { findActivity } from "./shared/activity";
 import {
   CookieJar,
   createFixture,

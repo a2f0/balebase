@@ -3,9 +3,9 @@ import {
   financeRoutes,
 } from "@balebase/validators/finance";
 import { financeLimits } from "@balebase/validators/rules";
-import { activityBatch } from "./activity";
 import type { FinanceContext } from "./financeContext";
-import { readBody, respond } from "./respond";
+import { activityBatch } from "./shared/activity";
+import { readBody, respond } from "./shared/respond";
 
 interface CategoryRow {
   id: string;

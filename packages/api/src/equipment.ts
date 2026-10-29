@@ -4,7 +4,6 @@ import {
 } from "@balebase/validators/equipment";
 import { equipmentTypes, isEquipmentType } from "@balebase/validators/rules";
 import { type Context, Hono } from "hono";
-import { activityBatch, findActivity } from "./activity";
 import type { ApiEnv } from "./authMiddleware";
 import { listLinkedEmails, toLinkedEmail } from "./inboundEmailLinks";
 import {
@@ -12,7 +11,8 @@ import {
   listMemberDirectory,
   requireManager,
 } from "./organizationMembers";
-import { readBody, respond } from "./respond";
+import { activityBatch, findActivity } from "./shared/activity";
+import { readBody, respond } from "./shared/respond";
 
 type EquipmentContext = Context<ApiEnv>;
 

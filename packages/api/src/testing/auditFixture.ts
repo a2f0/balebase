@@ -1,8 +1,8 @@
 import type { AuditDefinition } from "@balebase/validators/audits";
-import { activity } from "../activity";
 import { adminAuditTemplates } from "../adminAuditTemplates";
 import { audits } from "../audits";
 import { offline } from "../offline";
+import { activity } from "../shared/activity";
 import { memoryStorage, testBindings } from "./bindings";
 import { type QueryEvent, queryHooks, toD1 } from "./d1";
 import { createTestDatabase } from "./database";

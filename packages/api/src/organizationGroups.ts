@@ -11,7 +11,7 @@ import {
   listOrganizationMembers,
   requireManager,
 } from "./organizationMembers";
-import { readBody, respond } from "./respond";
+import { readBody, respond } from "./shared/respond";
 
 const invalidGroup =
   "A valid group name, members, and capabilities are required.";

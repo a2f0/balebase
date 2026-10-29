@@ -4,7 +4,7 @@ import {
   refreshSubscription,
   type SubscriptionEnvironment,
 } from "./billingSubscriptions";
-import { readBoundedRequest } from "./storage";
+import { readBoundedRequest } from "./shared/storage";
 import { StripeConfigurationError, verifyStripeWebhook } from "./stripe";
 import {
   optionalExpandableId,

@@ -4,10 +4,10 @@ import {
   activityRoutes,
 } from "@balebase/validators/activity";
 import { type Context, Hono } from "hono";
-import type { ApiKeyChannel, ApiKeyPrincipal } from "./apiKeys";
-import type { ApiEnv } from "./authMiddleware";
+import type { ApiKeyChannel, ApiKeyPrincipal } from "../apiKeys";
+import type { ApiEnv } from "../authMiddleware";
+import { userHasCapability } from "../organizationGroups";
 import { cursorPage } from "./cursorPagination";
-import { userHasCapability } from "./organizationGroups";
 import { readQuery, respond } from "./respond";
 
 export interface ActivityRow {

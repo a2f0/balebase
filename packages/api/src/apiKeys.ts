@@ -7,7 +7,7 @@ import { type Context, Hono } from "hono";
 import type { AuthSession } from "./auth";
 import type { ApiEnv } from "./authMiddleware";
 import { canManageOrganization, requireManager } from "./organizationMembers";
-import { readBody, respond } from "./respond";
+import { readBody, respond } from "./shared/respond";
 
 /** Whether an API-key request came from an MCP tool or straight to REST. */
 export type ApiKeyChannel = "mcp" | "rest";

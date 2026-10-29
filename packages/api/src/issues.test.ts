@@ -1,11 +1,11 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, describe, expect, it } from "bun:test";
 import type { ActivityPage } from "@balebase/validators/activity";
-import { activity } from "./activity";
 import { audits } from "./audits";
 import { createFinanceRouter } from "./finance";
 import { issues } from "./issues";
 import { requireCapability } from "./organizationGroups";
+import { activity } from "./shared/activity";
 import { testBindings } from "./testing/bindings";
 import { queryHooks, toD1 } from "./testing/d1";
 import { applyMigrations, createTestDatabase } from "./testing/database";

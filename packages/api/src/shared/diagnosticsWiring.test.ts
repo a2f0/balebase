@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 
 test("production Worker entrypoints report failures without changing their behavior", async () => {
   // Keep dependency mocks out of the real application's other tests.
-  const parent = resolve(import.meta.dir, "../.wrangler");
+  const parent = resolve(import.meta.dir, "../../.wrangler");
   await mkdir(parent, { recursive: true });
   const directory = await mkdtemp(resolve(parent, "diagnostics-wiring-"));
   try {
@@ -14,15 +14,15 @@ test("production Worker entrypoints report failures without changing their behav
       `
       import { expect, mock, test } from "bun:test";
       const reports = [];
-      const maintenance = await import(${JSON.stringify(resolve(import.meta.dir, "maintenance.ts"))});
+      const maintenance = await import(${JSON.stringify(resolve(import.meta.dir, "../maintenance.ts"))});
       const requestError = new TypeError("request failure");
       const emailError = new TypeError("email failure");
       const scheduledError = new TypeError("scheduled failure");
       mock.module(${JSON.stringify(resolve(import.meta.dir, "diagnostics.ts"))}, () => ({ captureApiError: async (error, source) => { reports.push({ error, source }); } }));
-      mock.module(${JSON.stringify(resolve(import.meta.dir, "email.ts"))}, () => ({ handleEmail: async () => { throw emailError; } }));
-      mock.module(${JSON.stringify(resolve(import.meta.dir, "maintenance.ts"))}, () => ({ ...maintenance, maintenanceTasks: () => [], runScheduledMaintenance: async () => { throw scheduledError; } }));
-      const { app } = await import(${JSON.stringify(resolve(import.meta.dir, "app.ts"))});
-      const { default: worker } = await import(${JSON.stringify(resolve(import.meta.dir, "index.ts"))});
+      mock.module(${JSON.stringify(resolve(import.meta.dir, "../email.ts"))}, () => ({ handleEmail: async () => { throw emailError; } }));
+      mock.module(${JSON.stringify(resolve(import.meta.dir, "../maintenance.ts"))}, () => ({ ...maintenance, maintenanceTasks: () => [], runScheduledMaintenance: async () => { throw scheduledError; } }));
+      const { app } = await import(${JSON.stringify(resolve(import.meta.dir, "../app.ts"))});
+      const { default: worker } = await import(${JSON.stringify(resolve(import.meta.dir, "../index.ts"))});
       app.get("/__diagnostics_test__", () => { throw requestError; });
       test("HTTP responses retain their error response and wait for reporting", async () => {
         const pending = [];
@@ -35,8 +35,8 @@ test("production Worker entrypoints report failures without changing their behav
       });
       test("routers with their own error handlers still report unexpected errors", async () => {
         const { Hono } = await import("hono");
-        const { createFinanceRouter } = await import(${JSON.stringify(resolve(import.meta.dir, "finance.ts"))});
-        const { employeeForms } = await import(${JSON.stringify(resolve(import.meta.dir, "employeeForms.ts"))});
+        const { createFinanceRouter } = await import(${JSON.stringify(resolve(import.meta.dir, "../finance.ts"))});
+        const { employeeForms } = await import(${JSON.stringify(resolve(import.meta.dir, "../employeeForms.ts"))});
         const plaidError = new TypeError("Plaid transport failure");
         const databaseError = new Error("database unavailable");
         const routes = new Hono();

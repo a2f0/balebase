@@ -1,9 +1,9 @@
 import { app } from "./app";
-import { captureApiError } from "./diagnostics";
 import { handleEmail } from "./email";
 import { scheduleJobs } from "./jobScheduler";
 import { consumeJobs } from "./jobWorker";
 import { runScheduledMaintenance } from "./maintenance";
+import { captureApiError } from "./shared/diagnostics";
 import type { Bindings } from "./types";
 
 export default {

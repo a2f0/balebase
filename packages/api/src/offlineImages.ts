@@ -5,7 +5,7 @@ import {
   toAuditIssueImage,
 } from "./auditIssueImageRecords";
 import type { IssueContext } from "./issueRecords";
-import { respond } from "./respond";
+import { respond } from "./shared/respond";
 
 export async function replayOfflineImage(
   context: IssueContext,

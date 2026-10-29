@@ -1,11 +1,11 @@
 import { auditsRoutes } from "@balebase/validators/audits";
 import { Hono } from "hono";
-import { activityBatch, activityStatement } from "./activity";
 import { deletePendingAuditIssueObject } from "./auditIssueImageCleanup";
 import { findAuditIssueImage } from "./auditIssueImageRecords";
 import { discardedAuditError, imageAuditNotDiscarded } from "./auditRunRecords";
 import type { ApiEnv } from "./authMiddleware";
-import { respond } from "./respond";
+import { activityBatch, activityStatement } from "./shared/activity";
+import { respond } from "./shared/respond";
 
 export const auditIssueImageRemoval = new Hono<ApiEnv>();
 

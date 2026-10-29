@@ -1,4 +1,4 @@
-import type { Bindings } from "./types";
+import type { Bindings } from "../types";
 
 /** Thrown when a body is still arriving at its read deadline. */
 export class BodyReadTimeoutError extends Error {}

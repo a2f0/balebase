@@ -14,7 +14,7 @@ import {
   restoreOrganization,
 } from "./organizationDeletion";
 import { listOrganizationMembers } from "./organizationMembers";
-import { respond } from "./respond";
+import { respond } from "./shared/respond";
 import type { Bindings } from "./types";
 
 const adminOrganizations = new Hono<ApiEnv>();

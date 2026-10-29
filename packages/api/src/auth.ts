@@ -18,8 +18,8 @@ import {
   assignAcceptedInvitationRequirements,
   assignRenewedInvitationRequirements,
 } from "./employeeForms";
-import { sendMail } from "./mailSender";
 import { organizationRoleActivity } from "./organizationRoleActivity";
+import { sendMail } from "./shared/mailSender";
 import type { Bindings } from "./types";
 
 type WaitUntil = (promise: Promise<unknown>) => void;

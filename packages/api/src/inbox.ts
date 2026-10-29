@@ -13,8 +13,8 @@ import {
   deleteEmailLink,
   listEmailLinks,
 } from "./inboundEmailLinks";
-import { respond } from "./respond";
-import { storedDownload } from "./storage";
+import { respond } from "./shared/respond";
+import { storedDownload } from "./shared/storage";
 
 const inbox = new Hono<ApiEnv>();
 

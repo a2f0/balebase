@@ -5,7 +5,7 @@ import { jobRunDetail, listJobRuns } from "./jobHistory";
 import { toJobRun } from "./jobRuns";
 import { waitForLegacyJob } from "./legacyJobRun";
 import { enqueueMaintenance, maintenanceJobs } from "./maintenance";
-import { readBody, readQuery, respond } from "./respond";
+import { readBody, readQuery, respond } from "./shared/respond";
 
 const adminJobs = new Hono<ApiEnv>();
 adminJobs.get("/", (context) =>

@@ -31,15 +31,15 @@ import {
 } from "./contractRecords";
 import { contractTemplates } from "./contractTemplates";
 import { firstSigners, notifyRecipients } from "./contractWorkflow";
-import { normalizeFilename } from "./filenames";
-import { readBody, respond } from "./respond";
+import { normalizeFilename } from "./shared/filenames";
+import { readBody, respond } from "./shared/respond";
 import {
   readBoundedForm,
   storedDownload,
   trackedPut,
   uploadExpired,
   uploadStillQueued,
-} from "./storage";
+} from "./shared/storage";
 
 type ContractContext = Context<ApiEnv>;
 

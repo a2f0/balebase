@@ -1,5 +1,5 @@
 import { productName } from "@balebase/ui/brand";
-import type { Bindings } from "./types";
+import type { Bindings } from "../types";
 
 interface Mail extends Omit<EmailReplyMessageBuilder, "from" | "replyTo"> {
   /** The organization the mail is sent for, named as "Acme via <product>". */

@@ -5,7 +5,7 @@ import {
 } from "@balebase/validators/finance";
 import type { FinanceContext } from "./financeContext";
 import { latestSyncJob } from "./financeSyncJobs";
-import { respond } from "./respond";
+import { respond } from "./shared/respond";
 
 interface ConnectionRow {
   daily_sync: number;

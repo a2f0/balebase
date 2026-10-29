@@ -4,7 +4,7 @@ import {
 } from "@balebase/validators/finance";
 import { financeLimits } from "@balebase/validators/rules";
 import type { FinanceContext } from "./financeContext";
-import { readQuery, respond } from "./respond";
+import { readQuery, respond } from "./shared/respond";
 
 interface TransactionMatchRow {
   account_name: string;

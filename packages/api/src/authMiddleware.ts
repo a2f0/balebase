@@ -12,8 +12,8 @@ import {
 import type { AuthSession } from "./auth";
 import { createAuth } from "./auth";
 import { organizationUserHasSeat } from "./billingEntitlements";
-import { isRecord } from "./jsonInput";
 import { isOrganizationOwner } from "./organizationMembers";
+import { isRecord } from "./shared/jsonInput";
 import type { Bindings } from "./types";
 
 export interface AuthVariables {

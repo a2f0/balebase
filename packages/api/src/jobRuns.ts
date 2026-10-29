@@ -1,5 +1,5 @@
 import { JobOutputSchema, type JobRun } from "@balebase/validators/adminJobs";
-import { captureApiError } from "./diagnostics";
+import { captureApiError } from "./shared/diagnostics";
 import type { Bindings } from "./types";
 
 export interface JobRow {

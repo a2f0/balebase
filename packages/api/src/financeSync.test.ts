@@ -1,5 +1,4 @@
 import { describe, expect, it, spyOn } from "bun:test";
-import { findActivity } from "./activity";
 import { jobRunDetail } from "./jobHistory";
 import { scheduleJobs } from "./jobScheduler";
 import { consumeJobs as consumeFinanceSync } from "./jobWorker";
@@ -8,6 +7,7 @@ import {
   type PlaidRequest,
   type PlaidRequestBody,
 } from "./plaid";
+import { findActivity } from "./shared/activity";
 import {
   createFixture,
   jsonRequest,

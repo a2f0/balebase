@@ -1,13 +1,13 @@
 import { auditsRoutes } from "@balebase/validators/audits";
 import { Hono } from "hono";
-import { activityBatch, activityStatement } from "./activity";
 import {
   discardedAuditError,
   discardRejection,
   findAudit,
 } from "./auditRunRecords";
 import type { ApiEnv } from "./authMiddleware";
-import { respond } from "./respond";
+import { activityBatch, activityStatement } from "./shared/activity";
+import { respond } from "./shared/respond";
 
 export const auditRunDiscard = new Hono<ApiEnv>();
 

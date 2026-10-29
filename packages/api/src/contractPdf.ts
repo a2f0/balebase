@@ -13,7 +13,7 @@ import {
   encodable,
   formatUtcTimestamp,
   type PdfLine,
-} from "./pdfText";
+} from "./shared/pdfText";
 
 /** A field's box as fractions of its page as displayed (after /Rotate). */
 export interface FieldRect {

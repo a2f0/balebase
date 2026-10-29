@@ -325,7 +325,7 @@ it("tells older clients that queued work continues without claiming completion",
 
 it("reports caught and interrupted maintenance failures and treats cancellation neutrally", async () => {
   const f = fixture();
-  const diagnostics = await import("./diagnostics");
+  const diagnostics = await import("./shared/diagnostics");
   const report = spyOn(diagnostics, "captureApiError").mockResolvedValue(
     undefined,
   );

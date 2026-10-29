@@ -5,7 +5,7 @@ import {
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "./authMiddleware";
 import { canManage, requireManager } from "./organizationMembers";
-import { readBody, respond } from "./respond";
+import { readBody, respond } from "./shared/respond";
 
 interface BusinessRow {
   city: string | null;

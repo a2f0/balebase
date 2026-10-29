@@ -1,6 +1,5 @@
 import { adminAuditTemplatesRoutes } from "@balebase/validators/adminAuditTemplates";
 import { Hono } from "hono";
-import { findActivity, requestActor } from "./activity";
 import {
   createTemplate,
   findTemplate,
@@ -14,7 +13,8 @@ import {
   toTemplate,
 } from "./auditTemplates";
 import type { ApiEnv } from "./authMiddleware";
-import { readBody, respond } from "./respond";
+import { findActivity, requestActor } from "./shared/activity";
+import { readBody, respond } from "./shared/respond";
 
 /**
  * Global audit templates, shared by every organization. Platform admins

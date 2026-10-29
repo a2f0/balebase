@@ -1,5 +1,5 @@
-import { decodeCursor } from "./cursorPagination";
 import type { FinanceContext } from "./financeContext";
+import { decodeCursor } from "./shared/cursorPagination";
 
 /** Filters are applied before pagination, including for older imported years. */
 export function financeListingFilters(context: FinanceContext) {
