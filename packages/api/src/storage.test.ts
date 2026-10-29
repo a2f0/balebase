@@ -106,4 +106,71 @@ describe("bounded body reads", () => {
     expect(await readBoundedRequest(request, 7)).toBeNull();
     expect(request.bodyUsed).toBe(false);
   });
+
+  it("stops reading image uploads at the streaming byte limit", async () => {
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      cancel: () => {
+        cancelled = true;
+      },
+      start(controller) {
+        controller.enqueue(new Uint8Array(4));
+        controller.enqueue(new Uint8Array(4));
+      },
+    });
+    expect(await readBodyWithLimit(stream, 7)).toBeNull();
+    expect(cancelled).toBe(true);
+
+    const exact = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(Uint8Array.from([1, 2]));
+        controller.enqueue(Uint8Array.from([3]));
+        controller.close();
+      },
+    });
+    const exactBytes = await readBodyWithLimit(exact, 3);
+    expect(exactBytes).not.toBeNull();
+    expect(new Uint8Array(exactBytes ?? [])).toEqual(
+      Uint8Array.from([1, 2, 3]),
+    );
+
+    let timedOutStreamCancelled = false;
+    const stalled = new ReadableStream<Uint8Array>({
+      cancel: () => {
+        timedOutStreamCancelled = true;
+      },
+    });
+    await expect(readBodyWithLimit(stalled, 7, 5)).rejects.toBeInstanceOf(
+      BodyReadTimeoutError,
+    );
+    expect(timedOutStreamCancelled).toBe(true);
+  });
+
+  it("does not wait for a stalled request-stream cancellation", async () => {
+    const neverCancels = () => new Promise<void>(() => undefined);
+    const oversized = new ReadableStream<Uint8Array>({
+      cancel: neverCancels,
+      start(controller) {
+        controller.enqueue(new Uint8Array(8));
+      },
+    });
+    const oversizedOutcome = await Promise.race([
+      readBodyWithLimit(oversized, 7),
+      new Promise<"stalled">((resolve) =>
+        setTimeout(() => resolve("stalled"), 50),
+      ),
+    ]);
+    expect(oversizedOutcome).toBeNull();
+
+    const timedOut = new ReadableStream<Uint8Array>({
+      cancel: neverCancels,
+    });
+    const timeoutOutcome = await Promise.race([
+      readBodyWithLimit(timedOut, 7, 5).catch((cause: unknown) => cause),
+      new Promise<"stalled">((resolve) =>
+        setTimeout(() => resolve("stalled"), 50),
+      ),
+    ]);
+    expect(timeoutOutcome).toBeInstanceOf(BodyReadTimeoutError);
+  });
 });

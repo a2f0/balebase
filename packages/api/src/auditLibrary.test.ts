@@ -16,6 +16,13 @@ import {
   validateResidentialLibrary,
 } from "./auditLibrary";
 import { audits } from "./audits";
+import {
+  createFixture,
+  jsonRequest,
+  legacyDatabase,
+  type TemplateListResponse,
+  type TemplateResponse,
+} from "./testing/auditFixture";
 import { testBindings } from "./testing/bindings";
 import { toD1 } from "./testing/d1";
 import { applyMigrations, createTestDatabase } from "./testing/database";
@@ -266,6 +273,186 @@ describe("starter template seeding", () => {
     expect(
       await (await routesFor(edited)(`/templates/${checklist.id}`)).json(),
     ).toMatchObject({ template: { name: "Admin edit", version: next } });
+  });
+});
+
+describe("built-in templates", () => {
+  it("attributes built-in templates to a durable system actor", async () => {
+    const fixture = createFixture();
+    const bookmarked = await jsonRequest<TemplateResponse>(
+      fixture,
+      "/templates/us_residential_core_global",
+      "GET",
+    );
+    expect(bookmarked.status).toBe(200);
+    expect(bookmarked.body.template.name).toBe(
+      "U.S. residential construction — comprehensive baseline",
+    );
+
+    const firstOrganization = await jsonRequest<TemplateListResponse>(
+      fixture,
+      "/templates",
+      "GET",
+    );
+    expect(firstOrganization.status).toBe(200);
+
+    const otherOrganization = await jsonRequest<TemplateListResponse>(
+      fixture,
+      "/templates",
+      "GET",
+      undefined,
+      { organizationId: "org_user-2", userId: "user-2" },
+    );
+    const builtIns = otherOrganization.body.templates.filter(({ id }) =>
+      ["nfpa70e_global", "us_residential_core_global"].includes(id),
+    );
+    expect(builtIns).toHaveLength(2);
+    for (const template of builtIns) {
+      expect(template.savedBy).toEqual({
+        email: "audit-library@system.invalid",
+        id: "system:audit-library",
+        name: "Stealth audit library",
+      });
+    }
+    expect(JSON.stringify(otherOrganization.body)).not.toContain(
+      "person@example.com",
+    );
+
+    // Foreign keys are enforced, so a restricting reference would throw here.
+    fixture.database.query("DELETE FROM user WHERE id = 'user-1'").run();
+    expect(
+      fixture.database.query("SELECT id FROM user WHERE id = 'user-1'").get(),
+    ).toBeNull();
+    expect(
+      fixture.database
+        .query(
+          `SELECT COUNT(*) AS count
+           FROM audit_template_families
+           WHERE id IN ('nfpa70e_global', 'us_residential_core_global')`,
+        )
+        .get(),
+    ).toEqual({ count: 2 });
+  });
+
+  it("seeds the audit actor despite a public email collision", async () => {
+    const database = legacyDatabase("0033");
+    database
+      .query(
+        `INSERT INTO user
+         (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
+         VALUES ('collision-user', 'Collision User', ?, 1, ?, ?, 'user', 0)`,
+      )
+      .run(
+        "audit-library@system.invalid",
+        "2026-08-25T12:00:00.000Z",
+        "2026-08-25T12:00:00.000Z",
+      );
+
+    applyMigrations(database, { before: "0034", from: "0033" });
+
+    expect(
+      database
+        .query("SELECT id, email FROM user WHERE id = 'collision-user'")
+        .get(),
+    ).toEqual({
+      email: "audit-library@system.invalid",
+      id: "collision-user",
+    });
+    const actor = database
+      .query("SELECT email, name FROM user WHERE id = 'system:audit-library'")
+      .get() as { email: string; name: string };
+    expect(actor.name).toBe("Stealth audit library");
+    expect(actor.email).toStartWith("audit-library+");
+    expect(actor.email).toEndWith("@system.invalid");
+    expect(actor.email).not.toBe("audit-library@system.invalid");
+  });
+
+  it("consolidates organization starters into one global template", async () => {
+    const database = legacyDatabase("0023");
+    const definition = JSON.stringify({ sections: [], version: 1 });
+    const insertFamily = database.query(
+      `INSERT INTO audit_template_families
+       (id, scope, organization_id, current_version, created_by, created_at,
+        updated_at)
+       VALUES (?, 'organization', ?, 1, ?, ?, ?)`,
+    );
+    const insertVersion = database.query(
+      `INSERT INTO audit_template_versions
+       (id, template_id, version, name, description, definition, status,
+        created_by, created_at)
+       VALUES (?, ?, 1, 'NFPA 70E readiness checklist', '', ?, 'published',
+        ?, ?)`,
+    );
+    for (const [templateId, organizationId, userId] of [
+      ["nfpa70e_org_user-1", "org_user-1", "user-1"],
+      ["nfpa70e_org_user-2", "org_user-2", "user-2"],
+    ] as const) {
+      insertFamily.run(
+        templateId,
+        organizationId,
+        userId,
+        "2026-08-20T12:00:00.000Z",
+        "2026-08-20T12:00:00.000Z",
+      );
+      insertVersion.run(
+        `${templateId}:v1`,
+        templateId,
+        definition,
+        userId,
+        "2026-08-20T12:00:00.000Z",
+      );
+    }
+    database
+      .query(
+        `INSERT INTO audits
+         (id, organization_id, template_id, template_family_id,
+          template_version_id, template_version, template_name, definition,
+          responses, status, started_by, created_at, updated_at)
+         VALUES ('starter-run', 'org_user-1', NULL, 'nfpa70e_org_user-1',
+          'nfpa70e_org_user-1:v1', 1, 'NFPA 70E readiness checklist', ?, '{}',
+          'in_progress', 'user-1', ?, ?)`,
+      )
+      .run(definition, "2026-08-21T12:00:00.000Z", "2026-08-21T12:00:00.000Z");
+
+    applyMigrations(database, { before: "0034", from: "0023" });
+
+    expect(
+      database
+        .query(
+          `SELECT id, scope, organization_id, created_by
+           FROM audit_template_families
+           WHERE id GLOB 'nfpa70e_*'`,
+        )
+        .all(),
+    ).toEqual([
+      {
+        created_by: "system:audit-library",
+        id: "nfpa70e_global",
+        organization_id: null,
+        scope: "global",
+      },
+    ]);
+    expect(
+      database
+        .query(
+          `SELECT created_by
+           FROM audit_template_versions
+           WHERE id = 'nfpa70e_global:v1'`,
+        )
+        .get(),
+    ).toEqual({ created_by: "system:audit-library" });
+    expect(
+      database
+        .query(
+          `SELECT template_family_id, template_version_id, template_version
+           FROM audits WHERE id = 'starter-run'`,
+        )
+        .get(),
+    ).toEqual({
+      template_family_id: "nfpa70e_global",
+      template_version: 1,
+      template_version_id: "nfpa70e_global:v1",
+    });
   });
 });
 
