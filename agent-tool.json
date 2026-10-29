@@ -37,6 +37,11 @@
   "pr": {
     "rejectClaudeBranding": true
   },
+  "permissions": {
+    "executables": {
+      "wrangler": "release"
+    }
+  },
   "images": {
     "targets": {
       "favicons": {

@@ -287,9 +287,14 @@ one of those packages ships with a patch bump from `agent-tool versions prepare`
 Pushes run the normal hooks with your usual environment and credentials, so
 review script and dependency changes before pushing them.
 
-After changing the `@a2f0/agent-tool` pin, run `bun run agents:sync` and commit
-the lockfile, skills, and `.agent-tool-skills.json` together. CI runs
-`bun run agents:check`, so drifted skills fail the required check.
+The pinned package also generates the Claude Code and Codex permission rules
+in `.claude/settings.json` and `.codex/rules/agent-tool.rules` from the
+`permissions` section of `agent-tool.json`; do not edit those rules either.
+After changing the `@a2f0/agent-tool` pin or that section, run
+`bun run agents:sync` and commit the lockfile, skills, permission rules,
+`.agent-tool-skills.json`, and `.agent-tool-permissions.json` together. CI
+runs `bun run agents:check`, so drifted skills or permission rules fail the
+required check.
 
 Use [the dependency upgrade workflow](docs/dependency-upgrades.md) when changing
 tool or package versions. That guide holds reusable upgrade procedures, active
