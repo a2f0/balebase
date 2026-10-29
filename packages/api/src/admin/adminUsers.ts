@@ -130,3 +130,37 @@ adminUsers.delete("/:userId/deletion", async (context) => {
     return context.json({ error: "User is not marked for deletion." }, 409);
   return respond(context, adminUsersRoutes.cancelDeletion, { ok: true });
 });
+
+adminUsers.delete("/:userId/admin", async (context) => {
+  const userId = context.req.param("userId");
+  if (userId === context.get("authSession").user.id) {
+    return context.json(
+      { error: "You cannot revoke your own root admin access." },
+      403,
+    );
+  }
+  const user = await context.env.DB.prepare(
+    "SELECT role FROM user WHERE id = ?",
+  )
+    .bind(userId)
+    .first<{ role: string | null }>();
+  if (!user) return context.json({ error: "User not found." }, 404);
+  const roles = (user.role ?? "")
+    .split(",")
+    .map((role) => role.trim())
+    .filter(Boolean);
+  if (!roles.includes("admin")) {
+    return context.json({ error: "User is not a root admin." }, 409);
+  }
+  const remaining = roles.filter((role) => role !== "admin");
+  // Guarded on the stored role so a concurrent change is not overwritten.
+  const result = await context.env.DB.prepare(
+    "UPDATE user SET role = ? WHERE id = ? AND role IS ?",
+  )
+    .bind(remaining.join(",") || "user", userId, user.role)
+    .run();
+  if (!result.meta.changes) {
+    return context.json({ error: "User is not a root admin." }, 409);
+  }
+  return respond(context, adminUsersRoutes.revokeAdmin, { ok: true });
+});

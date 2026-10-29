@@ -60,10 +60,10 @@ describe("root admin users", () => {
   });
 });
 
-async function renderUsers() {
+async function renderUsers(currentUserId?: string) {
   ({ container } = await mount(
     <>
-      <AdminUsers />
+      <AdminUsers currentUserId={currentUserId} />
       <DialogHost />
     </>,
   ));
@@ -135,7 +135,14 @@ it("requires email confirmation, refreshes pending status, and confirms cancella
   expect(container.textContent).not.toContain("Pending deletion");
 });
 
-it("disables marking admin accounts", async () => {
+async function openMenu() {
+  const trigger = container.querySelector<HTMLButtonElement>(
+    '[aria-haspopup="menu"]',
+  );
+  await act(async () => trigger?.click());
+}
+
+it("disables marking admin accounts but offers revoking root admin", async () => {
   respond(async () =>
     Response.json({
       total: 1,
@@ -143,10 +150,65 @@ it("disables marking admin accounts", async () => {
     }),
   );
   await renderUsers();
-  expect(
-    container.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')
-      ?.disabled,
-  ).toBeTrue();
+  await openMenu();
+  expect(button("Mark for deletion").disabled).toBeTrue();
+  expect(button("Revoke root admin").disabled).toBeFalse();
+});
+
+it("offers no revoke action for accounts that are not root admins", async () => {
+  respond(async () =>
+    Response.json({ total: 1, users: [user("person@example.com", null)] }),
+  );
+  await renderUsers();
+  await openMenu();
+  expect(document.body.textContent).not.toContain("Revoke root admin");
+});
+
+it("confirms before revoking root admin and refreshes the row", async () => {
+  const target = { ...user("admin@example.com", null), role: "user, admin" };
+  const mutations: Array<{ method: string; path: string }> = [];
+  respond(async (url, init) => {
+    if (init?.method === "DELETE") {
+      mutations.push({ method: init.method, path: url.pathname });
+      target.role = "user";
+      return Response.json({ ok: true });
+    }
+    return Response.json({ total: 1, users: [target] });
+  });
+  await renderUsers("someone-else");
+  await openMenu();
+  await act(async () => button("Revoke root admin").click());
+  expect(document.querySelector("dialog[open]")?.textContent).toContain(
+    "Revoke root admin for admin@example.com?",
+  );
+  await act(async () => button("Cancel").click());
+  expect(mutations).toEqual([]);
+  await openMenu();
+  await act(async () => button("Revoke root admin").click());
+  await act(async () => button("Revoke root admin").click());
+  expect(mutations).toEqual([
+    { method: "DELETE", path: "/api/admin/users/admin%40example.com/admin" },
+  ]);
+  expect(container.textContent).toContain(
+    "admin@example.com is no longer a root admin.",
+  );
+  await openMenu();
+  expect(document.body.textContent).not.toContain("Revoke root admin");
+});
+
+it("does not allow revoking root admin from your own account", async () => {
+  const self = { ...user("me@example.com", null), role: "user, admin" };
+  const mutations: string[] = [];
+  respond(async (_url, init) => {
+    if (init?.method && init.method !== "GET") mutations.push(init.method);
+    return Response.json({ total: 1, users: [self] });
+  });
+  await renderUsers(self.id);
+  await openMenu();
+  expect(button("Revoke root admin").disabled).toBeTrue();
+  await act(async () => button("Revoke root admin").click());
+  expect(document.querySelector("dialog[open]")).toBeNull();
+  expect(mutations).toEqual([]);
 });
 
 it("shows failed requests without changing deletion status", async () => {

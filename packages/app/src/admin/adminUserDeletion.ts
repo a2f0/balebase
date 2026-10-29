@@ -32,7 +32,33 @@ export function useAdminUserDeletion(reload: () => Promise<unknown>) {
     setUserId(undefined);
   }
 
-  return { userId, error, notice, update };
+  async function revokeAdmin(user: AdminUser) {
+    if (!(await confirmAdminRevocation(user))) return;
+    setUserId(user.id);
+    await run(async () => {
+      try {
+        await api.adminUsers.revokeAdmin(user.id);
+      } catch (cause) {
+        // A conflict means the list is out of date.
+        if (cause instanceof ApiError && cause.status === 409) await reload();
+        throw cause;
+      }
+      await reload();
+    }, `${user.email} is no longer a root admin.`);
+    setUserId(undefined);
+  }
+
+  return { userId, error, notice, revokeAdmin, update };
+}
+
+function confirmAdminRevocation(user: AdminUser) {
+  return confirmDialog({
+    title: `Revoke root admin for ${user.email}?`,
+    message:
+      "This account loses access to the Root Admin pages and platform-wide data. It keeps its other roles, organization memberships, and data.",
+    confirmLabel: "Revoke root admin",
+    tone: "danger",
+  });
 }
 
 function confirmUserDeletion(user: AdminUser) {

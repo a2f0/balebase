@@ -145,6 +145,9 @@ attribution is visible only to root admins; historical events are available to
 D1 database operators. History remains after cancellation and is removed when
 the target account is purged.
 
+Root admins can revoke another account's root admin role from the **Users** row
+menu after a confirmation. The API refuses to revoke the caller's own role.
+
 Users can request or cancel account deletion under **Account settings → General**.
 Apply migration `0048_create_user_deletion_requests.sql` before deploying this
 feature. The `purgeRequestedUsers` job processes up to 25 requests per run after

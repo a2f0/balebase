@@ -43,4 +43,9 @@ export const adminUsersRoutes = {
     path: "/api/admin/users/:userId/deletion",
     response: z.object({ ok: z.literal(true) }),
   }),
+  revokeAdmin: route({
+    method: "DELETE",
+    path: "/api/admin/users/:userId/admin",
+    response: z.object({ ok: z.literal(true) }),
+  }),
 };

@@ -2,14 +2,26 @@ import { Button, ContextMenu } from "@balebase/ui/react";
 
 export function AdminDeletionMenu({
   busy = false,
+  deletionDisabled,
   disabled = false,
+  extraItems = [],
   label,
   name,
   onSelect,
   pending,
 }: {
   busy?: boolean;
+  /** Disables only the deletion item; defaults to `disabled`. */
+  deletionDisabled?: boolean;
   disabled?: boolean;
+  /** Further actions listed after the deletion item. */
+  extraItems?: readonly {
+    disabled?: boolean;
+    icon: "lock";
+    id: string;
+    label: string;
+    onSelect: () => void;
+  }[];
   label: string;
   name: string;
   onSelect: () => void;
@@ -19,12 +31,16 @@ export function AdminDeletionMenu({
     <ContextMenu
       items={[
         {
-          disabled: disabled || busy,
+          disabled: (deletionDisabled ?? disabled) || busy,
           icon: pending ? "restore" : "trash",
           id: pending ? "restore" : "delete",
           label,
           onSelect,
         },
+        ...extraItems.map((item) => ({
+          ...item,
+          disabled: item.disabled || busy,
+        })),
       ]}
       label={`Actions for ${name}`}
       openOnClick

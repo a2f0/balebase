@@ -265,6 +265,41 @@ it("records only one request event when duplicate requests have the same timesta
   }
 });
 
+it("lets root admins revoke another root admin but never themselves", async () => {
+  const f = fixture();
+  const revoke = (id: string, init: RequestInit = {}) =>
+    f.request(`/users/${id}/admin`, {
+      method: "DELETE",
+      headers: { Origin: origin },
+      ...init,
+    });
+  const roleOf = (id: string) =>
+    f.database.query("SELECT role FROM user WHERE id = ?").get(id);
+  f.insertUser("actor", undefined, "user, admin");
+  f.insertUser("peer", undefined, "user, admin");
+  f.insertUser("plain");
+  expect((await revoke("actor")).status).toBe(403);
+  expect(roleOf("actor")).toEqual({ role: "user, admin" });
+  expect((await revoke("missing")).status).toBe(404);
+  expect((await revoke("plain")).status).toBe(409);
+  expect((await revoke("peer", { headers: {} })).status).toBe(403);
+  expect(roleOf("peer")).toEqual({ role: "user, admin" });
+  expect((await revoke("peer")).status).toBe(200);
+  expect(roleOf("peer")).toEqual({ role: "user" });
+  expect((await revoke("peer")).status).toBe(409);
+  for (const f2 of [fixture("user"), fixture("admin", "impersonator")]) {
+    f2.insertUser("peer", undefined, "user, admin");
+    expect(
+      (
+        await f2.request("/users/peer/admin", {
+          method: "DELETE",
+          headers: { Origin: origin },
+        })
+      ).status,
+    ).toBe(403);
+  }
+});
+
 /** The admin users router alone, for request-shape checks. */
 function routerFixture() {
   const database = createTestDatabase();
