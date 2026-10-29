@@ -3,7 +3,7 @@ import type {
   EmployeeRequirementKind,
   EmployeeRequirementStatus,
 } from "@balebase/validators/employeeForms";
-import { errorMessage, UpgradeRequiredError } from "./errors";
+import { errorMessage, UpgradeRequiredError } from "./shared/errors";
 
 /** A request being drafted, with an ID that keys it until it is sent. */
 export interface RequirementDraft extends EmployeeRequirementInput {

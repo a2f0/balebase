@@ -18,13 +18,10 @@ import type {
   EmployeeRequirementKind,
 } from "@balebase/validators/employeeForms";
 import { type ReactNode, useCallback, useRef } from "react";
-import { AppButtonLink } from "./AppLink";
-import { api } from "./apiClient";
 import {
   downloadEmployeeForm,
   downloadScreeningConsent,
 } from "./employeeFormDownloads";
-import { formatCalendarDate, formatDate } from "./labels";
 import type { WorkspaceOrganization } from "./organizationState";
 import {
   localDate,
@@ -33,8 +30,11 @@ import {
   type StatusBadge,
 } from "./requirementStatus";
 import { ScreeningRequest, screeningProgress } from "./ScreeningRequest";
-import { useAction } from "./useAction";
-import { useLoad } from "./useLoad";
+import { AppButtonLink } from "./shared/AppLink";
+import { api } from "./shared/apiClient";
+import { formatCalendarDate, formatDate } from "./shared/labels";
+import { useAction } from "./shared/useAction";
+import { useLoad } from "./shared/useLoad";
 import { myDocumentsPath, myScreeningIdForPath } from "./workspacePaths";
 
 type Action = (work: () => Promise<unknown>, success: string) => Promise<void>;

@@ -18,7 +18,6 @@ import type { Person } from "@balebase/validators/fields";
 import type { LinkedEmail } from "@balebase/validators/inbox";
 import { useCallback, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
-import { api } from "./apiClient";
 import { Assignee, AssigneeSelect } from "./EquipmentAssignee";
 import { EquipmentForm } from "./EquipmentForm";
 import {
@@ -27,9 +26,10 @@ import {
   equipmentTypeLabel,
 } from "./equipmentLabels";
 import { LinkedEmailList } from "./LinkedEmailList";
-import { countLabel, formatCalendarDate } from "./labels";
-import { useAction } from "./useAction";
-import { useLoad } from "./useLoad";
+import { api } from "./shared/apiClient";
+import { countLabel, formatCalendarDate } from "./shared/labels";
+import { useAction } from "./shared/useAction";
+import { useLoad } from "./shared/useLoad";
 import { equipmentPath } from "./workspacePaths";
 
 function useEquipmentDetail(

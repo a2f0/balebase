@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { api } from "./apiClient";
+import { api } from "./shared/apiClient";
 import { installFetch } from "./testing/fetch";
 
 const respond = installFetch();

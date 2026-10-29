@@ -6,8 +6,8 @@ import {
   PageSection,
 } from "@balebase/ui/react";
 import type { LinkedEmail } from "@balebase/validators/inbox";
-import { AppLink } from "./AppLink";
-import { countLabel } from "./labels";
+import { AppLink } from "./shared/AppLink";
+import { countLabel } from "./shared/labels";
 import { inboxEmailPath } from "./workspacePaths";
 
 /**

@@ -2,10 +2,10 @@ import { Button, Card, Field, Toast } from "@balebase/ui/react";
 import type { ContractTemplate } from "@balebase/validators/contractTemplates";
 import { contractLimits } from "@balebase/validators/rules";
 import { useEffect, useRef, useState } from "react";
-import { api } from "./apiClient";
 import { boxStyle, ContractPages } from "./ContractDocument";
 import { fieldTypeLabel, localDate, recipientTone } from "./contractFields";
-import { useAction } from "./useAction";
+import { api } from "./shared/apiClient";
+import { useAction } from "./shared/useAction";
 
 export function ContractTemplateMapping({
   template,

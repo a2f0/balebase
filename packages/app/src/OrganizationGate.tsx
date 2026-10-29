@@ -15,7 +15,7 @@ import type {
   OrganizationSeatRequirement,
   OrganizationTwoFactorRequirement,
 } from "./organizationAccessErrors";
-import { useAction } from "./useAction";
+import { useAction } from "./shared/useAction";
 import { organizationPathRequiresAccess } from "./workspacePaths";
 
 /**

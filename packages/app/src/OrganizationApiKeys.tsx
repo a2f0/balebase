@@ -21,12 +21,12 @@ import {
   apiKeyNameMaxLength,
 } from "@balebase/validators/rules";
 import { type FormEvent, useCallback, useState } from "react";
-import { api } from "./apiClient";
-import { formatDate } from "./labels";
 import { McpConfiguration } from "./McpConfiguration";
-import { useAction } from "./useAction";
-import { useClipboard } from "./useClipboard";
-import { useLoad } from "./useLoad";
+import { api } from "./shared/apiClient";
+import { formatDate } from "./shared/labels";
+import { useAction } from "./shared/useAction";
+import { useClipboard } from "./shared/useClipboard";
+import { useLoad } from "./shared/useLoad";
 
 interface CreatedKey {
   apiKey: ApiKey;

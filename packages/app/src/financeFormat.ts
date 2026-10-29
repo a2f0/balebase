@@ -1,4 +1,4 @@
-import { countLabel, formatCalendarDate } from "./labels";
+import { countLabel, formatCalendarDate } from "./shared/labels";
 
 /** Formats an amount in its currency, or as a plain number without one. */
 export function formatMoney(value: number | null, currency: string | null) {

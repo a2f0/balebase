@@ -1,7 +1,7 @@
 import { expect, it } from "bun:test";
 import { Toast, ToastProvider } from "@balebase/ui/react";
 import { act, StrictMode, useState } from "react";
-import { installDom } from "./testing/dom";
+import { installDom } from "../testing/dom";
 
 const { mount } = installDom();
 

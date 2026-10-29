@@ -4,8 +4,6 @@ import type {
   OrganizationMember,
 } from "@balebase/validators/organizationSettings";
 import type { ReactNode } from "react";
-import { AppLink } from "./AppLink";
-import { formatDate } from "./labels";
 import {
   MemberRoleControl,
   MemberTwoFactorControl,
@@ -17,6 +15,8 @@ import {
   formatRoles,
   type OrganizationInvitationRole,
 } from "./organizationState";
+import { AppLink } from "./shared/AppLink";
+import { formatDate } from "./shared/labels";
 import { organizationPeoplePath } from "./workspacePaths";
 
 interface MemberControlsProps {

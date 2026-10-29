@@ -32,12 +32,12 @@ const {
   window: dom,
 } = installDom({ url: `http://localhost:5173${resetLink}` });
 let App: typeof import("./App").App;
-let authClient: typeof import("./authClient").authClient;
+let authClient: typeof import("./shared/authClient").authClient;
 let container: HTMLElement;
 
 beforeAll(async () => {
   ({ App } = await import("./App"));
-  ({ authClient } = await import("./authClient"));
+  ({ authClient } = await import("./shared/authClient"));
 });
 
 const people = {

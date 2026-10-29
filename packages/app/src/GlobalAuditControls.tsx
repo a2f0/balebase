@@ -1,8 +1,8 @@
 import { Badge, Button, confirmDialog, Toast } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
-import { api } from "./apiClient";
-import { formatLabel } from "./labels";
-import { useAction } from "./useAction";
+import { api } from "./shared/apiClient";
+import { formatLabel } from "./shared/labels";
+import { useAction } from "./shared/useAction";
 
 /** Publication changes save the editor's content, including unsaved edits. */
 export function GlobalAuditControls({

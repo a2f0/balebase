@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { ApiError } from "@balebase/api-client";
 import type { AuditTemplate } from "@balebase/validators/audits";
-import { api } from "./apiClient";
 import {
   appendIssueImageSelection,
   uploadIssueImagesSequentially,
 } from "./auditIssueImages";
-import { apiUrl } from "./config";
+import { api } from "./shared/apiClient";
+import { apiUrl } from "./shared/config";
 import { installFetch } from "./testing/fetch";
 
 const respond = installFetch();

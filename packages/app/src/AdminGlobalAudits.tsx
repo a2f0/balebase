@@ -12,13 +12,13 @@ import {
 } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
 import { useCallback } from "react";
-import { AppButtonLink } from "./AppLink";
 import { TemplateStats, templateStatusTone } from "./AuditHome";
 import { AuditTemplateBuilder } from "./AuditTemplateBuilder";
-import { api } from "./apiClient";
-import { countLabel, formatLabel } from "./labels";
-import { useAction } from "./useAction";
-import { useLoad } from "./useLoad";
+import { AppButtonLink } from "./shared/AppLink";
+import { api } from "./shared/apiClient";
+import { countLabel, formatLabel } from "./shared/labels";
+import { useAction } from "./shared/useAction";
+import { useLoad } from "./shared/useLoad";
 import {
   globalAuditsPath,
   globalAuditTemplateIdForPath,

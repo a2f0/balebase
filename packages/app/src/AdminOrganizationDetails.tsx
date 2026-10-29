@@ -17,9 +17,9 @@ import type {
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { useCallback } from "react";
 import { AdminIdentity } from "./AdminIdentity";
-import { api } from "./apiClient";
-import { countLabel, formatCalendarDate, formatDate } from "./labels";
-import { useLoad } from "./useLoad";
+import { api } from "./shared/apiClient";
+import { countLabel, formatCalendarDate, formatDate } from "./shared/labels";
+import { useLoad } from "./shared/useLoad";
 import { adminOrganizationPath } from "./workspacePaths";
 
 export function AdminOrganizationDetails({

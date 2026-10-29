@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { ContextMenu } from "@balebase/ui/react";
 import { act } from "react";
-import { installDom } from "./testing/dom";
+import { installDom } from "../testing/dom";
 
 const { mount, window: dom } = installDom({ url: "http://localhost:5173" });
 let container: HTMLElement;

@@ -10,8 +10,6 @@ import {
 } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
 import { useEffect, useState } from "react";
-import { api } from "./apiClient";
-import { errorMessage } from "./errors";
 import { guardWorkspaceChange } from "./navigationGuard";
 import { OfflineAuditEditor } from "./OfflineAuditEditor";
 import { OfflineIssueCreator, OfflineIssueList } from "./OfflineIssues";
@@ -25,7 +23,9 @@ import {
   offlineScopeKey,
 } from "./offlineStore";
 import { retryOfflineWork, startOfflineAudit } from "./offlineWork";
-import { useAction } from "./useAction";
+import { api } from "./shared/apiClient";
+import { errorMessage } from "./shared/errors";
+import { useAction } from "./shared/useAction";
 
 export function OfflineWorkspacePage({
   workspace,

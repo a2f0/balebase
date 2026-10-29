@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { ApiError } from "@balebase/api-client";
 import type { ReactNode } from "react";
-import { ErrorToast } from "./ErrorToast";
-import { errorNotice } from "./errors";
 import {
   blockingSeatRequirement,
   OrganizationSeatRequired,
 } from "./OrganizationSeatRequired";
+import { ErrorToast } from "./shared/ErrorToast";
+import { errorNotice } from "./shared/errors";
 import { installDom } from "./testing/dom";
 
 const { clickLink, render: renderInDom } = installDom({

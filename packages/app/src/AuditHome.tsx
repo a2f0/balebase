@@ -20,18 +20,18 @@ import type {
   AuditTemplateScope,
 } from "@balebase/validators/audits";
 import { useCallback, useEffect, useState } from "react";
-import { api } from "./apiClient";
 import {
   type AuditTemplateView,
   readAuditTemplateView,
   storeAuditTemplateView,
 } from "./auditTemplateView";
-import { ErrorToast } from "./ErrorToast";
-import { InfiniteScroll } from "./InfiniteScroll";
-import { countLabel, formatDate, formatLabel } from "./labels";
-import { useAction } from "./useAction";
-import { useCursorPages } from "./useCursorPages";
-import { useLoad } from "./useLoad";
+import { api } from "./shared/apiClient";
+import { ErrorToast } from "./shared/ErrorToast";
+import { InfiniteScroll } from "./shared/InfiniteScroll";
+import { countLabel, formatDate, formatLabel } from "./shared/labels";
+import { useAction } from "./shared/useAction";
+import { useCursorPages } from "./shared/useCursorPages";
+import { useLoad } from "./shared/useLoad";
 import { auditRunPath, auditTemplatePath } from "./workspacePaths";
 
 export function AuditHome({

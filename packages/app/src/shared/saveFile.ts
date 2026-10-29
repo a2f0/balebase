@@ -1,4 +1,4 @@
-import { nativeHost } from "./host";
+import { nativeHost } from "../host";
 
 /** Saves downloaded bytes; a native shell saves or shares them its own way. */
 export async function saveFile(blob: Blob, filename: string): Promise<boolean> {

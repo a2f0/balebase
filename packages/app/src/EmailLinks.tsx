@@ -12,16 +12,16 @@ import type {
   InboundEmailLinkTarget,
 } from "@balebase/validators/inbox";
 import { type FormEvent, useEffect, useState } from "react";
-import { AppLink } from "./AppLink";
-import { api } from "./apiClient";
 import {
   describeEmailLink,
   formatTransactionDate,
 } from "./emailLinkDescription";
 import { equipmentName, equipmentTypeLabel } from "./equipmentLabels";
-import { errorMessage } from "./errors";
 import { formatMoney } from "./financeFormat";
-import { useLoad } from "./useLoad";
+import { AppLink } from "./shared/AppLink";
+import { api } from "./shared/apiClient";
+import { errorMessage } from "./shared/errors";
+import { useLoad } from "./shared/useLoad";
 import { equipmentPath, libraryPath } from "./workspacePaths";
 
 type LinkTab = "equipment" | "folder" | "transaction";

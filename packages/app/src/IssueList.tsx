@@ -8,11 +8,11 @@ import {
   LoadingState,
 } from "@balebase/ui/react";
 import { useCallback } from "react";
-import { AppLink } from "./AppLink";
-import { api } from "./apiClient";
-import { InfiniteScroll } from "./InfiniteScroll";
-import { formatLabel } from "./labels";
-import { useCursorPages } from "./useCursorPages";
+import { AppLink } from "./shared/AppLink";
+import { api } from "./shared/apiClient";
+import { InfiniteScroll } from "./shared/InfiniteScroll";
+import { formatLabel } from "./shared/labels";
+import { useCursorPages } from "./shared/useCursorPages";
 import { issuePath } from "./workspacePaths";
 
 export function IssueList({

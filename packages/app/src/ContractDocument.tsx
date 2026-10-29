@@ -5,7 +5,11 @@ import type {
   RenderTask,
 } from "pdfjs-dist";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { isRenderCancellation, openPdf, renderPdfPage } from "./pdfDocument";
+import {
+  isRenderCancellation,
+  openPdf,
+  renderPdfPage,
+} from "./shared/pdfDocument";
 
 /** A page's size in PDF points as displayed, after any /Rotate. */
 export interface PageSize {

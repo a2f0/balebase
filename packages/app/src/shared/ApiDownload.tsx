@@ -1,7 +1,7 @@
 import { ButtonLink, Toast } from "@balebase/ui/react";
 import { type ComponentProps, type MouseEvent, useRef, useState } from "react";
-import { fetchApi } from "./apiVersion";
-import { nativeHost } from "./host";
+import { fetchApi } from "../apiVersion";
+import { nativeHost } from "../host";
 import { saveFile } from "./saveFile";
 
 /** Browser links stay ordinary links; native downloads share authenticated bytes. */

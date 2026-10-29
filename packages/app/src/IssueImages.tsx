@@ -1,8 +1,8 @@
 import { Banner, PageSection } from "@balebase/ui/react";
 import { useCallback } from "react";
-import { ApiImage } from "./ApiImage";
-import { api } from "./apiClient";
-import { useLoad } from "./useLoad";
+import { ApiImage } from "./shared/ApiImage";
+import { api } from "./shared/apiClient";
+import { useLoad } from "./shared/useLoad";
 
 export function IssueImages({ issueId }: { issueId: string }) {
   const loaded = useLoad(

@@ -8,14 +8,14 @@ import {
 } from "@balebase/ui/react";
 import type { SigningField, SigningView } from "@balebase/validators/signing";
 import { useCallback, useState } from "react";
-import { ApiDownload } from "./ApiDownload";
-import { api } from "./apiClient";
 import { boxStyle, ContractPages } from "./ContractDocument";
 import { fieldTypeLabel, initialsFor } from "./contractFields";
-import { formatCalendarDate } from "./labels";
 import { SignatureDialog } from "./SignatureDialog";
-import { useAction } from "./useAction";
-import { useLoad } from "./useLoad";
+import { ApiDownload } from "./shared/ApiDownload";
+import { api } from "./shared/apiClient";
+import { formatCalendarDate } from "./shared/labels";
+import { useAction } from "./shared/useAction";
+import { useLoad } from "./shared/useLoad";
 
 /** The page a signer opens from their emailed link; needs no account. */
 export function SigningPage({ token }: { token: string }) {

@@ -1,16 +1,16 @@
 import { confirmDialog } from "@balebase/ui/react";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { useCallback } from "react";
-import { api } from "./apiClient";
-import { authClient } from "./authClient";
-import { throwIfRefused } from "./errors";
 import {
   type OrganizationInvitationRole,
   organizationRoleValue,
   type WorkspaceOrganization,
 } from "./organizationState";
-import { useAction } from "./useAction";
-import { useLoad } from "./useLoad";
+import { api } from "./shared/apiClient";
+import { authClient } from "./shared/authClient";
+import { throwIfRefused } from "./shared/errors";
+import { useAction } from "./shared/useAction";
+import { useLoad } from "./shared/useLoad";
 
 type OrganizationPeopleState = ReturnType<typeof useOrganizationPeopleData>;
 

@@ -8,11 +8,11 @@ import {
   spyOn,
 } from "bun:test";
 import { act, type ReactNode } from "react";
+import { configureHost } from "../host";
+import { installDom } from "../testing/dom";
 import { ApiDownload } from "./ApiDownload";
 import { ApiImage } from "./ApiImage";
-import { configureHost } from "./host";
 import * as saving from "./saveFile";
-import { installDom } from "./testing/dom";
 
 const {
   mount,

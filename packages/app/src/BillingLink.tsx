@@ -1,4 +1,4 @@
-import { AppButtonLink } from "./AppLink";
+import { AppButtonLink } from "./shared/AppLink";
 import { billingPath } from "./workspacePaths";
 
 /** Opens Billing in place; a modified click opens it in a new tab. */

@@ -4,7 +4,7 @@ import {
   inviteWithRequirements,
   reviewRevisionForStatus,
 } from "./employeeOnboarding";
-import { errorNotice } from "./errors";
+import { errorNotice } from "./shared/errors";
 
 describe("employee onboarding", () => {
   it("requires approval of the downloaded form version", () => {

@@ -1,6 +1,4 @@
 import { ApiError } from "@balebase/api-client";
-import { api } from "./apiClient";
-import { errorMessage } from "./errors";
 import {
   activeOfflineKey,
   changeOfflineWorkspace,
@@ -9,6 +7,8 @@ import {
   offlineImage,
   readOfflineWorkspace,
 } from "./offlineStore";
+import { api } from "./shared/apiClient";
+import { errorMessage } from "./shared/errors";
 
 function readyOfflineJob(workspace: OfflineWorkspace, now: number) {
   return workspace.jobs.find(

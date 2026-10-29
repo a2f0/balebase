@@ -11,9 +11,9 @@ import {
 import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
 import { useCallback, useState } from "react";
 import { AdminJobHistory } from "./AdminJobHistory";
-import { api } from "./apiClient";
-import { errorMessage } from "./errors";
-import { useLoad } from "./useLoad";
+import { api } from "./shared/apiClient";
+import { errorMessage } from "./shared/errors";
+import { useLoad } from "./shared/useLoad";
 
 export function AdminJobs() {
   const loaded = useLoad(

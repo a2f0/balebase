@@ -1,6 +1,6 @@
 import { type ComponentProps, useEffect, useState } from "react";
-import { fetchApi } from "./apiVersion";
-import { nativeHost } from "./host";
+import { fetchApi } from "../apiVersion";
+import { nativeHost } from "../host";
 
 /** WebView image loads cannot use the native HTTP cookie store. */
 export function ApiImage({

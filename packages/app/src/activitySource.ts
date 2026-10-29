@@ -1,5 +1,5 @@
 import type { ActivityResourceType } from "@balebase/validators/activity";
-import { api } from "./apiClient";
+import { api } from "./shared/apiClient";
 
 export type ActivitySource =
   | {

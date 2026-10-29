@@ -12,7 +12,7 @@ import { useReducer } from "react";
 import { ApiKeyAttribution } from "./ActivityFeed";
 import { AuditIssueDraftFields, useAuditIssueDraft } from "./AuditRunIssues";
 import { auditItems, isAnswered } from "./auditProgress";
-import { countLabel, formatDateTime, formatLabel } from "./labels";
+import { countLabel, formatDateTime, formatLabel } from "./shared/labels";
 
 const checkResponses = ["pass", "fail", "na"] as const;
 

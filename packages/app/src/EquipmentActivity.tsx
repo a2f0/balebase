@@ -1,7 +1,7 @@
 import type { ActivityEvent } from "@balebase/validators/activity";
 import { assigneeLabel, textValue } from "./activityLabels";
 import { equipmentTypeLabel } from "./equipmentLabels";
-import { formatCalendarDate } from "./labels";
+import { formatCalendarDate } from "./shared/labels";
 
 interface EquipmentChange {
   after: unknown;

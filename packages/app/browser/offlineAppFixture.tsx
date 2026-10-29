@@ -1,7 +1,7 @@
 import { DialogHost } from "@balebase/ui/react";
 import { createRoot } from "react-dom/client";
 import { App } from "../src/App";
-import { authClient } from "../src/authClient";
+import { authClient } from "../src/shared/authClient";
 import "./offlineFixture";
 
 const testApi = {

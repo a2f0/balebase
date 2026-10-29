@@ -3,10 +3,10 @@ import { useId, useRef, useState } from "react";
 import { version as appVersion } from "../package.json";
 import type { AccountSession } from "./accountSessions";
 import { useApiVersion } from "./apiVersion";
-import { errorMessage } from "./errors";
+import { errorMessage } from "./shared/errors";
+import { useAction } from "./shared/useAction";
+import { useMenuDismissal } from "./shared/useMenuDismissal";
 import { ThemeSwitcher } from "./ThemeSwitcher";
-import { useAction } from "./useAction";
-import { useMenuDismissal } from "./useMenuDismissal";
 
 interface AccountControlProps {
   accounts: AccountSession[];

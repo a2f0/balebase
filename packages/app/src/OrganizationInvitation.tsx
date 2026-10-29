@@ -1,10 +1,10 @@
 import { Button, Card, Icon, LoadingState, Toast } from "@balebase/ui/react";
 import { useCallback, useState } from "react";
-import { authClient } from "./authClient";
-import { throwIfRefused } from "./errors";
-import { formatDateTime } from "./labels";
-import { useAction } from "./useAction";
-import { useLoad } from "./useLoad";
+import { authClient } from "./shared/authClient";
+import { throwIfRefused } from "./shared/errors";
+import { formatDateTime } from "./shared/labels";
+import { useAction } from "./shared/useAction";
+import { useLoad } from "./shared/useLoad";
 
 interface InvitationDetails {
   email: string;

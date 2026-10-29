@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { fetchApi } from "./apiVersion";
-import { authCallbackUrl } from "./config";
 import { configureHost } from "./host";
+import { authCallbackUrl } from "./shared/config";
 import { installFetch } from "./testing/fetch";
 
 const respond = installFetch();

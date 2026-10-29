@@ -5,7 +5,7 @@ import {
   equipmentTypeIcon,
   equipmentTypeLabel,
 } from "./equipmentLabels";
-import { formatCalendarDate } from "./labels";
+import { formatCalendarDate } from "./shared/labels";
 
 describe("equipment labels", () => {
   it("names the starting types and falls back for types added later", () => {

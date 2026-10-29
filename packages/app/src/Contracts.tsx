@@ -15,8 +15,6 @@ import type {
   ContractSummary as ContractListItem,
 } from "@balebase/validators/contracts";
 import { useCallback, useRef, useState } from "react";
-import { AppLink } from "./AppLink";
-import { api } from "./apiClient";
 import { ContractEditor } from "./ContractEditor";
 import { ContractStatusBadge, ContractSummary } from "./ContractSummary";
 import { ContractTemplates } from "./ContractTemplates";
@@ -25,9 +23,11 @@ import {
   contractFilters,
   matchesFilter,
 } from "./contractFields";
-import { countLabel, formatCalendarDate } from "./labels";
-import { useAction } from "./useAction";
-import { useLoad } from "./useLoad";
+import { AppLink } from "./shared/AppLink";
+import { api } from "./shared/apiClient";
+import { countLabel, formatCalendarDate } from "./shared/labels";
+import { useAction } from "./shared/useAction";
+import { useLoad } from "./shared/useLoad";
 import {
   contractIdForPath,
   contractPath,

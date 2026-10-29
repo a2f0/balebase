@@ -17,7 +17,6 @@ import {
   isUsStateCode,
 } from "@balebase/validators/rules";
 import { type FormEvent, useCallback, useState } from "react";
-import { api } from "./apiClient";
 import {
   downloadEmployeeForm,
   downloadScreeningConsent,
@@ -27,10 +26,11 @@ import {
   type RequirementDraft,
   reviewRevisionForStatus,
 } from "./employeeOnboarding";
-import { formatCalendarDate, formatDate } from "./labels";
 import { isClosedReportStatus, requirementBadge } from "./requirementStatus";
-import { useAction } from "./useAction";
-import { useLoad } from "./useLoad";
+import { api } from "./shared/apiClient";
+import { formatCalendarDate, formatDate } from "./shared/labels";
+import { useAction } from "./shared/useAction";
+import { useLoad } from "./shared/useLoad";
 
 const options: Array<{ kind: EmployeeRequirementKind; title: string }> = [
   { kind: "form", title: "W-4" },

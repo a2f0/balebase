@@ -19,22 +19,22 @@ import type {
   InboxFolder,
 } from "@balebase/validators/inbox";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiDownload } from "./ApiDownload";
 import { AttachmentPreviewTile } from "./AttachmentPreview";
-import { api } from "./apiClient";
 import { EmailLinks } from "./EmailLinks";
-import { errorMessage } from "./errors";
 import { selectEmailId } from "./inboxSelection";
+import { previewKindFor } from "./previewKind";
+import { ApiDownload } from "./shared/ApiDownload";
+import { api } from "./shared/apiClient";
+import { errorMessage } from "./shared/errors";
 import {
   countLabel,
   formatBytes,
   formatDateTime,
   formatShortDate,
-} from "./labels";
-import { previewKindFor } from "./previewKind";
-import { useAction } from "./useAction";
-import { useClipboard } from "./useClipboard";
-import { useLoad } from "./useLoad";
+} from "./shared/labels";
+import { useAction } from "./shared/useAction";
+import { useClipboard } from "./shared/useClipboard";
+import { useLoad } from "./shared/useLoad";
 
 interface InboxContext {
   canAccessFinance: boolean;

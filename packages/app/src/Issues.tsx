@@ -14,12 +14,12 @@ import {
 import type { Issue, IssueInput } from "@balebase/validators/issues";
 import { useCallback, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
-import { api } from "./apiClient";
-import { errorMessage } from "./errors";
 import { IssueForm } from "./IssueForm";
 import { IssueImages } from "./IssueImages";
 import { IssueList } from "./IssueList";
-import { useLoad } from "./useLoad";
+import { api } from "./shared/apiClient";
+import { errorMessage } from "./shared/errors";
+import { useLoad } from "./shared/useLoad";
 import {
   auditRunPath,
   financeTransactionPath,

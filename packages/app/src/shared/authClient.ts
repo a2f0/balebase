@@ -6,7 +6,7 @@ import {
   twoFactorClient,
 } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
-import { fetchApi } from "./apiVersion";
+import { fetchApi } from "../apiVersion";
 import { apiUrl } from "./config";
 
 export const authClient = createAuthClient({

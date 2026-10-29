@@ -14,8 +14,6 @@ import type {
   ExpenseReportCurrency,
 } from "@balebase/validators/finance";
 import { useEffect, useState } from "react";
-import { api } from "./apiClient";
-import { errorMessage } from "./errors";
 import {
   categoryShare,
   presetRange,
@@ -24,7 +22,9 @@ import {
   reportPresets,
 } from "./expenseReport";
 import { formatMoney } from "./financeFormat";
-import { countLabel, formatCalendarDate } from "./labels";
+import { api } from "./shared/apiClient";
+import { errorMessage } from "./shared/errors";
+import { countLabel, formatCalendarDate } from "./shared/labels";
 import { financeOverviewPath } from "./workspacePaths";
 
 export function FinanceReports({

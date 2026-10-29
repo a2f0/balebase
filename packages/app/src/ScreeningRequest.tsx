@@ -9,14 +9,14 @@ import {
 } from "@balebase/ui/react";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { useCallback } from "react";
-import { AppButtonLink } from "./AppLink";
-import { api } from "./apiClient";
 import { downloadScreeningConsent } from "./employeeFormDownloads";
-import { formatDate } from "./labels";
 import { localDate, personalRequirement } from "./requirementStatus";
 import { ScreeningForm } from "./ScreeningForm";
-import { useAction } from "./useAction";
-import { useLoad } from "./useLoad";
+import { AppButtonLink } from "./shared/AppLink";
+import { api } from "./shared/apiClient";
+import { formatDate } from "./shared/labels";
+import { useAction } from "./shared/useAction";
+import { useLoad } from "./shared/useLoad";
 
 /** An emailed screening link remains useful after the person submits. */
 export function ScreeningRequest({

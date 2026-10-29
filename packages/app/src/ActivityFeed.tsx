@@ -19,11 +19,11 @@ import {
   EquipmentActivityDetails,
   equipmentActivitySummary,
 } from "./EquipmentActivity";
-import { InfiniteScroll } from "./InfiniteScroll";
-import { formatDateTime } from "./labels";
 import { formatRoles } from "./organizationState";
 import { RecordActivityDetails } from "./RecordActivity";
-import { useCursorPages } from "./useCursorPages";
+import { InfiniteScroll } from "./shared/InfiniteScroll";
+import { formatDateTime } from "./shared/labels";
+import { useCursorPages } from "./shared/useCursorPages";
 import {
   auditRunPath,
   auditTemplatePath,

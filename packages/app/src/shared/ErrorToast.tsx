@@ -1,5 +1,5 @@
 import { Toast } from "@balebase/ui/react";
-import { BillingLink } from "./BillingLink";
+import { BillingLink } from "../BillingLink";
 import type { ErrorNotice } from "./errors";
 
 /** An error toast that links to Billing when an upgrade resolves the error. */

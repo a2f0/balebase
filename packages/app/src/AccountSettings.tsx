@@ -11,11 +11,11 @@ import {
 import { type FormEvent, useState } from "react";
 import { AccountDeletion } from "./AccountDeletion";
 import { AccountSecurity } from "./AccountSecurity";
-import { AppLink } from "./AppLink";
 import { saveDefaultOrganizationPreference } from "./defaultOrganization";
 import type { WorkspaceOrganization } from "./organizationState";
+import { AppLink } from "./shared/AppLink";
+import { useAction } from "./shared/useAction";
 import { ThemeSwitcher } from "./ThemeSwitcher";
-import { useAction } from "./useAction";
 
 export function AccountSettings({
   defaultOrganizationId,

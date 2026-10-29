@@ -1,7 +1,7 @@
 import { Button, Toast } from "@balebase/ui/react";
 import { type KeyboardEvent, useId, useState } from "react";
-import { apiUrl } from "./config";
-import { useClipboard } from "./useClipboard";
+import { apiUrl } from "./shared/config";
+import { useClipboard } from "./shared/useClipboard";
 
 /** The MCP endpoint that accepts API keys. */
 const mcpServerUrl = `${apiUrl}/mcp`;

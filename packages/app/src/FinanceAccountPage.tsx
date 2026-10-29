@@ -13,14 +13,18 @@ import {
 } from "@balebase/ui/react";
 import type { FinanceAccountDetail } from "@balebase/validators/finance";
 import { useCallback } from "react";
-import { AppLink } from "./AppLink";
-import { api } from "./apiClient";
 import { connectionTone } from "./FinanceAccounts";
 import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
 import { FinanceSyncSettings } from "./FinanceSyncSettings";
 import { formatImportedHistory, formatMoney } from "./financeFormat";
-import { formatCalendarDate, formatDateTime, formatLabel } from "./labels";
-import { useLoad } from "./useLoad";
+import { AppLink } from "./shared/AppLink";
+import { api } from "./shared/apiClient";
+import {
+  formatCalendarDate,
+  formatDateTime,
+  formatLabel,
+} from "./shared/labels";
+import { useLoad } from "./shared/useLoad";
 import {
   financeConnectionPath,
   financeTransactionPath,

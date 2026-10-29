@@ -8,14 +8,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { AppButtonLink } from "./AppLink";
-import { api } from "./apiClient";
 import {
   EmployeeForms,
   inRequirementScope,
   type RequirementScope,
 } from "./EmployeeForms";
-import { errorMessage } from "./errors";
 import { InviteMemberForm } from "./InviteMemberForm";
 import {
   OrganizationMembers,
@@ -30,7 +27,10 @@ import {
   canManageOrganization,
   type WorkspaceOrganization,
 } from "./organizationState";
-import { useFocusWhenFolded } from "./useFocusWhenFolded";
+import { AppButtonLink } from "./shared/AppLink";
+import { api } from "./shared/apiClient";
+import { errorMessage } from "./shared/errors";
+import { useFocusWhenFolded } from "./shared/useFocusWhenFolded";
 import { myDocumentsPath } from "./workspacePaths";
 
 /**

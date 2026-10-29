@@ -1,4 +1,4 @@
-import { api } from "./apiClient";
+import { api } from "./shared/apiClient";
 
 /** Saves the organization the user opens on sign-in, then reloads the session. */
 export async function saveDefaultOrganizationPreference(

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { ReactNode } from "react";
+import { installDom } from "../testing/dom";
 import { AppButtonLink, AppLink } from "./AppLink";
-import { installDom } from "./testing/dom";
 
 const { clickLink, mount } = installDom({ url: "http://localhost:5173/" });
 let container: HTMLElement;

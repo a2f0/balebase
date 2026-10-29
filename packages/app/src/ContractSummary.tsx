@@ -9,8 +9,6 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type { ContractDetail } from "@balebase/validators/contracts";
-import { ApiDownload } from "./ApiDownload";
-import { api } from "./apiClient";
 import { boxStyle, ContractPages } from "./ContractDocument";
 import {
   confirmContractDeletion,
@@ -22,8 +20,10 @@ import {
   recipientTone,
   reminderOptions,
 } from "./contractFields";
-import { formatCalendarDate, formatDateTime } from "./labels";
-import { useAction } from "./useAction";
+import { ApiDownload } from "./shared/ApiDownload";
+import { api } from "./shared/apiClient";
+import { formatCalendarDate, formatDateTime } from "./shared/labels";
+import { useAction } from "./shared/useAction";
 import { contractPath } from "./workspacePaths";
 
 /** A contract that has been sent: its progress, actions, and history. */

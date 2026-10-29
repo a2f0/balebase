@@ -1,7 +1,7 @@
 import { Button, Card, confirmDialog, Toast } from "@balebase/ui/react";
-import { api } from "./apiClient";
-import { useAction } from "./useAction";
-import { useLoad } from "./useLoad";
+import { api } from "./shared/apiClient";
+import { useAction } from "./shared/useAction";
+import { useLoad } from "./shared/useLoad";
 
 const loadRequestedAt = async () =>
   (await api.accountSettings.deletion()).requestedAt;

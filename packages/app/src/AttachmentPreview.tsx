@@ -5,11 +5,15 @@ import type {
   RenderTask,
 } from "pdfjs-dist";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
-import { ApiDownload } from "./ApiDownload";
-import { ApiImage } from "./ApiImage";
 import { fetchApi } from "./apiVersion";
-import { countLabel, formatBytes } from "./labels";
-import { isRenderCancellation, openPdf, renderPdfPage } from "./pdfDocument";
+import { ApiDownload } from "./shared/ApiDownload";
+import { ApiImage } from "./shared/ApiImage";
+import { countLabel, formatBytes } from "./shared/labels";
+import {
+  isRenderCancellation,
+  openPdf,
+  renderPdfPage,
+} from "./shared/pdfDocument";
 
 type PreviewKind = "image" | "pdf";
 

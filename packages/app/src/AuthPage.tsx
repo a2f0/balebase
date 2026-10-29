@@ -7,9 +7,9 @@ import {
   offerToSavePassword,
   performAuthAction,
 } from "./authActions";
-import { websiteUrl } from "./config";
+import { websiteUrl } from "./shared/config";
+import { useAction } from "./shared/useAction";
 import { TwoFactorChallenge } from "./TwoFactorChallenge";
-import { useAction } from "./useAction";
 import { useSavedSignIn } from "./useSavedSignIn";
 
 type AuthVariant = "add-account" | "default";

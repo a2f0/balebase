@@ -6,7 +6,7 @@ import type {
   OfflineScope,
 } from "@balebase/validators/offline";
 
-import { apiUrl } from "./config";
+import { apiUrl } from "./shared/config";
 
 export interface OfflineAudit {
   id: string;

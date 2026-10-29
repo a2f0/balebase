@@ -15,12 +15,12 @@ import {
   useState,
 } from "react";
 import { AccountControl } from "./AccountControl";
-import { AppLink } from "./AppLink";
 import type { AccountSession } from "./accountSessions";
 import { hasRole, type WorkspaceOrganization } from "./organizationState";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
+import { AppLink } from "./shared/AppLink";
+import { useAction } from "./shared/useAction";
 import { readSidebarWidth } from "./sidebarWidth";
-import { useAction } from "./useAction";
 
 export interface WorkspaceUser {
   email: string;

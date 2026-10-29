@@ -1,5 +1,5 @@
-import { api } from "./apiClient";
-import { saveFile } from "./saveFile";
+import { api } from "./shared/apiClient";
+import { saveFile } from "./shared/saveFile";
 
 /** Saves the signed background check authorization behind a report. */
 export async function downloadScreeningConsent(id: string) {

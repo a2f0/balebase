@@ -16,7 +16,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { api } from "./apiClient";
 import {
   BusinessFields,
   type BusinessFormState,
@@ -29,10 +28,11 @@ import {
   formatBusinessAddress,
   useIdentifierCopy,
 } from "./businessState";
-import { errorMessage } from "./errors";
-import { formatCalendarDate } from "./labels";
-import { useFocusWhenFolded } from "./useFocusWhenFolded";
-import { useLoad } from "./useLoad";
+import { api } from "./shared/apiClient";
+import { errorMessage } from "./shared/errors";
+import { formatCalendarDate } from "./shared/labels";
+import { useFocusWhenFolded } from "./shared/useFocusWhenFolded";
+import { useLoad } from "./shared/useLoad";
 import { businessPath } from "./workspacePaths";
 
 export function BusinessDetailPage({

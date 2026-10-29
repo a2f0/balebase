@@ -16,10 +16,10 @@ import { AdminDeletionMenu } from "./AdminDeletionMenu";
 import { AdminIdentity } from "./AdminIdentity";
 import { useAdminUserDeletion } from "./adminUserDeletion";
 import { adminUserListQuery, adminUserPageSize } from "./adminUserList";
-import { api } from "./apiClient";
-import { countLabel, formatDate } from "./labels";
 import { formatRoles, hasRole } from "./organizationState";
-import { useLoad } from "./useLoad";
+import { api } from "./shared/apiClient";
+import { countLabel, formatDate } from "./shared/labels";
+import { useLoad } from "./shared/useLoad";
 
 interface UserListing {
   total: number;

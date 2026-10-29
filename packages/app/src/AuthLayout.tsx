@@ -1,7 +1,7 @@
 import { legalLinks, productName } from "@balebase/ui/brand";
 import { Icon, type IconName, Logo } from "@balebase/ui/react";
 import { type ReactNode, useEffect, useRef } from "react";
-import { websiteUrl } from "./config";
+import { websiteUrl } from "./shared/config";
 
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (

@@ -23,13 +23,13 @@ import type {
 import { auditLimits } from "@balebase/validators/rules";
 import { type ReactNode, useCallback, useState } from "react";
 import { ActivityFeed } from "./ActivityFeed";
-import { api } from "./apiClient";
-import { ErrorToast } from "./ErrorToast";
-import type { ErrorNotice } from "./errors";
 import { GlobalAuditControls } from "./GlobalAuditControls";
-import { countLabel, formatDate } from "./labels";
-import { useAction } from "./useAction";
-import { useLoad } from "./useLoad";
+import { api } from "./shared/apiClient";
+import { ErrorToast } from "./shared/ErrorToast";
+import type { ErrorNotice } from "./shared/errors";
+import { countLabel, formatDate } from "./shared/labels";
+import { useAction } from "./shared/useAction";
+import { useLoad } from "./shared/useLoad";
 import { moveEntry, useReorderDrag } from "./useReorderDrag";
 import { auditTemplatePath, globalAuditsPath } from "./workspacePaths";
 

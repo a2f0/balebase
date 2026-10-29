@@ -29,11 +29,11 @@ import {
   RunOverview,
 } from "./AuditRunHeader";
 import { AuditIssuePanel } from "./AuditRunIssues";
-import { api } from "./apiClient";
 import { progressFor } from "./auditProgress";
-import { errorMessage } from "./errors";
-import { countLabel, formatDate } from "./labels";
-import { useAction } from "./useAction";
+import { api } from "./shared/apiClient";
+import { errorMessage } from "./shared/errors";
+import { countLabel, formatDate } from "./shared/labels";
+import { useAction } from "./shared/useAction";
 
 interface AuditRunPageProps {
   id: string;

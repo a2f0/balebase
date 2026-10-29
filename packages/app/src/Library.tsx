@@ -28,14 +28,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { ApiDownload } from "./ApiDownload";
-import { AppLink } from "./AppLink";
-import { api } from "./apiClient";
 import { LinkedEmailList } from "./LinkedEmailList";
-import { countLabel, formatBytes, formatShortDate } from "./labels";
-import { useAction } from "./useAction";
-import { useLoad } from "./useLoad";
-import { useMenuDismissal } from "./useMenuDismissal";
+import { ApiDownload } from "./shared/ApiDownload";
+import { AppLink } from "./shared/AppLink";
+import { api } from "./shared/apiClient";
+import { countLabel, formatBytes, formatShortDate } from "./shared/labels";
+import { useAction } from "./shared/useAction";
+import { useLoad } from "./shared/useLoad";
+import { useMenuDismissal } from "./shared/useMenuDismissal";
 import type { WorkspaceUser } from "./WorkspaceShell";
 import { libraryFolderIdForPath, libraryPath } from "./workspacePaths";
 

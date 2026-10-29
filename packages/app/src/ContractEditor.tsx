@@ -5,7 +5,6 @@ import type {
 } from "@balebase/validators/contracts";
 import { contractLimits } from "@balebase/validators/rules";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "./apiClient";
 import { ContractPages } from "./ContractDocument";
 import {
   EditorOverlay,
@@ -22,8 +21,9 @@ import {
   reminderOptions,
 } from "./contractFields";
 import { addNavigationGuard } from "./navigationGuard";
+import { api } from "./shared/apiClient";
+import { useAction } from "./shared/useAction";
 import { confirmDiscardChanges } from "./unsavedChanges";
-import { useAction } from "./useAction";
 
 type Editor = ReturnType<typeof useDraftEditor>;
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { act, useCallback } from "react";
-import { installDom } from "./testing/dom";
+import { installDom } from "../testing/dom";
 import { useAction } from "./useAction";
 import { useCursorPages } from "./useCursorPages";
 import { useLoad } from "./useLoad";

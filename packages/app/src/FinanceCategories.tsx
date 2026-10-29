@@ -12,9 +12,9 @@ import {
 import type { ExpenseCategory } from "@balebase/validators/finance";
 import { financeLimits } from "@balebase/validators/rules";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { api } from "./apiClient";
-import { countLabel } from "./labels";
-import { useAction } from "./useAction";
+import { api } from "./shared/apiClient";
+import { countLabel } from "./shared/labels";
+import { useAction } from "./shared/useAction";
 
 export function FinanceCategories({
   categories,

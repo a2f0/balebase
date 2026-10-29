@@ -20,11 +20,11 @@ import type {
 import type { LinkedEmail } from "@balebase/validators/inbox";
 import { financeLimits } from "@balebase/validators/rules";
 import { type FormEvent, useState } from "react";
-import { AppLink } from "./AppLink";
 import { FinanceTransactionFilters } from "./FinanceTransactionFilters";
 import { formatMoney } from "./financeFormat";
-import { InfiniteScroll } from "./InfiniteScroll";
-import { formatCalendarDate, formatLabel } from "./labels";
+import { AppLink } from "./shared/AppLink";
+import { InfiniteScroll } from "./shared/InfiniteScroll";
+import { formatCalendarDate, formatLabel } from "./shared/labels";
 import {
   financeTransactionPath,
   inboxEmailPath,

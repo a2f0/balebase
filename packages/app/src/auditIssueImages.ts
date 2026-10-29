@@ -4,7 +4,7 @@ import {
   issueImageProblem,
   maxIssueImages,
 } from "@balebase/validators/issueRules";
-import { api } from "./apiClient";
+import { api } from "./shared/apiClient";
 
 type IssueImageUploader = (issueId: string, file: File) => Promise<unknown>;
 
