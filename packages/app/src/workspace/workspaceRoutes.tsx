@@ -18,7 +18,10 @@ import { Inbox } from "../inbox/Inbox";
 import { Issues } from "../issues/Issues";
 import { OrganizationInvitation } from "../organizations/OrganizationInvitation";
 import { OrganizationSettings } from "../organizations/OrganizationSettings";
-import type { WorkspaceOrganization } from "../organizations/organizationState";
+import {
+  canManageOrganization,
+  type WorkspaceOrganization,
+} from "../organizations/organizationState";
 import type { useOrganizationAccess } from "../organizations/useOrganizationAccess";
 import { Projects } from "../projects/Projects";
 import type { WorkspacePage } from "./WorkspaceShell";
@@ -80,6 +83,7 @@ const routes: WorkspaceRoute[] = [
     render: ({ access, navigate }) => (
       <Activity
         canAccessFinance={access.can("finance")}
+        canManage={canManageOrganization(access.memberRole)}
         onNavigate={navigate}
       />
     ),

@@ -765,6 +765,57 @@ describe("password authentication", () => {
     ).toBe(200);
   });
 
+  it("keeps group changes off Better Auth's team endpoints", async () => {
+    const fixture = await createFixture();
+    await post(fixture.auth, "/sign-up/email", {
+      email,
+      name: "Example Person",
+      password: originalPassword,
+      termsAccepted: true,
+    });
+    const signIn = await post(fixture.auth, "/sign-in/email", {
+      email,
+      password: originalPassword,
+    });
+    const cookie = signIn.headers.get("set-cookie") ?? "";
+    const { organizationId, teamId, userId } = fixture.database
+      .query(
+        `SELECT team.organizationId AS organizationId, team.id AS teamId,
+                teamMember.userId AS userId
+         FROM team JOIN teamMember ON teamMember.teamId = team.id`,
+      )
+      .get() as { organizationId: string; teamId: string; userId: string };
+    const groups = () =>
+      fixture.database
+        .query(
+          `SELECT team.id, team.name, teamMember.userId FROM team
+           LEFT JOIN teamMember ON teamMember.teamId = team.id`,
+        )
+        .all();
+    const before = groups();
+    const attempts: Array<[string, Record<string, unknown>]> = [
+      ["/organization/create-team", { name: "Shadow", organizationId }],
+      ["/organization/update-team", { data: { name: "Renamed" }, teamId }],
+      ["/organization/remove-team", { organizationId, teamId }],
+      ["/organization/add-team-member", { teamId, userId }],
+      ["/organization/remove-team-member", { teamId, userId }],
+    ];
+    for (const [path, body] of attempts) {
+      expect((await post(fixture.auth, path, body, cookie)).status).toBe(404);
+    }
+    expect(groups()).toEqual(before);
+    // Listing stays available.
+    expect(
+      (
+        await get(
+          fixture.auth,
+          `/organization/list-teams?organizationId=${organizationId}`,
+          cookie,
+        )
+      ).status,
+    ).toBe(200);
+  });
+
   it("records when a signed-in user was last active", async () => {
     const fixture = await createFixture();
     await post(fixture.auth, "/sign-up/email", {

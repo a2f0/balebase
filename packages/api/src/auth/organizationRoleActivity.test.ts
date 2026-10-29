@@ -42,7 +42,7 @@ describe("organization role activity", () => {
     });
 
     const feed = await app.request(
-      "/api/activity",
+      "/api/activity?resourceType=organization_member",
       { headers: { cookie: fixture.owner.cookie } },
       fixture.bindings,
       executionContext(fixture.pending),
@@ -52,8 +52,29 @@ describe("organization role activity", () => {
       events: page?.events,
       nextCursor: null,
     });
+    // Signing up created the Finance group; its owner sees that grant.
+    const groups = await app.request(
+      "/api/activity?resourceType=organization_group",
+      { headers: { cookie: fixture.owner.cookie } },
+      fixture.bindings,
+      executionContext(fixture.pending),
+    );
+    expect(await groups.json()).toMatchObject({
+      events: [
+        {
+          action: "organization.group_created",
+          actor: { id: fixture.owner.id },
+          details: {
+            capabilities: ["finance"],
+            members: [{ userId: fixture.owner.id }],
+            name: "Finance",
+          },
+          root: { label: "Finance", type: "organization_group" },
+        },
+      ],
+    });
     const otherFeed = await app.request(
-      "/api/activity",
+      "/api/activity?resourceType=organization_member",
       { headers: { cookie: fixture.target.cookie } },
       fixture.bindings,
       executionContext(fixture.pending),

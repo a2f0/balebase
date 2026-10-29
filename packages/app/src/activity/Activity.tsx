@@ -10,6 +10,7 @@ const resourceLabels: Record<ActivityResourceType, string> = {
   equipment: "Equipment",
   project: "Projects",
   organization_member: "People",
+  organization_group: "Groups",
   api_key: "API keys",
   finance_transaction: "Transactions",
   finance_connection: "Bank connections",
@@ -19,24 +20,37 @@ function isResourceType(value: string): value is ActivityResourceType {
   return Object.hasOwn(resourceLabels, value);
 }
 
+/** Finance resources need Finance access; groups need a manager. */
+function canFilter(
+  value: string,
+  access: { canAccessFinance: boolean; canManage: boolean },
+) {
+  if (value.startsWith("finance_")) return access.canAccessFinance;
+  if (value === "organization_group") return access.canManage;
+  return true;
+}
+
 export function Activity({
   onNavigate,
   canAccessFinance = false,
+  canManage = false,
 }: {
   onNavigate: (pathname: string) => void;
   canAccessFinance?: boolean;
+  canManage?: boolean;
 }) {
   const [selected, setSelected] = useState<ActivityResourceType>();
   useEffect(() => {
-    if (!canAccessFinance)
-      setSelected((previous) =>
-        previous?.startsWith("finance_") ? undefined : previous,
-      );
-  }, [canAccessFinance]);
+    setSelected((previous) =>
+      previous && !canFilter(previous, { canAccessFinance, canManage })
+        ? undefined
+        : previous,
+    );
+  }, [canAccessFinance, canManage]);
   const resourceType =
-    selected?.startsWith("finance_") && !canAccessFinance
-      ? undefined
-      : selected;
+    selected && canFilter(selected, { canAccessFinance, canManage })
+      ? selected
+      : undefined;
   return (
     <Page>
       <PageHeader
@@ -55,8 +69,8 @@ export function Activity({
           >
             <option value="">All resources</option>
             {Object.entries(resourceLabels)
-              .filter(
-                ([value]) => canAccessFinance || !value.startsWith("finance_"),
+              .filter(([value]) =>
+                canFilter(value, { canAccessFinance, canManage }),
               )
               .map(([value, label]) => (
                 <option key={value} value={value}>

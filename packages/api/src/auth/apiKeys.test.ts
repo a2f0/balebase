@@ -1506,6 +1506,39 @@ it("attributes daily-sync settings to API keys and protects bank activity with F
   ).toEqual([]);
 });
 
+it("attributes group access changes to the API key that made them", async () => {
+  const f = await createFixture();
+  const write = await f.createKey("write");
+  const { id: groupId } = f.database
+    .query('SELECT id FROM "team" WHERE "organizationId" = ?')
+    .get(f.organizationId) as { id: string };
+  const saved = await f.withKey(
+    write.token,
+    "PATCH",
+    `/api/organization-groups/${groupId}`,
+    { capabilities: [], name: "Finance", userIds: [f.userId] },
+  );
+  expect(saved.status).toBe(200);
+  const history = await f.withKey<{ events: unknown[] }>(
+    write.token,
+    "GET",
+    "/api/activity?resourceType=organization_group",
+  );
+  expect(history.body.events[0]).toMatchObject({
+    action: "organization.group_updated",
+    actor: {
+      apiKey: { channel: "rest", id: write.apiKey.id, name: "write key" },
+      id: f.userId,
+    },
+    details: { removedCapabilities: ["finance"] },
+  });
+  // The sign-up grant came from the person, not the key.
+  expect(history.body.events[1]).toMatchObject({
+    action: "organization.group_created",
+    actor: { apiKey: null, id: f.userId },
+  });
+});
+
 it("queues MCP finance sync immediately and exposes saved status to readers", async () => {
   const f = await createFixture();
   const read = await f.createKey("read");

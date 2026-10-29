@@ -145,6 +145,34 @@ describe("activity feed, mounted", () => {
     expect(requests.at(-1)?.search).toBe("");
   });
 
+  it("offers the Groups filter only to organization managers", async () => {
+    const requests: URL[] = [];
+    respond(async (url) => {
+      requests.push(url);
+      return Response.json({ events: [], nextCursor: null });
+    });
+    const view = await mount(<Activity canManage onNavigate={() => {}} />);
+    container = view.container;
+    await settle();
+    const select = container.querySelector("select");
+    expect(container.textContent).toContain("Groups");
+    await act(async () => {
+      if (select) {
+        select.value = "organization_group";
+        select.dispatchEvent(
+          new dom.Event("change", { bubbles: true }) as unknown as Event,
+        );
+      }
+    });
+    await settle();
+    expect(requests.at(-1)?.search).toBe("?resourceType=organization_group");
+    // Losing manager access drops the filter.
+    await view.render(<Activity onNavigate={() => {}} />);
+    await settle();
+    expect(container.textContent).not.toContain("Groups");
+    expect(requests.at(-1)?.search).toBe("");
+  });
+
   it("ignores a response from the previous resource filter", async () => {
     let resolvePrevious: ((response: Response) => void) | undefined;
     respond(async (url) => {
@@ -226,6 +254,108 @@ describe("activity feed, mounted", () => {
       expect(navigations).toEqual(["/organization/people/bob%2Fmember"]);
     },
   );
+
+  it.each([true, false])(
+    "shows two-factor requirement changes (compact: %s)",
+    async (compact) => {
+      const change: ActivityEvent = {
+        ...event(51, ""),
+        action: "organization.member_two_factor_requirement_changed",
+        details: {
+          after: true,
+          before: false,
+          userEmail: "bob@example.com",
+          userId: "bob-user",
+          userName: "Bob",
+        },
+        root: { type: "organization_member", id: "bob-member", label: "Bob" },
+        subject: { type: "organization_member", id: "bob-member" },
+      };
+      respond(async () =>
+        Response.json({ events: [change], nextCursor: null }),
+      );
+      const navigations: string[] = [];
+      ({ container } = await mount(
+        <ActivityFeed
+          compact={compact}
+          onNavigate={(path) => navigations.push(path)}
+        />,
+      ));
+      await settle();
+      expect(container.textContent).toContain(
+        "Sam changed a two-factor requirement",
+      );
+      expect(container.textContent).toContain(
+        "Two-factor: Not required → Required",
+      );
+      if (compact)
+        expect(container.querySelector("summary")?.textContent).toBe(
+          "Bob · Two-factor: Not required → Required",
+        );
+      await click(compact ? "Bob" : "Open member");
+      expect(navigations).toEqual(["/organization/people/bob-member"]);
+    },
+  );
+
+  it("shows group grants, revocations, and snapshots", async () => {
+    const group = (
+      id: number,
+      action: string,
+      details: ActivityEvent["details"],
+    ): ActivityEvent => ({
+      ...event(id, ""),
+      action,
+      details,
+      root: { id: "group-1", label: "Finance", type: "organization_group" },
+      subject: { id: "group-1", type: "organization_group" },
+    });
+    const bob = { email: "bob@example.com", name: "Bob", userId: "bob-user" };
+    const ann = { email: "ann@example.com", name: "", userId: "ann-user" };
+    respond(async () =>
+      Response.json({
+        events: [
+          group(53, "organization.group_deleted", {
+            capabilities: [],
+            members: [],
+            name: "Finance",
+          }),
+          group(52, "organization.group_updated", {
+            addedCapabilities: [],
+            addedMembers: [bob],
+            name: "Finance",
+            removedCapabilities: ["finance"],
+            removedMembers: [ann],
+            renamedFrom: "Books",
+          }),
+          group(51, "organization.group_created", {
+            capabilities: ["finance"],
+            members: [bob],
+            name: "Books",
+          }),
+        ],
+        nextCursor: null,
+      }),
+    );
+    const navigations: string[] = [];
+    ({ container } = await mount(
+      <ActivityFeed onNavigate={(path) => navigations.push(path)} />,
+    ));
+    await settle();
+    const rows = [...container.querySelectorAll(".activityRow")].map(
+      (row) => row.textContent,
+    );
+    expect(rows[0]).toContain("Sam deleted a group");
+    expect(rows[0]).toContain("No members · No access");
+    expect(rows[0]).not.toContain("Open groups");
+    expect(rows[1]).toContain("Sam changed a group");
+    expect(rows[1]).toContain(
+      "Renamed from Books · Added: Bob · Removed: ann@example.com · Access removed: Finance",
+    );
+    expect(rows[2]).toContain("Sam created a group");
+    expect(rows[2]).toContain("Members: Bob · Access: Finance");
+    await click("Open groups");
+    expect(navigations).toEqual(["/organization/access"]);
+  });
 
   it.each([true, false])(
     "names the API key and channel behind a change (compact: %s)",

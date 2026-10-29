@@ -815,8 +815,16 @@ function fixture(legacy = false) {
     apiKey: false,
     request,
   };
+  // The stored role, as requireOrganization sets it.
   const app = testApp({}, () => ({
     organizationId: state.organization,
+    organizationRole: (
+      db
+        .query(
+          "SELECT role FROM member WHERE organizationId = ? AND userId = ?",
+        )
+        .get(state.organization, state.user) as { role: string } | null
+    )?.role,
     userId: state.user,
   }));
   app.use("*", async (context, next) => {

@@ -41,6 +41,13 @@ export interface ActivityActor {
 const pageSize = 50;
 
 /**
+ * Access history only organization managers read: group grants and
+ * revocations, and members' two-factor requirements.
+ */
+const managerOnlyActivity = `(root_type = 'organization_group'
+  OR action = 'organization.member_two_factor_requirement_changed')`;
+
+/**
  * An organization's activity, or global activity when the organization is
  * null. Roots must be authorized by the caller before requesting global
  * activity.
@@ -52,6 +59,7 @@ export async function findActivity(
   root?: ActivityRoot,
   includeFinance = false,
   resourceType?: ActivityResourceType,
+  includeManagerOnly = false,
 ) {
   if (cursor !== undefined && !/^[1-9]\d{0,15}$/.test(cursor)) return null;
   const before = cursor === undefined ? null : Number(cursor);
@@ -65,6 +73,7 @@ export async function findActivity(
     filters.push(
       "root_type NOT IN ('finance_transaction', 'finance_connection')",
     );
+  if (!includeManagerOnly) filters.push(`NOT ${managerOnlyActivity}`);
   if (resourceType) {
     filters.push("root_type = ?");
     bindings.push(resourceType);
