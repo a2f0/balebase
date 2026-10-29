@@ -229,7 +229,7 @@ export async function recordApiKeyUse(
  * session that created it was, and only while its creator keeps two-factor
  * authentication enabled; otherwise a later requirement needs a new key.
  */
-function apiKeySession(row: CredentialRow, now: Date) {
+function apiKeySession(row: CredentialRow, now: Date): AuthSession {
   const twoFactorEnabled = Boolean(row.twoFactorEnabled);
   const twoFactorVerified = twoFactorEnabled && row.two_factor_verified === 1;
   return {
@@ -262,7 +262,7 @@ function apiKeySession(row: CredentialRow, now: Date) {
       twoFactorEnabled,
       updatedAt: new Date(row.updatedAt),
     },
-  } as unknown as AuthSession;
+  };
 }
 
 function isBanned(row: CredentialRow, now: Date) {
