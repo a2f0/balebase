@@ -16,7 +16,7 @@ feature is one source of events; audit trails span the whole application.
   uncertain; do not assume the original migration is the current model.
 - `packages/validators/src/activity.ts` and
   `packages/api-client/src/activity.ts`: typed request/response contracts.
-- `packages/app/src/Activity.tsx`, `ActivityFeed.tsx`, and
+- `packages/app/src/activity/Activity.tsx`, `ActivityFeed.tsx`, and
   `activitySource.ts`: workspace and record history readers and presentation.
 - `packages/api/src/organizationGroups.ts`: capability checks. Finance
   activity has stricter visibility than ordinary organization activity.
