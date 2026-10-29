@@ -255,6 +255,26 @@ describe("projects", () => {
     ]);
   });
 
+  it("records a deleted project as the deletion found it", async () => {
+    const { as, events, hooks, run } = fixture();
+    const owner = as("owner-user", "owner");
+    const id = await createProject(owner);
+    // Another manager renames the project after this request read it.
+    hooks.after("FROM projects AS project", () => {
+      run(
+        "UPDATE projects SET name = 'Renamed', revision = revision + 1 WHERE id = ?",
+      ).run(id);
+    });
+    expect((await owner("DELETE", `/api/projects/${id}`)).status).toBe(204);
+    expect(events().at(-1)).toEqual({
+      action: "project.deleted",
+      actor: "owner-user",
+      details: { description: "", name: "Renamed" },
+      label: "Renamed",
+      subject: "project",
+    });
+  });
+
   it("lets members read projects but only managers change them", async () => {
     const { as, events } = fixture();
     const owner = as("owner-user", "owner");

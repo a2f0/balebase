@@ -21,8 +21,12 @@ const forms: ProjectForm[] = [
 
 const edits: unknown[] = [];
 
-/** Serves one project, applying member and form changes, and records writes. */
-function stubApi(canManage: boolean) {
+/**
+ * Serves one project, applying member and form changes, and records writes.
+ * `elsewhere` is merged into the project when a member is added, as another
+ * manager's saved edit would be.
+ */
+function stubApi(canManage: boolean, elsewhere: Partial<Project> = {}) {
   const writes: string[] = [];
   edits.length = 0;
   let project: Project = {
@@ -62,7 +66,12 @@ function stubApi(canManage: boolean) {
         method === "PUT"
           ? [...project.members, member]
           : project.members.filter((person) => person.id !== target);
-      project = { ...project, memberCount: members.length, members };
+      project = {
+        ...project,
+        ...(method === "PUT" ? elsewhere : {}),
+        memberCount: members.length,
+        members,
+      };
     } else {
       const enabled =
         method === "PUT"
@@ -138,6 +147,24 @@ describe("project detail", () => {
     expect(edits).toEqual([{ expectedRevision: 0, name: "Clinic renovation" }]);
     expect(container.textContent).toContain("Clinic renovation");
     expect(container.textContent).toContain("North wing");
+  });
+
+  it("keeps an open edit on the revision it showed after the project refreshes", async () => {
+    stubApi(true, { description: "Changed elsewhere", revision: 4 });
+    const container = await render();
+    await click(queryButton("Edit", container));
+    // Adding a member refreshes the project with another manager's edit.
+    await fill(
+      container.querySelector('select[aria-label="Add a member"]'),
+      "sam",
+    );
+    await click(queryButton("Add member", container));
+    await settle();
+    expect(container.textContent).toContain("Changed elsewhere");
+    await fill(container.querySelector("form input"), "Clinic renovation");
+    await click(queryButton("Save changes", container));
+    await settle();
+    expect(edits).toEqual([{ expectedRevision: 0, name: "Clinic renovation" }]);
   });
 
   it("shows members a read-only view", async () => {

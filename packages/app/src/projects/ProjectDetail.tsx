@@ -32,7 +32,9 @@ function useProjectDetail(id: string, onNavigate: (pathname: string) => void) {
   );
   const { setData } = loaded;
   const action = useAction("Could not update the project.");
-  const [editing, setEditing] = useState(false);
+  // The project as it was when editing began: later refreshes, such as a
+  // member change, must not move the edit onto a revision it never showed.
+  const [editing, setEditing] = useState<Project>();
 
   const change = (work: () => Promise<Project>, message?: string) =>
     action.run(async () => {
@@ -78,6 +80,7 @@ export function ProjectDetailPage({
     useProjectDetail(id, onNavigate);
   const project = detail?.project;
   const canEdit = Boolean(detail?.canManage && project && !editing);
+  const stopEditing = () => setEditing(undefined);
   let title = "Loading…";
   if (project) title = project.name;
   else if (error) title = "Project unavailable";
@@ -91,7 +94,7 @@ export function ProjectDetailPage({
               <Button
                 disabled={busy}
                 icon="edit"
-                onClick={() => setEditing(true)}
+                onClick={() => setEditing(project)}
               >
                 Edit
               </Button>
@@ -129,14 +132,14 @@ export function ProjectDetailPage({
           <>
             {editing && (
               <ProjectForm
-                initial={project}
-                onCancel={() => setEditing(false)}
+                initial={editing}
+                onCancel={stopEditing}
                 onSave={async (input) => {
                   const saved = await change(
-                    () => api.projects.update(id, editedFields(project, input)),
+                    () => api.projects.update(id, editedFields(editing, input)),
                     "Project updated.",
                   );
-                  if (saved) setEditing(false);
+                  if (saved) stopEditing();
                   return saved;
                 }}
               />

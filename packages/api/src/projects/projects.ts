@@ -68,19 +68,11 @@ projects.post("/", requireManager(), async (context) => {
         now,
         now,
       ),
-    activityStatement(
-      database,
-      {
-        action: "project.created",
-        actorId: userId(context),
-        details: { description: input.description, name: input.name },
-        occurredAt: now,
-        organizationId,
-        root: { id, label: input.name, type: "project" },
-        subject: { id, type: "project" },
-      },
-      { bindings: [id, organizationId], sql: projectExists },
-    ),
+    projectEvent(context, id, {
+      action: "project.created",
+      details: null,
+      subject: { id, type: "project" },
+    }),
   ]);
   return projectResponse(context, projectsRoutes.create, id, 201);
 });
@@ -193,21 +185,14 @@ projects.delete("/:id", requireManager(), async (context) => {
     userId(context),
   );
   if (!existing) return projectNotFound(context);
-  // History outlives the project; purging the organization removes it.
+  // History outlives the project; purging the organization removes it. The
+  // event snapshots the row this batch deletes.
   await activityBatch(database, context.get("apiKey"), [
-    activityStatement(
-      database,
-      {
-        action: "project.deleted",
-        actorId: userId(context),
-        details: { description: existing.description, name: existing.name },
-        occurredAt: new Date().toISOString(),
-        organizationId,
-        root: { id: existing.id, label: existing.name, type: "project" },
-        subject: { id: existing.id, type: "project" },
-      },
-      { bindings: [existing.id, organizationId], sql: projectExists },
-    ),
+    projectEvent(context, existing.id, {
+      action: "project.deleted",
+      details: null,
+      subject: { id: existing.id, type: "project" },
+    }),
     database
       .prepare("DELETE FROM projects WHERE id = ? AND organization_id = ?")
       .bind(existing.id, organizationId),
@@ -236,15 +221,12 @@ projects.put("/:id/members/:userId", requireManager(), async (context) => {
       AND EXISTS (SELECT 1 FROM member WHERE organizationId = ? AND userId = ?)`,
   };
   const [, inserted] = await activityBatch(database, context.get("apiKey"), [
-    activityStatement(
-      database,
+    projectEvent(
+      context,
+      project.id,
       {
         action: "project.member_added",
-        actorId: userId(context),
         details: memberDetails(person),
-        occurredAt: new Date().toISOString(),
-        organizationId,
-        root: { id: project.id, label: project.name, type: "project" },
         subject: { id: memberId, type: "user" },
       },
       {
@@ -299,15 +281,12 @@ projects.delete("/:id/members/:userId", requireManager(), async (context) => {
       sql: "EXISTS (SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?)",
     };
     await activityBatch(database, context.get("apiKey"), [
-      activityStatement(
-        database,
+      projectEvent(
+        context,
+        project.id,
         {
           action: "project.member_removed",
-          actorId: userId(context),
           details: memberDetails(person),
-          occurredAt: new Date().toISOString(),
-          organizationId,
-          root: { id: project.id, label: project.name, type: "project" },
           subject: { id: memberId, type: "user" },
         },
         membership,
@@ -349,15 +328,12 @@ projects.put("/:id/forms/:templateId", requireManager(), async (context) => {
       WHERE family.id = ? AND ${visibleTemplateFilter()})`,
   };
   const [, inserted] = await activityBatch(database, context.get("apiKey"), [
-    activityStatement(
-      database,
+    projectEvent(
+      context,
+      project.id,
       {
         action: "project.form_enabled",
-        actorId: userId(context),
         details: { templateId: form.id, title: form.name },
-        occurredAt: new Date().toISOString(),
-        organizationId,
-        root: { id: project.id, label: project.name, type: "project" },
         subject: { id: form.id, type: "audit_template" },
       },
       {
@@ -420,15 +396,12 @@ projects.delete("/:id/forms/:templateId", requireManager(), async (context) => {
                     WHERE project_id = ? AND template_id = ?)`,
     };
     await activityBatch(database, context.get("apiKey"), [
-      activityStatement(
-        database,
+      projectEvent(
+        context,
+        project.id,
         {
           action: "project.form_disabled",
-          actorId: userId(context),
           details: { templateId, title: form.name },
-          occurredAt: new Date().toISOString(),
-          organizationId,
-          root: { id: project.id, label: project.name, type: "project" },
           subject: { id: templateId, type: "audit_template" },
         },
         enabled,
@@ -463,6 +436,51 @@ async function projectResponse(
   );
   if (!project) return projectNotFound(context);
   return respond(context, route, { project }, status);
+}
+
+/**
+ * Records a project event in the batch, labelled with the project's name as
+ * the batch finds it, and only while the project exists and `condition`
+ * holds. Null `details` snapshot the project's name and description.
+ */
+function projectEvent(
+  context: ProjectContext,
+  projectId: string,
+  event: {
+    action: string;
+    details: Record<string, unknown> | null;
+    subject: { id: string; type: string };
+  },
+  condition: { bindings: (string | number)[]; sql: string } = {
+    bindings: [],
+    sql: "1",
+  },
+) {
+  const details = event.details
+    ? "?"
+    : "json_object('name', project.name, 'description', project.description)";
+  return context.env.DB.prepare(
+    `INSERT INTO activity_events (
+       organization_id, root_type, root_id, root_label, subject_type,
+       subject_id, action, actor_user_id, actor_name, actor_email,
+       occurred_at, details
+     )
+     SELECT project.organization_id, 'project', project.id, project.name, ?, ?,
+            ?, actor.id, actor.name, actor.email, ?, ${details}
+     FROM projects AS project
+     JOIN user AS actor ON actor.id = ?
+     WHERE project.id = ? AND project.organization_id = ? AND (${condition.sql})`,
+  ).bind(
+    event.subject.type,
+    event.subject.id,
+    event.action,
+    new Date().toISOString(),
+    ...(event.details ? [JSON.stringify(event.details)] : []),
+    userId(context),
+    projectId,
+    context.get("organizationId"),
+    ...condition.bindings,
+  );
 }
 
 function memberDetails(person: { email: string; id: string; name: string }) {
