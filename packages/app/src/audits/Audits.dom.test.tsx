@@ -10,7 +10,7 @@ let container: HTMLElement;
 
 async function show(pathname: string) {
   ({ container } = await render(
-    <Audits onNavigate={() => {}} pathname={pathname} />,
+    <Audits canPublish onNavigate={() => {}} pathname={pathname} />,
   ));
   await settle(30);
 }

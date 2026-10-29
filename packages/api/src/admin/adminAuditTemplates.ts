@@ -9,8 +9,9 @@ import {
   staleTemplateError,
   storedDefinition,
   type TemplateRow,
-  templateSelect,
+  templateSummarySelect,
   toTemplate,
+  toTemplateSummary,
 } from "../audits/auditTemplates";
 import type { ApiEnv } from "../auth/apiEnv";
 import { findActivity, requestActor } from "../shared/activity";
@@ -24,13 +25,14 @@ import { readBody, respond } from "../shared/respond";
 const adminAuditTemplates = new Hono<ApiEnv>();
 
 adminAuditTemplates.get("/", async (context) => {
+  // Audit counts cover every organization's audits.
   const result = await context.env.DB.prepare(
-    `${templateSelect}
+    `${templateSummarySelect()}
      WHERE family.scope = 'global' AND version.status != 'discarded'
      ORDER BY family.updated_at DESC`,
-  ).all<TemplateRow>();
+  ).all<TemplateRow & { audit_count: number }>();
   return respond(context, adminAuditTemplatesRoutes.list, {
-    templates: result.results.map(toTemplate),
+    templates: result.results.map(toTemplateSummary),
   });
 });
 
@@ -158,11 +160,13 @@ adminAuditTemplates.delete("/:id", async (context) => {
     context.req.param("id"),
   );
   if (!current) return context.json({ error: "Template not found." }, 404);
-  if (current.status !== "draft") {
+  // Organizations stop seeing a form once it is unpublished, so only
+  // published forms must be unpublished before they can be discarded.
+  if (current.status === "published") {
     return context.json(
       {
         error:
-          "Only draft forms can be discarded. Unpublish published forms instead.",
+          "Only draft or unpublished forms can be discarded. Unpublish this form first.",
       },
       409,
     );

@@ -144,11 +144,26 @@ it("names the listed forms turned on for the person's projects", async () => {
            ('mine', 'org_user-1', 'hidden', '2026-10-01'),
            ('theirs', 'org_user-1', 'nfpa70e_global', '2026-10-01');
   `);
+  // The organization's own form is still a draft.
+  expect((await forms()).projectFormIds).toEqual([]);
+  f.db.exec(
+    "UPDATE audit_template_versions SET status = 'published' WHERE template_id = 'form' AND version = 2",
+  );
   const listed = await forms();
   // Not another member's project, and not a form the organization cannot use.
   expect(listed.projectFormIds).toEqual(["form"]);
   expect(listed.templates.map((template) => template.id)).toContain(
     "nfpa70e_global",
+  );
+  // Unpublishing it stops the download; it stays listed for downloading by
+  // hand.
+  f.db.exec(
+    "UPDATE audit_template_versions SET status = 'unpublished' WHERE template_id = 'form' AND version = 2",
+  );
+  const unpublished = await forms();
+  expect(unpublished.projectFormIds).toEqual([]);
+  expect(unpublished.templates.map((template) => template.id)).toContain(
+    "form",
   );
 });
 

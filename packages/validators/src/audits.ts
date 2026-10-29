@@ -72,6 +72,28 @@ export const AuditTemplateResponseSchema = z.object({
 export const AuditTemplateListSchema = z.object({
   templates: z.array(AuditTemplateSchema),
 });
+
+/** A form in a forms list, with how many audits have been started from it. */
+const AuditTemplateSummarySchema = AuditTemplateSchema.extend({
+  /** Audits started from any version of the form, not counting discarded ones. */
+  auditCount: z.int().nonnegative(),
+});
+export type AuditTemplateSummary = z.infer<typeof AuditTemplateSummarySchema>;
+
+export const AuditTemplateSummaryListSchema = z.object({
+  templates: z.array(AuditTemplateSummarySchema),
+});
+
+/**
+ * Publishes or unpublishes a form as it is saved; its status is kept
+ * otherwise. Only published forms are offered to projects.
+ */
+export const TemplatePublicationSchema = z
+  .enum(["published", "unpublished"], {
+    error: "Template status is invalid.",
+  })
+  .optional();
+export type TemplatePublication = z.infer<typeof TemplatePublicationSchema>;
 export const AuditTemplateVersionListSchema = z.object({
   versions: z.array(AuditTemplateVersionSchema),
 });
@@ -224,7 +246,7 @@ export const auditsRoutes = {
   listTemplates: route({
     method: "GET",
     path: "/api/audits/templates",
-    response: AuditTemplateListSchema,
+    response: AuditTemplateSummaryListSchema,
   }),
   createTemplate: route({
     method: "POST",
@@ -267,7 +289,8 @@ export const auditsRoutes = {
   updateTemplate: route({
     method: "PUT",
     path: "/api/audits/templates/:id",
-    body: AuditTemplateSaveSchema,
+    /** Only organization managers can publish or unpublish. */
+    body: AuditTemplateSaveSchema.extend({ status: TemplatePublicationSchema }),
     response: AuditTemplateResponseSchema,
   }),
   start: route({

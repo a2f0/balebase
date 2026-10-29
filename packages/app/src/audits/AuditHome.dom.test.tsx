@@ -105,8 +105,8 @@ function page(container: HTMLElement) {
 }
 
 const templates = [
-  template("g1", "Fire safety", "global"),
-  template("o1", "Kitchen close", "organization"),
+  { ...template("g1", "Fire safety", "global"), auditCount: 4 },
+  { ...template("o1", "Kitchen close", "organization"), auditCount: 1 },
 ];
 
 describe("audit template layout, mounted", () => {
@@ -135,7 +135,10 @@ describe("audit template layout, mounted", () => {
     }
     expect(globalRow).toContain("Fire safety");
     expect(globalRow).toContain("Customize");
+    expect(globalRow).toContain("4 audits");
     expect(organizationRow).toContain("Kitchen close");
+    expect(organizationRow).toContain("1 audit");
+    expect(organizationRow).not.toContain("1 audits");
     expect(organizationRow).toContain("Edit");
     for (const text of [globalRow, organizationRow]) {
       expect(text).not.toContain("Manage");

@@ -18,6 +18,7 @@ import type {
   AuditSummary,
   AuditTemplate,
   AuditTemplateScope,
+  AuditTemplateSummary,
 } from "@balebase/validators/audits";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorToast } from "../billing/ErrorToast";
@@ -185,7 +186,7 @@ function TemplateLibrary({
   ...actions
 }: TemplateActions & {
   onViewChange: (view: AuditTemplateView) => void;
-  templates: AuditTemplate[] | undefined;
+  templates: AuditTemplateSummary[] | undefined;
   view: AuditTemplateView;
 }) {
   return (
@@ -269,7 +270,7 @@ function TemplateCollection({
   description: string;
   emptyMessage: string;
   emptyTitle: string;
-  templates: AuditTemplate[];
+  templates: AuditTemplateSummary[];
   title: string;
   view: AuditTemplateView;
 }) {
@@ -310,7 +311,7 @@ function TemplateCard({
   onBegin,
   template,
   ...actions
-}: TemplateActions & { template: AuditTemplate }) {
+}: TemplateActions & { template: AuditTemplateSummary }) {
   return (
     <article className="card auditTemplateCard">
       <div className="auditTemplateBody">
@@ -325,7 +326,7 @@ function TemplateCard({
           {template.description || "A custom checklist."}
         </p>
         <p className="auditTemplateMeta">
-          <TemplateStats template={template} />
+          <TemplateStats auditCount={template.auditCount} template={template} />
         </p>
       </div>
       <div className="cardFooter auditTemplateFooter">
@@ -348,7 +349,7 @@ function TemplateRow({
   onBegin,
   template,
   ...actions
-}: TemplateActions & { template: AuditTemplate }) {
+}: TemplateActions & { template: AuditTemplateSummary }) {
   return (
     <li className="row auditTemplateRow">
       <span className="rowMain">
@@ -361,7 +362,7 @@ function TemplateRow({
         <Badge dot tone={templateStatusTone(template.status)}>
           {formatLabel(template.status)}
         </Badge>
-        <TemplateStats template={template} />
+        <TemplateStats auditCount={template.auditCount} template={template} />
       </span>
       <span className="rowActions auditTemplateRowActions">
         <TemplateEditButtons {...actions} template={template} />
@@ -371,7 +372,14 @@ function TemplateRow({
   );
 }
 
-export function TemplateStats({ template }: { template: AuditTemplate }) {
+/** A form's size and version, and how many audits it has when given. */
+export function TemplateStats({
+  auditCount,
+  template,
+}: {
+  auditCount?: number;
+  template: AuditTemplate;
+}) {
   return (
     <>
       <span className="cluster auditTemplateStat">
@@ -383,6 +391,12 @@ export function TemplateStats({ template }: { template: AuditTemplate }) {
         {countLabel(template.definition.sections.length, "section")}
       </span>
       <span className="auditTemplateStat mono">v{template.version}</span>
+      {auditCount !== undefined && (
+        <span className="cluster auditTemplateStat">
+          <Icon name="audits" size={16} />
+          {countLabel(auditCount, "audit")}
+        </span>
+      )}
     </>
   );
 }

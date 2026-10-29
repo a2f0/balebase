@@ -10,7 +10,7 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
-import type { AuditTemplate } from "@balebase/validators/audits";
+import type { AuditTemplateSummary } from "@balebase/validators/audits";
 import { useCallback } from "react";
 import { TemplateStats, templateStatusTone } from "../audits/AuditHome";
 import { AuditTemplateBuilder } from "../audits/AuditTemplateBuilder";
@@ -86,7 +86,7 @@ function GlobalAuditList({
             New global checklist
           </Button>
         }
-        description="Publish checklists to share them with every organization. Unpublish forms to keep them private, or discard drafts you no longer need."
+        description="Publish checklists to share them with every organization. Unpublish forms to keep them private, or discard drafts and unpublished forms you no longer need. Audit counts cover every organization."
         eyebrow="Root Admin"
         title="Global Audits"
       />
@@ -132,7 +132,7 @@ function GlobalAuditRow({
   template,
 }: {
   onNavigate: (pathname: string) => void;
-  template: AuditTemplate;
+  template: AuditTemplateSummary;
 }) {
   const href = globalAuditsPath(template.id);
   return (
@@ -147,7 +147,7 @@ function GlobalAuditRow({
         <Badge dot tone={templateStatusTone(template.status)}>
           {formatLabel(template.status)}
         </Badge>
-        <TemplateStats template={template} />
+        <TemplateStats auditCount={template.auditCount} template={template} />
       </span>
       <span className="rowActions auditTemplateRowActions">
         <AppButtonLink

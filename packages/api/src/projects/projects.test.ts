@@ -44,14 +44,19 @@ describe("projects", () => {
 
     const detail = await owner<Detail>("GET", `/api/projects/${id}`);
     expect(detail.body.canManage).toBe(true);
-    // Published global forms and the organization's own; not other
-    // organizations' forms or unpublished global ones. Migrations also seed
-    // the starter library's global forms.
+    // Published global forms and the organization's own published forms;
+    // not other organizations' forms or drafts and unpublished forms.
+    // Migrations also seed the starter library's global forms.
     const offered = detail.body.availableForms.map((form) => form.id);
     expect(offered).toContain("org-form");
     expect(offered).toContain("global-published");
-    expect(offered).not.toContain("other-org-form");
-    expect(offered).not.toContain("global-draft");
+    for (const hidden of [
+      "other-org-form",
+      "global-draft",
+      "org-draft",
+      "org-unpublished",
+    ])
+      expect(offered).not.toContain(hidden);
     expect(detail.body.directory.map((person) => person.id)).toEqual([
       "member-user",
       "owner-user",
@@ -313,7 +318,13 @@ describe("projects", () => {
     expect(
       (await owner("PUT", `/api/projects/${id}/members/other-user`)).status,
     ).toBe(400);
-    for (const form of ["other-org-form", "global-draft", "missing"])
+    for (const form of [
+      "other-org-form",
+      "global-draft",
+      "org-draft",
+      "org-unpublished",
+      "missing",
+    ])
       expect(
         (await owner("PUT", `/api/projects/${id}/forms/${form}`)).status,
       ).toBe(404);
@@ -321,6 +332,38 @@ describe("projects", () => {
       400,
     );
     expect(events().map((event) => event.action)).toEqual(["project.created"]);
+  });
+
+  it("stops listing and counting a turned-on form once it is unpublished", async () => {
+    const { as, events, run } = fixture();
+    const owner = as("owner-user", "owner");
+    const id = await createProject(owner);
+    for (const form of ["org-form", "global-published"])
+      await owner("PUT", `/api/projects/${id}/forms/${form}`);
+    for (const form of ["org-form", "global-published"])
+      run(
+        `UPDATE audit_template_versions SET status = 'unpublished'
+         WHERE template_id = '${form}'`,
+      ).run();
+    const detail = (await owner<Detail>("GET", `/api/projects/${id}`)).body;
+    expect(detail.project).toMatchObject({ formCount: 0, forms: [] });
+    const listing = await owner<{ projects: ProjectSummary[] }>(
+      "GET",
+      "/api/projects",
+    );
+    expect(listing.body.projects[0]?.formCount).toBe(0);
+    // Still turned on, without history for a change nobody made here.
+    expect(
+      run("SELECT template_id FROM project_audit_forms ORDER BY 1").all(),
+    ).toEqual([
+      { template_id: "global-published" },
+      { template_id: "org-form" },
+    ]);
+    expect(events().map((event) => event.action)).toEqual([
+      "project.created",
+      "project.form_enabled",
+      "project.form_enabled",
+    ]);
   });
 
   it("counts people only while they belong to the organization, without rewriting the project", async () => {
@@ -457,7 +500,9 @@ function seed(database: Database) {
   const forms: Array<
     [string, "global" | "organization", string | null, string, string, number]
   > = [
-    ["org-form", "organization", "org-1", "Site walk v2", "draft", 2],
+    ["org-form", "organization", "org-1", "Site walk v2", "published", 2],
+    ["org-draft", "organization", "org-1", "Work in progress", "draft", 1],
+    ["org-unpublished", "organization", "org-1", "Retired", "unpublished", 2],
     ["other-org-form", "organization", "org-2", "Their form", "draft", 1],
     ["global-published", "global", null, "NFPA 70E", "published", 1],
     ["global-draft", "global", null, "Unreleased", "draft", 1],
