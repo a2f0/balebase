@@ -64,6 +64,8 @@ const actionLabels: Record<string, string> = {
   "audit.reopened": "reopened the audit",
   "audit.started": "started the audit",
   "audit.template_created": "created the form",
+  "audit.template_discarded": "discarded the form",
+  "audit.template_restored": "restored the form",
   "audit.template_version_saved": "saved a form version",
   "equipment.assigned": "changed the equipment assignee",
   "equipment.created": "added equipment",
@@ -449,6 +451,8 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
         </p>
       );
     case "audit.template_created":
+    case "audit.template_discarded":
+    case "audit.template_restored":
     case "audit.template_version_saved":
       return (
         <p className="activityDetails">Version {textValue(details.version)}</p>

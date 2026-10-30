@@ -1,4 +1,7 @@
-import type { adminAuditTemplatesRoutes } from "@balebase/validators/adminAuditTemplates";
+import type {
+  AdminTemplateView,
+  adminAuditTemplatesRoutes,
+} from "@balebase/validators/adminAuditTemplates";
 import type { AuditTemplate } from "@balebase/validators/audits";
 import { templateSaveBody } from "./audits";
 import { endpoint } from "./endpoint";
@@ -48,13 +51,20 @@ const endpoints = {
     body: "json",
     response: "json",
   }),
+  restore: endpoint<typeof adminAuditTemplatesRoutes.restore>({
+    method: "POST",
+    path: "/api/admin/audit-templates/:id/restore",
+    body: "json",
+    response: "json",
+  }),
 };
 
 /** Global forms, which only root admin's Global Audits can change. */
 export function adminAuditTemplatesApi(transport: Transport) {
   return {
-    list() {
-      return transport.call(endpoints.list);
+    /** Global forms in use, or with `"discarded"`, those awaiting the purge. */
+    list(view?: AdminTemplateView) {
+      return transport.call(endpoints.list, { query: { view } });
     },
     create(name: string) {
       return transport.call(endpoints.create, {
@@ -93,6 +103,13 @@ export function adminAuditTemplatesApi(transport: Transport) {
      */
     discard(template: AuditTemplate) {
       return transport.call(endpoints.discard, {
+        body: { expectedCurrentVersion: template.currentVersion },
+        params: { id: template.id },
+      });
+    },
+    /** Restores a discarded form, unless it changed since it was listed. */
+    restore(template: AuditTemplate) {
+      return transport.call(endpoints.restore, {
         body: { expectedCurrentVersion: template.currentVersion },
         params: { id: template.id },
       });

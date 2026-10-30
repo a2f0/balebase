@@ -690,6 +690,15 @@ File cleanup processes 25 objects per run, so a large backlog can take days to
 drain; the grace period is a minimum wait, not a deletion deadline. Additional
 manual cleanup runs can drain eligible files sooner.
 
+Root admins can restore discarded global audit forms from **Global Audits →
+Discarded forms**. The **Purge discarded global forms** job
+(`purgeDiscardedAuditForms`) permanently deletes up to 100 per run once their
+discard is at least 30 days old, with their versions and activity; its saved
+output reports `purged`. It runs with hourly maintenance in production and from
+**Root Admin → Jobs → Run now** in either tier. Each run is one D1 statement
+that rechecks eligibility, so a restore committed first keeps the form. Audits
+started from a purged form keep their snapshot.
+
 Inbox messages can be moved to Trash and restored by organization members.
 Deleted messages retain their deletion time and initiating user in D1, while
 their raw message and attachments remain in R2. Preview or permanently purge
