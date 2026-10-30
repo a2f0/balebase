@@ -228,5 +228,15 @@ describe("a manager's next step", () => {
         }),
       ),
     ).toBe("Download w4.pdf to review it, then set its status to Complete.");
+    expect(
+      managerNextStep(
+        check({ ...form, invitationStatus: "pending", memberId: null }),
+      ),
+    ).toBe(
+      "Waiting for pat@example.com to accept their invitation and upload the file in My documents.",
+    );
+    expect(managerNextStep(check({ ...form, memberId: null }))).toBe(
+      "pat@example.com is no longer in the organization, so they can’t upload this form. Remove the request if you no longer need it.",
+    );
   });
 });

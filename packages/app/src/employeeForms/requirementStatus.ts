@@ -87,11 +87,10 @@ export function managerNextStep(requirement: EmployeeRequirement) {
       ? "Complete. Review the report in Checkr before making a decision."
       : "Complete. Nothing more is needed.";
   }
+  const invited = requirement.invitationStatus === "pending";
+  const gone = !requirement.memberId && !invited;
   if (requirement.kind === "form") {
-    if (!requirement.hasDocument) {
-      return `Waiting for ${person} to upload the file in My documents.`;
-    }
-    return `Download ${requirement.documentFilename ?? "the file"} to review it, then set its status to Complete.`;
+    return formNextStep(requirement, person, invited, gone);
   }
   if (requirement.checkrSubmitting) {
     return `${person} started submitting their details to Checkr. It finishes when they submit the form again.`;
@@ -116,10 +115,28 @@ export function managerNextStep(requirement: EmployeeRequirement) {
   if (requirement.kind === "credit_check") {
     return `${productName} doesn’t order credit checks. Run it yourself, then set its status here as it moves along.`;
   }
-  if (!requirement.memberId && requirement.invitationStatus !== "pending") {
+  if (gone) {
     return `${person} is no longer in the organization, so this check can’t be requested through Checkr.`;
   }
   return `Checkr isn’t set up in ${productName} yet, so ${productName} can’t order this check. Run it yourself, then set its status here as it moves along. The person sees the status in My documents.`;
+}
+
+/** Who a form waits on: the person, or a manager's review. */
+function formNextStep(
+  requirement: EmployeeRequirement,
+  person: string,
+  invited: boolean,
+  gone: boolean,
+) {
+  if (requirement.hasDocument) {
+    return `Download ${requirement.documentFilename ?? "the file"} to review it, then set its status to Complete.`;
+  }
+  if (gone) {
+    return `${person} is no longer in the organization, so they can’t upload this form. Remove the request if you no longer need it.`;
+  }
+  return invited
+    ? `Waiting for ${person} to accept their invitation and upload the file in My documents.`
+    : `Waiting for ${person} to upload the file in My documents.`;
 }
 
 /** The next step while Checkr holds an open report, if it does. */
