@@ -31,6 +31,7 @@ export function IssueList({
   );
   const {
     error,
+    generation,
     items,
     loadMore,
     loadingMore,
@@ -106,6 +107,7 @@ export function IssueList({
           busy={loadingMore}
           cursor={nextCursor}
           disabled={refreshing}
+          key={generation}
           onLoadMore={loadMore}
         >
           Load more issues

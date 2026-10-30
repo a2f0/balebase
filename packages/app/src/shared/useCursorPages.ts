@@ -14,6 +14,8 @@ interface CursorPage<T> {
  * items on screen until the first page replaces them, so the page does not
  * collapse and lose its scroll position. A page requested before the newest
  * first page is dropped when it arrives, and no page loads during a refresh.
+ * `generation` changes with each first page; key `InfiniteScroll` on it so a
+ * refreshed list forgets which cursor it already loaded.
  */
 export function useCursorPages<T>(
   fetchPage: (cursor?: string) => Promise<CursorPage<T>>,
@@ -25,6 +27,7 @@ export function useCursorPages<T>(
   const [error, setError] = useState<string>();
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [generation, setGeneration] = useState(0);
   const [reloads, setReloads] = useState(0);
   const latest = useRef(0);
   const shown = useRef<typeof fetchPage>(undefined);
@@ -44,6 +47,7 @@ export function useCursorPages<T>(
         if (request !== latest.current) return;
         setItems(page.items);
         setNextCursor(page.nextCursor);
+        setGeneration(request);
         setRefreshing(false);
       },
       (cause: unknown) => {
@@ -78,6 +82,7 @@ export function useCursorPages<T>(
   const reload = useCallback(() => setReloads((count) => count + 1), []);
   return {
     error,
+    generation,
     items,
     loadMore,
     loadingMore,
