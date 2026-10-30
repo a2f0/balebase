@@ -59,6 +59,7 @@
     "mobile:upload:ios": "sh scripts/lib/nativeRelease.sh ios upload production",
     "mobile:upload:ios:staging": "sh scripts/lib/nativeRelease.sh ios upload staging",
     "scope": "bash scripts/dev/scope.sh",
+    "screenshots": "bun run --cwd packages/app-web screenshots",
     "terraform:apply": "bash terraform/scripts/run.sh apply",
     "terraform:plan": "bash terraform/scripts/run.sh plan",
     "terraform:staging:apply": "bash terraform/scripts/run.sh staging apply",
