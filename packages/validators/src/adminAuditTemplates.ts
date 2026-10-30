@@ -10,12 +10,6 @@ import {
 } from "./audits";
 import { route } from "./route";
 
-/**
- * Days a discarded global form stays restorable, counted from its discard
- * (the discarded version's save time); the purge job deletes it afterwards.
- */
-export const discardedTemplateRetentionDays = 30;
-
 /** Global forms in use, or discarded forms that can still be restored. */
 const AdminTemplateViewSchema = z.enum(["active", "discarded"]);
 export type AdminTemplateView = z.infer<typeof AdminTemplateViewSchema>;

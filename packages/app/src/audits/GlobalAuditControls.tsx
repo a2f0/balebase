@@ -1,9 +1,9 @@
 import { Badge, Button, confirmDialog, Toast } from "@balebase/ui/react";
-import { discardedTemplateRetentionDays } from "@balebase/validators/adminAuditTemplates";
 import type {
   AuditTemplate,
   TemplatePublication,
 } from "@balebase/validators/audits";
+import { discardedTemplateRetentionDays } from "@balebase/validators/rules";
 import type { ReactNode } from "react";
 import { api } from "../shared/apiClient";
 import { formatLabel } from "../shared/labels";

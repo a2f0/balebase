@@ -10,8 +10,8 @@ import {
   PageSection,
   Toast,
 } from "@balebase/ui/react";
-import { discardedTemplateRetentionDays } from "@balebase/validators/adminAuditTemplates";
 import type { AuditTemplateSummary } from "@balebase/validators/audits";
+import { discardedTemplateRetentionDays } from "@balebase/validators/rules";
 import { useCallback } from "react";
 import { TemplateStats, templateStatusTone } from "../audits/AuditHome";
 import { AuditTemplateBuilder } from "../audits/AuditTemplateBuilder";

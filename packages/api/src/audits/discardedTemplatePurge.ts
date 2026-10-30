@@ -1,4 +1,4 @@
-import { discardedTemplateRetentionDays } from "@balebase/validators/adminAuditTemplates";
+import { discardedTemplateRetentionDays } from "@balebase/validators/rules";
 import type { Bindings } from "../types";
 
 const batchSize = 100;
