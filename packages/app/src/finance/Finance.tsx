@@ -55,8 +55,9 @@ import {
 
 const linkTokenStorageKey = "balebase.plaid.linkToken";
 /** Set while Link runs in update mode, so an OAuth return repairs that
- * connection instead of exchanging a token for a new one. */
-const updateConnectionStorageKey = "balebase.plaid.updateConnectionId";
+ * connection instead of exchanging a token for a new one. It names the link
+ * token it belongs to, so a flow started in another tab never adopts it. */
+const updateConnectionStorageKey = "balebase.plaid.updateConnection";
 
 export function Finance({
   onNavigate,
@@ -502,13 +503,16 @@ function usePlaidConnect(
   const [busy, setBusy] = useState(false);
   const resumedOAuth = useRef(false);
   const complete = useCallback(
-    async (publicToken: string, metadata: PlaidLinkMetadata) => {
+    async (
+      publicToken: string,
+      metadata: PlaidLinkMetadata,
+      repairing: string | undefined,
+    ) => {
       setBusy(true);
       setError(undefined);
       try {
         // Update mode keeps the Item and its access token, so there is no
         // public token to exchange; a sync confirms the repaired login.
-        const repairing = localStorage.getItem(updateConnectionStorageKey);
         const connectionId =
           repairing ??
           (
@@ -543,12 +547,22 @@ function usePlaidConnect(
       const result = await linkToken();
       localStorage.setItem(linkTokenStorageKey, result.linkToken);
       if (connectionId)
-        localStorage.setItem(updateConnectionStorageKey, connectionId);
-      else localStorage.removeItem(updateConnectionStorageKey);
-      await launchPlaid(result.linkToken, undefined, complete, (message) => {
-        setError(message);
-        setBusy(false);
-      });
+        localStorage.setItem(
+          updateConnectionStorageKey,
+          JSON.stringify({ connectionId, linkToken: result.linkToken }),
+        );
+      // This session's repair target is bound here, not read back from
+      // storage another tab can overwrite.
+      await launchPlaid(
+        result.linkToken,
+        undefined,
+        (publicToken, metadata) =>
+          complete(publicToken, metadata, connectionId),
+        (message) => {
+          setError(message);
+          setBusy(false);
+        },
+      );
     } catch (cause) {
       setError(errorMessage(cause, "Could not update finances."));
       setBusy(false);
@@ -566,7 +580,11 @@ function usePlaidConnect(
 }
 
 function useOAuthResume(
-  complete: (token: string, metadata: PlaidLinkMetadata) => Promise<void>,
+  complete: (
+    token: string,
+    metadata: PlaidLinkMetadata,
+    repairing: string | undefined,
+  ) => Promise<void>,
   resumed: { current: boolean },
   setBusy: Dispatch<SetStateAction<boolean>>,
   setError: (message: string | undefined) => void,
@@ -580,12 +598,39 @@ function useOAuthResume(
       clearOAuthState();
       return;
     }
+    const repairing = updateConnectionFor(token);
     setBusy(true);
-    void launchPlaid(token, window.location.href, complete, (message) => {
-      setError(message);
-      setBusy(false);
-    });
+    void launchPlaid(
+      token,
+      window.location.href,
+      (publicToken, metadata) => complete(publicToken, metadata, repairing),
+      (message) => {
+        setError(message);
+        setBusy(false);
+      },
+    );
   }, [complete, resumed, setBusy, setError]);
+}
+
+/** The connection an update-mode Link session repairs, if `token` started one. */
+function updateConnectionFor(token: string) {
+  try {
+    const stored: unknown = JSON.parse(
+      localStorage.getItem(updateConnectionStorageKey) ?? "null",
+    );
+    if (
+      stored &&
+      typeof stored === "object" &&
+      "linkToken" in stored &&
+      "connectionId" in stored &&
+      stored.linkToken === token &&
+      typeof stored.connectionId === "string"
+    )
+      return stored.connectionId;
+  } catch {
+    // A malformed marker cannot name a connection; treat it as a new one.
+  }
+  return undefined;
 }
 
 let plaidScript: Promise<boolean> | undefined;
