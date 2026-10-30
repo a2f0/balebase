@@ -1,6 +1,6 @@
 import { productName } from "@balebase/ui/brand";
 import { financeRoutes } from "@balebase/validators/finance";
-import { respond } from "../shared/respond";
+import { readBody, respond } from "../shared/respond";
 import type { Bindings } from "../types";
 import type { FinanceContext } from "./financeContext";
 import { PlaidApiError, type PlaidRequest } from "./plaid";
@@ -9,6 +9,7 @@ import { decryptToken } from "./plaidCrypto";
 interface LinkTokenResponse {
   expiration: string;
   link_token: string;
+  request_id?: string;
 }
 
 /** Starts Plaid Link for a new Item. */
@@ -21,7 +22,16 @@ export async function createLinkToken(
     products: ["transactions"],
     transactions: { days_requested: 730 },
   });
-  return respond(context, financeRoutes.createLinkToken, result);
+  console.log({
+    event: "plaid_link_token_created",
+    mode: "create",
+    organizationId: context.get("organizationId"),
+    requestId: result.requestId,
+  });
+  return respond(context, financeRoutes.createLinkToken, {
+    expiration: result.expiration,
+    linkToken: result.linkToken,
+  });
 }
 
 /**
@@ -60,7 +70,17 @@ export async function createUpdateLinkToken(
   const result = await requestLinkToken(context, requestPlaid, {
     access_token: accessToken,
   });
-  return respond(context, financeRoutes.createUpdateLinkToken, result);
+  console.log({
+    event: "plaid_link_token_created",
+    mode: "update",
+    connectionId: item.id,
+    organizationId,
+    requestId: result.requestId,
+  });
+  return respond(context, financeRoutes.createUpdateLinkToken, {
+    expiration: result.expiration,
+    linkToken: result.linkToken,
+  });
 }
 
 async function requestLinkToken(
@@ -87,7 +107,33 @@ async function requestLinkToken(
         : {}),
     },
   );
-  return { expiration: result.expiration, linkToken: result.link_token };
+  return {
+    expiration: result.expiration,
+    linkToken: result.link_token,
+    requestId: result.request_id ?? null,
+  };
+}
+
+/**
+ * Logs what Plaid Link reported for a session. Errors inside Link (after the
+ * bank login, before onSuccess) never reach another route, so this is the
+ * only server-side record of them. The body carries no credentials or tokens.
+ */
+export async function reportLinkDiagnostics(context: FinanceContext) {
+  const input = await readBody(
+    context,
+    financeRoutes.reportLinkDiagnostics,
+    "Invalid Plaid Link diagnostics.",
+  );
+  if (input instanceof Response) return input;
+  const log = input.error ? console.error : console.log;
+  log({
+    event: "plaid_link_diagnostics",
+    organizationId: context.get("organizationId"),
+    userId: context.get("authSession").user.id,
+    ...input,
+  });
+  return context.body(null, 204);
 }
 
 export function requireEncryptionKey(env: Bindings) {

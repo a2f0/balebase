@@ -42,10 +42,12 @@ type PlaidConfig = Parameters<NonNullable<Window["Plaid"]>["create"]>[0];
 let container: HTMLElement;
 let opened: PlaidConfig[];
 let requests: string[];
+let diagnostics: unknown[];
 
 beforeEach(() => {
   opened = [];
   requests = [];
+  diagnostics = [];
   dom.localStorage.clear();
   dom.history.replaceState(null, "", "/finance/connections");
   Object.assign(dom, {
@@ -58,6 +60,10 @@ beforeEach(() => {
   });
   respond((url, init) => {
     const method = init?.method ?? "GET";
+    if (url.pathname === "/api/finance/link-diagnostics") {
+      diagnostics.push(JSON.parse(String(init?.body)));
+      return new Response(null, { status: 204 });
+    }
     if (method !== "GET") requests.push(`${method} ${url.pathname}`);
     if (url.pathname.endsWith("/link-token"))
       return Response.json({
@@ -111,6 +117,81 @@ async function succeed(config: PlaidConfig | undefined) {
 }
 
 describe("Plaid Link", () => {
+  it("reports Link's error and event trail and shows its code and session", async () => {
+    await mountConnections();
+    await click("Update login");
+    const [config] = opened;
+    if (!config?.onEvent) throw new Error("Link events are not collected.");
+    config.onEvent("OPEN", { view_name: null });
+    config.onEvent("ERROR", {
+      error_code: "INTERNAL_SERVER_ERROR",
+      error_type: "API_ERROR",
+      request_id: "request-1",
+      view_name: "ERROR",
+    });
+    await act(async () =>
+      config.onExit(
+        {
+          display_message: null,
+          error_code: "INTERNAL_SERVER_ERROR",
+          error_message: "an unexpected error occurred",
+          error_type: "API_ERROR",
+        },
+        {
+          institution: { institution_id: "ins_138430", name: "Axos" },
+          link_session_id: "session-1",
+          request_id: "request-2",
+          status: "requires_credentials",
+        },
+      ),
+    );
+    expect(container.textContent).toContain(
+      "an unexpected error occurred (INTERNAL_SERVER_ERROR, session session-1)",
+    );
+    expect(diagnostics).toEqual([
+      {
+        connectionId: "axos",
+        error: {
+          displayMessage: null,
+          errorCode: "INTERNAL_SERVER_ERROR",
+          errorMessage: "an unexpected error occurred",
+          errorType: "API_ERROR",
+        },
+        events: [
+          {
+            errorCode: null,
+            errorMessage: null,
+            errorType: null,
+            eventName: "OPEN",
+            exitStatus: null,
+            requestId: null,
+            timestamp: null,
+            viewName: null,
+          },
+          {
+            errorCode: "INTERNAL_SERVER_ERROR",
+            errorMessage: null,
+            errorType: "API_ERROR",
+            eventName: "ERROR",
+            exitStatus: null,
+            requestId: "request-1",
+            timestamp: null,
+            viewName: "ERROR",
+          },
+        ],
+        institutionId: "ins_138430",
+        institutionName: "Axos",
+        linkSessionId: "session-1",
+        mode: "update",
+        oauthResume: false,
+        outcome: "exit",
+        requestId: "request-2",
+        status: "requires_credentials",
+      },
+    ]);
+    expect(requests).toEqual(["POST /api/finance/connections/axos/link-token"]);
+  });
+
   it("updates a broken login in place: syncs the same connection without an exchange", async () => {
     await mountConnections();
     await click("Update login");
@@ -119,6 +200,9 @@ describe("Plaid Link", () => {
     expect(requests).toEqual([
       "POST /api/finance/connections/axos/link-token",
       "POST /api/finance/connections/axos/sync-jobs",
+    ]);
+    expect(diagnostics).toMatchObject([
+      { mode: "update", oauthResume: false, outcome: "success" },
     ]);
     expect(dom.localStorage.length).toBe(0);
   });
@@ -167,6 +251,9 @@ describe("Plaid Link", () => {
     expect(opened[0]?.receivedRedirectUri).toContain("oauth_state_id=state");
     await succeed(opened[0]);
     expect(requests).toEqual(["POST /api/finance/connections/axos/sync-jobs"]);
+    expect(diagnostics).toMatchObject([
+      { connectionId: "axos", oauthResume: true, outcome: "success" },
+    ]);
     expect(dom.localStorage.length).toBe(0);
   });
 });

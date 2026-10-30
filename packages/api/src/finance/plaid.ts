@@ -70,6 +70,7 @@ export class PlaidApiError extends Error {
 interface PlaidErrorBody extends Record<string, unknown> {
   error_code?: unknown;
   error_message?: unknown;
+  request_id?: unknown;
 }
 
 export const plaidRequest: PlaidRequest = async <T>(
@@ -91,7 +92,17 @@ export const plaidRequest: PlaidRequest = async <T>(
   });
   const result: unknown = await response.json().catch(() => null);
   if (response.ok) return result as T;
-  throw plaidError(result, response.status);
+  const error = plaidError(result, response.status);
+  console.error({
+    event: "plaid_request_failed",
+    path,
+    status: response.status,
+    code: error.code,
+    requestId: isRecord(result)
+      ? (result as PlaidErrorBody).request_id
+      : undefined,
+  });
+  throw error;
 };
 
 function plaidCredentials(env: Bindings) {

@@ -34,6 +34,7 @@ import type { FinanceContext } from "./financeContext";
 import {
   createLinkToken,
   createUpdateLinkToken,
+  reportLinkDiagnostics,
   requireEncryptionKey,
 } from "./financeLinkTokens";
 import { financeListingFilters } from "./financeListingFilters";
@@ -109,6 +110,7 @@ export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
   finance.post("/link-token", async (context) =>
     createLinkToken(context, requestPlaid),
   );
+  finance.post("/link-diagnostics", reportLinkDiagnostics);
   finance.post("/exchange", async (context) =>
     exchangePublicToken(context, requestPlaid),
   );
