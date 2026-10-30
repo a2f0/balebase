@@ -35,6 +35,12 @@ so inspect them. Run reviews, version preparation, audits, infrastructure
 previews, interactive tools, and servers directly. Never narrow a suite or
 silence warnings to reduce output.
 
+For bank sync or reconnect failures, follow
+[finance troubleshooting](docs/finance-troubleshooting.md). Read the scoped
+connection and jobs, then probe Plaid's live institution health before asking
+for another login or changing code. Keep login health separate from transaction
+refresh health; preserve the existing Item and never expose credentials.
+
 Capture screenshots through the `take-screenshots` skill, not by running
 `bun run screenshots` directly, and check its `status` before anything
 publishes them; [CONTRIBUTING.md](CONTRIBUTING.md#screenshots) has the layout.

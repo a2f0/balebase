@@ -180,6 +180,11 @@ verify a non-admin session cannot access run history or details.
 
 ## Finance background sync
 
+For stopped imports or failed bank reauthorization, use the
+[finance troubleshooting runbook](finance-troubleshooting.md). It includes
+read-only connection/job queries, the credential-safe Plaid institution-health
+probe, and guidance for separating provider outages from Item or browser errors.
+
 Before deploying this change, review and apply each tier's Terraform plan to
 create its queue: `balebase-api-finance-sync` in production and
 `balebase-api-staging-finance-sync` in staging. The Cloudflare token needs Queues
