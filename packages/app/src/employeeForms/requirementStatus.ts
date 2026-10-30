@@ -103,9 +103,10 @@ export function managerNextStep(requirement: EmployeeRequirement) {
     return `Waiting for ${person} to read the disclosures, enter their details, and sign in My documents. Requesting the check emailed them a link to the form.`;
   }
   if (report) {
-    // Checkr orders only background checks now, so a canceled credit report
-    // is tracked by hand.
-    return requirement.kind === "background_check"
+    // Checkr orders only background checks now, and only while it's set up,
+    // so other canceled reports are tracked by hand.
+    return requirement.kind === "background_check" &&
+      requirement.checkrAvailable
       ? "Checkr canceled this report. Request the check again, or run it yourself and set its status here."
       : "Checkr canceled this report. Run the check yourself, then set its status here.";
   }
