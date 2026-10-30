@@ -1,6 +1,7 @@
 import type {
   FinanceTransactionAnnotation,
   financeRoutes,
+  PlaidLinkDiagnostics,
 } from "@balebase/validators/finance";
 import { endpoint } from "./endpoint";
 import type { Transport } from "./transport";
@@ -20,6 +21,12 @@ const endpoints = {
     method: "POST",
     path: "/api/finance/connections/:id/link-token",
     response: "json",
+  }),
+  reportLinkDiagnostics: endpoint<typeof financeRoutes.reportLinkDiagnostics>({
+    method: "POST",
+    path: "/api/finance/link-diagnostics",
+    body: "json",
+    response: "empty",
   }),
   exchangePublicToken: endpoint<typeof financeRoutes.exchangePublicToken>({
     method: "POST",
@@ -157,6 +164,11 @@ export function financeApi(transport: Transport) {
     createPlaidUpdateLinkToken(connectionId: string) {
       return transport.call(endpoints.createUpdateLinkToken, {
         params: { id: connectionId },
+      });
+    },
+    reportPlaidLinkDiagnostics(diagnostics: PlaidLinkDiagnostics) {
+      return transport.call(endpoints.reportLinkDiagnostics, {
+        body: diagnostics,
       });
     },
     exchangePlaidPublicToken(

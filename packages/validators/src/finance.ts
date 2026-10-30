@@ -272,6 +272,45 @@ const ReportRangeSchema = z
   .object({ from: ReportDaySchema, to: ReportDaySchema })
   .refine(({ from, to }) => !from || !to || from <= to, reportRangeRule);
 
+const linkText = (max: number) => z.string().max(max).nullable();
+
+/** What Plaid Link reported for one session, so failures inside Link (which
+ * never reach the API otherwise) can be read from the API logs. */
+const PlaidLinkDiagnosticsSchema = z.object({
+  connectionId: linkText(100),
+  error: z
+    .object({
+      displayMessage: linkText(1000),
+      errorCode: linkText(100),
+      errorMessage: linkText(1000),
+      errorType: linkText(100),
+    })
+    .nullable(),
+  events: z
+    .array(
+      z.object({
+        errorCode: linkText(100),
+        errorMessage: linkText(1000),
+        errorType: linkText(100),
+        eventName: linkText(100),
+        exitStatus: linkText(100),
+        requestId: linkText(100),
+        timestamp: linkText(100),
+        viewName: linkText(100),
+      }),
+    )
+    .max(200),
+  institutionId: linkText(100),
+  institutionName: linkText(200),
+  linkSessionId: linkText(100),
+  mode: z.enum(["create", "update"]),
+  oauthResume: z.boolean(),
+  outcome: z.enum(["exit", "success"]),
+  requestId: linkText(100),
+  status: linkText(100),
+});
+export type PlaidLinkDiagnostics = z.infer<typeof PlaidLinkDiagnosticsSchema>;
+
 export const financeRoutes = {
   listing: route({
     method: "GET",
@@ -290,6 +329,12 @@ export const financeRoutes = {
     method: "POST",
     path: "/api/finance/connections/:id/link-token",
     response: z.object({ expiration: z.string(), linkToken: z.string() }),
+  }),
+  reportLinkDiagnostics: route({
+    method: "POST",
+    path: "/api/finance/link-diagnostics",
+    body: PlaidLinkDiagnosticsSchema,
+    response: "empty",
   }),
   exchangePublicToken: route({
     method: "POST",

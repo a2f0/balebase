@@ -48,6 +48,11 @@ import {
 } from "./financeConnectionActions";
 import { selectFinanceAccount } from "./financeTransactions";
 import {
+  linkDiagnostics,
+  linkErrorMessage,
+  type PlaidLinkSession,
+} from "./plaidLinkDiagnostics";
+import {
   type FinanceListingState,
   initialFilters,
   useFinanceData,
@@ -556,6 +561,7 @@ function usePlaidConnect(
       await launchPlaid(
         result.linkToken,
         undefined,
+        { connectionId, oauthResume: false },
         (publicToken, metadata) =>
           complete(publicToken, metadata, connectionId),
         (message) => {
@@ -603,6 +609,7 @@ function useOAuthResume(
     void launchPlaid(
       token,
       window.location.href,
+      { connectionId: repairing, oauthResume: true },
       (publicToken, metadata) => complete(publicToken, metadata, repairing),
       (message) => {
         setError(message);
@@ -659,6 +666,7 @@ function loadPlaid() {
 async function launchPlaid(
   token: string,
   receivedRedirectUri: string | undefined,
+  session: PlaidLinkSession,
   onSuccess: (token: string, metadata: PlaidLinkMetadata) => Promise<void>,
   onExit: (message: string | undefined) => void,
 ) {
@@ -667,14 +675,18 @@ async function launchPlaid(
     return;
   }
   let handler: PlaidLinkHandler | undefined;
+  const diagnostics = linkDiagnostics(session);
   const configuration = {
-    onExit: (error: PlaidLinkError | null) => {
+    onEvent: diagnostics.onEvent,
+    onExit: (error: PlaidLinkError | null, metadata: PlaidLinkExitMetadata) => {
       handler?.destroy();
       clearOAuthState();
-      onExit(error?.error_message ?? undefined);
+      diagnostics.report("exit", error, metadata ?? {});
+      onExit(linkErrorMessage(error, metadata ?? {}));
     },
     onSuccess: (publicToken: string, metadata: PlaidLinkMetadata) => {
       handler?.destroy();
+      diagnostics.report("success", null, metadata);
       void onSuccess(publicToken, metadata);
     },
     token,

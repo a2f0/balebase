@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import {
   createFixture,
   financePath,
@@ -147,5 +147,59 @@ describe("Plaid Link update mode", () => {
     expect(
       fixture.calls.filter(({ path }) => path === "/link/token/create"),
     ).toEqual([]);
+  });
+
+  it("logs Link diagnostics without storing them and rejects malformed reports", async () => {
+    const fixture = await brokenLoginFixture();
+    const logged = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const report = {
+        connectionId: fixture.id,
+        error: {
+          displayMessage: null,
+          errorCode: "INTERNAL_SERVER_ERROR",
+          errorMessage: "an unexpected error occurred",
+          errorType: "API_ERROR",
+        },
+        events: [],
+        institutionId: "ins_test",
+        institutionName: "First Test Bank",
+        linkSessionId: "session-1",
+        mode: "update",
+        oauthResume: true,
+        outcome: "exit",
+        requestId: "request-1",
+        status: null,
+      };
+      const accepted = await fixture.app.request(
+        financePath("/link-diagnostics"),
+        {
+          body: JSON.stringify(report),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        },
+        fixture.bindings,
+      );
+      expect(accepted.status).toBe(204);
+      expect(logged).toHaveBeenCalledWith({
+        event: "plaid_link_diagnostics",
+        organizationId: "org_user-1",
+        userId: "user-1",
+        ...report,
+      });
+      const rejected = await jsonRequest(
+        fixture.app,
+        fixture.bindings,
+        "/link-diagnostics",
+        "POST",
+        { ...report, events: "none" },
+      );
+      expect(rejected).toMatchObject({
+        body: { error: "Invalid Plaid Link diagnostics." },
+        status: 400,
+      });
+    } finally {
+      logged.mockRestore();
+    }
   });
 });
