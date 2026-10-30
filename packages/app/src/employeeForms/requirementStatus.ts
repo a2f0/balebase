@@ -1,3 +1,4 @@
+import { productName } from "@balebase/ui/brand";
 import type { BadgeTone } from "@balebase/ui/react";
 import type {
   EmployeeRequirement,
@@ -72,6 +73,54 @@ export function personalRequirement(
     };
   }
   return { badge: waitingBadge(requirement), group: "waiting" };
+}
+
+/**
+ * What a manager does next with a request, or who it waits on. Spells out
+ * the stage the badge names, including why Balebase can't order a check.
+ */
+export function managerNextStep(requirement: EmployeeRequirement) {
+  const person = requirement.targetName ?? requirement.targetEmail ?? "They";
+  const report = requirement.checkrReportStatus;
+  if (requirement.status === "complete") {
+    return report
+      ? "Complete. Review the report in Checkr before making a decision."
+      : "Complete. Nothing more is needed.";
+  }
+  if (requirement.kind === "form") {
+    if (!requirement.hasDocument) {
+      return `Waiting for ${person} to upload the file in My documents.`;
+    }
+    return `Download ${requirement.documentFilename ?? "the file"} to review it, then set its status to Complete.`;
+  }
+  if (requirement.checkrSubmitting) {
+    return `${person} started submitting their details to Checkr. It finishes when they submit the form again.`;
+  }
+  if (report === "suspended") {
+    return "Checkr suspended the report while it waits for information from the person. Checkr contacts them; Refresh check updates the status here.";
+  }
+  if (report === "dispute") {
+    return "The person disputed the report. Checkr reviews the dispute and updates the report here.";
+  }
+  if (report && !isClosedReportStatus(report)) {
+    return "Checkr is preparing the report. Its status updates here from Checkr automatically; Refresh check updates it now.";
+  }
+  if (requirement.checkrRequested) {
+    return `Waiting for ${person} to read the disclosures, enter their details, and sign in My documents. Requesting the check emailed them a link to the form.`;
+  }
+  if (report) {
+    return "Checkr canceled this report. Request the check again, or run it yourself and set its status here.";
+  }
+  if (requirement.checkrAvailable) {
+    return `Enter the state (and optionally the city) where ${person} will work, then choose Request background check. They get an email with a link to the form in My documents.`;
+  }
+  if (requirement.kind === "credit_check") {
+    return `${productName} doesn’t order credit checks. Run it yourself, then set its status here as it moves along.`;
+  }
+  if (!requirement.memberId && requirement.invitationStatus !== "pending") {
+    return `${person} is no longer in the organization, so this check can’t be requested through Checkr.`;
+  }
+  return `Checkr isn’t set up in ${productName} yet, so ${productName} can’t order this check. Run it yourself, then set its status here as it moves along. The person sees the status in My documents.`;
 }
 
 /** Today's date where the person is, as the YYYY-MM-DD due dates use. */

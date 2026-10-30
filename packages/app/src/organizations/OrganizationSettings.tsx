@@ -13,6 +13,7 @@ import {
 } from "@balebase/ui/react";
 import { type FormEvent, useState } from "react";
 import { OrganizationBilling } from "../billing/OrganizationBilling";
+import { OrganizationRequirementPage } from "../employeeForms/OrganizationRequirementPage";
 import { AppLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
 import { authClient } from "../shared/authClient";
@@ -21,6 +22,7 @@ import { useAction } from "../shared/useAction";
 import {
   organizationAccessPath,
   organizationMemberIdForPath,
+  organizationRequirementIdForPath,
   organizationSettingsPage,
 } from "../workspace/workspacePaths";
 import { OrganizationApiKeys } from "./OrganizationApiKeys";
@@ -96,6 +98,7 @@ export function OrganizationSettings({
           organizations={organizations}
           ownerCount={ownerCount}
           page={page}
+          requirementId={organizationRequirementIdForPath(pathname)}
         />
       </PageBody>
     </Page>
@@ -114,6 +117,7 @@ function OrganizationSettingsPageContent({
   organizations,
   ownerCount,
   page,
+  requirementId,
 }: {
   accessError: string | undefined;
   canManage: boolean;
@@ -126,8 +130,19 @@ function OrganizationSettingsPageContent({
   organizations: WorkspaceOrganization[];
   ownerCount: number;
   page: ReturnType<typeof organizationSettingsPage>;
+  requirementId: string | undefined;
 }) {
   if (!organization) return <LoadingState label="Loading organization…" />;
+  if (page === "people" && requirementId) {
+    return (
+      <OrganizationRequirementPage
+        canManage={memberRole === undefined || canManage}
+        key={requirementId}
+        onNavigate={onNavigate}
+        requirementId={requirementId}
+      />
+    );
+  }
   if (page === "people" && memberId) {
     return (
       <OrganizationMemberDetail

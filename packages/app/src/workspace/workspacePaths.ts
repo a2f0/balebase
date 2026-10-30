@@ -94,6 +94,15 @@ export function myScreeningIdForPath(pathname: string) {
   return recordIdForPath(pathname, "/me/screening");
 }
 
+/** One request in My documents: what it is, where it stands, what's next. */
+export function myRequirementPath(requirementId: string) {
+  return `/me/requests/${encodeURIComponent(requirementId)}`;
+}
+
+export function myRequirementIdForPath(pathname: string) {
+  return recordIdForPath(pathname, "/me/requests");
+}
+
 export function auditRunPath(id: string) {
   return `/audits/runs/${encodeURIComponent(id)}`;
 }
@@ -191,6 +200,15 @@ export function organizationMemberIdForPath(pathname: string) {
   return recordIdForPath(pathname, organizationPeoplePath());
 }
 
+/** A manager's page for one requested form or check, under People. */
+export function organizationRequirementPath(requirementId: string) {
+  return `/organization/requests/${encodeURIComponent(requirementId)}`;
+}
+
+export function organizationRequirementIdForPath(pathname: string) {
+  return recordIdForPath(pathname, "/organization/requests");
+}
+
 type OrganizationSettingsPage =
   | "access"
   | "api-keys"
@@ -203,7 +221,8 @@ export function organizationSettingsPage(
 ): OrganizationSettingsPage {
   if (
     pathname === organizationPeoplePath() ||
-    organizationMemberIdForPath(pathname)
+    organizationMemberIdForPath(pathname) ||
+    organizationRequirementIdForPath(pathname)
   ) {
     return "people";
   }

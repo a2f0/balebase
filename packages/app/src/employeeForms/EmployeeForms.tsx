@@ -17,10 +17,12 @@ import {
   isUsStateCode,
 } from "@balebase/validators/rules";
 import { type FormEvent, useCallback, useState } from "react";
+import { AppLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
 import { formatCalendarDate, formatDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
+import { organizationRequirementPath } from "../workspace/workspacePaths";
 import {
   downloadEmployeeForm,
   downloadScreeningConsent,
@@ -169,39 +171,23 @@ export function inRequirementScope(
  * page, managers also request new ones; requests without a member page keep
  * every other control. People complete their own in My documents.
  */
-export function EmployeeForms({ scope }: { scope: RequirementScope }) {
-  // The list covers every scope, so a new scope only filters it again.
-  const loaded = useLoad(
-    useCallback(async () => (await api.employeeForms.list()).requirements, []),
-    "Could not load requirements.",
-  );
-  const requirements = loaded.data?.filter((item) =>
-    inRequirementScope(scope, item),
-  );
-  const loading = loaded.loading;
-  const change = useAction("Could not update requirements.");
-  const { busy, notice } = change;
-  const error = change.error ?? loaded.error;
-  const load = loaded.reload;
-
-  async function action<T>(
-    work: () => Promise<T>,
-    success: string | ((result: T) => string),
-  ) {
-    // Reload either way so a refused change shows what is stored, and stay
-    // busy until it has, so no action runs against stale requirements.
-    await change.run(async () => {
-      try {
-        return await work();
-      } catch (cause) {
-        // Until the reload succeeds, nothing stale stays actionable.
-        loaded.setData(undefined);
-        throw cause;
-      } finally {
-        await load();
-      }
-    }, success);
-  }
+export function EmployeeForms({
+  onNavigate,
+  scope,
+}: {
+  onNavigate: (pathname: string) => void;
+  scope: RequirementScope;
+}) {
+  const {
+    action,
+    busy,
+    error,
+    loading,
+    notice,
+    reload: load,
+    requirements: all,
+  } = useManagedRequirements();
+  const requirements = all?.filter((item) => inRequirementScope(scope, item));
 
   return (
     <Card
@@ -236,6 +222,7 @@ export function EmployeeForms({ scope }: { scope: RequirementScope }) {
               action={action}
               busy={busy}
               key={requirement.id}
+              onNavigate={onNavigate}
               requirement={requirement}
               showTarget={scope.kind === "unattached"}
             />
@@ -284,7 +271,48 @@ function RequirementAssignmentForm({
   );
 }
 
-type RequirementAction = <T>(
+/**
+ * Every request in the organization, as a manager sees them, and an action
+ * that reloads them afterwards.
+ */
+export function useManagedRequirements() {
+  const loaded = useLoad(
+    useCallback(async () => (await api.employeeForms.list()).requirements, []),
+    "Could not load requirements.",
+  );
+  const change = useAction("Could not update requirements.");
+  const { reload, setData } = loaded;
+
+  async function action<T>(
+    work: () => Promise<T>,
+    success: string | ((result: T) => string),
+  ) {
+    // Reload either way so a refused change shows what is stored, and stay
+    // busy until it has, so no action runs against stale requirements.
+    await change.run(async () => {
+      try {
+        return await work();
+      } catch (cause) {
+        // Until the reload succeeds, nothing stale stays actionable.
+        setData(undefined);
+        throw cause;
+      } finally {
+        await reload();
+      }
+    }, success);
+  }
+  return {
+    action,
+    busy: change.busy,
+    error: change.error ?? loaded.error,
+    loading: loaded.loading,
+    notice: change.notice,
+    reload,
+    requirements: loaded.data,
+  };
+}
+
+export type RequirementAction = <T>(
   work: () => Promise<T>,
   success: string | ((result: T) => string),
 ) => Promise<void>;
@@ -292,23 +320,30 @@ type RequirementAction = <T>(
 function RequirementItem({
   action,
   busy,
+  onNavigate,
   requirement,
   showTarget,
 }: {
   action: RequirementAction;
   busy: boolean;
+  onNavigate: (pathname: string) => void;
   requirement: EmployeeRequirement;
   /** Name the person when the list is not already one person's page. */
   showTarget: boolean;
 }) {
-  const [reviewedRevision, setReviewedRevision] = useState<number | null>(null);
-  const locked = screeningLocked(requirement);
   const badge = requirementBadge(requirement);
   return (
     <li className="requirementItem">
       <div className="requirementItemHeader">
         <div>
-          <strong>{requirement.title}</strong>
+          <strong>
+            <AppLink
+              href={organizationRequirementPath(requirement.id)}
+              onNavigate={onNavigate}
+            >
+              {requirement.title}
+            </AppLink>
+          </strong>
           {showTarget && (
             <span className="rowMeta">
               {" "}
@@ -329,68 +364,85 @@ function RequirementItem({
           result={requirement.checkrResult}
         />
       )}
-      <div className="requirementActions">
-        <RequirementDocumentControl
+      <RequirementActions
+        action={action}
+        busy={busy}
+        requirement={requirement}
+      />
+    </li>
+  );
+}
+
+/** A manager's controls for one request, in the list or on its own page. */
+export function RequirementActions({
+  action,
+  busy,
+  requirement,
+}: {
+  action: RequirementAction;
+  busy: boolean;
+  requirement: EmployeeRequirement;
+}) {
+  const [reviewedRevision, setReviewedRevision] = useState<number | null>(null);
+  const locked = screeningLocked(requirement);
+  return (
+    <div className="requirementActions">
+      <RequirementDocumentControl
+        action={action}
+        busy={busy}
+        onDownloaded={setReviewedRevision}
+        requirement={requirement}
+      />
+      {/* Credit reports ordered through hosted invitations still refresh. */}
+      {((requirement.kind === "background_check" &&
+        (requirement.checkrAvailable ||
+          requirement.checkrRequested ||
+          requirement.checkrSubmitting)) ||
+        requirement.checkrReportStatus) && (
+        <CheckrControl action={action} busy={busy} requirement={requirement} />
+      )}
+      {(requirement.kind === "form" ||
+        (!requirement.checkrAvailable && !locked) ||
+        isClosedReportStatus(requirement.checkrReportStatus)) && (
+        <RequirementStatusControl
           action={action}
           busy={busy}
-          onDownloaded={setReviewedRevision}
           requirement={requirement}
+          reviewedRevision={reviewedRevision}
         />
-        {/* Credit reports ordered through hosted invitations still refresh. */}
-        {((requirement.kind === "background_check" &&
-          (requirement.checkrAvailable ||
-            requirement.checkrRequested ||
-            requirement.checkrSubmitting)) ||
-          requirement.checkrReportStatus) && (
-          <CheckrControl
-            action={action}
-            busy={busy}
-            requirement={requirement}
-          />
-        )}
-        {(requirement.kind === "form" ||
-          (!requirement.checkrAvailable && !locked) ||
-          isClosedReportStatus(requirement.checkrReportStatus)) && (
-          <RequirementStatusControl
-            action={action}
-            busy={busy}
-            requirement={requirement}
-            reviewedRevision={reviewedRevision}
-          />
-        )}
-        <input
-          aria-label={`Due date for ${requirement.title}`}
-          className="input inputSm"
+      )}
+      <input
+        aria-label={`Due date for ${requirement.title}`}
+        className="input inputSm"
+        disabled={busy}
+        onChange={(event) =>
+          void action(
+            () =>
+              api.employeeForms.update(requirement.id, {
+                dueDate: event.target.value,
+              }),
+            "Due date updated.",
+          )
+        }
+        type="date"
+        value={requirement.dueDate}
+      />
+      {!locked && (
+        <Button
           disabled={busy}
-          onChange={(event) =>
+          onClick={() =>
             void action(
-              () =>
-                api.employeeForms.update(requirement.id, {
-                  dueDate: event.target.value,
-                }),
-              "Due date updated.",
+              () => api.employeeForms.delete(requirement.id),
+              "Requirement removed.",
             )
           }
-          type="date"
-          value={requirement.dueDate}
-        />
-        {!locked && (
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void action(
-                () => api.employeeForms.delete(requirement.id),
-                "Requirement removed.",
-              )
-            }
-            size="sm"
-            variant="danger"
-          >
-            Remove
-          </Button>
-        )}
-      </div>
-    </li>
+          size="sm"
+          variant="danger"
+        >
+          Remove
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -554,7 +606,7 @@ function CheckrRequestControl({
   );
 }
 
-function CheckrResult({
+export function CheckrResult({
   completedAt,
   result,
 }: {
