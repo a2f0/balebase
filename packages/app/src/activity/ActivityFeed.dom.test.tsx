@@ -1,7 +1,8 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import type { ActivityEvent } from "@balebase/validators/activity";
 import { act } from "react";
 import { installDom } from "../testing/dom";
+import { IntersectionObserverFixture } from "../testing/intersectionObserver";
 import { Activity } from "./Activity";
 import { ActivityFeed } from "./ActivityFeed";
 
@@ -12,8 +13,15 @@ const {
   respond,
   settle,
   window: dom,
-} = installDom({ url: "http://localhost:5173/activity" });
+} = installDom({
+  url: "http://localhost:5173/activity",
+  globals: () => ({ IntersectionObserver: IntersectionObserverFixture }),
+});
 let container: HTMLElement;
+
+afterEach(() => {
+  IntersectionObserverFixture.instances.length = 0;
+});
 
 async function renderFeed(sourceId: string, refreshKey = 0) {
   ({ container } = await render(
@@ -527,6 +535,49 @@ describe("activity feed, mounted", () => {
     expect(container.querySelectorAll(".activityRow")).toHaveLength(1);
     await renderFeed("audit/id", 1);
     expect(requests).toHaveLength(4);
+  });
+
+  it("keeps the loaded events on screen while a saved change refreshes them", async () => {
+    const cursors: (string | null)[] = [];
+    let refreshed: ((response: Response) => void) | undefined;
+    respond(async (url) => {
+      const cursor = url.searchParams.get("cursor");
+      cursors.push(cursor);
+      if (cursor)
+        return Response.json({ events: [event(50, "na")], nextCursor: "50" });
+      if (cursors.length === 1)
+        return Response.json({ events: [event(51, "fail")], nextCursor: "51" });
+      return new Promise<Response>((resolve) => {
+        refreshed = resolve;
+      });
+    });
+    await renderFeed("audit-1");
+    await act(async () => IntersectionObserverFixture.intersect());
+    await settle();
+    expect(cursors).toEqual([null, "51"]);
+    expect(container.querySelectorAll(".activityRow")).toHaveLength(2);
+
+    await renderFeed("audit-1", 1);
+    expect(cursors).toEqual([null, "51", null]);
+    expect(container.querySelectorAll(".activityRow")).toHaveLength(2);
+    expect(container.textContent).not.toContain("Loading activity");
+    // No older page loads into a list that is being replaced.
+    await act(async () => IntersectionObserverFixture.intersect());
+    await settle();
+    expect(cursors).toEqual([null, "51", null]);
+
+    await act(async () =>
+      refreshed?.(
+        Response.json({ events: [event(51, "pass")], nextCursor: "51" }),
+      ),
+    );
+    await settle();
+    expect(container.querySelectorAll(".activityRow")).toHaveLength(1);
+    // The refreshed first page can page again, even to a cursor loaded before.
+    await act(async () => IntersectionObserverFixture.intersect());
+    await settle();
+    expect(cursors).toEqual([null, "51", null, "51"]);
+    expect(container.querySelectorAll(".activityRow")).toHaveLength(2);
   });
 
   it("ignores a previous audit's response after navigating to another audit", async () => {

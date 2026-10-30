@@ -29,8 +29,16 @@ export function IssueList({
     },
     [filters],
   );
-  const { error, items, loadMore, loadingMore, nextCursor, reload } =
-    useCursorPages(fetchPage, "Could not load issues.");
+  const {
+    error,
+    generation,
+    items,
+    loadMore,
+    loadingMore,
+    nextCursor,
+    refreshing,
+    reload,
+  } = useCursorPages(fetchPage, "Could not load issues.");
   return (
     <div className="stack">
       {error && (
@@ -98,6 +106,8 @@ export function IssueList({
           autoLoad={!error}
           busy={loadingMore}
           cursor={nextCursor}
+          disabled={refreshing}
+          key={generation}
           onLoadMore={loadMore}
         >
           Load more issues

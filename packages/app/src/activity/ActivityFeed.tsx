@@ -97,8 +97,16 @@ export function ActivityFeed({
   resourceType?: ActivityResourceType | undefined;
   source?: ActivitySource;
 }) {
-  const { error, items, loadMore, loadingMore, nextCursor, reload } =
-    useActivityPage(source, refreshKey, resourceType);
+  const {
+    error,
+    generation,
+    items,
+    loadMore,
+    loadingMore,
+    nextCursor,
+    refreshing,
+    reload,
+  } = useActivityPage(source, refreshKey, resourceType);
   return (
     <PageSection
       className={compact ? "activityFeedCompact" : undefined}
@@ -124,6 +132,8 @@ export function ActivityFeed({
           autoLoad={!error}
           busy={loadingMore}
           cursor={nextCursor}
+          disabled={refreshing}
+          key={generation}
           onLoadMore={loadMore}
         >
           Load more activity
