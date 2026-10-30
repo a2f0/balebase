@@ -724,6 +724,16 @@ Waiting for details (requested, waiting on the person), Submitting to Checkr,
 Report in progress, Report canceled, or Complete. Forms and checks tracked by
 hand keep their plain status.
 
+Each request's title opens its own page. In
+My documents (`/me/requests/<request>`) it shows the person what was asked,
+its status, due date, and work location, what happens next, and their
+controls (start the background check, upload, download). A manager's page
+(`/organization/requests/<request>`) adds who it's for, the Checkr stage,
+report status and result, a next step for the current stage, and the same
+controls as the People list. When Checkr isn't configured, both pages say so:
+the manager runs the check outside Balebase and sets its status by hand, and
+the person sees that there is nothing for them to do.
+
 Background checks use Checkr's self-hosted flow. A manager requests a check
 with the person's US work state and optional city, and Balebase emails the
 person a link to their screening form in My documents

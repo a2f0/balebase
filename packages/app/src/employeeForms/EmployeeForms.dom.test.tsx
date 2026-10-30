@@ -43,7 +43,10 @@ function screening(
 async function render(requirements: EmployeeRequirement[]) {
   respond(async () => Response.json({ requirements }));
   ({ container } = await mount(
-    <EmployeeForms scope={{ kind: "member", memberId: "member" }} />,
+    <EmployeeForms
+      onNavigate={() => {}}
+      scope={{ kind: "member", memberId: "member" }}
+    />,
   ));
 }
 
@@ -79,7 +82,10 @@ describe("requesting forms on a member's page", () => {
       });
     });
     ({ container } = await mount(
-      <EmployeeForms scope={{ kind: "member", memberId: "member" }} />,
+      <EmployeeForms
+        onNavigate={() => {}}
+        scope={{ kind: "member", memberId: "member" }}
+      />,
     ));
     expect(item("Own check")).toBeTruthy();
     expect(container.textContent).not.toContain("Their check");
@@ -236,7 +242,10 @@ describe("requesting a Checkr background check", () => {
       });
     });
     ({ container } = await mount(
-      <EmployeeForms scope={{ kind: "member", memberId: "member" }} />,
+      <EmployeeForms
+        onNavigate={() => {}}
+        scope={{ kind: "member", memberId: "member" }}
+      />,
     ));
     const check = item("Background check");
     expect(badgeText(check)).toBe("Not requested");

@@ -1,3 +1,4 @@
+import { productName } from "@balebase/ui/brand";
 import type { BadgeTone } from "@balebase/ui/react";
 import type {
   EmployeeRequirement,
@@ -72,6 +73,85 @@ export function personalRequirement(
     };
   }
   return { badge: waitingBadge(requirement), group: "waiting" };
+}
+
+/**
+ * What a manager does next with a request, or who it waits on. Spells out
+ * the stage the badge names, including why Balebase can't order a check.
+ */
+export function managerNextStep(requirement: EmployeeRequirement) {
+  const person = requirement.targetName ?? requirement.targetEmail ?? "They";
+  const report = requirement.checkrReportStatus;
+  if (requirement.status === "complete") {
+    return report
+      ? "Complete. Review the report in Checkr before making a decision."
+      : "Complete. Nothing more is needed.";
+  }
+  const invited = requirement.invitationStatus === "pending";
+  const gone = !requirement.memberId && !invited;
+  if (requirement.kind === "form") {
+    return formNextStep(requirement, person, invited, gone);
+  }
+  if (requirement.checkrSubmitting) {
+    return `${person} started submitting their details to Checkr. It finishes when they submit the form again.`;
+  }
+  const reportStep = reportNextStep(requirement.checkrReportStatus);
+  if (reportStep) return reportStep;
+  // A request outlives Checkr being turned off, but the person can no
+  // longer submit it, so it falls through to tracking by hand.
+  if (requirement.checkrRequested && requirement.checkrAvailable) {
+    return `Waiting for ${person} to read the disclosures, enter their details, and sign in My documents. Requesting the check emailed them a link to the form.`;
+  }
+  if (report) {
+    // Checkr orders only background checks now, and only while it's set up,
+    // so other canceled reports are tracked by hand.
+    return requirement.kind === "background_check" &&
+      requirement.checkrAvailable
+      ? "Checkr canceled this report. Request the check again, or run it yourself and set its status here."
+      : "Checkr canceled this report. Run the check yourself, then set its status here.";
+  }
+  if (requirement.checkrAvailable) {
+    return `Enter the state (and optionally the city) where ${person} will work, then choose Request background check. They get an email with a link to the form in My documents.`;
+  }
+  if (requirement.kind === "credit_check") {
+    return `${productName} doesn’t order credit checks. Run it yourself, then set its status here as it moves along.`;
+  }
+  if (gone) {
+    return `${person} is no longer in the organization, so this check can’t be requested through Checkr.`;
+  }
+  return `Checkr isn’t set up in ${productName} yet, so ${productName} can’t order this check. Run it yourself, then set its status here as it moves along. The person sees the status in My documents.`;
+}
+
+/** Who a form waits on: the person, or a manager's review. */
+function formNextStep(
+  requirement: EmployeeRequirement,
+  person: string,
+  invited: boolean,
+  gone: boolean,
+) {
+  if (requirement.hasDocument) {
+    return `Download ${requirement.documentFilename ?? "the file"} to review it, then set its status to Complete.`;
+  }
+  if (gone) {
+    return `${person} is no longer in the organization, so they can’t upload this form. Remove the request if you no longer need it.`;
+  }
+  return invited
+    ? `Waiting for ${person} to accept their invitation and upload the file in My documents.`
+    : `Waiting for ${person} to upload the file in My documents.`;
+}
+
+/** The next step while Checkr holds an open report, if it does. */
+function reportNextStep(report: string | null) {
+  if (report === "suspended") {
+    return "Checkr suspended the report while it waits for information from the person. Checkr contacts them; Refresh check updates the status here.";
+  }
+  if (report === "dispute") {
+    return "The person disputed the report. Checkr reviews the dispute and updates the report here.";
+  }
+  if (report && !isClosedReportStatus(report)) {
+    return "Checkr is preparing the report. Its status updates here from Checkr automatically; Refresh check updates it now.";
+  }
+  return undefined;
 }
 
 /** Today's date where the person is, as the YYYY-MM-DD due dates use. */

@@ -137,5 +137,8 @@ export function screeningProgress(
     return `This report ${status === "partially_canceled" ? "was partly canceled" : "was canceled"}. Contact ${organizationName} about next steps.`;
   if (status)
     return "Checkr is preparing your report and contacts you if it needs anything. You can return here to check its status.";
-  return `${organizationName} sends you this check when it’s ready.`;
+  // Without Checkr, the organization runs the check itself, outside Balebase.
+  if (requirement.status === "in_progress" || !requirement.checkrAvailable)
+    return `${organizationName} runs this check and contacts you if it needs anything. There’s nothing for you to do here.`;
+  return `${organizationName} hasn’t sent you this check yet. When it does, you’ll get an email and can start it from My documents.`;
 }
