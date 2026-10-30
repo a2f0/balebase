@@ -307,6 +307,24 @@ export async function findTemplate(
     : selected;
 }
 
+/**
+ * A discarded global form that has not been purged yet, with the status a
+ * restore gives it: the one it had before the discard, except that a form is
+ * never published again by a restore.
+ */
+export async function findDiscardedTemplate(database: D1Database, id: string) {
+  const current = await loadTemplate(database, null, id);
+  if (current?.scope !== "global" || current.status !== "discarded")
+    return null;
+  const previous =
+    current.current_version > 1
+      ? await loadTemplate(database, null, id, current.current_version - 1)
+      : null;
+  const restoredStatus: "draft" | "unpublished" =
+    previous?.status === "draft" ? "draft" : "unpublished";
+  return { current, restoredStatus };
+}
+
 /** Internal reads also see discarded forms so concurrent writes report stale. */
 async function loadTemplate(
   database: D1Database,

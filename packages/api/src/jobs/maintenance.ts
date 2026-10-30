@@ -1,5 +1,6 @@
 import type { JobOutput } from "@balebase/validators/adminJobs";
 import { purgePendingAuditIssueImages } from "../audits/auditIssueImageCleanup";
+import { purgeDiscardedAuditForms } from "../audits/discardedTemplatePurge";
 import { purgeExpiredFreeAuditRuns } from "../billing/billingRetention";
 import { reconcileSubscriptionSeats } from "../billing/billingSeats";
 import { purgeStripeWebhookReceipts } from "../billing/billingWebhook";
@@ -31,6 +32,12 @@ export const maintenanceJobs = [
     name: "Purge expired Free audit history",
     description:
       "Permanently deletes audit runs that meet the existing Free-plan retention policy. Organizations whose paid plan ended keep their history for a 30-day grace period first.",
+  },
+  {
+    id: "purgeDiscardedAuditForms",
+    name: "Purge discarded global forms",
+    description:
+      "Permanently deletes up to 100 global audit forms discarded at least 30 days ago, with their versions and history. Audits started from them keep their own copies. Restoration is no longer possible after the purge.",
   },
   {
     id: "purgeDeletedObjects",
@@ -83,6 +90,9 @@ export function maintenanceTasks(environment: Bindings): MaintenanceTasks {
     }),
     purgeExpiredFreeAuditRuns: async () => ({
       purged: await purgeExpiredFreeAuditRuns(environment),
+    }),
+    purgeDiscardedAuditForms: async () => ({
+      purged: await purgeDiscardedAuditForms(environment),
     }),
     purgePendingAuditIssueImages: async () => ({
       purged: await purgePendingAuditIssueImages(environment),

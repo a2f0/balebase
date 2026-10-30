@@ -3,6 +3,7 @@ import type {
   AuditTemplate,
   TemplatePublication,
 } from "@balebase/validators/audits";
+import { discardedTemplateRetentionDays } from "@balebase/validators/rules";
 import type { ReactNode } from "react";
 import { api } from "../shared/apiClient";
 import { formatLabel } from "../shared/labels";
@@ -51,7 +52,8 @@ export function PublicationControls({
 
 /**
  * Root admins publish and unpublish global forms, and discard drafts and
- * unpublished forms, which organizations no longer see.
+ * unpublished forms, which organizations no longer see. Discarded forms can
+ * be restored from Global Audits until the purge job deletes them.
  */
 export function GlobalAuditControls({
   busy,
@@ -76,7 +78,7 @@ export function GlobalAuditControls({
     if (
       !(await confirmDialog({
         confirmLabel: draft ? "Discard draft" : "Discard form",
-        message: `This ${draft ? "draft" : "unpublished form"} will be removed from Global Audits. Unsaved changes will be lost.`,
+        message: `This ${draft ? "draft" : "unpublished form"} will be removed from Global Audits. You can restore it from Discarded forms for ${discardedTemplateRetentionDays} days; after that it is permanently deleted. Unsaved changes will be lost.`,
         title: `Discard “${template.name}”?`,
         tone: "danger",
       }))

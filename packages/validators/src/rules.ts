@@ -16,6 +16,12 @@ export const equipmentLimits = {
   serialNumber: 100,
 } as const;
 
+/**
+ * Days a discarded global form stays restorable, counted from its discard
+ * (the discarded version's save time); the purge job deletes it afterwards.
+ */
+export const discardedTemplateRetentionDays = 30;
+
 export const projectLimits = {
   description: 1000,
   name: 120,

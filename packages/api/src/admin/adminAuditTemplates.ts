@@ -2,6 +2,7 @@ import { adminAuditTemplatesRoutes } from "@balebase/validators/adminAuditTempla
 import { Hono } from "hono";
 import {
   createTemplate,
+  findDiscardedTemplate,
   findTemplate,
   listTemplateVersions,
   positiveInteger,
@@ -15,7 +16,7 @@ import {
 } from "../audits/auditTemplates";
 import type { ApiEnv } from "../auth/apiEnv";
 import { findActivity, requestActor } from "../shared/activity";
-import { readBody, respond } from "../shared/respond";
+import { readBody, readQuery, respond } from "../shared/respond";
 
 /**
  * Global audit templates, shared by every organization. Platform admins
@@ -25,11 +26,21 @@ import { readBody, respond } from "../shared/respond";
 const adminAuditTemplates = new Hono<ApiEnv>();
 
 adminAuditTemplates.get("/", async (context) => {
-  // Audit counts cover every organization's audits.
+  const query = readQuery(
+    context,
+    adminAuditTemplatesRoutes.list,
+    "Invalid template view.",
+  );
+  if (query instanceof Response) return query;
+  // Audit counts cover every organization's audits. A discarded form's
+  // current version is its discard, so the newest discards come first.
+  const view =
+    query.view === "discarded"
+      ? "version.status = 'discarded' ORDER BY version.created_at DESC, family.id"
+      : "version.status != 'discarded' ORDER BY family.updated_at DESC";
   const result = await context.env.DB.prepare(
     `${templateSummarySelect()}
-     WHERE family.scope = 'global' AND version.status != 'discarded'
-     ORDER BY family.updated_at DESC`,
+     WHERE family.scope = 'global' AND ${view}`,
   ).all<TemplateRow & { audit_count: number }>();
   return respond(context, adminAuditTemplatesRoutes.list, {
     templates: result.results.map(toTemplateSummary),
@@ -193,6 +204,52 @@ adminAuditTemplates.delete("/:id", async (context) => {
   return saved === "stale"
     ? context.json({ error: staleTemplateError }, 409)
     : respond(context, adminAuditTemplatesRoutes.discard, { discarded: true });
+});
+
+adminAuditTemplates.post("/:id/restore", async (context) => {
+  const id = context.req.param("id");
+  const discarded = await findDiscardedTemplate(context.env.DB, id);
+  if (!discarded) {
+    return (await findTemplate(context.env.DB, null, id))
+      ? context.json({ error: "Only discarded forms can be restored." }, 409)
+      : context.json({ error: "Template not found." }, 404);
+  }
+  const body = await readBody(
+    context,
+    adminAuditTemplatesRoutes.restore,
+    "The current template version is required.",
+  );
+  if (body instanceof Response) return body;
+  const { current, restoredStatus } = discarded;
+  let saved: Awaited<ReturnType<typeof saveTemplateVersion>>;
+  try {
+    saved = await saveTemplateVersion(
+      context.env.DB,
+      null,
+      current,
+      requestActor(context),
+      {
+        definition: storedDefinition(current.definition),
+        description: current.description,
+        expectedCurrentVersion: body.expectedCurrentVersion,
+        name: current.name,
+      },
+      restoredStatus,
+    );
+  } catch (cause) {
+    // The purge job deleted the form between the read and the save.
+    if (
+      !(await findDiscardedTemplate(context.env.DB, id)) &&
+      !(await findTemplate(context.env.DB, null, id))
+    )
+      return context.json({ error: "Template not found." }, 404);
+    throw cause;
+  }
+  return saved === "stale"
+    ? context.json({ error: staleTemplateError }, 409)
+    : respond(context, adminAuditTemplatesRoutes.restore, {
+        template: toTemplate(saved),
+      });
 });
 
 export { adminAuditTemplates };

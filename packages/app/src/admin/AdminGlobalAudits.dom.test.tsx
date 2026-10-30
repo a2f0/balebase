@@ -52,12 +52,38 @@ const globalForm: AuditTemplate = {
 
 const admin = `${apiUrl}/api/admin/audit-templates`;
 
+const discardedForm = {
+  ...globalForm,
+  auditCount: 0,
+  currentVersion: 2,
+  id: "old/form",
+  name: "Old checklist",
+  savedAt: "2026-10-05T09:00:00.000Z",
+  savedBy: { email: "other@example.com", id: "u2", name: "Other Root" },
+  status: "discarded",
+  version: 2,
+};
+
 /** Answers like the root admin API, recording every request. */
-function stubApi(form = globalForm, failure?: string) {
+function stubApi(
+  form = globalForm,
+  failure?: string,
+  discarded: (typeof discardedForm)[] = [],
+) {
   const requests: string[] = [];
   respond(async ({ href: url }, init) => {
     const method = init?.method ?? "GET";
     requests.push(`${method} ${url}`);
+    if (url === `${admin}?view=discarded`) {
+      return Response.json({ templates: discarded });
+    }
+    if (method === "POST" && url.endsWith("/restore")) {
+      if (failure) return Response.json({ error: failure }, { status: 409 });
+      const restored = discarded.shift();
+      return Response.json({
+        template: { ...restored, currentVersion: 3, status: "unpublished" },
+      });
+    }
     if (method === "DELETE") {
       return failure
         ? Response.json({ error: failure }, { status: 409 })
@@ -149,7 +175,7 @@ describe("Global Audits", () => {
     await act(async () => button("Discard form").click());
     const dialog = document.querySelector('[role="alertdialog"]');
     expect(dialog?.textContent).toContain(
-      "This unpublished form will be removed from Global Audits.",
+      "This unpublished form will be removed from Global Audits. You can restore it from Discarded forms for 30 days",
     );
     await act(async () =>
       dialog?.querySelector<HTMLButtonElement>(".buttonDanger")?.click(),
@@ -194,7 +220,47 @@ describe("Global Audits", () => {
     );
     await act(async () => manage?.click());
     expect(paths).toEqual(["/root/global-audits/fire%2Fsafety"]);
-    expect(requests).toEqual([`GET ${admin}`]);
+    expect(requests).toEqual([`GET ${admin}`, `GET ${admin}?view=discarded`]);
+    expect(container.textContent).toContain("No discarded forms");
+  });
+
+  it("lists discarded forms with their purge date and restores one", async () => {
+    const requests = stubApi(globalForm, undefined, [discardedForm]);
+    await render("/root/global-audits");
+    const rows = container.querySelectorAll(".auditTemplateRow");
+    const discarded = rows[1];
+    expect(discarded?.textContent).toContain("Old checklist");
+    expect(discarded?.textContent).toContain(
+      "Discarded Oct 5, 2026 by Other Root",
+    );
+    expect(discarded?.textContent).toContain("Deleted after Nov 4, 2026");
+    await act(async () => button("Restore").click());
+    await settle(30);
+    expect(requests).toContain(`POST ${admin}/old%2Fform/restore`);
+    expect(container.textContent).toContain(
+      "“Old checklist” restored as an unpublished form.",
+    );
+    expect(container.textContent).toContain("No discarded forms");
+    expect(
+      requests.filter((request) => request === `GET ${admin}?view=discarded`),
+    ).toHaveLength(2);
+  });
+
+  it("shows a refused restore and reloads the discarded forms", async () => {
+    const requests = stubApi(
+      globalForm,
+      "This template has a newer version. Reload it before saving.",
+      [discardedForm],
+    );
+    await render("/root/global-audits");
+    await act(async () => button("Restore").click());
+    await settle(30);
+    expect(container.textContent).toContain(
+      "This template has a newer version.",
+    );
+    expect(
+      requests.filter((request) => request === `GET ${admin}?view=discarded`),
+    ).toHaveLength(2);
   });
 
   it("creates new global checklists through the root admin API", async () => {
@@ -203,7 +269,11 @@ describe("Global Audits", () => {
 
     await act(async () => button("New global checklist").click());
     await settle(30);
-    expect(requests).toEqual([`GET ${admin}`, `POST ${admin}`]);
+    expect(requests).toEqual([
+      `GET ${admin}`,
+      `GET ${admin}?view=discarded`,
+      `POST ${admin}`,
+    ]);
     expect(paths).toEqual(["/root/global-audits/new%2Fform"]);
   });
 

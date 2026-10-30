@@ -451,7 +451,18 @@ drafts until published. Published forms can be unpublished and published again;
 unpublishing hides them from organizations and prevents new runs and copies,
 while preserving versions and existing audit runs. Drafts and unpublished forms
 can be discarded; published forms must be unpublished first. Discarded forms
-leave the admin list but remain stored with their history.
+leave the admin list for its **Discarded forms** section, which shows who
+discarded each one and when it will be deleted. Restoring a discarded form saves
+a new version with the status it had before, a draft or an unpublished form; a
+restore never publishes it. The **Purge discarded global forms** job
+(`purgeDiscardedAuditForms`) permanently deletes up to 100 forms discarded at
+least 30 days ago per run, with their versions and history, as part of hourly
+production maintenance or from **Root Admin → Jobs**. Audits started from a
+purged form keep their own copy of it, and projects it was turned on for lose
+it. The deletion rechecks eligibility, so a restore committed first keeps the
+form. Discards and restores appear in the form's Activity as their own events.
+Apply migration `0079_restore_discarded_audit_forms.sql`, which names those
+events, before deploying.
 Publication changes save a new version, including the editor's current changes,
 and reject stale versions just like other template saves. Organizations can only
 read published versions and their activity; draft and unpublished history stays

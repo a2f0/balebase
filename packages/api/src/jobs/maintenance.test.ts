@@ -149,7 +149,7 @@ it("keeps hourly scheduling idempotent and gates cleanup on retention even when 
   await runScheduledMaintenance(f.bindings, source);
   expect(
     f.database.query("SELECT count(*) AS count FROM job_runs").get(),
-  ).toEqual({ count: 9 });
+  ).toEqual({ count: 10 });
   const rows = f.database.query("SELECT id, job_id FROM job_runs").all() as {
     id: string;
     job_id: string;
@@ -295,7 +295,7 @@ it("preserves completed results for older apps and never reports queued work as 
   const oldCatalog = (await (await f.request("/jobs")).json()) as {
     jobs: { id: string }[];
   };
-  expect(oldCatalog.jobs).toHaveLength(9);
+  expect(oldCatalog.jobs).toHaveLength(10);
   const catalog = (await (await f.request("/jobs?all=true")).json()) as {
     jobs: { id: string }[];
   };
