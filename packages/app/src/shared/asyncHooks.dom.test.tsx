@@ -207,6 +207,51 @@ describe("useCursorPages", () => {
     expect(hook.current().nextCursor).toBe("next");
   });
 
+  it("keeps the loaded items on screen while a refresh loads", async () => {
+    let first = deferred<{ items: string[]; nextCursor: string | null }>();
+    const requests: (string | undefined)[] = [];
+    const fetchPage = async (cursor?: string) => {
+      requests.push(cursor);
+      return cursor ? { items: ["c"], nextCursor: null } : first.promise;
+    };
+    const hook = await renderHook(
+      ({
+        fetch,
+        refreshKey,
+      }: {
+        fetch: typeof fetchPage;
+        refreshKey: number;
+      }) => useCursorPages(fetch, "Could not load.", refreshKey),
+      { fetch: fetchPage, refreshKey: 0 },
+    );
+    await act(async () => first.resolve({ items: ["a"], nextCursor: "next" }));
+    expect(hook.current().items).toEqual(["a"]);
+    expect(hook.current().refreshing).toBe(false);
+
+    first = deferred();
+    await hook.rerender({ fetch: fetchPage, refreshKey: 1 });
+    expect(hook.current().items).toEqual(["a"]);
+    expect(hook.current().nextCursor).toBe("next");
+    expect(hook.current().refreshing).toBe(true);
+    await act(async () => {
+      expect(await hook.current().loadMore()).toBe(false);
+    });
+    await act(async () => first.resolve({ items: ["b"], nextCursor: null }));
+    expect(hook.current().items).toEqual(["b"]);
+    expect(hook.current().refreshing).toBe(false);
+    expect(requests).toEqual([undefined, undefined]);
+
+    // A different list still clears the old one while it loads.
+    first = deferred();
+    await hook.rerender({
+      fetch: async (cursor?: string) => fetchPage(cursor),
+      refreshKey: 1,
+    });
+    expect(hook.current().items).toBeUndefined();
+    await act(async () => first.resolve({ items: ["d"], nextCursor: null }));
+    expect(hook.current().items).toEqual(["d"]);
+  });
+
   it("keeps loaded items and shows the error when a later page fails", async () => {
     const fetchPage = async (cursor?: string) => {
       if (cursor) throw new TypeError("Load failed");
