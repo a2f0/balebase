@@ -98,7 +98,9 @@ export function managerNextStep(requirement: EmployeeRequirement) {
   }
   const reportStep = reportNextStep(requirement.checkrReportStatus);
   if (reportStep) return reportStep;
-  if (requirement.checkrRequested) {
+  // A request outlives Checkr being turned off, but the person can no
+  // longer submit it, so it falls through to tracking by hand.
+  if (requirement.checkrRequested && requirement.checkrAvailable) {
     return `Waiting for ${person} to read the disclosures, enter their details, and sign in My documents. Requesting the check emailed them a link to the form.`;
   }
   if (report) {

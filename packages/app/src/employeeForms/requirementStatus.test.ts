@@ -171,6 +171,9 @@ describe("a manager's next step", () => {
       managerNextStep(check({ checkrAvailable: false, kind: "credit_check" })),
     ).toContain("doesn’t order credit checks");
     expect(
+      managerNextStep(check({ checkrAvailable: false, checkrRequested: true })),
+    ).toContain("Checkr isn’t set up in Balebase yet");
+    expect(
       managerNextStep(
         check({ checkrReportStatus: "canceled", kind: "credit_check" }),
       ),
