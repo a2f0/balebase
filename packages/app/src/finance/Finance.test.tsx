@@ -81,6 +81,7 @@ function renderFinance(
       onDisconnect={async () => undefined}
       onNavigate={() => undefined}
       onReload={async () => undefined}
+      onRepair={async () => undefined}
       onSync={async () => undefined}
       page={options.page ?? "overview"}
     />,

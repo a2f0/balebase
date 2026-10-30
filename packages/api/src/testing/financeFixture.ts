@@ -161,7 +161,14 @@ export function mockPlaid(options?: {
   let syncCount = 0;
   return async <T>(_env: Bindings, path: string, body: PlaidRequestBody) => {
     if (path === "/link/token/create") {
-      expect(body.transactions).toEqual({ days_requested: 730 });
+      if (body.access_token) {
+        // Update mode repairs an existing Item and must not request products.
+        expect(body.access_token).toStartWith("access-sandbox-test-");
+        expect(body).not.toHaveProperty("products");
+        expect(body).not.toHaveProperty("transactions");
+      } else {
+        expect(body.transactions).toEqual({ days_requested: 730 });
+      }
       return {
         expiration: "2026-08-19T12:30:00Z",
         link_token: "link-sandbox-test",

@@ -54,6 +54,10 @@ import {
 } from "./useFinanceData";
 
 const linkTokenStorageKey = "balebase.plaid.linkToken";
+/** Set while Link runs in update mode, so an OAuth return repairs that
+ * connection instead of exchanging a token for a new one. It names the link
+ * token it belongs to, so a flow started in another tab never adopts it. */
+const updateConnectionStorageKey = "balebase.plaid.updateConnection";
 
 export function Finance({
   onNavigate,
@@ -92,6 +96,7 @@ export function Finance({
       }}
       onNavigate={onNavigate}
       onReload={load}
+      onRepair={plaid.repair}
       onSync={actions.sync}
       page={page}
     />
@@ -208,6 +213,7 @@ interface OverviewHandlers {
   onDeleteData: (connection: FinanceConnection) => Promise<void>;
   onDisconnect: (connection: FinanceConnection) => Promise<void>;
   onNavigate: (pathname: string) => void;
+  onRepair: (connection: FinanceConnection) => Promise<void>;
   onSync: (id: string) => Promise<void>;
 }
 
@@ -275,6 +281,7 @@ export function FinanceView({
             onDisconnect={handlers.onDisconnect}
             onNavigate={handlers.onNavigate}
             onReload={onReload}
+            onRepair={handlers.onRepair}
             onSync={handlers.onSync}
           />
         )}
@@ -496,19 +503,26 @@ function usePlaidConnect(
   const [busy, setBusy] = useState(false);
   const resumedOAuth = useRef(false);
   const complete = useCallback(
-    async (publicToken: string, metadata: PlaidLinkMetadata) => {
+    async (
+      publicToken: string,
+      metadata: PlaidLinkMetadata,
+      repairing: string | undefined,
+    ) => {
       setBusy(true);
       setError(undefined);
       try {
-        const connection = await api.finance.exchangePlaidPublicToken(
-          publicToken,
-          {
-            id: metadata.institution?.institution_id ?? null,
-            name: metadata.institution?.name ?? null,
-          },
-        );
+        // Update mode keeps the Item and its access token, so there is no
+        // public token to exchange; a sync confirms the repaired login.
+        const connectionId =
+          repairing ??
+          (
+            await api.finance.exchangePlaidPublicToken(publicToken, {
+              id: metadata.institution?.institution_id ?? null,
+              name: metadata.institution?.name ?? null,
+            })
+          ).connectionId;
         clearOAuthState();
-        const result = await api.finance.startSync(connection.connectionId);
+        const result = await api.finance.startSync(connectionId);
         await load();
         setNotice(syncNotice(result));
       } catch (cause) {
@@ -522,27 +536,55 @@ function usePlaidConnect(
   );
   useOAuthResume(complete, resumedOAuth, setBusy, setError);
 
-  const connect = async () => {
+  const start = async (
+    linkToken: () => Promise<{ linkToken: string }>,
+    connectionId: string | undefined,
+  ) => {
     setBusy(true);
     setError(undefined);
     setNotice(undefined);
     try {
-      const result = await api.finance.createPlaidLinkToken();
+      const result = await linkToken();
       localStorage.setItem(linkTokenStorageKey, result.linkToken);
-      await launchPlaid(result.linkToken, undefined, complete, (message) => {
-        setError(message);
-        setBusy(false);
-      });
+      if (connectionId)
+        localStorage.setItem(
+          updateConnectionStorageKey,
+          JSON.stringify({ connectionId, linkToken: result.linkToken }),
+        );
+      // This session's repair target is bound here, not read back from
+      // storage another tab can overwrite.
+      await launchPlaid(
+        result.linkToken,
+        undefined,
+        (publicToken, metadata) =>
+          complete(publicToken, metadata, connectionId),
+        (message) => {
+          setError(message);
+          setBusy(false);
+        },
+      );
     } catch (cause) {
       setError(errorMessage(cause, "Could not update finances."));
       setBusy(false);
     }
   };
-  return { busy, connect };
+  return {
+    busy,
+    connect: () => start(() => api.finance.createPlaidLinkToken(), undefined),
+    repair: (connection: FinanceConnection) =>
+      start(
+        () => api.finance.createPlaidUpdateLinkToken(connection.id),
+        connection.id,
+      ),
+  };
 }
 
 function useOAuthResume(
-  complete: (token: string, metadata: PlaidLinkMetadata) => Promise<void>,
+  complete: (
+    token: string,
+    metadata: PlaidLinkMetadata,
+    repairing: string | undefined,
+  ) => Promise<void>,
   resumed: { current: boolean },
   setBusy: Dispatch<SetStateAction<boolean>>,
   setError: (message: string | undefined) => void,
@@ -556,12 +598,39 @@ function useOAuthResume(
       clearOAuthState();
       return;
     }
+    const repairing = updateConnectionFor(token);
     setBusy(true);
-    void launchPlaid(token, window.location.href, complete, (message) => {
-      setError(message);
-      setBusy(false);
-    });
+    void launchPlaid(
+      token,
+      window.location.href,
+      (publicToken, metadata) => complete(publicToken, metadata, repairing),
+      (message) => {
+        setError(message);
+        setBusy(false);
+      },
+    );
   }, [complete, resumed, setBusy, setError]);
+}
+
+/** The connection an update-mode Link session repairs, if `token` started one. */
+function updateConnectionFor(token: string) {
+  try {
+    const stored: unknown = JSON.parse(
+      localStorage.getItem(updateConnectionStorageKey) ?? "null",
+    );
+    if (
+      stored &&
+      typeof stored === "object" &&
+      "linkToken" in stored &&
+      "connectionId" in stored &&
+      stored.linkToken === token &&
+      typeof stored.connectionId === "string"
+    )
+      return stored.connectionId;
+  } catch {
+    // A malformed marker cannot name a connection; treat it as a new one.
+  }
+  return undefined;
 }
 
 let plaidScript: Promise<boolean> | undefined;
@@ -621,6 +690,7 @@ function hasOAuthState() {
 
 function clearOAuthState() {
   localStorage.removeItem(linkTokenStorageKey);
+  localStorage.removeItem(updateConnectionStorageKey);
   if (hasOAuthState())
     window.history.replaceState(window.history.state, "", "/finance");
 }

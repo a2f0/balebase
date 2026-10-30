@@ -663,6 +663,15 @@ accounts is not double-counted. Totals are grouped by currency. Earlier
 free-text category overrides were converted into categories by migration
 `0034`.
 
+When a connection stops syncing with an error, such as Plaid's
+`ITEM_LOGIN_REQUIRED` after a bank password or MFA change, **Update login** on
+the Connections tab opens Plaid Link in update mode for that same Item. No
+products are requested and no public token is exchanged: the stored access
+token and sync cursor are kept, and the sync that follows resumes where the
+last successful one stopped, so imported records, categories, and annotations
+are untouched. Prefer it over disconnecting and reconnecting, which creates a
+new Item and relies on matching to carry history over.
+
 Disconnecting is available after an accepted sync finishes. It disables daily sync,
 calls Plaid's `/item/remove`, erases the stored
 access token, and retains the imported history and annotations. A later Link

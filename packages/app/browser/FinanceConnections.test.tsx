@@ -40,6 +40,7 @@ it("opens a connection from anywhere on its row except its own buttons", async (
       onDisconnect={async () => undefined}
       onNavigate={() => undefined}
       onReload={async () => undefined}
+      onRepair={async () => undefined}
       onSync={async () => undefined}
     />,
   );

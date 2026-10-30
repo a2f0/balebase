@@ -27,6 +27,8 @@ interface ConnectionHandlers {
   onDeleteData: (connection: FinanceConnection) => Promise<void>;
   onDisconnect: (connection: FinanceConnection) => Promise<void>;
   onNavigate: (pathname: string) => void;
+  /** Opens Plaid Link in update mode to repair the connection's login. */
+  onRepair: (connection: FinanceConnection) => Promise<void>;
   onSync: (id: string) => Promise<void>;
 }
 
@@ -49,7 +51,7 @@ export function FinanceConnections({
           </span>
         ) : undefined
       }
-      description="Sync each institution, disconnect it, or delete the data it imported. Select one for its accounts and Plaid identifiers."
+      description="Sync each institution, update its bank login when it stops syncing, disconnect it, or delete the data it imported. Select one for its accounts and Plaid identifiers."
       title="Connections"
     >
       {loadError && (
@@ -186,6 +188,7 @@ function ConnectionActions({
   onConnect,
   onDeleteData,
   onDisconnect,
+  onRepair,
   onSync,
 }: ConnectionHandlers & { connection: FinanceConnection }) {
   if (connection.status === "disconnected") {
@@ -213,6 +216,17 @@ function ConnectionActions({
   }
   return (
     <div className="rowActions financeConnectionActions">
+      {connection.status === "error" && (
+        <Button
+          disabled={busy || syncPending(connection.syncStatus)}
+          icon="key"
+          onClick={() => void onRepair(connection)}
+          size="sm"
+          variant="primary"
+        >
+          Update login
+        </Button>
+      )}
       <Button
         disabled={
           busy ||

@@ -284,6 +284,13 @@ export const financeRoutes = {
     path: "/api/finance/link-token",
     response: z.object({ expiration: z.string(), linkToken: z.string() }),
   }),
+  /** Plaid Link update mode: repairs a connection's login on the same Item,
+   * so its access token, sync cursor, and imported records stay as they are. */
+  createUpdateLinkToken: route({
+    method: "POST",
+    path: "/api/finance/connections/:id/link-token",
+    response: z.object({ expiration: z.string(), linkToken: z.string() }),
+  }),
   exchangePublicToken: route({
     method: "POST",
     path: "/api/finance/exchange",
