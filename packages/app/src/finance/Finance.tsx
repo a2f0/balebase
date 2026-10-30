@@ -54,6 +54,9 @@ import {
 } from "./useFinanceData";
 
 const linkTokenStorageKey = "balebase.plaid.linkToken";
+/** Set while Link runs in update mode, so an OAuth return repairs that
+ * connection instead of exchanging a token for a new one. */
+const updateConnectionStorageKey = "balebase.plaid.updateConnectionId";
 
 export function Finance({
   onNavigate,
@@ -92,6 +95,7 @@ export function Finance({
       }}
       onNavigate={onNavigate}
       onReload={load}
+      onRepair={plaid.repair}
       onSync={actions.sync}
       page={page}
     />
@@ -208,6 +212,7 @@ interface OverviewHandlers {
   onDeleteData: (connection: FinanceConnection) => Promise<void>;
   onDisconnect: (connection: FinanceConnection) => Promise<void>;
   onNavigate: (pathname: string) => void;
+  onRepair: (connection: FinanceConnection) => Promise<void>;
   onSync: (id: string) => Promise<void>;
 }
 
@@ -275,6 +280,7 @@ export function FinanceView({
             onDisconnect={handlers.onDisconnect}
             onNavigate={handlers.onNavigate}
             onReload={onReload}
+            onRepair={handlers.onRepair}
             onSync={handlers.onSync}
           />
         )}
@@ -500,15 +506,19 @@ function usePlaidConnect(
       setBusy(true);
       setError(undefined);
       try {
-        const connection = await api.finance.exchangePlaidPublicToken(
-          publicToken,
-          {
-            id: metadata.institution?.institution_id ?? null,
-            name: metadata.institution?.name ?? null,
-          },
-        );
+        // Update mode keeps the Item and its access token, so there is no
+        // public token to exchange; a sync confirms the repaired login.
+        const repairing = localStorage.getItem(updateConnectionStorageKey);
+        const connectionId =
+          repairing ??
+          (
+            await api.finance.exchangePlaidPublicToken(publicToken, {
+              id: metadata.institution?.institution_id ?? null,
+              name: metadata.institution?.name ?? null,
+            })
+          ).connectionId;
         clearOAuthState();
-        const result = await api.finance.startSync(connection.connectionId);
+        const result = await api.finance.startSync(connectionId);
         await load();
         setNotice(syncNotice(result));
       } catch (cause) {
@@ -522,13 +532,19 @@ function usePlaidConnect(
   );
   useOAuthResume(complete, resumedOAuth, setBusy, setError);
 
-  const connect = async () => {
+  const start = async (
+    linkToken: () => Promise<{ linkToken: string }>,
+    connectionId: string | undefined,
+  ) => {
     setBusy(true);
     setError(undefined);
     setNotice(undefined);
     try {
-      const result = await api.finance.createPlaidLinkToken();
+      const result = await linkToken();
       localStorage.setItem(linkTokenStorageKey, result.linkToken);
+      if (connectionId)
+        localStorage.setItem(updateConnectionStorageKey, connectionId);
+      else localStorage.removeItem(updateConnectionStorageKey);
       await launchPlaid(result.linkToken, undefined, complete, (message) => {
         setError(message);
         setBusy(false);
@@ -538,7 +554,15 @@ function usePlaidConnect(
       setBusy(false);
     }
   };
-  return { busy, connect };
+  return {
+    busy,
+    connect: () => start(() => api.finance.createPlaidLinkToken(), undefined),
+    repair: (connection: FinanceConnection) =>
+      start(
+        () => api.finance.createPlaidUpdateLinkToken(connection.id),
+        connection.id,
+      ),
+  };
 }
 
 function useOAuthResume(
@@ -621,6 +645,7 @@ function hasOAuthState() {
 
 function clearOAuthState() {
   localStorage.removeItem(linkTokenStorageKey);
+  localStorage.removeItem(updateConnectionStorageKey);
   if (hasOAuthState())
     window.history.replaceState(window.history.state, "", "/finance");
 }

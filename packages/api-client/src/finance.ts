@@ -16,6 +16,11 @@ const endpoints = {
     path: "/api/finance/link-token",
     response: "json",
   }),
+  createUpdateLinkToken: endpoint<typeof financeRoutes.createUpdateLinkToken>({
+    method: "POST",
+    path: "/api/finance/connections/:id/link-token",
+    response: "json",
+  }),
   exchangePublicToken: endpoint<typeof financeRoutes.exchangePublicToken>({
     method: "POST",
     path: "/api/finance/exchange",
@@ -148,6 +153,11 @@ export function financeApi(transport: Transport) {
     },
     createPlaidLinkToken() {
       return transport.call(endpoints.createLinkToken);
+    },
+    createPlaidUpdateLinkToken(connectionId: string) {
+      return transport.call(endpoints.createUpdateLinkToken, {
+        params: { id: connectionId },
+      });
     },
     exchangePlaidPublicToken(
       publicToken: string,

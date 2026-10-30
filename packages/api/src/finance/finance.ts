@@ -1,4 +1,3 @@
-import { productName } from "@balebase/ui/brand";
 import {
   type FinanceAccount,
   type FinanceConnection,
@@ -32,6 +31,11 @@ import {
 } from "./financeCategories";
 import { connectionDetail } from "./financeConnectionDetail";
 import type { FinanceContext } from "./financeContext";
+import {
+  createLinkToken,
+  createUpdateLinkToken,
+  requireEncryptionKey,
+} from "./financeLinkTokens";
 import { financeListingFilters } from "./financeListingFilters";
 import { expenseReport } from "./financeReports";
 import type { PlaidItemRow } from "./financeSync";
@@ -98,15 +102,6 @@ interface ExchangeResponse {
   item_id: string;
 }
 
-interface LinkTokenResponse {
-  expiration: string;
-  link_token: string;
-}
-
-interface LinkTokenRequest extends Record<string, unknown> {
-  redirect_uri?: string;
-}
-
 export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
   const finance = new Hono<ApiEnv>();
 
@@ -116,6 +111,9 @@ export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
   );
   finance.post("/exchange", async (context) =>
     exchangePublicToken(context, requestPlaid),
+  );
+  finance.post("/connections/:id/link-token", async (context) =>
+    createUpdateLinkToken(context, requestPlaid),
   );
   finance.post("/connections/:id/sync", legacySyncConnection);
   finance.post("/connections/:id/sync-jobs", startConnectionSync);
@@ -254,38 +252,6 @@ async function transactionActivity(context: FinanceContext) {
   return page
     ? respond(context, financeRoutes.transactionActivity, page)
     : context.json({ error: "Invalid activity cursor." }, 400);
-}
-
-async function createLinkToken(
-  context: FinanceContext,
-  requestPlaid: PlaidRequest,
-) {
-  requireEncryptionKey(context.env);
-  const body: LinkTokenRequest = {
-    client_name: productName,
-    country_codes: ["US"],
-    language: "en",
-    products: ["transactions"],
-    transactions: { days_requested: 730 },
-    user: {
-      client_user_id: clientUserId(
-        context.get("organizationId"),
-        context.get("authSession").user.id,
-      ),
-    },
-  };
-  if (context.env.PLAID_REDIRECT_URI) {
-    body.redirect_uri = context.env.PLAID_REDIRECT_URI;
-  }
-  const result = await requestPlaid<LinkTokenResponse>(
-    context.env,
-    "/link/token/create",
-    body,
-  );
-  return respond(context, financeRoutes.createLinkToken, {
-    expiration: result.expiration,
-    linkToken: result.link_token,
-  });
 }
 
 async function exchangePublicToken(
@@ -734,21 +700,10 @@ function toTransaction(
   };
 }
 
-function requireEncryptionKey(env: Bindings) {
-  if (!env.PLAID_TOKEN_ENCRYPTION_KEY) {
-    throw new PlaidApiError("Plaid is not configured.", "NOT_CONFIGURED", 503);
-  }
-  return env.PLAID_TOKEN_ENCRYPTION_KEY;
-}
-
 function isConfigured(env: Bindings) {
   return Boolean(
     env.PLAID_CLIENT_ID && env.PLAID_SECRET && env.PLAID_TOKEN_ENCRYPTION_KEY,
   );
-}
-
-function clientUserId(organizationId: string, userId: string) {
-  return `${organizationId}:${userId}`.slice(0, 128);
 }
 
 function parseLabels(value: string | null) {
