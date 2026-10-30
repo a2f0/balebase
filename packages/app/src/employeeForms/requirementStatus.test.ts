@@ -208,6 +208,13 @@ describe("a manager's next step", () => {
     ).toContain("Request the check again");
     expect(
       managerNextStep(
+        check({ checkrAvailable: false, checkrReportStatus: "canceled" }),
+      ),
+    ).toBe(
+      "Checkr canceled this report. Run the check yourself, then set its status here.",
+    );
+    expect(
+      managerNextStep(
         check({ checkrReportStatus: "complete", status: "complete" }),
       ),
     ).toBe("Complete. Review the report in Checkr before making a decision.");
