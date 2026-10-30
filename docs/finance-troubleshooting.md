@@ -22,6 +22,8 @@ For production, run this from the repository root in Bash, replacing both
 placeholders with the confirmed IDs. It selects no credentials, cursors,
 transaction details, or job checkpoint payloads. If you do not have authorized
 production access, stop and request it rather than using another environment.
+Paste only the exact stored IDs into the quoted SQL literals; never insert
+untrusted text, quotes, or SQL fragments into this remote command.
 
 ```bash
 (
@@ -74,6 +76,13 @@ Balebase's Link configuration.
   unset PLAID_CLIENT_ID PLAID_SECRET
   load_tier_env prod
   export PLAID_INSTITUTION_ID='REPLACE_INSTITUTION_ID'
+  # Bash builtins keep unrelated secrets out of Bun without putting keys in argv.
+  for variable in $(compgen -e); do
+    case "$variable" in
+      PATH|HOME|TMPDIR|PLAID_CLIENT_ID|PLAID_SECRET|PLAID_INSTITUTION_ID) ;;
+      *) export -n "$variable" ;;
+    esac
+  done
   bun --no-env-file -e '
 const institutionId = process.env.PLAID_INSTITUTION_ID;
 const clientId = process.env.PLAID_CLIENT_ID;
@@ -125,8 +134,11 @@ try {
 ```
 
 The probe has a bounded timeout, refuses redirects, disables automatic `.env`
-loading, and prints only selected response fields. Credentials stay in the
-process environment and request headers, not command arguments or output.
+loading, and prints only selected response fields. The subshell loads the tier,
+then removes every other variable's export attribute except `PATH`, `HOME`, and
+`TMPDIR`; Bun inherits only those and the two Plaid credentials and institution
+ID. The credentials stay in its environment and request headers, not command
+arguments or output (including arguments to an `env` command).
 Never use shell tracing, `curl -v`, raw request dumps, or environment dumps
 around credentials. If saving output, use an approved private incident folder,
 not the repository; preserve the observation timestamp and Plaid request ID.
@@ -167,11 +179,19 @@ page or from institution health alone.
 ## If health does not explain the failure
 
 Capture a fresh attempt with the user's participation, preferably one Link
-session in one tab. Start a live tail before the attempt, from `packages/api`
-after loading the production Cloudflare environment:
+session in one tab. Start a live tail before the attempt. From the repository
+root in Bash, use a subshell so credentials do not remain in the interactive
+shell after the tail stops:
 
-```sh
-bunx --bun wrangler tail balebase-api --format json
+```bash
+(
+  set +x
+  set -eu
+  source scripts/lib/cloudflareEnv.sh
+  load_cloudflare_env
+  cd packages/api
+  bunx --bun wrangler tail balebase-api --format json
+)
 ```
 
 Stop the tail afterward; restart it after a Worker deploy. Treat raw tail
