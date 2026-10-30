@@ -27,10 +27,14 @@ import {
   libraryPath,
   movedWorkspacePath,
   myDocumentsPath,
+  myRequirementIdForPath,
+  myRequirementPath,
   myScreeningIdForPath,
   organizationMemberIdForPath,
   organizationPathRequiresAccess,
   organizationPeoplePath,
+  organizationRequirementIdForPath,
+  organizationRequirementPath,
   organizationSettingsPage,
   recordIdForPath,
   signingTokenForPath,
@@ -94,6 +98,10 @@ describe("workspace paths", () => {
     expect(myScreeningIdForPath(myDocumentsPath("check/1"))).toBe("check/1");
     expect(myScreeningIdForPath("/me")).toBeUndefined();
     expect(myScreeningIdForPath("/me/screening/%E0%A4%A")).toBe("%E0%A4%A");
+    expect(myRequirementPath("w/4")).toBe("/me/requests/w%2F4");
+    expect(myRequirementIdForPath(myRequirementPath("w/4"))).toBe("w/4");
+    expect(myRequirementIdForPath("/me/screening/w4")).toBeUndefined();
+    expect(myScreeningIdForPath(myRequirementPath("w4"))).toBeUndefined();
     expect(
       movedWorkspacePath("/organization/people/member/screening/check%2F1"),
     ).toBe("/me/screening/check%2F1");
@@ -176,6 +184,19 @@ describe("workspace paths", () => {
     expect(organizationPeoplePath("member/1")).toBe(
       "/organization/people/member%2F1",
     );
+    expect(organizationRequirementPath("check/1")).toBe(
+      "/organization/requests/check%2F1",
+    );
+    expect(
+      organizationRequirementIdForPath(organizationRequirementPath("check/1")),
+    ).toBe("check/1");
+    expect(organizationSettingsPage(organizationRequirementPath("check"))).toBe(
+      "people",
+    );
+    expect(
+      organizationMemberIdForPath(organizationRequirementPath("check")),
+    ).toBeUndefined();
+    expect(organizationSettingsPage("/organization/requests")).toBe("general");
     expect(organizationSettingsPage("/organization/access")).toBe("access");
     expect(organizationSettingsPage("/organization/api-keys")).toBe("api-keys");
     expect(organizationSettingsPage("/organization/unknown")).toBe("general");

@@ -212,6 +212,7 @@ function PeopleBody({
         ) && (
           <EmployeeForms
             key={`${peopleKey(data)}:${summary.version}`}
+            onNavigate={onNavigate}
             scope={unattached}
           />
         )}

@@ -256,9 +256,11 @@ describe("My documents", () => {
       }),
     ]);
     await render();
-    expect(section("Done").querySelector("a")?.getAttribute("href")).toBe(
-      "/me/screening/done",
-    );
+    expect(
+      [...section("Done").querySelectorAll("a")].map((link) =>
+        link.getAttribute("href"),
+      ),
+    ).toEqual(["/me/requests/done", "/me/screening/done"]);
     expect(section("With Acme").textContent).toContain(
       "Check your email for a request from Checkr",
     );
@@ -318,6 +320,102 @@ describe("My documents", () => {
     ]);
     expect(container.textContent).toContain(
       "This background check isn’t waiting for you.",
+    );
+  });
+
+  it("opens each request's own page from its title", async () => {
+    stubApi(requests);
+    const paths: string[] = [];
+    await render("/me", (path) => paths.push(path));
+
+    const title = section("To do").querySelector<HTMLAnchorElement>("strong a");
+    expect(title?.textContent).toBe("W-4");
+    expect(title?.getAttribute("href")).toBe("/me/requests/w4");
+    await act(async () =>
+      title?.dispatchEvent(
+        new dom.MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+        }) as never,
+      ),
+    );
+    expect(paths).toEqual(["/me/requests/w4"]);
+  });
+
+  it("explains a background check the organization runs without Checkr", async () => {
+    stubApi([
+      requirement({
+        id: "manual",
+        kind: "background_check",
+        title: "Background check",
+      }),
+    ]);
+    await render();
+    expect(rows("With Acme")).toEqual([
+      { badge: "Not started", title: "Background check" },
+    ]);
+    expect(section("With Acme").textContent).toContain(
+      "Acme runs this check and contacts you if it needs anything.",
+    );
+
+    await render("/me/requests/manual");
+    expect(container.querySelector("h1")?.textContent).toBe("Background check");
+    expect(container.textContent).toContain("Requested byAcme");
+    expect(container.textContent).toContain(
+      "There’s nothing for you to do here.",
+    );
+    expect(container.textContent).not.toContain("Start background check");
+  });
+
+  it("says a Checkr background check is coming before it's requested", async () => {
+    stubApi([
+      requirement({
+        checkrAvailable: true,
+        id: "later",
+        kind: "background_check",
+        title: "Background check",
+      }),
+    ]);
+    await render("/me/requests/later");
+    expect(container.textContent).toContain(
+      "Acme hasn’t sent you this check yet. When it does, you’ll get an email and can start it from My documents.",
+    );
+  });
+
+  it("starts the background check from its request page", async () => {
+    stubApi(requests);
+    await render("/me/requests/check");
+    expect(container.textContent).toContain("Work locationAustin, TX");
+    const start = [...container.querySelectorAll("a")].find(
+      (element) => element.textContent === "Start background check",
+    );
+    expect(start?.getAttribute("href")).toBe("/me/screening/check");
+  });
+
+  it("uploads a form from its request page", async () => {
+    const calls = stubApi([requirement({ id: "w4", title: "W-4" })]);
+    await render("/me/requests/w4");
+    expect(container.textContent).toContain("Upload a PDF, JPEG, or PNG.");
+    const input = container.querySelector<HTMLInputElement>("input[type=file]");
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: { 0: new File(["PDF"], "w4.pdf"), length: 1 },
+    });
+    await act(async () => {
+      input?.dispatchEvent(new dom.Event("change", { bubbles: true }) as never);
+    });
+    expect(calls).toContainEqual({
+      method: "POST",
+      url: "http://localhost:8787/api/employee-forms/w4/document",
+    });
+    expect(container.textContent).toContain("W-4 sent.");
+  });
+
+  it("does not show a request that isn't the person's", async () => {
+    stubApi(requests);
+    await render("/me/requests/another-person");
+    expect(container.textContent).toContain(
+      "This request isn’t in your documents.",
     );
   });
 });

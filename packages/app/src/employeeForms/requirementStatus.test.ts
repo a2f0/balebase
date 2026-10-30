@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import {
   localDate,
+  managerNextStep,
   personalRequirement,
   requirementBadge,
 } from "./requirementStatus";
@@ -151,5 +152,98 @@ describe("a request in My documents", () => {
 
   it("dates today where the person is", () => {
     expect(localDate(new Date(2026, 0, 5, 23, 30))).toBe("2026-01-05");
+  });
+});
+
+describe("a manager's next step", () => {
+  it("says why a check can't be ordered without Checkr", () => {
+    expect(managerNextStep(check({ checkrAvailable: false }))).toBe(
+      "Checkr isn’t set up in Balebase yet, so Balebase can’t order this check. Run it yourself, then set its status here as it moves along. The person sees the status in My documents.",
+    );
+    expect(
+      managerNextStep(
+        check({ checkrAvailable: false, memberId: null, targetName: "Pat" }),
+      ),
+    ).toBe(
+      "Pat is no longer in the organization, so this check can’t be requested through Checkr.",
+    );
+    expect(
+      managerNextStep(check({ checkrAvailable: false, kind: "credit_check" })),
+    ).toContain("doesn’t order credit checks");
+    expect(
+      managerNextStep(check({ checkrAvailable: false, checkrRequested: true })),
+    ).toContain("Checkr isn’t set up in Balebase yet");
+    expect(
+      managerNextStep(
+        check({ checkrReportStatus: "canceled", kind: "credit_check" }),
+      ),
+    ).toBe(
+      "Checkr canceled this report. Run the check yourself, then set its status here.",
+    );
+  });
+
+  it("walks a Checkr background check through each stage", () => {
+    const pat = { targetName: "Pat" };
+    expect(managerNextStep(check(pat))).toContain(
+      "Enter the state (and optionally the city) where Pat will work",
+    );
+    expect(managerNextStep(check({ ...pat, checkrRequested: true }))).toContain(
+      "Waiting for Pat to read the disclosures",
+    );
+    expect(
+      managerNextStep(
+        check({ ...pat, checkrRequested: true, checkrSubmitting: true }),
+      ),
+    ).toContain("Pat started submitting");
+    expect(
+      managerNextStep(
+        check({ checkrReportStatus: "pending", status: "in_progress" }),
+      ),
+    ).toContain("Checkr is preparing the report.");
+    expect(
+      managerNextStep(check({ checkrReportStatus: "suspended" })),
+    ).toContain("Checkr suspended the report");
+    expect(
+      managerNextStep(check({ checkrReportStatus: "canceled" })),
+    ).toContain("Request the check again");
+    expect(
+      managerNextStep(
+        check({ checkrAvailable: false, checkrReportStatus: "canceled" }),
+      ),
+    ).toBe(
+      "Checkr canceled this report. Run the check yourself, then set its status here.",
+    );
+    expect(
+      managerNextStep(
+        check({ checkrReportStatus: "complete", status: "complete" }),
+      ),
+    ).toBe("Complete. Review the report in Checkr before making a decision.");
+  });
+
+  it("tells a manager when a form is theirs to review", () => {
+    const form = { kind: "form" as const, targetEmail: "pat@example.com" };
+    expect(managerNextStep(check(form))).toBe(
+      "Waiting for pat@example.com to upload the file in My documents.",
+    );
+    expect(
+      managerNextStep(
+        check({
+          ...form,
+          documentFilename: "w4.pdf",
+          hasDocument: true,
+          status: "submitted",
+        }),
+      ),
+    ).toBe("Download w4.pdf to review it, then set its status to Complete.");
+    expect(
+      managerNextStep(
+        check({ ...form, invitationStatus: "pending", memberId: null }),
+      ),
+    ).toBe(
+      "Waiting for pat@example.com to accept their invitation and upload the file in My documents.",
+    );
+    expect(managerNextStep(check({ ...form, memberId: null }))).toBe(
+      "pat@example.com is no longer in the organization, so they can’t upload this form. Remove the request if you no longer need it.",
+    );
   });
 });
