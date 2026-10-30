@@ -296,6 +296,36 @@ real cloud credentials. Live verification, such as
 `bun run deploy:staging:verify`, and Scope assessments are separate opt-in
 commands.
 
+## Screenshots
+
+`bun run screenshots` captures the main workspace pages of the web app with
+Playwright's bundled Chromium. Install it once with
+`bun run --cwd packages/app-web browsers:install`. Extra arguments go to
+Playwright, so `bun run screenshots --project=mobile` captures one layout.
+
+The capture starts its own servers on ports 34010 and 34020 and never reuses
+running ones: the API over an in-memory database that
+`packages/api/scripts/screenshotSeed.ts` fills with one organization through
+the API's own routes, on a fixed clock, and the web app pointed at it. It needs
+no `.secrets` and reaches no deployed service. The capture lives in
+`packages/app-web/playwright.screenshots.config.ts` and
+`packages/app-web/screenshots/`, apart from every check and test suite.
+
+It writes `.screenshots/<layout>/<theme>/<screen>.png`, replacing only the PNGs
+of the layouts it captures:
+
+- layouts `web` (1440×900 at 2×, 2880×1800 pixels), `ipad` (iPad Pro 11,
+  1668×2388), and `mobile` (iPhone 13, 1170×1992);
+- themes `light` and `dark`, pinned through the stored theme preference;
+- screens `projects`, `issues`, `audits`, `equipment`, `businesses`,
+  `activity`, and `organization`, named in `screenshots/screens.ts`; a
+  gallery that shows them keeps these names.
+
+`.screenshots` is ignored. In a clone the matrix workspace manages, it links
+to that workspace's shared artifact store, so every clone reads the newest
+capture instead of recapturing; the store records the capture's commit in
+`.screenshots/capture.json`. No build or deploy captures or publishes them.
+
 ## Keep changes readable
 
 - Keep related behavior together. Extract a module when it has a clear job;

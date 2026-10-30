@@ -33,6 +33,10 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
+# Screenshot captures (CONTRIBUTING.md#screenshots). Most clones link this to
+# the shared store, so the pattern has no trailing slash.
+.screenshots
+
 # Private artifact-bound readiness reports (docs/readiness.md)
 .readiness/
 

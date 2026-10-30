@@ -35,6 +35,10 @@ so inspect them. Run reviews, version preparation, audits, infrastructure
 previews, interactive tools, and servers directly. Never narrow a suite or
 silence warnings to reduce output.
 
+Capture screenshots through the `take-screenshots` skill, not by running
+`bun run screenshots` directly, and check its `status` before anything
+publishes them; [CONTRIBUTING.md](CONTRIBUTING.md#screenshots) has the layout.
+
 The skills in `.claude/skills` and `.agents/skills`, and the permission rules
 in `.claude/settings.json` and `.codex/rules/agent-tool.rules`, come from the
 pinned `@a2f0/agent-tool`; do not edit them. Classify the executables agents

@@ -80,8 +80,17 @@ const packageWorkspaces: Record<string, PackageWorkspace> = {
   },
   "packages/app-web": {
     // The browser tests generate an entry script that imports this fixture.
-    entry: ["browser/**/*.test.ts", "browser/updatesFixture.tsx"],
-    project: ["src/**/*.{css,ts,tsx}", "browser/**/*.{ts,tsx}"],
+    // The screenshot config's testMatch finds the capture specs.
+    entry: [
+      "browser/**/*.test.ts",
+      "browser/updatesFixture.tsx",
+      "screenshots/**/*.capture.ts",
+    ],
+    project: [
+      "src/**/*.{css,ts,tsx}",
+      "browser/**/*.{ts,tsx}",
+      "screenshots/**/*.ts",
+    ],
     production: ["src/**/*.{ts,tsx}!"],
   },
   "packages/ui": {

@@ -13,6 +13,8 @@
     "browser/**/*.ts",
     "browser/**/*.tsx",
     "searchIndexing.test.ts",
+    "screenshots/**/*.ts",
+    "playwright.screenshots.config.ts",
     "vite.config.ts",
     "offlineShell.ts"
   ]
