@@ -77,43 +77,10 @@ export function MyRequirementPage({
               }
               title="Details"
             >
-              <dl className="keyValue">
-                <dt>Type</dt>
-                <dd>{requirementKinds[requirement.kind].label}</dd>
-                <dt>Requested by</dt>
-                <dd>{organizationName}</dd>
-                <dt>Status</dt>
-                <dd>
-                  <StatusBadge requirement={requirement} />
-                </dd>
-                <dt>Due</dt>
-                <dd>{formatCalendarDate(requirement.dueDate)}</dd>
-                {requirement.completedAt && (
-                  <>
-                    <dt>Completed</dt>
-                    <dd>{formatDate(requirement.completedAt)}</dd>
-                  </>
-                )}
-                {requirement.checkrWorkLocation && (
-                  <>
-                    <dt>Work location</dt>
-                    <dd>
-                      {[
-                        requirement.checkrWorkLocation.city,
-                        requirement.checkrWorkLocation.state,
-                      ]
-                        .filter(Boolean)
-                        .join(", ")}
-                    </dd>
-                  </>
-                )}
-                {requirement.documentFilename && (
-                  <>
-                    <dt>Your file</dt>
-                    <dd>{requirement.documentFilename}</dd>
-                  </>
-                )}
-              </dl>
+              <MyRequirementFacts
+                organizationName={organizationName}
+                requirement={requirement}
+              />
             </Card>
             <Card title="What happens next">
               <p>
@@ -139,4 +106,52 @@ export function MyRequirementPage({
 function StatusBadge({ requirement }: { requirement: EmployeeRequirement }) {
   const { badge } = personalRequirement(requirement, localDate());
   return <Badge tone={badge.tone}>{badge.label}</Badge>;
+}
+
+function MyRequirementFacts({
+  organizationName,
+  requirement,
+}: {
+  organizationName: string;
+  requirement: EmployeeRequirement;
+}) {
+  return (
+    <dl className="keyValue">
+      <dt>Type</dt>
+      <dd>{requirementKinds[requirement.kind].label}</dd>
+      <dt>Requested by</dt>
+      <dd>{organizationName}</dd>
+      <dt>Status</dt>
+      <dd>
+        <StatusBadge requirement={requirement} />
+      </dd>
+      <dt>Due</dt>
+      <dd>{formatCalendarDate(requirement.dueDate)}</dd>
+      {requirement.completedAt && (
+        <>
+          <dt>Completed</dt>
+          <dd>{formatDate(requirement.completedAt)}</dd>
+        </>
+      )}
+      {requirement.checkrWorkLocation && (
+        <>
+          <dt>Work location</dt>
+          <dd>
+            {[
+              requirement.checkrWorkLocation.city,
+              requirement.checkrWorkLocation.state,
+            ]
+              .filter(Boolean)
+              .join(", ")}
+          </dd>
+        </>
+      )}
+      {requirement.documentFilename && (
+        <>
+          <dt>Your file</dt>
+          <dd>{requirement.documentFilename}</dd>
+        </>
+      )}
+    </dl>
+  );
 }
