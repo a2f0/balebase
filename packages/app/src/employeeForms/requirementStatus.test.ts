@@ -170,6 +170,13 @@ describe("a manager's next step", () => {
     expect(
       managerNextStep(check({ checkrAvailable: false, kind: "credit_check" })),
     ).toContain("doesn’t order credit checks");
+    expect(
+      managerNextStep(
+        check({ checkrReportStatus: "canceled", kind: "credit_check" }),
+      ),
+    ).toBe(
+      "Checkr canceled this report. Run the check yourself, then set its status here.",
+    );
   });
 
   it("walks a Checkr background check through each stage", () => {
