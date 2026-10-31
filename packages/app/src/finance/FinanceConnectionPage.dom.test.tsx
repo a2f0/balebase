@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
+import type { ActivityPage } from "@balebase/validators/activity";
 import type {
   FinanceConnectionDetail,
   FinanceInstitutionHealth,
@@ -76,6 +77,37 @@ function health(
   };
 }
 
+/** The connection's own history: who connected it. */
+function history(): ActivityPage {
+  return {
+    events: [
+      {
+        action: "finance.connection_created",
+        actor: {
+          apiKey: null,
+          email: "person@example.com",
+          id: "user-1",
+          name: "Example Person",
+        },
+        details: {
+          institutionId: "ins_109508",
+          institutionName: "First Platypus Bank",
+        },
+        historical: false,
+        id: 1,
+        occurredAt: "2026-09-01T12:00:00.000Z",
+        root: {
+          id: "item-1",
+          label: "First Platypus Bank",
+          type: "finance_connection",
+        },
+        subject: { id: "item-1", type: "finance_connection" },
+      },
+    ],
+    nextCursor: null,
+  };
+}
+
 async function mountPage(onNavigate: (path: string) => void = () => undefined) {
   const view = await mount(
     <>
@@ -101,15 +133,19 @@ describe("Finance connection page", () => {
     stubClipboard(async (text) => void copied.push(text));
     const requests: string[] = [];
     respond(async (url) => {
-      requests.push(url.href);
-      return Response.json(detail());
+      requests.push(url.pathname);
+      return Response.json(
+        url.pathname.endsWith("/activity") ? history() : detail(),
+      );
     });
     await mountPage();
 
     expect(requests).toEqual([
-      expect.stringContaining("/api/finance/connections/item-1"),
+      "/api/finance/connections/item-1",
+      "/api/finance/connections/item-1/activity",
     ]);
     const text = container.textContent ?? "";
+    expect(text).toContain("Example Person connected a bank");
     expect(text).toContain("First Platypus Bank");
     expect(text).toContain("by Example Person");
     expect(text).toContain("42 transactions");
@@ -291,6 +327,7 @@ describe("Bank status", () => {
   it("checks for an outage only when asked while the connection works", async () => {
     const requests: string[] = [];
     respond(async (url) => {
+      if (url.pathname.endsWith("/activity")) return Response.json(history());
       requests.push(url.pathname);
       return Response.json(
         url.pathname.endsWith("/institution-health") ? health() : detail(),

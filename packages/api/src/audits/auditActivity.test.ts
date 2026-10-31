@@ -461,7 +461,7 @@ describe("audit activity", () => {
       other,
     );
     expect(globalHistory.body.events.map(({ action }) => action)).toEqual([
-      "audit.template_version_saved",
+      "audit.template_published",
     ]);
     const privateHistory = await jsonRequest<ActivityResponse>(
       fixture,

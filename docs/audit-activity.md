@@ -4,8 +4,9 @@ Activity is the shared history of consequential changes across Balebase. The
 checklist Audits feature is one producer alongside equipment, projects, issues,
 organization membership (roles, invitations, joining, leaving and removal),
 organization renames, deletion and restoration, group access, members'
-two-factor requirements, API keys, and transaction annotations, categories,
-and bank connection sync settings.
+two-factor requirements, API keys, transaction annotations and categories,
+bank connections (connecting, sync requests and settings, disconnecting, and
+deleting imported data), expense categories, and Pro checkout starts.
 The workspace page is `/activity`; individual records can expose the same
 events in their own history. Contract signing also has a
 separate history. Coverage is incremental: an empty shared feed does not prove
@@ -38,7 +39,12 @@ Use `activityBatch` with the request's API key so trigger and explicit events
 receive the same attribution. Audit failures must roll back the related change.
 Provider retries need a stable deduplication boundary. The current shared model
 requires a user actor; extending it to system/provider work needs an explicit
-actor model, never a fabricated human identity.
+actor model, never a fabricated human identity. Until then, maintenance jobs
+such as the discarded global form purge record no events: the projects that
+lose a purged form show no removal, and the job run keeps only its count.
+Stripe-driven subscription and seat changes and Plaid-driven connection status
+changes likewise stay in their current-state columns, Stripe's own history, and
+job runs.
 
 ## Reading and retaining history
 
@@ -46,36 +52,47 @@ actor model, never a fabricated human identity.
 cursor pagination. Its optional `resourceType` filter selects the root type
 before pagination. The Activity page offers all resources, audits, forms,
 workspace issues, equipment, projects, the organization, people, invitations,
-groups, API keys, transactions, and bank connections. Audit and transaction
-filters include issues attached to those roots; workspace issues are
-standalone issues. Transaction and bank connection
-activity requires Finance capability even when a caller supplies the filter
-directly. Group events, invitation events (they name invited addresses),
-two-factor requirement changes, and the organization's deletion and
-restoration are visible only to organization owners and admins, as group
-details, pending invitations and member security settings already are.
-Everyone in the organization sees people joining, leaving, being removed or
-changing role, and organization renames. Root admins read the organization's
-own history (renames, deletion and restoration) on its admin detail page,
-including while it is deleted. The MCP `list_activity` tool accepts the same optional
+groups, API keys, transactions, bank connections, expense categories, and
+billing. Audit and transaction filters include issues attached to those roots;
+workspace issues are standalone issues. Transaction, bank connection, and
+expense category activity requires Finance capability even when a caller
+supplies the filter directly. Group events, invitation events (they name
+invited addresses), two-factor requirement changes, billing events, and the
+organization's deletion and restoration are visible only to organization
+owners and admins, as group details, pending invitations, member security
+settings, and billing management already are. Everyone in the organization
+sees people joining, leaving, being removed or changing role, and
+organization renames. Root admins read the organization's own history
+(renames, deletion and restoration) on its admin detail page, including while
+it is deleted. The MCP `list_activity` tool accepts the same optional
 `resourceType`; keep that filter when passing the next cursor.
 
 Resource history routes authorize the resource before using `findActivity`.
+A bank connection's history (`GET /api/finance/connections/:id/activity`, MCP
+`list_finance_connection_activity`) stays readable after it is disconnected.
 Shared global form history only exposes published versions to organization
-members. Adding a producer with restricted details also requires reviewing
-the shared feed's reader permissions, labels, and navigation.
+members. Form events name the version they saved: creation (with the global
+form a copy came from and the published version it started from), saved
+versions, publication,
+unpublication, discards, and restores. Organizations therefore see a global
+form's publications but never its unpublications, discards, or restores.
+Adding a producer with restricted details also requires reviewing the shared
+feed's reader permissions, labels, and navigation.
 
 History follows the resource's documented retention. It is not an immutable
 compliance ledger. Purging an organization removes its activity; purging an
-audit run or form removes that root's history. Historical imports must be
-marked as such and contain only facts actually retained. Do not reconstruct
-unknown editors, previous values, or timestamps from current state.
+audit run or form removes that root's history. Deleting a disconnected bank
+connection's imported data removes that connection's and its transactions'
+history, but keeps one `finance.connection_data_deleted` event naming who
+deleted it and how many accounts, transactions, and annotations went. Historical
+imports must be marked as such and contain only facts actually retained. Do not
+reconstruct unknown editors, previous values, or timestamps from current state.
 
 ## Organization membership
 
 Better Auth's organization endpoints carry the request's actor into the write
 they make (`auth/organizationActivity.ts`), so the triggers of migrations 0057
-and 0080 record each change atomically with it: role changes, invitations
+and 0082 record each change atomically with it: role changes, invitations
 sent, canceled (including the cancel a re-invite makes) or declined, a person
 joining by invitation (actor: the person; details: the role and the inviter),
 and organization renames, URL name and logo changes. Removing a member and

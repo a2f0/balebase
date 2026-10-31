@@ -41,11 +41,12 @@ export interface ActivityActor {
 const pageSize = 50;
 
 /**
- * Access history only organization managers read: group grants and
- * revocations, invitations (invited addresses), members' two-factor
- * requirements, and the organization's deletion and restoration.
+ * History only organization managers read: group grants and revocations,
+ * invitations (invited addresses), members' two-factor requirements, billing,
+ * and the organization's deletion and restoration.
  */
-const managerOnlyActivity = `(root_type IN ('organization_group', 'organization_invitation')
+const managerOnlyActivity = `(root_type IN ('organization_group', 'organization_billing',
+                             'organization_invitation')
   OR action IN ('organization.member_two_factor_requirement_changed',
                 'organization.deletion_requested', 'organization.restored'))`;
 
@@ -73,7 +74,7 @@ export async function findActivity(
     organizationId === null ? [] : [organizationId];
   if (!includeFinance)
     filters.push(
-      "root_type NOT IN ('finance_transaction', 'finance_connection')",
+      "root_type NOT IN ('finance_transaction', 'finance_connection', 'finance_category')",
     );
   if (!includeManagerOnly) filters.push(`NOT ${managerOnlyActivity}`);
   if (resourceType) {

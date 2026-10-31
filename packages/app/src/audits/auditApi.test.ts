@@ -14,7 +14,8 @@ const respond = installFetch();
 describe("audit template API", () => {
   it("saves and copies a template against the version it was read at", async () => {
     const bodies: unknown[] = [];
-    const template = { ...exampleTemplate(), currentVersion: 3 };
+    // An older version is open: the copy names it as its source.
+    const template = { ...exampleTemplate(), currentVersion: 3, version: 2 };
     respond(async (_url, init) => {
       bodies.push(JSON.parse(String(init?.body)));
       return Response.json({ template });
@@ -28,7 +29,7 @@ describe("audit template API", () => {
       expectedCurrentVersion: 3,
       name: template.name,
     };
-    expect(bodies).toEqual([saved, saved]);
+    expect(bodies).toEqual([saved, { ...saved, sourceVersion: 2 }]);
   });
 });
 

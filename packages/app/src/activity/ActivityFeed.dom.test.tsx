@@ -142,11 +142,16 @@ describe("activity feed, mounted", () => {
     expect(requests.at(-1)?.search).toBe("?resourceType=finance_transaction");
     await choose("finance_connection");
     expect(requests.at(-1)?.search).toBe("?resourceType=finance_connection");
+    await choose("finance_category");
+    expect(requests.at(-1)?.search).toBe("?resourceType=finance_category");
+    // Billing is for organization managers.
+    expect(container.textContent).not.toContain("Billing");
     await view.render(<Activity onNavigate={() => {}} />);
     await settle();
     expect(requests.at(-1)?.search).toBe("");
     expect(container.textContent).not.toContain("Transactions");
     expect(container.textContent).not.toContain("Bank connections");
+    expect(container.textContent).not.toContain("Expense categories");
     await view.render(<Activity canAccessFinance onNavigate={() => {}} />);
     await settle();
     expect(container.querySelector("select")?.value).toBe("");
@@ -174,10 +179,21 @@ describe("activity feed, mounted", () => {
     });
     await settle();
     expect(requests.at(-1)?.search).toBe("?resourceType=organization_group");
+    await act(async () => {
+      if (select) {
+        select.value = "organization_billing";
+        select.dispatchEvent(
+          new dom.Event("change", { bubbles: true }) as unknown as Event,
+        );
+      }
+    });
+    await settle();
+    expect(requests.at(-1)?.search).toBe("?resourceType=organization_billing");
     // Losing manager access drops the filter.
     await view.render(<Activity onNavigate={() => {}} />);
     await settle();
     expect(container.textContent).not.toContain("Groups");
+    expect(container.textContent).not.toContain("Billing");
     expect(requests.at(-1)?.search).toBe("");
   });
 
@@ -704,4 +720,164 @@ it("names who changed an expense category, using the names recorded then", async
   expect(rows[1]).toContain("Sam changed the expense category");
   expect(rows[1]).toContain("Deleted category→changed toMeals");
   expect(rows[2]).toContain("Uncategorized→changed toTravel");
+});
+
+it("summarizes bank, category, and billing changes and links what still exists", async () => {
+  const change = (
+    id: number,
+    action: string,
+    type: string,
+    details: ActivityEvent["details"],
+    label = "First Bank",
+  ): ActivityEvent => ({
+    ...event(id, ""),
+    action,
+    details,
+    root: { id: `${type}-1`, label, type },
+    subject: { id: `${type}-1`, type },
+  });
+  const changes = [
+    change(
+      7,
+      "billing.checkout_started",
+      "organization_billing",
+      {
+        checkoutSessionId: "cs_1",
+        priceId: "price_1",
+        quantity: 3,
+      },
+      "Acme",
+    ),
+    change(6, "finance.connection_data_deleted", "finance_connection", {
+      accountCount: 2,
+      annotationCount: 1,
+      institutionName: "First Bank",
+      transactionCount: 40,
+    }),
+    change(5, "finance.connection_created", "finance_connection", {
+      institutionId: "ins_1",
+      institutionName: "First Bank",
+    }),
+    change(
+      4,
+      "finance.category_renamed",
+      "finance_category",
+      {
+        afterName: "Team meals",
+        afterSlug: "team-meals",
+        beforeName: "Meals",
+        beforeSlug: "meals",
+      },
+      "Team meals",
+    ),
+    change(
+      3,
+      "finance.category_deleted",
+      "finance_category",
+      {
+        name: "Fuel",
+        slug: "fuel",
+        transactionCount: 1,
+      },
+      "Fuel",
+    ),
+    change(
+      2,
+      "finance.categories_defaults_added",
+      "finance_category",
+      {
+        names: ["Insurance", "Travel"],
+      },
+      "Expense categories",
+    ),
+    change(
+      1,
+      "finance.category_created",
+      "finance_category",
+      {
+        name: "Meals",
+        slug: "meals",
+      },
+      "Meals",
+    ),
+  ];
+  respond(async () => Response.json({ events: changes, nextCursor: null }));
+  const paths: string[] = [];
+  ({ container } = await mount(
+    <ActivityFeed onNavigate={(path) => paths.push(path)} />,
+  ));
+  const rows = [...container.querySelectorAll(".activityRow")].map(
+    (row) => row.textContent ?? "",
+  );
+  expect(rows[0]).toContain("Sam started Pro checkout");
+  expect(rows[0]).toContain("Pro for 3 seats");
+  expect(rows[1]).toContain("deleted a bank's imported data");
+  expect(rows[1]).toContain(
+    "Deleted 2 accounts, 40 transactions, and 1 annotation",
+  );
+  expect(rows[2]).toContain("Sam connected a bank");
+  expect(rows[3]).toContain("Meals → Team meals");
+  expect(rows[4]).toContain("Fuel · 1 transaction left uncategorized");
+  expect(rows[5]).toContain("Insurance, Travel");
+  expect(rows[6]).toContain("created an expense category");
+  // Deleted data has no connection page left to open.
+  expect(
+    container.querySelectorAll(".activityRow")[1]?.querySelector("button"),
+  ).toBeNull();
+  await click("Open billing");
+  await click("Open connection");
+  expect(paths).toEqual([
+    "/organization/billing",
+    "/finance/connections/finance_connection-1",
+  ]);
+  expect(
+    [...container.querySelectorAll("button")].filter(
+      (button) => button.textContent === "Open categories",
+    ),
+  ).toHaveLength(4);
+});
+
+it("names form publication changes and a copied form's source", async () => {
+  const form = (
+    id: number,
+    action: string,
+    details: Record<string, unknown>,
+  ): ActivityEvent => ({
+    ...event(id, ""),
+    action,
+    root: { type: "audit_template", id: "form-1", label: "Site walk" },
+    subject: { type: "audit_template", id: "form-1" },
+    details,
+  });
+  const changes = [
+    form(5, "audit.template_created", {
+      copiedFrom: { name: "Ladder check", templateId: "ladder", version: null },
+      version: 1,
+    }),
+    form(4, "audit.template_unpublished", { version: 4 }),
+    form(3, "audit.template_version_saved", { version: 3 }),
+    form(2, "audit.template_published", { version: 2 }),
+    form(1, "audit.template_created", {
+      copiedFrom: { name: "NFPA 70E", templateId: "nfpa", version: 5 },
+      version: 1,
+    }),
+  ];
+  respond(async () => Response.json({ events: changes, nextCursor: null }));
+  ({ container } = await mount(
+    <ActivityFeed source={{ type: "audit_template", id: "form-1" }} />,
+  ));
+  const rows = [...container.querySelectorAll(".activityRow")].map(
+    (row) => row.textContent ?? "",
+  );
+  expect(rows).toHaveLength(5);
+  // A copy whose client named no version records only the form.
+  expect(rows[0]).toContain("Version 1 · Copied from Ladder check");
+  expect(rows[0]).not.toContain("Ladder check, version");
+  expect(rows[1]).toContain("Sam unpublished the form");
+  expect(rows[1]).toContain("Version 4");
+  expect(rows[2]).toContain("Sam saved a form version");
+  expect(rows[3]).toContain("Sam published the form");
+  expect(rows[4]).toContain("Sam created the form");
+  expect(rows[4]).toContain("Version 1 · Copied from NFPA 70E, version 5");
+  expect(rows[2]).not.toContain("Copied from");
 });

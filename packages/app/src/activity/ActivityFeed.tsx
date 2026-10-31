@@ -20,7 +20,9 @@ import { useCursorPages } from "../shared/useCursorPages";
 import {
   auditRunPath,
   auditTemplatePath,
+  billingPath,
   equipmentPath,
+  financeCategoriesPath,
   financeConnectionPath,
   financeTransactionPath,
   issuePath,
@@ -34,6 +36,7 @@ import {
   EquipmentActivityDetails,
   equipmentActivitySummary,
 } from "./EquipmentActivity";
+import { financeActionLabels, financeActivitySummary } from "./financeActivity";
 import { groupActivitySummary } from "./groupActivity";
 import {
   membershipSummary,
@@ -70,7 +73,9 @@ const actionLabels: Record<string, string> = {
   "audit.started": "started the audit",
   "audit.template_created": "created the form",
   "audit.template_discarded": "discarded the form",
+  "audit.template_published": "published the form",
   "audit.template_restored": "restored the form",
+  "audit.template_unpublished": "unpublished the form",
   "audit.template_version_saved": "saved a form version",
   "equipment.assigned": "changed the equipment assignee",
   "equipment.created": "added equipment",
@@ -89,6 +94,7 @@ const actionLabels: Record<string, string> = {
   "project.member_added": "added a project member",
   "project.member_removed": "removed a project member",
   "project.updated": "edited a project",
+  ...financeActionLabels,
   ...organizationActionLabels,
 };
 
@@ -293,13 +299,13 @@ const membershipActions = new Set([
 
 function activitySummary(event: ActivityEvent) {
   const { details } = event;
-  if (event.action === "finance.daily_sync_changed")
-    return `Daily sync ${details.before ? "on" : "off"} → ${details.after ? "on" : "off"}`;
   if (event.action === "finance.transaction_annotated")
     return "Annotation changes";
   if (event.action === "finance.transaction_categorized") {
     return `${categoryLabel(details.before, details.beforeName)} → ${categoryLabel(details.after, details.afterName)}`;
   }
+  const financeSummary = financeActivitySummary(event);
+  if (financeSummary !== undefined) return financeSummary;
   const rootSummary = rootSummaries[event.root.type];
   if (rootSummary) return rootSummary(event);
   if (event.action === "audit.answer_changed") {
@@ -352,8 +358,8 @@ function ActivityRow({
   );
 }
 
-/** Roots whose expanded details are their one-line summary. */
-const oneLineDetails: Partial<
+/** Details that are the root's one-line summary. */
+const detailSummaries: Partial<
   Record<string, (event: ActivityEvent) => string>
 > = {
   api_key: apiKeySummary,
@@ -365,16 +371,16 @@ const oneLineDetails: Partial<
 
 function ActivityDetails({ event }: { event: ActivityEvent }) {
   const details = event.details;
-  if (event.action === "finance.daily_sync_changed")
-    return <p>{activitySummary(event)}</p>;
+  const summary =
+    financeActivitySummary(event) ??
+    (membershipActions.has(event.action)
+      ? membershipSummary(event)
+      : detailSummaries[event.root.type]?.(event));
+  if (summary !== undefined)
+    return <p className="activityDetails">{summary}</p>;
   if (event.root.type === "equipment") {
     return <EquipmentActivityDetails event={event} />;
   }
-  const lineDetails = membershipActions.has(event.action)
-    ? membershipSummary
-    : oneLineDetails[event.root.type];
-  if (lineDetails)
-    return <p className="activityDetails">{lineDetails(event)}</p>;
   if (
     event.action === "finance.transaction_annotated" ||
     event.action === "issue.updated"
@@ -474,16 +480,35 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
       );
     case "audit.template_created":
     case "audit.template_discarded":
+    case "audit.template_published":
     case "audit.template_restored":
+    case "audit.template_unpublished":
     case "audit.template_version_saved":
-      return (
-        <p className="activityDetails">Version {textValue(details.version)}</p>
-      );
+      return <TemplateDetails details={details} />;
     default:
       return details.title ? (
         <p className="activityDetails">{textValue(details.title)}</p>
       ) : null;
   }
+}
+
+/** A form version, and the published global version a copy started from. */
+function TemplateDetails({ details }: { details: ActivityEvent["details"] }) {
+  const source = details.copiedFrom;
+  const copiedVersion =
+    typeof source === "object" && source !== null
+      ? textValue(Reflect.get(source, "version"))
+      : "";
+  const copied =
+    typeof source === "object" && source !== null
+      ? ` · Copied from ${textValue(Reflect.get(source, "name")) || "a global form"}${copiedVersion && `, version ${copiedVersion}`}`
+      : null;
+  return (
+    <p className="activityDetails">
+      Version {textValue(details.version)}
+      {copied}
+    </p>
+  );
 }
 
 function MemberRoleDetails({ event }: { event: ActivityEvent }) {
@@ -524,10 +549,7 @@ function categoryLabel(id: unknown, name: unknown) {
 function activityPath(event: ActivityEvent) {
   if (event.subject.type === "issue" || event.subject.type === "audit_issue")
     return issuePath(event.subject.id);
-  if (event.root.type === "finance_connection")
-    return financeConnectionPath(event.root.id);
-  if (event.root.type === "finance_transaction")
-    return financeTransactionPath(event.root.id);
+  if (event.root.type.startsWith("finance_")) return financeActivityPath(event);
   // Deleted equipment has no page to open.
   if (event.root.type === "equipment") {
     return event.action === "equipment.deleted"
@@ -547,6 +569,18 @@ function activityPath(event: ActivityEvent) {
   return undefined;
 }
 
+function financeActivityPath(event: ActivityEvent) {
+  // Deleting a connection's data also deletes its page.
+  if (event.root.type === "finance_connection")
+    return event.action === "finance.connection_data_deleted"
+      ? undefined
+      : financeConnectionPath(event.root.id);
+  if (event.root.type === "finance_category") return financeCategoriesPath;
+  if (event.root.type === "finance_transaction")
+    return financeTransactionPath(event.root.id);
+  return undefined;
+}
+
 function organizationActivityPath(event: ActivityEvent) {
   // People who left or were removed have no member page.
   if (event.root.type === "organization_member")
@@ -554,6 +588,7 @@ function organizationActivityPath(event: ActivityEvent) {
       event.action === "organization.member_removed"
       ? undefined
       : organizationPeoplePath(event.root.id);
+  if (event.root.type === "organization_billing") return billingPath;
   // Groups have no page of their own; deleted ones have nowhere to go.
   if (event.root.type === "organization_group")
     return event.action === "organization.group_deleted"
@@ -566,6 +601,8 @@ function activityLinkLabel(event: ActivityEvent) {
   if (event.subject.type === "issue" || event.subject.type === "audit_issue")
     return "Open issue";
   if (event.root.type === "finance_connection") return "Open connection";
+  if (event.root.type === "finance_category") return "Open categories";
+  if (event.root.type === "organization_billing") return "Open billing";
   if (event.root.type === "finance_transaction") return "Open transaction";
   if (event.root.type === "equipment") return "Open equipment";
   if (event.root.type === "organization_member") return "Open member";

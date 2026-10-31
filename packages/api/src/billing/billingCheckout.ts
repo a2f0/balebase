@@ -1,3 +1,4 @@
+import { type ActivityActor, activityBatch } from "../shared/activity";
 import type { Bindings } from "../types";
 import { paidStatusList } from "./billingEntitlements";
 import {
@@ -130,33 +131,71 @@ export async function attachCheckoutSessionToClaim(
     .run();
 }
 
+/**
+ * Stores the opened session as the organization's pending Checkout and, in the
+ * same batch, records who started it. A session is recorded once, even when a
+ * webhook attached it to the claim first.
+ */
 export async function storePendingCheckout(
   database: D1Database,
   organizationId: string,
   claimId: string,
   checkout: StripeCheckoutSession,
+  started: { actor: ActivityActor; priceId: string; quantity: number },
 ) {
-  const stored = await database
-    .prepare(
-      `UPDATE organization_billing
-       SET pending_checkout_session_id = ?, pending_checkout_url = ?,
-           pending_checkout_expires_at = ?, pending_checkout_retry_at = NULL,
-           ${clearCheckoutClaim},
-           updated_at = ?
-       WHERE organization_id = ?
-         AND (checkout_claim_id = ? OR pending_checkout_session_id = ?)`,
-    )
-    .bind(
-      checkout.id,
-      checkout.url,
-      checkout.expires_at,
-      new Date().toISOString(),
-      organizationId,
-      claimId,
-      checkout.id,
-    )
-    .run();
-  return Number(stored.meta.changes) > 0;
+  const now = new Date().toISOString();
+  const [stored] = await activityBatch(database, started.actor.apiKey, [
+    database
+      .prepare(
+        `UPDATE organization_billing
+         SET pending_checkout_session_id = ?, pending_checkout_url = ?,
+             pending_checkout_expires_at = ?, pending_checkout_retry_at = NULL,
+             ${clearCheckoutClaim},
+             updated_at = ?
+         WHERE organization_id = ?
+           AND (checkout_claim_id = ? OR pending_checkout_session_id = ?)`,
+      )
+      .bind(
+        checkout.id,
+        checkout.url,
+        checkout.expires_at,
+        now,
+        organizationId,
+        claimId,
+        checkout.id,
+      ),
+    database
+      .prepare(
+        `INSERT INTO activity_events (
+           organization_id, root_type, root_id, root_label, subject_type,
+           subject_id, action, actor_user_id, actor_name, actor_email,
+           occurred_at, details
+         )
+         SELECT organization.id, 'organization_billing', organization.id,
+                organization.name, 'billing_checkout', ?,
+                'billing.checkout_started', actor.id, actor.name, actor.email,
+                ?, json_object('checkoutSessionId', ?, 'priceId', ?,
+                               'quantity', ?)
+         FROM organization JOIN user AS actor ON actor.id = ?
+         WHERE organization.id = ? AND changes() > 0
+           AND NOT EXISTS (
+             SELECT 1 FROM activity_events
+             WHERE organization_id = organization.id
+               AND action = 'billing.checkout_started' AND subject_id = ?
+           )`,
+      )
+      .bind(
+        checkout.id,
+        now,
+        checkout.id,
+        started.priceId,
+        started.quantity,
+        started.actor.userId,
+        organizationId,
+        checkout.id,
+      ),
+  ]);
+  return Number(stored?.meta.changes) > 0;
 }
 
 export async function clearPendingCheckoutIfCurrent(
@@ -277,6 +316,7 @@ export function checkoutParameters(
   priceId: string,
   claim: BillingRow & { checkout_claim_id: string },
   inlineEmail: string | null,
+  startedBy: string,
 ) {
   const successUrl = `${origin}/organization/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
   const parameters = new URLSearchParams({
@@ -284,8 +324,11 @@ export function checkoutParameters(
     "line_items[0][quantity]": String(claim.checkout_claim_quantity),
     "metadata[checkout_claim_id]": claim.checkout_claim_id,
     "metadata[organization_id]": organizationId,
+    // The Balebase user who started Checkout, so Stripe's records name them.
+    "metadata[started_by_user_id]": startedBy,
     "subscription_data[metadata][checkout_claim_id]": claim.checkout_claim_id,
     "subscription_data[metadata][organization_id]": organizationId,
+    "subscription_data[metadata][started_by_user_id]": startedBy,
     client_reference_id: organizationId,
     expires_at: String(claim.checkout_claim_expires_at),
     mode: "subscription",

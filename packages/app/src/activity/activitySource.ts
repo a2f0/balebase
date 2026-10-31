@@ -11,6 +11,7 @@ export type ActivitySource =
         | "equipment"
         | "issue"
         | "project"
+        | "finance_connection"
         | "finance_transaction"
         | "global_audit_template";
     }
@@ -37,6 +38,8 @@ export function listActivity(
       return api.audits.templateActivity(id, cursor);
     case "equipment":
       return api.equipment.activity(id, cursor);
+    case "finance_connection":
+      return api.finance.connectionActivity(id, cursor);
     case "finance_transaction":
       return api.finance.transactionActivity(id, cursor);
     case "global_audit_template":

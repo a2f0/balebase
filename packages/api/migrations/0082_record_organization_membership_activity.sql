@@ -2,7 +2,7 @@
 -- them. As in 0057, the request's actor travels in the same write as the
 -- change, so each trigger commits its event atomically with it. Member removal
 -- and organization deletion and restoration record their events in the API's
--- own batches (organizationActivity.ts and organizationDeletion.ts).
+-- own batches (memberRemoval.ts and organizationDeletion.ts).
 ALTER TABLE invitation ADD COLUMN activity_actor_id TEXT
   REFERENCES user (id) ON DELETE RESTRICT;
 ALTER TABLE organization ADD COLUMN activity_actor_id TEXT
