@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import { lineName } from "./fields";
 import { LinkedEmailSchema } from "./inbox";
 import { route } from "./route";
@@ -42,6 +43,12 @@ export const libraryFoldersRoutes = {
     method: "GET",
     path: "/api/library/folders/:id",
     response: LibraryFolderDetailSchema,
+  }),
+  activity: route({
+    method: "GET",
+    path: "/api/library/folders/:id/activity",
+    query: ActivityQuerySchema,
+    response: ActivityPageSchema,
   }),
   rename: route({
     method: "PATCH",

@@ -40,7 +40,7 @@ accountSettings.patch("/default-organization", async (context) => {
 });
 
 // Triggers record these when Better Auth changes the person's two-factor
-// setting or password (migration 0080). Only the person reads them here; root
+// setting or password (migration 0082). Only the person reads them here; root
 // admins read them in D1.
 accountSettings.get("/security-events", async (context) => {
   const { results } = await context.env.DB.prepare(

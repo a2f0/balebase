@@ -142,11 +142,16 @@ describe("activity feed, mounted", () => {
     expect(requests.at(-1)?.search).toBe("?resourceType=finance_transaction");
     await choose("finance_connection");
     expect(requests.at(-1)?.search).toBe("?resourceType=finance_connection");
+    await choose("finance_category");
+    expect(requests.at(-1)?.search).toBe("?resourceType=finance_category");
+    // Billing is for organization managers.
+    expect(container.textContent).not.toContain("Billing");
     await view.render(<Activity onNavigate={() => {}} />);
     await settle();
     expect(requests.at(-1)?.search).toBe("");
     expect(container.textContent).not.toContain("Transactions");
     expect(container.textContent).not.toContain("Bank connections");
+    expect(container.textContent).not.toContain("Expense categories");
     await view.render(<Activity canAccessFinance onNavigate={() => {}} />);
     await settle();
     expect(container.querySelector("select")?.value).toBe("");
@@ -174,10 +179,21 @@ describe("activity feed, mounted", () => {
     });
     await settle();
     expect(requests.at(-1)?.search).toBe("?resourceType=organization_group");
+    await act(async () => {
+      if (select) {
+        select.value = "organization_billing";
+        select.dispatchEvent(
+          new dom.Event("change", { bubbles: true }) as unknown as Event,
+        );
+      }
+    });
+    await settle();
+    expect(requests.at(-1)?.search).toBe("?resourceType=organization_billing");
     // Losing manager access drops the filter.
     await view.render(<Activity onNavigate={() => {}} />);
     await settle();
     expect(container.textContent).not.toContain("Groups");
+    expect(container.textContent).not.toContain("Billing");
     expect(requests.at(-1)?.search).toBe("");
   });
 
@@ -704,4 +720,274 @@ it("names who changed an expense category, using the names recorded then", async
   expect(rows[1]).toContain("Sam changed the expense category");
   expect(rows[1]).toContain("Deleted category→changed toMeals");
   expect(rows[2]).toContain("Uncategorized→changed toTravel");
+});
+
+it("summarizes bank, category, and billing changes and links what still exists", async () => {
+  const change = (
+    id: number,
+    action: string,
+    type: string,
+    details: ActivityEvent["details"],
+    label = "First Bank",
+  ): ActivityEvent => ({
+    ...event(id, ""),
+    action,
+    details,
+    root: { id: `${type}-1`, label, type },
+    subject: { id: `${type}-1`, type },
+  });
+  const changes = [
+    change(
+      7,
+      "billing.checkout_started",
+      "organization_billing",
+      {
+        checkoutSessionId: "cs_1",
+        priceId: "price_1",
+        quantity: 3,
+      },
+      "Acme",
+    ),
+    change(6, "finance.connection_data_deleted", "finance_connection", {
+      accountCount: 2,
+      annotationCount: 1,
+      institutionName: "First Bank",
+      transactionCount: 40,
+    }),
+    change(5, "finance.connection_created", "finance_connection", {
+      institutionId: "ins_1",
+      institutionName: "First Bank",
+    }),
+    change(
+      4,
+      "finance.category_renamed",
+      "finance_category",
+      {
+        afterName: "Team meals",
+        afterSlug: "team-meals",
+        beforeName: "Meals",
+        beforeSlug: "meals",
+      },
+      "Team meals",
+    ),
+    change(
+      3,
+      "finance.category_deleted",
+      "finance_category",
+      {
+        name: "Fuel",
+        slug: "fuel",
+        transactionCount: 1,
+      },
+      "Fuel",
+    ),
+    change(
+      2,
+      "finance.categories_defaults_added",
+      "finance_category",
+      {
+        names: ["Insurance", "Travel"],
+      },
+      "Expense categories",
+    ),
+    change(
+      1,
+      "finance.category_created",
+      "finance_category",
+      {
+        name: "Meals",
+        slug: "meals",
+      },
+      "Meals",
+    ),
+  ];
+  respond(async () => Response.json({ events: changes, nextCursor: null }));
+  const paths: string[] = [];
+  ({ container } = await mount(
+    <ActivityFeed onNavigate={(path) => paths.push(path)} />,
+  ));
+  const rows = [...container.querySelectorAll(".activityRow")].map(
+    (row) => row.textContent ?? "",
+  );
+  expect(rows[0]).toContain("Sam started Pro checkout");
+  expect(rows[0]).toContain("Pro for 3 seats");
+  expect(rows[1]).toContain("deleted a bank's imported data");
+  expect(rows[1]).toContain(
+    "Deleted 2 accounts, 40 transactions, and 1 annotation",
+  );
+  expect(rows[2]).toContain("Sam connected a bank");
+  expect(rows[3]).toContain("Meals → Team meals");
+  expect(rows[4]).toContain("Fuel · 1 transaction left uncategorized");
+  expect(rows[5]).toContain("Insurance, Travel");
+  expect(rows[6]).toContain("created an expense category");
+  // Deleted data has no connection page left to open.
+  expect(
+    container.querySelectorAll(".activityRow")[1]?.querySelector("button"),
+  ).toBeNull();
+  await click("Open billing");
+  await click("Open connection");
+  expect(paths).toEqual([
+    "/organization/billing",
+    "/finance/connections/finance_connection-1",
+  ]);
+  expect(
+    [...container.querySelectorAll("button")].filter(
+      (button) => button.textContent === "Open categories",
+    ),
+  ).toHaveLength(4);
+});
+
+it("names form publication changes and a copied form's source", async () => {
+  const form = (
+    id: number,
+    action: string,
+    details: Record<string, unknown>,
+  ): ActivityEvent => ({
+    ...event(id, ""),
+    action,
+    root: { type: "audit_template", id: "form-1", label: "Site walk" },
+    subject: { type: "audit_template", id: "form-1" },
+    details,
+  });
+  const changes = [
+    form(5, "audit.template_created", {
+      copiedFrom: { name: "Ladder check", templateId: "ladder", version: null },
+      version: 1,
+    }),
+    form(4, "audit.template_unpublished", { version: 4 }),
+    form(3, "audit.template_version_saved", { version: 3 }),
+    form(2, "audit.template_published", { version: 2 }),
+    form(1, "audit.template_created", {
+      copiedFrom: { name: "NFPA 70E", templateId: "nfpa", version: 5 },
+      version: 1,
+    }),
+  ];
+  respond(async () => Response.json({ events: changes, nextCursor: null }));
+  ({ container } = await mount(
+    <ActivityFeed source={{ type: "audit_template", id: "form-1" }} />,
+  ));
+  const rows = [...container.querySelectorAll(".activityRow")].map(
+    (row) => row.textContent ?? "",
+  );
+  expect(rows).toHaveLength(5);
+  // A copy whose client named no version records only the form.
+  expect(rows[0]).toContain("Version 1 · Copied from Ladder check");
+  expect(rows[0]).not.toContain("Ladder check, version");
+  expect(rows[1]).toContain("Sam unpublished the form");
+  expect(rows[1]).toContain("Version 4");
+  expect(rows[2]).toContain("Sam saved a form version");
+  expect(rows[3]).toContain("Sam published the form");
+  expect(rows[4]).toContain("Sam created the form");
+  expect(rows[4]).toContain("Version 1 · Copied from NFPA 70E, version 5");
+  expect(rows[2]).not.toContain("Copied from");
+});
+
+it("shows library, inbox, and business events, linking to records that remain", async () => {
+  const recorded = (
+    id: number,
+    action: string,
+    root: ActivityEvent["root"],
+    details: ActivityEvent["details"],
+  ): ActivityEvent => ({
+    ...event(id, ""),
+    action,
+    details,
+    root,
+    subject: { id: "email-1", type: "inbound_email" },
+  });
+  const business = { id: "b1", label: "Acme Holdings", type: "business" };
+  respond(async () =>
+    Response.json({
+      events: [
+        recorded(70, "business.updated", business, {
+          changes: [
+            { after: "Acme Holdings", before: "Acme", field: "name" },
+            { after: null, before: "•••4321", field: "ein" },
+          ],
+        }),
+        recorded(
+          69,
+          "business.deleted",
+          { id: "b2", label: "Old Co", type: "business" },
+          { duns: null, ein: "•••1111", name: "Old Co" },
+        ),
+        recorded(
+          68,
+          "inbox.email_linked",
+          { id: "equipment-1", label: "Dell XPS 13", type: "equipment" },
+          { from: "sender@example.com", subject: "Lease renewal" },
+        ),
+        recorded(
+          67,
+          "inbox.email_restored",
+          { id: "email-1", label: "Lease renewal", type: "inbound_email" },
+          { from: "sender@example.com", fromStatus: "trash" },
+        ),
+        recorded(
+          66,
+          "library.folder_deleted",
+          { id: "f1", label: "Taxes", type: "library_folder" },
+          { emailLinkCount: 1, fileCount: 2, name: "Taxes" },
+        ),
+        recorded(
+          65,
+          "library.file_moved",
+          { id: "file-1", label: "w2.pdf", type: "library_file" },
+          {
+            filename: "w2.pdf",
+            fromFolderId: "f1",
+            fromFolderName: "Taxes",
+            toFolderId: null,
+            toFolderName: null,
+          },
+        ),
+      ],
+      nextCursor: null,
+    }),
+  );
+  const navigations: string[] = [];
+  ({ container } = await mount(
+    <Activity onNavigate={(pathname) => navigations.push(pathname)} />,
+  ));
+  await settle();
+  expect(
+    [...container.querySelectorAll(".activityHeading")].map(
+      (heading) => heading.textContent,
+    ),
+  ).toEqual([
+    "Sam edited a business · Acme Holdings",
+    "Sam deleted a business · Old Co",
+    "Sam linked an email · Dell XPS 13",
+    "Sam restored an email · Lease renewal",
+    "Sam deleted a folder · Taxes",
+    "Sam moved a file · w2.pdf",
+  ]);
+  expect(
+    [...container.querySelectorAll("summary")].map(
+      (summary) => summary.textContent,
+    ),
+  ).toEqual([
+    "Name: Acme → Acme Holdings · EIN: •••4321 → None",
+    "Old Co · EIN •••1111",
+    "Lease renewal · Equipment: Dell XPS 13",
+    "sender@example.com · from Trash",
+    "Taxes · 2 files returned to the library · 1 email link removed",
+    "w2.pdf · Taxes → Library (no folder)",
+  ]);
+  for (const label of ["Old Co", "Taxes", "w2.pdf", "Lease renewal"])
+    expect(container.querySelector(`[aria-label$=": ${label}"]`)).toBeNull();
+  await click("Acme Holdings");
+  await click("Dell XPS 13");
+  expect(navigations).toEqual(["/businesses/b1", "/equipment/equipment-1"]);
+  const options = [...container.querySelectorAll("option")].map(
+    (option) => option.textContent,
+  );
+  expect(options).toEqual(
+    expect.arrayContaining([
+      "Library files",
+      "Library folders",
+      "Inbox",
+      "Businesses",
+    ]),
+  );
 });

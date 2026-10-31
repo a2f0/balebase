@@ -487,7 +487,10 @@ it("records connection changes in shared activity with Finance reader permission
     true,
     "finance_connection",
   );
-  expect(page?.events).toHaveLength(1);
+  expect(page?.events.map(({ action }) => action)).toEqual([
+    "finance.daily_sync_changed",
+    "finance.connection_created",
+  ]);
   expect(page?.events[0]).toMatchObject({
     action: "finance.daily_sync_changed",
     actor: { id: "user-1", email: "person@example.com" },
@@ -512,13 +515,14 @@ it("records connection changes in shared activity with Finance reader permission
       .get(),
   ).toEqual({ count: 1 });
   await fixture.request("/data", "DELETE");
+  // Only the record of the deletion itself outlives the connection.
   expect(
     fixture.database
       .query(
-        "SELECT id FROM activity_events WHERE root_type = 'finance_connection'",
+        "SELECT action FROM activity_events WHERE root_type = 'finance_connection'",
       )
       .all(),
-  ).toEqual([]);
+  ).toEqual([{ action: "finance.connection_data_deleted" }]);
 });
 
 it.each(["ITEM_NOT_FOUND", "INVALID_ACCESS_TOKEN"])(

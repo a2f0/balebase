@@ -28,6 +28,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { ActivityFeed } from "../activity/ActivityFeed";
 import { LinkedEmailList } from "../inbox/LinkedEmailList";
 import { ApiDownload } from "../shared/ApiDownload";
 import { AppLink } from "../shared/AppLink";
@@ -384,6 +385,10 @@ function LibraryContent({
           emptyText="Open a message in the Inbox and link it to this folder."
           onNavigate={onNavigate}
           onUnlink={(email) => void actions.unlink(email)}
+        />
+        <ActivityFeed
+          refreshKey={data.detail}
+          source={{ id: data.detail.folder.id, type: "library_folder" }}
         />
       </>
     );

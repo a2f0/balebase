@@ -167,7 +167,10 @@ export function auditsApi(transport: Transport) {
     /** Saves a global form's edits as a new form of the organization's own. */
     copyTemplate(template: AuditTemplate) {
       return transport.call(endpoints.copyTemplate, {
-        body: templateSaveBody(template),
+        body: {
+          ...templateSaveBody(template),
+          sourceVersion: template.version,
+        },
         params: { id: template.id },
       });
     },

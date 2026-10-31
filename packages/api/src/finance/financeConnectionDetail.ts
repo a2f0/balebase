@@ -3,6 +3,7 @@ import {
   type FinanceConnectionDetail,
   financeRoutes,
 } from "@balebase/validators/finance";
+import { findActivity } from "../shared/activity";
 import { respond } from "../shared/respond";
 import type { FinanceContext } from "./financeContext";
 import { latestSyncJob } from "./financeSyncJobs";
@@ -97,6 +98,31 @@ export async function connectionDetail(context: FinanceContext) {
       syncJob: await latestSyncJob(database, id),
     },
   });
+}
+
+/**
+ * A connection's own history, newest first, including after it is
+ * disconnected. The finance capability guards every route here.
+ */
+export async function connectionActivity(context: FinanceContext) {
+  const id = context.req.param("id") ?? "";
+  const organizationId = context.get("organizationId");
+  const exists = await context.env.DB.prepare(
+    "SELECT id FROM plaid_items WHERE id = ? AND organization_id = ?",
+  )
+    .bind(id, organizationId)
+    .first();
+  if (!exists) return context.json({ error: "Connection not found." }, 404);
+  const page = await findActivity(
+    context.env.DB,
+    organizationId,
+    context.req.query("cursor"),
+    { type: "finance_connection", id },
+    true,
+  );
+  return page
+    ? respond(context, financeRoutes.connectionActivity, page)
+    : context.json({ error: "Invalid activity cursor." }, 400);
 }
 
 function toConnection(

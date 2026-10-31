@@ -194,6 +194,22 @@ export function emptyBusinessForm(): BusinessFormState {
   };
 }
 
+/**
+ * The name, which every save sends, and the fields edited since `baseline`,
+ * so a save keeps another manager's concurrent changes to other fields.
+ */
+export function changedBusinessInput(
+  baseline: BusinessFormState,
+  form: BusinessFormState,
+): BusinessInput {
+  const before = businessInput(baseline);
+  const after = businessInput(form);
+  const changed = Object.entries(after).filter(
+    ([field, value]) => before[field as keyof BusinessInput] !== value,
+  );
+  return { ...Object.fromEntries(changed), name: after.name };
+}
+
 export function businessInput(form: BusinessFormState): BusinessInput {
   return {
     city: form.city.trim() || null,

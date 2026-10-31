@@ -6,6 +6,11 @@ import { libraryFolderNameMaxLength } from "@balebase/validators/rules";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
 import { listLinkedEmails, toLinkedEmail } from "../inbox/inboundEmailLinks";
+import {
+  activityBatch,
+  findActivity,
+  insertActivity,
+} from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 
 type LibraryContext = Context<ApiEnv>;
@@ -63,13 +68,20 @@ libraryFolders.post("/", async (context) => {
   }
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  await context.env.DB.prepare(
-    `INSERT INTO library_folders
-       (id, organization_id, name, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?)`,
-  )
-    .bind(id, organizationId, name, now, now)
-    .run();
+  const database = context.env.DB;
+  await activityBatch(database, context.get("apiKey"), [
+    database
+      .prepare(
+        `INSERT INTO library_folders
+           (id, organization_id, name, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .bind(id, organizationId, name, now, now),
+    folderEvent(context, id, {
+      action: "library.folder_created",
+      details: "json_object('name', folder.name)",
+    }),
+  ]);
   return respond(
     context,
     libraryFoldersRoutes.create,
@@ -114,12 +126,24 @@ libraryFolders.patch("/:id", async (context) => {
   if (await nameTaken(context.env.DB, organizationId, name, id)) {
     return duplicateName(context);
   }
-  await context.env.DB.prepare(
-    `UPDATE library_folders SET name = ?, updated_at = ?
-     WHERE id = ? AND organization_id = ?`,
-  )
-    .bind(name, new Date().toISOString(), id, organizationId)
-    .run();
+  // The event reads the old name in the batch. Renaming a folder to its
+  // current name, letter case included, changes and records nothing.
+  const database = context.env.DB;
+  await activityBatch(database, context.get("apiKey"), [
+    folderEvent(context, id, {
+      action: "library.folder_renamed",
+      detailBindings: [name],
+      details: "json_object('before', folder.name, 'after', ?)",
+      label: name,
+      when: { bindings: [name], sql: "folder.name IS NOT ?" },
+    }),
+    database
+      .prepare(
+        `UPDATE library_folders SET name = ?, updated_at = ?
+         WHERE id = ? AND organization_id = ? AND name IS NOT ?`,
+      )
+      .bind(name, new Date().toISOString(), id, organizationId, name),
+  ]);
   return respond(context, libraryFoldersRoutes.rename, {
     folder: { id, name },
   });
@@ -132,8 +156,22 @@ libraryFolders.delete("/:id", async (context) => {
     return folderNotFound(context);
   }
   // Return documents to the library root and drop email links explicitly
-  // rather than relying on the foreign-key action and trigger alone.
-  await context.env.DB.batch([
+  // rather than relying on the foreign-key action and trigger alone. The
+  // event counts what the deletion unfiles and unlinks, and outlives the
+  // folder until the organization is purged.
+  await activityBatch(context.env.DB, context.get("apiKey"), [
+    folderEvent(context, id, {
+      action: "library.folder_deleted",
+      details: `json_object(
+         'name', folder.name,
+         'fileCount', (SELECT COUNT(*) FROM objects
+                       WHERE organization_id = folder.organization_id
+                         AND folder_id = folder.id),
+         'emailLinkCount', (SELECT COUNT(*) FROM inbound_email_links
+                            WHERE organization_id = folder.organization_id
+                              AND target_type = 'library_folder'
+                              AND target_id = folder.id))`,
+    }),
     context.env.DB.prepare(
       `UPDATE objects SET folder_id = NULL
        WHERE organization_id = ? AND folder_id = ?`,
@@ -149,6 +187,63 @@ libraryFolders.delete("/:id", async (context) => {
   ]);
   return context.body(null, 204);
 });
+
+libraryFolders.get("/:id/activity", async (context) => {
+  const organizationId = context.get("organizationId");
+  const folder = await findLibraryFolder(
+    context.env.DB,
+    organizationId,
+    context.req.param("id"),
+  );
+  if (!folder) return folderNotFound(context);
+  const page = await findActivity(
+    context.env.DB,
+    organizationId,
+    context.req.query("cursor"),
+    { id: folder.id, type: "library_folder" },
+  );
+  return page
+    ? respond(context, libraryFoldersRoutes.activity, page)
+    : context.json({ error: "Invalid activity cursor." }, 400);
+});
+
+/**
+ * Records a folder event in the batch, labelled with the folder's stored name
+ * unless a new `label` is given, and only while the folder exists and `when`
+ * holds. `details` is SQL over `folder`.
+ */
+function folderEvent(
+  context: LibraryContext,
+  id: string,
+  event: {
+    action: string;
+    detailBindings?: string[];
+    details: string;
+    label?: string;
+    when?: { bindings: string[]; sql: string };
+  },
+) {
+  const when = event.when ?? { bindings: [], sql: "1" };
+  return context.env.DB.prepare(
+    `${insertActivity}
+     SELECT folder.organization_id, 'library_folder', folder.id,
+            ${event.label === undefined ? "folder.name" : "?"},
+            'library_folder', folder.id, ?, actor.id, actor.name, actor.email,
+            ?, ${event.details}
+     FROM library_folders AS folder
+     JOIN user AS actor ON actor.id = ?
+     WHERE folder.id = ? AND folder.organization_id = ? AND (${when.sql})`,
+  ).bind(
+    ...(event.label === undefined ? [] : [event.label]),
+    event.action,
+    new Date().toISOString(),
+    ...(event.detailBindings ?? []),
+    context.get("authSession").user.id,
+    id,
+    context.get("organizationId"),
+    ...when.bindings,
+  );
+}
 
 export async function findLibraryFolder(
   database: D1Database,

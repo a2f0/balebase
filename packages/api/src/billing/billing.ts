@@ -10,6 +10,7 @@ import {
   canManageOrganization,
   requireManager,
 } from "../organizations/organizationMembers";
+import { requestActor } from "../shared/activity";
 import { respond } from "../shared/respond";
 import type { Bindings } from "../types";
 import {
@@ -116,6 +117,7 @@ billing.post("/checkout", requireBillingManager, async (context) => {
     record.checkout_claim_price_id,
     record,
     publishableKey ? context.get("authSession").user.email : null,
+    context.get("authSession").user.id,
   );
   try {
     const checkout = parseStripeCheckoutSession(
@@ -140,6 +142,11 @@ billing.post("/checkout", requireBillingManager, async (context) => {
       organizationId,
       checkoutClaim.id,
       checkout,
+      {
+        actor: requestActor(context),
+        priceId: record.checkout_claim_price_id,
+        quantity: record.checkout_claim_quantity,
+      },
     );
     if (!stored) {
       await expireCheckoutSession(context.env, checkout.id);

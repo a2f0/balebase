@@ -35,6 +35,7 @@ import {
   type BusinessFormState,
   businessForm,
   businessInput,
+  changedBusinessInput,
   emptyBusinessForm,
 } from "./BusinessForm";
 import {
@@ -489,9 +490,9 @@ function BusinessEditRow({
   onError: (message: string) => void;
   onUpdated: (business: Business) => void;
 }) {
-  const [form, setForm] = useState<BusinessFormState>(() =>
-    businessForm(business),
-  );
+  // The business as editing began; later refreshes must not move it.
+  const [baseline] = useState(() => businessForm(business));
+  const [form, setForm] = useState<BusinessFormState>(baseline);
   const [busy, setBusy] = useState(false);
 
   async function save(event: FormEvent) {
@@ -500,7 +501,7 @@ function BusinessEditRow({
     try {
       const result = await api.businesses.update(
         business.id,
-        businessInput(form),
+        changedBusinessInput(baseline, form),
       );
       onUpdated(result.business);
     } catch (cause) {

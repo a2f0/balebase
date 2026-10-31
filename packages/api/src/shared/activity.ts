@@ -26,6 +26,11 @@ export interface ActivityRow {
 }
 
 interface ActivityRoot {
+  /**
+   * Also include events whose subject is this record under another root, such
+   * as an email's links, which are recorded on the record it was linked to.
+   */
+  includeSubject?: boolean;
   issueId?: string;
   publishedTemplateOnly?: boolean;
   id: string;
@@ -41,10 +46,10 @@ export interface ActivityActor {
 const pageSize = 50;
 
 /**
- * Access history only organization managers read: group grants and
- * revocations, and members' two-factor requirements.
+ * History only organization managers read: group grants and revocations,
+ * members' two-factor requirements, and billing.
  */
-const managerOnlyActivity = `(root_type = 'organization_group'
+const managerOnlyActivity = `(root_type IN ('organization_group', 'organization_billing')
   OR action = 'organization.member_two_factor_requirement_changed')`;
 
 /**
@@ -71,14 +76,19 @@ export async function findActivity(
     organizationId === null ? [] : [organizationId];
   if (!includeFinance)
     filters.push(
-      "root_type NOT IN ('finance_transaction', 'finance_connection')",
+      "root_type NOT IN ('finance_transaction', 'finance_connection', 'finance_category')",
     );
   if (!includeManagerOnly) filters.push(`NOT ${managerOnlyActivity}`);
   if (resourceType) {
     filters.push("root_type = ?");
     bindings.push(resourceType);
   }
-  if (root) {
+  if (root?.includeSubject) {
+    filters.push(
+      "((root_type = ? AND root_id = ?) OR (subject_type = ? AND subject_id = ?))",
+    );
+    bindings.push(root.type, root.id, root.type, root.id);
+  } else if (root) {
     filters.push("root_type = ? AND root_id = ?");
     bindings.push(root.type, root.id);
     if (root.issueId) {
@@ -172,6 +182,16 @@ export async function activityBatch(
   ]);
   return results.slice(1, -1);
 }
+
+/**
+ * The head of an `INSERT ... SELECT` that snapshots an event from the stored
+ * rows it describes. Select the columns in this order, joining the actor as
+ * `user AS actor`.
+ */
+export const insertActivity = `INSERT INTO activity_events (
+  organization_id, root_type, root_id, root_label, subject_type, subject_id,
+  action, actor_user_id, actor_name, actor_email, occurred_at, details
+)`;
 
 /** Include this statement in the same batch as the corresponding mutation. */
 export function activityStatement(
