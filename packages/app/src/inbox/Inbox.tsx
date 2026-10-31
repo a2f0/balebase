@@ -19,6 +19,7 @@ import type {
   InboxFolder,
 } from "@balebase/validators/inbox";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityFeed } from "../activity/ActivityFeed";
 import { ApiDownload } from "../shared/ApiDownload";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
@@ -569,6 +570,10 @@ function MessageDetail({
       {email.attachments.length > 0 && (
         <AttachmentList email={email} folder={folder} />
       )}
+      <ActivityFeed
+        refreshKey={email}
+        source={{ id: email.id, type: "inbound_email" }}
+      />
     </article>
   );
 }

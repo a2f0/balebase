@@ -1,6 +1,7 @@
 import { objectsRoutes } from "@balebase/validators/objects";
 import { type Context, Hono } from "hono";
-import type { ApiEnv } from "../auth/apiEnv";
+import type { ApiEnv, ApiKeyPrincipal } from "../auth/apiEnv";
+import { activityBatch, insertActivity } from "../shared/activity";
 import { maxFilenameBytes, normalizeFilename } from "../shared/filenames";
 import { readBody, respond } from "../shared/respond";
 import {
@@ -18,6 +19,11 @@ const objects = new Hono<ApiEnv>();
 const maxUploadBytes = 25 * 1024 * 1024;
 const uploadTooLarge = "Files must be 25 MB or smaller.";
 const maxR2ObjectKeyBytes = 1_024;
+
+/** What a file event records: never its contents or storage key. */
+const fileDetails = `json_object('filename', objects.filename,
+  'contentType', objects.content_type, 'size', objects.size,
+  'folderId', objects.folder_id, 'folderName', folder.name)`;
 
 // Lists one folder's documents, or the documents at the library root.
 objects.get("/", async (context) => {
@@ -88,16 +94,24 @@ objects.post("/", async (context) => {
   const contentType = file.type || "application/octet-stream";
   const createdAt = new Date().toISOString();
 
-  const stored = await storeLibraryObject(context.env, file, {
-    content_type: contentType,
-    created_at: createdAt,
-    filename,
-    folder_id: folderId,
-    id,
-    object_key: objectKey,
-    organization_id: organizationId,
-    size: file.size,
-  });
+  const stored = await storeLibraryObject(
+    context.env,
+    file,
+    {
+      content_type: contentType,
+      created_at: createdAt,
+      filename,
+      folder_id: folderId,
+      id,
+      object_key: objectKey,
+      organization_id: organizationId,
+      size: file.size,
+    },
+    {
+      apiKey: context.get("apiKey"),
+      userId: context.get("authSession").user.id,
+    },
+  );
   if (!stored) return context.json({ error: uploadExpired }, 409);
 
   return respond(
@@ -159,14 +173,52 @@ objects.patch("/:id", async (context) => {
   ) {
     return folderNotFound(context);
   }
-  await context.env.DB.prepare(
-    `UPDATE objects SET folder_id = ?
-     WHERE id = ? AND organization_id = ? AND kind = 'library'`,
-  )
-    .bind(folderId, row.id, organizationId)
-    .run();
+  const database = context.env.DB;
+  // Moving a document where it already is changes nothing and records
+  // nothing. The destination is checked again in the batch, so a folder
+  // deleted meanwhile neither gains the document nor an event.
+  const moves = `objects.id = ? AND objects.organization_id = ?
+    AND objects.kind = 'library' AND objects.folder_id IS NOT ?
+    AND (? IS NULL OR EXISTS (
+      SELECT 1 FROM library_folders
+      WHERE id = ? AND organization_id = objects.organization_id
+    ))`;
+  const bindings = [row.id, organizationId, folderId, folderId, folderId];
+  await activityBatch(database, context.get("apiKey"), [
+    database
+      .prepare(
+        `${insertActivity}
+         SELECT objects.organization_id, 'library_file', objects.id,
+                objects.filename, 'library_file', objects.id,
+                'library.file_moved', actor.id, actor.name, actor.email, ?,
+                json_object('filename', objects.filename,
+                            'fromFolderId', objects.folder_id,
+                            'fromFolderName', source.name,
+                            'toFolderId', target.id,
+                            'toFolderName', target.name)
+         FROM objects
+         JOIN user AS actor ON actor.id = ?
+         LEFT JOIN library_folders AS source ON source.id = objects.folder_id
+         LEFT JOIN library_folders AS target ON target.id = ?
+         WHERE ${moves}`,
+      )
+      .bind(
+        new Date().toISOString(),
+        context.get("authSession").user.id,
+        folderId,
+        ...bindings,
+      ),
+    database
+      .prepare(`UPDATE objects SET folder_id = ? WHERE ${moves}`)
+      .bind(folderId, ...bindings),
+  ]);
+  const moved = await findObject(database, organizationId, row.id);
+  if (!moved) {
+    return context.json({ error: "Object not found." }, 404);
+  }
+  if (moved.folder_id !== folderId) return folderNotFound(context);
   return respond(context, objectsRoutes.move, {
-    object: toStoredObject({ ...row, folder_id: folderId }),
+    object: toStoredObject(moved),
   });
 });
 
@@ -181,12 +233,55 @@ objects.delete("/:id", async (context) => {
     return context.json({ error: "Object not found." }, 404);
   }
 
+  // The event, the row's removal, and a cleanup entry for its bytes commit
+  // together, so the history is kept even if removing the bytes fails; the
+  // cleanup job then retries it.
+  const database = context.env.DB;
+  const deletedAt = new Date().toISOString();
+  const thisFile = `objects.id = ? AND objects.organization_id = ?
+    AND objects.kind = 'library'`;
+  const [, , deleted] = await activityBatch(database, context.get("apiKey"), [
+    database
+      .prepare(
+        `${insertActivity}
+         SELECT objects.organization_id, 'library_file', objects.id,
+                objects.filename, 'library_file', objects.id,
+                'library.file_deleted', actor.id, actor.name, actor.email, ?,
+                ${fileDetails}
+         FROM objects
+         JOIN user AS actor ON actor.id = ?
+         LEFT JOIN library_folders AS folder ON folder.id = objects.folder_id
+         WHERE ${thisFile}`,
+      )
+      .bind(
+        deletedAt,
+        context.get("authSession").user.id,
+        row.id,
+        organizationId,
+      ),
+    database
+      .prepare(
+        `INSERT OR REPLACE INTO deleted_object_cleanup
+           (id, organization_id, object_key, deleted_at, cleanup_token,
+            cleanup_claimed_at)
+         SELECT ?, objects.organization_id, objects.object_key, ?, NULL, NULL
+         FROM objects WHERE ${thisFile}`,
+      )
+      .bind(`library-delete:${row.id}`, deletedAt, row.id, organizationId),
+    database
+      .prepare(`DELETE FROM objects WHERE ${thisFile}`)
+      .bind(row.id, organizationId),
+  ]);
+  if (!deleted?.meta.changes) {
+    return context.json({ error: "Object not found." }, 404);
+  }
   await context.env.STORAGE.delete(row.object_key);
-  await context.env.DB.prepare(
-    `DELETE FROM objects
-     WHERE id = ? AND organization_id = ? AND kind = 'library'`,
-  )
-    .bind(row.id, organizationId)
+  await database
+    .prepare(
+      `DELETE FROM deleted_object_cleanup
+       WHERE id = ? AND cleanup_token IS NULL`,
+    )
+    .bind(`library-delete:${row.id}`)
     .run();
 
   return context.body(null, 204);
@@ -196,6 +291,7 @@ async function storeLibraryObject(
   environment: Pick<Bindings, "DB" | "STORAGE">,
   file: File,
   row: StoredObjectRow & { organization_id: string },
+  actor: { apiKey: ApiKeyPrincipal | undefined; userId: string },
 ) {
   await trackedPut(
     environment,
@@ -213,26 +309,45 @@ async function storeLibraryObject(
       },
     },
   );
+  const database = environment.DB;
   try {
-    const inserted = await environment.DB.prepare(
-      `INSERT INTO objects
-       (id, organization_id, object_key, filename, content_type, size,
-        created_at, kind, folder_id)
-       SELECT ?, ?, ?, ?, ?, ?, ?, 'library', ? WHERE ${uploadStillQueued}`,
-    )
-      .bind(
-        row.id,
-        row.organization_id,
-        row.object_key,
-        row.filename,
-        row.content_type,
-        row.size,
-        row.created_at,
-        row.folder_id,
-        row.object_key,
-      )
-      .run();
-    if (inserted.meta.changes) return true;
+    // The event reads the row this batch inserts, so an expired upload,
+    // which inserts nothing, records nothing.
+    const [inserted] = await activityBatch(database, actor.apiKey, [
+      database
+        .prepare(
+          `INSERT INTO objects
+           (id, organization_id, object_key, filename, content_type, size,
+            created_at, kind, folder_id)
+           SELECT ?, ?, ?, ?, ?, ?, ?, 'library', ? WHERE ${uploadStillQueued}`,
+        )
+        .bind(
+          row.id,
+          row.organization_id,
+          row.object_key,
+          row.filename,
+          row.content_type,
+          row.size,
+          row.created_at,
+          row.folder_id,
+          row.object_key,
+        ),
+      database
+        .prepare(
+          `${insertActivity}
+           SELECT objects.organization_id, 'library_file', objects.id,
+                  objects.filename, 'library_file', objects.id,
+                  'library.file_uploaded', actor.id, actor.name, actor.email,
+                  objects.created_at, ${fileDetails}
+           FROM objects
+           JOIN user AS actor ON actor.id = ?
+           LEFT JOIN library_folders AS folder ON folder.id = objects.folder_id
+           WHERE objects.id = ? AND objects.organization_id = ?
+             AND objects.kind = 'library'`,
+        )
+        .bind(actor.userId, row.id, row.organization_id),
+    ]);
+    if (inserted?.meta.changes) return true;
   } catch (error) {
     await environment.STORAGE.delete(row.object_key);
     throw error;

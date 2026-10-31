@@ -7,11 +7,14 @@ export type ActivitySource =
       type:
         | "audit_run"
         | "audit_template"
+        | "business"
         | "equipment"
         | "issue"
         | "project"
         | "finance_transaction"
-        | "global_audit_template";
+        | "global_audit_template"
+        | "inbound_email"
+        | "library_folder";
     }
   | undefined;
 
@@ -31,14 +34,20 @@ export function listActivity(
       return api.audits.runActivity(id, cursor);
     case "audit_template":
       return api.audits.templateActivity(id, cursor);
+    case "business":
+      return api.businesses.activity(id, cursor);
     case "equipment":
       return api.equipment.activity(id, cursor);
     case "finance_transaction":
       return api.finance.transactionActivity(id, cursor);
     case "global_audit_template":
       return api.adminAuditTemplates.activity(id, cursor);
+    case "inbound_email":
+      return api.inbox.activity(id, cursor);
     case "issue":
       return api.issues.activity(id, cursor);
+    case "library_folder":
+      return api.libraryFolders.activity(id, cursor);
     case "project":
       return api.projects.activity(id, cursor);
   }

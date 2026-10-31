@@ -1,7 +1,7 @@
 import { inboxRoutes } from "@balebase/validators/inbox";
 import { libraryFoldersRoutes } from "@balebase/validators/libraryFolders";
 import { objectsRoutes } from "@balebase/validators/objects";
-import type { McpTool } from "./mcpToolSchema";
+import { activityCursor, type McpTool } from "./mcpToolSchema";
 
 const folderId = { id: "Folder id from list_library_folders." };
 const folderName = { name: "Folder name, unique in the library." };
@@ -28,6 +28,14 @@ export const libraryTools: McpTool[] = [
     name: "get_library_folder",
     route: libraryFoldersRoutes.get,
     title: "Get library folder",
+  },
+  {
+    description:
+      "Lists one library folder's history, newest first: its creation, renames, and emails linked to it or unlinked.",
+    descriptions: { ...folderId, ...activityCursor },
+    name: "list_library_folder_activity",
+    route: libraryFoldersRoutes.activity,
+    title: "List library folder activity",
   },
   {
     description: "Creates a library folder.",
@@ -93,6 +101,14 @@ export const libraryTools: McpTool[] = [
     name: "get_inbox_email",
     route: inboxRoutes.get,
     title: "Get inbox email",
+  },
+  {
+    description:
+      "Lists one email's history, newest first: moves to Archive, Trash, or back to the inbox, and links. Links to finance transactions require Finance access.",
+    descriptions: { ...emailId, ...activityCursor },
+    name: "list_inbox_email_activity",
+    route: inboxRoutes.activity,
+    title: "List inbox email activity",
   },
   {
     description:

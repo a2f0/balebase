@@ -20,10 +20,13 @@ import { useCursorPages } from "../shared/useCursorPages";
 import {
   auditRunPath,
   auditTemplatePath,
+  businessPath,
   equipmentPath,
   financeConnectionPath,
   financeTransactionPath,
+  inboxEmailPath,
   issuePath,
+  libraryPath,
   organizationAccessPath,
   organizationPeoplePath,
   projectPath,
@@ -35,6 +38,7 @@ import {
   equipmentActivitySummary,
 } from "./EquipmentActivity";
 import { groupActivitySummary } from "./groupActivity";
+import { isLibraryActivity, libraryActivitySummary } from "./libraryActivity";
 import { projectActivitySummary } from "./projectActivity";
 import { RecordActivityDetails } from "./RecordActivity";
 
@@ -52,6 +56,20 @@ const actionLabels: Record<string, string> = {
   "api_key.created": "created an API key",
   "api_key.revoked": "revoked an API key",
   "audit.answer_changed": "changed an answer",
+  "business.created": "added a business",
+  "business.deleted": "deleted a business",
+  "business.updated": "edited a business",
+  "inbox.email_archived": "archived an email",
+  "inbox.email_linked": "linked an email",
+  "inbox.email_restored": "restored an email",
+  "inbox.email_trashed": "moved an email to Trash",
+  "inbox.email_unlinked": "unlinked an email",
+  "library.file_deleted": "deleted a file",
+  "library.file_moved": "moved a file",
+  "library.file_uploaded": "uploaded a file",
+  "library.folder_created": "created a folder",
+  "library.folder_deleted": "deleted a folder",
+  "library.folder_renamed": "renamed a folder",
   "audit.completed": "completed the audit",
   "audit.offline_synced": "synced an offline audit",
   "audit.discarded": "discarded the audit",
@@ -278,6 +296,8 @@ function memberSummary(event: ActivityEvent) {
 
 function activitySummary(event: ActivityEvent) {
   const { details } = event;
+  // Links are recorded on equipment and transactions too.
+  if (isLibraryActivity(event)) return libraryActivitySummary(event);
   if (event.action === "finance.daily_sync_changed")
     return `Daily sync ${details.before ? "on" : "off"} → ${details.after ? "on" : "off"}`;
   if (event.action === "finance.transaction_annotated")
@@ -341,18 +361,8 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
   const details = event.details;
   if (event.action === "finance.daily_sync_changed")
     return <p>{activitySummary(event)}</p>;
-  if (event.root.type === "equipment") {
-    return <EquipmentActivityDetails event={event} />;
-  }
-  if (event.root.type === "api_key") {
-    return <p className="activityDetails">{apiKeySummary(event)}</p>;
-  }
-  if (event.root.type === "project") {
-    return <p className="activityDetails">{projectActivitySummary(event)}</p>;
-  }
-  if (event.root.type === "organization_group") {
-    return <p className="activityDetails">{groupActivitySummary(event)}</p>;
-  }
+  const rooted = rootDetails(event);
+  if (rooted) return rooted;
   if (
     event.action === "finance.transaction_annotated" ||
     event.action === "issue.updated"
@@ -464,6 +474,27 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
   }
 }
 
+/** Details shared by every event on some roots, and library links anywhere. */
+function rootDetails(event: ActivityEvent) {
+  // Links are recorded on equipment and transactions too.
+  if (isLibraryActivity(event)) {
+    return <p className="activityDetails">{libraryActivitySummary(event)}</p>;
+  }
+  if (event.root.type === "equipment") {
+    return <EquipmentActivityDetails event={event} />;
+  }
+  if (event.root.type === "api_key") {
+    return <p className="activityDetails">{apiKeySummary(event)}</p>;
+  }
+  if (event.root.type === "project") {
+    return <p className="activityDetails">{projectActivitySummary(event)}</p>;
+  }
+  if (event.root.type === "organization_group") {
+    return <p className="activityDetails">{groupActivitySummary(event)}</p>;
+  }
+  return undefined;
+}
+
 function MemberRoleDetails({ event }: { event: ActivityEvent }) {
   return (
     <div className="activityDetails">
@@ -522,7 +553,27 @@ function activityPath(event: ActivityEvent) {
   if (event.root.type === "audit_run") return auditRunPath(event.root.id);
   if (event.root.type === "audit_template")
     return auditTemplatePath(event.root.id);
-  return undefined;
+  return libraryActivityPath(event);
+}
+
+/** Deleted folders and businesses, files, and trashed email have no page. */
+function libraryActivityPath({ action, root }: ActivityEvent) {
+  switch (root.type) {
+    case "library_folder":
+      return action === "library.folder_deleted"
+        ? undefined
+        : libraryPath(root.id);
+    case "business":
+      return action === "business.deleted" ? undefined : businessPath(root.id);
+    case "inbound_email":
+      if (action === "inbox.email_archived")
+        return inboxEmailPath(root.id, "archived");
+      return action === "inbox.email_restored"
+        ? inboxEmailPath(root.id)
+        : undefined;
+    default:
+      return undefined;
+  }
 }
 
 function organizationActivityPath(event: ActivityEvent) {
@@ -545,6 +596,9 @@ function activityLinkLabel(event: ActivityEvent) {
   if (event.root.type === "organization_member") return "Open member";
   if (event.root.type === "organization_group") return "Open groups";
   if (event.root.type === "project") return "Open project";
+  if (event.root.type === "library_folder") return "Open folder";
+  if (event.root.type === "business") return "Open business";
+  if (event.root.type === "inbound_email") return "Open email";
   return event.root.type === "audit_run" ? "Open audit" : "Open form";
 }
 

@@ -14,6 +14,10 @@ const resourceLabels: Record<ActivityResourceType, string> = {
   api_key: "API keys",
   finance_transaction: "Transactions",
   finance_connection: "Bank connections",
+  library_file: "Library files",
+  library_folder: "Library folders",
+  inbound_email: "Inbox",
+  business: "Businesses",
 };
 
 function isResourceType(value: string): value is ActivityResourceType {

@@ -16,6 +16,11 @@ const endpoints = {
     path: "/api/businesses/:id",
     response: "json",
   }),
+  activity: endpoint<typeof businessesRoutes.activity>({
+    method: "GET",
+    path: "/api/businesses/:id/activity",
+    response: "json",
+  }),
   create: endpoint<typeof businessesRoutes.create>({
     method: "POST",
     path: "/api/businesses",
@@ -42,6 +47,13 @@ export function businessesApi(transport: Transport) {
     },
     get(id: string) {
       return transport.call(endpoints.get, { params: { id } });
+    },
+    /** The business's history, newest first. */
+    activity(id: string, cursor?: string) {
+      return transport.call(endpoints.activity, {
+        params: { id },
+        query: { cursor },
+      });
     },
     create(input: BusinessInput) {
       return transport.call(endpoints.create, { body: input });
