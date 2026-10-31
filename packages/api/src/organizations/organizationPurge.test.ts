@@ -1,11 +1,11 @@
 import { expect, it, spyOn } from "bun:test";
-import { enqueueMaintenance } from "../jobs/maintenance";
 import { purgeDeletedObjects } from "../library/deletedObjectCleanup";
 import { fixture, now, post } from "../testing/maintenanceFixture";
 import { purgeDeletedOrganizations } from "./organizationPurge";
 
 it("purges only organizations past 30 days and honors a restore or renewed deletion before execution", async () => {
   const f = fixture();
+  f.insertActor();
   const insert = f.database.query(`INSERT INTO organization
     (id, name, slug, createdAt, deletedAt) VALUES (?, ?, ?, '2026-01-01', ?)`);
   for (const [id, deletedAt] of [
@@ -48,6 +48,7 @@ it("purges only organizations past 30 days and honors a restore or renewed delet
 
 it("bounds organization purges to 25 and makes progress across repeated runs", async () => {
   const f = fixture();
+  f.insertActor();
   const insert = f.database.query(`INSERT INTO organization
     (id, name, slug, createdAt, deletedAt) VALUES (?, ?, ?, '2026-01-01', '2026-08-01')`);
   for (let i = 29; i >= 0; i--) {
@@ -76,6 +77,7 @@ it("bounds organization purges to 25 and makes progress across repeated runs", a
 
 it("queues a confirmed organization purge, cascades records, and retains every kind of file for retryable cleanup", async () => {
   const f = fixture();
+  f.insertActor();
   f.insertUser("person");
   f.database.exec(`
     INSERT INTO organization (id, name, slug, createdAt, deletedAt)
@@ -147,6 +149,7 @@ it("queues a confirmed organization purge, cascades records, and retains every k
     },
     logs: [
       { message: "Job queued." },
+      { message: "Manual run requested." },
       { message: "Processing attempt started." },
       { message: "Job completed." },
     ],
@@ -213,6 +216,7 @@ it("queues a confirmed organization purge, cascades records, and retains every k
 
 it("rolls back organization deletion and cleanup tombstones together on a cascade failure", async () => {
   const f = fixture();
+  f.insertActor();
   f.database.exec(`
     INSERT INTO organization (id, name, slug, createdAt, deletedAt)
       VALUES ('purge', 'Purge', 'purge', '2020-01-01', '2020-02-01');
@@ -221,11 +225,7 @@ it("rolls back organization deletion and cleanup tombstones together on a cascad
     CREATE TRIGGER reject_email_delete BEFORE DELETE ON inbound_emails
       BEGIN SELECT RAISE(ABORT, 'Failed cascade'); END;
   `);
-  const run = await enqueueMaintenance(
-    f.bindings,
-    "purgeDeletedOrganizations",
-    { trigger: "manual", actorUserId: "actor" },
-  );
+  const run = await f.requestRun("purgeDeletedOrganizations");
   await f.deliver(run.id);
   expect(await (await f.request(`/jobs/runs/${run.id}`)).json()).toMatchObject({
     run: {
@@ -248,6 +248,7 @@ it("rolls back organization deletion and cleanup tombstones together on a cascad
 
 it("isolates failing organizations, retains partial counters, and rotates the batch", async () => {
   const f = fixture();
+  f.insertActor();
   const insert = f.database.query(`INSERT INTO organization
     (id, name, slug, createdAt, deletedAt) VALUES (?, ?, ?, '2020-01-01', '2020-02-01')`);
   for (let i = 0; i < 30; i++) {
@@ -262,14 +263,7 @@ it("isolates failing organizations, retains partial counters, and rotates the ba
       { purged: 1, skipped: 0, failed: 24 },
       { purged: 5, skipped: 0, failed: 20 },
     ]) {
-      const run = await enqueueMaintenance(
-        f.bindings,
-        "purgeDeletedOrganizations",
-        {
-          trigger: "manual",
-          actorUserId: "actor",
-        },
-      );
+      const run = await f.requestRun("purgeDeletedOrganizations");
       await f.deliver(run.id);
       expect(
         await (await f.request(`/jobs/runs/${run.id}`)).json(),

@@ -209,6 +209,7 @@ it.each(["capacitor://localhost", "https://localhost"])(
       ).status,
     ).toBe(403);
     const admin = fixture();
+    admin.insertActor();
     expect(
       (
         await admin.request(

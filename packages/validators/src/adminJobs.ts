@@ -28,6 +28,9 @@ const JobRunSchema = z.object({
   status: JobStatusSchema,
   source: z.enum(["manual", "scheduled", "daily"]),
   requestedBy: z.string().nullable(),
+  /** The requester's name and email when they asked; null for older runs. */
+  requestedByName: z.string().nullable(),
+  requestedByEmail: z.string().nullable(),
   organizationId: z.string().nullable(),
   connectionId: z.string().nullable(),
   attempts: z.number(),

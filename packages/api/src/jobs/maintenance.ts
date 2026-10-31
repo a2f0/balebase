@@ -119,12 +119,29 @@ export function maintenanceTasks(environment: Bindings): MaintenanceTasks {
   };
 }
 
+/**
+ * Saves a run, or reuses the job's active run, and dispatches it. A manual
+ * request is recorded with the requester's snapshot in the same transaction,
+ * including when it joins an active run. It returns null, writing nothing,
+ * when the requester is no longer a root admin.
+ */
+export async function enqueueMaintenance(
+  env: Bindings,
+  jobId: MaintenanceJobId,
+  source: Extract<RunSource, { trigger: "scheduled" }>,
+  dependsOn?: string | null,
+): Promise<JobRow>;
+export async function enqueueMaintenance(
+  env: Bindings,
+  jobId: MaintenanceJobId,
+  source: Extract<RunSource, { trigger: "manual" }>,
+): Promise<JobRow | null>;
 export async function enqueueMaintenance(
   env: Bindings,
   jobId: MaintenanceJobId,
   source: RunSource,
   dependsOn: string | null = null,
-) {
+): Promise<JobRow | null> {
   if (!env.FINANCE_SYNC_QUEUE)
     throw new Error("Background job queue is not configured.");
   const scheduled = source.trigger === "scheduled" ? source : null;
@@ -132,28 +149,92 @@ export async function enqueueMaintenance(
     ? `scheduled:${jobId}:${scheduled.scheduledTime}`
     : crypto.randomUUID();
   const now = new Date().toISOString();
-  const results = await env.DB.batch([
-    env.DB.prepare(`INSERT OR IGNORE INTO job_runs
-      (id, job_id, source, requested_by, cron, scheduled_time, depends_on, available_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
-      id,
-      jobId,
-      source.trigger,
-      source.trigger === "manual" ? source.actorUserId : null,
-      scheduled?.cron ?? null,
-      scheduled?.scheduledTime ?? null,
-      dependsOn,
-      now,
-      now,
-    ),
-    env.DB.prepare(`SELECT * FROM job_runs WHERE job_id = ?
+  const selectRun = env.DB.prepare(`SELECT * FROM job_runs WHERE job_id = ?
       AND (id = ? OR status IN ('queued', 'running'))
-      ORDER BY created_at DESC, rowid DESC LIMIT 1`).bind(jobId, id),
-  ]);
+      ORDER BY created_at DESC, rowid DESC LIMIT 1`).bind(jobId, id);
+  const results = await env.DB.batch(
+    source.trigger === "manual"
+      ? [
+          ...manualRequestStatements(env.DB, {
+            actorUserId: source.actorUserId,
+            dependsOn,
+            id,
+            jobId,
+            now,
+          }),
+          selectRun,
+        ]
+      : [
+          env.DB.prepare(`INSERT OR IGNORE INTO job_runs
+      (id, job_id, source, cron, scheduled_time, depends_on, available_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+            id,
+            jobId,
+            source.trigger,
+            scheduled?.cron ?? null,
+            scheduled?.scheduledTime ?? null,
+            dependsOn,
+            now,
+            now,
+          ),
+          selectRun,
+        ],
+  );
+  if (source.trigger === "manual" && !results[0]?.results.length) return null;
   const job = results.at(-1)?.results[0] as JobRow | undefined;
   if (!job) throw new Error("Maintenance job could not be saved.");
   if (job.status === "queued") await dispatchJob(env, job.id);
   return job;
+}
+
+// The requester's stored role, not the session's, so a demoted admin's request
+// records and starts nothing.
+const requesterGuard = `actor.id = ?
+  AND instr(',' || replace(COALESCE(actor.role, ''), ' ', '') || ',', ',admin,') > 0`;
+
+function manualRequestStatements(
+  database: D1Database,
+  input: {
+    actorUserId: string;
+    dependsOn: string | null;
+    id: string;
+    jobId: MaintenanceJobId;
+    now: string;
+  },
+) {
+  const { actorUserId, dependsOn, id, jobId, now } = input;
+  // The new run, or the active run that the unique index kept it from adding.
+  const requestedRun = `FROM job_runs AS run JOIN user AS actor ON ${requesterGuard}
+    WHERE run.job_id = ? AND (run.id = ? OR run.status IN ('queued', 'running'))
+    ORDER BY run.created_at DESC, run.rowid DESC LIMIT 1`;
+  return [
+    database
+      .prepare(`SELECT actor.id FROM user AS actor WHERE ${requesterGuard}`)
+      .bind(actorUserId),
+    database
+      .prepare(`INSERT OR IGNORE INTO job_runs
+      (id, job_id, source, requested_by, requested_by_name, requested_by_email,
+       depends_on, available_at, created_at)
+      SELECT ?, ?, 'manual', actor.id, actor.name, actor.email, ?, ?, ?
+      FROM user AS actor WHERE ${requesterGuard}`)
+      .bind(id, jobId, dependsOn, now, now, actorUserId),
+    database
+      .prepare(`INSERT INTO job_logs (run_id, occurred_at, level, message, details_json)
+      SELECT run.id, ?, 'info',
+        CASE WHEN run.id = ? THEN 'Manual run requested.'
+          ELSE 'Manual request joined this active run.' END,
+        json_object('requestedBy',
+          json_object('id', actor.id, 'name', actor.name, 'email', actor.email))
+      ${requestedRun}`)
+      .bind(now, id, actorUserId, jobId, id),
+    database
+      .prepare(`INSERT INTO maintenance_requests
+      (id, job_id, run_id, joined_active_run, requested_at,
+       actor_user_id, actor_name, actor_email)
+      SELECT ?, run.job_id, run.id, run.id <> ?, ?, actor.id, actor.name, actor.email
+      ${requestedRun}`)
+      .bind(crypto.randomUUID(), id, now, actorUserId, jobId, id),
+  ];
 }
 
 export async function runMaintenanceJob(
