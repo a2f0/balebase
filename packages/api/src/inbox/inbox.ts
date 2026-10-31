@@ -7,16 +7,28 @@ import {
 import { type Context, Hono } from "hono";
 import PostalMime from "postal-mime";
 import type { ApiEnv } from "../auth/apiEnv";
+import { userHasCapability } from "../organizations/organizationGroups";
+import {
+  activityBatch,
+  findActivity,
+  insertActivity,
+} from "../shared/activity";
 import { respond } from "../shared/respond";
 import { storedDownload } from "../shared/storage";
 import { organizationInboxAddress } from "./inboundEmailAddress";
 import {
   createEmailLink,
   deleteEmailLink,
+  emailLabel,
   listEmailLinks,
 } from "./inboundEmailLinks";
 
 const inbox = new Hono<ApiEnv>();
+
+const emailStatus = `CASE
+  WHEN inbound_emails.deleted_at IS NOT NULL THEN 'trash'
+  WHEN inbound_emails.archived_at IS NOT NULL THEN 'archived'
+  ELSE 'inbox' END`;
 
 interface InboundEmailRow {
   archived_at: string | null;
@@ -160,26 +172,47 @@ inbox.get("/:emailId/attachments/:attachmentId", async (context) => {
   );
 });
 
+inbox.get("/:id/activity", async (context) => {
+  const organizationId = context.get("organizationId");
+  const email = await context.env.DB.prepare(
+    `SELECT id FROM inbound_emails WHERE id = ? AND organization_id = ?`,
+  )
+    .bind(context.req.param("id"), organizationId)
+    .first<{ id: string }>();
+  if (!email) return context.json({ error: "Email not found." }, 404);
+  // Links are recorded on the record they link to; a transaction's needs
+  // Finance access, as the transaction's own history does.
+  const page = await findActivity(
+    context.env.DB,
+    organizationId,
+    context.req.query("cursor"),
+    { id: email.id, includeSubject: true, type: "inbound_email" },
+    await userHasCapability(
+      context.env.DB,
+      organizationId,
+      context.get("authSession").user.id,
+      "finance",
+    ),
+  );
+  return page
+    ? respond(context, inboxRoutes.activity, page)
+    : context.json({ error: "Invalid activity cursor." }, 400);
+});
+
 inbox.delete("/:id", async (context) => {
   const deletedAt = new Date().toISOString();
   const deletedByUserId = context.get("authSession").user.id;
-  const result = await context.env.DB.prepare(
-    `UPDATE inbound_emails
-     SET deleted_at = ?, deleted_by_user_id = ?, archived_at = NULL
-     WHERE id = ? AND organization_id = ? AND deleted_at IS NULL
+  const [, result] = await changeEmail(context, {
+    action: "inbox.email_trashed",
+    set: "deleted_at = ?, deleted_by_user_id = ?, archived_at = NULL",
+    setBindings: [deletedAt, deletedByUserId],
+    when: `deleted_at IS NULL
        AND NOT EXISTS (
          SELECT 1 FROM inbound_email_links AS link
          WHERE link.email_id = inbound_emails.id
        )`,
-  )
-    .bind(
-      deletedAt,
-      deletedByUserId,
-      context.req.param("id"),
-      context.get("organizationId"),
-    )
-    .run();
-  if (!result.meta.changes) {
+  });
+  if (!result?.meta.changes) {
     const activeEmail = await context.env.DB.prepare(
       `SELECT id FROM inbound_emails
        WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`,
@@ -205,18 +238,13 @@ inbox.delete("/:id", async (context) => {
 });
 
 inbox.post("/:id/archive", async (context) => {
-  const result = await context.env.DB.prepare(
-    `UPDATE inbound_emails SET archived_at = ?
-     WHERE id = ? AND organization_id = ?
-       AND deleted_at IS NULL AND archived_at IS NULL`,
-  )
-    .bind(
-      new Date().toISOString(),
-      context.req.param("id"),
-      context.get("organizationId"),
-    )
-    .run();
-  if (!result.meta.changes) {
+  const [, result] = await changeEmail(context, {
+    action: "inbox.email_archived",
+    set: "archived_at = ?",
+    setBindings: [new Date().toISOString()],
+    when: "deleted_at IS NULL AND archived_at IS NULL",
+  });
+  if (!result?.meta.changes) {
     return context.json({ error: "Inbox email not found." }, 404);
   }
   return respond(context, inboxRoutes.archive, {
@@ -225,21 +253,62 @@ inbox.post("/:id/archive", async (context) => {
 });
 
 inbox.post("/:id/restore", async (context) => {
-  const result = await context.env.DB.prepare(
-    `UPDATE inbound_emails
-     SET deleted_at = NULL, deleted_by_user_id = NULL, archived_at = NULL
-     WHERE id = ? AND organization_id = ?
-       AND (deleted_at IS NOT NULL OR archived_at IS NOT NULL)`,
-  )
-    .bind(context.req.param("id"), context.get("organizationId"))
-    .run();
-  if (!result.meta.changes) {
+  const [, result] = await changeEmail(context, {
+    action: "inbox.email_restored",
+    set: "deleted_at = NULL, deleted_by_user_id = NULL, archived_at = NULL",
+    setBindings: [],
+    when: "(deleted_at IS NOT NULL OR archived_at IS NOT NULL)",
+  });
+  if (!result?.meta.changes) {
     return context.json({ error: "Trashed or archived email not found." }, 404);
   }
   return respond(context, inboxRoutes.restore, {
     emailId: context.req.param("id"),
   });
 });
+
+/**
+ * Moves an email between Inbox, Archive, and Trash when `when` holds, with an
+ * event gated on the same condition and read before the change, so a refused
+ * or repeated move records nothing. Results line up with [event, update].
+ */
+function changeEmail(
+  context: Context<ApiEnv>,
+  change: {
+    action: string;
+    set: string;
+    setBindings: string[];
+    when: string;
+  },
+) {
+  const database = context.env.DB;
+  const thisEmail = `inbound_emails.id = ?
+    AND inbound_emails.organization_id = ? AND ${change.when}`;
+  const bindings = [context.req.param("id"), context.get("organizationId")];
+  return activityBatch(database, context.get("apiKey"), [
+    database
+      .prepare(
+        `${insertActivity}
+         SELECT inbound_emails.organization_id, 'inbound_email',
+                inbound_emails.id, ${emailLabel}, 'inbound_email',
+                inbound_emails.id, ?, actor.id, actor.name, actor.email, ?,
+                json_object('from', inbound_emails.envelope_from,
+                            'fromStatus', ${emailStatus})
+         FROM inbound_emails
+         JOIN user AS actor ON actor.id = ?
+         WHERE ${thisEmail}`,
+      )
+      .bind(
+        change.action,
+        new Date().toISOString(),
+        context.get("authSession").user.id,
+        ...bindings,
+      ),
+    database
+      .prepare(`UPDATE inbound_emails SET ${change.set} WHERE ${thisEmail}`)
+      .bind(...change.setBindings, ...bindings),
+  ]);
+}
 
 async function findEmail(
   database: D1Database,

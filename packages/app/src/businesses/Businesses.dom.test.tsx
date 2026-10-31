@@ -407,7 +407,10 @@ describe("editing a business from its detail page", () => {
     canManage = true,
   ) {
     const patches: unknown[] = [];
-    respond(async (_url, init) => {
+    respond(async (url, init) => {
+      if (String(url).endsWith("/activity")) {
+        return Response.json({ events: [], nextCursor: null });
+      }
       if (init?.method !== "PATCH") {
         return Response.json({ business: acme, canManage });
       }
@@ -443,14 +446,11 @@ describe("editing a business from its detail page", () => {
     expect(field("12-345-6789")?.value).toBe("12-345-6789");
 
     await fill(field("Acme, Inc."), "Acme Holdings");
+    await fill(field("12-3456789"), "98-7654321");
     await click(named("Save changes"));
-    expect(patches).toEqual([
-      expect.objectContaining({
-        duns: "12-345-6789",
-        ein: "12-3456789",
-        name: "Acme Holdings",
-      }),
-    ]);
+    // Only the name and the fields edited are sent, so another manager's
+    // concurrent change to the rest is kept.
+    expect(patches).toEqual([{ ein: "98-7654321", name: "Acme Holdings" }]);
     expect(editor()).toBeUndefined();
     expect(view.text()).toContain("Business updated.");
     expect(document.querySelector("h1")?.textContent).toBe("Acme Holdings");

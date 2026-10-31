@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import { RecordIdSchema } from "./fields";
 import { route } from "./route";
 
@@ -123,6 +124,12 @@ export const inboxRoutes = {
     path: "/api/inbox/:id",
     query: InboxFolderQuerySchema,
     response: z.object({ email: InboundEmailDetailSchema }),
+  }),
+  activity: route({
+    method: "GET",
+    path: "/api/inbox/:id/activity",
+    query: ActivityQuerySchema,
+    response: ActivityPageSchema,
   }),
   link: route({
     method: "POST",

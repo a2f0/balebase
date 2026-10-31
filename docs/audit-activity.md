@@ -6,7 +6,8 @@ organization membership (roles, invitations, joining, leaving and removal),
 organization renames, deletion and restoration, group access, members'
 two-factor requirements, API keys, transaction annotations and categories,
 bank connections (connecting, sync requests and settings, disconnecting, and
-deleting imported data), expense categories, and Pro checkout starts.
+deleting imported data), expense categories, Pro checkout starts, library
+files and folders, inbox email moves and links, and businesses.
 The workspace page is `/activity`; individual records can expose the same
 events in their own history. Contract signing also has a
 separate history. Coverage is incremental: an empty shared feed does not prove
@@ -52,17 +53,18 @@ job runs.
 cursor pagination. Its optional `resourceType` filter selects the root type
 before pagination. The Activity page offers all resources, audits, forms,
 workspace issues, equipment, projects, the organization, people, invitations,
-groups, API keys, transactions, bank connections, expense categories, and
-billing. Audit and transaction filters include issues attached to those roots;
-workspace issues are standalone issues. Transaction, bank connection, and
-expense category activity requires Finance capability even when a caller
-supplies the filter directly. Group events, invitation events (they name
-invited addresses), two-factor requirement changes, billing events, and the
-organization's deletion and restoration are visible only to organization
-owners and admins, as group details, pending invitations, member security
-settings, and billing management already are. Everyone in the organization
-sees people joining, leaving, being removed or changing role, and
-organization renames. Root admins read the organization's own history
+groups, API keys, transactions, bank connections, expense categories, billing,
+library files, library folders, inbox email, and businesses. Audit and
+transaction filters include issues attached to those roots; workspace issues
+are standalone issues. Transaction, bank connection, and expense category
+activity requires Finance capability even when a caller supplies the filter
+directly, including emails linked to a transaction. Group events, invitation
+events (they name invited addresses), two-factor requirement changes, billing
+events, and the organization's deletion and restoration are visible only to
+organization owners and admins, as group details, pending invitations, member
+security settings, and billing management already are. Everyone in the
+organization sees people joining, leaving, being removed or changing role,
+and organization renames. Root admins read the organization's own history
 (renames, deletion and restoration) on its admin detail page, including while
 it is deleted. The MCP `list_activity` tool accepts the same optional
 `resourceType`; keep that filter when passing the next cursor.
@@ -109,6 +111,37 @@ saves that change nothing record nothing. A membership deleted with no request
 behind it, as when an account is purged, has no actor to record until the
 shared model gains a system actor; equipment is still unassigned then.
 
+## Library, inbox, and businesses
+
+Uploading, moving, and permanently deleting a library file records an event on
+the file (`library_file`) naming its filename, content type, size, and folder,
+never its contents or storage key. Creating, renaming, and deleting a folder
+records one on the folder (`library_folder`); a deletion counts the files it
+returns to the library root and the email links it removes. Moving a file to
+the folder it is in, or renaming a folder to its current name, records nothing.
+A file's deletion commits with its event and queues its bytes for the
+deleted-object cleanup, which retries if removing them fails.
+
+Moving an email to Archive or Trash, and restoring it, records an event on the
+email (`inbound_email`), labelled with its subject and naming only its sender
+and the folder it left, never its body or attachments; restoring no longer
+erases who trashed it. Linking an email to a folder, equipment, or a
+transaction, and unlinking it, records an event on that record with the email as
+the subject, so a transaction's links need Finance access wherever they are
+read. A folder or equipment deletion counts or drops its links without one event
+per link. When Plaid removes a transaction, its links are hidden with it, and
+kept, without an event. Inbound mail is a provider action with no user actor:
+the stored message and its raw `.eml` are its record.
+
+Creating, editing, and deleting a business records an event on the business
+(`business`). Edits list each changed field with its old and new value; a save
+that changes nothing, a duplicate EIN or DUNS number, and a save racing another
+change record nothing. Every member can read the feed, so events show only the
+last four digits of an EIN or DUNS number.
+
+Folders, emails, and businesses show their own history. An email's history also
+lists its links, recorded on the linked records.
+
 ## Group access
 
 Groups grant capabilities such as Finance. Their creation, deletion, renames,
@@ -132,7 +165,9 @@ examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `equipment/equipment.test.ts`, `projects/projects.test.ts`, `auth/apiKeys.test.ts`,
 `auth/organizationRoleActivity.test.ts`,
 `organizations/membershipActivity.test.ts`,
-`organizations/accessActivity.test.ts`, and `issues/issues.test.ts`.
+`organizations/accessActivity.test.ts`, `issues/issues.test.ts`,
+`library/libraryActivity.test.ts`, `inbox/inboxActivity.test.ts`, and
+`businesses/businessActivity.test.ts`.
 
 The repository-owned [audit-trails skill](../skills/audit-trails/SKILL.md)
 reviews mutations, triggers, separate histories, readers, and retention, then

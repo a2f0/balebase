@@ -17,6 +17,11 @@ const endpoints = {
     path: "/api/inbox/:id",
     response: "json",
   }),
+  activity: endpoint<typeof inboxRoutes.activity>({
+    method: "GET",
+    path: "/api/inbox/:id/activity",
+    response: "json",
+  }),
   link: endpoint<typeof inboxRoutes.link>({
     method: "POST",
     path: "/api/inbox/:id/links",
@@ -71,6 +76,13 @@ export function inboxApi(transport: Transport) {
       return transport.url(endpoints.attachment, {
         params: { attachmentId, emailId },
         query: folderQuery(folder),
+      });
+    },
+    /** The email's history, including its links, newest first. */
+    activity(id: string, cursor?: string) {
+      return transport.call(endpoints.activity, {
+        params: { id },
+        query: { cursor },
       });
     },
     /** Moves an email to Trash. */
