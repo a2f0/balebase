@@ -76,6 +76,28 @@ groups (`create-team`, `update-team`, `remove-team`, `add-team-member`,
 only writer. Group and two-factor requirement writes re-check in the transaction
 that the actor is still an owner or admin.
 
+## Platform and account history
+
+Some histories are not organization activity:
+
+- `user_role_events` records platform role changes: revocations from the Users
+  page with the acting admin, and `auth:set-role` changes with the operator who
+  ran the script (`actor_kind = 'operator'`, no user ID). D1 operators read it.
+- `user_deletion_events` records account deletion requests and cancellations.
+- `maintenance_requests` records every manual maintenance request, including
+  one that joins an active run, with the requester's snapshot. It outlives the
+  30-day job history and the requester's account. Each request also logs a line
+  on its run, and the run keeps the first requester's name and email.
+- `user_security_events` records a person's own two-factor and password
+  changes by trigger. The person reads it under Account settings → Security;
+  root admins read it in D1.
+
+Better Auth's admin endpoints that would change another person's account or
+act as them (`set-user-password`, `ban-user`, `unban-user`,
+`revoke-user-session(s)`, `remove-user`, `impersonate-user`,
+`stop-impersonating`) are disabled, as are its role endpoints; offer such an
+action only as a guarded, recorded `/api/admin/users` route.
+
 ## Reviewing coverage
 
 For implementation changes, test successful event creation, actor attribution,
@@ -84,7 +106,9 @@ Use rollback and retry tests when those paths affect correctness. Existing
 examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `equipment/equipment.test.ts`, `projects/projects.test.ts`, `auth/apiKeys.test.ts`,
 `auth/organizationRoleActivity.test.ts`,
-`organizations/accessActivity.test.ts`, and `issues/issues.test.ts`.
+`organizations/accessActivity.test.ts`, `issues/issues.test.ts`,
+`jobs/maintenanceRequests.test.ts`, `admin/setUserRole.test.ts`, and
+`users/securityEvents.test.ts`.
 
 The repository-owned [audit-trails skill](../skills/audit-trails/SKILL.md)
 reviews mutations, triggers, separate histories, readers, and retention, then

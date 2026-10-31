@@ -11,6 +11,8 @@ import {
   origin,
   originalPassword,
   post,
+  totpCode,
+  totpSecret,
 } from "../testing/authFixture";
 import { applyMigrations, createTestDatabase } from "../testing/database";
 import { seedUser } from "../testing/seed";
@@ -765,6 +767,89 @@ describe("password authentication", () => {
     ).toBe(200);
   });
 
+  it("keeps account changes and impersonation off Better Auth's admin endpoints", async () => {
+    const fixture = await createFixture();
+    const otherEmail = "other@example.com";
+    for (const address of [email, otherEmail]) {
+      await post(fixture.auth, "/sign-up/email", {
+        email: address,
+        name: "Example Person",
+        password: originalPassword,
+        termsAccepted: true,
+      });
+    }
+    fixture.database
+      .query('UPDATE "user" SET role = ? WHERE email = ?')
+      .run("admin", email);
+    const adminCookie =
+      (
+        await post(fixture.auth, "/sign-in/email", {
+          email,
+          password: originalPassword,
+        })
+      ).headers.get("set-cookie") ?? "";
+    const otherCookies = new CookieJar();
+    otherCookies.absorb(
+      await post(fixture.auth, "/sign-in/email", {
+        email: otherEmail,
+        password: originalPassword,
+      }),
+    );
+    const other = fixture.database
+      .query('SELECT id FROM "user" WHERE email = ?')
+      .get(otherEmail) as { id: string };
+    const { token } = fixture.database
+      .query("SELECT token FROM session WHERE userId = ?")
+      .get(other.id) as { token: string };
+    const accounts = () =>
+      fixture.database
+        .query(
+          `SELECT user.id, user.banned, user.banReason, account.password,
+                  (SELECT count(*) FROM session WHERE session.userId = user.id) AS sessions,
+                  (SELECT count(*) FROM session WHERE impersonatedBy IS NOT NULL) AS impersonations
+           FROM user LEFT JOIN account ON account.userId = user.id
+           WHERE user.email LIKE ? ORDER BY user.email`,
+        )
+        .all("%@example.com");
+    const before = accounts();
+    const attempts: Array<[string, Record<string, unknown>]> = [
+      [
+        "/admin/set-user-password",
+        { newPassword: replacementPassword, userId: other.id },
+      ],
+      ["/admin/ban-user", { banReason: "Probe", userId: other.id }],
+      ["/admin/unban-user", { userId: other.id }],
+      ["/admin/revoke-user-session", { sessionToken: token }],
+      ["/admin/revoke-user-sessions", { userId: other.id }],
+      ["/admin/remove-user", { userId: other.id }],
+      ["/admin/impersonate-user", { userId: other.id }],
+      ["/admin/stop-impersonating", {}],
+    ];
+    for (const [path, body] of attempts) {
+      const response = await post(fixture.auth, path, body, adminCookie);
+      expect({ path, status: response.status }).toEqual({ path, status: 404 });
+    }
+    expect(accounts()).toEqual(before);
+    expect(
+      (
+        await post(fixture.auth, "/sign-in/email", {
+          email: otherEmail,
+          password: replacementPassword,
+        })
+      ).status,
+    ).toBe(401);
+    expect(
+      await (
+        await get(fixture.auth, "/get-session", otherCookies.header())
+      ).json(),
+    ).toMatchObject({ user: { email: otherEmail } });
+    // Listing stays available to admins.
+    expect(
+      (await get(fixture.auth, "/admin/list-users?limit=1", adminCookie))
+        .status,
+    ).toBe(200);
+  });
+
   it("keeps group changes off Better Auth's team endpoints", async () => {
     const fixture = await createFixture();
     await post(fixture.auth, "/sign-up/email", {
@@ -885,37 +970,24 @@ describe("password authentication", () => {
 
   it("does not mark an impersonated user as active", async () => {
     const fixture = await createFixture();
-    const impersonatedEmail = "impersonated@example.com";
-    for (const [userEmail, name] of [
-      [email, "Example Admin"],
-      [impersonatedEmail, "Impersonated Person"],
-    ]) {
-      await post(fixture.auth, "/sign-up/email", {
-        email: userEmail,
-        name,
-        password: originalPassword,
-        termsAccepted: true,
-      });
-    }
-    fixture.database
-      .query('UPDATE "user" SET role = ? WHERE email = ?')
-      .run("admin", email);
-    const adminSignIn = await post(fixture.auth, "/sign-in/email", {
+    await post(fixture.auth, "/sign-up/email", {
       email,
+      name: "Impersonated Person",
       password: originalPassword,
+      termsAccepted: true,
     });
-    const impersonated = fixture.database
-      .query("SELECT id FROM user WHERE email = ?")
-      .get(impersonatedEmail) as { id: string };
-    const impersonation = await post(
-      fixture.auth,
-      "/admin/impersonate-user",
-      { userId: impersonated.id },
-      adminSignIn.headers.get("set-cookie"),
-    );
-    expect(impersonation.status).toBe(200);
     const cookies = new CookieJar();
-    cookies.absorb(impersonation);
+    cookies.absorb(
+      await post(fixture.auth, "/sign-in/email", {
+        email,
+        password: originalPassword,
+      }),
+    );
+    // Better Auth's impersonation endpoints are disabled, but a session that
+    // an earlier release started stays valid until it expires.
+    fixture.database
+      .query("UPDATE session SET impersonatedBy = 'root-admin'")
+      .run();
 
     const response = await app.request(
       "/api/me",
@@ -925,13 +997,11 @@ describe("password authentication", () => {
     );
     await Promise.all(fixture.pending);
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      user: { email: impersonatedEmail },
-    });
+    expect(await response.json()).toMatchObject({ user: { email } });
     expect(
       fixture.database
         .query("SELECT lastActiveAt FROM user WHERE email = ?")
-        .get(impersonatedEmail),
+        .get(email),
     ).toEqual({ lastActiveAt: null });
   });
 });
@@ -939,12 +1009,6 @@ describe("password authentication", () => {
 interface DeviceSession {
   session: { token: string };
   user: { email: string };
-}
-
-function totpSecret(uri: string) {
-  const secret = new URL(uri).searchParams.get("secret");
-  if (!secret) throw new Error("TOTP URI is missing its secret.");
-  return secret;
 }
 
 function hasMultiSessionCookie(response: Response) {
@@ -958,44 +1022,6 @@ function withoutMultiSessionCookies(header: string) {
     .split("; ")
     .filter((cookie) => !cookie.includes("_multi-"))
     .join("; ");
-}
-
-async function totpCode(uri: string) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    decodeBase32(totpSecret(uri)),
-    { hash: "SHA-1", name: "HMAC" },
-    false,
-    ["sign"],
-  );
-  const counter = new ArrayBuffer(8);
-  new DataView(counter).setBigUint64(
-    0,
-    BigInt(Math.floor(Date.now() / 30_000)),
-  );
-  const digest = new Uint8Array(await crypto.subtle.sign("HMAC", key, counter));
-  const offset = (digest.at(-1) ?? 0) & 0x0f;
-  const value =
-    (((digest[offset] ?? 0) & 0x7f) << 24) |
-    ((digest[offset + 1] ?? 0) << 16) |
-    ((digest[offset + 2] ?? 0) << 8) |
-    (digest[offset + 3] ?? 0);
-  return (value % 1_000_000).toString().padStart(6, "0");
-}
-
-function decodeBase32(encoded: string) {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let bits = "";
-  for (const character of encoded.toUpperCase().replace(/=+$/, "")) {
-    const value = alphabet.indexOf(character);
-    if (value < 0) throw new Error("TOTP secret is not valid base32.");
-    bits += value.toString(2).padStart(5, "0");
-  }
-  const bytes: number[] = [];
-  for (let index = 0; index + 8 <= bits.length; index += 8) {
-    bytes.push(Number.parseInt(bits.slice(index, index + 8), 2));
-  }
-  return Uint8Array.from(bytes);
 }
 
 async function activeEmail(

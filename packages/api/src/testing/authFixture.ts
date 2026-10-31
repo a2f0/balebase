@@ -106,3 +106,49 @@ export class CookieJar {
       .join("; ");
   }
 }
+
+/** The TOTP secret inside an authenticator setup URI. */
+export function totpSecret(uri: string) {
+  const secret = new URL(uri).searchParams.get("secret");
+  if (!secret) throw new Error("TOTP URI is missing its secret.");
+  return secret;
+}
+
+/** The current code for an authenticator setup URI. */
+export async function totpCode(uri: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    decodeBase32(totpSecret(uri)),
+    { hash: "SHA-1", name: "HMAC" },
+    false,
+    ["sign"],
+  );
+  const counter = new ArrayBuffer(8);
+  new DataView(counter).setBigUint64(
+    0,
+    BigInt(Math.floor(Date.now() / 30_000)),
+  );
+  const digest = new Uint8Array(await crypto.subtle.sign("HMAC", key, counter));
+  const offset = (digest.at(-1) ?? 0) & 0x0f;
+  const value =
+    (((digest[offset] ?? 0) & 0x7f) << 24) |
+    ((digest[offset + 1] ?? 0) << 16) |
+    ((digest[offset + 2] ?? 0) << 8) |
+    (digest[offset + 3] ?? 0);
+  return (value % 1_000_000).toString().padStart(6, "0");
+}
+
+function decodeBase32(encoded: string) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const character of encoded.toUpperCase().replace(/=+$/, "")) {
+    const value = alphabet.indexOf(character);
+    if (value < 0) throw new Error("TOTP secret is not valid base32.");
+    bits += value.toString(2).padStart(5, "0");
+  }
+  const bytes: number[] = [];
+  for (let index = 0; index + 8 <= bits.length; index += 8) {
+    bytes.push(Number.parseInt(bits.slice(index, index + 8), 2));
+  }
+  return Uint8Array.from(bytes);
+}

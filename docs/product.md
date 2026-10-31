@@ -68,9 +68,20 @@ bun run auth:set-role person@example.com admin
 
 Pass `--local` as the third argument to update the local D1 database instead.
 Later role changes use `auth:set-role` or, for revoking another root admin, the
-Users page. Better Auth's `/admin/set-role`, `/admin/update-user`, and
-`/admin/create-user` endpoints are disabled because they change roles without
-the revocation route's self-guard and history. Public account registration
+Users page. The script records each change in `user_role_events` with the
+previous and new role and the operator who ran it, in the same statement as the
+change; setting the role a user already has changes and records nothing.
+Operators are not Balebase accounts: the event keeps `AUTH_OPERATOR_NAME` and
+`AUTH_OPERATOR_EMAIL`, defaulting to the operator's Git `user.name` and
+`user.email`, and the script refuses to run without a name. Better Auth's
+`/admin/set-role`, `/admin/update-user`, and `/admin/create-user` endpoints are
+disabled because they change roles without the revocation route's self-guard
+and history. Its admin endpoints that would set another person's password, ban
+or unban them, revoke their sessions, remove them, or impersonate them
+(`set-user-password`, `ban-user`, `unban-user`, `revoke-user-session`,
+`revoke-user-sessions`, `remove-user`, `impersonate-user`,
+`stop-impersonating`) are disabled for the same reason; account deletion goes
+through the recorded deletion queue below. Public account registration
 is enabled for now. The client includes sign-up, sign-in, sign-out, reset
 request, and new-password screens. Object-storage endpoints require an
 authenticated session, and each organization's upload library is isolated in
@@ -86,10 +97,10 @@ available Checkr reports, without changing the admin's active workspace.
 The organization list and detail overview show each organization's Plaid Item
 count: bank login connections, including those with sync errors, excluding
 disconnected connections retained for transaction history.
-Authenticated API requests record each account's last active date; an admin
-impersonating someone does not. Root admins see it on both pages, and
-organization owners and administrators see it for members under
-Organization → People. Other members do not receive it.
+Authenticated API requests record each account's last active date; an
+impersonated session, which only earlier releases could start, does not. Root
+admins see it on both pages, and organization owners and administrators see it
+for members under Organization → People. Other members do not receive it.
 The shared inbound mailbox is at `/inbox`. Each account receives a default
 organization at signup; existing accounts are backfilled by the organization
 migration. Organization owners and
@@ -103,7 +114,8 @@ organization. This behavior is shared by the web, iOS, and Android apps.
 
 Root admins use `/root/jobs` to run platform maintenance and inspect maintenance
 and bank sync history. Every run uses the shared background queue and D1 run
-record, with a stable ID, source, requesting user when available, timestamps,
+record, with a stable ID, source, the requesting admin's name and email when it
+was requested by hand, timestamps,
 processing attempt count, status, structured output, and chronological logs.
 Each bank page counts as a processing attempt, including retries. The page
 refreshes automatically, filters by job and status, and loads older runs as you
@@ -117,7 +129,14 @@ retention rules and batch sizes as hourly production maintenance
 (`17 * * * *`, UTC). `POST /api/admin/jobs/:jobId/runs` accepts JSON
 `{"confirm":"<jobId>"}`, an authenticated admin session, and the configured
 client `Origin` header. It responds with 202 and the saved run; an active run
-of the same job is reused. Closing the page does not stop execution. Staging
+of the same job is reused. The request is refused with 403, recording nothing,
+when the caller's stored role is no longer `admin`. Each accepted request,
+including one that joins an active run, adds a log line to the run naming the
+requester and a row to `maintenance_requests` (job, run, whether it joined an
+active run, time, and the requester's ID, name, and email) in the same
+transaction. That history is kept after job history expires and after the
+requester's account is purged, so destructive runs stay attributable; D1
+database operators read it. Closing the page does not stop execution. Staging
 supports manual maintenance and five-minute queue recovery, but does not enqueue
 hourly maintenance. Bank sync is listed here for inspection; it is requested
 from Finance for a specific connection or through daily sync settings.
@@ -155,7 +174,20 @@ admins cannot revoke each other. Each revocation records the actor, target,
 time, and previous and new roles in `user_role_events` in the same transaction;
 like deletion history, it is readable by D1 operators and removed when the
 target account is purged. Apply migration `0077_record_user_role_activity.sql`
-before deploying.
+before deploying. `auth:set-role` changes record `role_set` events with an
+operator actor (migration `0080_record_account_history.sql`).
+
+**Account settings → Security** lists the person's latest 50 security changes:
+turning two-factor authentication on or off and changing or resetting their
+password (`GET /api/account-settings/security-events`). Database triggers record
+each change in `user_security_events` in the statement that makes it, so a
+failed verification, a wrong password, or a change that cannot be recorded
+changes nothing. Every remaining path to these changes is the person's own
+session or password reset link, so the event names no separate actor. Changes
+made before migration `0080_record_account_history.sql` were not recorded. Only
+the person reads the list in the app; root admins read it in D1. It is removed
+when the account is purged. Signing out other sessions is not recorded: Better
+Auth deletes those session rows the same way it signs a session out.
 
 Users can request or cancel account deletion under **Account settings → General**.
 Apply migration `0048_create_user_deletion_requests.sql` before deploying this
@@ -193,8 +225,9 @@ from completion; queued and running jobs are retained until resolved. The
 five-minute scheduler purges expired history in batches. Bank-run history also
 follows connection and organization deletion. Job history is operational history,
 not an immutable audit ledger; domain activity and deletion history retain their
-own policies. Actor IDs and run creation are committed together, and lifecycle
-logs are written by database triggers in the same transaction as state changes.
+own policies. Requester snapshots and run creation are committed together, and
+lifecycle logs are written by database triggers in the same transaction as
+state changes.
 
 Saved output uses named counters and flags: purge counts, blocked user counts,
 subscriptions checked, contract reminders, screening/notification counts, and

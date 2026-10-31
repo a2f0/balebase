@@ -77,9 +77,7 @@ export function AdminJobRun({ runId }: { runId: string }) {
             · {run.source}
           </p>
           <p className="textSm">Run ID: {run.runId}</p>
-          <p className="textSm">
-            Requested by: {run.requestedBy ?? "Scheduler"}
-          </p>
+          <p className="textSm">Requested by: {requester(run)}</p>
           {run.connectionId && (
             <p className="textSm">Bank connection: {run.connectionId}</p>
           )}
@@ -144,4 +142,11 @@ export function AdminJobRun({ runId }: { runId: string }) {
       )}
     </div>
   );
+}
+
+function requester(run: Detail["run"]) {
+  if (run.requestedByName)
+    return `${run.requestedByName} (${run.requestedByEmail ?? "no email"})`;
+  // Runs requested before names were saved keep only the account ID.
+  return run.requestedBy ?? "Scheduler";
 }

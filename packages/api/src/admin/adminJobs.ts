@@ -86,6 +86,8 @@ async function startMaintenance(context: Context<ApiEnv>, legacy: boolean) {
     trigger: "manual",
     actorUserId: context.get("authSession").user.id,
   });
+  if (!run)
+    return context.json({ error: "Only root admins can run jobs." }, 403);
   if (!legacy)
     return respond(context, adminJobsRoutes.start, { run: toJobRun(run) }, 202);
   const completed = await waitForLegacyJob(context.env.DB, run.id);
