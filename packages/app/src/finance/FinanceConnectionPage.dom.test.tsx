@@ -360,6 +360,21 @@ describe("Bank status", () => {
     expect(paths).toEqual(["/finance/connections"]);
   });
 
+  it("does not suggest Update login for a failure a new login cannot fix", async () => {
+    respond(async (url) =>
+      Response.json(
+        url.pathname.endsWith("/institution-health")
+          ? health()
+          : detail({ errorCode: "INTERNAL_SERVER_ERROR", status: "error" }),
+      ),
+    );
+    await mountPage();
+    const text = container.textContent ?? "";
+    expect(text).toContain("Healthy 99.4% of recent requests succeeded");
+    expect(text).not.toContain("needs its own login updated");
+    expect(container.querySelector(".banner")).toBeNull();
+  });
+
   it("says unknown health is unknown and shows a failed check", async () => {
     let fail = true;
     respond(async (url) => {

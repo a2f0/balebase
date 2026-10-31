@@ -58,7 +58,7 @@ export function FinanceInstitutionHealth({
         <>
           <HealthGuidance
             bank={bank}
-            connectionStatus={connection.status}
+            loginError={needsLogin(connection)}
             health={health}
             onNavigate={onNavigate}
           />
@@ -167,18 +167,35 @@ function statusTone(status: string | null): BadgeTone {
   return "neutral";
 }
 
+/** Plaid errors that Update login (Link update mode) can repair. Other
+ * failures, such as Plaid's own INTERNAL_SERVER_ERROR, need no new login. */
+const loginErrorCodes = new Set([
+  "ACCESS_NOT_GRANTED",
+  "INSUFFICIENT_CREDENTIALS",
+  "ITEM_LOGIN_REQUIRED",
+  "PENDING_DISCONNECT",
+  "PENDING_EXPIRATION",
+]);
+
+function needsLogin(connection: Connection) {
+  return (
+    connection.status === "error" &&
+    loginErrorCodes.has(connection.errorCode ?? "")
+  );
+}
+
 const troubled = (health: { status: string | null } | null) =>
   health?.status === "DEGRADED" || health?.status === "DOWN";
 
 /** What the reported health means for this connection, in Plaid's words. */
 function HealthGuidance({
   bank,
-  connectionStatus,
+  loginError,
   health,
   onNavigate,
 }: {
   bank: string;
-  connectionStatus: string;
+  loginError: boolean;
   health: Health;
   onNavigate: (path: string) => void;
 }) {
@@ -215,7 +232,7 @@ function HealthGuidance({
       </Banner>
     );
   }
-  if (connectionStatus === "error" && health.logins.status === "HEALTHY") {
+  if (loginError && health.logins.status === "HEALTHY") {
     return (
       <Banner>
         Plaid reports that logins at {bank} are working for most people, so this
