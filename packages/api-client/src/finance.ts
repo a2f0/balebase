@@ -55,6 +55,11 @@ const endpoints = {
     path: "/api/finance/connections/:id",
     response: "json",
   }),
+  institutionHealth: endpoint<typeof financeRoutes.institutionHealth>({
+    method: "GET",
+    path: "/api/finance/connections/:id/institution-health",
+    response: "json",
+  }),
   disconnectConnection: endpoint<typeof financeRoutes.disconnectConnection>({
     method: "DELETE",
     path: "/api/finance/connections/:id",
@@ -264,6 +269,12 @@ function financeSyncApi(transport: Transport) {
     },
     syncStatus(id: string) {
       return transport.call(endpoints.syncStatus, { params: { id } });
+    },
+    /** Plaid's live health for a connection's bank, across all its users. */
+    institutionHealth(connectionId: string) {
+      return transport.call(endpoints.institutionHealth, {
+        params: { id: connectionId },
+      });
     },
     updateSyncSettings(id: string, dailySync: boolean) {
       return transport.call(endpoints.updateSyncSettings, {

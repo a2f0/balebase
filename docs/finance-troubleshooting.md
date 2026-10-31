@@ -56,6 +56,13 @@ Check job logs when needed, keeping the same connection and organization scope.
 
 ## Probe the institution, not the customer's credentials
 
+Customers can run this check themselves: **Bank status** on the connection's
+page shows the same `item_logins` and `transactions_updates` health, and checks
+by itself when the connection is in error. Ask them what it shows, or read it
+through `GET /api/finance/connections/:id/institution-health` or the MCP tool
+`get_finance_institution_health`. Answers are reused for five minutes per
+institution, so use the probe below when you need a fresh Plaid request ID.
+
 The decisive health check is Plaid's **read-only**
 `POST /institutions/get_by_id` with `options.include_status: true`. Although
 it uses POST, it only retrieves institution metadata. It uses the application's

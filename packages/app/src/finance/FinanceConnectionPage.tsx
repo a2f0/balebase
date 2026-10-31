@@ -30,6 +30,7 @@ import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
 import { financeAccountPath } from "../workspace/workspacePaths";
 import { connectionTone } from "./FinanceAccounts";
+import { FinanceInstitutionHealth } from "./FinanceInstitutionHealth";
 import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
 import { FinanceSyncSettings } from "./FinanceSyncSettings";
 import {
@@ -81,6 +82,12 @@ export function FinanceConnectionPage({
         {data && (
           <>
             <ConnectionSummary connection={data.connection} />
+            <FinanceInstitutionHealth
+              // A new connection starts with no answer from the last one.
+              key={data.connection.id}
+              connection={data.connection}
+              onNavigate={onNavigate}
+            />
             <FinanceSyncSettings
               id={id}
               dailySync={data.connection.dailySync}

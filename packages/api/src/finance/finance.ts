@@ -32,6 +32,10 @@ import {
 import { connectionDetail } from "./financeConnectionDetail";
 import type { FinanceContext } from "./financeContext";
 import {
+  type InstitutionHealthCache,
+  institutionHealth,
+} from "./financeInstitutionHealth";
+import {
   createLinkToken,
   createUpdateLinkToken,
   reportLinkDiagnostics,
@@ -122,6 +126,10 @@ export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
   finance.get("/connections/:id/sync-status", connectionSyncStatus);
   finance.patch("/connections/:id/sync-settings", updateSyncSettings);
   finance.get("/connections/:id", connectionDetail);
+  const healthCache: InstitutionHealthCache = new Map();
+  finance.get("/connections/:id/institution-health", async (context) =>
+    institutionHealth(context, requestPlaid, healthCache),
+  );
   finance.delete("/connections/:id", async (context) =>
     disconnectConnection(context, requestPlaid),
   );

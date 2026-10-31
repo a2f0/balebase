@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
-import type { FinanceConnectionDetail } from "@balebase/validators/finance";
+import type {
+  FinanceConnectionDetail,
+  FinanceInstitutionHealth,
+} from "@balebase/validators/finance";
 import { act } from "react";
 import { holdTimers, installDom } from "../testing/dom";
 import { FinanceConnectionPage } from "./FinanceConnectionPage";
@@ -51,6 +54,25 @@ function detail(
       },
       ...connection,
     },
+  };
+}
+
+function health(
+  logins: Partial<NonNullable<FinanceInstitutionHealth["logins"]>> | null = {},
+): FinanceInstitutionHealth {
+  return {
+    checkedAt: "2026-10-31T14:00:00.000Z",
+    institutionId: "ins_109508",
+    institutionName: "First Platypus Bank",
+    logins: logins && {
+      institutionErrorRate: 0.5,
+      lastStatusChange: "2026-10-01T08:00:00.000Z",
+      plaidErrorRate: 0.1,
+      status: "HEALTHY",
+      successRate: 99.4,
+      ...logins,
+    },
+    transactions: null,
   };
 }
 
@@ -109,7 +131,7 @@ describe("Finance connection page", () => {
 
   it("reloads after a failed sync to show Plaid's error", async () => {
     let failed = false;
-    respond(async (_url, init) => {
+    respond(async (url, init) => {
       if (init?.method === "POST") {
         failed = true;
         return Response.json(
@@ -120,6 +142,8 @@ describe("Finance connection page", () => {
           { status: 502 },
         );
       }
+      if (url.href.endsWith("/institution-health"))
+        return Response.json(health());
       return Response.json(
         failed
           ? detail({
@@ -157,6 +181,7 @@ describe("Finance connection page", () => {
     await mountPage((path) => paths.push(path));
     expect(() => button("Sync now")).toThrow();
     expect(container.textContent).toContain("Disconnected");
+    expect(container.textContent).not.toContain("Bank status");
 
     await click("Delete data");
     await answer("Cancel");
@@ -260,4 +285,103 @@ it("saves daily sync for the bank connection and preserves the setting on a fail
   await settle();
   expect(checkbox.checked).toBe(true);
   expect(container.textContent).toContain("Could not save sync settings.");
+});
+
+describe("Bank status", () => {
+  it("checks for an outage only when asked while the connection works", async () => {
+    const requests: string[] = [];
+    respond(async (url) => {
+      requests.push(url.pathname);
+      return Response.json(
+        url.pathname.endsWith("/institution-health") ? health() : detail(),
+      );
+    });
+    await mountPage();
+    expect(requests).toEqual(["/api/finance/connections/item-1"]);
+    expect(container.textContent).toContain(
+      "check whether First Platypus Bank is having a wider outage",
+    );
+
+    await click("Check for outages");
+    expect(requests).toEqual([
+      "/api/finance/connections/item-1",
+      "/api/finance/connections/item-1/institution-health",
+    ]);
+    const text = container.textContent ?? "";
+    expect(text).toContain("Logins and repairs");
+    expect(text).toContain("Healthy 99.4% of recent requests succeeded");
+    expect(text).toContain("0.5% failed at the bank, 0.1% failed at Plaid");
+    expect(text).toContain("Transaction updates");
+    expect(text).toContain("Unknown Plaid did not report it.");
+    expect(container.querySelector(".banner")).toBeNull();
+    expect(button("Check again").disabled).toBe(false);
+  });
+
+  it("checks by itself when the connection fails and warns during a login outage", async () => {
+    respond(async (url) =>
+      Response.json(
+        url.pathname.endsWith("/institution-health")
+          ? health({
+              institutionErrorRate: 81,
+              plaidErrorRate: 2,
+              status: "DOWN",
+              successRate: 17,
+            })
+          : detail({ errorCode: "ITEM_LOGIN_REQUIRED", status: "error" }),
+      ),
+    );
+    await mountPage();
+    const text = container.textContent ?? "";
+    expect(text).toContain(
+      "Plaid reports that logins at First Platypus Bank are failing for many people.",
+    );
+    expect(text).toContain("Down 17% of recent requests succeeded");
+    expect(text).toContain("81% failed at the bank");
+  });
+
+  it("points a failing connection at Update login when its bank's logins work", async () => {
+    respond(async (url) =>
+      Response.json(
+        url.pathname.endsWith("/institution-health")
+          ? health()
+          : detail({ errorCode: "ITEM_LOGIN_REQUIRED", status: "error" }),
+      ),
+    );
+    const paths: string[] = [];
+    await mountPage((path) => paths.push(path));
+    expect(container.textContent).toContain(
+      "this connection probably needs its own login updated",
+    );
+    const link = container.querySelector<HTMLAnchorElement>(
+      ".banner a[href='/finance/connections']",
+    );
+    if (!link) throw new Error("Connections link missing");
+    await click(link);
+    expect(paths).toEqual(["/finance/connections"]);
+  });
+
+  it("says unknown health is unknown and shows a failed check", async () => {
+    let fail = true;
+    respond(async (url) => {
+      if (!url.pathname.endsWith("/institution-health"))
+        return Response.json(detail());
+      if (fail)
+        return Response.json(
+          { code: "INTERNAL_SERVER_ERROR", error: "Plaid is unavailable." },
+          { status: 502 },
+        );
+      return Response.json(health(null));
+    });
+    await mountPage();
+    await click("Check for outages");
+    expect(container.textContent).toContain("Plaid is unavailable.");
+    fail = false;
+    await click("Check for outages");
+    const text = container.textContent ?? "";
+    expect(text).not.toContain("Plaid is unavailable.");
+    expect(text).toContain(
+      "Plaid did not report login status for First Platypus Bank right now. That does not mean it is working.",
+    );
+    expect(text).not.toContain("Healthy");
+  });
 });
