@@ -262,7 +262,13 @@ export const auditsRoutes = {
   copyTemplate: route({
     method: "POST",
     path: "/api/audits/templates/:id/copies",
-    body: AuditTemplateSaveSchema,
+    body: AuditTemplateSaveSchema.extend({
+      /** The published global version the copy starts from, kept as its source. */
+      sourceVersion: z
+        .int({ error: "The template version is invalid." })
+        .min(1, "The template version is invalid.")
+        .optional(),
+    }),
     response: AuditTemplateResponseSchema,
   }),
   templateVersions: route({

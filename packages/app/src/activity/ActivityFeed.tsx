@@ -72,7 +72,9 @@ const actionLabels: Record<string, string> = {
   "audit.started": "started the audit",
   "audit.template_created": "created the form",
   "audit.template_discarded": "discarded the form",
+  "audit.template_published": "published the form",
   "audit.template_restored": "restored the form",
+  "audit.template_unpublished": "unpublished the form",
   "audit.template_version_saved": "saved a form version",
   "contract.created": "created a contract",
   "contract.deleted": "deleted a contract",
@@ -463,11 +465,11 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
       );
     case "audit.template_created":
     case "audit.template_discarded":
+    case "audit.template_published":
     case "audit.template_restored":
+    case "audit.template_unpublished":
     case "audit.template_version_saved":
-      return (
-        <p className="activityDetails">Version {textValue(details.version)}</p>
-      );
+      return <TemplateDetails details={details} />;
     default:
       return details.title ? (
         <p className="activityDetails">{textValue(details.title)}</p>
@@ -483,6 +485,25 @@ function rootActivityDetails(event: ActivityEvent) {
   if (event.root.type === "organization_member") return null;
   const summary = rootSummaries[event.root.type];
   return summary ? <p className="activityDetails">{summary(event)}</p> : null;
+}
+
+/** A form version, and the published global version a copy started from. */
+function TemplateDetails({ details }: { details: ActivityEvent["details"] }) {
+  const source = details.copiedFrom;
+  const copiedVersion =
+    typeof source === "object" && source !== null
+      ? textValue(Reflect.get(source, "version"))
+      : "";
+  const copied =
+    typeof source === "object" && source !== null
+      ? ` · Copied from ${textValue(Reflect.get(source, "name")) || "a global form"}${copiedVersion && `, version ${copiedVersion}`}`
+      : null;
+  return (
+    <p className="activityDetails">
+      Version {textValue(details.version)}
+      {copied}
+    </p>
+  );
 }
 
 function MemberRoleDetails({ event }: { event: ActivityEvent }) {
