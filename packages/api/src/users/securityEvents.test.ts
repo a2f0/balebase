@@ -46,6 +46,20 @@ const recorded = (fixture: Fixture) =>
     )
     .all();
 
+const rejectHistory = (fixture: Fixture) =>
+  fixture.database.exec(
+    "CREATE TRIGGER reject_security_event BEFORE INSERT ON user_security_events BEGIN SELECT RAISE(ABORT, 'history unavailable'); END",
+  );
+const allowHistory = (fixture: Fixture) =>
+  fixture.database.exec("DROP TRIGGER reject_security_event");
+const twoFactorState = (fixture: Fixture) =>
+  fixture.database
+    .query(
+      `SELECT user.twoFactorEnabled, twoFactor.verified FROM user
+       LEFT JOIN twoFactor ON twoFactor.userId = user.id WHERE user.email = ?`,
+    )
+    .get(email);
+
 async function history(fixture: Fixture, cookies: CookieJar) {
   const response = await app.request(
     "/api/account-settings/security-events",
@@ -174,9 +188,7 @@ it("records two-factor and password changes only when they happen", async () => 
 it("keeps the old password when the change cannot be recorded", async () => {
   const fixture = await createFixture();
   const cookies = await signUp(fixture, email);
-  fixture.database.exec(
-    "CREATE TRIGGER reject_security_event BEFORE INSERT ON user_security_events BEGIN SELECT RAISE(ABORT, 'history unavailable'); END",
-  );
+  rejectHistory(fixture);
   const changed = await post(
     fixture.auth,
     "/change-password",
@@ -184,7 +196,7 @@ it("keeps the old password when the change cannot be recorded", async () => {
     cookies.header(),
   );
   expect(changed.status).not.toBe(200);
-  fixture.database.exec("DROP TRIGGER reject_security_event");
+  allowHistory(fixture);
   expect(recorded(fixture)).toEqual([]);
   await signedIn(fixture, email, originalPassword);
   expect(
@@ -195,4 +207,61 @@ it("keeps the old password when the change cannot be recorded", async () => {
       })
     ).status,
   ).toBe(401);
+});
+
+it("keeps two-factor enrollment and removal consistent when they cannot be recorded", async () => {
+  const fixture = await createFixture();
+  const cookies = await signUp(fixture, email);
+  const enabled = await post(
+    fixture.auth,
+    "/two-factor/enable",
+    { password: originalPassword },
+    cookies.header(),
+  );
+  const { totpURI } = (await enabled.json()) as { totpURI: string };
+  rejectHistory(fixture);
+  const verify = () =>
+    totpCode(totpURI).then((code) =>
+      post(fixture.auth, "/two-factor/verify-totp", { code }, cookies.header()),
+    );
+  expect((await verify()).status).not.toBe(200);
+  expect(twoFactorState(fixture)).toEqual({
+    twoFactorEnabled: 0,
+    verified: 0,
+  });
+  allowHistory(fixture);
+  const verified = await verify();
+  expect(verified.status).toBe(200);
+  cookies.absorb(verified);
+  expect(twoFactorState(fixture)).toEqual({
+    twoFactorEnabled: 1,
+    verified: 1,
+  });
+  expect(recorded(fixture)).toEqual([{ email, action: "two_factor_enabled" }]);
+
+  rejectHistory(fixture);
+  const disable = () =>
+    post(
+      fixture.auth,
+      "/two-factor/disable",
+      { password: originalPassword },
+      cookies.header(),
+    );
+  expect((await disable()).status).not.toBe(200);
+  // Better Auth turns the setting off before deleting the authenticator, so
+  // the refused change leaves both in place.
+  expect(twoFactorState(fixture)).toEqual({
+    twoFactorEnabled: 1,
+    verified: 1,
+  });
+  allowHistory(fixture);
+  expect((await disable()).status).toBe(200);
+  expect(twoFactorState(fixture)).toEqual({
+    twoFactorEnabled: 0,
+    verified: null,
+  });
+  expect(recorded(fixture)).toEqual([
+    { email, action: "two_factor_enabled" },
+    { email, action: "two_factor_disabled" },
+  ]);
 });
