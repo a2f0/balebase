@@ -615,13 +615,22 @@ on the connection. Manual sync can start a fresh attempt after failure.
 
 Sync jobs retain their source, requesting user, timestamps, outcome, and counts.
 Daily runs identify their source without inventing a human actor. The shared
-Activity feed records manual sync requests, daily-sync setting changes with
-before/after values, and disconnects, with user and API-key attribution in the
-same transaction as the mutation. **Bank connections** activity requires
-Finance access. This activity remains until the connection's data or organization
-is purged. Completed sync runs and operational logs are retained for 30 days;
-operators can inspect them in the Jobs page or D1. Finance-authorized members can
-read the latest job on the connection page.
+Activity feed records connecting a bank, manual sync requests, daily-sync
+setting changes with before/after values, disconnects, and deleting a
+connection's imported data, with user and API-key attribution in the same
+transaction as the mutation. Each connection's page shows its own history
+(`GET /api/finance/connections/:id/activity`, MCP
+`list_finance_connection_activity`), including after it is disconnected.
+**Bank connections** activity requires Finance access. This activity remains
+until the connection's data or organization is purged; deleting the data keeps
+one event recording who deleted it and the number of accounts, transactions, and
+annotations removed. Apply migration `0080_record_finance_data_deletion.sql`
+before deploying the Worker that records it. Plaid-driven status changes, such
+as a login error and its recovery, are not activity events yet; the latest error
+shows on the connection and in its sync jobs. Completed sync runs and
+operational logs are retained for 30 days; operators can inspect them in the
+Jobs page or D1. Finance-authorized members can read the latest job on the
+connection page.
 
 Each institution's sync, disconnect, and delete actions live at
 `/finance/connections`; the overview only warns when a connection stops
@@ -655,7 +664,10 @@ category changes its slug, and `uncategorized` is reserved. Selecting a
 category's row, or **Show transactions** in its context menu, opens
 `/finance/expenses/category/<slug>`, the overview filtered to that category's
 transactions across all imported history. Deleting a category leaves its
-transactions uncategorized. `/finance/reports` totals
+transactions uncategorized. Creating, renaming (with the old and new name and
+slug), deleting (with how many transactions it leaves uncategorized), and adding
+the common set (naming the categories added) appear in Activity under
+**Expense categories**, which requires Finance access. `/finance/reports` totals
 expenses by category over a period: posted outflows count as spending, refunds
 assigned to a category reduce it, and unassigned transfers and loan or card
 payments are reported separately so money moved between the organization's own
@@ -865,11 +877,17 @@ any quantity drift.
 
 Owners and organization admins can upgrade or manage billing at
 `/organization/billing`. Subscription management uses Stripe's hosted Billing
-Portal. Checkout uses Stripe's hosted page unless `STRIPE_PUBLISHABLE_KEY` holds
-a publishable key from the same Stripe account and mode as the secret key; then
-the billing page embeds Stripe's Payment Element, styled with the app's theme
-tokens. Add the following values to the ignored `.secrets/prod/app.env` before
-local billing work or a production API deployment:
+Portal. Starting Pro checkout records a `billing.checkout_started` event naming
+the owner or admin, the seat quantity, and the price, visible under **Billing**
+in Activity to owners and admins only; the Checkout session and subscription
+metadata also carry `started_by_user_id`. Subscription status, cancellation, and
+seat quantity changes come from Stripe and are kept as current state and in
+Stripe's own history, not as Activity events. Checkout uses Stripe's hosted page
+unless `STRIPE_PUBLISHABLE_KEY` holds a publishable key from the same Stripe
+account and mode as the secret key; then the billing page embeds Stripe's
+Payment Element, styled with the app's theme tokens. Add the following values to
+the ignored `.secrets/prod/app.env` before local billing work or a production
+API deployment:
 
 ```sh
 export STRIPE_SECRET_KEY=your-live-or-test-secret-key

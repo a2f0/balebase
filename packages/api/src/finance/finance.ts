@@ -29,7 +29,10 @@ import {
   listExpenseCategories,
   renameCategory,
 } from "./financeCategories";
-import { connectionDetail } from "./financeConnectionDetail";
+import {
+  connectionActivity,
+  connectionDetail,
+} from "./financeConnectionDetail";
 import type { FinanceContext } from "./financeContext";
 import {
   type InstitutionHealthCache,
@@ -126,6 +129,7 @@ export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
   finance.get("/connections/:id/sync-status", connectionSyncStatus);
   finance.patch("/connections/:id/sync-settings", updateSyncSettings);
   finance.get("/connections/:id", connectionDetail);
+  finance.get("/connections/:id/activity", connectionActivity);
   const healthCache: InstitutionHealthCache = new Map();
   finance.get("/connections/:id/institution-health", async (context) =>
     institutionHealth(context, requestPlaid, healthCache),
@@ -442,11 +446,12 @@ async function deleteConnectionData(context: FinanceContext) {
     return context.json({ error: "Connection not found." }, 404);
   }
   const organizationId = context.get("organizationId");
-  const connection = await context.env.DB.prepare(
-    `SELECT status FROM plaid_items WHERE id = ? AND organization_id = ?`,
-  )
-    .bind(connectionId, organizationId)
-    .first<{ status: string }>();
+  const database = context.env.DB;
+  const connection = await findConnectionStatus(
+    database,
+    organizationId,
+    connectionId,
+  );
   if (!connection) {
     return context.json({ error: "Connection not found." }, 404);
   }
@@ -456,27 +461,116 @@ async function deleteConnectionData(context: FinanceContext) {
       409,
     );
   }
-  await context.env.DB.batch([
-    context.env.DB.prepare(
-      `DELETE FROM finance_transaction_annotations
+  const actor = requestActor(context);
+  // Every statement rechecks that the connection is still disconnected, so a
+  // concurrent change deletes nothing and records nothing.
+  const disconnected = `EXISTS (SELECT 1 FROM plaid_items
+    WHERE id = ? AND organization_id = ? AND status = 'disconnected')`;
+  const results = await activityBatch(database, actor.apiKey, [
+    connectionDataDeletedEvent(
+      database,
+      actor.userId,
+      organizationId,
+      connectionId,
+    ),
+    database
+      .prepare(
+        `DELETE FROM finance_transaction_annotations
          WHERE organization_id = ? AND transaction_id IN (
            SELECT id FROM plaid_transactions
            WHERE plaid_item_record_id = ? AND organization_id = ?
-         )`,
-    ).bind(organizationId, connectionId, organizationId),
-    context.env.DB.prepare(
-      `DELETE FROM plaid_transactions
-         WHERE plaid_item_record_id = ? AND organization_id = ?`,
-    ).bind(connectionId, organizationId),
-    context.env.DB.prepare(
-      `DELETE FROM plaid_accounts
-         WHERE plaid_item_record_id = ? AND organization_id = ?`,
-    ).bind(connectionId, organizationId),
-    context.env.DB.prepare(
-      "DELETE FROM plaid_items WHERE id = ? AND organization_id = ?",
-    ).bind(connectionId, organizationId),
+         ) AND ${disconnected}`,
+      )
+      .bind(
+        organizationId,
+        connectionId,
+        organizationId,
+        connectionId,
+        organizationId,
+      ),
+    database
+      .prepare(
+        `DELETE FROM plaid_transactions
+         WHERE plaid_item_record_id = ? AND organization_id = ?
+           AND ${disconnected}`,
+      )
+      .bind(connectionId, organizationId, connectionId, organizationId),
+    database
+      .prepare(
+        `DELETE FROM plaid_accounts
+         WHERE plaid_item_record_id = ? AND organization_id = ?
+           AND ${disconnected}`,
+      )
+      .bind(connectionId, organizationId, connectionId, organizationId),
+    database
+      .prepare(
+        `DELETE FROM plaid_items
+         WHERE id = ? AND organization_id = ? AND status = 'disconnected'`,
+      )
+      .bind(connectionId, organizationId),
   ]);
-  return context.body(null, 204);
+  if (results.at(-1)?.meta.changes) return context.body(null, 204);
+  return (await findConnectionStatus(database, organizationId, connectionId))
+    ? context.json({ error: "Connection changed. Reload and try again." }, 409)
+    : context.json({ error: "Connection not found." }, 404);
+}
+
+function findConnectionStatus(
+  database: D1Database,
+  organizationId: string,
+  id: string,
+) {
+  return database
+    .prepare(
+      "SELECT status FROM plaid_items WHERE id = ? AND organization_id = ?",
+    )
+    .bind(id, organizationId)
+    .first<{ status: string }>();
+}
+
+/**
+ * Records what a data deletion removes, read in the deleting batch before the
+ * rows go. Migration 0080 keeps this event when the connection row is deleted.
+ */
+function connectionDataDeletedEvent(
+  database: D1Database,
+  actorId: string,
+  organizationId: string,
+  connectionId: string,
+) {
+  return database
+    .prepare(
+      `INSERT INTO activity_events (
+         organization_id, root_type, root_id, root_label, subject_type,
+         subject_id, action, actor_user_id, actor_name, actor_email,
+         occurred_at, details
+       )
+       SELECT item.organization_id, 'finance_connection', item.id,
+              COALESCE(item.institution_name, 'Bank connection'),
+              'finance_connection', item.id, 'finance.connection_data_deleted',
+              actor.id, actor.name, actor.email, ?,
+              json_object(
+                'institutionName', item.institution_name,
+                'accountCount', (SELECT COUNT(*) FROM plaid_accounts
+                  WHERE plaid_item_record_id = item.id
+                    AND organization_id = item.organization_id),
+                'transactionCount', (SELECT COUNT(*) FROM plaid_transactions
+                  WHERE plaid_item_record_id = item.id
+                    AND organization_id = item.organization_id),
+                'annotationCount', (SELECT COUNT(*)
+                  FROM finance_transaction_annotations AS annotation
+                  JOIN plaid_transactions AS txn
+                    ON txn.id = annotation.transaction_id
+                  WHERE txn.plaid_item_record_id = item.id
+                    AND txn.organization_id = item.organization_id
+                    AND annotation.organization_id = item.organization_id)
+              )
+       FROM plaid_items AS item
+       JOIN user AS actor ON actor.id = ?
+       WHERE item.id = ? AND item.organization_id = ?
+         AND item.status = 'disconnected'`,
+    )
+    .bind(new Date().toISOString(), actorId, connectionId, organizationId);
 }
 
 async function updateTransactionAnnotation(context: FinanceContext) {
@@ -538,26 +632,49 @@ async function insertConnection(
   id: string,
 ) {
   const now = new Date().toISOString();
-  await context.env.DB.prepare(
-    `INSERT INTO plaid_items
-     (id, organization_id, plaid_item_id, access_token_ciphertext,
-      access_token_iv, institution_id, institution_name, status, created_by,
-      created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
-  )
-    .bind(
-      id,
-      context.get("organizationId"),
-      exchange.item_id,
-      encrypted.ciphertext,
-      encrypted.iv,
-      input.institutionId ?? null,
-      input.institutionName ?? null,
-      context.get("authSession").user.id,
-      now,
-      now,
-    )
-    .run();
+  const database = context.env.DB;
+  const organizationId = context.get("organizationId");
+  const actor = requestActor(context);
+  const label = input.institutionName ?? "Bank connection";
+  await activityBatch(database, actor.apiKey, [
+    database
+      .prepare(
+        `INSERT INTO plaid_items
+         (id, organization_id, plaid_item_id, access_token_ciphertext,
+          access_token_iv, institution_id, institution_name, status, created_by,
+          created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
+      )
+      .bind(
+        id,
+        organizationId,
+        exchange.item_id,
+        encrypted.ciphertext,
+        encrypted.iv,
+        input.institutionId ?? null,
+        input.institutionName ?? null,
+        actor.userId,
+        now,
+        now,
+      ),
+    activityStatement(
+      database,
+      {
+        action: "finance.connection_created",
+        actorId: actor.userId,
+        // Plaid's Item ID and token stay out of activity.
+        details: {
+          institutionId: input.institutionId ?? null,
+          institutionName: input.institutionName ?? null,
+        },
+        occurredAt: now,
+        organizationId,
+        root: { id, label, type: "finance_connection" },
+        subject: { id, type: "finance_connection" },
+      },
+      { sql: "changes() > 0", bindings: [] },
+    ),
+  ]);
 }
 
 async function listConnections(database: D1Database, organizationId: string) {
