@@ -63,7 +63,9 @@ An outer launcher can use `hermes -z "$task" --usage-file "$usage_file"` for an
 already authorized child run; the file is written after the run returns, not
 while its final request is still running. Check the installed
 `hermes_cli/oneshot.py` writer and [CLI reference][hermes] for the actual
-version. One-shot mode bypasses approval prompts: do not switch a live audit
+version. The fields below were checked against [Hermes
+v0.22.5+2418.g8209674][hermes-source]; verify them again after upgrades.
+One-shot mode bypasses approval prompts: do not switch a live audit
 to it or launch another audit merely to obtain usage. Its execution policy
 needs separate authorization.
 
@@ -130,6 +132,7 @@ Only for a new authorized report with no previously created issue:
 ```sh
 gh issue create --repo "$repo" --title "$title" --body-file "$body_file" \
   > "$receipt_dir/issue-url.txt"
+IFS= read -r issue_url < "$receipt_dir/issue-url.txt"
 ```
 
 Immediately save the returned URL as `issue_url` in the checkpoint, before any
@@ -177,6 +180,7 @@ examples are exercised with a stub CLI in the repository's documentation tests;
 they do not open real issues or execute audits.
 
 [hermes]: https://hermes-agent.nousresearch.com/docs/reference/cli-commands
+[hermes-source]: https://github.com/NousResearch/hermes-agent/blob/820967473d4d5b6777d3a9419def4be422711d16/hermes_cli/oneshot.py
 [create]: https://cli.github.com/manual/gh_issue_create
 [edit]: https://cli.github.com/manual/gh_issue_edit
 [view]: https://cli.github.com/manual/gh_issue_view
