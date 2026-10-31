@@ -187,7 +187,8 @@ function needsLogin(connection: Connection) {
 const troubled = (health: { status: string | null } | null) =>
   health?.status === "DEGRADED" || health?.status === "DOWN";
 
-/** What the reported health means for this connection, in Plaid's words. */
+/** What the reported health means for this connection, in Plaid's words.
+ * Login and transaction advice are independent, so both can show. */
 function HealthGuidance({
   bank,
   loginError,
@@ -207,7 +208,36 @@ function HealthGuidance({
       </Banner>
     );
   }
-  if (troubled(health.logins)) {
+  return (
+    <>
+      <LoginGuidance
+        bank={bank}
+        loginError={loginError}
+        logins={health.logins}
+        onNavigate={onNavigate}
+      />
+      {troubled(health.transactions) && (
+        <Banner tone="warning">
+          Plaid reports problems refreshing transactions at {bank}, so new
+          transactions may arrive late.
+        </Banner>
+      )}
+    </>
+  );
+}
+
+function LoginGuidance({
+  bank,
+  loginError,
+  logins,
+  onNavigate,
+}: {
+  bank: string;
+  loginError: boolean;
+  logins: Health["logins"];
+  onNavigate: (path: string) => void;
+}) {
+  if (troubled(logins)) {
     return (
       <Banner tone="warning">
         Plaid reports that logins at {bank} are failing for many people. Wait
@@ -216,15 +246,7 @@ function HealthGuidance({
       </Banner>
     );
   }
-  if (troubled(health.transactions)) {
-    return (
-      <Banner tone="warning">
-        Plaid reports problems refreshing transactions at {bank}, so new
-        transactions may arrive late.
-      </Banner>
-    );
-  }
-  if (!health.logins?.status) {
+  if (!logins?.status) {
     return (
       <Banner>
         Plaid did not report login status for {bank} right now. That does not
@@ -232,7 +254,7 @@ function HealthGuidance({
       </Banner>
     );
   }
-  if (loginError && health.logins.status === "HEALTHY") {
+  if (loginError && logins.status === "HEALTHY") {
     return (
       <Banner>
         Plaid reports that logins at {bank} are working for most people, so this

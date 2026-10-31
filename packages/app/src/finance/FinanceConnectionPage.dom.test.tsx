@@ -343,7 +343,17 @@ describe("Bank status", () => {
     respond(async (url) =>
       Response.json(
         url.pathname.endsWith("/institution-health")
-          ? health()
+          ? {
+              ...health(),
+              transactions: {
+                institutionErrorRate: 40,
+                lastStatusChange: null,
+                plaidErrorRate: 0,
+                refreshInterval: "DELAYED",
+                status: "DEGRADED",
+                successRate: 60,
+              },
+            }
           : detail({ errorCode: "ITEM_LOGIN_REQUIRED", status: "error" }),
       ),
     );
@@ -352,6 +362,11 @@ describe("Bank status", () => {
     expect(container.textContent).toContain(
       "this connection probably needs its own login updated",
     );
+    // A transaction-refresh problem does not hide the login advice.
+    expect(container.textContent).toContain(
+      "Plaid reports problems refreshing transactions at First Platypus Bank",
+    );
+    expect(container.textContent).toContain("Refreshes delayed");
     const link = container.querySelector<HTMLAnchorElement>(
       ".banner a[href='/finance/connections']",
     );
