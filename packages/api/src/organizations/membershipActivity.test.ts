@@ -15,6 +15,9 @@ import { removeMemberWithActivity } from "./memberRemoval";
 describe("member removal activity", () => {
   it("records who removed a member, the groups and equipment they lost, and their keys", async () => {
     const fixture = await createMembershipFixture();
+    // Bob administers the organization, so his unexpired key works until now;
+    // his expired one already stopped.
+    fixture.database.exec("UPDATE member SET role = 'admin' WHERE id = 'bob'");
     const response = await fixture.remove("bob");
     expect(response.status).toBe(200);
 
@@ -29,7 +32,7 @@ describe("member removal activity", () => {
       actor: { id: fixture.owner.id, name: "Alice", email },
       details: {
         apiKeys: [{ id: "bob-key", name: "Bob's key" }],
-        role: "member",
+        role: "admin",
         userEmail: "bob@example.com",
         userId: fixture.bob.id,
         userName: "Bob",
@@ -572,6 +575,12 @@ async function createMembershipFixture() {
     .query(`INSERT INTO organization_api_keys (id, organization_id, name, access,
       token_prefix, token_hash, created_by, created_at)
       VALUES ('bob-key', ?, 'Bob''s key', 'read', 'bb_1', 'hash', ?, ?)`)
+    .run(organizationId, bob.id, now);
+  database
+    .query(`INSERT INTO organization_api_keys (id, organization_id, name, access,
+      token_prefix, token_hash, created_by, created_at, expires_at)
+      VALUES ('bob-expired', ?, 'Expired', 'read', 'bb_2', 'hash-2', ?, ?,
+              '2026-01-01T00:00:00.000Z')`)
     .run(organizationId, bob.id, now);
   insertBilling(database, organizationId, {
     seat_quantity: 10,

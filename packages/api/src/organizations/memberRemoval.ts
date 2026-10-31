@@ -75,13 +75,18 @@ function membershipEvent(
               json_object(
                 'role', member.role, 'userId', person.id,
                 'userName', person.name, 'userEmail', person.email,
-                -- Keys stop working once their creator is no longer a member.
+                -- The keys this removal stops: a key works only while it is
+                -- unrevoked and unexpired and its creator manages the
+                -- organization.
                 'apiKeys', json((
                   SELECT json_group_array(json_object('id', id, 'name', name))
                   FROM (
                     SELECT id, name FROM organization_api_keys
                     WHERE organization_id = member.organizationId
                       AND created_by = member.userId AND revoked_at IS NULL
+                      AND (expires_at IS NULL OR expires_at > ?)
+                      AND (instr(${roles("member.role")}, ',owner,') > 0
+                           OR instr(${roles("member.role")}, ',admin,') > 0)
                     ORDER BY created_at, id
                   )
                 )))
@@ -94,6 +99,7 @@ function membershipEvent(
       removal.reason === "member_left"
         ? "organization.member_left"
         : "organization.member_removed",
+      occurredAt,
       occurredAt,
       removal.actorId,
       removal.memberId,
