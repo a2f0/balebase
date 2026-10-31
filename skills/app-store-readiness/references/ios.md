@@ -27,10 +27,13 @@ Check these common first-review risks against the app and its metadata:
   minimum-functionality (4.2) scrutiny.
 - Guideline 2.3.10: no names, icons, links, or imagery of other mobile
   platforms or marketplaces (Android, Google Play) in the iOS app or its
-  metadata, including About screens and cross-promotion. Search the shipped
-  strings in every language and the listing, and guard them with a test.
-- Guideline 1.4.1: in Health & Fitness or Medical, make no diagnosis or
-  treatment claims, and say in the notes when the app is not a medical device.
+  metadata, including About screens and cross-promotion, unless they serve
+  specific, approved interactive functionality. Search the shipped strings in
+  every language and the listing, and guard them with a test.
+- Guideline 1.4.1: diagnosis, treatment, and health-measurement claims get
+  greater scrutiny. Back any such claim with disclosed methodology and any
+  regulatory clearance, and remind users to consult a doctor; an app that makes
+  none should say in the notes that it is not a medical device.
 
 Verify current [submission requirements](https://developer.apple.com/news/upcoming-requirements/)
 against the archive's SDK/toolchain, not just the installed Xcode. Check

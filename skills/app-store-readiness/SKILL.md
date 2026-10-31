@@ -102,7 +102,10 @@ without being asked:
 Apple sends exactly this list as a Guideline 2.1 "Information Needed" request,
 which costs a first submission a full review round trip. Keep the notes under
 version control when the repository keeps its listing metadata, guard their
-coverage with a test, and keep recordings outside Git. Check every claim in the
+coverage with a test, and keep recordings outside Git. Never commit demo
+credentials: enter them in the console's sign-in fields (App Store Connect's
+App Review Information, Play Console's App access) and have the committed notes
+say where they are. Check every claim in the
 notes against the submitted build. A recording or physical-device test the
 agent cannot perform is an owner prerequisite with an exact next action, never
 a pass.
