@@ -39,7 +39,7 @@ function fixture() {
   const directory = mkdtempSync(join(tmpdir(), "audit usage docs "));
   onTestFinished(() => rmSync(directory, { recursive: true, force: true }));
   // No inherited credentials/config, and no real gh (even via `command gh`).
-  for (const command of ["cmp", "jq", "mv"]) {
+  for (const command of ["cmp", "jq", "mv", "env"]) {
     const executable = Bun.which(command);
     if (!executable) throw new Error(`Fixture requires ${command}`);
     symlinkSync(executable, join(directory, command));
@@ -131,7 +131,9 @@ test.each(["edit", "view", "body", "url"])(
 test("documentation fixtures fail closed if a command bypasses gh stub", () => {
   const f = fixture();
   expect(f.run("command gh issue view anything").exitCode).toBe(127);
-  expect(f.run("env gh issue view anything").exitCode).toBe(127);
+  const throughEnv = f.run("env gh issue view anything");
+  expect(throughEnv.exitCode).toBe(127);
+  expect(throughEnv.stderr.toString()).toContain("gh");
   expect(f.run(`test -z "\${GH_TOKEN:-}\${GITHUB_TOKEN:-}"`).exitCode).toBe(0);
 });
 
