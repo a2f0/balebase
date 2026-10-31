@@ -78,6 +78,38 @@ policy/metadata impact. Escalate product decisions only when needed; keep
 unrelated checks moving. Do not add accounts, analytics, permission prompts,
 or generic compliance UI merely to satisfy an inapplicable checklist.
 
+## Prepare the reviewer packet
+
+Treat what the reviewer receives as part of the candidate. Before a first
+submission, and whenever the core flow changes, the review notes answer
+without being asked:
+
+- the app's purpose and audience, the problem it solves, and why it is worth
+  having over established apps in its category;
+- how to reach each main feature from launch, with demo credentials, sample
+  files, or a statement that none are needed;
+- each external service the core features rely on (data providers,
+  authentication, payments, AI), or a statement that there are none;
+- regional differences in features or content, or confirmation that there are
+  none;
+- authorization for regulated services or third-party material, or why it
+  does not apply;
+- where to find a screen recording on a physical device running the latest
+  OS, starting at launch and covering the typical flow plus any account
+  creation, login, and deletion, user-content reporting and blocking, and
+  access to paid content.
+
+Apple sends exactly this list as a Guideline 2.1 "Information Needed" request,
+which costs a first submission a full review round trip. Keep the notes under
+version control when the repository keeps its listing metadata, guard their
+coverage with a test, and keep recordings outside Git. Never commit demo
+credentials: enter them in the console's sign-in fields (App Store Connect's
+App Review Information, Play Console's App access) and have the committed notes
+say where they are. Check every claim in the
+notes against the submitted build. A recording or physical-device test the
+agent cannot perform is an owner prerequisite with an exact next action, never
+a pass.
+
 ## Deliver the readiness record
 
 Use the repository's existing report convention or a concise PR attachment.
