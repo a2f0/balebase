@@ -122,6 +122,7 @@ No secrets, credentials, raw prompts/transcripts, request payloads, production
 rows, private paths/hostnames, raw session/request IDs or free-text failures.
 Review the entire public body, not just the receipt, before sending.
 
+The examples require GitHub CLI, jq, and a POSIX shell.
 Set `repo` to the resolved repository, `title` to the report title, `body_file`
 to the private sanitized complete report, and `receipt_dir` to its private
 checkpoint directory. Run snippets with `sh -eu` (or equivalent fail-fast
@@ -141,14 +142,18 @@ Read back that exact issue after creation and after every edit:
 
 ```sh
 gh issue view "$issue_url" --repo "$repo" --json url,number,body \
-  > "$receipt_dir/issue-readback.json"
+  > "$receipt_dir/issue-candidate.json"
+jq -e --arg url "$issue_url" --rawfile expected "$body_file" \
+  '.url == $url and .body == $expected' "$receipt_dir/issue-candidate.json" > /dev/null
+mv "$receipt_dir/issue-candidate.json" "$receipt_dir/issue-readback.json"
 ```
 
 Inspect the returned canonical URL/repository/number and compare the decoded
 `body` exactly with the intended complete body, including both run markers and
 the receipt. A successful write command alone is not verified publication.
-Only after that comparison succeeds, promote the readback to a separate
-last-verified checkpoint; a failed read must not truncate the previous evidence.
+The snippets compare the URL and decoded body, and only then promote the
+candidate to the last-verified checkpoint. A failed read or mismatch leaves
+previous verified evidence intact. Keep one publisher per private directory.
 Record the canonical URL plus `audit-usage:RUN_ID` as the receipt handle; location
 is the issue body, comment URL/ID not applicable.
 
@@ -164,7 +169,10 @@ reconciled full body privately, then edit the existing issue and read back:
 ```sh
 gh issue edit "$issue_url" --repo "$repo" --body-file "$body_file"
 gh issue view "$issue_url" --repo "$repo" --json url,number,body \
-  > "$receipt_dir/issue-readback.json"
+  > "$receipt_dir/issue-candidate.json"
+jq -e --arg url "$issue_url" --rawfile expected "$body_file" \
+  '.url == $url and .body == $expected' "$receipt_dir/issue-candidate.json" > /dev/null
+mv "$receipt_dir/issue-candidate.json" "$receipt_dir/issue-readback.json"
 ```
 
 On any failed/ambiguous write or readback, retain the intended body, run marker,
