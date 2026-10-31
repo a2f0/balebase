@@ -102,9 +102,9 @@ erases who trashed it. Linking an email to a folder, equipment, or a
 transaction, and unlinking it, records an event on that record with the email as
 the subject, so a transaction's links need Finance access wherever they are
 read. A folder or equipment deletion counts or drops its links without one event
-per link, and Plaid removing a transaction removes its links, and its history,
-without an event. Inbound mail is a provider action with no user actor: the
-stored message and its raw `.eml` are its record.
+per link. When Plaid removes a transaction, its links are hidden with it, and
+kept, without an event. Inbound mail is a provider action with no user actor:
+the stored message and its raw `.eml` are its record.
 
 Creating, editing, and deleting a business records an event on the business
 (`business`). Edits list each changed field with its old and new value; a save
