@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ActivityEventSchema } from "./activity";
+import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import {
   EmployeeRequirementKindSchema,
   EmployeeRequirementStatusSchema,
@@ -46,11 +46,6 @@ export type AdminOrganizationRequirement = z.infer<
 >;
 
 const AdminOrganizationDetailSchema = z.object({
-  /**
-   * The organization's own history, newest first: renames, deletion
-   * requests and restorations.
-   */
-  history: z.array(ActivityEventSchema),
   members: z.array(OrganizationMemberSchema),
   organization: AdminOrganizationSchema,
   requirements: z.array(AdminOrganizationRequirementSchema),
@@ -69,6 +64,16 @@ export const adminOrganizationsRoutes = {
     method: "GET",
     path: "/api/admin/organizations/:organizationId",
     response: AdminOrganizationDetailSchema,
+  }),
+  /**
+   * The organization's own history, newest first: renames, deletion
+   * requests and restorations.
+   */
+  activity: route({
+    method: "GET",
+    path: "/api/admin/organizations/:organizationId/activity",
+    query: ActivityQuerySchema,
+    response: ActivityPageSchema,
   }),
   markForDeletion: route({
     method: "DELETE",

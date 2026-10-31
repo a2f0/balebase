@@ -5,6 +5,7 @@ export type ActivitySource =
   | {
       id: string;
       type:
+        | "admin_organization"
         | "audit_run"
         | "audit_template"
         | "equipment"
@@ -17,7 +18,8 @@ export type ActivitySource =
 
 /**
  * One page of a record's history, or the organization's without a source. A
- * global form's history is read through Global Audits, when managing it.
+ * global form's history is read through Global Audits, when managing it, and
+ * an organization's own history by root admins through its admin page.
  */
 export function listActivity(
   source?: ActivitySource,
@@ -27,6 +29,8 @@ export function listActivity(
   if (!source) return api.activity.list(cursor, resourceType);
   const { id } = source;
   switch (source.type) {
+    case "admin_organization":
+      return api.adminOrganizations.activity(id, cursor);
     case "audit_run":
       return api.audits.runActivity(id, cursor);
     case "audit_template":

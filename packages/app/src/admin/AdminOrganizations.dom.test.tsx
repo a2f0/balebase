@@ -41,9 +41,9 @@ function lifecycleEvent(
   };
 }
 
-function detail(id = "other/org"): AdminOrganizationDetail {
+function history() {
   return {
-    history: [
+    events: [
       lifecycleEvent(2, "organization.restored", {
         deletedByEmail: "pat@example.com",
         deletedByName: "Pat Person",
@@ -54,6 +54,12 @@ function detail(id = "other/org"): AdminOrganizationDetail {
         via: "root_admin",
       }),
     ],
+    nextCursor: null,
+  };
+}
+
+function detail(id = "other/org"): AdminOrganizationDetail {
+  return {
     organization: {
       createdAt: "2026-10-07T11:00:00.000Z",
       deletedAt: null,
@@ -120,12 +126,19 @@ function button(text: string) {
 
 describe("root organization details", () => {
   it("shows who deleted and restored the organization", async () => {
-    const fixture = detail();
-    respond(async () => Response.json(fixture));
+    const requests: string[] = [];
+    respond(async (url) => {
+      requests.push(url.pathname);
+      return Response.json(
+        url.pathname.endsWith("/activity") ? history() : detail(),
+      );
+    });
     await render("/root/organizations/other%2Forg");
-    const rows = [
-      ...container.querySelectorAll('[aria-label="Organization history"] li'),
-    ].map((row) => row.textContent);
+    await act(async () => {});
+    expect(requests).toContain("/api/admin/organizations/other%2Forg/activity");
+    const rows = [...container.querySelectorAll(".activityRow")].map(
+      (row) => row.textContent,
+    );
     expect(rows).toHaveLength(2);
     expect(rows[0]).toContain("Rae Root restored the organization");
     expect(rows[0]).toContain("Deleted by Pat Person");
@@ -177,6 +190,7 @@ describe("root organization details", () => {
         method: init?.method ?? "GET",
         credentials: init?.credentials,
       });
+      if (url.endsWith("/activity")) return Response.json(history());
       return Response.json(
         url.endsWith("/other%2Forg")
           ? fixture
@@ -223,6 +237,7 @@ describe("root organization details", () => {
       "GET",
       "GET",
       "GET",
+      "GET",
     ]);
     expect(
       requests.every((request) => request.credentials === "include"),
@@ -230,6 +245,7 @@ describe("root organization details", () => {
     expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
       "/api/admin/organizations",
       "/api/admin/organizations/other%2Forg",
+      "/api/admin/organizations/other%2Forg/activity",
       "/api/admin/organizations",
     ]);
   });

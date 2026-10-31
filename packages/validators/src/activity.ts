@@ -70,7 +70,7 @@ const ActivityDetailsSchema = z
   })
   .catchall(z.unknown());
 
-export const ActivityEventSchema = z.object({
+const ActivityEventSchema = z.object({
   action: z.string(),
   actor: ActivityActorSchema,
   details: ActivityDetailsSchema,

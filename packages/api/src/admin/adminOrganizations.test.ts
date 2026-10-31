@@ -428,10 +428,11 @@ describe("admin organizations", () => {
       (await first.request("/org_member-user", { method: "DELETE" })).status,
     ).toBe(409);
 
-    const detail = await first.request("/org_member-user");
-    const { history } = (await detail.json()) as HistoryResponse;
+    const page = await first.request("/org_member-user/activity");
+    expect(page.status).toBe(200);
+    const { events } = (await page.json()) as HistoryResponse;
     expect(
-      history.map(({ action, actor, details }) => ({
+      events.map(({ action, actor, details }) => ({
         action,
         actor: actor.id,
         details,
@@ -480,6 +481,10 @@ describe("admin organizations", () => {
       false,
     );
     expect(memberFeed?.events).toEqual([]);
+    expect((await first.request("/missing/activity")).status).toBe(404);
+    expect(
+      (await first.request("/org_member-user/activity?cursor=bad")).status,
+    ).toBe(400);
   });
 
   it("keeps an organization deleted when its restoration cannot be recorded", async () => {
@@ -503,10 +508,10 @@ describe("admin organizations", () => {
         )
         .get(),
     ).toEqual({ deletedByUserId: "user-1" });
-    const { history } = (await (
-      await admin.request("/org_member-user")
+    const { events } = (await (
+      await admin.request("/org_member-user/activity")
     ).json()) as HistoryResponse;
-    expect(history.map(({ action }) => action)).toEqual([
+    expect(events.map(({ action }) => action)).toEqual([
       "organization.deletion_requested",
     ]);
   });
@@ -616,7 +621,7 @@ describe("admin organizations", () => {
 });
 
 interface HistoryResponse {
-  history: Array<{
+  events: Array<{
     action: string;
     actor: { id: string; name: string };
     details: Record<string, unknown>;

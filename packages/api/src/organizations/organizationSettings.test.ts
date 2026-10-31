@@ -492,8 +492,14 @@ function lifecycleEvents(database: Database) {
          FROM activity_events
          WHERE root_type = 'organization' AND root_id = ? ORDER BY id`,
       )
-      .all(targetOrganizationId) as { details: string }[]
-  ).map((row) => ({ ...row, details: JSON.parse(row.details) }));
+      .all(targetOrganizationId) as {
+      action: string;
+      actor_user_id: string;
+      details: string;
+      occurred_at: string;
+      root_label: string;
+    }[]
+  ).map((row) => ({ ...row, details: JSON.parse(row.details) as unknown }));
 }
 
 function createFixture() {
