@@ -100,7 +100,9 @@ async function fetchHealth(
   const institution = isRecord<"institution">(result)
     ? result.institution
     : undefined;
-  const status =
+  const status: Partial<
+    Record<"item_logins" | "transactions_updates", unknown>
+  > =
     isRecord<"status">(institution) &&
     isRecord<"item_logins" | "transactions_updates">(institution.status)
       ? institution.status
