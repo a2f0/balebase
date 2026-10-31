@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
+import { findActivity } from "../shared/activity";
 import { testBindings } from "../testing/bindings";
 import { toD1 } from "../testing/d1";
 import { createTestDatabase } from "../testing/database";
@@ -397,6 +398,119 @@ describe("admin organizations", () => {
     );
   });
 
+  it("records who deleted and restored an organization, for root admins and its managers", async () => {
+    const database = createDeletionFixture();
+    seedAccount(database, {
+      email: "second@example.com",
+      id: "admin-2",
+      name: "Second Admin",
+      role: "admin",
+    });
+    const first = adminApp(database);
+    const second = adminApp(database, "staging", "admin-2");
+    expect(
+      (await first.request("/org_member-user", { method: "DELETE" })).status,
+    ).toBe(200);
+    expect(
+      (await second.request("/org_member-user/restore", { method: "POST" }))
+        .status,
+    ).toBe(200);
+    // Restoring an active organization records nothing.
+    expect(
+      (await second.request("/org_member-user/restore", { method: "POST" }))
+        .status,
+    ).toBe(409);
+    expect(
+      (await second.request("/org_member-user", { method: "DELETE" })).status,
+    ).toBe(200);
+    // Deleting it again records nothing either.
+    expect(
+      (await first.request("/org_member-user", { method: "DELETE" })).status,
+    ).toBe(409);
+
+    const detail = await first.request("/org_member-user");
+    const { history } = (await detail.json()) as HistoryResponse;
+    expect(
+      history.map(({ action, actor, details }) => ({
+        action,
+        actor: actor.id,
+        details,
+      })),
+    ).toEqual([
+      {
+        action: "organization.deletion_requested",
+        actor: "admin-2",
+        details: { canceledInvitations: 0, via: "root_admin" },
+      },
+      {
+        action: "organization.restored",
+        actor: "admin-2",
+        details: {
+          deletedAt: expect.any(String),
+          deletedByEmail: "person@example.com",
+          deletedById: "user-1",
+          deletedByName: "Example Person",
+          via: "root_admin",
+        },
+      },
+      {
+        action: "organization.deletion_requested",
+        actor: "user-1",
+        details: { canceledInvitations: 0, via: "root_admin" },
+      },
+    ]);
+    // The organization's own feed keeps it for managers only.
+    const managerFeed = await findActivity(
+      toD1(database),
+      targetOrganizationId,
+      undefined,
+      undefined,
+      false,
+      "organization",
+      true,
+    );
+    expect(managerFeed?.events).toHaveLength(3);
+    const memberFeed = await findActivity(
+      toD1(database),
+      targetOrganizationId,
+      undefined,
+      undefined,
+      false,
+      "organization",
+      false,
+    );
+    expect(memberFeed?.events).toEqual([]);
+  });
+
+  it("keeps an organization deleted when its restoration cannot be recorded", async () => {
+    const database = createDeletionFixture();
+    const admin = adminApp(database);
+    expect(
+      (await admin.request("/org_member-user", { method: "DELETE" })).status,
+    ).toBe(200);
+    database.exec(`CREATE TRIGGER reject_activity
+      BEFORE INSERT ON activity_events
+      BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END`);
+    const response = await admin.request("/org_member-user/restore", {
+      method: "POST",
+    });
+    expect(response.status).toBe(500);
+    database.exec("DROP TRIGGER reject_activity");
+    expect(
+      database
+        .query(
+          "SELECT deletedByUserId FROM organization WHERE id = 'org_member-user'",
+        )
+        .get(),
+    ).toEqual({ deletedByUserId: "user-1" });
+    const { history } = (await (
+      await admin.request("/org_member-user")
+    ).json()) as HistoryResponse;
+    expect(history.map(({ action }) => action)).toEqual([
+      "organization.deletion_requested",
+    ]);
+  });
+
   it("restores a deleted organization without overriding other defaults", async () => {
     const database = createDeletionFixture();
     const deletion = await adminApp(database).request("/org_member-user", {
@@ -501,6 +615,14 @@ describe("admin organizations", () => {
   });
 });
 
+interface HistoryResponse {
+  history: Array<{
+    action: string;
+    actor: { id: string; name: string };
+    details: Record<string, unknown>;
+  }>;
+}
+
 function createDeletionFixture() {
   const database = createTestDatabase();
   seedAccount(database, {
@@ -567,6 +689,7 @@ function createDetailFixture() {
 function adminApp(
   database: Database,
   checkrEnv: Bindings["CHECKR_ENV"] = "staging",
+  userId = "user-1",
 ) {
   const app = testApp(
     { "/": adminOrganizations },
@@ -574,7 +697,7 @@ function adminApp(
       email: "person@example.com",
       name: "Example Person",
       role: "admin",
-      userId: "user-1",
+      userId,
     },
   );
   const bindings = testBindings({

@@ -42,10 +42,12 @@ const pageSize = 50;
 
 /**
  * Access history only organization managers read: group grants and
- * revocations, and members' two-factor requirements.
+ * revocations, invitations (invited addresses), members' two-factor
+ * requirements, and the organization's deletion and restoration.
  */
-const managerOnlyActivity = `(root_type = 'organization_group'
-  OR action = 'organization.member_two_factor_requirement_changed')`;
+const managerOnlyActivity = `(root_type IN ('organization_group', 'organization_invitation')
+  OR action IN ('organization.member_two_factor_requirement_changed',
+                'organization.deletion_requested', 'organization.restored'))`;
 
 /**
  * An organization's activity, or global activity when the organization is

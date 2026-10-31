@@ -2,8 +2,10 @@
 
 Activity is the shared history of consequential changes across Balebase. The
 checklist Audits feature is one producer alongside equipment, projects, issues,
-organization roles, group access, members' two-factor requirements, API keys,
-and transaction annotations, categories, and bank connection sync settings.
+organization membership (roles, invitations, joining, leaving and removal),
+organization renames, deletion and restoration, group access, members'
+two-factor requirements, API keys, and transaction annotations, categories,
+and bank connection sync settings.
 The workspace page is `/activity`; individual records can expose the same
 events in their own history. Contract signing also has a
 separate history. Coverage is incremental: an empty shared feed does not prove
@@ -43,13 +45,19 @@ actor model, never a fabricated human identity.
 `GET /api/activity` reads the active organization's events newest first, with
 cursor pagination. Its optional `resourceType` filter selects the root type
 before pagination. The Activity page offers all resources, audits, forms,
-workspace issues, equipment, projects, people, groups, API keys, transactions,
-and bank connections. Audit and transaction filters include issues attached to those
-roots; workspace issues are standalone issues. Transaction and bank connection
+workspace issues, equipment, projects, the organization, people, invitations,
+groups, API keys, transactions, and bank connections. Audit and transaction
+filters include issues attached to those roots; workspace issues are
+standalone issues. Transaction and bank connection
 activity requires Finance capability even when a caller supplies the filter
-directly. Group events and two-factor requirement changes are visible only to
-organization owners and admins, as group details and member security settings
-already are. The MCP `list_activity` tool accepts the same optional
+directly. Group events, invitation events (they name invited addresses),
+two-factor requirement changes, and the organization's deletion and
+restoration are visible only to organization owners and admins, as group
+details, pending invitations and member security settings already are.
+Everyone in the organization sees people joining, leaving, being removed or
+changing role, and organization renames. Root admins read the organization's
+own history (renames, deletion and restoration) on its admin detail page,
+including while it is deleted. The MCP `list_activity` tool accepts the same optional
 `resourceType`; keep that filter when passing the next cursor.
 
 Resource history routes authorize the resource before using `findActivity`.
@@ -63,6 +71,27 @@ audit run or form removes that root's history. Historical imports must be
 marked as such and contain only facts actually retained. Do not reconstruct
 unknown editors, previous values, or timestamps from current state.
 
+## Organization membership
+
+Better Auth's organization endpoints carry the request's actor into the write
+they make (`auth/organizationActivity.ts`), so the triggers of migrations 0057
+and 0080 record each change atomically with it: role changes, invitations
+sent, canceled (including the cancel a re-invite makes) or declined, a person
+joining by invitation (actor: the person; details: the role and the inviter),
+and organization renames, URL name and logo changes. Removing a member and
+leaving run as one batch (`organizations/memberRemoval.ts`) that records the
+membership's end with its role and the API keys it stops, each group the
+person loses as a group update, and each equipment item returned to
+unassigned, all attributed to the remover (or to the person leaving), then
+deletes the membership. That batch re-checks that the remover still owns or
+administers the organization and never removes the last owner. Deleting an
+organization (by an owner or a root admin, `details.via`) and restoring it
+record events in the same batch as the change; the restoration keeps who had
+deleted it, which the organization row then clears. Rejected requests and
+saves that change nothing record nothing. A membership deleted with no request
+behind it, as when an account is purged, has no actor to record until the
+shared model gains a system actor; equipment is still unassigned then.
+
 ## Group access
 
 Groups grant capabilities such as Finance. Their creation, deletion, renames,
@@ -73,7 +102,8 @@ the organization is purged. Better Auth's team endpoints that would change
 groups (`create-team`, `update-team`, `remove-team`, `add-team-member`,
 `remove-team-member`) are disabled, and invitations cannot carry a group
 (older ones lose theirs on acceptance), so `/api/organization-groups` is the
-only writer. Group and two-factor requirement writes re-check in the transaction
+only writer apart from member removal, which records each group the person
+loses. Group and two-factor requirement writes re-check in the transaction
 that the actor is still an owner or admin.
 
 ## Reviewing coverage
@@ -84,6 +114,7 @@ Use rollback and retry tests when those paths affect correctness. Existing
 examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `equipment/equipment.test.ts`, `projects/projects.test.ts`, `auth/apiKeys.test.ts`,
 `auth/organizationRoleActivity.test.ts`,
+`organizations/membershipActivity.test.ts`,
 `organizations/accessActivity.test.ts`, and `issues/issues.test.ts`.
 
 The repository-owned [audit-trails skill](../skills/audit-trails/SKILL.md)

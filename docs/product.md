@@ -328,7 +328,8 @@ previewed, so SVG attachments download instead.
 The organization-scoped Equipment page at `/equipment` tracks computers, cell
 phones, and monitors with their make, model, serial number, and purchase date.
 Each item can be assigned to one organization member at a time, and removing a
-member from the organization returns their equipment to unassigned. Every
+member from the organization returns their equipment to unassigned, recorded
+in each item's history with the person who removed them (or who left). Every
 member can view equipment; organization owners and admins add, edit, assign,
 and delete it. Receipts and other inbox emails link to equipment the same way
 they link to folders, and any member can link or unlink them. The API owns the

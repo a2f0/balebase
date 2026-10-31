@@ -21,7 +21,7 @@ import {
 import { groupCreatedActivity } from "../organizations/groupActivity";
 import { sendMail } from "../shared/mailSender";
 import type { Bindings } from "../types";
-import { organizationRoleActivity } from "./organizationRoleActivity";
+import { organizationActivity } from "./organizationActivity";
 
 type WaitUntil = (promise: Promise<unknown>) => void;
 type AuthUserRecord = User &
@@ -161,7 +161,7 @@ export function createAuth(env: Bindings, waitUntil: WaitUntil) {
       }),
       multiSession({ maximumSessions: 5 }),
       configuredOrganizationPlugin(env, waitUntil),
-      organizationRoleActivity(),
+      organizationActivity(env.DB),
     ],
     rateLimit: {
       enabled: true,

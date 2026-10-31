@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ActivityEventSchema } from "./activity";
 import {
   EmployeeRequirementKindSchema,
   EmployeeRequirementStatusSchema,
@@ -45,6 +46,11 @@ export type AdminOrganizationRequirement = z.infer<
 >;
 
 const AdminOrganizationDetailSchema = z.object({
+  /**
+   * The organization's own history, newest first: renames, deletion
+   * requests and restorations.
+   */
+  history: z.array(ActivityEventSchema),
   members: z.array(OrganizationMemberSchema),
   organization: AdminOrganizationSchema,
   requirements: z.array(AdminOrganizationRequirementSchema),

@@ -35,6 +35,11 @@ import {
   equipmentActivitySummary,
 } from "./EquipmentActivity";
 import { groupActivitySummary } from "./groupActivity";
+import {
+  membershipSummary,
+  organizationActionLabels,
+  organizationActivitySummary,
+} from "./organizationActivity";
 import { projectActivitySummary } from "./projectActivity";
 import { RecordActivityDetails } from "./RecordActivity";
 
@@ -84,6 +89,7 @@ const actionLabels: Record<string, string> = {
   "project.member_added": "added a project member",
   "project.member_removed": "removed a project member",
   "project.updated": "edited a project",
+  ...organizationActionLabels,
 };
 
 export function ActivityFeed({
@@ -263,18 +269,27 @@ const rootSummaries: Partial<Record<string, (event: ActivityEvent) => string>> =
   {
     api_key: apiKeySummary,
     equipment: equipmentActivitySummary,
+    organization: organizationActivitySummary,
     organization_group: groupActivitySummary,
+    organization_invitation: organizationActivitySummary,
     organization_member: memberSummary,
     project: projectActivitySummary,
   };
 
 function memberSummary(event: ActivityEvent) {
+  if (membershipActions.has(event.action)) return membershipSummary(event);
   const change =
     event.action === "organization.member_two_factor_requirement_changed"
       ? twoFactorSummary(event)
       : `${formatRoles(textValue(event.details.before))} → ${formatRoles(textValue(event.details.after))}`;
   return `${memberLabel(event)} · ${change}`;
 }
+
+const membershipActions = new Set([
+  "organization.member_joined",
+  "organization.member_left",
+  "organization.member_removed",
+]);
 
 function activitySummary(event: ActivityEvent) {
   const { details } = event;
@@ -337,6 +352,17 @@ function ActivityRow({
   );
 }
 
+/** Roots whose expanded details are their one-line summary. */
+const oneLineDetails: Partial<
+  Record<string, (event: ActivityEvent) => string>
+> = {
+  api_key: apiKeySummary,
+  organization: organizationActivitySummary,
+  organization_group: groupActivitySummary,
+  organization_invitation: organizationActivitySummary,
+  project: projectActivitySummary,
+};
+
 function ActivityDetails({ event }: { event: ActivityEvent }) {
   const details = event.details;
   if (event.action === "finance.daily_sync_changed")
@@ -344,15 +370,11 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
   if (event.root.type === "equipment") {
     return <EquipmentActivityDetails event={event} />;
   }
-  if (event.root.type === "api_key") {
-    return <p className="activityDetails">{apiKeySummary(event)}</p>;
-  }
-  if (event.root.type === "project") {
-    return <p className="activityDetails">{projectActivitySummary(event)}</p>;
-  }
-  if (event.root.type === "organization_group") {
-    return <p className="activityDetails">{groupActivitySummary(event)}</p>;
-  }
+  const lineDetails = membershipActions.has(event.action)
+    ? membershipSummary
+    : oneLineDetails[event.root.type];
+  if (lineDetails)
+    return <p className="activityDetails">{lineDetails(event)}</p>;
   if (
     event.action === "finance.transaction_annotated" ||
     event.action === "issue.updated"
@@ -526,8 +548,12 @@ function activityPath(event: ActivityEvent) {
 }
 
 function organizationActivityPath(event: ActivityEvent) {
+  // People who left or were removed have no member page.
   if (event.root.type === "organization_member")
-    return organizationPeoplePath(event.root.id);
+    return event.action === "organization.member_left" ||
+      event.action === "organization.member_removed"
+      ? undefined
+      : organizationPeoplePath(event.root.id);
   // Groups have no page of their own; deleted ones have nowhere to go.
   if (event.root.type === "organization_group")
     return event.action === "organization.group_deleted"

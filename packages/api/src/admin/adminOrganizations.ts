@@ -10,6 +10,7 @@ import {
   restoreOrganization,
 } from "../organizations/organizationDeletion";
 import { listOrganizationMembers } from "../organizations/organizationMembers";
+import { findActivity } from "../shared/activity";
 import { respond } from "../shared/respond";
 import type { Bindings } from "../types";
 
@@ -71,11 +72,21 @@ adminOrganizations.get("/:organizationId", async (context) => {
   if (!organization) {
     return context.json({ error: "Organization not found." }, 404);
   }
-  const [members, requirements] = await Promise.all([
+  const [members, requirements, history] = await Promise.all([
     listOrganizationMembers(context.env.DB, organizationId),
     listAdminRequirements(context.env, organizationId),
+    findActivity(
+      context.env.DB,
+      organizationId,
+      undefined,
+      { id: organizationId, type: "organization" },
+      false,
+      undefined,
+      true,
+    ),
   ]);
   return respond(context, adminOrganizationsRoutes.get, {
+    history: history?.events ?? [],
     organization: toAdminOrganization(organization),
     members,
     requirements,
@@ -164,11 +175,11 @@ async function listAdminRequirements(
 adminOrganizations.delete("/:organizationId", async (context) => {
   const organizationId = context.req.param("organizationId");
   const actor = context.get("authSession").user;
-  const result = await deleteBilledOrganization(
-    context,
-    organizationId,
-    actor.id,
-  );
+  const result = await deleteBilledOrganization(context, organizationId, {
+    apiKey: context.get("apiKey"),
+    userId: actor.id,
+    via: "root_admin",
+  });
   if ("response" in result) return result.response;
   const { deletion } = result;
   if (!deletion) {
@@ -196,7 +207,15 @@ adminOrganizations.delete("/:organizationId", async (context) => {
 
 adminOrganizations.post("/:organizationId/restore", async (context) => {
   const organizationId = context.req.param("organizationId");
-  const restoration = await restoreOrganization(context.env.DB, organizationId);
+  const restoration = await restoreOrganization(
+    context.env.DB,
+    organizationId,
+    {
+      apiKey: context.get("apiKey"),
+      userId: context.get("authSession").user.id,
+      via: "root_admin",
+    },
+  );
   if (!restoration) {
     const organization = await context.env.DB.prepare(
       "SELECT deletedAt FROM organization WHERE id = ?",

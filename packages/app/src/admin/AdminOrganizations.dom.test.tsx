@@ -15,8 +15,45 @@ const {
 let container: HTMLElement;
 let root: Root;
 
+function lifecycleEvent(
+  id: number,
+  action: string,
+  details: Record<string, unknown>,
+) {
+  return {
+    action,
+    actor: {
+      apiKey: null,
+      email: "root@example.com",
+      id: "root",
+      name: "Rae Root",
+    },
+    details,
+    historical: false,
+    id,
+    occurredAt: "2026-10-20T12:00:00.000Z",
+    root: {
+      id: "other/org",
+      label: "Other organization",
+      type: "organization",
+    },
+    subject: { id: "other/org", type: "organization" },
+  };
+}
+
 function detail(id = "other/org"): AdminOrganizationDetail {
   return {
+    history: [
+      lifecycleEvent(2, "organization.restored", {
+        deletedByEmail: "pat@example.com",
+        deletedByName: "Pat Person",
+        via: "root_admin",
+      }),
+      lifecycleEvent(1, "organization.deletion_requested", {
+        canceledInvitations: 2,
+        via: "root_admin",
+      }),
+    ],
     organization: {
       createdAt: "2026-10-07T11:00:00.000Z",
       deletedAt: null,
@@ -82,6 +119,20 @@ function button(text: string) {
 }
 
 describe("root organization details", () => {
+  it("shows who deleted and restored the organization", async () => {
+    const fixture = detail();
+    respond(async () => Response.json(fixture));
+    await render("/root/organizations/other%2Forg");
+    const rows = [
+      ...container.querySelectorAll('[aria-label="Organization history"] li'),
+    ].map((row) => row.textContent);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain("Rae Root restored the organization");
+    expect(rows[0]).toContain("Deleted by Pat Person");
+    expect(rows[1]).toContain("Rae Root deleted the organization");
+    expect(rows[1]).toContain("Pending invitations canceled: 2");
+  });
+
   it.each([0, 3])(
     "shows %i Plaid items in the list and overview",
     async (count) => {

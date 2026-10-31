@@ -16,8 +16,17 @@ import type {
 } from "@balebase/validators/adminOrganizations";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { useCallback } from "react";
+import {
+  organizationActionLabels,
+  organizationActivitySummary,
+} from "../activity/organizationActivity";
 import { api } from "../shared/apiClient";
-import { countLabel, formatCalendarDate, formatDate } from "../shared/labels";
+import {
+  countLabel,
+  formatCalendarDate,
+  formatDate,
+  formatDateTime,
+} from "../shared/labels";
 import { useLoad } from "../shared/useLoad";
 import { adminOrganizationPath } from "../workspace/workspacePaths";
 import { AdminIdentity } from "./AdminIdentity";
@@ -69,6 +78,7 @@ export function AdminOrganizationDetails({
             <OrganizationOverview organization={detail.organization} />
             <OrganizationPeople members={detail.members} />
             <OrganizationRequirements requirements={detail.requirements} />
+            <OrganizationHistory history={detail.history} />
           </>
         ) : busy ? (
           <LoadingState label="Loading organization details…" />
@@ -242,6 +252,42 @@ function OrganizationRequirements({
             </tbody>
           </table>
         </div>
+      )}
+    </PageSection>
+  );
+}
+
+/** Renames, deletion requests and restorations, newest first. */
+function OrganizationHistory({
+  history,
+}: {
+  history: AdminOrganizationDetail["history"];
+}) {
+  return (
+    <PageSection title="Organization history">
+      {history.length === 0 ? (
+        <EmptyState compact icon="layers" title="No recorded changes." />
+      ) : (
+        <ol aria-label="Organization history" className="rowList">
+          {history.map((event) => (
+            <li className="row" key={event.id}>
+              <div className="rowMain">
+                <p>
+                  <strong title={event.actor.email}>
+                    {event.actor.name || event.actor.email}
+                  </strong>{" "}
+                  {organizationActionLabels[event.action] ?? event.action}
+                </p>
+                <p className="textXs textSubtle">
+                  <time dateTime={event.occurredAt}>
+                    {formatDateTime(event.occurredAt)}
+                  </time>{" "}
+                  · {organizationActivitySummary(event)}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ol>
       )}
     </PageSection>
   );

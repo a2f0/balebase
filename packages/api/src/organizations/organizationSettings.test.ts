@@ -44,6 +44,25 @@ describe("organization deletion", () => {
     };
     expect(body.organizationId).toBe(targetOrganizationId);
     expect(new Date(body.deletedAt).toISOString()).toBe(body.deletedAt);
+    // Recorded before the pending invitation was canceled, with the owner.
+    expect(lifecycleEvents(fixture.database)).toEqual([
+      {
+        action: "organization.deletion_requested",
+        actor_user_id: "owner-user",
+        details: { canceledInvitations: 1, via: "owner" },
+        occurred_at: body.deletedAt,
+        root_label: expect.any(String),
+      },
+    ]);
+    // Repeating it changes and records nothing.
+    expect(
+      (
+        await fixture
+          .app("owner-user", "owner")
+          .request("/current", { method: "DELETE" })
+      ).status,
+    ).toBe(409);
+    expect(lifecycleEvents(fixture.database)).toHaveLength(1);
     expect(
       fixture.database
         .query(
@@ -259,6 +278,7 @@ describe("organization deletion", () => {
           .app("owner-user", "owner")
           .request("/current", { method: "DELETE" });
         expect(response.status).toBe(502);
+        expect(lifecycleEvents(fixture.database)).toEqual([]);
         expect(
           fixture.database
             .query(
@@ -297,6 +317,7 @@ describe("organization deletion", () => {
           .app("owner-user", "owner")
           .request("/current", { method: "DELETE" });
         expect(response.status).toBe(500);
+        expect(lifecycleEvents(fixture.database)).toEqual([]);
         expect(
           fixture.database
             .query(
@@ -461,6 +482,19 @@ describe("organization member security", () => {
     });
   });
 });
+
+/** The organization's deletion history, oldest first. */
+function lifecycleEvents(database: Database) {
+  return (
+    database
+      .query(
+        `SELECT action, actor_user_id, details, occurred_at, root_label
+         FROM activity_events
+         WHERE root_type = 'organization' AND root_id = ? ORDER BY id`,
+      )
+      .all(targetOrganizationId) as { details: string }[]
+  ).map((row) => ({ ...row, details: JSON.parse(row.details) }));
+}
 
 function createFixture() {
   const database = createTestDatabase();
