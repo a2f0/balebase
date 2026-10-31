@@ -462,7 +462,13 @@ purged form keep their own copy of it, and projects it was turned on for lose
 it. The deletion rechecks eligibility, so a restore committed first keeps the
 form. Discards and restores appear in the form's Activity as their own events.
 Apply migration `0079_restore_discarded_audit_forms.sql`, which names those
-events, before deploying.
+events, before deploying. The purge records nothing in the projects that lose
+the form: the shared activity model needs a person as the actor, and no person
+runs the job. Its job run keeps the number of forms purged.
+Publishing and unpublishing a form, organization or global, appear in its
+Activity as their own events; a save that keeps the status is an ordinary saved
+version. Organizations see a global form's publications but not its
+unpublications, which name unpublished versions.
 Publication changes save a new version, including the editor's current changes,
 and reject stale versions just like other template saves. Organizations can only
 read published versions and their activity; draft and unpublished history stays
@@ -487,7 +493,14 @@ versions as historical records. Earlier answer edits and completion actors
 were not stored and cannot be reconstructed.
 
 Customizing a global template creates a new organization-scoped form instead
-of changing the shared template or its version history. Platform administrators
+of changing the shared template or its version history. The copy records the
+global form and the published version the editor started from (`sourceVersion`,
+which may be older than the current one), and its Activity names them; a
+client that names no version records only the form, named as currently
+published. A draft or unpublished source version returns 404, and a global
+form changed since it was read returns 409. Apply migration
+`0080_record_form_publication_and_copies.sql`, which adds that source and the
+publication events, before deploying. Platform administrators
 use a separate management action when they intentionally publish a new global
 version.
 
@@ -624,7 +637,7 @@ transaction as the mutation. Each connection's page shows its own history
 **Bank connections** activity requires Finance access. This activity remains
 until the connection's data or organization is purged; deleting the data keeps
 one event recording who deleted it and the number of accounts, transactions, and
-annotations removed. Apply migration `0080_record_finance_data_deletion.sql`
+annotations removed. Apply migration `0081_record_finance_data_deletion.sql`
 before deploying the Worker that records it. Plaid-driven status changes, such
 as a login error and its recovery, are not activity events yet; the latest error
 shows on the connection and in its sync jobs. Completed sync runs and

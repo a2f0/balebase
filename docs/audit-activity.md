@@ -38,9 +38,12 @@ Use `activityBatch` with the request's API key so trigger and explicit events
 receive the same attribution. Audit failures must roll back the related change.
 Provider retries need a stable deduplication boundary. The current shared model
 requires a user actor; extending it to system/provider work needs an explicit
-actor model, never a fabricated human identity. Until then, Stripe-driven
-subscription and seat changes and Plaid-driven connection status changes stay
-in their current-state columns, Stripe's own history, and job runs.
+actor model, never a fabricated human identity. Until then, maintenance jobs
+such as the discarded global form purge record no events: the projects that
+lose a purged form show no removal, and the job run keeps only its count.
+Stripe-driven subscription and seat changes and Plaid-driven connection status
+changes likewise stay in their current-state columns, Stripe's own history, and
+job runs.
 
 ## Reading and retaining history
 
@@ -61,8 +64,13 @@ Resource history routes authorize the resource before using `findActivity`.
 A bank connection's history (`GET /api/finance/connections/:id/activity`, MCP
 `list_finance_connection_activity`) stays readable after it is disconnected.
 Shared global form history only exposes published versions to organization
-members. Adding a producer with restricted details also requires reviewing
-the shared feed's reader permissions, labels, and navigation.
+members. Form events name the version they saved: creation (with the global
+form a copy came from and the published version it started from), saved
+versions, publication,
+unpublication, discards, and restores. Organizations therefore see a global
+form's publications but never its unpublications, discards, or restores.
+Adding a producer with restricted details also requires reviewing the shared
+feed's reader permissions, labels, and navigation.
 
 History follows the resource's documented retention. It is not an immutable
 compliance ledger. Purging an organization removes its activity; purging an

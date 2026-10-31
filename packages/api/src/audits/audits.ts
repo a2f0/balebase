@@ -148,15 +148,30 @@ audits.post("/templates/:id/copies", async (context) => {
   ) {
     return context.json({ error: staleTemplateError }, 409);
   }
+  const { sourceVersion = null, ...copy } = input;
+  if (
+    sourceVersion !== null &&
+    !(await findTemplate(
+      context.env.DB,
+      context.get("organizationId"),
+      source.id,
+      sourceVersion,
+    ))
+  ) {
+    return context.json({ error: "Template version not found." }, 404);
+  }
   const saved = await copyGlobalTemplate(
     context.env.DB,
     context.get("organizationId"),
     requestActor(context),
-    input,
-    new Date().toISOString(),
+    copy,
+    { current: source, version: sourceVersion },
     (await organizationPlanLimits(context.env, context.get("organizationId")))
       .formTemplates,
   );
+  if (saved === "stale") {
+    return context.json({ error: staleTemplateError }, 409);
+  }
   if (!saved) {
     return context.json(
       {
@@ -605,16 +620,41 @@ audits.route("/runs", auditRunDiscard);
 audits.route("/issues", auditIssueImages);
 audits.route("/issues", auditIssueImageRemoval);
 
+/**
+ * Matches while global form ? is still published at current version ?, and
+ * when version ? is given, that version of it is published.
+ */
+const publishedSourceSql = `
+  SELECT 1 FROM audit_template_families AS source
+  JOIN audit_template_versions AS sourceVersion
+    ON sourceVersion.template_id = source.id
+   AND sourceVersion.version = source.current_version
+  WHERE source.id = ? AND source.scope = 'global'
+    AND sourceVersion.version = ? AND sourceVersion.status = 'published'
+    AND (? IS NULL OR EXISTS (
+      SELECT 1 FROM audit_template_versions AS copied
+      WHERE copied.template_id = source.id AND copied.version = ?
+        AND copied.status = 'published'
+    ))`;
+
+/**
+ * Copies a published global form into the organization as a new draft that
+ * records its source: the form, and the published version the definition came
+ * from when the caller names one. Returns "stale" when the form is no longer
+ * published at the current version read, and null when the plan limit is
+ * reached; both checks run in the inserting statement.
+ */
 async function copyGlobalTemplate(
   database: D1Database,
   organizationId: string,
   actor: ActivityActor,
   input: TemplateSaveInput,
-  now: string,
+  source: { current: TemplateRow; version: number | null },
   templateLimit: number | null,
 ) {
   const id = crypto.randomUUID();
-  const versionId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const { current } = source;
   const results = await activityBatch(database, actor.apiKey, [
     database
       .prepare(
@@ -622,10 +662,11 @@ async function copyGlobalTemplate(
          (id, scope, organization_id, current_version, created_by, created_at,
           updated_at)
          SELECT ?, 'organization', ?, 1, ?, ?, ?
-         WHERE ? IS NULL OR (
+         WHERE (? IS NULL OR (
            SELECT COUNT(*) FROM audit_template_families
            WHERE scope = 'organization' AND organization_id = ?
-         ) < ?`,
+         ) < ?)
+           AND EXISTS (${publishedSourceSql})`,
       )
       .bind(
         id,
@@ -636,29 +677,38 @@ async function copyGlobalTemplate(
         templateLimit,
         organizationId,
         templateLimit,
+        current.id,
+        current.current_version,
+        source.version,
+        source.version,
       ),
     database
       .prepare(
         `INSERT INTO audit_template_versions
          (id, template_id, version, name, description, definition, status,
-          created_by, created_at)
-         SELECT ?, ?, 1, ?, ?, ?, 'draft', ?, ?
+          created_by, created_at, copied_from_template_id, copied_from_version)
+         SELECT ?, ?, 1, ?, ?, ?, 'draft', ?, ?, ?, ?
          WHERE EXISTS (
            SELECT 1 FROM audit_template_families WHERE id = ?
          )`,
       )
       .bind(
-        versionId,
+        crypto.randomUUID(),
         id,
         input.name,
         input.description,
         JSON.stringify(input.definition),
         actor.userId,
         now,
+        current.id,
+        source.version,
         id,
       ),
   ]);
-  if (!Number(results[0]?.meta.changes)) return null;
+  if (!Number(results[0]?.meta.changes)) {
+    const latest = await findTemplate(database, organizationId, current.id);
+    return latest?.current_version === current.current_version ? null : "stale";
+  }
   const saved = await findTemplate(database, organizationId, id);
   if (!saved) throw new Error("Copied template could not be loaded.");
   return saved;

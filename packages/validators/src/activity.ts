@@ -39,6 +39,7 @@ const ActivityDetailsSchema = z
     changes: detail,
     clientCompletedAt: detail,
     clientStartedAt: detail,
+    copiedFrom: detail,
     description: detail,
     filename: detail,
     institutionName: detail,

@@ -530,7 +530,7 @@ function findConnectionStatus(
 
 /**
  * Records what a data deletion removes, read in the deleting batch before the
- * rows go. Migration 0080 keeps this event when the connection row is deleted.
+ * rows go. Migration 0081 keeps this event when the connection row is deleted.
  */
 function connectionDataDeletedEvent(
   database: D1Database,
