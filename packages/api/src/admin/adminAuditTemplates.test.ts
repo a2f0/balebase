@@ -764,7 +764,7 @@ describe("global audit templates", () => {
       admin,
     );
     expect(history.body.events.map(({ action }) => action)).toEqual([
-      "audit.template_version_saved",
+      "audit.template_published",
       "audit.template_created",
     ]);
     const organizationView = await jsonRequest<TemplateResponse>(

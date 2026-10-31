@@ -705,3 +705,41 @@ it("names who changed an expense category, using the names recorded then", async
   expect(rows[1]).toContain("Deleted category→changed toMeals");
   expect(rows[2]).toContain("Uncategorized→changed toTravel");
 });
+
+it("names form publication changes and a copied form's source", async () => {
+  const form = (
+    id: number,
+    action: string,
+    details: Record<string, unknown>,
+  ): ActivityEvent => ({
+    ...event(id, ""),
+    action,
+    root: { type: "audit_template", id: "form-1", label: "Site walk" },
+    subject: { type: "audit_template", id: "form-1" },
+    details,
+  });
+  const changes = [
+    form(4, "audit.template_unpublished", { version: 4 }),
+    form(3, "audit.template_version_saved", { version: 3 }),
+    form(2, "audit.template_published", { version: 2 }),
+    form(1, "audit.template_created", {
+      copiedFrom: { name: "NFPA 70E", templateId: "nfpa", version: 5 },
+      version: 1,
+    }),
+  ];
+  respond(async () => Response.json({ events: changes, nextCursor: null }));
+  ({ container } = await mount(
+    <ActivityFeed source={{ type: "audit_template", id: "form-1" }} />,
+  ));
+  const rows = [...container.querySelectorAll(".activityRow")].map(
+    (row) => row.textContent ?? "",
+  );
+  expect(rows).toHaveLength(4);
+  expect(rows[0]).toContain("Sam unpublished the form");
+  expect(rows[0]).toContain("Version 4");
+  expect(rows[1]).toContain("Sam saved a form version");
+  expect(rows[2]).toContain("Sam published the form");
+  expect(rows[3]).toContain("Sam created the form");
+  expect(rows[3]).toContain("Version 1 · Copied from NFPA 70E, version 5");
+  expect(rows[1]).not.toContain("Copied from");
+});

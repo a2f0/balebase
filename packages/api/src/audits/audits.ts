@@ -153,10 +153,13 @@ audits.post("/templates/:id/copies", async (context) => {
     context.get("organizationId"),
     requestActor(context),
     input,
-    new Date().toISOString(),
+    source,
     (await organizationPlanLimits(context.env, context.get("organizationId")))
       .formTemplates,
   );
+  if (saved === "stale") {
+    return context.json({ error: staleTemplateError }, 409);
+  }
   if (!saved) {
     return context.json(
       {
@@ -605,16 +608,31 @@ audits.route("/runs", auditRunDiscard);
 audits.route("/issues", auditIssueImages);
 audits.route("/issues", auditIssueImageRemoval);
 
+/** Matches when global form ? is still published at version ?. */
+const publishedSourceSql = `
+  SELECT 1 FROM audit_template_families AS source
+  JOIN audit_template_versions AS sourceVersion
+    ON sourceVersion.template_id = source.id
+   AND sourceVersion.version = source.current_version
+  WHERE source.id = ? AND source.scope = 'global'
+    AND sourceVersion.version = ? AND sourceVersion.status = 'published'`;
+
+/**
+ * Copies the global form's published version `source` into the organization
+ * as a new draft that records its source. Returns "stale" when the source is
+ * no longer that published version, and null when the plan limit is reached;
+ * both checks run in the inserting statement.
+ */
 async function copyGlobalTemplate(
   database: D1Database,
   organizationId: string,
   actor: ActivityActor,
   input: TemplateSaveInput,
-  now: string,
+  source: TemplateRow,
   templateLimit: number | null,
 ) {
   const id = crypto.randomUUID();
-  const versionId = crypto.randomUUID();
+  const now = new Date().toISOString();
   const results = await activityBatch(database, actor.apiKey, [
     database
       .prepare(
@@ -622,10 +640,11 @@ async function copyGlobalTemplate(
          (id, scope, organization_id, current_version, created_by, created_at,
           updated_at)
          SELECT ?, 'organization', ?, 1, ?, ?, ?
-         WHERE ? IS NULL OR (
+         WHERE (? IS NULL OR (
            SELECT COUNT(*) FROM audit_template_families
            WHERE scope = 'organization' AND organization_id = ?
-         ) < ?`,
+         ) < ?)
+           AND EXISTS (${publishedSourceSql})`,
       )
       .bind(
         id,
@@ -636,29 +655,36 @@ async function copyGlobalTemplate(
         templateLimit,
         organizationId,
         templateLimit,
+        source.id,
+        source.version,
       ),
     database
       .prepare(
         `INSERT INTO audit_template_versions
          (id, template_id, version, name, description, definition, status,
-          created_by, created_at)
-         SELECT ?, ?, 1, ?, ?, ?, 'draft', ?, ?
+          created_by, created_at, copied_from_template_id, copied_from_version)
+         SELECT ?, ?, 1, ?, ?, ?, 'draft', ?, ?, ?, ?
          WHERE EXISTS (
            SELECT 1 FROM audit_template_families WHERE id = ?
          )`,
       )
       .bind(
-        versionId,
+        crypto.randomUUID(),
         id,
         input.name,
         input.description,
         JSON.stringify(input.definition),
         actor.userId,
         now,
+        source.id,
+        source.version,
         id,
       ),
   ]);
-  if (!Number(results[0]?.meta.changes)) return null;
+  if (!Number(results[0]?.meta.changes)) {
+    const latest = await findTemplate(database, organizationId, source.id);
+    return latest?.current_version === source.version ? null : "stale";
+  }
   const saved = await findTemplate(database, organizationId, id);
   if (!saved) throw new Error("Copied template could not be loaded.");
   return saved;
