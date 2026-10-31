@@ -881,3 +881,113 @@ it("names form publication changes and a copied form's source", async () => {
   expect(rows[4]).toContain("Version 1 · Copied from NFPA 70E, version 5");
   expect(rows[2]).not.toContain("Copied from");
 });
+
+it("shows library, inbox, and business events, linking to records that remain", async () => {
+  const recorded = (
+    id: number,
+    action: string,
+    root: ActivityEvent["root"],
+    details: ActivityEvent["details"],
+  ): ActivityEvent => ({
+    ...event(id, ""),
+    action,
+    details,
+    root,
+    subject: { id: "email-1", type: "inbound_email" },
+  });
+  const business = { id: "b1", label: "Acme Holdings", type: "business" };
+  respond(async () =>
+    Response.json({
+      events: [
+        recorded(70, "business.updated", business, {
+          changes: [
+            { after: "Acme Holdings", before: "Acme", field: "name" },
+            { after: null, before: "•••4321", field: "ein" },
+          ],
+        }),
+        recorded(
+          69,
+          "business.deleted",
+          { id: "b2", label: "Old Co", type: "business" },
+          { duns: null, ein: "•••1111", name: "Old Co" },
+        ),
+        recorded(
+          68,
+          "inbox.email_linked",
+          { id: "equipment-1", label: "Dell XPS 13", type: "equipment" },
+          { from: "sender@example.com", subject: "Lease renewal" },
+        ),
+        recorded(
+          67,
+          "inbox.email_restored",
+          { id: "email-1", label: "Lease renewal", type: "inbound_email" },
+          { from: "sender@example.com", fromStatus: "trash" },
+        ),
+        recorded(
+          66,
+          "library.folder_deleted",
+          { id: "f1", label: "Taxes", type: "library_folder" },
+          { emailLinkCount: 1, fileCount: 2, name: "Taxes" },
+        ),
+        recorded(
+          65,
+          "library.file_moved",
+          { id: "file-1", label: "w2.pdf", type: "library_file" },
+          {
+            filename: "w2.pdf",
+            fromFolderId: "f1",
+            fromFolderName: "Taxes",
+            toFolderId: null,
+            toFolderName: null,
+          },
+        ),
+      ],
+      nextCursor: null,
+    }),
+  );
+  const navigations: string[] = [];
+  ({ container } = await mount(
+    <Activity onNavigate={(pathname) => navigations.push(pathname)} />,
+  ));
+  await settle();
+  expect(
+    [...container.querySelectorAll(".activityHeading")].map(
+      (heading) => heading.textContent,
+    ),
+  ).toEqual([
+    "Sam edited a business · Acme Holdings",
+    "Sam deleted a business · Old Co",
+    "Sam linked an email · Dell XPS 13",
+    "Sam restored an email · Lease renewal",
+    "Sam deleted a folder · Taxes",
+    "Sam moved a file · w2.pdf",
+  ]);
+  expect(
+    [...container.querySelectorAll("summary")].map(
+      (summary) => summary.textContent,
+    ),
+  ).toEqual([
+    "Name: Acme → Acme Holdings · EIN: •••4321 → None",
+    "Old Co · EIN •••1111",
+    "Lease renewal · Equipment: Dell XPS 13",
+    "sender@example.com · from Trash",
+    "Taxes · 2 files returned to the library · 1 email link removed",
+    "w2.pdf · Taxes → Library (no folder)",
+  ]);
+  for (const label of ["Old Co", "Taxes", "w2.pdf", "Lease renewal"])
+    expect(container.querySelector(`[aria-label$=": ${label}"]`)).toBeNull();
+  await click("Acme Holdings");
+  await click("Dell XPS 13");
+  expect(navigations).toEqual(["/businesses/b1", "/equipment/equipment-1"]);
+  const options = [...container.querySelectorAll("option")].map(
+    (option) => option.textContent,
+  );
+  expect(options).toEqual(
+    expect.arrayContaining([
+      "Library files",
+      "Library folders",
+      "Inbox",
+      "Businesses",
+    ]),
+  );
+});

@@ -16,6 +16,10 @@ const resourceLabels: Record<ActivityResourceType, string> = {
   finance_connection: "Bank connections",
   finance_category: "Expense categories",
   organization_billing: "Billing",
+  library_file: "Library files",
+  library_folder: "Library folders",
+  inbound_email: "Inbox",
+  business: "Businesses",
 };
 
 function isResourceType(value: string): value is ActivityResourceType {

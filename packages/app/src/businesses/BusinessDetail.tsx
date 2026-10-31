@@ -16,6 +16,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { ActivityFeed } from "../activity/ActivityFeed";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import { formatCalendarDate } from "../shared/labels";
@@ -26,7 +27,7 @@ import {
   BusinessFields,
   type BusinessFormState,
   businessForm,
-  businessInput,
+  changedBusinessInput,
 } from "./BusinessForm";
 import {
   businessIdentifiers,
@@ -109,6 +110,12 @@ export function BusinessDetailPage({
           ) : (
             <BusinessDetailCard business={business} onCopy={onCopy} />
           ))}
+        {business && (
+          <ActivityFeed
+            refreshKey={business}
+            source={{ id: business.id, type: "business" }}
+          />
+        )}
       </PageBody>
     </Page>
   );
@@ -177,9 +184,9 @@ function BusinessEditCard({
   onError: (message: string) => void;
   onSaved: (business: Business) => void;
 }) {
-  const [form, setForm] = useState<BusinessFormState>(() =>
-    businessForm(business),
-  );
+  // The business as editing began; later refreshes must not move it.
+  const [baseline] = useState(() => businessForm(business));
+  const [form, setForm] = useState<BusinessFormState>(baseline);
   const [busy, setBusy] = useState(false);
   const nameField = useRef<HTMLInputElement>(null);
   // The Edit button that opened the form is gone; move focus into the form.
@@ -191,7 +198,7 @@ function BusinessEditCard({
     try {
       const result = await api.businesses.update(
         business.id,
-        businessInput(form),
+        changedBusinessInput(baseline, form),
       );
       onSaved(result.business);
     } catch (cause) {

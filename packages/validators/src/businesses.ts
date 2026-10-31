@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import { calendarDate, optionalText, requiredText } from "./fields";
 import { route } from "./route";
 import { businessLimits } from "./rules";
@@ -86,6 +87,12 @@ export const businessesRoutes = {
     method: "GET",
     path: "/api/businesses/:id",
     response: BusinessDetailSchema,
+  }),
+  activity: route({
+    method: "GET",
+    path: "/api/businesses/:id/activity",
+    query: ActivityQuerySchema,
+    response: ActivityPageSchema,
   }),
   create: route({
     method: "POST",
