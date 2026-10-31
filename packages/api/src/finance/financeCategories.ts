@@ -3,7 +3,7 @@ import {
   financeRoutes,
 } from "@balebase/validators/finance";
 import { financeLimits } from "@balebase/validators/rules";
-import { activityBatch } from "../shared/activity";
+import { activityBatch, requestActor } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import type { FinanceContext } from "./financeContext";
 
@@ -86,20 +86,30 @@ export async function createCategory(context: FinanceContext) {
   const database = context.env.DB;
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
+  const actor = requestActor(context);
   const slug = await writeWithSlug(
     database,
     organizationId,
     name,
     null,
     (slug) =>
-      database
-        .prepare(
-          `INSERT INTO finance_expense_categories
-           (id, organization_id, name, slug, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(id, organizationId, name, slug, now, now)
-        .run(),
+      activityBatch(database, actor.apiKey, [
+        database
+          .prepare(
+            `INSERT INTO finance_expense_categories
+             (id, organization_id, name, slug, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(id, organizationId, name, slug, now, now),
+        categoryEvent(database, {
+          action: "finance.category_created",
+          actorId: actor.userId,
+          details: "json_object('name', category.name, 'slug', category.slug)",
+          id,
+          occurredAt: now,
+          organizationId,
+        }),
+      ]),
   );
   return respond(
     context,
@@ -127,15 +137,42 @@ export async function renameCategory(context: FinanceContext) {
   }
   // The slug follows the name, so a renamed category's old link stops working.
   const database = context.env.DB;
-  const slug = await writeWithSlug(database, organizationId, name, id, (slug) =>
-    database
-      .prepare(
-        `UPDATE finance_expense_categories
-         SET name = ?, slug = ?, updated_at = ?
-         WHERE id = ? AND organization_id = ?`,
-      )
-      .bind(name, slug, new Date().toISOString(), id, organizationId)
-      .run(),
+  const actor = requestActor(context);
+  const slug = await writeWithSlug(
+    database,
+    organizationId,
+    name,
+    id,
+    (slug) => {
+      const now = new Date().toISOString();
+      // Saving the current name and slug changes nothing and records nothing.
+      const changed = (table: string) => ({
+        bindings: [name, slug],
+        sql: `(${table}.name <> ? OR ${table}.slug <> ?)`,
+      });
+      return activityBatch(database, actor.apiKey, [
+        categoryEvent(database, {
+          action: "finance.category_renamed",
+          actorId: actor.userId,
+          details: `json_object('beforeName', category.name, 'afterName', ?,
+          'beforeSlug', category.slug, 'afterSlug', ?)`,
+          detailBindings: [name, slug],
+          id,
+          label: name,
+          occurredAt: now,
+          organizationId,
+          when: changed("category"),
+        }),
+        database
+          .prepare(
+            `UPDATE finance_expense_categories
+           SET name = ?, slug = ?, updated_at = ?
+           WHERE id = ? AND organization_id = ?
+             AND ${changed("finance_expense_categories").sql}`,
+          )
+          .bind(name, slug, now, id, organizationId, name, slug),
+      ]);
+    },
   );
   return respond(context, financeRoutes.renameCategory, {
     category: { id, name, slug },
@@ -148,36 +185,60 @@ export async function deleteCategory(context: FinanceContext) {
   if (!id || !(await findCategory(context.env.DB, organizationId, id))) {
     return categoryNotFound(context);
   }
+  const database = context.env.DB;
+  const actor = requestActor(context);
+  const now = new Date().toISOString();
   // Unassign explicitly rather than relying on the foreign-key action alone,
   // so each transaction's activity names who removed its category.
-  await activityBatch(context.env.DB, context.get("apiKey"), [
-    context.env.DB.prepare(
-      `UPDATE finance_transaction_annotations
-       SET expense_category_id = NULL, updated_by = ?, updated_at = ?
-       WHERE organization_id = ? AND expense_category_id = ?`,
-    ).bind(
-      context.get("authSession").user.id,
-      new Date().toISOString(),
-      organizationId,
+  const results = await activityBatch(database, actor.apiKey, [
+    categoryEvent(database, {
+      action: "finance.category_deleted",
+      actorId: actor.userId,
+      details: `json_object('name', category.name, 'slug', category.slug,
+        'transactionCount', (SELECT COUNT(*) FROM finance_transaction_annotations
+          WHERE organization_id = category.organization_id
+            AND expense_category_id = category.id))`,
       id,
-    ),
-    context.env.DB.prepare(
-      `DELETE FROM finance_expense_categories
-       WHERE id = ? AND organization_id = ?`,
-    ).bind(id, organizationId),
+      occurredAt: now,
+      organizationId,
+    }),
+    database
+      .prepare(
+        `UPDATE finance_transaction_annotations
+         SET expense_category_id = NULL, updated_by = ?, updated_at = ?
+         WHERE organization_id = ? AND expense_category_id = ?`,
+      )
+      .bind(actor.userId, now, organizationId, id),
+    database
+      .prepare(
+        `DELETE FROM finance_expense_categories
+         WHERE id = ? AND organization_id = ?`,
+      )
+      .bind(id, organizationId),
   ]);
+  // A concurrent delete removed it first and recorded the deletion.
+  if (!results.at(-1)?.meta.changes) return categoryNotFound(context);
   return context.body(null, 204);
 }
 
 export async function addDefaultCategories(context: FinanceContext) {
   const database = context.env.DB;
   const organizationId = context.get("organizationId");
+  const actor = requestActor(context);
   // OR IGNORE skips a default whose name or slug a concurrent write took; the
   // next pass adds it under a free slug unless its name now exists.
   for (let pass = 1; pass <= 3; pass++) {
     const inserts = await missingDefaultInserts(database, organizationId);
     if (!inserts.length) break;
-    await database.batch(inserts);
+    await activityBatch(database, actor.apiKey, [
+      ...inserts.map(({ statement }) => statement),
+      defaultsAddedEvent(
+        database,
+        actor.userId,
+        organizationId,
+        inserts.map(({ id }) => id),
+      ),
+    ]);
   }
   return respond(context, financeRoutes.addDefaultCategories, {
     categories: await listExpenseCategories(database, organizationId),
@@ -203,14 +264,104 @@ async function missingDefaultInserts(
     .map((name) => {
       const slug = uniqueSlug(name, slugs);
       slugs.add(slug);
-      return database
+      const id = crypto.randomUUID();
+      const statement = database
         .prepare(
           `INSERT OR IGNORE INTO finance_expense_categories
              (id, organization_id, name, slug, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
         )
-        .bind(crypto.randomUUID(), organizationId, name, slug, now, now);
+        .bind(id, organizationId, name, slug, now, now);
+      return { id, statement };
     });
+}
+
+/**
+ * One event naming the defaults this batch inserted. Their IDs are new, so
+ * the rows that exist when it runs are exactly those its inserts added; when
+ * a concurrent write took them all, nothing is recorded.
+ */
+function defaultsAddedEvent(
+  database: D1Database,
+  actorId: string,
+  organizationId: string,
+  ids: string[],
+) {
+  const inserted = `FROM finance_expense_categories
+    WHERE organization_id = ? AND id IN (${ids.map(() => "?").join(", ")})`;
+  return database
+    .prepare(
+      `INSERT INTO activity_events (
+         organization_id, root_type, root_id, root_label, subject_type,
+         subject_id, action, actor_user_id, actor_name, actor_email,
+         occurred_at, details
+       )
+       SELECT ?, 'finance_category', ?, 'Expense categories',
+              'finance_category', ?, 'finance.categories_defaults_added',
+              actor.id, actor.name, actor.email, ?,
+              json_object('names', json((SELECT json_group_array(name)
+                FROM (SELECT name ${inserted} ORDER BY name))))
+       FROM user AS actor
+       WHERE actor.id = ? AND EXISTS (SELECT 1 ${inserted})`,
+    )
+    .bind(
+      organizationId,
+      organizationId,
+      organizationId,
+      new Date().toISOString(),
+      organizationId,
+      ...ids,
+      actorId,
+      organizationId,
+      ...ids,
+    );
+}
+
+/**
+ * An event for one stored category, labelled and detailed from its row as the
+ * batch reads it. Nothing is recorded when the category, or `when`, no longer
+ * matches.
+ */
+function categoryEvent(
+  database: D1Database,
+  input: {
+    action: string;
+    actorId: string;
+    detailBindings?: string[];
+    /** A JSON expression over the `category` row. */
+    details: string;
+    id: string;
+    label?: string;
+    occurredAt: string;
+    organizationId: string;
+    when?: { bindings: string[]; sql: string };
+  },
+) {
+  return database
+    .prepare(
+      `INSERT INTO activity_events (
+         organization_id, root_type, root_id, root_label, subject_type,
+         subject_id, action, actor_user_id, actor_name, actor_email,
+         occurred_at, details
+       )
+       SELECT category.organization_id, 'finance_category', category.id,
+              COALESCE(?, category.name), 'finance_category', category.id, ?,
+              actor.id, actor.name, actor.email, ?, ${input.details}
+       FROM finance_expense_categories AS category
+       JOIN user AS actor ON actor.id = ?
+       WHERE category.id = ? AND category.organization_id = ?
+         AND ${input.when?.sql ?? "1"}`,
+    )
+    .bind(
+      input.label ?? null,
+      input.action,
+      input.occurredAt,
+      ...(input.detailBindings ?? []),
+      input.actorId,
+      input.id,
+      input.organizationId,
+      ...(input.when?.bindings ?? []),
+    );
 }
 
 /** Sets or clears a transaction's single expense category. */

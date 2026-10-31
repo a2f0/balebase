@@ -85,6 +85,11 @@ const endpoints = {
     path: "/api/finance/transactions/:id",
     response: "json",
   }),
+  connectionActivity: endpoint<typeof financeRoutes.connectionActivity>({
+    method: "GET",
+    path: "/api/finance/connections/:id/activity",
+    response: "json",
+  }),
   transactionActivity: endpoint<typeof financeRoutes.transactionActivity>({
     method: "GET",
     path: "/api/finance/transactions/:id/activity",
@@ -262,8 +267,15 @@ export function financeApi(transport: Transport) {
   };
 }
 
+/** A connection's sync, settings, health, and history. */
 function financeSyncApi(transport: Transport) {
   return {
+    connectionActivity(id: string, cursor?: string) {
+      return transport.call(endpoints.connectionActivity, {
+        params: { id },
+        query: { cursor },
+      });
+    },
     startSync(id: string) {
       return transport.call(endpoints.startSync, { params: { id } });
     },
