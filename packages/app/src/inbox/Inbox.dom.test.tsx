@@ -66,6 +66,9 @@ function fixture(linkCount = 0, listed = true) {
       email.links = [];
       return new Response(null, { status: 204 });
     }
+    if (url.pathname.endsWith("/activity")) {
+      return Response.json({ events: [], nextCursor: null });
+    }
     const folder = url.searchParams.get("folder") ?? "inbox";
     if (url.pathname.endsWith("/email-1")) {
       return folder === status
@@ -178,6 +181,7 @@ describe("Inbox, mounted", () => {
     expect(container.textContent).toContain("No archived messages");
     await click("Inbox");
     expect(container.textContent).toContain("Your purchase receipt");
+    expect(requests).toContain("GET /api/inbox/email-1/activity");
     expect(requests).toContain("POST /api/inbox/email-1/archive");
     expect(requests).toContain("POST /api/inbox/email-1/restore");
   });

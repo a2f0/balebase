@@ -21,6 +21,7 @@ import {
   auditRunPath,
   auditTemplatePath,
   billingPath,
+  businessPath,
   contractPath,
   contractTemplatePath,
   equipmentPath,
@@ -28,6 +29,7 @@ import {
   financeConnectionPath,
   financeTransactionPath,
   issuePath,
+  libraryPath,
   organizationAccessPath,
   organizationPeoplePath,
   organizationRequirementPath,
@@ -45,6 +47,7 @@ import {
 } from "./EquipmentActivity";
 import { financeActionLabels, financeActivitySummary } from "./financeActivity";
 import { groupActivitySummary } from "./groupActivity";
+import { isLibraryActivity, libraryActivitySummary } from "./libraryActivity";
 import { projectActivitySummary } from "./projectActivity";
 import { RecordActivityDetails } from "./RecordActivity";
 
@@ -62,6 +65,20 @@ const actionLabels: Record<string, string> = {
   "api_key.created": "created an API key",
   "api_key.revoked": "revoked an API key",
   "audit.answer_changed": "changed an answer",
+  "business.created": "added a business",
+  "business.deleted": "deleted a business",
+  "business.updated": "edited a business",
+  "inbox.email_archived": "archived an email",
+  "inbox.email_linked": "linked an email",
+  "inbox.email_restored": "restored an email",
+  "inbox.email_trashed": "moved an email to Trash",
+  "inbox.email_unlinked": "unlinked an email",
+  "library.file_deleted": "deleted a file",
+  "library.file_moved": "moved a file",
+  "library.file_uploaded": "uploaded a file",
+  "library.folder_created": "created a folder",
+  "library.folder_deleted": "deleted a folder",
+  "library.folder_renamed": "renamed a folder",
   "audit.completed": "completed the audit",
   "audit.offline_synced": "synced an offline audit",
   "audit.discarded": "discarded the audit",
@@ -305,6 +322,8 @@ function memberSummary(event: ActivityEvent) {
 
 function activitySummary(event: ActivityEvent) {
   const { details } = event;
+  // Links are recorded on equipment and transactions too.
+  if (isLibraryActivity(event)) return libraryActivitySummary(event);
   if (event.action === "finance.transaction_annotated")
     return "Annotation changes";
   if (event.action === "finance.transaction_categorized") {
@@ -378,8 +397,11 @@ const detailSummaries: Partial<
 
 function ActivityDetails({ event }: { event: ActivityEvent }) {
   const details = event.details;
-  const summary =
-    financeActivitySummary(event) ?? detailSummaries[event.root.type]?.(event);
+  // Links are recorded on equipment and transactions too.
+  const summary = isLibraryActivity(event)
+    ? libraryActivitySummary(event)
+    : (financeActivitySummary(event) ??
+      detailSummaries[event.root.type]?.(event));
   if (summary !== undefined)
     return <p className="activityDetails">{summary}</p>;
   if (event.root.type === "equipment") {
@@ -571,17 +593,40 @@ function activityPath(event: ActivityEvent) {
   return contractActivityPath(event);
 }
 
-/** Forms, and contracts, templates, and requests until they are deleted. */
+/** Pages of contracts, templates, and requests, which go once deleted. */
+const contractRecordPaths: Partial<Record<string, (id: string) => string>> = {
+  contract: contractPath,
+  contract_template: contractTemplatePath,
+  employee_requirement: organizationRequirementPath,
+};
+
+/** Forms; contracts, templates, and requests until deleted; then library. */
 function contractActivityPath(event: ActivityEvent) {
   if (event.root.type === "audit_template")
     return auditTemplatePath(event.root.id);
-  if (event.action.endsWith(".deleted")) return undefined;
-  if (event.root.type === "contract") return contractPath(event.root.id);
-  if (event.root.type === "contract_template")
-    return contractTemplatePath(event.root.id);
-  if (event.root.type === "employee_requirement")
-    return organizationRequirementPath(event.root.id);
-  return undefined;
+  const recordPath = contractRecordPaths[event.root.type];
+  if (recordPath)
+    return event.action.endsWith(".deleted")
+      ? undefined
+      : recordPath(event.root.id);
+  return libraryActivityPath(event);
+}
+
+/**
+ * Deleted folders and businesses, and files, have no page. An email's events
+ * do not link either: an event cannot tell which folder the email is in now.
+ */
+function libraryActivityPath({ action, root }: ActivityEvent) {
+  switch (root.type) {
+    case "library_folder":
+      return action === "library.folder_deleted"
+        ? undefined
+        : libraryPath(root.id);
+    case "business":
+      return action === "business.deleted" ? undefined : businessPath(root.id);
+    default:
+      return undefined;
+  }
 }
 
 function financeActivityPath(event: ActivityEvent) {
@@ -608,21 +653,28 @@ function organizationActivityPath(event: ActivityEvent) {
   return undefined;
 }
 
+/** The button that opens an event's record, by root type. */
+const linkLabels: Partial<Record<string, string>> = {
+  audit_run: "Open audit",
+  business: "Open business",
+  contract: "Open contract",
+  contract_template: "Open template",
+  employee_requirement: "Open request",
+  equipment: "Open equipment",
+  finance_category: "Open categories",
+  finance_connection: "Open connection",
+  finance_transaction: "Open transaction",
+  library_folder: "Open folder",
+  organization_billing: "Open billing",
+  organization_group: "Open groups",
+  organization_member: "Open member",
+  project: "Open project",
+};
+
 function activityLinkLabel(event: ActivityEvent) {
   if (event.subject.type === "issue" || event.subject.type === "audit_issue")
     return "Open issue";
-  if (event.root.type === "finance_connection") return "Open connection";
-  if (event.root.type === "finance_category") return "Open categories";
-  if (event.root.type === "organization_billing") return "Open billing";
-  if (event.root.type === "finance_transaction") return "Open transaction";
-  if (event.root.type === "equipment") return "Open equipment";
-  if (event.root.type === "organization_member") return "Open member";
-  if (event.root.type === "organization_group") return "Open groups";
-  if (event.root.type === "project") return "Open project";
-  if (event.root.type === "contract") return "Open contract";
-  if (event.root.type === "contract_template") return "Open template";
-  if (event.root.type === "employee_requirement") return "Open request";
-  return event.root.type === "audit_run" ? "Open audit" : "Open form";
+  return linkLabels[event.root.type] ?? "Open form";
 }
 
 function apiKeySummary({ details }: ActivityEvent) {

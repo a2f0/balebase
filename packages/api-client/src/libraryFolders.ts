@@ -19,6 +19,11 @@ const endpoints = {
     path: "/api/library/folders/:id",
     response: "json",
   }),
+  activity: endpoint<typeof libraryFoldersRoutes.activity>({
+    method: "GET",
+    path: "/api/library/folders/:id/activity",
+    response: "json",
+  }),
   rename: endpoint<typeof libraryFoldersRoutes.rename>({
     method: "PATCH",
     path: "/api/library/folders/:id",
@@ -41,6 +46,13 @@ export function libraryFoldersApi(transport: Transport) {
     /** A folder and the emails linked to it. */
     get(id: string) {
       return transport.call(endpoints.get, { params: { id } });
+    },
+    /** The folder's history, including emails linked to it, newest first. */
+    activity(id: string, cursor?: string) {
+      return transport.call(endpoints.activity, {
+        params: { id },
+        query: { cursor },
+      });
     },
     async create(name: string) {
       const { folder } = await transport.call(endpoints.create, {

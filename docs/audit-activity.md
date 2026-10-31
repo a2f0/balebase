@@ -5,11 +5,12 @@ checklist Audits feature is one producer alongside equipment, projects, issues,
 organization roles, group access, members' two-factor requirements, API keys,
 transaction annotations and categories, bank connections (connecting, sync
 requests and settings, disconnecting, and deleting imported data), expense
-categories, Pro checkout starts, contracts and contract templates, and the
-forms and checks requested of people. The workspace page is `/activity`;
-individual records can expose the same events in their own history. Contract
-signing also has a separate history (see [Contracts](#contracts)). Coverage is
-incremental: an empty shared feed does not prove no changes occurred.
+categories, Pro checkout starts, library files and folders, inbox email moves
+and links, businesses, contracts and contract templates, and the forms and
+checks requested of people. The workspace page is `/activity`; individual
+records can expose the same events in their own history. Contract signing also
+has a separate history (see [Contracts](#contracts)). Coverage is incremental:
+an empty shared feed does not prove no changes occurred.
 
 ## Recording a change
 
@@ -51,16 +52,17 @@ job runs.
 cursor pagination. Its optional `resourceType` filter selects the root type
 before pagination. The Activity page offers all resources, audits, forms,
 workspace issues, equipment, projects, people, groups, API keys, transactions,
-bank connections, expense categories, billing, contracts, contract templates,
-and requested forms and checks. Audit and transaction filters include issues
-attached to those roots; workspace issues are standalone issues. Transaction,
-bank connection, and expense category activity requires Finance capability even
-when a caller supplies the filter directly. Group events, two-factor
-requirement changes, billing events, and requested forms and checks
-(`employee_requirement`) are visible only to organization owners and admins, as
-group details, member security settings, billing management, and employee
-records already are. The MCP `list_activity` tool accepts the same optional
-`resourceType`; keep that filter when passing the next cursor.
+bank connections, expense categories, billing, library files, library folders,
+inbox email, businesses, contracts, contract templates, and requested forms and
+checks. Audit and transaction filters include issues attached to those roots;
+workspace issues are standalone issues. Transaction, bank connection, and
+expense category activity requires Finance capability even when a caller
+supplies the filter directly, including emails linked to a transaction. Group
+events, two-factor requirement changes, billing events, and requested forms and
+checks (`employee_requirement`) are visible only to organization owners and
+admins, as group details, member security settings, billing management, and
+employee records already are. The MCP `list_activity` tool accepts the same
+optional `resourceType`; keep that filter when passing the next cursor.
 
 Resource history routes authorize the resource before using `findActivity`.
 A bank connection's history (`GET /api/finance/connections/:id/activity`, MCP
@@ -82,6 +84,37 @@ history, but keeps one `finance.connection_data_deleted` event naming who
 deleted it and how many accounts, transactions, and annotations went. Historical
 imports must be marked as such and contain only facts actually retained. Do not
 reconstruct unknown editors, previous values, or timestamps from current state.
+
+## Library, inbox, and businesses
+
+Uploading, moving, and permanently deleting a library file records an event on
+the file (`library_file`) naming its filename, content type, size, and folder,
+never its contents or storage key. Creating, renaming, and deleting a folder
+records one on the folder (`library_folder`); a deletion counts the files it
+returns to the library root and the email links it removes. Moving a file to
+the folder it is in, or renaming a folder to its current name, records nothing.
+A file's deletion commits with its event and queues its bytes for the
+deleted-object cleanup, which retries if removing them fails.
+
+Moving an email to Archive or Trash, and restoring it, records an event on the
+email (`inbound_email`), labelled with its subject and naming only its sender
+and the folder it left, never its body or attachments; restoring no longer
+erases who trashed it. Linking an email to a folder, equipment, or a
+transaction, and unlinking it, records an event on that record with the email as
+the subject, so a transaction's links need Finance access wherever they are
+read. A folder or equipment deletion counts or drops its links without one event
+per link. When Plaid removes a transaction, its links are hidden with it, and
+kept, without an event. Inbound mail is a provider action with no user actor:
+the stored message and its raw `.eml` are its record.
+
+Creating, editing, and deleting a business records an event on the business
+(`business`). Edits list each changed field with its old and new value; a save
+that changes nothing, a duplicate EIN or DUNS number, and a save racing another
+change record nothing. Every member can read the feed, so events show only the
+last four digits of an EIN or DUNS number.
+
+Folders, emails, and businesses show their own history. An email's history also
+lists its links, recorded on the linked records.
 
 ## Group access
 
@@ -137,8 +170,9 @@ examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `equipment/equipment.test.ts`, `projects/projects.test.ts`, `auth/apiKeys.test.ts`,
 `auth/organizationRoleActivity.test.ts`,
 `organizations/accessActivity.test.ts`, `issues/issues.test.ts`,
-`contracts/contractActivity.test.ts`, and
-`employeeForms/requirementActivity.test.ts`.
+`library/libraryActivity.test.ts`, `inbox/inboxActivity.test.ts`,
+`businesses/businessActivity.test.ts`, `contracts/contractActivity.test.ts`,
+and `employeeForms/requirementActivity.test.ts`.
 
 The repository-owned [audit-trails skill](../skills/audit-trails/SKILL.md)
 reviews mutations, triggers, separate histories, readers, and retention, then

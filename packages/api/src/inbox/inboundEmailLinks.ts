@@ -7,11 +7,44 @@ import {
 import type { Context } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
 import { userHasCapability } from "../organizations/organizationGroups";
+import { activityBatch, insertActivity } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 
 type LinkContext = Context<ApiEnv>;
 
 type EmailLinkTargetType = InboundEmailLinkTarget["targetType"];
+
+/** An email's label in its history: its subject, shortened. */
+export const emailLabel = `COALESCE(
+  NULLIF(substr(trim(inbound_emails.subject), 1, 120), ''), '(No subject)')`;
+
+/**
+ * Snapshots a link event from the stored link, email, and target. Links are
+ * recorded on the record the email is linked to, so they appear in its
+ * history, and a transaction's stay behind Finance access; the email is the
+ * subject. Binds (action, occurred at, actor, link id, organization).
+ */
+const linkEvent = `${insertActivity}
+  SELECT link.organization_id, link.target_type, link.target_id,
+         CASE link.target_type
+           WHEN 'library_folder' THEN folder.name
+           WHEN 'equipment' THEN item.make || ' ' || item.model
+           ELSE COALESCE(txn.merchant_name, txn.name)
+         END,
+         'inbound_email', inbound_emails.id, ?, actor.id, actor.name,
+         actor.email, ?,
+         json_object('subject', ${emailLabel},
+                     'from', inbound_emails.envelope_from)
+  FROM inbound_email_links AS link
+  JOIN inbound_emails ON inbound_emails.id = link.email_id
+  JOIN user AS actor ON actor.id = ?
+  LEFT JOIN library_folders AS folder
+    ON link.target_type = 'library_folder' AND folder.id = link.target_id
+  LEFT JOIN equipment AS item
+    ON link.target_type = 'equipment' AND item.id = link.target_id
+  LEFT JOIN plaid_transactions AS txn
+    ON link.target_type = 'finance_transaction' AND txn.id = link.target_id
+  WHERE link.id = ? AND link.organization_id = ?`;
 
 interface EmailLinkRow {
   equipment_make: string | null;
@@ -88,10 +121,14 @@ export async function createEmailLink(context: LinkContext) {
   }
   // The target is checked in the insert itself: a target deleted a moment
   // earlier (after its cleanup trigger ran) must not gain an orphaned link.
+  // The event reads the link this batch inserts, so linking twice or to a
+  // missing target records nothing.
   const id = crypto.randomUUID();
-  await database
-    .prepare(
-      `INSERT INTO inbound_email_links
+  const userId = context.get("authSession").user.id;
+  await activityBatch(database, context.get("apiKey"), [
+    database
+      .prepare(
+        `INSERT INTO inbound_email_links
          (id, organization_id, email_id, target_type, target_id, created_by,
           created_at)
        SELECT ?, ?, ?, ?, ?, ?, ?
@@ -99,21 +136,30 @@ export async function createEmailLink(context: LinkContext) {
          AND EXISTS (SELECT 1 FROM inbound_emails
                      WHERE id = ? AND organization_id = ? AND deleted_at IS NULL)
        ON CONFLICT (email_id, target_type, target_id) DO NOTHING`,
-    )
-    .bind(
-      id,
-      organizationId,
-      email.id,
-      input.targetType,
-      input.targetId,
-      context.get("authSession").user.id,
-      new Date().toISOString(),
-      input.targetId,
-      organizationId,
-      email.id,
-      organizationId,
-    )
-    .run();
+      )
+      .bind(
+        id,
+        organizationId,
+        email.id,
+        input.targetType,
+        input.targetId,
+        userId,
+        new Date().toISOString(),
+        input.targetId,
+        organizationId,
+        email.id,
+        organizationId,
+      ),
+    database
+      .prepare(linkEvent)
+      .bind(
+        "inbox.email_linked",
+        new Date().toISOString(),
+        userId,
+        id,
+        organizationId,
+      ),
+  ]);
   const row = (await emailLinkRows(database, organizationId, email.id)).find(
     (link) =>
       link.target_type === input.targetType &&
@@ -144,11 +190,24 @@ export async function deleteEmailLink(context: LinkContext) {
   ) {
     return financeRequired(context);
   }
-  await context.env.DB.prepare(
-    `DELETE FROM inbound_email_links WHERE id = ? AND organization_id = ?`,
-  )
-    .bind(link.id, organizationId)
-    .run();
+  // The event snapshots the link this batch removes.
+  const database = context.env.DB;
+  await activityBatch(database, context.get("apiKey"), [
+    database
+      .prepare(linkEvent)
+      .bind(
+        "inbox.email_unlinked",
+        new Date().toISOString(),
+        context.get("authSession").user.id,
+        link.id,
+        organizationId,
+      ),
+    database
+      .prepare(
+        `DELETE FROM inbound_email_links WHERE id = ? AND organization_id = ?`,
+      )
+      .bind(link.id, organizationId),
+  ]);
   return context.body(null, 204);
 }
 

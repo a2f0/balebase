@@ -50,7 +50,7 @@ export const workspaceTools: McpTool[] = [
   },
   {
     description:
-      "Lists the organization's activity feed, newest first, 50 events per page: audits, forms, issues, equipment, projects, role and group changes, API keys, transactions, bank connections, expense categories, and billing. Optionally filter by root resource type. Finance activity requires Finance access; group and billing activity require an organization owner or admin. Pass nextCursor to page, retaining the same filter.",
+      "Lists the organization's activity feed, newest first, 50 events per page: audits, forms, issues, equipment, projects, role and group changes, API keys, transactions, bank connections, expense categories, billing, library files and folders, inbox email moves and links, and businesses. Optionally filter by root resource type. Finance activity requires Finance access; group and billing activity require an organization owner or admin. Pass nextCursor to page, retaining the same filter.",
     descriptions: {
       ...activityCursor,
       resourceType:
@@ -168,6 +168,14 @@ export const workspaceTools: McpTool[] = [
     name: "get_business",
     route: businessesRoutes.get,
     title: "Get business",
+  },
+  {
+    description:
+      "Lists one business's change history, newest first. EIN and DUNS numbers appear only as their last four digits.",
+    descriptions: { ...businessId, ...activityCursor },
+    name: "list_business_activity",
+    route: businessesRoutes.activity,
+    title: "List business activity",
   },
   {
     description:
