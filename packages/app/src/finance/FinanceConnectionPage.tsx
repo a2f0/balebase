@@ -22,6 +22,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { ActivityFeed } from "../activity/ActivityFeed";
 import { AppLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
@@ -112,6 +113,11 @@ export function FinanceConnectionPage({
             >
               <FinanceSourceFields fields={sourceFields(data)} />
             </PageSection>
+            <ActivityFeed
+              // Changes that record activity, not every sync status poll.
+              refreshKey={`${data.connection.status}:${data.connection.dailySync}:${data.connection.syncJob?.id}`}
+              source={{ id, type: "finance_connection" }}
+            />
           </>
         )}
       </PageBody>

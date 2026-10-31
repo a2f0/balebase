@@ -172,6 +172,8 @@ export function expenseCategoryFiltersFor(
   return { categorySlug: slug || null, uncategorized: false };
 }
 
+export const financeCategoriesPath = "/finance/categories";
+
 export function financeAccountPath(id: string) {
   return `/finance/accounts/${encodeURIComponent(id)}`;
 }
