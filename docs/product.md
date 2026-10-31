@@ -672,6 +672,18 @@ last successful one stopped, so imported records, categories, and annotations
 are untouched. Prefer it over disconnecting and reconnecting, which creates a
 new Item and relies on matching to carry history over.
 
+Before retrying, anyone with finance access can check for a wider outage under
+**Bank status** on the connection's page (`/finance/connections/<id>`). It
+checks by itself when the connection is in error and otherwise on **Check for
+outages**. The API (`GET /api/finance/connections/:id/institution-health`, MCP
+tool `get_finance_institution_health`) asks Plaid's read-only
+`/institutions/get_by_id` for the stored institution ID with the application's
+credentials; no access token is decrypted. Logins (including **Update login**
+repairs) and transaction updates are shown separately as Plaid reports them,
+missing fields as unknown, and one answer per institution is reused for five
+minutes in each Worker isolate. During a login outage the page advises waiting
+rather than retrying; when logins are healthy it points to **Update login**.
+
 Disconnecting is available after an accepted sync finishes. It disables daily sync,
 calls Plaid's `/item/remove`, erases the stored
 access token, and retains the imported history and annotations. A later Link

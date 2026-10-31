@@ -103,6 +103,39 @@ export type FinanceConnectionDetail = z.infer<
   typeof FinanceConnectionDetailSchema
 >;
 
+/**
+ * Plaid's live health for one product at an institution, across every Plaid
+ * customer. Rates are percentages of recent requests; null means Plaid did not
+ * report it, which is unknown rather than healthy. `status` is Plaid's coarse
+ * (deprecated) HEALTHY, DEGRADED, or DOWN.
+ */
+const InstitutionProductHealthSchema = z.object({
+  institutionErrorRate: z.number().nullable(),
+  lastStatusChange: z.string().nullable(),
+  plaidErrorRate: z.number().nullable(),
+  status: z.string().nullable(),
+  successRate: z.number().nullable(),
+});
+export type InstitutionProductHealth = z.infer<
+  typeof InstitutionProductHealthSchema
+>;
+
+const FinanceInstitutionHealthSchema = z.object({
+  /** When Plaid was asked; repeated checks within minutes share one answer. */
+  checkedAt: z.string(),
+  institutionId: z.string().nullable(),
+  institutionName: z.string().nullable(),
+  /** Logging in, including Update login repairs. */
+  logins: InstitutionProductHealthSchema.nullable(),
+  /** Refreshing transactions for connections that are already logged in. */
+  transactions: InstitutionProductHealthSchema.extend({
+    refreshInterval: z.string().nullable(),
+  }).nullable(),
+});
+export type FinanceInstitutionHealth = z.infer<
+  typeof FinanceInstitutionHealthSchema
+>;
+
 const FinanceTransactionAnnotationSchema = z.object({
   labels: z.array(z.string()),
   note: z.string(),
@@ -383,6 +416,12 @@ export const financeRoutes = {
     method: "GET",
     path: "/api/finance/connections/:id",
     response: FinanceConnectionDetailSchema,
+  }),
+  /** Plaid's live health for the connection's bank: is it a wider outage? */
+  institutionHealth: route({
+    method: "GET",
+    path: "/api/finance/connections/:id/institution-health",
+    response: FinanceInstitutionHealthSchema,
   }),
   disconnectConnection: route({
     method: "DELETE",

@@ -72,6 +72,15 @@ export const financeTools: McpTool[] = [
   },
   {
     description:
+      "Gets Plaid's live health for a connection's bank across all Plaid users, with logins (including repairs) and transaction updates reported separately as percentages of recent requests. Null fields mean unknown, not healthy. Answers are reused for up to five minutes.",
+    descriptions: connectionId,
+    name: "get_finance_institution_health",
+    openWorld: true,
+    route: financeRoutes.institutionHealth,
+    title: "Get finance institution health",
+  },
+  {
+    description:
       "Replaces a transaction's note, labels, and reviewed flag. Send the current values for anything that should stay.",
     descriptions: {
       ...transactionId,
