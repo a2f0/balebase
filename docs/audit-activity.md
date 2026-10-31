@@ -56,8 +56,9 @@ already are. The MCP `list_activity` tool accepts the same optional
 
 Resource history routes authorize the resource before using `findActivity`.
 Shared global form history only exposes published versions to organization
-members. Form events name the version they saved: creation (with the published
-global form and version a copy came from), saved versions, publication,
+members. Form events name the version they saved: creation (with the global
+form a copy came from and the published version it started from), saved
+versions, publication,
 unpublication, discards, and restores. Organizations therefore see a global
 form's publications but never its unpublications, discards, or restores.
 Adding a producer with restricted details also requires reviewing the shared

@@ -719,6 +719,10 @@ it("names form publication changes and a copied form's source", async () => {
     details,
   });
   const changes = [
+    form(5, "audit.template_created", {
+      copiedFrom: { name: "Ladder check", templateId: "ladder", version: null },
+      version: 1,
+    }),
     form(4, "audit.template_unpublished", { version: 4 }),
     form(3, "audit.template_version_saved", { version: 3 }),
     form(2, "audit.template_published", { version: 2 }),
@@ -734,12 +738,15 @@ it("names form publication changes and a copied form's source", async () => {
   const rows = [...container.querySelectorAll(".activityRow")].map(
     (row) => row.textContent ?? "",
   );
-  expect(rows).toHaveLength(4);
-  expect(rows[0]).toContain("Sam unpublished the form");
-  expect(rows[0]).toContain("Version 4");
-  expect(rows[1]).toContain("Sam saved a form version");
-  expect(rows[2]).toContain("Sam published the form");
-  expect(rows[3]).toContain("Sam created the form");
-  expect(rows[3]).toContain("Version 1 · Copied from NFPA 70E, version 5");
-  expect(rows[1]).not.toContain("Copied from");
+  expect(rows).toHaveLength(5);
+  // A copy whose client named no version records only the form.
+  expect(rows[0]).toContain("Version 1 · Copied from Ladder check");
+  expect(rows[0]).not.toContain("Ladder check, version");
+  expect(rows[1]).toContain("Sam unpublished the form");
+  expect(rows[1]).toContain("Version 4");
+  expect(rows[2]).toContain("Sam saved a form version");
+  expect(rows[3]).toContain("Sam published the form");
+  expect(rows[4]).toContain("Sam created the form");
+  expect(rows[4]).toContain("Version 1 · Copied from NFPA 70E, version 5");
+  expect(rows[2]).not.toContain("Copied from");
 });

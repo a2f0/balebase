@@ -148,12 +148,24 @@ audits.post("/templates/:id/copies", async (context) => {
   ) {
     return context.json({ error: staleTemplateError }, 409);
   }
+  const { sourceVersion = null, ...copy } = input;
+  if (
+    sourceVersion !== null &&
+    !(await findTemplate(
+      context.env.DB,
+      context.get("organizationId"),
+      source.id,
+      sourceVersion,
+    ))
+  ) {
+    return context.json({ error: "Template version not found." }, 404);
+  }
   const saved = await copyGlobalTemplate(
     context.env.DB,
     context.get("organizationId"),
     requestActor(context),
-    input,
-    source,
+    copy,
+    { current: source, version: sourceVersion },
     (await organizationPlanLimits(context.env, context.get("organizationId")))
       .formTemplates,
   );
@@ -608,31 +620,41 @@ audits.route("/runs", auditRunDiscard);
 audits.route("/issues", auditIssueImages);
 audits.route("/issues", auditIssueImageRemoval);
 
-/** Matches when global form ? is still published at version ?. */
+/**
+ * Matches while global form ? is still published at current version ?, and
+ * when version ? is given, that version of it is published.
+ */
 const publishedSourceSql = `
   SELECT 1 FROM audit_template_families AS source
   JOIN audit_template_versions AS sourceVersion
     ON sourceVersion.template_id = source.id
    AND sourceVersion.version = source.current_version
   WHERE source.id = ? AND source.scope = 'global'
-    AND sourceVersion.version = ? AND sourceVersion.status = 'published'`;
+    AND sourceVersion.version = ? AND sourceVersion.status = 'published'
+    AND (? IS NULL OR EXISTS (
+      SELECT 1 FROM audit_template_versions AS copied
+      WHERE copied.template_id = source.id AND copied.version = ?
+        AND copied.status = 'published'
+    ))`;
 
 /**
- * Copies the global form's published version `source` into the organization
- * as a new draft that records its source. Returns "stale" when the source is
- * no longer that published version, and null when the plan limit is reached;
- * both checks run in the inserting statement.
+ * Copies a published global form into the organization as a new draft that
+ * records its source: the form, and the published version the definition came
+ * from when the caller names one. Returns "stale" when the form is no longer
+ * published at the current version read, and null when the plan limit is
+ * reached; both checks run in the inserting statement.
  */
 async function copyGlobalTemplate(
   database: D1Database,
   organizationId: string,
   actor: ActivityActor,
   input: TemplateSaveInput,
-  source: TemplateRow,
+  source: { current: TemplateRow; version: number | null },
   templateLimit: number | null,
 ) {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
+  const { current } = source;
   const results = await activityBatch(database, actor.apiKey, [
     database
       .prepare(
@@ -655,7 +677,9 @@ async function copyGlobalTemplate(
         templateLimit,
         organizationId,
         templateLimit,
-        source.id,
+        current.id,
+        current.current_version,
+        source.version,
         source.version,
       ),
     database
@@ -676,14 +700,14 @@ async function copyGlobalTemplate(
         JSON.stringify(input.definition),
         actor.userId,
         now,
-        source.id,
+        current.id,
         source.version,
         id,
       ),
   ]);
   if (!Number(results[0]?.meta.changes)) {
-    const latest = await findTemplate(database, organizationId, source.id);
-    return latest?.current_version === source.version ? null : "stale";
+    const latest = await findTemplate(database, organizationId, current.id);
+    return latest?.current_version === current.current_version ? null : "stale";
   }
   const saved = await findTemplate(database, organizationId, id);
   if (!saved) throw new Error("Copied template could not be loaded.");

@@ -245,30 +245,28 @@ describe("copied form history", () => {
   it("names the published global form and version a copy came from", async () => {
     const fixture = createFixture();
     const global = await globalForm(fixture, "Shared form", ["published"]);
-    // The copy comes from the latest published version, not the first.
+    // Version 3 renames the form; the organization starts from version 2.
     await save(
       fixture,
-      global,
+      { ...global, name: "Shared form v3" },
       2,
       { status: "published" },
       admin,
       `/admin/audit-templates/${global.id}`,
     );
-    const copy = await jsonRequest<TemplateResponse>(
-      fixture,
-      `/templates/${global.id}/copies`,
-      "POST",
-      {
-        definition: global.definition,
-        expectedCurrentVersion: 3,
-        name: "Our form",
-      },
-      { userId: "user-2" },
-    );
-    expect(copy.status).toBe(201);
+    const copy = (body: Record<string, unknown>) =>
+      jsonRequest<TemplateResponse>(
+        fixture,
+        `/templates/${global.id}/copies`,
+        "POST",
+        { definition: global.definition, name: "Our form", ...body },
+        { userId: "user-2" },
+      );
+    const copied = await copy({ expectedCurrentVersion: 3, sourceVersion: 2 });
+    expect(copied.status).toBe(201);
     const history = await jsonRequest<ActivityResponse>(
       fixture,
-      `/templates/${copy.body.template.id}/activity`,
+      `/templates/${copied.body.template.id}/activity`,
       "GET",
     );
     expect(history.body.events).toHaveLength(1);
@@ -276,7 +274,7 @@ describe("copied form history", () => {
       action: "audit.template_created",
       actor: { id: "user-2" },
       details: {
-        copiedFrom: { name: "Shared form", templateId: global.id, version: 3 },
+        copiedFrom: { name: "Shared form", templateId: global.id, version: 2 },
         version: 1,
       },
     });
@@ -285,11 +283,35 @@ describe("copied form history", () => {
         `SELECT copied_from_template_id, copied_from_version
          FROM audit_template_versions WHERE template_id = ?`,
       )
-      .get(copy.body.template.id);
+      .get(copied.body.template.id);
     expect(row).toEqual({
       copied_from_template_id: global.id,
-      copied_from_version: 3,
+      copied_from_version: 2,
     });
+
+    // Without a version, only the form is known: its current published name.
+    const unversioned = await copy({});
+    expect(
+      formEvents(fixture, unversioned.body.template.id).map(({ details }) =>
+        JSON.parse(details),
+      ),
+    ).toEqual([
+      {
+        copiedFrom: {
+          name: "Shared form v3",
+          templateId: global.id,
+          version: null,
+        },
+        version: 1,
+      },
+    ]);
+
+    // A draft version stays private, so it cannot be a copy's source.
+    const before = organizationFormCount(fixture);
+    expect((await copy({ sourceVersion: 1 })).status).toBe(404);
+    expect((await copy({ sourceVersion: 9 })).status).toBe(404);
+    expect(organizationFormCount(fixture)).toEqual(before);
+
     // A blank form records no source.
     const blank = await jsonRequest<TemplateResponse>(
       fixture,
@@ -312,6 +334,7 @@ describe("copied form history", () => {
       jsonRequest(fixture, `/templates/${id}/copies`, "POST", {
         definition,
         name: "Our form",
+        sourceVersion: 2,
       });
     expect((await copy(hidden.id, hidden.definition)).status).toBe(404);
 

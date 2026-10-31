@@ -78,6 +78,8 @@ export const auditTools: McpTool[] = [
     descriptions: {
       ...templateSave,
       id: "Global form id from list_audit_templates.",
+      sourceVersion:
+        "The published version you copied the definition from, recorded as the copy's source; omit to record only the form.",
     },
     name: "copy_audit_template",
     route: auditsRoutes.copyTemplate,

@@ -1,11 +1,13 @@
--- A form copied from a global form keeps the global form and version it was
--- copied from, so its history can name its source. Only copies set these.
+-- A form copied from a global form keeps the global form it was copied from
+-- and, when the client names it, the published version the copy started from,
+-- so its history can name its source. Only copies set these.
 ALTER TABLE audit_template_versions ADD COLUMN copied_from_template_id TEXT;
 ALTER TABLE audit_template_versions ADD COLUMN copied_from_version INTEGER;
 
 -- Publishing and unpublishing a form are recorded as such instead of as
--- ordinary saves, and a copy's creation names the published global version it
--- came from. Earlier events keep their actions. The trigger is replaced within
+-- ordinary saves, and a copy's creation names the global form it came from:
+-- the copied version's name, or the current published name when no version
+-- was given. Earlier events keep their actions. The trigger is replaced within
 -- this migration; every earlier write still records.
 DROP TRIGGER activity_template_version_insert;
 
@@ -34,7 +36,7 @@ BEGIN
                 'version', NEW.version,
                 'copiedFrom', json_object(
                   'templateId', source.template_id,
-                  'version', source.version,
+                  'version', NEW.copied_from_version,
                   'name', source.name
                 )
               ) END
@@ -43,9 +45,14 @@ BEGIN
   LEFT JOIN audit_template_versions AS previous
     ON previous.template_id = NEW.template_id
    AND previous.version = NEW.version - 1
+  LEFT JOIN audit_template_families AS source_family
+    ON source_family.id = NEW.copied_from_template_id
+   AND source_family.scope = 'global'
   LEFT JOIN audit_template_versions AS source
-    ON source.template_id = NEW.copied_from_template_id
-   AND source.version = NEW.copied_from_version
+    ON source.template_id = source_family.id
+   AND source.version = COALESCE(
+     NEW.copied_from_version, source_family.current_version
+   )
    AND source.status = 'published'
   WHERE family.id = NEW.template_id;
 END;

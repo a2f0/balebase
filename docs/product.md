@@ -494,10 +494,13 @@ were not stored and cannot be reconstructed.
 
 Customizing a global template creates a new organization-scoped form instead
 of changing the shared template or its version history. The copy records the
-global form and published version it came from, and its Activity names them;
-a copy started from a version that is no longer the published current one
-returns 409. Apply migration `0080_record_form_publication_and_copies.sql`,
-which adds that source and the publication events, before deploying. Platform administrators
+global form and the published version the editor started from (`sourceVersion`,
+which may be older than the current one), and its Activity names them; a
+client that names no version records only the form, named as currently
+published. A draft or unpublished source version returns 404, and a global
+form changed since it was read returns 409. Apply migration
+`0080_record_form_publication_and_copies.sql`, which adds that source and the
+publication events, before deploying. Platform administrators
 use a separate management action when they intentionally publish a new global
 version.
 

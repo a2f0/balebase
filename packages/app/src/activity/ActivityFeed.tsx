@@ -469,9 +469,13 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
 /** A form version, and the published global version a copy started from. */
 function TemplateDetails({ details }: { details: ActivityEvent["details"] }) {
   const source = details.copiedFrom;
+  const copiedVersion =
+    typeof source === "object" && source !== null
+      ? textValue(Reflect.get(source, "version"))
+      : "";
   const copied =
     typeof source === "object" && source !== null
-      ? ` · Copied from ${textValue(Reflect.get(source, "name")) || "a global form"}, version ${textValue(Reflect.get(source, "version"))}`
+      ? ` · Copied from ${textValue(Reflect.get(source, "name")) || "a global form"}${copiedVersion && `, version ${copiedVersion}`}`
       : null;
   return (
     <p className="activityDetails">
