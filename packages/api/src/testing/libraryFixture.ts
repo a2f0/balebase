@@ -14,7 +14,7 @@ import { testApp } from "./session";
 
 const timestamp = "2026-10-01T12:00:00.000Z";
 
-export interface StoredEvent {
+interface StoredEvent {
   action: string;
   actor_api_key_channel: string | null;
   actor_api_key_name: string | null;
@@ -98,6 +98,7 @@ export function libraryFixture() {
         .run(),
     hooks,
     state,
+    storage: bucket,
     stored,
     /** Makes requests through the owner's API key over `channel`. */
     useApiKey: (channel: "mcp" | "rest") => {

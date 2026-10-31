@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setSystemTime } from "bun:test";
 import { libraryFixture } from "../testing/libraryFixture";
 
 interface Page {
@@ -206,6 +206,34 @@ describe("business activity", () => {
         .query("SELECT name, city FROM businesses WHERE id = ?")
         .get(id),
     ).toEqual({ city: "Dallas", name: "Acme" });
+  });
+
+  it("credits only the save that changed the row when two match", async () => {
+    const fixture = libraryFixture();
+    const owner = fixture.as("owner-user");
+    const id = await createAcme(fixture);
+    const now = new Date("2026-10-31T12:00:00.000Z");
+    // Another manager saves the same values in the same millisecond.
+    fixture.hooks.before("UPDATE OR IGNORE businesses", () => {
+      fixture.database
+        .query(
+          "UPDATE businesses SET name = 'Acme Holdings', updated_at = ? WHERE id = ?",
+        )
+        .run(now.toISOString(), id);
+    });
+    setSystemTime(now);
+    try {
+      expect(
+        (
+          await owner("PATCH", `/api/businesses/${id}`, {
+            name: "Acme Holdings",
+          })
+        ).status,
+      ).toBe(409);
+    } finally {
+      setSystemTime();
+    }
+    expect(fixture.events("action = 'business.updated'")).toEqual([]);
   });
 
   it("rolls the change back when its event cannot be recorded", async () => {

@@ -275,14 +275,19 @@ objects.delete("/:id", async (context) => {
   if (!deleted?.meta.changes) {
     return context.json({ error: "Object not found." }, 404);
   }
-  await context.env.STORAGE.delete(row.object_key);
-  await database
-    .prepare(
-      `DELETE FROM deleted_object_cleanup
-       WHERE id = ? AND cleanup_token IS NULL`,
-    )
-    .bind(`library-delete:${row.id}`)
-    .run();
+  try {
+    await context.env.STORAGE.delete(row.object_key);
+    await database
+      .prepare(
+        `DELETE FROM deleted_object_cleanup
+         WHERE id = ? AND cleanup_token IS NULL`,
+      )
+      .bind(`library-delete:${row.id}`)
+      .run();
+  } catch (cause) {
+    // The file is deleted; its cleanup entry remains for the scheduled retry.
+    console.error("Library file cleanup deferred.", cause);
+  }
 
   return context.body(null, 204);
 });

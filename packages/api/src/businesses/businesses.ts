@@ -172,16 +172,14 @@ businesses.patch("/:id", requireBusinessManager, async (context) => {
   const timestamp = new Date().toISOString();
   const organizationId = context.get("organizationId");
   const database = context.env.DB;
-  // The update applies only over the values just read, and the event commits
-  // only when the row then holds this save's values and time, so a duplicate
+  // The update applies only over the values just read, and the event, next
+  // in the batch, only when that update changed the row, so a duplicate
   // identifier (ignored) or a concurrent change records nothing.
-  const holds = (values: BusinessValues) => ({
-    bindings: [id, organizationId, ...businessColumns.map((c) => values[c])],
+  const asRead = {
+    bindings: [id, organizationId, ...businessColumns.map((c) => existing[c])],
     sql: `id = ? AND organization_id = ?
       ${businessColumns.map((column) => `AND ${column} IS ?`).join(" ")}`,
-  });
-  const asRead = holds(existing);
-  const saved = holds(next);
+  };
   const [result] = await activityBatch(database, context.get("apiKey"), [
     database
       .prepare(
@@ -206,11 +204,7 @@ businesses.patch("/:id", requireBusinessManager, async (context) => {
         root: { id, label: next.name, type: "business" },
         subject: { id, type: "business" },
       },
-      {
-        bindings: [...saved.bindings, timestamp],
-        sql: `EXISTS (SELECT 1 FROM businesses
-                WHERE ${saved.sql} AND updated_at = ?)`,
-      },
+      { bindings: [], sql: "changes() > 0" },
     ),
   ]);
   if (!result?.meta.changes) {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { libraryFixture } from "../testing/libraryFixture";
 
 interface Folder {
@@ -152,6 +152,33 @@ describe("library activity", () => {
       "/api/activity?resourceType=library_file",
     );
     expect(outside.body.events).toEqual([]);
+  });
+
+  it("keeps a deletion, queueing the bytes, when removing them fails", async () => {
+    const fixture = libraryFixture();
+    const member = fixture.as("member-user");
+    const file = (await upload(fixture, "w2.txt")).body.object;
+    fixture.storage.delete = async () => {
+      throw new Error("R2 unavailable");
+    };
+    const logged = spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect((await member("DELETE", `/api/objects/${file.id}`)).status).toBe(
+        204,
+      );
+      expect(logged).toHaveBeenCalledTimes(1);
+    } finally {
+      logged.mockRestore();
+    }
+    expect(fixture.events("action = 'library.file_deleted'")).toHaveLength(1);
+    expect(
+      fixture.database
+        .query("SELECT object_key FROM deleted_object_cleanup")
+        .all(),
+    ).toEqual([{ object_key: file.objectKey }]);
+    expect((await member("DELETE", `/api/objects/${file.id}`)).status).toBe(
+      404,
+    );
   });
 
   it("names the API key and channel a file was changed through", async () => {
