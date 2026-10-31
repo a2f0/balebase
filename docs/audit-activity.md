@@ -3,8 +3,10 @@
 Activity is the shared history of consequential changes across Balebase. The
 checklist Audits feature is one producer alongside equipment, projects, issues,
 organization roles, group access, members' two-factor requirements, API keys,
-transaction annotations, categories, and bank connection sync settings,
-library files and folders, inbox email moves and links, and businesses.
+transaction annotations and categories, bank connections (connecting, sync
+requests and settings, disconnecting, and deleting imported data), expense
+categories, Pro checkout starts, library files and folders, inbox email moves
+and links, and businesses.
 The workspace page is `/activity`; individual records can expose the same
 events in their own history. Contract signing also has a
 separate history. Coverage is incremental: an empty shared feed does not prove
@@ -40,6 +42,9 @@ requires a user actor; extending it to system/provider work needs an explicit
 actor model, never a fabricated human identity. Until then, maintenance jobs
 such as the discarded global form purge record no events: the projects that
 lose a purged form show no removal, and the job run keeps only its count.
+Stripe-driven subscription and seat changes and Plaid-driven connection status
+changes likewise stay in their current-state columns, Stripe's own history, and
+job runs.
 
 ## Reading and retaining history
 
@@ -47,16 +52,20 @@ lose a purged form show no removal, and the job run keeps only its count.
 cursor pagination. Its optional `resourceType` filter selects the root type
 before pagination. The Activity page offers all resources, audits, forms,
 workspace issues, equipment, projects, people, groups, API keys, transactions,
-bank connections, library files, library folders, inbox email, and businesses.
-Audit and transaction filters include issues attached to those roots; workspace
-issues are standalone issues. Transaction and bank connection activity requires
-Finance capability even when a caller supplies the filter directly, including
-emails linked to a transaction. Group events and two-factor requirement changes
-are visible only to organization owners and admins, as group details and member
-security settings already are. The MCP `list_activity` tool accepts the same
-optional `resourceType`; keep that filter when passing the next cursor.
+bank connections, expense categories, billing, library files, library folders,
+inbox email, and businesses. Audit and transaction filters include issues
+attached to those roots; workspace issues are standalone issues. Transaction,
+bank connection, and expense category activity requires Finance capability even
+when a caller supplies the filter directly, including emails linked to a
+transaction. Group events, two-factor requirement changes, and billing events
+are visible only to organization owners and admins, as group details, member
+security settings, and billing management already are. The MCP `list_activity`
+tool accepts the same optional `resourceType`; keep that filter when passing the
+next cursor.
 
 Resource history routes authorize the resource before using `findActivity`.
+A bank connection's history (`GET /api/finance/connections/:id/activity`, MCP
+`list_finance_connection_activity`) stays readable after it is disconnected.
 Shared global form history only exposes published versions to organization
 members. Form events name the version they saved: creation (with the global
 form a copy came from and the published version it started from), saved
@@ -68,9 +77,12 @@ feed's reader permissions, labels, and navigation.
 
 History follows the resource's documented retention. It is not an immutable
 compliance ledger. Purging an organization removes its activity; purging an
-audit run or form removes that root's history. Historical imports must be
-marked as such and contain only facts actually retained. Do not reconstruct
-unknown editors, previous values, or timestamps from current state.
+audit run or form removes that root's history. Deleting a disconnected bank
+connection's imported data removes that connection's and its transactions'
+history, but keeps one `finance.connection_data_deleted` event naming who
+deleted it and how many accounts, transactions, and annotations went. Historical
+imports must be marked as such and contain only facts actually retained. Do not
+reconstruct unknown editors, previous values, or timestamps from current state.
 
 ## Library, inbox, and businesses
 

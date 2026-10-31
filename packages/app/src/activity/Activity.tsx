@@ -14,6 +14,8 @@ const resourceLabels: Record<ActivityResourceType, string> = {
   api_key: "API keys",
   finance_transaction: "Transactions",
   finance_connection: "Bank connections",
+  finance_category: "Expense categories",
+  organization_billing: "Billing",
   library_file: "Library files",
   library_folder: "Library folders",
   inbound_email: "Inbox",
@@ -24,13 +26,14 @@ function isResourceType(value: string): value is ActivityResourceType {
   return Object.hasOwn(resourceLabels, value);
 }
 
-/** Finance resources need Finance access; groups need a manager. */
+/** Finance resources need Finance access; groups and billing need a manager. */
 function canFilter(
   value: string,
   access: { canAccessFinance: boolean; canManage: boolean },
 ) {
   if (value.startsWith("finance_")) return access.canAccessFinance;
-  if (value === "organization_group") return access.canManage;
+  if (value === "organization_group" || value === "organization_billing")
+    return access.canManage;
   return true;
 }
 

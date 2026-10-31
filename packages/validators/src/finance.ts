@@ -457,6 +457,12 @@ export const financeRoutes = {
       transaction: FinanceTransactionSchema,
     }),
   }),
+  connectionActivity: route({
+    method: "GET",
+    path: "/api/finance/connections/:id/activity",
+    query: ActivityQuerySchema,
+    response: ActivityPageSchema,
+  }),
   transactionActivity: route({
     method: "GET",
     path: "/api/finance/transactions/:id/activity",

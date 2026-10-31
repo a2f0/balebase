@@ -1,5 +1,5 @@
 import { financeRoutes } from "@balebase/validators/finance";
-import type { McpTool } from "./mcpToolSchema";
+import { activityCursor, type McpTool } from "./mcpToolSchema";
 
 const categoryName = {
   name: "Category name, unique in the organization; repeated spaces collapse.",
@@ -78,6 +78,14 @@ export const financeTools: McpTool[] = [
     openWorld: true,
     route: financeRoutes.institutionHealth,
     title: "Get finance institution health",
+  },
+  {
+    description:
+      "Lists one bank connection's history, newest first, 50 events per page: who connected it, requested syncs, changed daily sync, or disconnected it. Works for disconnected connections. Pass nextCursor to page.",
+    descriptions: { ...connectionId, ...activityCursor },
+    name: "list_finance_connection_activity",
+    route: financeRoutes.connectionActivity,
+    title: "List finance connection activity",
   },
   {
     description:

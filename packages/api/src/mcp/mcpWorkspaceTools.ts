@@ -50,7 +50,7 @@ export const workspaceTools: McpTool[] = [
   },
   {
     description:
-      "Lists the organization's activity feed, newest first, 50 events per page: audits, forms, issues, transaction annotations, equipment, projects, role changes, API keys, library files and folders, inbox email moves and links, and businesses. Optionally filter by root resource type. Finance activity requires Finance access. Pass nextCursor to page, retaining the same filter.",
+      "Lists the organization's activity feed, newest first, 50 events per page: audits, forms, issues, equipment, projects, role and group changes, API keys, transactions, bank connections, expense categories, billing, library files and folders, inbox email moves and links, and businesses. Optionally filter by root resource type. Finance activity requires Finance access; group and billing activity require an organization owner or admin. Pass nextCursor to page, retaining the same filter.",
     descriptions: {
       ...activityCursor,
       resourceType:
