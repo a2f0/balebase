@@ -176,7 +176,9 @@ are never expired by history retention. Domain activity history is separate.
 After deployment, start a small maintenance job, close and reopen the page, and
 verify its queued/running/completed history and named output. Check a manual bank
 sync in the same history, confirm duplicate requests share an active run, and
-verify a non-admin session cannot access run history or details.
+verify a non-admin session cannot access run history or details. Manual
+requests also appear in `maintenance_requests`, which job history retention does
+not remove.
 
 ## Finance background sync
 

@@ -28,6 +28,8 @@ const run: JobRun = {
   status: "succeeded",
   source: "scheduled",
   requestedBy: null,
+  requestedByName: null,
+  requestedByEmail: null,
   organizationId: null,
   connectionId: null,
   attempts: 1,

@@ -1,4 +1,8 @@
-import { accountSettingsRoutes } from "@balebase/validators/accountSettings";
+import {
+  accountSettingsRoutes,
+  type SecurityEventAction,
+  securityEventLimit,
+} from "@balebase/validators/accountSettings";
 import { Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
 import { readBody, respond } from "../shared/respond";
@@ -32,6 +36,24 @@ accountSettings.patch("/default-organization", async (context) => {
   }
   return respond(context, accountSettingsRoutes.updateDefaultOrganization, {
     defaultOrganizationId: body.organizationId,
+  });
+});
+
+// Triggers record these when Better Auth changes the person's two-factor
+// setting or password (migration 0082). Only the person reads them here; root
+// admins read them in D1.
+accountSettings.get("/security-events", async (context) => {
+  const { results } = await context.env.DB.prepare(
+    `SELECT action, occurred_at FROM user_security_events
+     WHERE user_id = ? ORDER BY id DESC LIMIT ?`,
+  )
+    .bind(context.get("authSession").user.id, securityEventLimit)
+    .all<{ action: SecurityEventAction; occurred_at: string }>();
+  return respond(context, accountSettingsRoutes.securityEvents, {
+    events: results.map((row) => ({
+      action: row.action,
+      occurredAt: row.occurred_at,
+    })),
   });
 });
 

@@ -78,6 +78,21 @@ const roleChangePaths = [
   "/admin/create-user",
 ];
 
+// Balebase has no screen for these. Each would change another person's account
+// (password, ban, sessions, deletion) or act as them with no history, and
+// remove-user would bypass the recorded deletion queue. Add a guarded,
+// recorded /api/admin/users route before offering any of them.
+const accountChangePaths = [
+  "/admin/set-user-password",
+  "/admin/ban-user",
+  "/admin/unban-user",
+  "/admin/revoke-user-session",
+  "/admin/revoke-user-sessions",
+  "/admin/remove-user",
+  "/admin/impersonate-user",
+  "/admin/stop-impersonating",
+];
+
 // Groups (Better Auth teams) change only through the recorded
 // /api/organization-groups routes. These would grant and revoke group access,
 // including Finance, with no history. Listing teams stays available.
@@ -87,6 +102,12 @@ const groupChangePaths = [
   "/organization/remove-team",
   "/organization/add-team-member",
   "/organization/remove-team-member",
+];
+
+const disabledPaths = [
+  ...roleChangePaths,
+  ...accountChangePaths,
+  ...groupChangePaths,
 ];
 
 export function createAuth(env: Bindings, waitUntil: WaitUntil) {
@@ -100,7 +121,7 @@ export function createAuth(env: Bindings, waitUntil: WaitUntil) {
     baseURL: env.BETTER_AUTH_URL,
     database: env.DB,
     databaseHooks: authDatabaseHooks(env),
-    disabledPaths: [...roleChangePaths, ...groupChangePaths],
+    disabledPaths,
     emailAndPassword: {
       autoSignIn: false,
       customSyntheticUser: ({ coreFields, additionalFields, id }) => ({

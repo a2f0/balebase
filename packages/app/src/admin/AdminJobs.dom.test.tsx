@@ -26,6 +26,8 @@ const queued: JobRun = {
   status: "queued",
   source: "manual",
   requestedBy: "actor",
+  requestedByName: "Admin Actor",
+  requestedByEmail: "actor@example.com",
   organizationId: null,
   connectionId: null,
   attempts: 0,
@@ -98,6 +100,9 @@ it("times out a slow job output read and lets the user retry", async () => {
     timeout.mockReturnValue(new AbortController().signal);
     await act(async () => button("Retry loading output").click());
     expect(container.textContent).toContain('"recovered": true');
+    expect(container.textContent).toContain(
+      "Requested by: Admin Actor (actor@example.com)",
+    );
     expect(detailRequests).toBe(2);
   } finally {
     timeout.mockRestore();
