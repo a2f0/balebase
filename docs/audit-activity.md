@@ -37,7 +37,9 @@ Use `activityBatch` with the request's API key so trigger and explicit events
 receive the same attribution. Audit failures must roll back the related change.
 Provider retries need a stable deduplication boundary. The current shared model
 requires a user actor; extending it to system/provider work needs an explicit
-actor model, never a fabricated human identity.
+actor model, never a fabricated human identity. Until then, maintenance jobs
+such as the discarded global form purge record no events: the projects that
+lose a purged form show no removal, and the job run keeps only its count.
 
 ## Reading and retaining history
 
@@ -56,8 +58,13 @@ optional `resourceType`; keep that filter when passing the next cursor.
 
 Resource history routes authorize the resource before using `findActivity`.
 Shared global form history only exposes published versions to organization
-members. Adding a producer with restricted details also requires reviewing
-the shared feed's reader permissions, labels, and navigation.
+members. Form events name the version they saved: creation (with the global
+form a copy came from and the published version it started from), saved
+versions, publication,
+unpublication, discards, and restores. Organizations therefore see a global
+form's publications but never its unpublications, discards, or restores.
+Adding a producer with restricted details also requires reviewing the shared
+feed's reader permissions, labels, and navigation.
 
 History follows the resource's documented retention. It is not an immutable
 compliance ledger. Purging an organization removes its activity; purging an
