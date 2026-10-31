@@ -94,7 +94,7 @@ reconstruct unknown editors, previous values, or timestamps from current state.
 
 Better Auth's organization endpoints carry the request's actor into the write
 they make (`auth/organizationActivity.ts`), so the triggers of migrations 0057
-and 0082 record each change atomically with it: role changes, invitations
+and 0083 record each change atomically with it: role changes, invitations
 sent, canceled (including the cancel a re-invite makes) or declined, a person
 joining by invitation (actor: the person; details: the role and the inviter),
 and organization renames, URL name and logo changes. Removing a member and

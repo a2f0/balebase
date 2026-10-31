@@ -28,7 +28,7 @@ const actorField = {
  * Records Better Auth's organization access changes with the request's actor.
  * Role changes, invitations, joining by invitation and organization renames
  * carry the actor in the same write, where the triggers of migrations 0057
- * and 0082 record the event. Removing a member and leaving run as one
+ * and 0083 record the event. Removing a member and leaving run as one
  * recorded batch instead (memberRemoval.ts). Better Auth checks permissions
  * before each of these writes.
  */
