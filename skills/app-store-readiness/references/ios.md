@@ -10,6 +10,31 @@ digital-purchase obligations that actually apply. Small feature sets require a
 specific usefulness assessment; do not equate simplicity with automatic
 rejection. Confirm review notes explain non-obvious behavior.
 
+Write the App Review Information notes as the skill's reviewer packet; the
+field holds at most 4,000 characters. Apple reviews on physical devices, so
+install the exact candidate from TestFlight on a physical iPhone (and iPad when
+supported) running the latest iOS release, walk the flow in the notes, and
+record that session for the reviewer; simulator runs do not substitute.
+
+Check these common first-review risks against the app and its metadata:
+
+- Guideline 4.3(b): apps in the categories it calls well established (such as
+  sound effects, flashlights, simple timers, and wallpapers) and their close
+  neighbors (noise and sleep-sound players) are accepted only when
+  meaningfully different or improved. State the difference
+  concretely in the description and notes, and list the features beyond the
+  basic one; a pitch built on doing a few things simply invites spam or
+  minimum-functionality (4.2) scrutiny.
+- Guideline 2.3.10: no names, icons, links, or imagery of other mobile
+  platforms or marketplaces (Android, Google Play) in the iOS app or its
+  metadata, including About screens and cross-promotion, unless they serve
+  specific, approved interactive functionality. Search the shipped strings in
+  every language and the listing, and guard them with a test.
+- Guideline 1.4.1: diagnosis, treatment, and health-measurement claims get
+  greater scrutiny. Back any such claim with disclosed methodology and any
+  regulatory clearance, and remind users to consult a doctor; an app that makes
+  none should say in the notes that it is not a medical device.
+
 Verify current [submission requirements](https://developer.apple.com/news/upcoming-requirements/)
 against the archive's SDK/toolchain, not just the installed Xcode. Check
 app/extension IDs, entitlements, supported devices, signing, build numbering,
