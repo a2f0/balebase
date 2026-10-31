@@ -24,7 +24,6 @@ import {
   equipmentPath,
   financeConnectionPath,
   financeTransactionPath,
-  inboxEmailPath,
   issuePath,
   libraryPath,
   organizationAccessPath,
@@ -556,7 +555,10 @@ function activityPath(event: ActivityEvent) {
   return libraryActivityPath(event);
 }
 
-/** Deleted folders and businesses, files, and trashed email have no page. */
+/**
+ * Deleted folders and businesses, and files, have no page. An email's events
+ * do not link either: an event cannot tell which folder the email is in now.
+ */
 function libraryActivityPath({ action, root }: ActivityEvent) {
   switch (root.type) {
     case "library_folder":
@@ -565,12 +567,6 @@ function libraryActivityPath({ action, root }: ActivityEvent) {
         : libraryPath(root.id);
     case "business":
       return action === "business.deleted" ? undefined : businessPath(root.id);
-    case "inbound_email":
-      if (action === "inbox.email_archived")
-        return inboxEmailPath(root.id, "archived");
-      return action === "inbox.email_restored"
-        ? inboxEmailPath(root.id)
-        : undefined;
     default:
       return undefined;
   }
@@ -598,7 +594,6 @@ function activityLinkLabel(event: ActivityEvent) {
   if (event.root.type === "project") return "Open project";
   if (event.root.type === "library_folder") return "Open folder";
   if (event.root.type === "business") return "Open business";
-  if (event.root.type === "inbound_email") return "Open email";
   return event.root.type === "audit_run" ? "Open audit" : "Open form";
 }
 

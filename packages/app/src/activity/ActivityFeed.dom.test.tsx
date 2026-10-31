@@ -798,16 +798,11 @@ it("shows library, inbox, and business events, linking to records that remain", 
     "Taxes · 2 files returned to the library · 1 email link removed",
     "w2.pdf · Taxes → Library (no folder)",
   ]);
-  for (const label of ["Old Co", "Taxes", "w2.pdf"])
+  for (const label of ["Old Co", "Taxes", "w2.pdf", "Lease renewal"])
     expect(container.querySelector(`[aria-label$=": ${label}"]`)).toBeNull();
   await click("Acme Holdings");
   await click("Dell XPS 13");
-  await click("Lease renewal");
-  expect(navigations).toEqual([
-    "/businesses/b1",
-    "/equipment/equipment-1",
-    "/inbox?email=email-1",
-  ]);
+  expect(navigations).toEqual(["/businesses/b1", "/equipment/equipment-1"]);
   const options = [...container.querySelectorAll("option")].map(
     (option) => option.textContent,
   );
