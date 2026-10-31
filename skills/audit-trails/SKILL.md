@@ -17,6 +17,12 @@ the report without publishing. Honor authorization already given in the session.
 
 ## Establish scope
 
+Start [usage tracking](references/usage-receipts.md) now, before audit work or
+delegation. Save a baseline and run/batch identity beside the private report;
+checkpoint usage with coverage after each slice and before a pause. A resume
+keeps the run identity, previous receipts, and publication handle, but starts a
+new nonoverlapping batch. Missing counters must be disclosed, not estimated.
+
 Read repository guidance and its product and retention documentation. Resolve
 the repository with `gh repo view --json nameWithOwner`. Record the audited
 commit, dirty paths, requested focus, and exclusions. Do not claim a committed
@@ -95,12 +101,15 @@ trigger, actual and expected behavior, revision-pinned evidence, impact,
 recommended event/reader behavior, and observable acceptance criteria. Include
 checked coverage, unverified leads, and explicit limitations.
 
-When publication is authorized, write the exact issue body to a private file
-and use `gh issue create --repo <owner/repo> --title <title> --body-file <path>`.
+Include an **Audit usage receipt** in every report, even for partial work,
+zero findings, or unavailable counters. Follow [usage publication and
+readback](references/usage-receipts.md#publish-and-resume): the receipt goes in
+the issue body so findings and accounting publish together. Preserve existing
+publication and security-disclosure authorization; without it, save locally.
 Prefer one ranked report issue unless the user requested separate issues. If a
 matching issue already covers the audit, update it only when authorized to do
-so; otherwise link it in the report. Report a publication failure alongside
-the saved report instead of losing the findings or claiming success.
+so; otherwise link it in the report. Never recreate an issue to retry a failed
+receipt update. Report incomplete publication alongside the saved report.
 
 Return the issue or report link, the highest-impact gaps, what was actually
 checked, and remaining scope. Discovery does not imply the gaps were fixed.

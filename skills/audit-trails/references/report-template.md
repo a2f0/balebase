@@ -36,6 +36,41 @@ Separate incomplete traces and unavailable tests from ranked findings. Record
 the next verification step and any unchecked entrypoints. A clean source trace
 does not prove deployed migrations, production data, or runtime behavior.
 
+## Audit usage receipt
+
+Follow [usage tracking and publication](usage-receipts.md). Replace placeholders;
+use `unavailable (reason)` rather than a fabricated zero. Publish this section
+inside the report body, bounded by the same run's markers on every update:
+
+<!-- audit-usage:RUN_ID:begin -->
+
+- **Run / batches / scope:** opaque run ID; batch IDs; full, partial, or resumed.
+- **Revision:** audited repository and full commit; dirty-path treatment.
+- **Skill / harness:** audit-trails source version or content hashes (including
+  loaded references); harness version; provider/model and effort if exposed.
+- **Evidence / baseline:** sanitized source kind and counter semantics;
+  dedicated run or before/after boundary; evidence digest, not a private path.
+- **Cutoff / outcome:** last completed request before publication, or child exit
+  observed by outer launcher; timestamp; completed, partial, or interrupted.
+
+| Batch / actor / provider / model | Input | Output | Cache read | Cache write | Reasoning | API calls | Duration |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Fill one row per measured scope; distinguish external CLI auditors | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable |
+
+- **Coverage / rollup:** coordinator, children, auxiliary calls, and external
+  CLIs included/excluded; only nonoverlapping measured subtotals; no grand total
+  for partial coverage. State whether cache/reasoning are already included.
+- **Limitations:** unavailable fields and reasons, shared-session contamination,
+  model attribution limits, unobservable tail/publication/final reply. Label
+  optional cost as an estimate, not subscription charges or quota consumption.
+
+<!-- audit-usage:RUN_ID:end -->
+
+Keep private checkpoint paths and raw evidence out of the published report.
+Locally record the canonical issue URL and the receipt's run marker; for this
+body-based publication, receipt location is the issue body (comment ID: not
+applicable). Keep that handle even if a later update or verification fails.
+
 ## Suggested implementation order
 
 Order by impact and dependencies. State which changes, if any, were made in
