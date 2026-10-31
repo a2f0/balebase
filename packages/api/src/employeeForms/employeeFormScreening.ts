@@ -5,6 +5,7 @@ import {
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
 import { requireManager } from "../organizations/organizationMembers";
+import { requestActor } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import { storedDownload } from "../shared/storage";
 import {
@@ -71,6 +72,7 @@ employeeFormScreening.post(
       row.id,
       body.state,
       body.city ?? null,
+      requestActor(context),
     );
     if (!requested) {
       return context.json(

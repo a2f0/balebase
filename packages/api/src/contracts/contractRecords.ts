@@ -5,6 +5,8 @@ import type {
   RecipientStatus,
   SigningOrder,
 } from "@balebase/validators/contracts";
+import type { ApiKeyPrincipal } from "../auth/apiEnv";
+import { rowActivityStatement } from "../shared/activity";
 import type { ContractMail } from "./contractMail";
 
 export interface ContractRow {
@@ -76,6 +78,8 @@ export interface FieldRow {
 export interface EventRow {
   actor_name: string | null;
   actor_user_id: string | null;
+  api_key_channel: ApiKeyPrincipal["channel"] | null;
+  api_key_name: string | null;
   created_at: string;
   detail: string | null;
   id: string;
@@ -87,6 +91,8 @@ export interface EventRow {
 
 interface ContractEvent {
   actorUserId?: string | null;
+  /** The key a person acted through, if any; its name is kept as a snapshot. */
+  apiKey?: ApiKeyPrincipal | undefined;
   contractId: string;
   detail?: string | null;
   ip?: string | null;
@@ -155,6 +161,7 @@ export async function listEvents(database: D1Database, contractId: string) {
     .prepare(
       `SELECT event.id, event.recipient_id, event.actor_user_id, event.type,
               event.detail, event.ip, event.user_agent, event.created_at,
+              event.api_key_name, event.api_key_channel,
               actor.name AS actor_name
        FROM contract_events AS event
        LEFT JOIN user AS actor ON actor.id = event.actor_user_id
@@ -175,6 +182,7 @@ export function eventStatement(
   event: ContractEvent,
   when?: { bindings: unknown[]; sql: string },
 ) {
+  const apiKey = event.actorUserId ? event.apiKey : undefined;
   const values = [
     crypto.randomUUID(),
     event.contractId,
@@ -185,20 +193,91 @@ export function eventStatement(
     event.ip ?? null,
     event.userAgent?.slice(0, 300) ?? null,
     new Date().toISOString(),
+    apiKey?.id ?? null,
+    apiKey?.id ?? null,
+    apiKey?.channel ?? null,
   ];
   const columns = `INSERT INTO contract_events
          (id, contract_id, recipient_id, actor_user_id, type, detail, ip,
-          user_agent, created_at)`;
+          user_agent, created_at, api_key_id, api_key_name, api_key_channel)`;
+  const keyName = "(SELECT name FROM organization_api_keys WHERE id = ?)";
   return when
     ? database
         .prepare(
-          `${columns} SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${when.sql}`,
+          `${columns} SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${keyName}, ?
+           WHERE ${when.sql}`,
         )
         .bind(...values, ...when.bindings)
     : database
-        .prepare(`${columns} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .prepare(
+          `${columns} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${keyName}, ?)`,
+        )
         .bind(...values);
 }
+
+/**
+ * Shared activity about a contract, snapshotting the row inside the batch.
+ * Signer emails, IPs, and signatures stay in the contract's own events.
+ */
+export function contractActivityStatement(
+  database: D1Database,
+  input: {
+    action: string;
+    actorId: string;
+    contractId: string;
+    details: { bindings: (string | number | null)[]; sql: string };
+    organizationId: string;
+  },
+  condition?: { bindings: (string | number | null)[]; sql: string },
+) {
+  return rowActivityStatement(
+    database,
+    {
+      action: input.action,
+      actorId: input.actorId,
+      details: input.details,
+      id: input.contractId,
+      label: "contracts.title",
+      occurredAt: new Date().toISOString(),
+      organizationId: input.organizationId,
+      rootType: "contract",
+      table: "contracts",
+    },
+    condition,
+  );
+}
+
+/** Holds once the contract exists, for events about a new one. */
+export function contractExists(id: string) {
+  return {
+    bindings: [id],
+    sql: "EXISTS (SELECT 1 FROM contracts WHERE id = ?)",
+  };
+}
+
+/** Shared activity for a new contract, uploaded or made from a template. */
+export function contractCreatedActivity(
+  database: D1Database,
+  actorId: string,
+  contractId: string,
+  organizationId: string,
+) {
+  return contractActivityStatement(database, {
+    action: "contract.created",
+    actorId,
+    contractId,
+    details: {
+      bindings: [],
+      sql: `json_object('documentSha256', document_sha256,
+        'templateName', template_name, 'templateVersion', template_version)`,
+    },
+    organizationId,
+  });
+}
+
+/** How many signers a contract has, for activity details. */
+export const contractSignerCount = `(SELECT COUNT(*) FROM contract_recipients
+  WHERE contract_recipients.contract_id = contracts.id)`;
 
 export async function recordEvent(database: D1Database, event: ContractEvent) {
   await eventStatement(database, event).run();

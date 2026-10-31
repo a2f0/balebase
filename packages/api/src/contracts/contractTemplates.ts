@@ -7,6 +7,11 @@ import {
 } from "@balebase/validators/contractTemplates";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
+import {
+  activityBatch,
+  requestActor,
+  rowActivityStatement,
+} from "../shared/activity";
 import { normalizeFilename } from "../shared/filenames";
 import { readBody, readQuery, respond } from "../shared/respond";
 import {
@@ -22,7 +27,11 @@ import {
   offPageError,
 } from "./contractDraft";
 import { InvalidPdfError, inspectPdf, sha256Hex } from "./contractPdf";
-import { eventStatement } from "./contractRecords";
+import {
+  contractCreatedActivity,
+  contractExists,
+  eventStatement,
+} from "./contractRecords";
 import { mappedDraft } from "./contractTemplateDefinition";
 
 type TemplateContext = Context<ApiEnv>;
@@ -318,8 +327,9 @@ contractTemplates.post("/:id/contracts", async (context) => {
       httpMetadata: { contentType: "application/pdf" },
     },
   );
+  const actor = requestActor(context);
   try {
-    const result = await context.env.DB.batch([
+    const result = await activityBatch(context.env.DB, actor.apiKey, [
       context.env.DB.prepare(
         `INSERT INTO contracts
           (id, organization_id, title, document_object_key, document_filename, document_size,
@@ -349,16 +359,15 @@ contractTemplates.post("/:id/contracts", async (context) => {
       eventStatement(
         context.env.DB,
         {
-          actorUserId: context.get("authSession").user.id,
+          actorUserId: actor.userId,
+          apiKey: actor.apiKey,
           contractId: id,
           detail: `${source.name} · v${source.version}`,
           type: "created_from_template",
         },
-        {
-          sql: "EXISTS (SELECT 1 FROM contracts WHERE id = ?)",
-          bindings: [id],
-        },
+        contractExists(id),
       ),
+      contractCreatedActivity(context.env.DB, actor.userId, id, organizationId),
     ]);
     if (!result[0]?.meta.changes) {
       await context.env.STORAGE.delete(objectKey);
@@ -376,13 +385,41 @@ contractTemplates.post("/:id/contracts", async (context) => {
   );
 });
 
+// Every version goes with the template; contracts made from it keep their
+// name and version snapshot, and the shared activity keeps the deletion.
 contractTemplates.delete("/:id", async (context) => {
-  const result = await context.env.DB.prepare(
-    "DELETE FROM contract_templates WHERE id = ? AND organization_id = ?",
-  )
-    .bind(context.req.param("id"), context.get("organizationId"))
-    .run();
-  if (!result.meta.changes) return notFound(context);
+  const database = context.env.DB;
+  const id = context.req.param("id");
+  const organizationId = context.get("organizationId");
+  const actor = requestActor(context);
+  const current = `(SELECT name FROM contract_template_versions
+    WHERE template_id = contract_templates.id
+      AND version = contract_templates.current_version)`;
+  const result = await activityBatch(database, actor.apiKey, [
+    rowActivityStatement(database, {
+      action: "contract_template.deleted",
+      actorId: actor.userId,
+      details: {
+        bindings: [],
+        sql: `json_object('title', ${current},
+          'version', current_version,
+          'versionCount', (SELECT COUNT(*) FROM contract_template_versions
+            WHERE template_id = contract_templates.id))`,
+      },
+      id,
+      label: `COALESCE(${current}, 'Contract template')`,
+      occurredAt: new Date().toISOString(),
+      organizationId,
+      rootType: "contract_template",
+      table: "contract_templates",
+    }),
+    database
+      .prepare(
+        "DELETE FROM contract_templates WHERE id = ? AND organization_id = ?",
+      )
+      .bind(id, organizationId),
+  ]);
+  if (!result.at(-1)?.meta.changes) return notFound(context);
   return context.body(null, 204);
 });
 

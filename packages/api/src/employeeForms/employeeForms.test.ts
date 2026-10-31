@@ -563,7 +563,7 @@ describe("employee forms", () => {
       () => {
         throw new Error("D1 response lost.");
       },
-      { method: "run" },
+      { method: "batch" },
     );
     const form = new FormData();
     form.set(

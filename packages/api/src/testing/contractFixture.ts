@@ -3,6 +3,8 @@ import { expect } from "bun:test";
 import type { TemplateDefinition } from "@balebase/validators/contractTemplates";
 import { Hono } from "hono";
 import { degrees, PDFDocument } from "pdf-lib";
+import { activity } from "../activity/activity";
+import type { ApiKeyPrincipal } from "../auth/apiEnv";
 import { contracts } from "../contracts/contracts";
 import { signing } from "../contracts/signing";
 import { memoryStorage, testBindings } from "./bindings";
@@ -146,8 +148,11 @@ export function createFixture() {
     STORAGE: bucket,
   });
 
-  const as = (userId: string, organizationId: string) =>
-    contractClient(bindings, userId, organizationId);
+  const as = (
+    userId: string,
+    organizationId: string,
+    apiKey?: ApiKeyPrincipal,
+  ) => contractClient(bindings, userId, organizationId, apiKey);
   const owner = as("owner-user", "org-1");
   return {
     ...owner,
@@ -179,17 +184,26 @@ function contractClient(
   bindings: ReturnType<typeof testBindings>,
   userId: string,
   organizationId: string,
+  apiKey?: ApiKeyPrincipal,
 ) {
-  const session = withTestSession({
+  const signedIn = withTestSession({
     organizationId,
     organizationRole: "member",
     userId,
   });
+  const session = async (
+    context: Parameters<typeof signedIn>[0],
+    next: () => Promise<void>,
+  ) => {
+    if (apiKey) context.set("apiKey", apiKey);
+    await signedIn(context, next);
+  };
   // Signing links are public, so only the contract routes are signed in.
   const app = new Hono<ApiTestEnv>();
-  app.use("/api/contracts/*", session);
-  app.use("/api/contracts", session);
+  for (const path of ["/api/contracts/*", "/api/contracts", "/api/activity"])
+    app.use(path, session);
   app.route("/api/contracts", contracts);
+  app.route("/api/activity", activity);
   app.route("/api/signing", signing);
   const request = (path: string, init?: RequestInit) =>
     app.request(path, init, bindings);

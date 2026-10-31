@@ -7,7 +7,9 @@ import type { ApiEnv } from "../auth/apiEnv";
 import {
   canManage,
   requireManager,
+  stillManages,
 } from "../organizations/organizationMembers";
+import { activityBatch, requestActor } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import { respondToUnexpectedError } from "../shared/unexpectedError";
 import { CheckrRequestError } from "./checkr";
@@ -19,6 +21,10 @@ import {
   toRequirement,
 } from "./employeeFormRecords";
 import { employeeFormScreening } from "./employeeFormScreening";
+import {
+  jsonBoolean,
+  requirementActivityStatement,
+} from "./requirementActivity";
 
 const employeeForms = new Hono<ApiEnv>();
 
@@ -92,37 +98,60 @@ employeeForms.post("/", requireManager(), async (context) => {
   const now = new Date().toISOString();
   const { requirements } = body;
   const ids = requirements.map(() => crypto.randomUUID());
-  const inserted = await context.env.DB.batch(
-    requirements.map((requirement, index) =>
-      context.env.DB.prepare(
-        `INSERT INTO employee_requirements
-         (id, organization_id, invitation_id, member_id, target_email,
-          assigned_user_id,
-          kind, title, due_date, created_at, updated_at)
-         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-         WHERE EXISTS (
-           SELECT 1 FROM ${memberId ? "member" : "invitation"}
-           WHERE id = ? AND organizationId = ?
-             ${memberId ? "" : "AND status = 'pending'"}
-         )`,
-      ).bind(
-        ids[index],
+  const actor = requestActor(context);
+  const manages = stillManages(organizationId, actor.userId);
+  const database = context.env.DB;
+  // Each request is recorded as it was assigned; a manager demoted meanwhile
+  // assigns nothing.
+  const inserted = await activityBatch(
+    database,
+    actor.apiKey,
+    requirements.flatMap((requirement, index) => [
+      database
+        .prepare(
+          `INSERT INTO employee_requirements
+           (id, organization_id, invitation_id, member_id, target_email,
+            assigned_user_id,
+            kind, title, due_date, created_at, updated_at)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+           WHERE EXISTS (
+             SELECT 1 FROM ${memberId ? "member" : "invitation"}
+             WHERE id = ? AND organizationId = ?
+               ${memberId ? "" : "AND status = 'pending'"}
+           ) AND ${manages.sql}`,
+        )
+        .bind(
+          ids[index] ?? "",
+          organizationId,
+          invitationId,
+          memberId,
+          target.email.toLowerCase(),
+          target.user_id,
+          requirement.kind,
+          requirement.title,
+          requirement.dueDate,
+          now,
+          now,
+          memberId ?? invitationId,
+          organizationId,
+          ...manages.bindings,
+        ),
+      requirementActivityStatement(database, {
+        action: "employee_requirement.assigned",
+        actorId: actor.userId,
+        details: {
+          bindings: [],
+          sql: `'dueDate', due_date,
+            'invited', ${jsonBoolean("invitation_id IS NOT NULL")}`,
+        },
         organizationId,
-        invitationId,
-        memberId,
-        target.email.toLowerCase(),
-        target.user_id,
-        requirement.kind,
-        requirement.title,
-        requirement.dueDate,
-        now,
-        now,
-        memberId ?? invitationId,
-        organizationId,
-      ),
-    ),
+        requirementId: ids[index] ?? "",
+      }),
+    ]),
   );
-  if (inserted.some((result) => !result.meta.changes)) {
+  if (
+    inserted.some((result, index) => index % 2 === 0 && !result.meta.changes)
+  ) {
     return context.json(
       { error: "The invitation or membership changed. Please try again." },
       409,
@@ -145,41 +174,92 @@ employeeForms.patch("/:id", requireManager(), async (context) => {
     return context.json({ error: "Invalid status or due date." }, 400);
   }
   const now = new Date().toISOString();
-  const updated = await context.env.DB.prepare(
-    `UPDATE employee_requirements
-     SET status = COALESCE(?, status), due_date = COALESCE(?, due_date),
-         completed_at = CASE
-           WHEN ? IS NULL THEN completed_at
-           WHEN ? = 'complete' THEN ?
-           ELSE NULL
-         END,
-         checkr_refresh_revision = checkr_refresh_revision +
-           CASE WHEN ? IS NOT NULL AND kind <> 'form' THEN 1 ELSE 0 END,
-         updated_at = ?
-     WHERE id = ? AND organization_id = ?
-       AND (? IS NULL OR kind <> 'form' OR document_revision = ?)
-       AND (? IS NULL OR checkr_report_id IS NULL OR
-            checkr_report_status IN ('canceled', 'partially_canceled'))
-       AND (? IS NULL OR
-            (checkr_starting_at IS NULL AND checkr_start_nonce IS NULL))`,
-  )
-    .bind(
-      status ?? null,
-      dueDate ?? null,
-      status ?? null,
-      status ?? null,
-      now,
-      status ?? null,
-      now,
+  const organizationId = context.get("organizationId");
+  const actor = requestActor(context);
+  const manages = stillManages(organizationId, actor.userId);
+  const guard = {
+    bindings: [
       row.id,
-      context.get("organizationId"),
+      organizationId,
       status ?? null,
       body.documentRevision ?? null,
       status ?? null,
       status ?? null,
-    )
-    .run();
-  if (!updated.meta.changes) {
+      ...manages.bindings,
+    ],
+    sql: `id = ? AND organization_id = ?
+       AND (? IS NULL OR kind <> 'form' OR document_revision = ?)
+       AND (? IS NULL OR checkr_report_id IS NULL OR
+            checkr_report_status IN ('canceled', 'partially_canceled'))
+       AND (? IS NULL OR
+            (checkr_starting_at IS NULL AND checkr_start_nonce IS NULL))
+       AND ${manages.sql}`,
+  };
+  const database = context.env.DB;
+  // Each event reads the value it replaces under the update's own guard, and
+  // only when the value changes.
+  const results = await activityBatch(database, actor.apiKey, [
+    requirementActivityStatement(
+      database,
+      {
+        action: "employee_requirement.status_changed",
+        actorId: actor.userId,
+        details: {
+          bindings: [status ?? null],
+          sql: `'before', status, 'after', ?,
+            'checkrReport', ${jsonBoolean("checkr_report_id IS NOT NULL")}`,
+        },
+        organizationId,
+        requirementId: row.id,
+      },
+      {
+        bindings: [...guard.bindings, status ?? null, status ?? null],
+        sql: `${guard.sql} AND ? IS NOT NULL AND status IS NOT ?`,
+      },
+    ),
+    requirementActivityStatement(
+      database,
+      {
+        action: "employee_requirement.due_date_changed",
+        actorId: actor.userId,
+        details: {
+          bindings: [dueDate ?? null],
+          sql: "'before', due_date, 'after', ?",
+        },
+        organizationId,
+        requirementId: row.id,
+      },
+      {
+        bindings: [...guard.bindings, dueDate ?? null, dueDate ?? null],
+        sql: `${guard.sql} AND ? IS NOT NULL AND due_date IS NOT ?`,
+      },
+    ),
+    database
+      .prepare(
+        `UPDATE employee_requirements
+         SET status = COALESCE(?, status), due_date = COALESCE(?, due_date),
+             completed_at = CASE
+               WHEN ? IS NULL THEN completed_at
+               WHEN ? = 'complete' THEN ?
+               ELSE NULL
+             END,
+             checkr_refresh_revision = checkr_refresh_revision +
+               CASE WHEN ? IS NOT NULL AND kind <> 'form' THEN 1 ELSE 0 END,
+             updated_at = ?
+         WHERE ${guard.sql}`,
+      )
+      .bind(
+        status ?? null,
+        dueDate ?? null,
+        status ?? null,
+        status ?? null,
+        now,
+        status ?? null,
+        now,
+        ...guard.bindings,
+      ),
+  ]);
+  if (!results.at(-1)?.meta.changes) {
     return context.json({ error: "The form changed. Please try again." }, 409);
   }
   return respond(context, employeeFormsRoutes.update, { ok: true });
@@ -194,16 +274,43 @@ employeeForms.delete("/:id", requireManager(), async (context) => {
       409,
     );
   }
-  const deleted = await context.env.DB.prepare(
-    `DELETE FROM employee_requirements
-     WHERE id = ? AND organization_id = ? AND checkr_starting_at IS NULL
+  const organizationId = context.get("organizationId");
+  const actor = requestActor(context);
+  const manages = stillManages(organizationId, actor.userId);
+  const guard = {
+    bindings: [row.id, organizationId, ...manages.bindings],
+    sql: `id = ? AND organization_id = ? AND checkr_starting_at IS NULL
        AND checkr_start_nonce IS NULL
        AND (checkr_report_id IS NULL OR
-            checkr_report_status IN ('canceled', 'partially_canceled'))`,
-  )
-    .bind(row.id, context.get("organizationId"))
-    .run();
-  if (!deleted.meta.changes) {
+            checkr_report_status IN ('canceled', 'partially_canceled'))
+       AND ${manages.sql}`,
+  };
+  const database = context.env.DB;
+  // The person's signed screening authorizations go with the requirement;
+  // the event keeps only how many there were.
+  const results = await activityBatch(database, actor.apiKey, [
+    requirementActivityStatement(
+      database,
+      {
+        action: "employee_requirement.deleted",
+        actorId: actor.userId,
+        details: {
+          bindings: [],
+          sql: `'status', status, 'dueDate', due_date,
+            'checkrReport', ${jsonBoolean("checkr_report_id IS NOT NULL")},
+            'consentsRemoved', (SELECT COUNT(*) FROM employee_screening_consents
+              WHERE requirement_id = employee_requirements.id)`,
+        },
+        organizationId,
+        requirementId: row.id,
+      },
+      guard,
+    ),
+    database
+      .prepare(`DELETE FROM employee_requirements WHERE ${guard.sql}`)
+      .bind(...guard.bindings),
+  ]);
+  if (!results.at(-1)?.meta.changes) {
     return context.json(
       { error: "Screening is changing. Try again later." },
       409,

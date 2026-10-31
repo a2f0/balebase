@@ -41,10 +41,11 @@ export interface ActivityActor {
 const pageSize = 50;
 
 /**
- * Access history only organization managers read: group grants and
- * revocations, and members' two-factor requirements.
+ * History only organization managers read: group grants and revocations,
+ * members' two-factor requirements, and the forms and checks requested of
+ * people (employee records).
  */
-const managerOnlyActivity = `(root_type = 'organization_group'
+const managerOnlyActivity = `(root_type IN ('organization_group', 'employee_requirement')
   OR action = 'organization.member_two_factor_requirement_changed')`;
 
 /**
@@ -207,6 +208,63 @@ export function activityStatement(
       input.occurredAt,
       JSON.stringify(input.details),
       input.actorId,
+      ...condition.bindings,
+    );
+}
+
+/**
+ * An event about one organization-owned row of `table`, read inside the
+ * batch: the label and details are SQL over that row (unqualified columns are
+ * the row's), so they snapshot it as this transaction sees it, including a row
+ * a later statement in the batch updates or deletes. Records nothing unless
+ * the row exists and matches `condition`.
+ */
+export function rowActivityStatement(
+  database: D1Database,
+  input: {
+    action: string;
+    actorId: string;
+    details: { bindings: (string | number | null)[]; sql: string };
+    id: string;
+    label: string;
+    occurredAt: string;
+    organizationId: string;
+    rootType: string;
+    table: string;
+  },
+  condition: { bindings: (string | number | null)[]; sql: string } = {
+    bindings: [],
+    sql: "1 = 1",
+  },
+) {
+  const { table } = input;
+  return database
+    .prepare(
+      `WITH activity_actor AS (
+         SELECT id AS acting_id, name AS acting_name, email AS acting_email
+         FROM user WHERE id = ?
+       )
+       INSERT INTO activity_events (
+         organization_id, root_type, root_id, root_label, subject_type,
+         subject_id, action, actor_user_id, actor_name, actor_email,
+         occurred_at, details
+       )
+       SELECT ${table}.organization_id, ?, ${table}.id, ${input.label}, ?,
+              ${table}.id, ?, acting_id, acting_name, acting_email, ?,
+              ${input.details.sql}
+       FROM ${table}, activity_actor
+       WHERE ${table}.id = ? AND ${table}.organization_id = ?
+         AND (${condition.sql})`,
+    )
+    .bind(
+      input.actorId,
+      input.rootType,
+      input.rootType,
+      input.action,
+      input.occurredAt,
+      ...input.details.bindings,
+      input.id,
+      input.organizationId,
       ...condition.bindings,
     );
 }

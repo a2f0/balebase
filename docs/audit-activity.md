@@ -3,11 +3,12 @@
 Activity is the shared history of consequential changes across Balebase. The
 checklist Audits feature is one producer alongside equipment, projects, issues,
 organization roles, group access, members' two-factor requirements, API keys,
-and transaction annotations, categories, and bank connection sync settings.
-The workspace page is `/activity`; individual records can expose the same
-events in their own history. Contract signing also has a
-separate history. Coverage is incremental: an empty shared feed does not prove
-no changes occurred.
+transaction annotations, categories, and bank connection sync settings,
+contracts and contract templates, and the forms and checks requested of
+people. The workspace page is `/activity`; individual records can expose the
+same events in their own history. Contract signing also has a separate
+history (see [Contracts](#contracts)). Coverage is incremental: an empty shared
+feed does not prove no changes occurred.
 
 ## Recording a change
 
@@ -44,11 +45,13 @@ actor model, never a fabricated human identity.
 cursor pagination. Its optional `resourceType` filter selects the root type
 before pagination. The Activity page offers all resources, audits, forms,
 workspace issues, equipment, projects, people, groups, API keys, transactions,
-and bank connections. Audit and transaction filters include issues attached to those
+bank connections, contracts, contract templates, and requested forms and
+checks. Audit and transaction filters include issues attached to those
 roots; workspace issues are standalone issues. Transaction and bank connection
 activity requires Finance capability even when a caller supplies the filter
-directly. Group events and two-factor requirement changes are visible only to
-organization owners and admins, as group details and member security settings
+directly. Group events, two-factor requirement changes, and requested forms and
+checks (`employee_requirement`) are visible only to organization owners and
+admins, as group details, member security settings, and employee records
 already are. The MCP `list_activity` tool accepts the same optional
 `resourceType`; keep that filter when passing the next cursor.
 
@@ -76,6 +79,38 @@ groups (`create-team`, `update-team`, `remove-team`, `add-team-member`,
 only writer. Group and two-factor requirement writes re-check in the transaction
 that the actor is still an owner or admin.
 
+## Contracts
+
+Each contract keeps its own events (`contract_events`): creation, sending,
+signing-link emails and reminders, views, signatures and declines with the
+signer's IP and user agent, voids, completion, and failed deliveries. The
+contract page and the certificate of completion read them, and they go with the
+contract when it is deleted. An event a person made through an API key also
+keeps the key's name and REST/MCP channel, which both readers show. Scheduled
+reminders, completion, and delivery records have no actor. Sends, voids, and
+completions record their event in the same transaction as the change.
+
+The shared activity records `contract.created`, `contract.sent` (with the
+signer count, signing order, and due date that went out), `contract.voided`,
+and `contract.deleted`, which snapshots the status, document hashes, signer
+count, and template so a deleted agreement still leaves a trace until the
+organization is purged. Signer emails, IPs, and signatures stay out of it.
+Draft autosaves are not recorded; `contract.sent` captures the configuration
+that was sent. Deleting a contract template records
+`contract_template.deleted` with its current version and version count; while
+a template exists, its immutable versions name who saved each one.
+
+Requested forms and checks record assignment, due date and status changes
+(old and new values; a status set by hand is always a manager's), deletion
+(with the number of signed screening authorizations removed with it), each
+document upload (revision, and whether the person or a manager uploaded it),
+and background-check requests (work location, and the report a re-request
+supersedes). Manager writes re-check in the transaction that the actor is
+still an owner or admin. Details never hold filenames, screening results, or
+consent contents. The person's signed authorizations keep their own record
+(`employee_screening_consents`). Checkr's report status and result changes
+are not recorded yet: they come from the provider and need a system actor.
+
 ## Reviewing coverage
 
 For implementation changes, test successful event creation, actor attribution,
@@ -84,7 +119,9 @@ Use rollback and retry tests when those paths affect correctness. Existing
 examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `equipment/equipment.test.ts`, `projects/projects.test.ts`, `auth/apiKeys.test.ts`,
 `auth/organizationRoleActivity.test.ts`,
-`organizations/accessActivity.test.ts`, and `issues/issues.test.ts`.
+`organizations/accessActivity.test.ts`, `issues/issues.test.ts`,
+`contracts/contractActivity.test.ts`, and
+`employeeForms/requirementActivity.test.ts`.
 
 The repository-owned [audit-trails skill](../skills/audit-trails/SKILL.md)
 reviews mutations, triggers, separate histories, readers, and retention, then

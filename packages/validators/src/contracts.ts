@@ -93,6 +93,10 @@ export type ContractField = z.infer<typeof ContractFieldSchema>;
 
 const ContractEventSchema = z.object({
   actorName: z.string().nullable(),
+  /** The API key, and channel, a person acted through; its name is kept. */
+  apiKey: z
+    .object({ channel: z.enum(["mcp", "rest"]), name: z.string() })
+    .nullable(),
   createdAt: z.string(),
   detail: z.string().nullable(),
   id: z.string(),

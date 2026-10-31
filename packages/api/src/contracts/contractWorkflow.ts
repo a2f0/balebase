@@ -1,3 +1,4 @@
+import type { ActivityActor } from "../shared/activity";
 import { trackedPut, uploadStillQueued } from "../shared/storage";
 import type { Bindings } from "../types";
 import {
@@ -16,6 +17,7 @@ import {
 import {
   type ContractRow,
   type EventRow,
+  eventStatement,
   type FieldRow,
   findContractById,
   listEvents,
@@ -70,7 +72,9 @@ async function recipientLink(
 
 /**
  * Emails each recipient their signing link, issuing it on first notice, and
- * records delivery. Returns how many emails were accepted for delivery.
+ * records delivery. A manual reminder records the person who sent it, and the
+ * key they used; scheduled emails have no actor. Returns how many emails were
+ * accepted for delivery.
  */
 export async function notifyRecipients(
   environment: ContractEnvironment,
@@ -78,6 +82,7 @@ export async function notifyRecipients(
   recipients: RecipientRow[],
   reminder: boolean,
   at = new Date(),
+  actor?: ActivityActor,
 ) {
   const database = environment.DB;
   const mail = await mailFor(database, contract);
@@ -119,6 +124,8 @@ export async function notifyRecipients(
       await sendSigningRequest(environment, mail, recipient, link, reminder);
       delivered += 1;
       await recordEvent(database, {
+        actorUserId: actor?.userId ?? null,
+        apiKey: actor?.apiKey,
         contractId: contract.id,
         recipientId: recipient.id,
         type: reminder ? "reminded" : "notified",
@@ -219,27 +226,38 @@ async function completeContract(
       httpMetadata: { contentType: "application/pdf" },
     },
   );
-  const completed = await database
-    .prepare(
-      `UPDATE contracts
-       SET status = 'completed', completed_at = ?, final_object_key = ?,
-           final_sha256 = ?, updated_at = ?
-       WHERE id = ? AND status = 'sent' AND ${uploadStillQueued}`,
-    )
-    .bind(
-      completedAt,
-      finalKey,
-      await sha256Hex(signed),
-      completedAt,
-      contract.id,
-      finalKey,
-    )
-    .run();
-  if (!completed.meta.changes) {
+  // The event is recorded under the completion's own condition, in its
+  // transaction, so a completed contract never lacks it.
+  const [, completed] = await database.batch([
+    eventStatement(
+      database,
+      { contractId: contract.id, type: "completed" },
+      {
+        bindings: [contract.id, finalKey],
+        sql: `EXISTS (SELECT 1 FROM contracts WHERE id = ? AND status = 'sent')
+          AND ${uploadStillQueued}`,
+      },
+    ),
+    database
+      .prepare(
+        `UPDATE contracts
+         SET status = 'completed', completed_at = ?, final_object_key = ?,
+             final_sha256 = ?, updated_at = ?
+         WHERE id = ? AND status = 'sent' AND ${uploadStillQueued}`,
+      )
+      .bind(
+        completedAt,
+        finalKey,
+        await sha256Hex(signed),
+        completedAt,
+        contract.id,
+        finalKey,
+      ),
+  ]);
+  if (!completed?.meta.changes) {
     await environment.STORAGE.delete(finalKey);
     return false;
   }
-  await recordEvent(database, { contractId: contract.id, type: "completed" });
   await deliverCompletion(environment, contract, recipients, mail, signed);
   return true;
 }
@@ -392,7 +410,7 @@ async function recordDeliveryFailure(
 }
 
 /** A readable audit line for the certificate. */
-function describeEvent(
+export function describeEvent(
   event: EventRow,
   recipients: Map<string, Pick<RecipientRow, "email" | "name">>,
 ) {
@@ -400,7 +418,7 @@ function describeEvent(
     ? recipients.get(event.recipient_id)
     : undefined;
   const who = recipient ? `${recipient.name} <${recipient.email}>` : "a signer";
-  const actor = event.actor_name ?? "an organization member";
+  const actor = `${event.actor_name ?? "an organization member"}${viaApiKey(event)}`;
   switch (event.type) {
     case "created_from_template":
       return `Created by ${actor} from ${event.detail ?? "a template"}`;
@@ -411,7 +429,9 @@ function describeEvent(
     case "notified":
       return `Signing request emailed to ${who}`;
     case "reminded":
-      return `Reminder emailed to ${who}`;
+      return event.actor_user_id
+        ? `Reminder emailed to ${who} by ${actor}`
+        : `Scheduled reminder emailed to ${who}`;
     case "viewed":
       return `Viewed by ${who}${event.ip ? ` from ${event.ip}` : ""}`;
     case "signed":
@@ -425,6 +445,13 @@ function describeEvent(
     default:
       return event.type;
   }
+}
+
+/** Names the API key, and its channel, that a person acted through. */
+function viaApiKey(event: Pick<EventRow, "api_key_channel" | "api_key_name">) {
+  if (!event.api_key_name || !event.api_key_channel) return "";
+  const channel = event.api_key_channel === "mcp" ? "MCP" : "REST API";
+  return ` via API key ${event.api_key_name} (${channel})`;
 }
 
 /** Decodes a signature adopted as a PNG data URL, or null if it is not one. */

@@ -20,16 +20,23 @@ import { useCursorPages } from "../shared/useCursorPages";
 import {
   auditRunPath,
   auditTemplatePath,
+  contractPath,
+  contractTemplatePath,
   equipmentPath,
   financeConnectionPath,
   financeTransactionPath,
   issuePath,
   organizationAccessPath,
   organizationPeoplePath,
+  organizationRequirementPath,
   projectPath,
 } from "../workspace/workspacePaths";
 import { assigneeLabel, textValue } from "./activityLabels";
 import { type ActivitySource, listActivity } from "./activitySource";
+import {
+  contractActivitySummary,
+  requirementActivitySummary,
+} from "./contractActivity";
 import {
   EquipmentActivityDetails,
   equipmentActivitySummary,
@@ -67,6 +74,17 @@ const actionLabels: Record<string, string> = {
   "audit.template_discarded": "discarded the form",
   "audit.template_restored": "restored the form",
   "audit.template_version_saved": "saved a form version",
+  "contract.created": "created a contract",
+  "contract.deleted": "deleted a contract",
+  "contract.sent": "sent a contract for signature",
+  "contract.voided": "voided a contract",
+  "contract_template.deleted": "deleted a contract template",
+  "employee_requirement.assigned": "requested a form or check",
+  "employee_requirement.deleted": "removed a request",
+  "employee_requirement.document_uploaded": "uploaded a requested form",
+  "employee_requirement.due_date_changed": "changed a request's due date",
+  "employee_requirement.screening_requested": "requested a background check",
+  "employee_requirement.status_changed": "changed a request's status",
   "equipment.assigned": "changed the equipment assignee",
   "equipment.created": "added equipment",
   "equipment.deleted": "deleted equipment",
@@ -262,6 +280,9 @@ function CompactActivityRow({
 const rootSummaries: Partial<Record<string, (event: ActivityEvent) => string>> =
   {
     api_key: apiKeySummary,
+    contract: contractActivitySummary,
+    contract_template: contractActivitySummary,
+    employee_requirement: requirementActivitySummary,
     equipment: equipmentActivitySummary,
     organization_group: groupActivitySummary,
     organization_member: memberSummary,
@@ -341,18 +362,8 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
   const details = event.details;
   if (event.action === "finance.daily_sync_changed")
     return <p>{activitySummary(event)}</p>;
-  if (event.root.type === "equipment") {
-    return <EquipmentActivityDetails event={event} />;
-  }
-  if (event.root.type === "api_key") {
-    return <p className="activityDetails">{apiKeySummary(event)}</p>;
-  }
-  if (event.root.type === "project") {
-    return <p className="activityDetails">{projectActivitySummary(event)}</p>;
-  }
-  if (event.root.type === "organization_group") {
-    return <p className="activityDetails">{groupActivitySummary(event)}</p>;
-  }
+  const rootDetails = rootActivityDetails(event);
+  if (rootDetails) return rootDetails;
   if (
     event.action === "finance.transaction_annotated" ||
     event.action === "issue.updated"
@@ -464,6 +475,16 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
   }
 }
 
+/** Details for roots whose events share one format. */
+function rootActivityDetails(event: ActivityEvent) {
+  if (event.root.type === "equipment")
+    return <EquipmentActivityDetails event={event} />;
+  // Member events each have their own layout.
+  if (event.root.type === "organization_member") return null;
+  const summary = rootSummaries[event.root.type];
+  return summary ? <p className="activityDetails">{summary(event)}</p> : null;
+}
+
 function MemberRoleDetails({ event }: { event: ActivityEvent }) {
   return (
     <div className="activityDetails">
@@ -520,6 +541,17 @@ function activityPath(event: ActivityEvent) {
       ? undefined
       : projectPath(event.root.id);
   if (event.root.type === "audit_run") return auditRunPath(event.root.id);
+  return contractActivityPath(event);
+}
+
+/** Contracts, templates, and requests have no page once deleted. */
+function contractActivityPath(event: ActivityEvent) {
+  if (event.action.endsWith(".deleted")) return undefined;
+  if (event.root.type === "contract") return contractPath(event.root.id);
+  if (event.root.type === "contract_template")
+    return contractTemplatePath(event.root.id);
+  if (event.root.type === "employee_requirement")
+    return organizationRequirementPath(event.root.id);
   if (event.root.type === "audit_template")
     return auditTemplatePath(event.root.id);
   return undefined;
@@ -545,6 +577,9 @@ function activityLinkLabel(event: ActivityEvent) {
   if (event.root.type === "organization_member") return "Open member";
   if (event.root.type === "organization_group") return "Open groups";
   if (event.root.type === "project") return "Open project";
+  if (event.root.type === "contract") return "Open contract";
+  if (event.root.type === "contract_template") return "Open template";
+  if (event.root.type === "employee_requirement") return "Open request";
   return event.root.type === "audit_run" ? "Open audit" : "Open form";
 }
 

@@ -94,6 +94,7 @@ describe("contract labels", () => {
     const names = new Map([["r1", "Sam Signer"]]);
     const event = {
       actorName: "Olivia",
+      apiKey: null,
       createdAt: "",
       detail: null,
       id: "e",
@@ -112,5 +113,24 @@ describe("contract labels", () => {
     expect(describeContractEvent({ ...event, type: "sent" }, names)).toBe(
       "Olivia sent it for signature",
     );
+    expect(
+      describeContractEvent(
+        {
+          ...event,
+          apiKey: { channel: "mcp", name: "Assistant" },
+          type: "voided",
+        },
+        names,
+      ),
+    ).toBe("Olivia via Assistant (MCP) voided it");
+    expect(describeContractEvent({ ...event, type: "reminded" }, names)).toBe(
+      "Olivia emailed Sam Signer a reminder",
+    );
+    expect(
+      describeContractEvent(
+        { ...event, actorName: null, type: "reminded" },
+        names,
+      ),
+    ).toBe("Scheduled reminder emailed to Sam Signer");
   });
 });

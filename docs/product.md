@@ -370,7 +370,12 @@ flagged overdue but stays signable, and a reminder interval. The hourly cron
 re-emails signers who have not signed once the interval has passed since their
 last email, and **Send reminder** emails them immediately, at most once an
 hour. A sent contract can be voided, which invalidates its signing links;
-drafts, completed, declined, and voided contracts can be deleted.
+drafts, completed, declined, and voided contracts can be deleted. Creating,
+sending, voiding, and deleting a contract, and deleting a template, appear in
+Activity, which keeps a deleted contract's status, document hashes, and signer
+count; a contract's own history names the API key and channel behind changes
+made through a key. Migration `0080_attribute_contract_events.sql` adds that
+key attribution.
 
 Contract templates at `/contracts/templates` keep a PDF and placed fields
 without assigning actual people. Fields belong to named signer roles such as
@@ -407,11 +412,13 @@ organization queues them in `deleted_object_cleanup` for the scheduled purge.
 ## Audit activity
 
 The workspace **Activity** page (`/activity`) brings together changes to forms,
-audits, issues, equipment, organization roles, API keys, and transaction
-annotations and categories. Filter by resource to follow a particular area;
+audits, issues, equipment, organization roles, API keys, transaction
+annotations and categories, contracts, and the forms and checks requested of
+people. Filter by resource to follow a particular area;
 audit and transaction filters include their attached issues, while **Workspace
 issues** shows standalone issues. Transactions are available only to people
-with Finance access. Events show the actor, time, resource, and recorded change
+with Finance access, and requested forms and checks only to organization
+owners and admins. Events show the actor, time, resource, and recorded change
 details. API-key actions also identify the key and REST/MCP channel.
 
 The shared `activity_events` model records events atomically with successful
