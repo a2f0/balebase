@@ -16,6 +16,8 @@ const run: JobRun = {
   status: "queued",
   source: "manual",
   requestedBy: "actor",
+  requestedByName: "Admin Actor",
+  requestedByEmail: "actor@example.com",
   organizationId: null,
   connectionId: null,
   attempts: 0,

@@ -2,11 +2,7 @@ import { expect, it, spyOn } from "bun:test";
 import { fixture, post } from "../testing/maintenanceFixture";
 import { claimJob, recoverJobs } from "./jobRuns";
 import { waitForLegacyJob } from "./legacyJobRun";
-import {
-  enqueueMaintenance,
-  runMaintenanceJob,
-  runScheduledMaintenance,
-} from "./maintenance";
+import { runMaintenanceJob, runScheduledMaintenance } from "./maintenance";
 
 it("requires root admin access, trusted origin, a known job, and explicit confirmation", async () => {
   const regular = fixture("user");
@@ -20,6 +16,7 @@ it("requires root admin access, trusted origin, a known job, and explicit confir
     ).status,
   ).toBe(403);
   const admin = fixture();
+  admin.insertActor();
   expect((await admin.request("/jobs")).status).toBe(200);
   expect(
     (
@@ -48,11 +45,25 @@ it("requires root admin access, trusted origin, a known job, and explicit confir
     run: {
       status: "queued",
       requestedBy: "actor",
+      requestedByName: "Admin Actor",
+      requestedByEmail: "actor@example.com",
       source: "manual",
       attempts: 0,
       output: null,
     },
-    logs: [{ message: "Job queued." }],
+    logs: [
+      { message: "Job queued." },
+      {
+        message: "Manual run requested.",
+        details: {
+          requestedBy: {
+            email: "actor@example.com",
+            id: "actor",
+            name: "Admin Actor",
+          },
+        },
+      },
+    ],
   });
   await admin.deliver(run.runId);
   expect(
@@ -65,6 +76,7 @@ it("requires root admin access, trusted origin, a known job, and explicit confir
     },
     logs: [
       { message: "Job queued." },
+      { message: "Manual run requested." },
       { message: "Processing attempt started." },
       { message: "Job completed." },
     ],
@@ -75,10 +87,8 @@ it("requires root admin access, trusted origin, a known job, and explicit confir
 
 it("keeps a sanitized failed run and does not replay duplicate deliveries", async () => {
   const f = fixture();
-  const job = await enqueueMaintenance(f.bindings, "purgeDeletedObjects", {
-    trigger: "manual",
-    actorUserId: "actor",
-  });
+  f.insertActor();
+  const job = await f.requestRun("purgeDeletedObjects");
   const claimed = await claimJob(f.bindings.DB, job.id);
   if (!claimed) throw new Error("Missing claim");
   await runMaintenanceJob(f.bindings.DB, claimed, async () => {
@@ -95,6 +105,7 @@ it("keeps a sanitized failed run and does not replay duplicate deliveries", asyn
 
 it("retains execution failures after an accepted manual request", async () => {
   const f = fixture();
+  f.insertActor();
   f.database.exec("DROP TABLE user_deletion_requests");
   const response = await f.request(
     "/jobs/purgeRequestedUsers/runs",
@@ -110,20 +121,17 @@ it("retains execution failures after an accepted manual request", async () => {
 
 it("deduplicates active requests, recovers failed sends, and never replays interrupted maintenance", async () => {
   const f = fixture();
+  f.insertActor();
   if (!f.bindings.FINANCE_SYNC_QUEUE) throw new Error("Missing queue");
   const send = spyOn(f.bindings.FINANCE_SYNC_QUEUE, "send").mockRejectedValue(
     new Error("offline"),
   );
-  const start = () =>
-    enqueueMaintenance(f.bindings, "purgeRequestedUsers", {
-      trigger: "manual",
-      actorUserId: "actor",
-    });
+  const start = () => f.requestRun("purgeRequestedUsers");
   const first = await start();
   expect((await start()).id).toBe(first.id);
   expect(
     f.database.query("SELECT count(*) AS count FROM job_logs").get(),
-  ).toEqual({ count: 1 });
+  ).toEqual({ count: 3 });
   send.mockRestore();
   await recoverJobs(f.bindings);
   expect(f.messages).toContain(first.id);
@@ -140,6 +148,7 @@ it("deduplicates active requests, recovers failed sends, and never replays inter
 
 it("keeps hourly scheduling idempotent and gates cleanup on retention even when messages arrive out of order", async () => {
   const f = fixture();
+  f.insertActor();
   const source = {
     trigger: "scheduled" as const,
     cron: "17 * * * *",
@@ -179,6 +188,7 @@ it("keeps hourly scheduling idempotent and gates cleanup on retention even when 
 
 it("paginates filtered history and logs, rejects invalid filters, and expires only terminal runs after 30 days", async () => {
   const f = fixture();
+  f.insertActor();
   const created = new Date().toISOString();
   const old = new Date(Date.now() - 31 * 86400000).toISOString();
   for (let i = 0; i < 55; i++)
@@ -257,10 +267,8 @@ it("paginates filtered history and logs, rejects invalid filters, and expires on
 
 it("preserves completed results for older apps and never reports queued work as completed", async () => {
   const f = fixture();
-  const run = await enqueueMaintenance(f.bindings, "purgeRequestedUsers", {
-    trigger: "manual",
-    actorUserId: "actor",
-  });
+  f.insertActor();
+  const run = await f.requestRun("purgeRequestedUsers");
   expect(
     await waitForLegacyJob(f.bindings.DB, run.id, async () => {}),
   ).toBeNull();
@@ -304,6 +312,7 @@ it("preserves completed results for older apps and never reports queued work as 
 
 it("tells older clients that queued work continues without claiming completion", async () => {
   const f = fixture();
+  f.insertActor();
   const legacy = await import("./legacyJobRun");
   const wait = spyOn(legacy, "waitForLegacyJob").mockResolvedValue(null);
   try {
@@ -325,15 +334,13 @@ it("tells older clients that queued work continues without claiming completion",
 
 it("reports caught and interrupted maintenance failures and treats cancellation neutrally", async () => {
   const f = fixture();
+  f.insertActor();
   const diagnostics = await import("../shared/diagnostics");
   const report = spyOn(diagnostics, "captureApiError").mockResolvedValue(
     undefined,
   );
   try {
-    const first = await enqueueMaintenance(f.bindings, "purgeRequestedUsers", {
-      trigger: "manual",
-      actorUserId: "actor",
-    });
+    const first = await f.requestRun("purgeRequestedUsers");
     const claimed = await claimJob(f.bindings.DB, first.id);
     if (!claimed) throw new Error("Missing claim");
     const failure = new Error("task failed");
@@ -341,10 +348,7 @@ it("reports caught and interrupted maintenance failures and treats cancellation 
       throw failure;
     });
     expect(report).toHaveBeenCalledWith(failure, "job-error");
-    const next = await enqueueMaintenance(f.bindings, "purgeRequestedUsers", {
-      trigger: "manual",
-      actorUserId: "actor",
-    });
+    const next = await f.requestRun("purgeRequestedUsers");
     await claimJob(f.bindings.DB, next.id);
     f.database
       .query("UPDATE job_runs SET lease_until = '2000-01-01' WHERE id = ?")

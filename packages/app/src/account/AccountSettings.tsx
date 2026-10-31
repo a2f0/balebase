@@ -14,6 +14,7 @@ import { AppLink } from "../shared/AppLink";
 import { useAction } from "../shared/useAction";
 import { AccountDeletion } from "./AccountDeletion";
 import { AccountSecurity } from "./AccountSecurity";
+import { AccountSecurityHistory } from "./AccountSecurityHistory";
 import { saveDefaultOrganizationPreference } from "./defaultOrganization";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 
@@ -63,10 +64,13 @@ export function AccountSettings({
       />
       <PageBody>
         {security ? (
-          <AccountSecurity
-            onSecurityChanged={onSessionChanged}
-            twoFactorEnabled={twoFactorEnabled}
-          />
+          <>
+            <AccountSecurity
+              onSecurityChanged={onSessionChanged}
+              twoFactorEnabled={twoFactorEnabled}
+            />
+            <AccountSecurityHistory twoFactorEnabled={twoFactorEnabled} />
+          </>
         ) : (
           <AccountGeneral
             defaultOrganizationId={defaultOrganizationId}

@@ -9,6 +9,8 @@ export interface JobRow {
   organization_id: string | null;
   source: JobRun["source"];
   requested_by: string | null;
+  requested_by_name: string | null;
+  requested_by_email: string | null;
   status: JobRun["status"];
   attempts: number;
   failures: number;
@@ -36,6 +38,8 @@ export function toJobRun(row: JobRow): JobRun {
     status: row.status,
     source: row.source,
     requestedBy: row.requested_by,
+    requestedByName: row.requested_by_name,
+    requestedByEmail: row.requested_by_email,
     organizationId: row.organization_id,
     connectionId: row.connection_id,
     attempts: row.attempts,

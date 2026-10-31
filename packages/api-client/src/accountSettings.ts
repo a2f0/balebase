@@ -11,6 +11,11 @@ const endpoints = {
     body: "json",
     response: "json",
   }),
+  securityEvents: endpoint<typeof accountSettingsRoutes.securityEvents>({
+    method: "GET",
+    path: "/api/account-settings/security-events",
+    response: "json",
+  }),
   deletion: endpoint<typeof accountSettingsRoutes.deletion>({
     method: "GET",
     path: "/api/account-settings/deletion",
@@ -36,6 +41,10 @@ export function accountSettingsApi(transport: Transport) {
       return transport.call(endpoints.updateDefaultOrganization, {
         body: { organizationId },
       });
+    },
+    /** The signed-in person's latest two-factor and password changes. */
+    securityEvents() {
+      return transport.call(endpoints.securityEvents);
     },
     deletion() {
       return transport.call(endpoints.deletion);

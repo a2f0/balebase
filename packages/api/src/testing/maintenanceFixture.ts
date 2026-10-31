@@ -4,6 +4,7 @@ import { adminUsers } from "../admin/adminUsers";
 import { requireRole } from "../auth/authMiddleware";
 import { withNativeOrigin } from "../auth/nativeRequest";
 import { consumeJobs } from "../jobs/jobWorker";
+import { enqueueMaintenance, type MaintenanceJobId } from "../jobs/maintenance";
 import { userDeletion } from "../users/userDeletion";
 import { testBindings } from "./bindings";
 import { queryHooks, toD1 } from "./d1";
@@ -47,6 +48,24 @@ export function fixture(role = "admin", impersonatedBy?: string) {
   return {
     database,
     bindings,
+    /** Stores the session's actor, as production has it, with the session's role. */
+    insertActor: () =>
+      seedUser(database, {
+        createdAt: now.toISOString(),
+        email: "actor@example.com",
+        id: "actor",
+        name: "Admin Actor",
+        role,
+      }),
+    /** Requests a run as the session's actor, who must be a stored admin. */
+    async requestRun(jobId: MaintenanceJobId) {
+      const run = await enqueueMaintenance(bindings, jobId, {
+        trigger: "manual",
+        actorUserId: "actor",
+      });
+      if (!run) throw new Error("The actor is not a stored admin.");
+      return run;
+    },
     messages,
     deletedKeys,
     deliver: (jobId: string) =>

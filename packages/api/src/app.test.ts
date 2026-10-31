@@ -86,6 +86,7 @@ describe("api", () => {
       ["/api/account-settings/deletion", "GET"],
       ["/api/account-settings/deletion", "POST"],
       ["/api/account-settings/deletion", "DELETE"],
+      ["/api/account-settings/security-events", "GET"],
     ] as const) {
       const response = await app.request(path, { method }, authBindings());
       expect(response.status).toBe(401);
