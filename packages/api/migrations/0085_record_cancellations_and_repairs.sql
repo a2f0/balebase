@@ -17,3 +17,16 @@ CREATE TABLE billing_cancellation_intents (
   -- Unix seconds.
   created_at INTEGER NOT NULL
 );
+
+-- An update-mode Plaid Link session a person opened for a connection. The
+-- app's report that it repaired the login (`finance.connection_repaired`)
+-- must name one, by its link token, and consumes it, so a report cannot be
+-- replayed or made without opening Link. Only the token's hash is kept.
+CREATE TABLE finance_login_repair_sessions (
+  link_token_hash TEXT PRIMARY KEY NOT NULL,
+  organization_id TEXT NOT NULL
+    REFERENCES organization (id) ON DELETE CASCADE,
+  connection_id TEXT NOT NULL REFERENCES plaid_items (id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES user (id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL
+);

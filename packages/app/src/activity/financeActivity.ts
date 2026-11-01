@@ -13,7 +13,7 @@ export const financeActionLabels: Record<string, string> = {
   "finance.category_renamed": "renamed an expense category",
   "finance.connection_created": "connected a bank",
   "finance.connection_data_deleted": "deleted a bank's imported data",
-  "finance.connection_repaired": "repaired a bank login",
+  "finance.connection_repaired": "reported a bank login repair",
 };
 
 function count(value: unknown, singular: string) {

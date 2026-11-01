@@ -512,6 +512,7 @@ function usePlaidConnect(
       publicToken: string,
       metadata: PlaidLinkMetadata,
       repairing: string | undefined,
+      linkToken: string,
     ) => {
       setBusy(true);
       setError(undefined);
@@ -528,7 +529,10 @@ function usePlaidConnect(
             })
           ).connectionId;
         clearOAuthState();
-        if (repairing) await api.finance.reportPlaidLoginRepair(repairing);
+        // The Link session's token shows this report follows the update
+        // session the API opened; it is accepted once.
+        if (repairing)
+          await api.finance.reportPlaidLoginRepair(repairing, linkToken);
         const result = await api.finance.startSync(connectionId);
         await load();
         setNotice(syncNotice(result));
@@ -565,7 +569,7 @@ function usePlaidConnect(
         undefined,
         { connectionId, oauthResume: false },
         (publicToken, metadata) =>
-          complete(publicToken, metadata, connectionId),
+          complete(publicToken, metadata, connectionId, result.linkToken),
         (message) => {
           setError(message);
           setBusy(false);
@@ -592,6 +596,7 @@ function useOAuthResume(
     token: string,
     metadata: PlaidLinkMetadata,
     repairing: string | undefined,
+    linkToken: string,
   ) => Promise<void>,
   resumed: { current: boolean },
   setBusy: Dispatch<SetStateAction<boolean>>,
@@ -612,7 +617,8 @@ function useOAuthResume(
       token,
       window.location.href,
       { connectionId: repairing, oauthResume: true },
-      (publicToken, metadata) => complete(publicToken, metadata, repairing),
+      (publicToken, metadata) =>
+        complete(publicToken, metadata, repairing, token),
       (message) => {
         setError(message);
         setBusy(false);

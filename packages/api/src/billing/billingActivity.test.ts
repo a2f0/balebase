@@ -375,56 +375,92 @@ describe("subscription cancellation activity", () => {
     );
   });
 
-  it("keeps the first deleter's intent through a refused retry before the webhook", async () => {
-    const fixture = paidFixture();
+  it("credits whichever deleter's request Stripe shows canceled the subscription", async () => {
     const canceled = subscriptionEvent("evt_canceled", 200, "canceled", 2);
     const object = {
       ...canceled.data.object,
       canceled_at: Math.floor(Date.now() / 1_000),
     };
-    fixture.database.exec(`CREATE TRIGGER fail_activity
+    const active = subscriptionEvent("evt_active", 100, "active", 2).data
+      .object;
+    const secondDeleter = { ...deleting, actor: { userId: "user-2" } };
+
+    // A's request canceled, but its write failed; B retries before the
+    // webhook. Stripe shows the subscription canceled, so A is credited.
+    const first = paidFixture();
+    first.database.exec(`CREATE TRIGGER fail_activity
       BEFORE INSERT ON activity_events
       WHEN NEW.action = 'billing.subscription_canceled'
       BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END`);
-    let stripeCanceled = false;
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": async () => {
-          if (stripeCanceled)
-            return Response.json(
-              { error: { message: "No such subscription" } },
-              { status: 404 },
-            );
-          stripeCanceled = true;
-          return Response.json(object);
-        },
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": async () =>
+          Response.json(object),
         "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
           Response.json(object),
       },
-      async () => {
+      async ({ requests }) => {
         await expect(
           cancelOrganizationSubscription(
-            fixture.bindings,
+            first.bindings,
             organizationId,
             deleting,
           ),
         ).rejects.toThrow("activity unavailable");
-        fixture.database.run("DROP TRIGGER fail_activity");
-        // Someone else retries before the webhook arrives; Stripe refuses,
-        // since it already canceled for the first request.
-        await expect(
-          cancelOrganizationSubscription(fixture.bindings, organizationId, {
-            ...deleting,
-            actor: { userId: "user-2" },
-          }),
-        ).rejects.toThrow("No such subscription");
-        expect(intents(fixture)).toEqual([{ subscription_id: "sub_test" }]);
+        first.database.run("DROP TRIGGER fail_activity");
+        await cancelOrganizationSubscription(
+          first.bindings,
+          organizationId,
+          secondDeleter,
+        );
         expect(
-          (await sendWebhook(fixture, { ...canceled, data: { object } }))
-            .status,
-        ).toBe(200);
-        expect(canceledEvents(fixture)).toMatchObject([
-          { actor_user_id: "user-1", details: { via: "owner" } },
+          requests.filter(({ method }) => method === "DELETE"),
+        ).toHaveLength(1);
+        expect(canceledEvents(first)).toMatchObject([
+          { actor_user_id: "user-1" },
+        ]);
+        // The webhook that follows records nothing more.
+        await sendWebhook(first, { ...canceled, data: { object } });
+        expect(canceledEvents(first)).toHaveLength(1);
+        expect(intents(first)).toEqual([]);
+      },
+      { captureErrors: true },
+    );
+
+    // A's request failed without canceling; B's retry cancels, so B is.
+    const second = paidFixture();
+    let deletes = 0;
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": async () => {
+          deletes += 1;
+          return deletes === 1
+            ? Response.json(
+                { error: { message: "Stripe unavailable" } },
+                { status: 503 },
+              )
+            : Response.json(object);
+        },
+        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
+          Response.json(active),
+      },
+      async () => {
+        await expect(
+          cancelOrganizationSubscription(
+            second.bindings,
+            organizationId,
+            deleting,
+          ),
+        ).rejects.toThrow("Stripe unavailable");
+        // An indeterminate failure keeps A's intent.
+        expect(intents(second)).toEqual([{ subscription_id: "sub_test" }]);
+        await cancelOrganizationSubscription(
+          second.bindings,
+          organizationId,
+          secondDeleter,
+        );
+        expect(canceledEvents(second)).toMatchObject([
+          { actor_user_id: "user-2" },
         ]);
       },
       { captureErrors: true },

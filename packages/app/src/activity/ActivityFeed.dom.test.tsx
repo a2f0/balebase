@@ -1029,7 +1029,7 @@ it("summarizes billing cancellations, portal sessions, and login repairs", async
   );
   expect(rows[1]).toContain("Pro subscription canceled");
   expect(rows[2]).toContain("Sam opened the Stripe billing portal");
-  expect(rows[3]).toContain("Sam repaired a bank login");
+  expect(rows[3]).toContain("Sam reported a bank login repair");
   expect(rows[3]).toContain("First Bank · Was ITEM_LOGIN_REQUIRED");
   expect(rows[4]).toContain(
     "Deleted 1 account, 5 transactions, 0 annotations, 1 issue, and 2 email links",

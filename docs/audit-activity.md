@@ -51,7 +51,11 @@ Billing Portal, and Plaid-driven connection status changes likewise stay in
 their current-state columns, Stripe's own history, and job runs. A portal
 change can only be related to the latest `billing.portal_opened` event, which
 names who opened the portal, not who made the change: Stripe's portal sessions
-carry no metadata, so the opener cannot ride along to the webhook.
+carry no metadata, so the opener cannot ride along to the webhook. A bank
+login repair (`finance.connection_repaired`) is the app's report that Plaid
+Link update mode succeeded, since Plaid tells only the browser; it must
+consume a single-use update session the reporter opened for that connection
+(`finance_login_repair_sessions`).
 
 ## Reading and retaining history
 

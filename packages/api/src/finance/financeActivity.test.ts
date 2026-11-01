@@ -166,6 +166,22 @@ describe("bank connection activity", () => {
 });
 
 describe("login repair activity", () => {
+  /** The finance routes as another member, user-2. */
+  function otherMemberApp(fixture: Fixture) {
+    const app = new Hono<ApiTestEnv>();
+    app.use(
+      "*",
+      withTestSession({
+        email: "other@example.com",
+        name: "Other Person",
+        organizationId: "org_user-1",
+        userId: "user-2",
+      }),
+    );
+    app.route("/api/finance", createFinanceRouter(fixture.requestPlaid));
+    return app;
+  }
+
   async function brokenConnection(fixture: Fixture, app = fixture.app) {
     const { body } = await exchange(fixture, app);
     fixture.database
@@ -175,20 +191,32 @@ describe("login repair activity", () => {
          WHERE id = ?`,
       )
       .run(body.connectionId);
-    const repair = (repairApp = app) =>
+    const id = body.connectionId;
+    const openLink = async (linkApp = app) =>
+      (
+        await jsonRequest<{ linkToken: string }>(
+          linkApp,
+          fixture.bindings,
+          `/connections/${id}/link-token`,
+          "POST",
+        )
+      ).body.linkToken;
+    const repair = (linkToken: string, repairApp = app, connectionId = id) =>
       jsonRequest(
         repairApp,
         fixture.bindings,
-        `/connections/${body.connectionId}/login-repairs`,
+        `/connections/${connectionId}/login-repairs`,
         "POST",
+        { linkToken },
       );
-    return { id: body.connectionId, repair };
+    return { id, openLink, repair };
   }
 
-  it("records who repaired a login and what was wrong, without Plaid identifiers", async () => {
+  it("records who repaired a login and what was wrong, once per Link session", async () => {
     const fixture = await createFixture();
-    const { id, repair } = await brokenConnection(fixture);
-    expect((await repair()).status).toBe(204);
+    const { id, openLink, repair } = await brokenConnection(fixture);
+    const linkToken = await openLink();
+    expect((await repair(linkToken)).status).toBe(204);
     const recorded = events(fixture, "finance.connection_repaired");
     expect(recorded).toEqual([
       {
@@ -206,8 +234,16 @@ describe("login repair activity", () => {
         root_type: "finance_connection",
       },
     ]);
-    expect(JSON.stringify(recorded)).not.toContain("item-sandbox");
-    expect(JSON.stringify(recorded)).not.toContain("access-sandbox");
+    for (const secret of ["item-sandbox", "access-sandbox", linkToken])
+      expect(JSON.stringify(recorded)).not.toContain(secret);
+    // The session is used up: replaying the report records nothing.
+    expect((await repair(linkToken)).status).toBe(404);
+    expect(events(fixture, "finance.connection_repaired")).toHaveLength(1);
+    expect(
+      fixture.database
+        .query("SELECT COUNT(*) AS count FROM finance_login_repair_sessions")
+        .get(),
+    ).toEqual({ count: 0 });
     // Finance history only.
     const visible = (includeFinance: boolean) =>
       findActivity(
@@ -227,39 +263,62 @@ describe("login repair activity", () => {
 
   it("attributes a key-made repair to the key", async () => {
     const fixture = await createFixture();
-    const { repair } = await brokenConnection(fixture);
-    expect(
-      (await repair(apiKeyApp(fixture, fixture.requestPlaid))).status,
-    ).toBe(204);
+    const app = apiKeyApp(fixture, fixture.requestPlaid);
+    const { openLink, repair } = await brokenConnection(fixture, app);
+    expect((await repair(await openLink())).status).toBe(204);
     expect(events(fixture, "finance.connection_repaired")).toMatchObject([
       { actor_api_key_channel: "mcp", actor_api_key_id: "key-1" },
     ]);
   });
 
-  it("records nothing for other organizations, unknown or disconnected banks, or a failed write", async () => {
+  it("refuses reports without the reporter's own open Link session for that bank", async () => {
     const fixture = await createFixture();
-    const { id, repair } = await brokenConnection(fixture);
-    const foreign = await repair(
-      testApp("organization-2", fixture.requestPlaid),
+    const { openLink, repair } = await brokenConnection(fixture);
+    const other = await exchange(fixture, fixture.app, {
+      institutionId: "ins_2",
+      institutionName: "Second Bank",
+    });
+    // No session opened yet, or a made-up token.
+    expect((await repair("link-sandbox-test")).status).toBe(404);
+    const linkToken = await openLink();
+    expect((await repair("link-made-up")).status).toBe(404);
+    // Another member, another organization, or another bank.
+    expect((await repair(linkToken, otherMemberApp(fixture))).status).toBe(404);
+    expect(
+      (await repair(linkToken, testApp("organization-2", fixture.requestPlaid)))
+        .status,
+    ).toBe(404);
+    expect(
+      (await repair(linkToken, fixture.app, other.body.connectionId)).status,
+    ).toBe(404);
+    // An expired session.
+    fixture.database.run(
+      "UPDATE finance_login_repair_sessions SET expires_at = '2000-01-01T00:00:00.000Z'",
     );
-    const unknown = await jsonRequest(
-      fixture.app,
-      fixture.bindings,
-      "/connections/unknown/login-repairs",
-      "POST",
-    );
-    expect([foreign.status, unknown.status]).toEqual([404, 404]);
+    expect((await repair(linkToken)).status).toBe(404);
+    expect((await repair("")).status).toBe(400);
+    expect(events(fixture, "finance.connection_repaired")).toEqual([]);
+  });
+
+  it("keeps the session when recording fails, and records nothing once disconnected", async () => {
+    const fixture = await createFixture();
+    const { id, openLink, repair } = await brokenConnection(fixture);
+    const linkToken = await openLink();
     failActivity(fixture, "finance.connection_repaired");
-    expect((await repair()).status).toBe(500);
+    expect((await repair(linkToken)).status).toBe(500);
+    expect(events(fixture, "finance.connection_repaired")).toEqual([]);
     fixture.database.run("DROP TRIGGER fail_activity");
+    // The failed report left its session, so the app's retry records it.
+    expect((await repair(linkToken)).status).toBe(204);
+    const next = await openLink();
     await jsonRequest(
       fixture.app,
       fixture.bindings,
       `/connections/${id}`,
       "DELETE",
     );
-    expect((await repair()).status).toBe(404);
-    expect(events(fixture, "finance.connection_repaired")).toEqual([]);
+    expect((await repair(next)).status).toBe(404);
+    expect(events(fixture, "finance.connection_repaired")).toHaveLength(1);
   });
 });
 

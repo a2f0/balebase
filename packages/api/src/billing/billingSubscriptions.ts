@@ -364,14 +364,16 @@ export async function cancelStripeSubscription(
   cancellation?: SubscriptionCancellation,
 ) {
   await withSubscriptionSyncLock(environment.DB, subscriptionId, async () => {
-    const intentStored = cancellation
-      ? await recordCancellationIntent(
-          environment.DB,
+    const intent = cancellation
+      ? await claimCancellationIntent(
+          environment,
           organizationId,
           subscriptionId,
           cancellation,
         )
-      : false;
+      : "none";
+    if (intent === "resolved") return;
+    const intentStored = intent === "stored";
     let subscription: StripeSubscription;
     try {
       subscription = await deleteStripeSubscription(
@@ -392,6 +394,48 @@ export async function cancelStripeSubscription(
       organizationId,
     );
   });
+}
+
+/**
+ * Stores this request's cancellation intent. When an earlier request's recent
+ * intent is still unresolved, Stripe decides whose it is: a subscription
+ * already canceled was canceled by that request, so it is persisted, which
+ * credits that request ("resolved"); otherwise this request takes over.
+ */
+async function claimCancellationIntent(
+  environment: SubscriptionEnvironment,
+  organizationId: string,
+  subscriptionId: string,
+  cancellation: SubscriptionCancellation,
+) {
+  if (
+    await recordCancellationIntent(
+      environment.DB,
+      organizationId,
+      subscriptionId,
+      cancellation,
+    )
+  ) {
+    return "stored";
+  }
+  const current = await expandedSubscription(environment, subscriptionId);
+  if (current?.status === "canceled") {
+    await persistSubscription(
+      environment,
+      current,
+      Math.floor(Date.now() / 1000),
+      organizationId,
+    );
+    return "resolved";
+  }
+  await recordCancellationIntent(
+    environment.DB,
+    organizationId,
+    subscriptionId,
+    cancellation,
+    true,
+  );
+  return "stored";
 }
 
 async function deleteStripeSubscription(

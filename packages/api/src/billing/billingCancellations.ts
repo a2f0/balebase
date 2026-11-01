@@ -27,15 +27,16 @@ const intentWindowSeconds = 15 * 60;
  * Stores who is about to cancel a subscription before Stripe is asked to.
  * Whichever write persists the cancellation (this request, or a webhook when
  * this request's write fails) records the event from it, so the person is
- * never lost once Stripe has canceled. A recent unresolved intent is kept, as
- * its request may have canceled already; only a stale one is replaced.
- * Returns whether this request's intent is the stored one.
+ * never lost once Stripe has canceled. Unless `replace` is set, a recent
+ * unresolved intent is kept, as its request may have canceled already; only a
+ * stale one is replaced. Returns whether this request's intent is stored.
  */
 export async function recordCancellationIntent(
   database: D1Database,
   organizationId: string,
   subscriptionId: string,
   cancellation: SubscriptionCancellation,
+  replace = false,
 ) {
   const stored = await database
     .prepare(
@@ -58,8 +59,8 @@ export async function recordCancellationIntent(
          reason = excluded.reason,
          previous_status = excluded.previous_status,
          created_at = excluded.created_at
-       WHERE billing_cancellation_intents.created_at
-             < excluded.created_at - ${intentWindowSeconds}`,
+       WHERE ? OR billing_cancellation_intents.created_at
+                  < excluded.created_at - ${intentWindowSeconds}`,
     )
     .bind(
       subscriptionId,
@@ -71,6 +72,7 @@ export async function recordCancellationIntent(
       subscriptionId,
       Math.floor(Date.now() / 1_000),
       organizationId,
+      replace ? 1 : 0,
     )
     .run();
   return Number(stored.meta.changes) > 0;

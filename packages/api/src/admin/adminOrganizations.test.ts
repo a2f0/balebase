@@ -561,6 +561,9 @@ describe("admin organizations", () => {
       {
         "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
           Response.json(canceledSubscription()),
+        // The first attempt's 503 left its intent, so Stripe is asked first.
+        "GET https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
+          Response.json({ ...canceledSubscription(), status: "active" }),
       },
       async () => {
         expect(

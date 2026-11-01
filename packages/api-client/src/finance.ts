@@ -25,6 +25,7 @@ const endpoints = {
   reportLoginRepair: endpoint<typeof financeRoutes.reportLoginRepair>({
     method: "POST",
     path: "/api/finance/connections/:id/login-repairs",
+    body: "json",
     response: "empty",
   }),
   reportLinkDiagnostics: endpoint<typeof financeRoutes.reportLinkDiagnostics>({
@@ -282,8 +283,9 @@ function financeSyncApi(transport: Transport) {
       });
     },
     /** Records that Link update mode repaired the connection's login. */
-    reportPlaidLoginRepair(connectionId: string) {
+    reportPlaidLoginRepair(connectionId: string, linkToken: string) {
       return transport.call(endpoints.reportLoginRepair, {
+        body: { linkToken },
         params: { id: connectionId },
       });
     },
