@@ -467,6 +467,52 @@ describe("subscription cancellation activity", () => {
     );
   });
 
+  it("still credits the first deleter when the retry comes long after", async () => {
+    const fixture = paidFixture();
+    const now = Math.floor(Date.now() / 1_000);
+    const canceled = subscriptionEvent("evt_canceled", 200, "canceled", 2);
+    const object = { ...canceled.data.object, canceled_at: now };
+    // The same subscription as Stripe shows it an hour later.
+    const later = { ...object, canceled_at: now - 3_600 };
+    fixture.database.exec(`CREATE TRIGGER fail_activity
+      BEFORE INSERT ON activity_events
+      WHEN NEW.action = 'billing.subscription_canceled'
+      BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END`);
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": async () =>
+          Response.json(object),
+        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
+          Response.json(later),
+      },
+      async ({ requests }) => {
+        await expect(
+          cancelOrganizationSubscription(
+            fixture.bindings,
+            organizationId,
+            deleting,
+          ),
+        ).rejects.toThrow("activity unavailable");
+        fixture.database.run("DROP TRIGGER fail_activity");
+        // The first request ran an hour ago, when Stripe canceled.
+        fixture.database.run(
+          `UPDATE billing_cancellation_intents SET created_at = ${now - 3_600}`,
+        );
+        await cancelOrganizationSubscription(fixture.bindings, organizationId, {
+          ...deleting,
+          actor: { userId: "user-2" },
+        });
+        expect(
+          requests.filter(({ method }) => method === "DELETE"),
+        ).toHaveLength(1);
+        expect(canceledEvents(fixture)).toMatchObject([
+          { actor_user_id: "user-1" },
+        ]);
+      },
+      { captureErrors: true },
+    );
+  });
+
   it("credits nobody for a cancellation long after a refused or stale intent", async () => {
     const fixture = paidFixture();
     await withFetch(

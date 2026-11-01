@@ -951,11 +951,10 @@ organization cancels its subscription first and records
 `billing.subscription_canceled` naming the owner or root admin, the
 subscription, its previous status, and its seats, even when the deletion then
 fails; the deletion event lists the subscriptions it canceled. Apply
-migration `0085_record_billing_cancellations.sql` before deploying the Worker
-that records it. Other
-subscription status, cancellation, and seat quantity changes come from Stripe
-and are kept as current state and in Stripe's own history, not as Activity
-events. Checkout uses Stripe's hosted page
+migration `0085_record_cancellations_and_repairs.sql` before deploying the
+Worker that records it. Other subscription status, cancellation, and seat
+quantity changes come from Stripe and are kept as current state and in
+Stripe's own history, not as Activity events. Checkout uses Stripe's hosted page
 unless `STRIPE_PUBLISHABLE_KEY` holds a publishable key from the same Stripe
 account and mode as the secret key; then the billing page embeds Stripe's
 Payment Element, styled with the app's theme tokens. Add the following values to

@@ -397,7 +397,7 @@ export async function cancelStripeSubscription(
 }
 
 /**
- * Stores this request's cancellation intent. When an earlier request's recent
+ * Stores this request's cancellation intent. When an earlier request's
  * intent is still unresolved, Stripe decides whose it is: a subscription
  * already canceled was canceled by that request, so it is persisted, which
  * credits that request ("resolved"); otherwise this request takes over.
