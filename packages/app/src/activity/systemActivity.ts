@@ -29,8 +29,13 @@ export const systemActionLabels: Record<string, string> = {
   "user.purged": "permanently deleted an account",
 };
 
-/** Who asked for a purged account's or organization's deletion. */
-export function purgeSummary({ action, details }: ActivityEvent) {
+/** Which account or organization was purged, and who asked for it. */
+export function purgeSummary(event: ActivityEvent) {
+  const kind = event.action === "user.purged" ? "Account" : "Organization";
+  return `${kind} ${event.root.id} · ${purgeRequester(event)}`;
+}
+
+function purgeRequester({ action, details }: ActivityEvent) {
   const person =
     action === "user.purged"
       ? textValue(details.requestedByName) ||

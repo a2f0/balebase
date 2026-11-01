@@ -156,10 +156,14 @@ describe("system and provider activity", () => {
     expect(rows[0]).toContain(
       "Balebase maintenance permanently deleted an account",
     );
-    expect(rows[0]).toContain("Requested by Root Admin (root admin) on");
+    expect(rows[0]).toContain(
+      "Account user-9 · Requested by Root Admin (root admin) on",
+    );
     expect(rows[1]).toContain(
       "Balebase maintenance permanently deleted an organization",
     );
-    expect(rows[1]).toContain("Deleted by Olive Owner (owner) on");
+    expect(rows[1]).toContain(
+      "Organization org-9 · Deleted by Olive Owner (owner) on",
+    );
   });
 });
