@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import { calendarDate, optionalText, requiredText } from "./fields";
 import { route } from "./route";
 import {
@@ -387,6 +388,13 @@ export const employeeFormsRoutes = {
     method: "DELETE",
     path: "/api/employee-forms/:id",
     response: OkSchema,
+  }),
+  /** Managers only: one request's history, newest first. */
+  activity: route({
+    method: "GET",
+    path: "/api/employee-forms/:id/activity",
+    query: ActivityQuerySchema,
+    response: ActivityPageSchema,
   }),
   upload: route({
     method: "POST",

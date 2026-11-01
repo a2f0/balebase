@@ -135,8 +135,9 @@ including one that joins an active run, adds a log line to the run naming the
 requester and a row to `maintenance_requests` (job, run, whether it joined an
 active run, time, and the requester's ID, name, and email) in the same
 transaction. That history is kept after job history expires and after the
-requester's account is purged, so destructive runs stay attributable; D1
-database operators read it. Closing the page does not stop execution. Staging
+requester's account is purged, so destructive runs stay attributable. Root
+admins read it under **Manual requests** on the Jobs page
+(`GET /api/admin/jobs/requests`). Closing the page does not stop execution. Staging
 supports manual maintenance and five-minute queue recovery, but does not enqueue
 hourly maintenance. Bank sync is listed here for inspection; it is requested
 from Finance for a specific connection or through daily sync settings.
@@ -163,28 +164,38 @@ email; older requests show no recorded actor. Requests and cancellations,
 including self-service actions, record actor snapshots and the request date in
 `user_deletion_events` in the same database transaction. Duplicate requests
 preserve the original date and actor and do not create another event. Pending
-attribution is visible only to root admins; historical events are available to
-D1 database operators. History remains after cancellation and is removed when
-the target account is purged.
+attribution is visible only to root admins, who also read the full history
+from **View history** in the row menu at `/root/users`
+(`/root/users/<user-id>`, `GET /api/admin/users/:userId/history`). History
+remains after cancellation and is removed when the target account is purged;
+the purge then leaves a `user.purged` record in **Root Admin → Jobs → Purge
+history** naming the requester (a root admin by name and email, the account
+holder by ID only) and the request date, but not the purged account's name or
+email (migration `0086_record_system_activity.sql`).
 
 Root admins can revoke another account's root admin role from the **Users** row
 menu after a confirmation. The API refuses to revoke the caller's own role,
 and a revocation takes effect only while the caller still holds the role, so two
 admins cannot revoke each other. Each revocation records the actor, target,
 time, and previous and new roles in `user_role_events` in the same transaction;
-like deletion history, it is readable by D1 operators and removed when the
-target account is purged. Apply migration `0077_record_user_role_activity.sql`
+like deletion history, root admins read it from **View history** on the Users
+page, and it is removed when the target account is purged. Apply migration `0077_record_user_role_activity.sql`
 before deploying. `auth:set-role` changes record `role_set` events with an
 operator actor (migration `0082_record_account_history.sql`).
 
-**Account settings → Security** lists the person's latest 50 security changes:
-turning two-factor authentication on or off and changing or resetting their
-password (`GET /api/account-settings/security-events`). Database triggers record
+**Account settings → Security** lists the person's latest 50 security and
+profile changes: turning two-factor authentication on or off, replacing the
+authenticator app, regenerating backup codes, changing or resetting their
+password, and changing their name (with the old and new name) or picture
+(`GET /api/account-settings/security-events`). Database triggers record
 each change in `user_security_events` in the statement that makes it, so a
 failed verification, a wrong password, or a change that cannot be recorded
 changes nothing. Every remaining path to these changes is the person's own
 session or password reset link, so the event names no separate actor. Changes
-made before migration `0082_record_account_history.sql` were not recorded. Only
+made before migration `0082_record_account_history.sql` (and, for the
+authenticator, backup codes, name and picture, before
+`0085_record_access_lifecycle.sql`) were not recorded. Using a backup code to
+sign in changes nothing that is listed. Only
 the person reads the list in the app; root admins read it in D1. It is removed
 when the account is purged. Signing out other sessions is not recorded: Better
 Auth deletes those session rows the same way it signs a session out.
@@ -212,7 +223,10 @@ for each organization are removed together and their files are queued for
 **Purge deleted files**, which waits at least 15 minutes for uploads to finish
 and retries storage failures. File cleanup removes 25 objects per run, so a large
 backlog can take days to drain; root admins can start additional cleanup runs.
-User accounts are retained and follow the separate account-deletion policy.
+User accounts are retained and follow the separate account-deletion policy. Each
+purge records `organization.purged` in **Root Admin → Jobs → Purge history**
+with who deleted the organization and how (owner or root admin), but not its
+name; the organization's own activity is removed with it.
 
 Root Admin → Jobs shows each job's run schedule. Production maintenance is
 queued hourly at 17 minutes past the hour (UTC); staging maintenance is manual
@@ -296,7 +310,11 @@ session. A key counts as two-factor verified only when the session that created
 it was; if the organization later requires two-factor authentication, create a
 new key after signing in with it. A key stops working when it is revoked or
 expires, when its creator is no longer an owner or admin there, or when the
-organization is deleted. Send it as `Authorization: Bearer <key>`. Keys reach
+organization is deleted. Changing the creator's role below admin, removing
+them, or their leaving revokes their unexpired keys, recorded as
+`api_key.revoked` naming who made the change and why, and the API keys page
+shows the reason; regaining the role or rejoining does not bring a key back.
+Send it as `Authorization: Bearer <key>`. Keys reach
 the workspace routes: activity, audits, businesses, contracts, employee forms,
 equipment, finance, inbox, library folders and files, groups, `/api/me`, and the
 people list. Read keys may only use `GET`. Account settings, billing,
@@ -329,7 +347,10 @@ Apply migrations `0060_create_organization_api_keys.sql` and
 
 Library documents can be organized into flat, organization-scoped folders,
 each opened at `/library/<folder-id>`. A document lives in at most one folder;
-deleting a folder returns its documents to the library root.
+deleting a folder returns its documents to the library root. A folder's
+Activity also lists the files uploaded into, moved into or out of, and deleted
+from it. Each file's history opens from its card at `/library/files/<file-id>`
+and stays readable after the file is deleted.
 
 Inbox messages can be linked to library folders, equipment, and imported
 finance transactions. Links live in one polymorphic table,
@@ -341,8 +362,9 @@ Archived. The message toolbar archives email or moves it to Trash; archived
 email leaves the Inbox but keeps its attachments and links, remains available
 from linked records, and can be moved back to Inbox. Linked email cannot be
 moved to Trash, including email with Finance links hidden from the current
-user. Email in Trash is eligible for removal by the manual `emails:purge`
-command after 30 days and can be restored until it is purged. Legacy email
+user. Email in Trash is eligible for removal by the on-request **Purge trashed
+email** maintenance job after 30 days and can be restored until it is purged.
+Legacy email
 already in Trash keeps its links but is hidden from
 linked records until restored. Links to
 transactions that Plaid has since removed are hidden. Creating, removing, or
@@ -365,7 +387,9 @@ member from the organization returns their equipment to unassigned, recorded
 in each item's history with the person who removed them (or who left). Every
 member can view equipment; organization owners and admins add, edit, assign,
 and delete it. Receipts and other inbox emails link to equipment the same way
-they link to folders, and any member can link or unlink them. The API owns the
+they link to folders, and any member can link or unlink them. Deleting an item
+records who held it and how many email links went, and each linked email's
+history shows its link ending with the deletion. The API owns the
 list of equipment types, so adding one needs no migration; an item keeps its
 type if that type is later retired.
 
@@ -405,11 +429,12 @@ re-emails signers who have not signed once the interval has passed since their
 last email, and **Send reminder** emails them immediately, at most once an
 hour. A sent contract can be voided, which invalidates its signing links;
 drafts, completed, declined, and voided contracts can be deleted. Creating,
-sending, voiding, and deleting a contract, and deleting a template, appear in
-Activity, which keeps a deleted contract's status, document hashes, and signer
-count; a contract's own history names the API key and channel behind changes
-made through a key. Migration `0084_attribute_contract_events.sql` adds that
-key attribution.
+sending, voiding, and deleting a contract, and uploading, saving a version
+of, and deleting a template, appear in Activity, which keeps a deleted
+contract's status, document hashes, and signer, signed, and decline details;
+a template's page lists its own history, and a contract's own history
+names the API key and channel behind changes made through a key. Migration
+`0084_attribute_contract_events.sql` adds that key attribution.
 
 Contract templates at `/contracts/templates` keep a PDF and placed fields
 without assigning actual people. Fields belong to named signer roles such as
@@ -500,12 +525,14 @@ restore never publishes it. The **Purge discarded global forms** job
 least 30 days ago per run, with their versions and history, as part of hourly
 production maintenance or from **Root Admin → Jobs**. Audits started from a
 purged form keep their own copy of it, and projects it was turned on for lose
-it. The deletion rechecks eligibility, so a restore committed first keeps the
+it; each such project's activity shows the removal by Balebase maintenance.
+The deletion rechecks eligibility, so a restore committed first keeps the
 form. Discards and restores appear in the form's Activity as their own events.
+Until the purge, **History** on a discarded form shows its Activity, so root
+admins can see who made and published it before restoring it, and its
+versions stay readable through `/api/admin/audit-templates/:id/versions`.
 Apply migration `0079_restore_discarded_audit_forms.sql`, which names those
-events, before deploying. The purge records nothing in the projects that lose
-the form: the shared activity model needs a person as the actor, and no person
-runs the job. Its job run keeps the number of forms purged.
+events, before deploying. Its job run keeps the number of forms purged.
 Publishing and unpublishing a form, organization or global, appear in its
 Activity as their own events; a save that keeps the status is an ordinary saved
 version. Organizations see a global form's publications but not its
@@ -816,10 +843,11 @@ My documents (`/me/requests/<request>`) it shows the person what was asked,
 its status, due date, and work location, what happens next, and their
 controls (start the background check, upload, download). A manager's page
 (`/organization/requests/<request>`) adds who it's for, the Checkr stage,
-report status and result, a next step for the current stage, and the same
-controls as the People list. When Checkr isn't configured, both pages say so:
-the manager runs the check outside Balebase and sets its status by hand, and
-the person sees that there is nothing for them to do.
+report status and result, a next step for the current stage, the same
+controls as the People list, and the request's own history. When Checkr
+isn't configured, both pages say so: the manager runs the check outside
+Balebase and sets its status by hand, and the person sees that there is
+nothing for them to do.
 
 Background checks use Checkr's self-hosted flow. A manager requests a check
 with the person's US work state and optional city, and Balebase emails the
@@ -933,7 +961,9 @@ never returns them.
 Every organization starts on the cardless Free plan with one usable member
 seat, up to five organization form templates, and 30 days of audit-run history.
 An hourly Worker task removes older Free-plan audit runs and their associated
-issue images. Balebase Pro costs $10 per active organization member each month
+issue images, and records on the organization's activity how many runs it
+removed (`organization.audit_runs_purged`, by Balebase maintenance). Balebase
+Pro costs $10 per active organization member each month
 and includes unlimited form templates and audit history. Membership hooks update
 the licensed Stripe subscription quantity, and an hourly reconciliation repairs
 any quantity drift.
@@ -951,7 +981,7 @@ organization cancels its subscription first and records
 `billing.subscription_canceled` naming the owner or root admin, the
 subscription, its previous status, and its seats, even when the deletion then
 fails; the deletion event lists the subscriptions it canceled. Apply
-migration `0085_record_cancellations_and_repairs.sql` before deploying the
+migration `0087_record_cancellations_and_repairs.sql` before deploying the
 Worker that records it. Other subscription status, cancellation, and seat
 quantity changes come from Stripe and are kept as current state and in
 Stripe's own history, not as Activity events. Checkout uses Stripe's hosted page

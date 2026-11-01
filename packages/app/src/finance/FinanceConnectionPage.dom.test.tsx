@@ -88,6 +88,8 @@ function history(): ActivityPage {
           email: "person@example.com",
           id: "user-1",
           name: "Example Person",
+          source: null,
+          type: "user",
         },
         details: {
           institutionId: "ins_109508",

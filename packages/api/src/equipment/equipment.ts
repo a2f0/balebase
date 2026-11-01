@@ -5,7 +5,11 @@ import {
 import { equipmentTypes, isEquipmentType } from "@balebase/validators/rules";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
-import { listLinkedEmails, toLinkedEmail } from "../inbox/inboundEmailLinks";
+import {
+  deletedTargetLinkEvents,
+  listLinkedEmails,
+  toLinkedEmail,
+} from "../inbox/inboundEmailLinks";
 import {
   canManage,
   listMemberDirectory,
@@ -241,8 +245,16 @@ equipment.delete("/:id", requireManager(), async (context) => {
   if (!item) return equipmentNotFound(context);
   // Drop email links explicitly rather than relying on the trigger alone.
   // The event reads the row it describes, so it is recorded only when this
-  // batch is the one that deletes it.
+  // batch is the one that deletes it. It keeps who held the item and how many
+  // email links went, and each removed link is recorded on its email too.
+  const actorId = context.get("authSession").user.id;
   await activityBatch(context.env.DB, context.get("apiKey"), [
+    deletedTargetLinkEvents(context.env.DB, {
+      actorId,
+      organizationId,
+      targetId: item.id,
+      targetType: "equipment",
+    }),
     context.env.DB.prepare(
       `INSERT INTO activity_events (
          organization_id, root_type, root_id, root_label, subject_type,
@@ -255,16 +267,20 @@ equipment.delete("/:id", requireManager(), async (context) => {
               json_object('type', item.type, 'make', item.make,
                           'model', item.model,
                           'serialNumber', item.serial_number,
-                          'purchaseDate', item.purchase_date)
+                          'purchaseDate', item.purchase_date,
+                          'assignedTo', item.assigned_user_id,
+                          'assigneeName', assignee.name,
+                          'assigneeEmail', assignee.email,
+                          'emailLinkCount',
+                          (SELECT COUNT(*) FROM inbound_email_links AS link
+                           WHERE link.organization_id = item.organization_id
+                             AND link.target_type = 'equipment'
+                             AND link.target_id = item.id))
        FROM equipment AS item
        JOIN user AS actor ON actor.id = ?
+       LEFT JOIN user AS assignee ON assignee.id = item.assigned_user_id
        WHERE item.id = ? AND item.organization_id = ?`,
-    ).bind(
-      new Date().toISOString(),
-      context.get("authSession").user.id,
-      item.id,
-      organizationId,
-    ),
+    ).bind(new Date().toISOString(), actorId, item.id, organizationId),
     context.env.DB.prepare(
       `DELETE FROM inbound_email_links
        WHERE organization_id = ? AND target_type = 'equipment'

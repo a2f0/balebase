@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import { RecordIdSchema } from "./fields";
 import { route } from "./route";
 
@@ -36,6 +37,13 @@ export const objectsRoutes = {
     method: "GET",
     path: "/api/objects/:id",
     response: "file",
+  }),
+  /** A file's history, kept after it is deleted. */
+  activity: route({
+    method: "GET",
+    path: "/api/objects/:id/activity",
+    query: ActivityQuerySchema,
+    response: ActivityPageSchema,
   }),
   move: route({
     method: "PATCH",

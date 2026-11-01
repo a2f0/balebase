@@ -12,7 +12,8 @@ import {
 } from "@balebase/ui/react";
 import type { AuditTemplateSummary } from "@balebase/validators/audits";
 import { discardedTemplateRetentionDays } from "@balebase/validators/rules";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
+import { ActivityFeed } from "../activity/ActivityFeed";
 import { TemplateStats, templateStatusTone } from "../audits/AuditHome";
 import { AuditTemplateBuilder } from "../audits/AuditTemplateBuilder";
 import { AppButtonLink } from "../shared/AppLink";
@@ -169,6 +170,10 @@ function DiscardedForms({
   onRestore: (template: AuditTemplateSummary) => Promise<void>;
   templates: AuditTemplateSummary[] | undefined;
 }) {
+  // A discarded form's history stays readable until the purge, so admins can
+  // see who made and published it before deciding whether to restore it.
+  const [historyId, setHistoryId] = useState<string>();
+  const history = templates?.find(({ id }) => id === historyId);
   return (
     <PageSection
       actions={
@@ -197,6 +202,18 @@ function DiscardedForms({
                 </span>
                 <span className="rowActions auditTemplateRowActions">
                   <Button
+                    aria-pressed={historyId === template.id}
+                    icon="list"
+                    onClick={() =>
+                      setHistoryId((open) =>
+                        open === template.id ? undefined : template.id,
+                      )
+                    }
+                    size="sm"
+                  >
+                    History
+                  </Button>
+                  <Button
                     disabled={busy}
                     icon="restore"
                     onClick={() => void onRestore(template)}
@@ -216,6 +233,14 @@ function DiscardedForms({
         </EmptyState>
       ) : (
         !error && <LoadingState label="Loading discarded forms…" />
+      )}
+      {history && (
+        <section aria-label={`History of ${history.name}`}>
+          <ActivityFeed
+            key={history.id}
+            source={{ id: history.id, type: "global_audit_template" }}
+          />
+        </section>
       )}
     </PageSection>
   );

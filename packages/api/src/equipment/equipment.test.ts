@@ -421,6 +421,10 @@ describe("equipment", () => {
     ).toEqual({
       action: "equipment.deleted",
       details: {
+        assignedTo: "owner-user",
+        assigneeEmail: "owner-user@example.com",
+        assigneeName: "owner-user",
+        emailLinkCount: 0,
         make: "Apple",
         model: "MacBook Air",
         purchaseDate: "2026-04-01",
@@ -510,6 +514,167 @@ describe("equipment", () => {
     expect(database.query("SELECT id FROM inbound_email_links").all()).toEqual(
       [],
     );
+  });
+});
+
+describe("equipment deletion history", () => {
+  it("keeps who held the item and ends each email link on its email", async () => {
+    const { as, database } = createFixture();
+    const owner = as("owner-user", "owner");
+    const member = as("member-user", "member");
+    const created = await owner.json<{ equipment: Equipment }>(
+      "POST",
+      "/api/equipment",
+      laptop,
+    );
+    const id = created.body.equipment.id;
+    await member.json("POST", "/api/inbox/email-1/links", {
+      targetId: id,
+      targetType: "equipment",
+    });
+    await member.json("POST", "/api/inbox/email-1/links", {
+      targetId: "folder-1",
+      targetType: "library_folder",
+    });
+    // Equipment that predates its history: only the deletion keeps the holder.
+    database
+      .query("DELETE FROM activity_events WHERE action = 'equipment.created'")
+      .run();
+
+    expect((await owner.json("DELETE", `/api/equipment/${id}`)).status).toBe(
+      204,
+    );
+    // A second, racing delete finds nothing and records nothing.
+    expect((await owner.json("DELETE", `/api/equipment/${id}`)).status).toBe(
+      404,
+    );
+    const deleted = await owner.json<{ events: ActivityEvent[] }>(
+      "GET",
+      "/api/activity?resourceType=equipment",
+    );
+    expect(
+      deleted.body.events.map(({ action, actor, details, subject }) => ({
+        action,
+        actor: actor.id,
+        details,
+        subject: subject.type,
+      })),
+    ).toEqual([
+      {
+        action: "equipment.deleted",
+        actor: "owner-user",
+        details: {
+          assignedTo: "member-user",
+          assigneeEmail: "member-user@example.com",
+          assigneeName: "member-user",
+          emailLinkCount: 1,
+          make: "Apple",
+          model: "MacBook Pro",
+          purchaseDate: "2026-03-01",
+          serialNumber: "C02XYZ",
+          type: "computer",
+        },
+        subject: "equipment",
+      },
+      {
+        action: "inbox.email_unlinked",
+        actor: "owner-user",
+        details: {
+          from: "orders@store.example",
+          subject: "Your laptop receipt",
+          via: "target_deleted",
+        },
+        subject: "inbound_email",
+      },
+      {
+        action: "inbox.email_linked",
+        actor: "member-user",
+        details: {
+          from: "orders@store.example",
+          subject: "Your laptop receipt",
+        },
+        subject: "inbound_email",
+      },
+    ]);
+    // The email's history shows the link ending; its folder link stays.
+    const emailHistory = await member.json<{ events: ActivityEvent[] }>(
+      "GET",
+      "/api/inbox/email-1/activity",
+    );
+    expect(
+      emailHistory.body.events.map(({ action, root }) => [action, root.label]),
+    ).toEqual([
+      ["inbox.email_unlinked", "Apple MacBook Pro"],
+      ["inbox.email_linked", "Receipts"],
+      ["inbox.email_linked", "Apple MacBook Pro"],
+    ]);
+  });
+
+  it("records an unassigned item's empty holder, and rolls back on failure", async () => {
+    const { as, database } = createFixture();
+    const owner = as("owner-user", "owner");
+    const unassigned = await owner.json<{ equipment: Equipment }>(
+      "POST",
+      "/api/equipment",
+      { ...laptop, assigneeId: null },
+    );
+    await owner.json(
+      "DELETE",
+      `/api/equipment/${unassigned.body.equipment.id}`,
+    );
+    expect(
+      database
+        .query(
+          "SELECT details FROM activity_events WHERE action = 'equipment.deleted'",
+        )
+        .all()
+        .map((row) => JSON.parse((row as { details: string }).details)),
+    ).toEqual([
+      expect.objectContaining({
+        assignedTo: null,
+        assigneeEmail: null,
+        assigneeName: null,
+        emailLinkCount: 0,
+      }),
+    ]);
+    expect(
+      database
+        .query(
+          "SELECT COUNT(*) AS count FROM activity_events WHERE action = 'inbox.email_unlinked'",
+        )
+        .get(),
+    ).toEqual({ count: 0 });
+
+    const kept = await owner.json<{ equipment: Equipment }>(
+      "POST",
+      "/api/equipment",
+      laptop,
+    );
+    const id = kept.body.equipment.id;
+    await owner.json("POST", "/api/inbox/email-1/links", {
+      targetId: id,
+      targetType: "equipment",
+    });
+    const events = () =>
+      database.query("SELECT COUNT(*) AS count FROM activity_events").get();
+    const before = events();
+    database
+      .query(
+        `CREATE TRIGGER fail_activity BEFORE INSERT ON activity_events
+         BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END`,
+      )
+      .run();
+    const failed = await owner.json("DELETE", `/api/equipment/${id}`);
+    expect(failed.status).toBe(500);
+    expect(events()).toEqual(before);
+    expect(
+      database
+        .query("SELECT COUNT(*) AS count FROM equipment WHERE id = ?")
+        .get(id),
+    ).toEqual({ count: 1 });
+    expect(
+      database.query("SELECT COUNT(*) AS count FROM inbound_email_links").get(),
+    ).toEqual({ count: 1 });
   });
 });
 

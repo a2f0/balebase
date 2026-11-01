@@ -99,8 +99,8 @@ async function markOrganizationForDeletion(
           'canceledSubscriptionIds', json(?))`,
       },
       {
-        // changes() is the mark's: a repeat in the same millisecond by the
-        // same person matches the stored deletion but marks nothing.
+        // changes() is the UPDATE just before: a repeat in the same
+        // millisecond matches the stored deletedAt but changed nothing.
         bindings: [organizationId, deletedAt, deletedByUserId],
         sql: `organization.id = ? AND organization.deletedAt = ?
           AND organization.deletedByUserId = ? AND changes() > 0`,

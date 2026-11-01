@@ -25,7 +25,9 @@ describe("root admin pages", () => {
     expect(markup).toContain("Loading jobs…");
   });
   it("keeps the user listing on the Users page", () => {
-    const markup = renderToStaticMarkup(<AdminUsers />);
+    const markup = renderToStaticMarkup(
+      <AdminUsers onNavigate={() => undefined} pathname="/root/users" />,
+    );
 
     expect(markup).toContain("All users");
     expect(markup).toContain("Loading users…");

@@ -29,6 +29,7 @@ import {
   financeConnectionPath,
   financeTransactionPath,
   issuePath,
+  libraryFilePath,
   libraryPath,
   organizationAccessPath,
   organizationPeoplePath,
@@ -47,14 +48,26 @@ import {
 } from "./EquipmentActivity";
 import { financeActionLabels, financeActivitySummary } from "./financeActivity";
 import { groupActivitySummary } from "./groupActivity";
-import { isLibraryActivity, libraryActivitySummary } from "./libraryActivity";
 import {
+  isLibraryActivity,
+  libraryActivitySummary,
+  linkEndedByDeletion,
+} from "./libraryActivity";
+import {
+  apiKeyLines,
+  apiKeyRevocationReason,
   membershipSummary,
   organizationActionLabels,
   organizationActivitySummary,
 } from "./organizationActivity";
 import { projectActivitySummary } from "./projectActivity";
 import { RecordActivityDetails } from "./RecordActivity";
+import {
+  actorDetail,
+  actorName,
+  purgeSummary,
+  systemActionLabels,
+} from "./systemActivity";
 
 const actionLabels: Record<string, string> = {
   "finance.daily_sync_changed": "changed daily sync",
@@ -105,7 +118,9 @@ const actionLabels: Record<string, string> = {
   "contract.deleted": "deleted a contract",
   "contract.sent": "sent a contract for signature",
   "contract.voided": "voided a contract",
+  "contract_template.created": "uploaded a contract template",
   "contract_template.deleted": "deleted a contract template",
+  "contract_template.version_saved": "saved a contract template version",
   "employee_requirement.assigned": "requested a form or check",
   "employee_requirement.deleted": "removed a request",
   "employee_requirement.document_uploaded": "uploaded a requested form",
@@ -131,6 +146,7 @@ const actionLabels: Record<string, string> = {
   "project.updated": "edited a project",
   ...financeActionLabels,
   ...organizationActionLabels,
+  ...systemActionLabels,
 };
 
 export function ActivityFeed({
@@ -139,12 +155,14 @@ export function ActivityFeed({
   refreshKey,
   resourceType,
   source,
+  title,
 }: {
   compact?: boolean;
   onNavigate?: (pathname: string) => void;
   refreshKey?: unknown;
   resourceType?: ActivityResourceType | undefined;
   source?: ActivitySource;
+  title?: string;
 }) {
   const {
     error,
@@ -164,7 +182,7 @@ export function ActivityFeed({
           Refresh activity
         </Button>
       }
-      title={compact ? "Recent activity" : "Activity"}
+      title={title ?? (compact ? "Recent activity" : "Activity")}
     >
       {error && <Banner tone="danger">{error}</Banner>}
       {items ? (
@@ -259,8 +277,8 @@ function CompactActivityRow({
     <li className="row activityRow activityRowCompact">
       <div className="activityCompactHeading">
         <p className="activityHeading">
-          <strong title={event.actor.email}>
-            {event.actor.name || event.actor.email}
+          <strong title={actorDetail(event.actor)}>
+            {actorName(event.actor)}
           </strong>
           <ApiKeyAttribution actor={event.actor} />{" "}
           {actionLabels[event.action] ?? event.action}
@@ -297,7 +315,7 @@ function CompactActivityRow({
           <span className="activitySummary">{activitySummary(event)}</span>
         </summary>
         <div className="activityExpanded">
-          <p className="activityMeta">{event.actor.email}</p>
+          <p className="activityMeta">{actorDetail(event.actor)}</p>
           <ActivityDetails event={event} />
         </div>
       </details>
@@ -318,6 +336,7 @@ const rootSummaries: Partial<Record<string, (event: ActivityEvent) => string>> =
     organization_invitation: organizationActivitySummary,
     organization_member: memberSummary,
     project: projectActivitySummary,
+    user: purgeSummary,
   };
 
 function memberSummary(event: ActivityEvent) {
@@ -325,7 +344,10 @@ function memberSummary(event: ActivityEvent) {
   const change =
     event.action === "organization.member_two_factor_requirement_changed"
       ? twoFactorSummary(event)
-      : `${formatRoles(textValue(event.details.before))} → ${formatRoles(textValue(event.details.after))}`;
+      : [
+          `${formatRoles(textValue(event.details.before))} → ${formatRoles(textValue(event.details.after))}`,
+          ...apiKeyLines(event.details),
+        ].join(" · ");
   return `${memberLabel(event)} · ${change}`;
 }
 
@@ -369,14 +391,14 @@ function ActivityRow({
     <li className="row activityRow">
       <div className="rowMain activityMain">
         <p className="activityHeading">
-          <strong title={event.actor.email}>
-            {event.actor.name || event.actor.email}
+          <strong title={actorDetail(event.actor)}>
+            {actorName(event.actor)}
           </strong>
           <ApiKeyAttribution actor={event.actor} />{" "}
           {actionLabels[event.action] ?? event.action}
         </p>
         <p className="activityMeta">
-          {event.actor.email} ·{" "}
+          {actorDetail(event.actor)} ·{" "}
           <time dateTime={event.occurredAt}>
             {formatDateTime(event.occurredAt)}
           </time>
@@ -410,6 +432,7 @@ const detailSummaries: Partial<
   organization_group: groupActivitySummary,
   organization_invitation: organizationActivitySummary,
   project: projectActivitySummary,
+  user: purgeSummary,
 };
 
 function ActivityDetails({ event }: { event: ActivityEvent }) {
@@ -566,6 +589,9 @@ function MemberRoleDetails({ event }: { event: ActivityEvent }) {
         {formatRoles(textValue(event.details.before))} →{" "}
         {formatRoles(textValue(event.details.after))}
       </p>
+      {apiKeyLines(event.details).map((line) => (
+        <p key={line}>{line}</p>
+      ))}
     </div>
   );
 }
@@ -597,7 +623,7 @@ function activityPath(event: ActivityEvent) {
   if (event.root.type.startsWith("finance_")) return financeActivityPath(event);
   // Deleted equipment has no page to open.
   if (event.root.type === "equipment") {
-    return event.action === "equipment.deleted"
+    return event.action === "equipment.deleted" || linkEndedByDeletion(event)
       ? undefined
       : equipmentPath(event.root.id);
   }
@@ -632,13 +658,17 @@ function contractActivityPath(event: ActivityEvent) {
 }
 
 /**
- * Deleted folders and businesses, and files, have no page. An email's events
- * do not link either: an event cannot tell which folder the email is in now.
+ * Deleted folders and businesses have no page; a file's history outlives it.
+ * An email's events do not link: an event cannot tell which folder the email
+ * is in now.
  */
-function libraryActivityPath({ action, root }: ActivityEvent) {
+function libraryActivityPath(event: ActivityEvent) {
+  const { action, root } = event;
   switch (root.type) {
+    case "library_file":
+      return libraryFilePath(root.id);
     case "library_folder":
-      return action === "library.folder_deleted"
+      return action === "library.folder_deleted" || linkEndedByDeletion(event)
         ? undefined
         : libraryPath(root.id);
     case "business":
@@ -692,6 +722,7 @@ const linkLabels: Partial<Record<string, string>> = {
   finance_category: "Open categories",
   finance_connection: "Open connection",
   finance_transaction: "Open transaction",
+  library_file: "Open file history",
   library_folder: "Open folder",
   organization_billing: "Open billing",
   organization_group: "Open groups",
@@ -707,7 +738,12 @@ function activityLinkLabel(event: ActivityEvent) {
 
 function apiKeySummary({ details }: ActivityEvent) {
   const access = details.access === "write" ? "Read and write" : "Read only";
-  return `${access} · ${textValue(details.prefix)}…`;
+  const reason = apiKeyRevocationReason(details.reason);
+  return [
+    access,
+    `${textValue(details.prefix)}…`,
+    ...(reason ? [reason] : []),
+  ].join(" · ");
 }
 
 function memberLabel(event: ActivityEvent) {

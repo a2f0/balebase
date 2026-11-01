@@ -246,6 +246,24 @@ describe("Global Audits", () => {
     ).toHaveLength(2);
   });
 
+  it("shows a discarded form's history before it is restored or purged", async () => {
+    const requests = stubApi(globalForm, undefined, [discardedForm]);
+    await render("/root/global-audits");
+    const history = () =>
+      container.querySelector('[aria-label="History of Old checklist"]');
+    expect(history()).toBeNull();
+    await act(async () => button("History").click());
+    await settle(30);
+    expect(history()?.textContent).toContain("Activity");
+    expect(requests).toContain(`GET ${admin}/old%2Fform/activity`);
+    // Reading history changes nothing.
+    expect(requests.filter((request) => !request.startsWith("GET"))).toEqual(
+      [],
+    );
+    await act(async () => button("History").click());
+    expect(history()).toBeNull();
+  });
+
   it("shows a refused restore and reloads the discarded forms", async () => {
     const requests = stubApi(
       globalForm,

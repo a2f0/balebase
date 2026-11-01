@@ -1,9 +1,11 @@
 import type { ActivityEvent } from "@balebase/validators/activity";
 import { formatRoles } from "../organizations/organizationState";
 import { textValue } from "./activityLabels";
+import { purgeSummary, retentionSummary } from "./systemActivity";
 
 /** Labels for membership, invitation and organization lifecycle events. */
 export const organizationActionLabels: Record<string, string> = {
+  "organization.created": "created the organization",
   "organization.deletion_requested": "deleted the organization",
   "organization.invitation_accepted": "accepted an invitation",
   "organization.invitation_canceled": "canceled an invitation",
@@ -30,15 +32,25 @@ export function removalReasonLabel(reason: unknown) {
 }
 
 /** One line for an organization or invitation event. */
-export function organizationActivitySummary({
-  action,
-  details,
-}: ActivityEvent) {
+export function organizationActivitySummary(event: ActivityEvent) {
+  const { action, details } = event;
   switch (action) {
+    case "organization.created":
+      return [
+        textValue(details.name),
+        details.via === "signup" ? "At sign-up" : "",
+        `Founding owner: ${textValue(details.ownerName) || textValue(details.ownerEmail)}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
     case "organization.updated":
       return changes(details.changes).join(" · ") || "No changes";
     case "organization.deletion_requested":
       return `${viaLabel(details.via)} · Pending invitations canceled: ${textValue(details.canceledInvitations) || "0"}${canceledSubscriptions(details.canceledSubscriptionIds)}`;
+    case "organization.purged":
+      return purgeSummary(event);
+    case "organization.audit_runs_purged":
+      return retentionSummary(event);
     case "organization.restored":
       return `${viaLabel(details.via)} · Deleted by ${textValue(details.deletedByName) || textValue(details.deletedByEmail) || "someone no longer recorded"}`;
     default:
@@ -64,15 +76,37 @@ export function membershipSummary(event: ActivityEvent) {
       textValue(details.inviterName) || textValue(details.inviterEmail);
     return `${person} · ${role}${inviter ? ` · Invited by ${inviter}` : ""}`;
   }
-  const keys = Array.isArray(details.apiKeys) ? details.apiKeys : [];
-  const keyNames = keys
-    .map((key: unknown) => textValue(Reflect.get(Object(key), "name")))
-    .filter(Boolean);
+  return [person, role, ...apiKeyLines(details)].join(" · ");
+}
+
+/**
+ * The API keys a membership change revoked. Removals recorded before keys
+ * were revoked listed the keys they stopped (`apiKeys`) instead.
+ */
+export function apiKeyLines(details: ActivityEvent["details"]) {
+  const names = (value: unknown) =>
+    (Array.isArray(value) ? value : [])
+      .map((key: unknown) => textValue(Reflect.get(Object(key), "name")))
+      .filter(Boolean);
+  const revoked = names(details.revokedApiKeys);
+  const stopped = names(details.apiKeys);
   return [
-    person,
-    role,
-    ...(keyNames.length ? [`API keys stopped: ${keyNames.join(", ")}`] : []),
-  ].join(" · ");
+    ...(revoked.length ? [`API keys revoked: ${revoked.join(", ")}`] : []),
+    ...(stopped.length ? [`API keys stopped: ${stopped.join(", ")}`] : []),
+  ];
+}
+
+const apiKeyRevocationReasons: Record<string, string> = {
+  member_left: "Its creator left",
+  member_removed: "Its creator was removed",
+  role_changed: "Its creator is no longer an owner or admin",
+};
+
+/** Why a key was revoked, when a change to its creator's access did it. */
+export function apiKeyRevocationReason(reason: unknown) {
+  return typeof reason === "string"
+    ? apiKeyRevocationReasons[reason]
+    : undefined;
 }
 
 /** Deletions recorded before subscriptions were named have none. */

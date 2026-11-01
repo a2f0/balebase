@@ -19,6 +19,11 @@ const endpoints = {
     path: "/api/objects/:id",
     response: "file",
   }),
+  activity: endpoint<typeof objectsRoutes.activity>({
+    method: "GET",
+    path: "/api/objects/:id/activity",
+    response: "json",
+  }),
   move: endpoint<typeof objectsRoutes.move>({
     method: "PATCH",
     path: "/api/objects/:id",
@@ -49,6 +54,13 @@ export function objectsApi(transport: Transport) {
     },
     downloadUrl(id: string) {
       return transport.url(endpoints.download, { params: { id } });
+    },
+    /** A file's history, newest first, readable after it is deleted. */
+    activity(id: string, cursor?: string) {
+      return transport.call(endpoints.activity, {
+        params: { id },
+        query: { cursor },
+      });
     },
     /** Moves a file into a folder, or back to the library root with null. */
     async move(id: string, folderId: string | null) {

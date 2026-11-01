@@ -76,6 +76,9 @@ interface TemplatePost {
   sourceVersion?: number;
 }
 
+/** Each read of the template's history, in order. */
+const activityReads: string[] = [];
+
 function stubApi(
   options: {
     conflict?: boolean;
@@ -85,7 +88,35 @@ function stubApi(
   } = {},
 ) {
   const posts: Array<{ body: TemplatePost; url: string }> = [];
+  activityReads.length = 0;
   respond(async ({ href: url }, init) => {
+    if (url.includes("/activity")) {
+      activityReads.push(url);
+      return Response.json({
+        events: [
+          {
+            action: "contract_template.created",
+            actor: {
+              apiKey: null,
+              email: "o@example.com",
+              id: "o",
+              name: "Owner",
+            },
+            details: { name: "Original agreement", pageCount: 2, version: 1 },
+            historical: false,
+            id: 1,
+            occurredAt: "2026-10-01T12:00:00.000Z",
+            root: {
+              id: "t1",
+              label: "Original agreement",
+              type: "contract_template",
+            },
+            subject: { id: "t1", type: "contract_template" },
+          },
+        ],
+        nextCursor: null,
+      });
+    }
     if (init?.method === "DELETE")
       return options.deleteResponse ?? new Response(null, { status: 204 });
     if (init?.body instanceof FormData)
@@ -231,6 +262,14 @@ describe("contract templates, mounted", () => {
       "Version 3 saved",
     );
     expect(button("Save version 4", container).disabled).toBe(true);
+    // The template's history is read on opening and again after the save.
+    expect(container.textContent).toContain(
+      "Owner uploaded a contract template",
+    );
+    expect(activityReads).toEqual([
+      "http://localhost:8787/api/contracts/templates/t1/activity",
+      "http://localhost:8787/api/contracts/templates/t1/activity",
+    ]);
   });
 
   it("uses a selected older version and maps its role once", async () => {

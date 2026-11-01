@@ -14,7 +14,7 @@ it("only purges requested, aged accounts without active memberships or protected
     INSERT INTO member (id, organizationId, userId, role, createdAt) VALUES ('m', 'active', 'member', 'owner', '2026-01-01');
     INSERT INTO session (id, expiresAt, token, createdAt, updatedAt, userId) VALUES ('session', '2027-01-01', 'token', '2026-01-01', '2026-01-01', 'eligible');
     INSERT INTO account (id, issuer, accountId, providerId, userId, createdAt, updatedAt) VALUES ('account', 'credential', 'eligible', 'credential', 'eligible', '2026-01-01', '2026-01-01');`);
-  expect(await purgeRequestedUsers(f.bindings, now)).toEqual({
+  expect(await purgeRequestedUsers(f.bindings, "run-1", now)).toEqual({
     purged: 1,
     blocked: 3,
   });
@@ -59,11 +59,11 @@ it("preserves retained references and rotates blocked users so later requests ca
       .run(`blocked-${i}`);
   }
   f.insertUser("later", "2026-08-01");
-  expect(await purgeRequestedUsers(f.bindings, now)).toEqual({
+  expect(await purgeRequestedUsers(f.bindings, "run-1", now)).toEqual({
     purged: 0,
     blocked: 25,
   });
-  expect(await purgeRequestedUsers(f.bindings, now)).toEqual({
+  expect(await purgeRequestedUsers(f.bindings, "run-1", now)).toEqual({
     purged: 1,
     blocked: 24,
   });
@@ -90,7 +90,7 @@ it("preserves former members referenced by retained contracts and their audit ev
       (id, contract_id, actor_user_id, type, created_at)
     VALUES ('retained-event', 'retained-contract', 'event-actor', 'voided', '2026-01-01');
   `);
-  expect(await purgeRequestedUsers(f.bindings, now)).toEqual({
+  expect(await purgeRequestedUsers(f.bindings, "run-1", now)).toEqual({
     purged: 1,
     blocked: 3,
   });
@@ -148,7 +148,7 @@ it.each([
       f.database.exec(sql);
       interleaved = true;
     });
-    expect(await purgeRequestedUsers(f.bindings, now)).toEqual({
+    expect(await purgeRequestedUsers(f.bindings, "run-1", now)).toEqual({
       purged: 0,
       blocked: 1,
     });
@@ -287,7 +287,7 @@ it("records a user's own request once and permits cancellation", async () => {
     ).status,
   ).toBe(200);
   expect(events()).toHaveLength(2);
-  expect(await purgeRequestedUsers(f.bindings, now)).toEqual({
+  expect(await purgeRequestedUsers(f.bindings, "run-1", now)).toEqual({
     purged: 0,
     blocked: 0,
   });

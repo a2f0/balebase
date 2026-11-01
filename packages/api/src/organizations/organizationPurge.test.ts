@@ -26,7 +26,7 @@ it("purges only organizations past 30 days and honors a restore or renewed delet
       "UPDATE organization SET deletedAt = '2026-09-28' WHERE id = 'renewed'",
     );
   });
-  expect(await purgeDeletedOrganizations(f.bindings, now)).toEqual({
+  expect(await purgeDeletedOrganizations(f.bindings, "run-1", now)).toEqual({
     purged: 2,
     skipped: 2,
     failed: 0,
@@ -38,7 +38,7 @@ it("purges only organizations past 30 days and honors a restore or renewed delet
       id,
     })),
   );
-  expect(await purgeDeletedOrganizations(f.bindings, now)).toEqual({
+  expect(await purgeDeletedOrganizations(f.bindings, "run-1", now)).toEqual({
     purged: 0,
     skipped: 0,
     failed: 0,
@@ -55,7 +55,7 @@ it("bounds organization purges to 25 and makes progress across repeated runs", a
     const id = `org-${String(i).padStart(2, "0")}`;
     insert.run(id, id, id);
   }
-  expect(await purgeDeletedOrganizations(f.bindings, now)).toEqual({
+  expect(await purgeDeletedOrganizations(f.bindings, "run-1", now)).toEqual({
     purged: 25,
     skipped: 0,
     failed: 0,
@@ -63,12 +63,12 @@ it("bounds organization purges to 25 and makes progress across repeated runs", a
   expect(
     f.database.query("SELECT id FROM organization ORDER BY id").all(),
   ).toEqual(Array.from({ length: 5 }, (_, i) => ({ id: `org-${i + 25}` })));
-  expect(await purgeDeletedOrganizations(f.bindings, now)).toEqual({
+  expect(await purgeDeletedOrganizations(f.bindings, "run-1", now)).toEqual({
     purged: 5,
     skipped: 0,
     failed: 0,
   });
-  expect(await purgeDeletedOrganizations(f.bindings, now)).toEqual({
+  expect(await purgeDeletedOrganizations(f.bindings, "run-1", now)).toEqual({
     purged: 0,
     skipped: 0,
     failed: 0,
@@ -290,7 +290,7 @@ it("isolates failing organizations, retains partial counters, and rotates the ba
       organizationId: "org-24",
     });
     f.database.exec("DROP TRIGGER reject_selected_purges");
-    expect(await purgeDeletedOrganizations(f.bindings, now)).toEqual({
+    expect(await purgeDeletedOrganizations(f.bindings, "run-1", now)).toEqual({
       purged: 24,
       skipped: 0,
       failed: 0,

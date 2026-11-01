@@ -16,8 +16,10 @@ import { formatRoles, hasRole } from "../organizations/organizationState";
 import { api } from "../shared/apiClient";
 import { countLabel, formatDate } from "../shared/labels";
 import { useLoad } from "../shared/useLoad";
+import { adminUserIdForPath, adminUserPath } from "../workspace/workspacePaths";
 import { AdminDeletionMenu } from "./AdminDeletionMenu";
 import { AdminIdentity } from "./AdminIdentity";
+import { AdminUserHistory } from "./AdminUserHistory";
 import { useAdminUserDeletion } from "./adminUserDeletion";
 import { adminUserListQuery, adminUserPageSize } from "./adminUserList";
 
@@ -26,10 +28,30 @@ interface UserListing {
   users: AdminUser[];
 }
 
+/** Every account on the platform, or one person's platform history. */
 export function AdminUsers({
   currentUserId,
+  onNavigate,
+  pathname,
 }: {
   currentUserId?: string | undefined;
+  onNavigate: (pathname: string) => void;
+  pathname: string;
+}) {
+  const userId = adminUserIdForPath(pathname);
+  return userId ? (
+    <AdminUserHistory key={userId} onNavigate={onNavigate} userId={userId} />
+  ) : (
+    <AdminUserList currentUserId={currentUserId} onNavigate={onNavigate} />
+  );
+}
+
+function AdminUserList({
+  currentUserId,
+  onNavigate,
+}: {
+  currentUserId: string | undefined;
+  onNavigate: (pathname: string) => void;
 }) {
   const [page, setPage] = useState(0);
   const {
@@ -76,6 +98,7 @@ export function AdminUsers({
           currentUserId={currentUserId}
           lifecycle={lifecycle}
           listing={listing}
+          onNavigate={onNavigate}
           onPageChange={setPage}
           page={page}
         />
@@ -90,6 +113,7 @@ function UserSection({
   hasError,
   listing,
   lifecycle,
+  onNavigate,
   onPageChange,
   page,
 }: {
@@ -98,6 +122,7 @@ function UserSection({
   hasError: boolean;
   listing?: UserListing | undefined;
   lifecycle: ReturnType<typeof useAdminUserDeletion>;
+  onNavigate: (pathname: string) => void;
   onPageChange: (page: number) => void;
   page: number;
 }) {
@@ -115,6 +140,7 @@ function UserSection({
           <UserTable
             currentUserId={currentUserId}
             lifecycle={lifecycle}
+            onNavigate={onNavigate}
             users={listing.users}
           />
           <Pagination
@@ -137,10 +163,12 @@ function UserTable({
   currentUserId,
   users,
   lifecycle,
+  onNavigate,
 }: {
   currentUserId: string | undefined;
   users: AdminUser[];
   lifecycle: ReturnType<typeof useAdminUserDeletion>;
+  onNavigate: (pathname: string) => void;
 }) {
   return (
     <div className="tableWrap">
@@ -164,6 +192,7 @@ function UserTable({
               currentUserId={currentUserId}
               key={user.id}
               lifecycle={lifecycle}
+              onNavigate={onNavigate}
               user={user}
             />
           ))}
@@ -177,10 +206,12 @@ function UserRow({
   currentUserId,
   user,
   lifecycle,
+  onNavigate,
 }: {
   currentUserId: string | undefined;
   user: AdminUser;
   lifecycle: ReturnType<typeof useAdminUserDeletion>;
+  onNavigate: (pathname: string) => void;
 }) {
   const status = statusFor(user);
   const isAdmin = hasRole(user.role, "admin");
@@ -209,20 +240,26 @@ function UserRow({
           busy={lifecycle.userId === user.id}
           deletionDisabled={!user.deletionRequestedAt && isAdmin}
           disabled={lifecycle.userId !== undefined}
-          extraItems={
-            isAdmin
+          extraItems={[
+            ...(isAdmin
               ? [
                   {
                     // Revoking your own access would lock you out.
                     disabled: user.id === currentUserId,
-                    icon: "lock",
+                    icon: "lock" as const,
                     id: "revoke-admin",
                     label: "Revoke root admin",
                     onSelect: () => void lifecycle.revokeAdmin(user),
                   },
                 ]
-              : []
-          }
+              : []),
+            {
+              icon: "list",
+              id: "history",
+              label: "View history",
+              onSelect: () => onNavigate(adminUserPath(user.id)),
+            },
+          ]}
           label={
             user.deletionRequestedAt ? "Cancel deletion" : "Mark for deletion"
           }

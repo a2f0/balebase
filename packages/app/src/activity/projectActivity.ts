@@ -1,5 +1,6 @@
 import type { ActivityEvent } from "@balebase/validators/activity";
 import { textValue } from "./activityLabels";
+import { systemReasonLabel } from "./systemActivity";
 
 const fieldLabels: Record<string, string> = {
   description: "Description",
@@ -18,7 +19,9 @@ export function projectActivitySummary({
       return textValue(details.userName) || textValue(details.userEmail);
     case "project.form_enabled":
     case "project.form_disabled":
-      return textValue(details.title);
+      return [textValue(details.title), systemReasonLabel(details.reason)]
+        .filter(Boolean)
+        .join(" · ");
     case "project.updated":
       return (Array.isArray(details.changes) ? details.changes : [])
         .map((change: unknown) => {

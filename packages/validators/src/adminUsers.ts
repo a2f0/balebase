@@ -17,6 +17,36 @@ const AdminUserSchema = z.object({
 });
 export type AdminUser = z.infer<typeof AdminUserSchema>;
 
+/**
+ * Who made a platform change: a Balebase user, or an operator running
+ * `auth:set-role`, who has only the label they gave and no user ID.
+ */
+const PlatformActorSchema = z.object({
+  email: z.string(),
+  id: z.string().nullable(),
+  kind: z.enum(["user", "operator"]),
+  name: z.string(),
+});
+
+/** One platform role change or account deletion request or cancellation. */
+const AdminUserHistoryEventSchema = z.object({
+  action: z.enum([
+    "admin_revoked",
+    "role_set",
+    "deletion_requested",
+    "deletion_canceled",
+  ]),
+  actor: PlatformActorSchema,
+  id: z.string(),
+  /** Role changes only. */
+  newRole: z.string().nullable(),
+  occurredAt: z.string(),
+  previousRole: z.string().nullable(),
+  /** Deletion events only: when the request they made or canceled was made. */
+  requestedAt: z.string().nullable(),
+});
+export type AdminUserHistoryEvent = z.infer<typeof AdminUserHistoryEventSchema>;
+
 export const adminUsersRoutes = {
   list: route({
     method: "GET",
@@ -31,6 +61,16 @@ export const adminUsersRoutes = {
         .default(0),
     }),
     response: z.object({ total: z.number(), users: z.array(AdminUserSchema) }),
+  }),
+  history: route({
+    method: "GET",
+    path: "/api/admin/users/:userId/history",
+    query: z.object({ cursor: z.string().max(500).optional() }),
+    response: z.object({
+      events: z.array(AdminUserHistoryEventSchema),
+      nextCursor: z.string().nullable(),
+      user: z.object({ email: z.string(), id: z.string(), name: z.string() }),
+    }),
   }),
   markForDeletion: route({
     method: "POST",

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import { route } from "./route";
 
 const JobDefinitionSchema = z.object({
@@ -53,6 +54,19 @@ const JobLogSchema = z.object({
   details: JobLogDetailsSchema,
 });
 
+/** One manual maintenance request, kept after its run's history expires. */
+const MaintenanceRequestSchema = z.object({
+  /** The requester as they were when they asked. */
+  actor: z.object({ email: z.string(), id: z.string(), name: z.string() }),
+  id: z.string(),
+  jobId: z.string(),
+  /** The request joined a run that was already queued or running. */
+  joinedActiveRun: z.boolean(),
+  requestedAt: z.string(),
+  runId: z.string(),
+});
+export type MaintenanceRequest = z.infer<typeof MaintenanceRequestSchema>;
+
 export const adminJobsRoutes = {
   list: route({
     method: "GET",
@@ -93,6 +107,25 @@ export const adminJobsRoutes = {
     }),
     response: z.object({
       runs: z.array(JobRunSchema),
+      nextCursor: z.string().nullable(),
+    }),
+  }),
+  /** Purged accounts and organizations, newest first; kept after job history. */
+  purges: route({
+    method: "GET",
+    path: "/api/admin/jobs/purges",
+    query: ActivityQuerySchema,
+    response: ActivityPageSchema,
+  }),
+  requests: route({
+    method: "GET",
+    path: "/api/admin/jobs/requests",
+    query: z.object({
+      jobId: z.string().max(100).optional(),
+      cursor: z.string().max(500).optional(),
+    }),
+    response: z.object({
+      requests: z.array(MaintenanceRequestSchema),
       nextCursor: z.string().nullable(),
     }),
   }),
