@@ -7,9 +7,18 @@ import { activityProviderNames } from "@balebase/validators/rules";
 import { formatDate } from "../shared/labels";
 import { textValue } from "./activityLabels";
 
-/** Who made a change: a person, Balebase's maintenance, or a provider. */
+/** The system source of what a signing link did (the API's signing workflow). */
+const contractSigningSource = "contractSigning";
+
+/**
+ * Who made a change: a person, Balebase's maintenance or signing workflow, or
+ * a provider.
+ */
 export function actorName(actor: ActivityActor) {
-  if (actor.type === "system") return `${productName} maintenance`;
+  if (actor.type === "system")
+    return actor.source === contractSigningSource
+      ? `${productName} signing`
+      : `${productName} maintenance`;
   if (actor.type === "provider")
     return Reflect.get(activityProviderNames, actor.source ?? "") ?? actor.name;
   return actor.name || actor.email;
@@ -17,7 +26,10 @@ export function actorName(actor: ActivityActor) {
 
 /** The line under an actor: a person's email, or what kind of change it was. */
 export function actorDetail(actor: ActivityActor) {
-  if (actor.type === "system") return "Automatic maintenance";
+  if (actor.type === "system")
+    return actor.source === contractSigningSource
+      ? "Signing link"
+      : "Automatic maintenance";
   if (actor.type === "provider") return "Provider update";
   return actor.email;
 }

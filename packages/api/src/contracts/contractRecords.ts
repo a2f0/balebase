@@ -6,7 +6,11 @@ import type {
   SigningOrder,
 } from "@balebase/validators/contracts";
 import type { ApiKeyPrincipal } from "../auth/apiEnv";
-import { rowActivityStatement } from "../shared/activity";
+import {
+  contractSigningActor,
+  rowActivityStatement,
+  systemActivityRowsStatement,
+} from "../shared/activity";
 import type { ContractMail } from "./contractMail";
 
 export interface ContractRow {
@@ -246,6 +250,41 @@ export function contractActivityStatement(
       table: "contracts",
     },
     condition,
+  );
+}
+
+/**
+ * Shared activity no person recorded about a contract: a signer's decline or
+ * the contract's completion, by the signing workflow and caused by the
+ * contract's own event, snapshotting the row inside the batch. Records
+ * nothing unless the contract matches `condition`.
+ */
+export function contractSigningActivityStatement(
+  database: D1Database,
+  input: {
+    action: string;
+    contractEventId: string;
+    contractId: string;
+    details: { bindings: (string | number | null)[]; sql: string };
+  },
+  condition: { bindings: (string | number | null)[]; sql: string },
+) {
+  return systemActivityRowsStatement(
+    database,
+    contractSigningActor(input.contractEventId),
+    new Date().toISOString(),
+    {
+      bindings: [
+        input.action,
+        ...input.details.bindings,
+        input.contractId,
+        ...condition.bindings,
+      ],
+      sql: `SELECT organization_id, 'contract' AS root_type, id AS root_id,
+                   title AS root_label, 'contract' AS subject_type,
+                   id AS subject_id, ? AS action, ${input.details.sql} AS details
+            FROM contracts WHERE id = ? AND (${condition.sql})`,
+    },
   );
 }
 

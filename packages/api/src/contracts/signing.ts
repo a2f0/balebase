@@ -7,6 +7,8 @@ import { sendDeclined } from "./contractMail";
 import { isEmbeddablePng } from "./contractPdf";
 import {
   type ContractRow,
+  contractSignerCount,
+  contractSigningActivityStatement,
   eventStatement,
   type FieldRow,
   findContractById,
@@ -229,14 +231,35 @@ signing.post("/:token/decline", async (context) => {
   const database = context.env.DB;
   const now = new Date().toISOString();
   const guard = [recipient.id, contract.id];
+  const eventId = crypto.randomUUID();
   // One transaction, as with signing: the event, the decline, and the
-  // contract's end all land together or not at all.
+  // contract's end all land together or not at all. The shared feed names the
+  // signer only by recipient ID; their address, IP, and reason stay in the
+  // contract's own event.
   const results = await database.batch([
+    contractSigningActivityStatement(
+      database,
+      {
+        action: "contract.declined",
+        contractEventId: eventId,
+        contractId: contract.id,
+        details: {
+          bindings: [recipient.id],
+          sql: `json_object('recipientId', ?,
+            'signerCount', ${contractSignerCount},
+            'signedCount', (SELECT COUNT(*) FROM contract_recipients
+              WHERE contract_recipients.contract_id = contracts.id
+                AND contract_recipients.status = 'signed'))`,
+        },
+      },
+      { bindings: guard, sql: stillSignable },
+    ),
     eventStatement(
       database,
       {
         contractId: contract.id,
         detail: reason || null,
+        id: eventId,
         ip: clientIp(context),
         recipientId: recipient.id,
         type: "declined",
@@ -262,7 +285,7 @@ signing.post("/:token/decline", async (context) => {
       )
       .bind(now, contract.id),
   ]);
-  if (!results[1]?.meta.changes) {
+  if (!results[2]?.meta.changes) {
     return cannotSign(context, contract, recipient);
   }
   try {

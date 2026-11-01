@@ -1,5 +1,9 @@
 import { stillManages } from "../organizations/organizationMembers";
-import { type ActivityActor, activityBatch } from "../shared/activity";
+import {
+  type ActivityActor,
+  activityBatch,
+  type SystemActor,
+} from "../shared/activity";
 import { trackedPut } from "../shared/storage";
 import type { Bindings } from "../types";
 import {
@@ -13,6 +17,8 @@ import {
 import {
   jsonBoolean,
   requirementActivityStatement,
+  type ScreeningActor,
+  screeningActivityStatement,
 } from "./requirementActivity";
 import { buildScreeningConsentPdf } from "./screeningConsentPdf";
 import type { ScreeningDisclosures } from "./screeningDisclosures";
@@ -33,14 +39,24 @@ export interface CheckrScreeningRow {
   checkr_refresh_revision: number;
 }
 
+/** What brought a refresh: a manager, Checkr's webhook, or the hourly job. */
+export type ScreeningRefreshVia = "manual" | "scheduled" | "webhook";
+
 // Records the current Checkr report state on an ordered screening, and clears
 // any refresh requested before this one began. Returns null when another
-// refresh or edit changed it first. Every attempt records checkr_checked_at,
-// so a screening Checkr keeps failing on cannot hold its place at the front
-// of the scheduled refresh.
+// refresh or edit changed it first, or when a manager's refresh finds them no
+// longer an owner or admin. Every attempt records checkr_checked_at, so a
+// screening Checkr keeps failing on cannot hold its place at the front of the
+// scheduled refresh. A refresh that changes the screening's status, report
+// status, or result records `employee_requirement.screening_updated` in the
+// same transaction, by the manager who asked or by Checkr; a provider event
+// its cause already recorded holds the change back for a later refresh, so
+// the change never lands without its history.
 export async function refreshCheckrScreening(
   env: Bindings,
   row: CheckrScreeningRow,
+  actor: ScreeningActor,
+  via: ScreeningRefreshVia,
 ) {
   const checkedAt = new Date().toISOString();
   const report = await getCheckrReport(env, row.checkr_report_id).catch(
@@ -71,38 +87,100 @@ export async function refreshCheckrScreening(
       ? "pending"
       : "in_progress";
   const now = new Date().toISOString();
-  const refreshed = await env.DB.prepare(
-    `UPDATE employee_requirements
-     SET checkr_report_status = ?, checkr_result = ?, status = ?,
-         completed_at = CASE WHEN ? = 'complete'
-           THEN COALESCE(completed_at, ?) ELSE NULL END,
-         updated_at = ?, checkr_checked_at = ?,
-         checkr_refresh_requested_at = CASE
-           WHEN checkr_refresh_requested_at <= ? THEN NULL
-           ELSE checkr_refresh_requested_at
-         END,
-         checkr_refresh_revision = checkr_refresh_revision + 1
-     WHERE id = ? AND organization_id = ? AND checkr_report_id = ?
-       AND checkr_refresh_revision = ?`,
-  )
-    .bind(
-      reportStatus,
-      report.result ?? null,
-      nextStatus,
-      nextStatus,
-      now,
-      now,
-      checkedAt,
-      checkedAt,
-      row.id,
-      row.organization_id,
-      row.checkr_report_id,
-      row.checkr_refresh_revision,
-    )
-    .run();
-  if (!refreshed.meta.changes) return null;
+  const result = report.result ?? null;
+  const { changed, guard } = refreshGuard(row, actor, {
+    reportStatus,
+    result,
+    status: nextStatus,
+  });
+  const [, refreshed] = await activityBatch(
+    env.DB,
+    "type" in actor ? undefined : actor.apiKey,
+    [
+      screeningActivityStatement(
+        env.DB,
+        actor,
+        {
+          action: "employee_requirement.screening_updated",
+          details: {
+            bindings: [via, nextStatus, reportStatus, result, result],
+            sql: `'via', ?, 'previousStatus', status, 'status', ?,
+              'previousReportStatus', checkr_report_status,
+              'reportStatus', ?,
+              'resultChanged', ${jsonBoolean("checkr_result IS NOT ?")},
+              'hasResult', ${jsonBoolean("? IS NOT NULL")}`,
+          },
+          organizationId: row.organization_id,
+          requirementId: row.id,
+        },
+        {
+          bindings: [...guard.bindings, ...changed.bindings],
+          sql: `${guard.sql} AND ${changed.sql}`,
+        },
+      ),
+      // changes() is the event's insert: a change without its event waits.
+      env.DB.prepare(
+        `UPDATE employee_requirements
+         SET checkr_report_status = ?, checkr_result = ?, status = ?,
+             completed_at = CASE WHEN ? = 'complete'
+               THEN COALESCE(completed_at, ?) ELSE NULL END,
+             updated_at = ?, checkr_checked_at = ?,
+             checkr_refresh_requested_at = CASE
+               WHEN checkr_refresh_requested_at <= ? THEN NULL
+               ELSE checkr_refresh_requested_at
+             END,
+             checkr_refresh_revision = checkr_refresh_revision + 1
+         WHERE ${guard.sql} AND (NOT ${changed.sql} OR changes() > 0)`,
+      ).bind(
+        reportStatus,
+        result,
+        nextStatus,
+        nextStatus,
+        now,
+        now,
+        checkedAt,
+        checkedAt,
+        ...guard.bindings,
+        ...changed.bindings,
+      ),
+    ],
+  );
+  if (!refreshed?.meta.changes) return null;
   const notifications = await sendPendingScreeningNotifications(env, row.id);
   return { reportStatus, result: report.result ?? null, notifications };
+}
+
+/**
+ * The refresh's guard (the revision it read, and for a manager that they
+ * still manage) and whether it changes what the screening shows.
+ */
+function refreshGuard(
+  row: CheckrScreeningRow,
+  actor: ScreeningActor,
+  next: { reportStatus: string; result: string | null; status: string },
+) {
+  const manages =
+    "type" in actor
+      ? { bindings: [], sql: "1 = 1" }
+      : stillManages(row.organization_id, actor.userId);
+  return {
+    changed: {
+      bindings: [next.status, next.reportStatus, next.result],
+      sql: `(status IS NOT ? OR checkr_report_status IS NOT ?
+        OR checkr_result IS NOT ?)`,
+    },
+    guard: {
+      bindings: [
+        row.id,
+        row.organization_id,
+        row.checkr_report_id,
+        row.checkr_refresh_revision,
+        ...manages.bindings,
+      ],
+      sql: `id = ? AND organization_id = ? AND checkr_report_id = ?
+        AND checkr_refresh_revision = ? AND ${manages.sql}`,
+    },
+  };
 }
 
 /**
@@ -247,6 +325,7 @@ export async function submitCheckrScreening(
         plan.candidateId,
         claim.checkr_attempt_consent_id,
         plan.report,
+        { actor: { userId: subject.userId }, adopted: true },
       );
     }
     if (plan.kind === "wait") {
@@ -273,6 +352,7 @@ export async function submitCheckrScreening(
         plan.candidateId,
         claim.checkr_attempt_consent_id,
         report,
+        { actor: { userId: subject.userId }, adopted: false },
       );
     }
     const consent = await recordConsent(env, subject, submission, signer);
@@ -291,6 +371,7 @@ export async function submitCheckrScreening(
       candidateId,
       consent.id,
       report,
+      { actor: { userId: subject.userId }, adopted: false },
     );
   } catch (cause) {
     const rejected = cause instanceof RejectedDetails;
@@ -435,6 +516,7 @@ export interface CheckrAttemptRow {
 export async function recoverCheckrAttempt(
   env: Bindings,
   row: CheckrAttemptRow,
+  actor: SystemActor,
 ) {
   const scope = { organizationId: row.organization_id, requirementId: row.id };
   const now = new Date();
@@ -475,15 +557,20 @@ export async function recoverCheckrAttempt(
       ? await candidateReport(env, attempt.checkr_candidate_id)
       : null;
     if (report && attempt.checkr_candidate_id) {
-      await storeReport(
+      const stored = await storeReport(
         env.DB,
         scope,
         fence,
         attempt.checkr_candidate_id,
         attempt.checkr_attempt_consent_id,
         report,
+        { actor, adopted: true },
       );
-      return "adopted";
+      if (stored.kind === "submitted") return "adopted";
+      // Moved on, or this cause already adopted a report here: let go, so a
+      // later refresh settles it under its own cause.
+      await releaseSubmission(env.DB, scope, fence, false);
+      return "busy";
     }
     const waiting = reportMayArrive(attempt.checkr_report_requested_at);
     await releaseSubmission(env.DB, scope, fence, !waiting);
@@ -811,6 +898,22 @@ async function recordConsent(
   return { id, pdf };
 }
 
+/**
+ * Who stored a report: the person whose submission ordered (or, after a lost
+ * response, found) it, or Checkr when a webhook or the hourly refresh adopted
+ * a report for an attempt its person did not finish.
+ */
+type ReportStore =
+  | { actor: ActivityActor; adopted: boolean }
+  | { actor: SystemActor; adopted: true };
+
+/**
+ * Stores the attempt's report and records it in the same transaction:
+ * `employee_requirement.screening_submitted` by the person, or
+ * `employee_requirement.screening_report_adopted` by Checkr. The details name
+ * the authorization and the report's status, never the person's details or
+ * the report's contents. The write needs its event (`changes() > 0`).
+ */
 async function storeReport(
   database: D1Database,
   scope: AttemptScope,
@@ -818,39 +921,62 @@ async function storeReport(
   candidateId: string,
   consentId: string | null,
   report: StoredReport,
+  store: ReportStore,
 ): Promise<ScreeningSubmitResult> {
-  const stored = await database
-    .prepare(
-      `UPDATE employee_requirements
-       SET checkr_candidate_id = ?, checkr_report_id = ?,
-           checkr_report_status = ?, checkr_result = ?, checkr_consent_id = ?,
-           status = 'in_progress', checkr_starting_at = NULL,
-           checkr_start_lease = NULL, checkr_start_nonce = NULL,
-           checkr_start_nonce_at = NULL,
-           checkr_attempt_consent_id = NULL, checkr_attempt_digest = NULL,
-           checkr_report_requested_at = NULL,
-           checkr_refresh_requested_at = ?,
-           checkr_refresh_revision = checkr_refresh_revision + 1,
-           updated_at = ?
-       WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?
-         AND checkr_start_lease = ?`,
-    )
-    .bind(
-      candidateId,
-      report.id,
-      report.status,
-      report.result,
-      consentId,
-      // An adopted report may already be finished; the next refresh settles it.
-      report.status === "pending" ? null : new Date().toISOString(),
-      new Date().toISOString(),
-      scope.requirementId,
-      scope.organizationId,
-      fence.nonce,
-      fence.lease,
-    )
-    .run();
-  if (!stored.meta.changes)
+  const guard = {
+    bindings: [fence.nonce, fence.lease],
+    sql: "checkr_start_nonce = ? AND checkr_start_lease = ?",
+  };
+  const [, stored] = await database.batch([
+    screeningActivityStatement(
+      database,
+      store.actor,
+      {
+        action:
+          "type" in store.actor
+            ? "employee_requirement.screening_report_adopted"
+            : "employee_requirement.screening_submitted",
+        details: {
+          bindings: [consentId, report.status, store.adopted ? 1 : 0],
+          sql: `'consentId', ?, 'reportStatus', ?,
+            'adopted', ${jsonBoolean("? = 1")}`,
+        },
+        organizationId: scope.organizationId,
+        requirementId: scope.requirementId,
+      },
+      guard,
+    ),
+    database
+      .prepare(
+        `UPDATE employee_requirements
+         SET checkr_candidate_id = ?, checkr_report_id = ?,
+             checkr_report_status = ?, checkr_result = ?, checkr_consent_id = ?,
+             status = 'in_progress', checkr_starting_at = NULL,
+             checkr_start_lease = NULL, checkr_start_nonce = NULL,
+             checkr_start_nonce_at = NULL,
+             checkr_attempt_consent_id = NULL, checkr_attempt_digest = NULL,
+             checkr_report_requested_at = NULL,
+             checkr_refresh_requested_at = ?,
+             checkr_refresh_revision = checkr_refresh_revision + 1,
+             updated_at = ?
+         WHERE id = ? AND organization_id = ? AND ${guard.sql}
+           AND changes() > 0`,
+      )
+      .bind(
+        candidateId,
+        report.id,
+        report.status,
+        report.result,
+        consentId,
+        // An adopted report may already be finished; the next refresh settles it.
+        report.status === "pending" ? null : new Date().toISOString(),
+        new Date().toISOString(),
+        scope.requirementId,
+        scope.organizationId,
+        ...guard.bindings,
+      ),
+  ]);
+  if (!stored?.meta.changes)
     return conflict("This background check changed. Refresh and try again.");
   return { kind: "submitted", reportStatus: report.status };
 }

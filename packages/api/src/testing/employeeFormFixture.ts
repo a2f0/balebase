@@ -74,6 +74,15 @@ export function checkrResponses(call: CheckrCall) {
   return Response.json({ error: "unexpected" }, { status: 500 });
 }
 
+/** Checkr as the actor of one refresh run. */
+export function checkrRunActor() {
+  return {
+    causation: { id: crypto.randomUUID(), type: "job_run" },
+    provider: "checkr",
+    type: "provider",
+  } as const;
+}
+
 export function configureCheckr(
   fixture: Awaited<ReturnType<typeof createFixture>>,
 ) {

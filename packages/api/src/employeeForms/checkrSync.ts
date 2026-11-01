@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import type { SystemActor } from "../shared/activity";
 import { isRecord } from "../shared/jsonInput";
 import { readBoundedRequest } from "../shared/storage";
 import type { Bindings } from "../types";
@@ -19,7 +20,14 @@ const screeningRefreshConcurrency = 4;
 
 interface CheckrEventSubject {
   candidateId: string | null;
+  /** The webhook event's own ID, the cause its changes record. */
+  eventId: string | null;
   id: string;
+}
+
+/** Checkr, as the actor of what a webhook event or a refresh run brought. */
+function checkrActor(causation: { id: string; type: string } | null) {
+  return { causation, provider: "checkr", type: "provider" } as const;
 }
 
 // Checkr posts report events here. A verified event marks its screenings for
@@ -27,7 +35,9 @@ interface CheckrEventSubject {
 // the Checkr API, so duplicate or out-of-order deliveries settle on the
 // current state. When that refresh fails, the mark keeps the screening in the
 // hourly refresh below, even if it was already complete. An event for the
-// candidate of an unfinished submission adopts its report at once.
+// candidate of an unfinished submission adopts its report at once. Changes a
+// delivery brings are Checkr's, caused by its event ID, so a redelivery
+// records nothing twice.
 export async function handleCheckrWebhook(
   context: Context<{ Bindings: Bindings }>,
 ) {
@@ -71,11 +81,14 @@ export async function handleCheckrWebhook(
     const attempts = subject.candidateId
       ? await attemptsForCandidate(context.env.DB, subject.candidateId)
       : [];
+    const actor = checkrActor(
+      subject.eventId ? { id: subject.eventId, type: "checkr_event" } : null,
+    );
     context.executionCtx.waitUntil(
       Promise.all([
-        refreshEventScreenings(context.env, screenings),
+        refreshEventScreenings(context.env, screenings, actor),
         ...attempts.map((attempt) =>
-          recoverCheckrAttempt(context.env, attempt),
+          recoverCheckrAttempt(context.env, attempt, actor),
         ),
       ]).catch((cause) => {
         console.error("Could not apply a Checkr webhook event.", cause);
@@ -89,11 +102,16 @@ export async function handleCheckrWebhook(
 // their person left unfinished, then re-reads the least recently checked
 // screenings that Checkr has not finished or that a webhook asked to refresh.
 // Also retries completion emails and reports their delivery outcome to admins.
-export async function refreshActiveCheckrScreenings(env: Bindings) {
+// What the run finds changed at Checkr is Checkr's, caused by the run.
+export async function refreshActiveCheckrScreenings(
+  env: Bindings,
+  runId: string,
+) {
   const notifications = await sendPendingScreeningNotifications(env);
   if (!env.CHECKR_API_KEY)
     return { refreshed: 0, skipped: true, notifications };
-  const recovery = await recoverStaleAttempts(env);
+  const actor = checkrActor({ id: runId, type: "job_run" });
+  const recovery = await recoverStaleAttempts(env, actor);
   const { results } = await env.DB.prepare(
     `SELECT id, organization_id, status, checkr_report_id,
             checkr_report_status, checkr_refresh_revision
@@ -118,7 +136,9 @@ export async function refreshActiveCheckrScreenings(env: Bindings) {
     const outcomes = await Promise.allSettled(
       results
         .slice(index, index + screeningRefreshConcurrency)
-        .map((screening) => refreshCheckrScreening(env, screening)),
+        .map((screening) =>
+          refreshCheckrScreening(env, screening, actor, "scheduled"),
+        ),
     );
     for (const outcome of outcomes) {
       if (outcome.status === "rejected") failures.push(outcome.reason);
@@ -144,7 +164,7 @@ export async function refreshActiveCheckrScreenings(env: Bindings) {
 // Attempts idle long enough that no report request can still arrive: their
 // person may have lost a response or left the organization. Each recovery
 // records checkr_checked_at, so attempts Checkr keeps failing on rotate out.
-async function recoverStaleAttempts(env: Bindings) {
+async function recoverStaleAttempts(env: Bindings, actor: SystemActor) {
   const now = Date.now();
   const settled = new Date(now - reportSettleMs).toISOString();
   const { results } = await env.DB.prepare(
@@ -167,7 +187,7 @@ async function recoverStaleAttempts(env: Bindings) {
     )
     .all<CheckrAttemptRow>();
   const outcomes = await Promise.allSettled(
-    results.map((attempt) => recoverCheckrAttempt(env, attempt)),
+    results.map((attempt) => recoverCheckrAttempt(env, attempt, actor)),
   );
   return {
     failures: outcomes.flatMap((outcome) =>
@@ -199,9 +219,10 @@ async function attemptsForCandidate(database: D1Database, candidateId: string) {
 async function refreshEventScreenings(
   env: Bindings,
   screenings: CheckrScreeningRow[],
+  actor: SystemActor,
 ) {
   for (const screening of screenings) {
-    await refreshCheckrScreening(env, screening);
+    await refreshCheckrScreening(env, screening, actor, "webhook");
   }
 }
 
@@ -228,7 +249,10 @@ async function requestScreeningRefreshes(
 function checkrEventSubject(
   event: unknown,
 ): CheckrEventSubject | "ignored" | null {
-  if (!isRecord<"data" | "type">(event) || typeof event.type !== "string") {
+  if (
+    !isRecord<"data" | "id" | "type">(event) ||
+    typeof event.type !== "string"
+  ) {
     return null;
   }
   const data = event.data;
@@ -242,6 +266,7 @@ function checkrEventSubject(
   }
   if (!event.type.startsWith("report.")) return "ignored";
   return {
+    eventId: typeof event.id === "string" && event.id ? event.id : null,
     candidateId:
       typeof object.candidate_id === "string" && object.candidate_id
         ? object.candidate_id

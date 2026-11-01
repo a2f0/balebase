@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   checkrResponses,
+  checkrRunActor,
   checkrWebhook,
   configureCheckr,
   createFixture,
@@ -363,7 +364,10 @@ describe("Checkr screening recovery", () => {
                 SET checkr_start_nonce_at = '2026-01-01T00:00:00.000Z'
                 WHERE id = ?`)
         .run(abandoned);
-      await refreshActiveCheckrScreenings(fixture.bindings);
+      await refreshActiveCheckrScreenings(
+        fixture.bindings,
+        crypto.randomUUID(),
+      );
       expect(
         fixture.database
           .query(`SELECT checkr_start_nonce, checkr_candidate_id
@@ -413,9 +417,9 @@ describe("Checkr screening recovery", () => {
                     checkr_report_requested_at = ?
                 WHERE id = ?`)
         .run(new Date().toISOString(), id);
-      expect(await recoverCheckrAttempt(fixture.bindings, stale)).toBe(
-        "waiting",
-      );
+      expect(
+        await recoverCheckrAttempt(fixture.bindings, stale, checkrRunActor()),
+      ).toBe("waiting");
       expect(
         fixture.database
           .query(
@@ -425,9 +429,9 @@ describe("Checkr screening recovery", () => {
       ).toEqual({ checkr_start_nonce: "attempt", checkr_starting_at: null });
 
       report = true;
-      expect(await recoverCheckrAttempt(fixture.bindings, stale)).toBe(
-        "adopted",
-      );
+      expect(
+        await recoverCheckrAttempt(fixture.bindings, stale, checkrRunActor()),
+      ).toBe("adopted");
       expect(
         fixture.database
           .query(
@@ -470,7 +474,7 @@ describe("Checkr screening recovery", () => {
       for (let run = 0; run < 2; run += 1) {
         attempted.push([]);
         await expect(
-          refreshActiveCheckrScreenings(fixture.bindings),
+          refreshActiveCheckrScreenings(fixture.bindings, crypto.randomUUID()),
         ).rejects.toThrow();
       }
       expect(attempted[0]).toHaveLength(24);

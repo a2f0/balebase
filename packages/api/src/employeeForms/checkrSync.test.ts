@@ -313,7 +313,12 @@ describe("Checkr sync", () => {
       expect(requested.checkr_refresh_requested_at).toEqual(expect.any(String));
 
       checkrAvailable = true;
-      expect(await refreshActiveCheckrScreenings(fixture.bindings)).toEqual({
+      expect(
+        await refreshActiveCheckrScreenings(
+          fixture.bindings,
+          crypto.randomUUID(),
+        ),
+      ).toEqual({
         notifications: {
           sent: 1,
           failed: 0,
@@ -362,7 +367,10 @@ describe("Checkr sync", () => {
     );
     try {
       expect(
-        await refreshActiveCheckrScreenings(withoutCheckrKey(fixture.bindings)),
+        await refreshActiveCheckrScreenings(
+          withoutCheckrKey(fixture.bindings),
+          crypto.randomUUID(),
+        ),
       ).toEqual({
         refreshed: 0,
         skipped: true,
@@ -375,7 +383,7 @@ describe("Checkr sync", () => {
       });
       expect(checkr.calls).toEqual([]);
       await expect(
-        refreshActiveCheckrScreenings(fixture.bindings),
+        refreshActiveCheckrScreenings(fixture.bindings, crypto.randomUUID()),
       ).rejects.toThrow("Could not refresh 1 Checkr screening(s).");
       expect(checkr.calls.map(({ url }) => url).toSorted()).toEqual([
         "/reports/report-1",
@@ -414,7 +422,7 @@ describe("Checkr sync", () => {
       for (let run = 0; run < 2; run += 1) {
         attempted.push([]);
         await expect(
-          refreshActiveCheckrScreenings(fixture.bindings),
+          refreshActiveCheckrScreenings(fixture.bindings, crypto.randomUUID()),
         ).rejects.toThrow("Could not refresh 24 Checkr screening(s).");
       }
       expect(attempted[0]).toHaveLength(24);
@@ -503,7 +511,12 @@ describe("Checkr sync", () => {
       };
       expect(kept.checkr_refresh_revision).toBe(1);
       expect(kept.checkr_refresh_requested_at).toEqual(expect.any(String));
-      expect(await refreshActiveCheckrScreenings(conflicted.bindings)).toEqual({
+      expect(
+        await refreshActiveCheckrScreenings(
+          conflicted.bindings,
+          crypto.randomUUID(),
+        ),
+      ).toEqual({
         notifications: {
           sent: 0,
           failed: 0,
