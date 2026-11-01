@@ -1,6 +1,12 @@
 import type { ActivityCausation } from "../shared/systemActivity";
 import type { Bindings } from "../types";
 import {
+  canceledSubscriptionStatements,
+  forgetRefusedCancellation,
+  recordCancellationIntent,
+  type SubscriptionCancellation,
+} from "./billingCancellations";
+import {
   attachCheckoutSessionToClaim,
   checkoutDeletionInProgress,
   clearExpiredCheckoutDeletionLease,
@@ -191,6 +197,7 @@ async function prepareCheckoutSubscriptionReplacement(
       environment,
       organizationId,
       existing.stripe_subscription_id,
+      undefined,
       { ...cause, replacedBySubscriptionId: subscription.id },
     );
   }
@@ -274,11 +281,16 @@ async function persistSubscription(
   // grace period. Stripe reports no end time for unpaid or paused
   // subscriptions, and processing time is never earlier than the real end.
   const now = new Date().toISOString();
-  const persist = (write: D1PreparedStatement, guard: BillingGuard) =>
+  const persist = (
+    write: D1PreparedStatement,
+    guard: BillingGuard,
+    before: D1PreparedStatement[] = [],
+  ) =>
     writeWithChange(
       environment.DB,
       write,
       cause && { cause, guard, organizationId, stored },
+      before,
     );
   if (checkoutSessionId) {
     const update = environment.DB.prepare(
@@ -370,11 +382,29 @@ async function persistSubscription(
     eventCreated,
     now,
   );
-  return persist(upsert, {
-    bindings: [subscription.id],
-    sql: `billing.stripe_subscription_id IS NULL
-          OR billing.stripe_subscription_id = ?`,
-  });
+  return persist(
+    upsert,
+    {
+      bindings: [subscription.id],
+      sql: `billing.stripe_subscription_id IS NULL
+            OR billing.stripe_subscription_id = ?`,
+    },
+    personsCancellation(environment.DB, subscription, stored),
+  );
+}
+
+/**
+ * A canceled subscription first records the person whose request canceled
+ * it, if Stripe's cancellation carries their intent's marker.
+ */
+function personsCancellation(
+  database: D1Database,
+  subscription: StripeSubscription,
+  stored: StoredSubscription,
+) {
+  return subscription.status === "canceled"
+    ? canceledSubscriptionStatements(database, subscription, stored.seats)
+    : [];
 }
 
 /** The subscription's fields as `organization_billing` stores them. */
@@ -398,7 +428,8 @@ function storedSubscription(
 
 /**
  * Keeps the upsert from changing a tracked field unless the event before it
- * recorded the change. A cause records one event per subscription, so a
+ * recorded the change, or the person whose request canceled the
+ * subscription is recorded instead (`billing.subscription_canceled`). A cause records one event per subscription, so a
  * redelivered Stripe event that now reads a newer state (its first delivery
  * stored but could not mark the receipt processed) would otherwise store
  * that state without history; Stripe's own event for it stores it instead.
@@ -412,11 +443,17 @@ const recordedOrUnchanged = `AND (changes() > 0 OR (
   AND organization_billing.seat_quantity IS excluded.seat_quantity
   AND organization_billing.cancel_at_period_end IS
       excluded.cancel_at_period_end
-  AND organization_billing.current_period_end IS excluded.current_period_end))`;
+  AND organization_billing.current_period_end IS excluded.current_period_end)
+  OR (excluded.stripe_status = 'canceled' AND EXISTS (
+    SELECT 1 FROM activity_events
+    WHERE organization_id = excluded.organization_id
+      AND action = 'billing.subscription_canceled'
+      AND subject_id = excluded.stripe_subscription_id)))`;
 
 /**
- * Runs `write` with, before it in the same batch, the event recording what
- * it changes, if anything. Returns whether `write` changed the row.
+ * Runs `write` with, before it in the same batch, `before` and then the
+ * event recording what it changes, if anything. Returns whether `write`
+ * changed the row.
  */
 async function writeWithChange(
   database: D1Database,
@@ -427,10 +464,12 @@ async function writeWithChange(
     organizationId: string;
     stored: StoredSubscription;
   } | null,
+  before: D1PreparedStatement[],
 ) {
   const results = await database.batch(
     change
       ? [
+          ...before,
           subscriptionChangeStatement(
             database,
             change.cause,
@@ -440,27 +479,47 @@ async function writeWithChange(
           ),
           write,
         ]
-      : [write],
+      : [...before, write],
   );
   return Number(results.at(-1)?.meta.changes) > 0;
 }
 
 /**
- * Cancels the subscription in Stripe and stores it. `cause` is set when a
- * new Checkout replaced it; without one, as when deleting an organization,
- * Stripe's confirmation records no event of its own.
+ * Cancels the subscription in Stripe and stores it. A `cancellation` is a
+ * person's (deleting an organization), recorded as theirs. `cause` is set
+ * when a new Checkout replaced it, recorded as Stripe's change.
  */
 export async function cancelStripeSubscription(
   environment: SubscriptionEnvironment,
   organizationId: string,
   subscriptionId: string,
+  cancellation?: SubscriptionCancellation,
   cause: SubscriptionChangeCause | null = null,
 ) {
   await withSubscriptionSyncLock(environment.DB, subscriptionId, async () => {
-    const subscription = await deleteStripeSubscription(
-      environment,
-      subscriptionId,
-    );
+    const intent = cancellation
+      ? await claimCancellationIntent(
+          environment,
+          organizationId,
+          subscriptionId,
+          cancellation,
+        )
+      : null;
+    if (intent === "resolved") return;
+    let subscription: StripeSubscription;
+    try {
+      subscription = await deleteStripeSubscription(
+        environment,
+        subscriptionId,
+        intent ?? undefined,
+      );
+    } catch (cause) {
+      if (intent) {
+        await forgetRefusedCancellation(environment.DB, subscriptionId, cause);
+      }
+      throw cause;
+    }
+    // Persisting the cancellation records the intent's event with it.
     await persistSubscription(
       environment,
       subscription,
@@ -471,14 +530,63 @@ export async function cancelStripeSubscription(
   });
 }
 
+/**
+ * Stores this request's cancellation intent. When an earlier request's
+ * intent is still unresolved, Stripe decides whose it is: a subscription
+ * already canceled was canceled by that request, so it is persisted, which
+ * credits that request ("resolved"); otherwise this request takes over.
+ * Returns the marker to send with this request's cancellation.
+ */
+async function claimCancellationIntent(
+  environment: SubscriptionEnvironment,
+  organizationId: string,
+  subscriptionId: string,
+  cancellation: SubscriptionCancellation,
+) {
+  const marker = await recordCancellationIntent(
+    environment.DB,
+    organizationId,
+    subscriptionId,
+    cancellation,
+  );
+  if (marker) return marker;
+  const current = await expandedSubscription(environment, subscriptionId);
+  if (current?.status === "canceled") {
+    await persistSubscription(
+      environment,
+      current,
+      Math.floor(Date.now() / 1000),
+      null,
+      organizationId,
+    );
+    return "resolved";
+  }
+  return recordCancellationIntent(
+    environment.DB,
+    organizationId,
+    subscriptionId,
+    cancellation,
+    true,
+  );
+}
+
+/**
+ * Cancels the subscription now. A `marker` is sent as the cancellation's
+ * comment, which Stripe returns with the subscription, so the cancellation
+ * can be told apart from one made elsewhere.
+ */
 async function deleteStripeSubscription(
   environment: Pick<Bindings, "STRIPE_SECRET_KEY">,
   subscriptionId: string,
+  marker?: string,
 ) {
+  const query = marker
+    ? `?${new URLSearchParams({ "cancellation_details[comment]": marker })}`
+    : "";
   const subscription = parseStripeSubscription(
     await stripeDelete(
       environment,
-      `/v1/subscriptions/${encodeURIComponent(subscriptionId)}`,
+      `/v1/subscriptions/${encodeURIComponent(subscriptionId)}${query}`,
     ),
   );
   if (subscription.status !== "canceled") {

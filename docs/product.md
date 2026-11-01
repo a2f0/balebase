@@ -697,22 +697,24 @@ on the connection. Manual sync can start a fresh attempt after failure.
 Sync jobs retain their source, requesting user, timestamps, outcome, and counts.
 Daily runs identify their source without inventing a human actor. The shared
 Activity feed records connecting a bank, manual sync requests, daily-sync
-setting changes with before/after values, disconnects, and deleting a
-connection's imported data, with user and API-key attribution in the same
-transaction as the mutation. Each connection's page shows its own history
-(`GET /api/finance/connections/:id/activity`, MCP
+setting changes with before/after values, login repairs through **Update
+login**, disconnects, and deleting a connection's imported data, with user and
+API-key attribution in the same transaction as the mutation. Each connection's
+page shows its own history (`GET /api/finance/connections/:id/activity`, MCP
 `list_finance_connection_activity`), including after it is disconnected.
 **Bank connections** activity requires Finance access. This activity remains
 until the connection's data or organization is purged; deleting the data keeps
-one event recording who deleted it and the number of accounts, transactions, and
-annotations removed. Apply migration `0081_record_finance_data_deletion.sql`
-before deploying the Worker that records it. Plaid's changes are recorded too,
-by Plaid: a status change, such as a login error, retries running out, or a
-recovery (`finance.connection_status_changed`, with the error code but not
-Plaid's message), transactions Plaid withdraws (`finance.transactions_removed`),
-and the accounts and transactions a new connection takes over from a
-disconnected one (`finance.records_carried_over`). A failure that leaves the
-connection in the same state records nothing new. Completed sync runs and
+one event recording who deleted it and the number of accounts, transactions,
+annotations, issues (and how many were open), and email links removed; the
+issues and links go with their transactions. Apply migration
+`0081_record_finance_data_deletion.sql` before deploying the Worker that
+records it. Plaid's changes are recorded too, by Plaid: a status change, such
+as a login error, retries running out, or a recovery
+(`finance.connection_status_changed`, with the error code but not Plaid's
+message), transactions Plaid withdraws (`finance.transactions_removed`), and
+the accounts and transactions a new connection takes over from a disconnected
+one (`finance.records_carried_over`). A failure that leaves the connection in
+the same state records nothing new. Completed sync runs and
 operational logs are retained for 30 days; operators can inspect them in the
 Jobs page or D1. Finance-authorized members can read the latest job on the
 connection page.
@@ -766,8 +768,17 @@ the Connections tab opens Plaid Link in update mode for that same Item. No
 products are requested and no public token is exchanged: the stored access
 token and sync cursor are kept, and the sync that follows resumes where the
 last successful one stopped, so imported records, categories, and annotations
-are untouched. Prefer it over disconnecting and reconnecting, which creates a
-new Item and relies on matching to carry history over.
+are untouched. When Link reports success, the app reports the repair, which
+records `finance.connection_repaired` on the connection with who reported it
+and its status and error code when Link opened, then starts the sync. Plaid
+tells only the browser, so this is the app's report: it must name, by its link
+token, an update session the same person opened for that connection in the last
+four hours, and each session is accepted once (`finance_login_repair_sessions`
+keeps the token's hash and that state). A report the API cannot take yet stays
+in the browser and is retried on later visits until its session would expire.
+An abandoned Link session records nothing. Prefer it
+over disconnecting and reconnecting, which creates a new Item and relies on
+matching to carry history over.
 
 Before retrying, anyone with finance access can check for a wider outage under
 **Bank status** on the connection's page (`/finance/connections/<id>`). It
@@ -968,18 +979,28 @@ Owners and organization admins can upgrade or manage billing at
 Portal. Starting Pro checkout records a `billing.checkout_started` event naming
 the owner or admin, the seat quantity, and the price, visible under **Billing**
 in Activity to owners and admins only; the Checkout session and subscription
-metadata also carry `started_by_user_id`. Every change Stripe reports to the
-stored subscription (status, plan, seats, cancellation at period end, period
-end, and a replacement Checkout's cancellation of the previous subscription)
-records `billing.subscription_changed` by Stripe with the values before and
-after, and every stored seat quantity change records `billing.seats_changed`
-with what asked for it (a membership change or the hourly reconciliation), in
-the same transaction. Both are under **Billing**, for owners and admins only;
-the person behind a change keeps their own event. Checkout uses Stripe's
-hosted page unless `STRIPE_PUBLISHABLE_KEY` holds a publishable key from the
-same Stripe account and mode as the secret key; then the billing page embeds
-Stripe's Payment Element, styled with the app's theme tokens. Add the following
-values to the ignored `.secrets/prod/app.env` before local billing work or a production
+metadata also carry `started_by_user_id`. Opening the Billing Portal records
+`billing.portal_opened` with the opener and the portal session ID (never its
+URL); Stripe's portal sessions take no metadata, so changes made there arrive
+as Stripe's own changes and are not tied to the opener. Deleting a Pro
+organization cancels its subscription first and records
+`billing.subscription_canceled` naming the owner or root admin, the
+subscription, its previous status, and its seats, even when the deletion then
+fails; the deletion event lists the subscriptions it canceled. Apply
+migration `0087_record_cancellations_and_repairs.sql` before deploying the
+Worker that records it. Every other change Stripe reports to the stored
+subscription (status, plan, seats, cancellation at period end, period end,
+and a replacement Checkout's cancellation of the previous subscription),
+including those made in the Billing Portal, records
+`billing.subscription_changed` by Stripe with the values before and after,
+and every stored seat quantity change records `billing.seats_changed` with
+what asked for it (a membership change or the hourly reconciliation), in the
+same transaction. Both are under **Billing**, for owners and admins only.
+Checkout uses Stripe's hosted page unless `STRIPE_PUBLISHABLE_KEY` holds a
+publishable key from the same Stripe account and mode as the secret key; then
+the billing page embeds Stripe's Payment Element, styled with the app's theme
+tokens. Add the following values to the ignored `.secrets/prod/app.env` before
+local billing work or a production
 API deployment:
 
 ```sh

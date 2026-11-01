@@ -49,7 +49,9 @@ const storedSubscription = `json_object(
  * will change a tracked field. `guard` must repeat that write's own
  * condition over `billing` (the organization's `organization_billing` row,
  * NULL when there is none), so nothing is recorded when it changes nothing.
- * Put it before the write, so it reads the stored values.
+ * Put it before the write, so it reads the stored values. A cancellation
+ * whose person is recorded (`billing.subscription_canceled`, by a statement
+ * earlier in the batch or before) is theirs, so Stripe records nothing.
  */
 export function subscriptionChangeStatement(
   database: D1Database,
@@ -90,6 +92,8 @@ export function subscriptionChangeStatement(
         after.seats,
         cancelAtPeriodEnd,
         after.periodEnd,
+        after.status,
+        after.subscriptionId,
       ],
       sql: `SELECT organization.id AS organization_id,
                    'organization_billing' AS root_type,
@@ -114,7 +118,12 @@ export function subscriptionChangeStatement(
                    OR billing.stripe_price_id IS NOT ?
                    OR billing.seat_quantity IS NOT ?
                    OR billing.cancel_at_period_end IS NOT ?
-                   OR billing.current_period_end IS NOT ?)`,
+                   OR billing.current_period_end IS NOT ?)
+              AND NOT (? = 'canceled' AND EXISTS (
+                SELECT 1 FROM activity_events AS recorded
+                WHERE recorded.organization_id = organization.id
+                  AND recorded.action = 'billing.subscription_canceled'
+                  AND recorded.subject_id = ?))`,
     },
   );
 }

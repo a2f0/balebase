@@ -1,5 +1,10 @@
 import { productName } from "@balebase/ui/brand";
 import { financeRoutes } from "@balebase/validators/finance";
+import {
+  activityBatch,
+  requestActor,
+  rowActivityStatement,
+} from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import type { Bindings } from "../types";
 import type { FinanceContext } from "./financeContext";
@@ -70,6 +75,7 @@ export async function createUpdateLinkToken(
   const result = await requestLinkToken(context, requestPlaid, {
     access_token: accessToken,
   });
+  await storeRepairSession(context, item.id, result);
   console.log({
     event: "plaid_link_token_created",
     mode: "update",
@@ -81,6 +87,136 @@ export async function createUpdateLinkToken(
     expiration: result.expiration,
     linkToken: result.linkToken,
   });
+}
+
+/** As long as Plaid's link tokens last by default. */
+const repairSessionMilliseconds = 4 * 60 * 60 * 1_000;
+
+/**
+ * Remembers an update-mode Link session, so the app can report its success
+ * once (`reportLoginRepair`). It keeps the connection's status and error
+ * code as they were when the session opened, since the sync that follows
+ * the repair clears them before a delayed report arrives. Only the link
+ * token's hash is kept, until the report or four hours; expired sessions are
+ * cleared here.
+ */
+async function storeRepairSession(
+  context: FinanceContext,
+  connectionId: string,
+  linkToken: { linkToken: string },
+) {
+  const database = context.env.DB;
+  await database.batch([
+    database
+      .prepare(
+        "DELETE FROM finance_login_repair_sessions WHERE expires_at <= ?",
+      )
+      .bind(new Date().toISOString()),
+    database
+      .prepare(
+        `INSERT OR REPLACE INTO finance_login_repair_sessions
+           (link_token_hash, organization_id, connection_id, user_id,
+            status_before, error_code_before, expires_at)
+         SELECT ?, organization_id, id, ?, status, error_code, ?
+         FROM plaid_items WHERE id = ? AND organization_id = ?`,
+      )
+      .bind(
+        await tokenHash(linkToken.linkToken),
+        context.get("authSession").user.id,
+        new Date(Date.now() + repairSessionMilliseconds).toISOString(),
+        connectionId,
+        context.get("organizationId"),
+      ),
+  ]);
+}
+
+/**
+ * Records the app's report that Link update mode succeeded for this
+ * connection, so a repaired bank login has its own event, apart from the
+ * sync that follows. Plaid tells only the browser, so the event is the app's
+ * report, not Plaid's confirmation. It must carry the link token of an
+ * unexpired update session the same person opened for this connection, and
+ * each session is accepted once, so a report cannot be replayed or made up
+ * without opening Link. The event holds the connection's status and error
+ * code before the repair, never Plaid tokens or Item IDs.
+ */
+export async function reportLoginRepair(context: FinanceContext) {
+  const input = await readBody(
+    context,
+    financeRoutes.reportLoginRepair,
+    "A Link session is required.",
+  );
+  if (input instanceof Response) return input;
+  const organizationId = context.get("organizationId");
+  const connectionId = context.req.param("id") ?? "";
+  const actor = requestActor(context);
+  const database = context.env.DB;
+  const hash = await tokenHash(input.linkToken);
+  const repairSession = {
+    bindings: [
+      hash,
+      organizationId,
+      connectionId,
+      actor.userId,
+      new Date().toISOString(),
+    ],
+    sql: `EXISTS (SELECT 1 FROM finance_login_repair_sessions AS repair
+      WHERE repair.link_token_hash = ? AND repair.organization_id = ?
+        AND repair.connection_id = ? AND repair.user_id = ?
+        AND repair.expires_at > ?)`,
+  };
+  const [recorded] = await activityBatch(database, actor.apiKey, [
+    rowActivityStatement(
+      database,
+      {
+        action: "finance.connection_repaired",
+        actorId: actor.userId,
+        // The state when the session opened, before any sync cleared it.
+        details: {
+          bindings: [hash, hash],
+          sql: `json_object('institutionName', institution_name,
+            'statusBefore', (SELECT status_before
+              FROM finance_login_repair_sessions WHERE link_token_hash = ?),
+            'errorCodeBefore', (SELECT error_code_before
+              FROM finance_login_repair_sessions WHERE link_token_hash = ?))`,
+        },
+        id: connectionId,
+        label: "COALESCE(institution_name, 'Bank connection')",
+        occurredAt: new Date().toISOString(),
+        organizationId,
+        rootType: "finance_connection",
+        table: "plaid_items",
+      },
+      {
+        bindings: repairSession.bindings,
+        sql: `status IN ('active', 'error') AND ${repairSession.sql}`,
+      },
+    ),
+    database
+      .prepare(
+        `DELETE FROM finance_login_repair_sessions
+         WHERE link_token_hash = ? AND organization_id = ?
+           AND connection_id = ? AND user_id = ?`,
+      )
+      .bind(...repairSession.bindings.slice(0, 4)),
+  ]);
+  if (!recorded?.meta.changes) {
+    return context.json(
+      { error: "No open Link update session for this connection." },
+      404,
+    );
+  }
+  return context.body(null, 204);
+}
+
+async function tokenHash(token: string) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(token),
+  );
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 async function requestLinkToken(

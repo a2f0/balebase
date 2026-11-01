@@ -6,10 +6,11 @@ organization membership (roles, invitations, joining, leaving and removal),
 organization creation, renames, deletion and restoration, group access,
 members' two-factor requirements, API keys (including revocations that a
 change to their creator's access makes), transaction annotations and categories,
-bank connections (connecting, sync requests and settings, disconnecting,
-deleting imported data, and Plaid's status changes, removals, and carry-overs),
-expense categories, Pro checkout starts, Stripe's subscription and seat
-changes, library
+bank connections (connecting, sync requests and settings, login repairs,
+disconnecting, deleting imported data, and Plaid's status changes, removals,
+and carry-overs), expense categories, Pro checkout starts, Billing Portal
+sessions, subscription cancellations made by deleting an organization,
+Stripe's subscription and seat changes, library
 files and folders, inbox email moves and links, businesses, contracts and
 contract templates, the forms and checks requested of people, and maintenance
 jobs that purge records. The
@@ -92,7 +93,9 @@ or a failed provider request, records nothing:
   `billing.checkout_started` event that names who started it. Balebase
   canceling a subscription that a new Checkout replaced records it on the old
   subscription with `reason: replaced` and `replacedBySubscriptionId`.
-  Canceling while deleting an organization records no Stripe event of its own.
+  A cancellation recorded as a person's `billing.subscription_canceled`
+  (deleting an organization, including when the webhook records it because
+  the request's own write failed) records no Stripe event as well.
   A redelivered Stripe event that now reads a newer state stores nothing,
   since its cause is already recorded; Stripe's own event for that change
   stores and records it.
@@ -115,6 +118,14 @@ or a failed provider request, records nothing:
 
 Billing events are for owners and admins and bank connection events need
 Finance capability, as for people's own events.
+A Billing Portal change is Stripe's `billing.subscription_changed`; it can
+only be related to the latest `billing.portal_opened` event, which names who
+opened the portal, not who made the change: Stripe's portal sessions carry no
+metadata, so the opener cannot ride along to the webhook. A bank login repair
+(`finance.connection_repaired`) is the app's report that Plaid Link update
+mode succeeded, since Plaid tells only the browser; it must consume a
+single-use update session the reporter opened for that connection
+(`finance_login_repair_sessions`).
 
 ## Reading and retaining history
 
@@ -137,7 +148,8 @@ management, and employee records already are. Everyone in the organization
 sees people joining, leaving, being removed or changing role, API keys being
 created and revoked, and the organization's creation and renames. Root admins
 read the organization's own history (creation, renames, deletion and
-restoration) on its admin detail page, including while it is deleted. The
+restoration, and the subscription cancellations a deletion made) on its admin
+detail page, including while it is deleted. The
 MCP `list_activity` tool accepts the same optional `resourceType`; keep that
 filter when passing the next cursor.
 
@@ -168,7 +180,9 @@ purge leaves its count on the organization and the form purge leaves each
 affected project's removal. Deleting a disconnected bank
 connection's imported data removes that connection's and its transactions'
 history, but keeps one `finance.connection_data_deleted` event naming who
-deleted it and how many accounts, transactions, and annotations went. Historical
+deleted it and how many accounts, transactions, annotations, transaction issues
+(and open ones), and email links went; the issues, with their history, and the
+links are deleted with their transactions. Historical
 imports must be marked as such and contain only facts actually retained. Do not
 reconstruct unknown editors, previous values, or timestamps from current state.
 
@@ -191,10 +205,26 @@ membership. That batch re-checks that the remover still owns or administers
 the organization and never removes the last owner. Deleting an
 organization (by an owner or a root admin, `details.via`) and restoring it
 record events in the same batch as the change; the restoration keeps who had
-deleted it, which the organization row then clears. Rejected requests and
-saves that change nothing record nothing. A membership deleted with no request
-behind it, as when an account is purged, is not recorded on the organization
-yet; equipment is still unassigned then.
+deleted it, which the organization row then clears. Deleting a Pro
+organization first cancels its subscriptions in Stripe, and each cancellation
+Stripe confirms records `billing.subscription_canceled` (the subscription, its
+previous status and seats, `details.via`) with the persisted billing state,
+attributed to the deleting owner or root admin. It stays when the deletion
+then fails or changes nothing, since the paid plan has ended either way, and
+is recorded once per subscription; a Stripe refusal records nothing. Who is
+canceling is stored before Stripe is asked (`billing_cancellation_intents`,
+migration `0087_record_cancellations_and_repairs.sql`), with a marker the
+request sends as the cancellation's comment (`cancellation_details[comment]`).
+Only a cancellation Stripe reports with that marker is credited, so one made
+elsewhere, such as in the Billing Portal, never is. When the request cannot
+persist the cancellation, the webhook that reports it records the event
+instead, and a retry asks Stripe before replacing an unresolved intent: a
+subscription already canceled is credited to the earlier request.
+The deletion event lists the canceled subscription IDs. Root admins see these
+cancellations on the organization's admin page with its lifecycle events.
+Rejected requests and saves that change nothing record nothing. A membership
+deleted with no request behind it, as when an account is purged, is not
+recorded on the organization yet; equipment is still unassigned then.
 
 An API key acts as its creator, so a change that leaves the creator neither
 owner nor admin ends the key for good: a role change revokes the creator's
@@ -377,6 +407,7 @@ examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `organizations/membershipActivity.test.ts`,
 `organizations/accessLifecycle.test.ts`,
 `organizations/accessActivity.test.ts`, `issues/issues.test.ts`,
+`finance/financeActivity.test.ts`, `billing/billingActivity.test.ts`,
 `library/libraryActivity.test.ts`, `library/recordHistory.test.ts`,
 `inbox/inboxActivity.test.ts`,
 `businesses/businessActivity.test.ts`, `jobs/maintenanceRequests.test.ts`,

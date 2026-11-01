@@ -30,6 +30,11 @@ export interface ActivityRow {
 
 interface ActivityRoot {
   /**
+   * Also include the organization's events with these actions under any root,
+   * as the admin organization page includes billing cancellations.
+   */
+  alsoActions?: string[];
+  /**
    * Also include events whose subject is this record under another root, such
    * as an email's links, which are recorded on the record it was linked to.
    */
@@ -100,6 +105,11 @@ export async function findActivity(
       "((root_type = ? AND root_id = ?) OR (subject_type = ? AND subject_id = ?))",
     );
     bindings.push(root.type, root.id, root.type, root.id);
+  } else if (root?.alsoActions?.length) {
+    filters.push(
+      `((root_type = ? AND root_id = ?) OR action IN (${root.alsoActions.map(() => "?").join(", ")}))`,
+    );
+    bindings.push(root.type, root.id, ...root.alsoActions);
   } else if (root?.includeFolderFiles) {
     filters.push(
       `((root_type = ? AND root_id = ?) OR (root_type = 'library_file'

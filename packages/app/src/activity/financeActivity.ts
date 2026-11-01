@@ -10,6 +10,8 @@ export const financeActionLabels: Record<string, string> = {
   "billing.checkout_started": "started Pro checkout",
   "billing.seats_changed": "changed the subscription's seats",
   "billing.subscription_changed": "updated the Pro subscription",
+  "billing.portal_opened": "opened the Stripe billing portal",
+  "billing.subscription_canceled": "canceled the Pro subscription",
   "finance.categories_defaults_added": "added the common expense categories",
   "finance.category_created": "created an expense category",
   "finance.category_deleted": "deleted an expense category",
@@ -20,6 +22,7 @@ export const financeActionLabels: Record<string, string> = {
   "finance.records_carried_over":
     "carried over accounts and transactions from a disconnected bank",
   "finance.transactions_removed": "removed transactions",
+  "finance.connection_repaired": "reported a bank login repair",
 };
 
 function count(value: unknown, singular: string) {
@@ -80,6 +83,19 @@ function connectionStatus(value: unknown) {
 const summaries: Partial<Record<string, (event: ActivityEvent) => string>> = {
   "billing.checkout_started": ({ details }) =>
     `Pro for ${count(details.quantity, "seat")}`,
+  // Changes made in the portal arrive from Stripe and are not recorded yet.
+  "billing.portal_opened": () => "Stripe Billing Portal session",
+  "billing.subscription_canceled": ({ details }) =>
+    [
+      details.reason === "organization_deletion"
+        ? "For organization deletion"
+        : "Canceled",
+      details.via === "root_admin" ? "By a root admin" : "By an owner",
+      count(details.seatQuantity, "seat"),
+      details.previousStatus ? `Was ${textValue(details.previousStatus)}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · "),
   "finance.categories_defaults_added": ({ details }) =>
     Array.isArray(details.names) ? details.names.map(textValue).join(", ") : "",
   "finance.category_created": ({ details }) => textValue(details.name),
@@ -104,8 +120,28 @@ const summaries: Partial<Record<string, (event: ActivityEvent) => string>> = {
     `${count(details.accountCount, "account")} and ${count(details.transactionCount, "transaction")} from ${textValue(details.fromInstitutionName) || "a disconnected bank"}`,
   "finance.transactions_removed": ({ details }) =>
     `${count(details.count, "transaction")} withdrawn by the bank`,
-  "finance.connection_data_deleted": ({ details }) =>
-    `Deleted ${count(details.accountCount, "account")}, ${count(details.transactionCount, "transaction")}, and ${count(details.annotationCount, "annotation")}`,
+  "finance.connection_data_deleted": ({ details }) => {
+    const removed = [
+      count(details.accountCount, "account"),
+      count(details.transactionCount, "transaction"),
+      count(details.annotationCount, "annotation"),
+      // Deletions recorded before these were counted have no such field.
+      ...(typeof details.issueCount === "number"
+        ? [count(details.issueCount, "issue")]
+        : []),
+      ...(typeof details.emailLinkCount === "number"
+        ? [count(details.emailLinkCount, "email link")]
+        : []),
+    ];
+    return `Deleted ${removed.slice(0, -1).join(", ")}, and ${removed.at(-1)}`;
+  },
+  "finance.connection_repaired": ({ details, root }) =>
+    [
+      textValue(details.institutionName) || root.label,
+      details.errorCodeBefore
+        ? `Was ${textValue(details.errorCodeBefore)}`
+        : `Was ${textValue(details.statusBefore) || "unknown"}`,
+    ].join(" · "),
 };
 
 /** A one-line summary of a bank connection, category, or billing event. */

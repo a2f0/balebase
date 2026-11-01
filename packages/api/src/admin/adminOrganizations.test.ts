@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import { findActivity } from "../shared/activity";
+import { echoCancellation } from "../testing/billingFixture";
 import { testBindings } from "../testing/bindings";
 import { toD1 } from "../testing/d1";
 import { createTestDatabase } from "../testing/database";
@@ -294,8 +295,8 @@ describe("admin organizations", () => {
     insertPaidBilling(database);
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
-          Response.json(canceledSubscription()),
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test?*":
+          echoCancellation(canceledSubscription()),
       },
       async ({ requests }) => {
         const response = await adminApp(database).request(
@@ -306,7 +307,9 @@ describe("admin organizations", () => {
         expect(requests.map(({ method, url }) => ({ method, url }))).toEqual([
           {
             method: "DELETE",
-            url: "https://api.stripe.com/v1/subscriptions/sub_admin_test",
+            url: expect.stringMatching(
+              /^https:\/\/api\.stripe\.com\/v1\/subscriptions\/sub_admin_test\?cancellation_details/,
+            ),
           },
         ]);
         expect(
@@ -332,7 +335,7 @@ describe("admin organizations", () => {
     insertPaidBilling(database);
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test?*": () =>
           Response.json(
             { error: { message: "Stripe unavailable" } },
             { status: 503 },
@@ -367,8 +370,8 @@ describe("admin organizations", () => {
     );
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
-          Response.json(canceledSubscription()),
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test?*":
+          echoCancellation(canceledSubscription()),
       },
       async () => {
         const response = await adminApp(database).request(
@@ -396,6 +399,193 @@ describe("admin organizations", () => {
       },
       { captureErrors: true },
     );
+  });
+
+  it("records who canceled Pro when deleting, in both events, for managers and root admins", async () => {
+    const database = createDeletionFixture();
+    insertPaidBilling(database);
+    database.run(
+      "UPDATE organization_billing SET seat_quantity = 3 WHERE organization_id = 'org_member-user'",
+    );
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test?*":
+          echoCancellation(canceledSubscription(3)),
+      },
+      async () => {
+        const app = adminApp(database);
+        expect(
+          (await app.request(`/${targetOrganizationId}`, { method: "DELETE" }))
+            .status,
+        ).toBe(200);
+        expect(cancellationEvents(database)).toEqual([
+          {
+            actor_user_id: "user-1",
+            details: {
+              previousStatus: "active",
+              reason: "organization_deletion",
+              seatQuantity: 3,
+              subscriptionId: "sub_admin_test",
+              via: "root_admin",
+            },
+            root_type: "organization_billing",
+            subject_id: "sub_admin_test",
+          },
+        ]);
+        const page = await app.request(`/${targetOrganizationId}/activity`);
+        const { events } = (await page.json()) as HistoryResponse;
+        expect(
+          events.map(({ action, details }) => ({ action, details })),
+        ).toEqual([
+          {
+            action: "organization.deletion_requested",
+            details: {
+              canceledInvitations: 0,
+              canceledSubscriptionIds: ["sub_admin_test"],
+              via: "root_admin",
+            },
+          },
+          {
+            action: "billing.subscription_canceled",
+            details: expect.objectContaining({
+              subscriptionId: "sub_admin_test",
+            }),
+          },
+        ]);
+        const feed = (manager: boolean) =>
+          findActivity(
+            toD1(database),
+            targetOrganizationId,
+            undefined,
+            undefined,
+            true,
+            "organization_billing",
+            manager,
+          );
+        expect((await feed(false))?.events).toEqual([]);
+        expect((await feed(true))?.events).toMatchObject([
+          { action: "billing.subscription_canceled" },
+        ]);
+        expect(
+          (
+            await findActivity(
+              toD1(database),
+              "org_user-1",
+              undefined,
+              undefined,
+              true,
+              undefined,
+              true,
+            )
+          )?.events.filter(
+            ({ action }) => action === "billing.subscription_canceled",
+          ),
+        ).toEqual([]);
+      },
+    );
+  });
+
+  it("keeps one attributed cancellation when the deletion then fails", async () => {
+    const database = createDeletionFixture();
+    insertPaidBilling(database);
+    database.exec(
+      `CREATE TRIGGER fail_admin_organization_deletion
+       BEFORE UPDATE OF deletedAt ON organization
+       WHEN NEW.deletedAt IS NOT NULL
+       BEGIN
+         SELECT RAISE(ABORT, 'forced organization deletion failure');
+       END`,
+    );
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test?*":
+          echoCancellation(canceledSubscription()),
+      },
+      async ({ requests }) => {
+        const app = adminApp(database);
+        const remove = () =>
+          app.request(`/${targetOrganizationId}`, { method: "DELETE" });
+        expect((await remove()).status).toBe(500);
+        // The retry finds the subscription canceled and cancels nothing more.
+        expect((await remove()).status).toBe(500);
+        expect(requests).toHaveLength(1);
+        expect(cancellationEvents(database)).toMatchObject([
+          {
+            actor_user_id: "user-1",
+            details: { previousStatus: "active", via: "root_admin" },
+          },
+        ]);
+        expect(
+          database
+            .query(
+              "SELECT COUNT(*) AS count FROM activity_events WHERE action = 'organization.deletion_requested'",
+            )
+            .get(),
+        ).toEqual({ count: 0 });
+      },
+      { captureErrors: true },
+    );
+  });
+
+  it("records no cancellation when Stripe refuses it, and persists none when recording fails", async () => {
+    const database = createDeletionFixture();
+    insertPaidBilling(database);
+    const status = () =>
+      database
+        .query(
+          "SELECT stripe_status FROM organization_billing WHERE organization_id = ?",
+        )
+        .get(targetOrganizationId);
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test?*": () =>
+          Response.json(
+            { error: { message: "Stripe unavailable" } },
+            { status: 503 },
+          ),
+      },
+      async () => {
+        expect(
+          (
+            await adminApp(database).request(`/${targetOrganizationId}`, {
+              method: "DELETE",
+            })
+          ).status,
+        ).toBe(502);
+      },
+      { captureErrors: true },
+    );
+    expect(cancellationEvents(database)).toEqual([]);
+    database.exec(`CREATE TRIGGER fail_activity
+      BEFORE INSERT ON activity_events
+      WHEN NEW.action = 'billing.subscription_canceled'
+      BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END`);
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test?*":
+          echoCancellation(canceledSubscription()),
+        // The first attempt's 503 left its intent, so Stripe is asked first.
+        "GET https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
+          Response.json({ ...canceledSubscription(), status: "active" }),
+      },
+      async () => {
+        expect(
+          (
+            await adminApp(database).request(`/${targetOrganizationId}`, {
+              method: "DELETE",
+            })
+          ).status,
+        ).toBe(502);
+      },
+      { captureErrors: true },
+    );
+    expect(status()).toEqual({ stripe_status: "active" });
+    expect(cancellationEvents(database)).toEqual([]);
+    expect(
+      database
+        .query("SELECT deletedAt FROM organization WHERE id = ?")
+        .get(targetOrganizationId),
+    ).toEqual({ deletedAt: null });
   });
 
   it("records who deleted and restored an organization, for root admins and its managers", async () => {
@@ -441,7 +631,11 @@ describe("admin organizations", () => {
       {
         action: "organization.deletion_requested",
         actor: "admin-2",
-        details: { canceledInvitations: 0, via: "root_admin" },
+        details: {
+          canceledInvitations: 0,
+          canceledSubscriptionIds: [],
+          via: "root_admin",
+        },
       },
       {
         action: "organization.restored",
@@ -457,7 +651,11 @@ describe("admin organizations", () => {
       {
         action: "organization.deletion_requested",
         actor: "user-1",
-        details: { canceledInvitations: 0, via: "root_admin" },
+        details: {
+          canceledInvitations: 0,
+          canceledSubscriptionIds: [],
+          via: "root_admin",
+        },
       },
     ]);
     // The organization's own feed keeps it for managers only.
@@ -729,7 +927,25 @@ function insertPaidBilling(database: Database) {
     updated_at: "2026-08-26T12:00:00.000Z",
   });
 }
-function canceledSubscription() {
+function cancellationEvents(database: Database) {
+  return database
+    .query<
+      {
+        actor_user_id: string;
+        details: string;
+        root_type: string;
+        subject_id: string;
+      },
+      []
+    >(
+      `SELECT actor_user_id, details, root_type, subject_id
+       FROM activity_events WHERE action = 'billing.subscription_canceled'`,
+    )
+    .all()
+    .map((row) => ({ ...row, details: JSON.parse(row.details) as unknown }));
+}
+
+function canceledSubscription(quantity = 1) {
   return {
     cancel_at_period_end: false,
     customer: "cus_admin_test",
@@ -739,7 +955,7 @@ function canceledSubscription() {
         {
           id: "si_admin_test",
           price: { id: proPriceId },
-          quantity: 1,
+          quantity,
         },
       ],
     },
