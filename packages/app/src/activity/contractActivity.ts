@@ -22,6 +22,31 @@ const contractStatuses: Record<string, string> = {
   voided: "Voided",
 };
 
+/**
+ * Labels for contract and screening events no person, or the person the
+ * request is for, records: the signing workflow's, Checkr's, and the person's
+ * own submission.
+ */
+export const contractActionLabels: Record<string, string> = {
+  "contract.completed": "completed a contract",
+  "contract.declined": "recorded a signer's decline",
+  "employee_requirement.screening_report_adopted":
+    "adopted a background check report",
+  "employee_requirement.screening_submitted": "submitted a background check",
+  "employee_requirement.screening_updated": "updated a background check",
+};
+
+const screeningRefreshes: Record<string, string> = {
+  manual: "Refreshed by hand",
+  scheduled: "Scheduled refresh",
+  webhook: "Checkr update",
+};
+
+function reportStatus(value: unknown) {
+  const text = textValue(value).replaceAll("_", " ");
+  return text ? `${text.charAt(0).toUpperCase()}${text.slice(1)}` : "None";
+}
+
 function count(value: unknown, one: string, many: string) {
   const amount = typeof value === "number" ? value : 0;
   return `${amount} ${amount === 1 ? one : many}`;
@@ -52,6 +77,10 @@ export function contractActivitySummary({ action, details }: ActivityEvent) {
       ]
         .filter(Boolean)
         .join(" · ");
+    case "contract.declined":
+      return `A signer declined · ${textValue(details.signedCount) || "0"} of ${count(details.signerCount, "signer", "signers")} had signed`;
+    case "contract.completed":
+      return `Every signer signed · ${count(details.signerCount, "signer", "signers")}`;
     case "contract.deleted":
       return [
         `Was ${label(contractStatuses, details.status)}`,
@@ -130,6 +159,31 @@ function requirementChange(action: string, details: ActivityEvent["details"]) {
       ]
         .filter(Boolean)
         .join(" · ");
+    default:
+      return screeningChange(action, details);
+  }
+}
+
+/** What Checkr, a refresh, or the person's submission did to a screening. */
+function screeningChange(action: string, details: ActivityEvent["details"]) {
+  switch (action) {
+    case "employee_requirement.screening_updated":
+      return [
+        `Report ${reportStatus(details.previousReportStatus)} → ${reportStatus(details.reportStatus)}`,
+        details.previousStatus === details.status
+          ? ""
+          : `${label(requirementStatuses, details.previousStatus)} → ${label(requirementStatuses, details.status)}`,
+        details.resultChanged ? "Result updated" : "",
+        screeningRefreshes[textValue(details.via)] ?? "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    case "employee_requirement.screening_submitted":
+      return details.adopted
+        ? `Found the report an earlier submission ordered · ${reportStatus(details.reportStatus)}`
+        : `Signed the authorization and ordered the report · ${reportStatus(details.reportStatus)}`;
+    case "employee_requirement.screening_report_adopted":
+      return `Adopted the report an unfinished submission ordered · ${reportStatus(details.reportStatus)}`;
     default:
       return "Details";
   }

@@ -84,9 +84,15 @@ describe("screening notifications", () => {
       fixture.database.exec(
         "UPDATE employee_screening_notifications SET next_attempt_at = '2000-01-01'",
       );
-      await refreshActiveCheckrScreenings(fixture.bindings);
+      await refreshActiveCheckrScreenings(
+        fixture.bindings,
+        crypto.randomUUID(),
+      );
       expect(fixture.emails).toHaveLength(1);
-      await refreshActiveCheckrScreenings(fixture.bindings);
+      await refreshActiveCheckrScreenings(
+        fixture.bindings,
+        crypto.randomUUID(),
+      );
       expect(fixture.emails).toHaveLength(1);
     } finally {
       checkr.restore();
@@ -139,7 +145,12 @@ describe("screening notifications", () => {
     fixture.bindings.EMAIL.send = async () => {
       throw new Error("Mail unavailable");
     };
-    expect(await refreshActiveCheckrScreenings(fixture.bindings)).toEqual({
+    expect(
+      await refreshActiveCheckrScreenings(
+        fixture.bindings,
+        crypto.randomUUID(),
+      ),
+    ).toEqual({
       refreshed: 0,
       skipped: false,
       notifications: {
@@ -151,7 +162,10 @@ describe("screening notifications", () => {
     });
     fixture.bindings.EMAIL.send = send;
     expect(
-      await refreshActiveCheckrScreenings(withoutCheckrKey(fixture.bindings)),
+      await refreshActiveCheckrScreenings(
+        withoutCheckrKey(fixture.bindings),
+        crypto.randomUUID(),
+      ),
     ).toEqual({
       refreshed: 0,
       skipped: true,

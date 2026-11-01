@@ -14,8 +14,8 @@ import {
   checkrPackageScreenings,
   checkrTestMode,
 } from "./checkr";
+import { refreshCheckrScreening } from "./checkrRefresh";
 import {
-  refreshCheckrScreening,
   requestCheckrScreening,
   submitCheckrScreening,
 } from "./checkrScreening";
@@ -221,11 +221,16 @@ employeeFormScreening.post(
     if (!row?.checkr_report_id) {
       return context.json({ error: "Screening not submitted." }, 404);
     }
-    const refreshed = await refreshCheckrScreening(context.env, {
-      ...row,
-      checkr_report_id: row.checkr_report_id,
-      organization_id: context.get("organizationId"),
-    });
+    const refreshed = await refreshCheckrScreening(
+      context.env,
+      {
+        ...row,
+        checkr_report_id: row.checkr_report_id,
+        organization_id: context.get("organizationId"),
+      },
+      requestActor(context),
+      "manual",
+    );
     if (!refreshed) {
       return context.json({ error: "Screening changed. Please refresh." }, 409);
     }

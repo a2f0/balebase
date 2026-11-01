@@ -39,6 +39,7 @@ import {
 import { assigneeLabel, textValue } from "./activityLabels";
 import { type ActivitySource, listActivity } from "./activitySource";
 import {
+  contractActionLabels,
   contractActivitySummary,
   requirementActivitySummary,
 } from "./contractActivity";
@@ -144,6 +145,7 @@ const actionLabels: Record<string, string> = {
   "project.member_added": "added a project member",
   "project.member_removed": "removed a project member",
   "project.updated": "edited a project",
+  ...contractActionLabels,
   ...financeActionLabels,
   ...organizationActionLabels,
   ...systemActionLabels,

@@ -12,8 +12,8 @@ and carry-overs), expense categories, Pro checkout starts, Billing Portal
 sessions, subscription cancellations made by deleting an organization,
 Stripe's subscription and seat changes, library
 files and folders, inbox email moves and links, businesses, contracts and
-contract templates, the forms and checks requested of people, and maintenance
-jobs that purge records. The
+contract templates, the forms and checks requested of people (including
+Checkr's report updates), and maintenance jobs that purge records. The
 workspace page is `/activity`; individual records can expose the same events
 in their own history. Contract signing also has a separate history (see
 [Contracts](#contracts)). Coverage is incremental: an empty shared feed does
@@ -52,12 +52,15 @@ explicit actor type (migration `0086_record_system_activity.sql`):
   A CHECK constraint keeps every user event tied to a user.
 - `system`: Balebase's own maintenance. `actor_source` is the maintenance job's
   ID (such as `purgeDiscardedAuditForms`); readers show "Balebase maintenance".
+  The signing workflow (`contractSigning`) is the one other system source: it
+  records what a signing link did, and readers show "Balebase signing".
 - `provider`: a provider's change. `actor_source` is the provider (`stripe`,
   `plaid`, or `checkr`); readers show its name.
 
 System and provider events have no user ID and an empty email, and never name
 an API key. `causation_type` and `causation_id` say what caused them: the job
-run (`job_run`) or a provider's event ID (such as `stripe_event`). They are the
+run (`job_run`), a provider's event ID (such as `stripe_event` or
+`checkr_event`), or a contract's own event (`contract_event`). They are the
 deduplication boundary for provider retries and redelivered runs: a unique
 index allows one event per cause, action, root, and subject, and a redelivery
 records nothing new. Record them with `systemActivityStatement` (one event,
@@ -75,9 +78,8 @@ organizations (as platform purge history, below), the Free-plan retention purge
 (`organization.audit_runs_purged` on the organization, with the number of runs
 removed), the discarded global form purge (`project.form_disabled` with
 `reason: form_purged` on each project that had the form), and the trashed email
-purge (below). Checkr report changes still stay in their current-state
-columns, Checkr's own history, and job runs until their producer adopts the
-provider actor.
+purge (below). Checkr's report changes are provider events (see
+[Contracts](#contracts)).
 
 Stripe and Plaid record their changes as providers, in the same batch as the
 write and only when it changes a stored value; a write that changes nothing,
@@ -324,11 +326,15 @@ signer count, signing order, and due date that went out), `contract.voided`,
 and `contract.deleted`, which snapshots the status, document hashes, signer
 and signed counts, when it was declined, and template so a deleted agreement
 still leaves a trace until the organization is purged. Signer emails, IPs,
-signatures, and decline reasons stay out of it. A decline is the signer's and
-a completion the system's, so neither is a shared event until the shared model
-has a non-user actor; their `contract_events` and the deletion snapshot record
-them. Draft autosaves are not recorded; `contract.sent` captures the
-configuration that was sent.
+signatures, and decline reasons stay out of it. A signer's decline and a
+contract's completion come through signing links, not a member, so the signing
+workflow records them as system events (`actor_source = 'contractSigning'`),
+each caused by and in the same transaction as the contract's own `declined`
+or `completed` event, which names the signer: `contract.declined` (the
+recipient's ID and the signer and signed counts) and `contract.completed` (the
+signer count and the original and signed documents' hashes). Both outlive the
+contract until the organization is purged. Draft autosaves are not recorded;
+`contract.sent` captures the configuration that was sent.
 
 Uploading a contract template records `contract_template.created` (name,
 page count, and document hash), and each saved version records
@@ -347,9 +353,28 @@ and background-check requests (work location, and the report a re-request
 supersedes). Manager writes re-check in the transaction that the actor is
 still an owner or admin. Details never hold filenames, screening results, or
 consent contents. The person's signed authorizations keep their own record
-(`employee_screening_consents`). Checkr's report status and result changes
-are not recorded yet: they come from the provider, whose events need the
-provider actor.
+(`employee_screening_consents`).
+
+Background checks also record, in the same transaction as the change:
+
+- `employee_requirement.screening_submitted`, by the person, when their
+  submission orders the report (or, retrying after a lost response, finds the
+  one it ordered: `adopted`), naming the authorization (`consentId`) and the
+  report's status. A refused, rejected, or changed submission records nothing.
+- `employee_requirement.screening_report_adopted`, by Checkr, when its webhook
+  or the hourly refresh adopts the report of a submission its person did not
+  finish.
+- `employee_requirement.screening_updated` whenever a refresh changes the
+  screening's status, report status, or result: by the manager who pressed
+  **Refresh check** (with any API key), or by Checkr for its webhook
+  (`checkr_event`, the webhook event's ID) and the hourly refresh (`job_run`).
+  Details hold the old and new status and report status, `via`
+  (`manual`, `webhook`, or `scheduled`), `resultChanged`, and `hasResult`, but
+  never the result itself. A refresh that finds nothing new, a stale one, and
+  one by a manager who has since lost the role record nothing. Because
+  provider events are deduplicated per cause, a redelivered webhook that finds
+  a newer change leaves it for the next refresh rather than applying it
+  without its event.
 
 ## Platform and account history
 
@@ -414,7 +439,8 @@ examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `admin/setUserRole.test.ts`, `admin/platformHistory.test.ts`,
 `admin/discardedAuditForms.test.ts`, `users/securityEvents.test.ts`,
 `contracts/contractActivity.test.ts`,
-`employeeForms/requirementActivity.test.ts`, and
+`employeeForms/requirementActivity.test.ts`,
+`employeeForms/screeningActivity.test.ts` (Checkr and the person),
 `jobs/systemActivity.test.ts` (system actors and purges),
 `billing/billingProviderActivity.test.ts` (Stripe), and
 `finance/financeProviderActivity.test.ts` (Plaid).

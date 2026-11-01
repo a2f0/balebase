@@ -108,6 +108,107 @@ describe("system and provider activity", () => {
     expect(rows[2]).not.toContain("Open");
   });
 
+  it("names the signing workflow and Checkr on contracts and screenings", async () => {
+    const contract = { id: "c1", label: "Lease", type: "contract" };
+    const request = {
+      id: "r1",
+      label: "Background check · Bob",
+      type: "employee_requirement",
+    };
+    const person = {
+      kind: "background_check",
+      personName: "Bob",
+      title: "Background check",
+    };
+    const signing = { ...maintenance, name: "Balebase signing" };
+    const checkr: ActivityActor = {
+      ...maintenance,
+      name: "Checkr",
+      source: "checkr",
+      type: "provider",
+    };
+    const bob: ActivityActor = {
+      apiKey: null,
+      email: "bob@example.com",
+      id: "bob",
+      name: "Bob",
+      source: null,
+      type: "user",
+    };
+    respond(async () =>
+      Response.json({
+        events: [
+          activity(
+            5,
+            "contract.completed",
+            contract,
+            { signerCount: 2 },
+            { ...signing, source: "contractSigning" },
+          ),
+          activity(
+            4,
+            "contract.declined",
+            contract,
+            { recipientId: "rcp", signedCount: 1, signerCount: 2 },
+            { ...signing, source: "contractSigning" },
+          ),
+          activity(
+            3,
+            "employee_requirement.screening_updated",
+            request,
+            {
+              ...person,
+              hasResult: true,
+              previousReportStatus: "pending",
+              previousStatus: "in_progress",
+              reportStatus: "complete",
+              resultChanged: true,
+              status: "complete",
+              via: "webhook",
+            },
+            checkr,
+          ),
+          activity(
+            2,
+            "employee_requirement.screening_report_adopted",
+            request,
+            { ...person, adopted: true, reportStatus: "pending" },
+            checkr,
+          ),
+          activity(
+            1,
+            "employee_requirement.screening_submitted",
+            request,
+            { ...person, adopted: false, reportStatus: "pending" },
+            bob,
+          ),
+        ],
+        nextCursor: null,
+      }),
+    );
+    const { container } = await mount(<ActivityFeed onNavigate={() => {}} />);
+    await settle();
+    const rows = rowsOf(container);
+    expect(rows[0]).toContain("Balebase signing completed a contract");
+    expect(rows[0]).toContain("Signing link");
+    expect(rows[0]).toContain("Every signer signed · 2 signers");
+    expect(rows[1]).toContain("Balebase signing recorded a signer's decline");
+    expect(rows[1]).toContain("A signer declined · 1 of 2 signers had signed");
+    expect(rows[2]).toContain("Checkr updated a background check");
+    expect(rows[2]).toContain(
+      "Report Pending → Complete · In progress → Complete · Result updated · Checkr update",
+    );
+    expect(rows[3]).toContain("Checkr adopted a background check report");
+    expect(rows[3]).toContain(
+      "Adopted the report an unfinished submission ordered · Pending",
+    );
+    expect(rows[4]).toContain("Bob submitted a background check");
+    expect(rows[4]).toContain(
+      "Signed the authorization and ordered the report · Pending",
+    );
+    for (const row of rows) expect(row).not.toContain("maintenance");
+  });
+
   it("reads the purge history for root admins", async () => {
     const requests: string[] = [];
     respond(async (url) => {

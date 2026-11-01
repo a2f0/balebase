@@ -10,6 +10,9 @@ feature is one source of events; audit trails span the whole application.
 - `packages/api/src/shared/activity.ts`: `findActivity`, `activityStatement`,
   `activityBatch`, and `requestActor`. API-key context must share the database
   batch with the mutation, including mutations recorded by triggers.
+- `packages/api/src/shared/systemActivity.ts`: system and provider actors
+  (`maintenanceActor`, `providerActor`, `contractSigningActor`) and
+  `systemActivityStatement`/`systemActivityRowsStatement`.
 - `packages/api/src/activity/activity.ts`: the organization feed route
   (`GET /api/activity`), which shows finance events only with the finance
   capability.
