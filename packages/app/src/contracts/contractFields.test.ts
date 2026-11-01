@@ -131,6 +131,6 @@ describe("contract labels", () => {
         { ...event, actorName: null, type: "reminded" },
         names,
       ),
-    ).toBe("Scheduled reminder emailed to Sam Signer");
+    ).toBe("Reminder emailed to Sam Signer");
   });
 });

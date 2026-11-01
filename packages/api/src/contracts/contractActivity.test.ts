@@ -429,7 +429,7 @@ describe("contract activity", () => {
         { ...event, actor_name: null, actor_user_id: null, type: "reminded" },
         signer,
       ),
-    ).toBe("Scheduled reminder emailed to Sam <sam@example.com>");
+    ).toBe("Reminder emailed to Sam <sam@example.com>");
   });
 
   it("records a template's deletion with its versions, once", async () => {

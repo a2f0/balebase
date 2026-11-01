@@ -218,9 +218,11 @@ export function describeContractEvent(
     case "notified":
       return `Signing request emailed to ${who}`;
     case "reminded":
+      // Scheduled reminders, and manual ones from before senders were
+      // recorded, have no actor.
       return event.actorName
         ? `${actor} emailed ${who} a reminder`
-        : `Scheduled reminder emailed to ${who}`;
+        : `Reminder emailed to ${who}`;
     case "viewed":
       return `${who} opened it`;
     case "signed":

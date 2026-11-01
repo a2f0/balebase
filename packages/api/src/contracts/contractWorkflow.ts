@@ -429,9 +429,11 @@ export function describeEvent(
     case "notified":
       return `Signing request emailed to ${who}`;
     case "reminded":
+      // Scheduled reminders, and manual ones from before senders were
+      // recorded, have no actor.
       return event.actor_user_id
         ? `Reminder emailed to ${who} by ${actor}`
-        : `Scheduled reminder emailed to ${who}`;
+        : `Reminder emailed to ${who}`;
     case "viewed":
       return `Viewed by ${who}${event.ip ? ` from ${event.ip}` : ""}`;
     case "signed":

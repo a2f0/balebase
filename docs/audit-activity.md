@@ -166,9 +166,11 @@ signing-link emails and reminders, views, signatures and declines with the
 signer's IP and user agent, voids, completion, and failed deliveries. The
 contract page and the certificate of completion read them, and they go with the
 contract when it is deleted. An event a person made through an API key also
-keeps the key's name and REST/MCP channel, which both readers show. Scheduled
-reminders, completion, and delivery records have no actor. Sends, voids, and
-completions record their event in the same transaction as the change.
+keeps the key's name and REST/MCP channel, which both readers show. A manual
+reminder names its sender; scheduled reminders (and manual ones recorded
+before senders were), completion, and delivery records have no actor. Sends,
+voids, and completions record their event in the same transaction as the
+change.
 
 The shared activity records `contract.created`, `contract.sent` (with the
 signer count, signing order, and due date that went out), `contract.voided`,
