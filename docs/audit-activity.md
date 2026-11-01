@@ -171,11 +171,13 @@ attributed to the deleting owner or root admin. It stays when the deletion
 then fails or changes nothing, since the paid plan has ended either way, and
 is recorded once per subscription; a Stripe refusal records nothing. Who is
 canceling is stored before Stripe is asked (`billing_cancellation_intents`,
-migration `0087_record_cancellations_and_repairs.sql`), so when the request
-cannot persist the cancellation, the webhook that reports it records the event
-instead. A retry asks Stripe before replacing an unresolved intent: a
-subscription already canceled is credited to the earlier request. Only a
-cancellation Stripe reports within 15 minutes of an intent is credited to it.
+migration `0087_record_cancellations_and_repairs.sql`), with a marker the
+request sends as the cancellation's comment (`cancellation_details[comment]`).
+Only a cancellation Stripe reports with that marker is credited, so one made
+elsewhere, such as in the Billing Portal, never is. When the request cannot
+persist the cancellation, the webhook that reports it records the event
+instead, and a retry asks Stripe before replacing an unresolved intent: a
+subscription already canceled is credited to the earlier request.
 The deletion event lists the canceled subscription IDs. Root admins see these
 cancellations on the organization's admin page with its lifecycle events.
 Rejected requests and saves that change nothing record nothing. A membership

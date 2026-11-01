@@ -275,6 +275,7 @@ describe("subscription cancellation activity", () => {
     reason: "organization_deletion",
     via: "owner",
   };
+  const secondDeleter = { ...deleting, actor: { userId: "user-2" } };
 
   function paidFixture() {
     const fixture = createFixture();
@@ -289,6 +290,56 @@ describe("subscription cancellation activity", () => {
       updated_at: "2026-08-26T12:00:00.000Z",
     });
     return fixture;
+  }
+
+  /**
+   * Stripe's view of sub_test: a cancel request records its comment, as
+   * Stripe does, and later reads return it. `fail` answers the next cancel
+   * requests with that status instead.
+   */
+  function stripe() {
+    const canceled = subscriptionEvent("evt_canceled", 200, "canceled", 2);
+    const active = subscriptionEvent("evt_active", 100, "active", 2);
+    const state = {
+      comment: null as string | null,
+      fail: [] as number[],
+      status: "active",
+    };
+    const current = () => ({
+      ...(state.status === "canceled" ? canceled : active).data.object,
+      cancellation_details: { comment: state.comment },
+    });
+    return {
+      /** Stripe's own webhook for the current state. */
+      event: () => ({ ...canceled, data: { object: current() } }),
+      routes: {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_test?*": async (
+          call: FetchCall,
+        ) => {
+          const status = state.fail.shift();
+          if (status)
+            return Response.json(
+              { error: { message: `Stripe answered ${status}` } },
+              { status },
+            );
+          state.status = "canceled";
+          state.comment = new URL(call.url).searchParams.get(
+            "cancellation_details[comment]",
+          );
+          return Response.json(current());
+        },
+        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
+          Response.json(current()),
+      },
+      state,
+    };
+  }
+
+  function failActivity(fixture: Fixture) {
+    fixture.database.exec(`CREATE TRIGGER fail_activity
+      BEFORE INSERT ON activity_events
+      WHEN NEW.action = 'billing.subscription_canceled'
+      BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END`);
   }
 
   function canceledEvents(fixture: Fixture) {
@@ -306,32 +357,21 @@ describe("subscription cancellation activity", () => {
       .query("SELECT subscription_id FROM billing_cancellation_intents")
       .all();
 
+  const cancel = (fixture: Fixture, cancellation = deleting) =>
+    cancelOrganizationSubscription(
+      fixture.bindings,
+      organizationId,
+      cancellation,
+    );
+
   it("credits the deleter when the webhook persists a cancellation the request could not", async () => {
     const fixture = paidFixture();
-    const canceled = subscriptionEvent("evt_canceled", 200, "canceled", 2);
-    const object = {
-      ...canceled.data.object,
-      canceled_at: Math.floor(Date.now() / 1_000),
-    };
-    fixture.database.exec(`CREATE TRIGGER fail_activity
-      BEFORE INSERT ON activity_events
-      WHEN NEW.action = 'billing.subscription_canceled'
-      BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END`);
+    const provider = stripe();
+    failActivity(fixture);
     await withFetch(
-      {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": async () =>
-          Response.json(object),
-        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
-          Response.json(object),
-      },
+      provider.routes,
       async ({ requests }) => {
-        await expect(
-          cancelOrganizationSubscription(
-            fixture.bindings,
-            organizationId,
-            deleting,
-          ),
-        ).rejects.toThrow("activity unavailable");
+        await expect(cancel(fixture)).rejects.toThrow("activity unavailable");
         // Stripe canceled, but nothing was persisted or recorded.
         expect(
           fixture.database
@@ -340,12 +380,10 @@ describe("subscription cancellation activity", () => {
         ).toEqual({ stripe_status: "active" });
         expect(canceledEvents(fixture)).toEqual([]);
         expect(intents(fixture)).toEqual([{ subscription_id: "sub_test" }]);
+        expect(provider.state.comment).toStartWith("balebase-deletion:");
 
         fixture.database.run("DROP TRIGGER fail_activity");
-        expect(
-          (await sendWebhook(fixture, { ...canceled, data: { object } }))
-            .status,
-        ).toBe(200);
+        expect((await sendWebhook(fixture, provider.event())).status).toBe(200);
         expect(canceledEvents(fixture)).toEqual([
           {
             actor_user_id: "user-1",
@@ -361,11 +399,7 @@ describe("subscription cancellation activity", () => {
         expect(intents(fixture)).toEqual([]);
         // Retrying the deletion skips the canceled subscription and records
         // nothing more.
-        await cancelOrganizationSubscription(
-          fixture.bindings,
-          organizationId,
-          deleting,
-        );
+        await cancel(fixture);
         expect(
           requests.filter(({ method }) => method === "DELETE"),
         ).toHaveLength(1);
@@ -375,91 +409,47 @@ describe("subscription cancellation activity", () => {
     );
   });
 
-  it("credits whichever deleter's request Stripe shows canceled the subscription", async () => {
-    const canceled = subscriptionEvent("evt_canceled", 200, "canceled", 2);
-    const object = {
-      ...canceled.data.object,
-      canceled_at: Math.floor(Date.now() / 1_000),
-    };
-    const active = subscriptionEvent("evt_active", 100, "active", 2).data
-      .object;
-    const secondDeleter = { ...deleting, actor: { userId: "user-2" } };
-
-    // A's request canceled, but its write failed; B retries before the
-    // webhook. Stripe shows the subscription canceled, so A is credited.
-    const first = paidFixture();
-    first.database.exec(`CREATE TRIGGER fail_activity
-      BEFORE INSERT ON activity_events
-      WHEN NEW.action = 'billing.subscription_canceled'
-      BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END`);
+  it("credits the earlier deleter when a retry finds Stripe already canceled", async () => {
+    const fixture = paidFixture();
+    const provider = stripe();
+    failActivity(fixture);
     await withFetch(
-      {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": async () =>
-          Response.json(object),
-        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
-          Response.json(object),
-      },
+      provider.routes,
       async ({ requests }) => {
-        await expect(
-          cancelOrganizationSubscription(
-            first.bindings,
-            organizationId,
-            deleting,
-          ),
-        ).rejects.toThrow("activity unavailable");
-        first.database.run("DROP TRIGGER fail_activity");
-        await cancelOrganizationSubscription(
-          first.bindings,
-          organizationId,
-          secondDeleter,
+        await expect(cancel(fixture)).rejects.toThrow("activity unavailable");
+        fixture.database.run("DROP TRIGGER fail_activity");
+        // Long after, someone else retries before any webhook arrives.
+        fixture.database.run(
+          "UPDATE billing_cancellation_intents SET created_at = created_at - 86400",
         );
+        await cancel(fixture, secondDeleter);
         expect(
           requests.filter(({ method }) => method === "DELETE"),
         ).toHaveLength(1);
-        expect(canceledEvents(first)).toMatchObject([
+        expect(canceledEvents(fixture)).toMatchObject([
           { actor_user_id: "user-1" },
         ]);
         // The webhook that follows records nothing more.
-        await sendWebhook(first, { ...canceled, data: { object } });
-        expect(canceledEvents(first)).toHaveLength(1);
-        expect(intents(first)).toEqual([]);
+        await sendWebhook(fixture, provider.event());
+        expect(canceledEvents(fixture)).toHaveLength(1);
+        expect(intents(fixture)).toEqual([]);
       },
       { captureErrors: true },
     );
+  });
 
-    // A's request failed without canceling; B's retry cancels, so B is.
-    const second = paidFixture();
-    let deletes = 0;
+  it("credits the retrying deleter when the first request never canceled", async () => {
+    const fixture = paidFixture();
+    const provider = stripe();
+    provider.state.fail.push(503);
     await withFetch(
-      {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": async () => {
-          deletes += 1;
-          return deletes === 1
-            ? Response.json(
-                { error: { message: "Stripe unavailable" } },
-                { status: 503 },
-              )
-            : Response.json(object);
-        },
-        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
-          Response.json(active),
-      },
+      provider.routes,
       async () => {
-        await expect(
-          cancelOrganizationSubscription(
-            second.bindings,
-            organizationId,
-            deleting,
-          ),
-        ).rejects.toThrow("Stripe unavailable");
-        // An indeterminate failure keeps A's intent.
-        expect(intents(second)).toEqual([{ subscription_id: "sub_test" }]);
-        await cancelOrganizationSubscription(
-          second.bindings,
-          organizationId,
-          secondDeleter,
-        );
-        expect(canceledEvents(second)).toMatchObject([
+        await expect(cancel(fixture)).rejects.toThrow("Stripe answered 503");
+        // An indeterminate failure keeps the first intent.
+        expect(intents(fixture)).toEqual([{ subscription_id: "sub_test" }]);
+        await cancel(fixture, secondDeleter);
+        expect(canceledEvents(fixture)).toMatchObject([
           { actor_user_id: "user-2" },
         ]);
       },
@@ -467,99 +457,21 @@ describe("subscription cancellation activity", () => {
     );
   });
 
-  it("still credits the first deleter when the retry comes long after", async () => {
+  it("credits nobody for a cancellation made elsewhere while an intent waits", async () => {
     const fixture = paidFixture();
-    const now = Math.floor(Date.now() / 1_000);
-    const canceled = subscriptionEvent("evt_canceled", 200, "canceled", 2);
-    const object = { ...canceled.data.object, canceled_at: now };
-    // The same subscription as Stripe shows it an hour later.
-    const later = { ...object, canceled_at: now - 3_600 };
-    fixture.database.exec(`CREATE TRIGGER fail_activity
-      BEFORE INSERT ON activity_events
-      WHEN NEW.action = 'billing.subscription_canceled'
-      BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END`);
+    const provider = stripe();
+    provider.state.fail.push(503);
     await withFetch(
-      {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": async () =>
-          Response.json(object),
-        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
-          Response.json(later),
-      },
-      async ({ requests }) => {
-        await expect(
-          cancelOrganizationSubscription(
-            fixture.bindings,
-            organizationId,
-            deleting,
-          ),
-        ).rejects.toThrow("activity unavailable");
-        fixture.database.run("DROP TRIGGER fail_activity");
-        // The first request ran an hour ago, when Stripe canceled.
-        fixture.database.run(
-          `UPDATE billing_cancellation_intents SET created_at = ${now - 3_600}`,
-        );
-        await cancelOrganizationSubscription(fixture.bindings, organizationId, {
-          ...deleting,
-          actor: { userId: "user-2" },
-        });
-        expect(
-          requests.filter(({ method }) => method === "DELETE"),
-        ).toHaveLength(1);
-        expect(canceledEvents(fixture)).toMatchObject([
-          { actor_user_id: "user-1" },
-        ]);
+      provider.routes,
+      async () => {
+        await expect(cancel(fixture)).rejects.toThrow("Stripe answered 503");
+        expect(intents(fixture)).toEqual([{ subscription_id: "sub_test" }]);
+        // Moments later someone cancels in the Billing Portal instead.
+        provider.state.status = "canceled";
+        provider.state.comment = "Too expensive";
+        expect((await sendWebhook(fixture, provider.event())).status).toBe(200);
       },
       { captureErrors: true },
-    );
-  });
-
-  it("credits nobody for a cancellation long after a refused or stale intent", async () => {
-    const fixture = paidFixture();
-    await withFetch(
-      {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": async () =>
-          Response.json(
-            { error: { message: "No such subscription" } },
-            { status: 404 },
-          ),
-      },
-      async () => {
-        await expect(
-          cancelOrganizationSubscription(
-            fixture.bindings,
-            organizationId,
-            deleting,
-          ),
-        ).rejects.toThrow("No such subscription");
-      },
-      { captureErrors: true },
-    );
-    // A definitive refusal leaves no intent behind.
-    expect(intents(fixture)).toEqual([]);
-    // An intent left by an indeterminate failure credits only a cancellation
-    // Stripe reports close to it.
-    fixture.database.run(`INSERT INTO billing_cancellation_intents
-      (subscription_id, organization_id, actor_user_id, via, reason,
-       previous_status, created_at)
-      VALUES ('sub_test', '${organizationId}', 'user-1', 'owner',
-              'organization_deletion', 'active',
-              ${Math.floor(Date.now() / 1_000) - 86_400})`);
-    const canceled = subscriptionEvent("evt_portal", 300, "canceled", 2);
-    const object = {
-      ...canceled.data.object,
-      canceled_at: Math.floor(Date.now() / 1_000),
-    };
-    await withFetch(
-      {
-        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
-          Response.json(object),
-      },
-      async () => {
-        expect(
-          (await sendWebhook(fixture, { ...canceled, data: { object } }))
-            .status,
-        ).toBe(200);
-      },
     );
     expect(canceledEvents(fixture)).toEqual([]);
     expect(intents(fixture)).toEqual([]);
@@ -568,5 +480,20 @@ describe("subscription cancellation activity", () => {
         .query("SELECT stripe_status FROM organization_billing")
         .get(),
     ).toEqual({ stripe_status: "canceled" });
+  });
+
+  it("leaves no intent after a definitive refusal", async () => {
+    const fixture = paidFixture();
+    const provider = stripe();
+    provider.state.fail.push(404);
+    await withFetch(
+      provider.routes,
+      async () => {
+        await expect(cancel(fixture)).rejects.toThrow("Stripe answered 404");
+      },
+      { captureErrors: true },
+    );
+    expect(intents(fixture)).toEqual([]);
+    expect(canceledEvents(fixture)).toEqual([]);
   });
 });

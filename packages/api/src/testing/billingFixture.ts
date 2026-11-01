@@ -49,6 +49,22 @@ export function createFixture(organizationRole = "owner") {
   };
 }
 
+/**
+ * A Stripe subscription cancel route that returns `subscription` with the
+ * comment the request sent, as Stripe does.
+ */
+export function echoCancellation(subscription: Record<string, unknown>) {
+  return (call: { url: string }) =>
+    Response.json({
+      ...subscription,
+      cancellation_details: {
+        comment: new URL(call.url).searchParams.get(
+          "cancellation_details[comment]",
+        ),
+      },
+    });
+}
+
 export function subscriptionEvent(
   id: string,
   created: number,

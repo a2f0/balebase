@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import { findActivity } from "../shared/activity";
+import { echoCancellation } from "../testing/billingFixture";
 import { testBindings } from "../testing/bindings";
 import { toD1 } from "../testing/d1";
 import { createTestDatabase } from "../testing/database";
@@ -294,8 +295,8 @@ describe("admin organizations", () => {
     insertPaidBilling(database);
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
-          Response.json(canceledSubscription()),
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test?*":
+          echoCancellation(canceledSubscription()),
       },
       async ({ requests }) => {
         const response = await adminApp(database).request(
@@ -306,7 +307,9 @@ describe("admin organizations", () => {
         expect(requests.map(({ method, url }) => ({ method, url }))).toEqual([
           {
             method: "DELETE",
-            url: "https://api.stripe.com/v1/subscriptions/sub_admin_test",
+            url: expect.stringMatching(
+              /^https:\/\/api\.stripe\.com\/v1\/subscriptions\/sub_admin_test\?cancellation_details/,
+            ),
           },
         ]);
         expect(
@@ -332,7 +335,7 @@ describe("admin organizations", () => {
     insertPaidBilling(database);
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test?*": () =>
           Response.json(
             { error: { message: "Stripe unavailable" } },
             { status: 503 },
@@ -367,8 +370,8 @@ describe("admin organizations", () => {
     );
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
-          Response.json(canceledSubscription()),
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test?*":
+          echoCancellation(canceledSubscription()),
       },
       async () => {
         const response = await adminApp(database).request(
@@ -406,8 +409,8 @@ describe("admin organizations", () => {
     );
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
-          Response.json(canceledSubscription(3)),
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test?*":
+          echoCancellation(canceledSubscription(3)),
       },
       async () => {
         const app = adminApp(database);
@@ -495,8 +498,8 @@ describe("admin organizations", () => {
     );
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
-          Response.json(canceledSubscription()),
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test?*":
+          echoCancellation(canceledSubscription()),
       },
       async ({ requests }) => {
         const app = adminApp(database);
@@ -535,7 +538,7 @@ describe("admin organizations", () => {
         .get(targetOrganizationId);
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test?*": () =>
           Response.json(
             { error: { message: "Stripe unavailable" } },
             { status: 503 },
@@ -559,8 +562,8 @@ describe("admin organizations", () => {
       BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END`);
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
-          Response.json(canceledSubscription()),
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_admin_test?*":
+          echoCancellation(canceledSubscription()),
         // The first attempt's 503 left its intent, so Stripe is asked first.
         "GET https://api.stripe.com/v1/subscriptions/sub_admin_test": () =>
           Response.json({ ...canceledSubscription(), status: "active" }),

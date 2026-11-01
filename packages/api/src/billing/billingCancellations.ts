@@ -16,21 +16,16 @@ export interface SubscriptionCancellation {
 }
 
 /**
- * How long, in seconds, after its intent a cancellation Stripe reports is
- * still credited to the intent's person. The request cancels within seconds;
- * the window covers a webhook that persists that cancellation instead, and
- * keeps a later, unrelated cancellation from being credited to them.
- */
-const intentWindowSeconds = 15 * 60;
-
-/**
  * Stores who is about to cancel a subscription before Stripe is asked to.
  * Whichever write persists the cancellation (this request, or a webhook when
  * this request's write fails) records the event from it, so the person is
- * never lost once Stripe has canceled. Unless `replace` is set, an
- * unresolved intent is kept, however old, as its request may have canceled
- * already; the caller asks Stripe before replacing it. Returns whether this
- * request's intent is stored.
+ * never lost once Stripe has canceled. Each intent has its own marker, which
+ * the request sends as the cancellation's `cancellation_details[comment]`;
+ * only a cancellation that carries it back is credited, so one made
+ * elsewhere (in the Billing Portal, say) never is. Unless `replace` is set,
+ * an unresolved intent is kept, as its request may have canceled already;
+ * the caller asks Stripe before replacing it. Returns this request's marker,
+ * or null when an earlier intent was kept.
  */
 export async function recordCancellationIntent(
   database: D1Database,
@@ -39,17 +34,18 @@ export async function recordCancellationIntent(
   cancellation: SubscriptionCancellation,
   replace = false,
 ) {
+  const marker = `balebase-deletion:${crypto.randomUUID()}`;
   const stored = await database
     .prepare(
       `INSERT INTO billing_cancellation_intents (
          subscription_id, organization_id, actor_user_id, api_key_id,
-         api_key_channel, via, reason, previous_status, created_at
+         api_key_channel, via, reason, previous_status, marker, created_at
        )
        SELECT ?, organization.id, ?, ?, ?, ?, ?, (
                 SELECT stripe_status FROM organization_billing
                 WHERE organization_id = organization.id
                   AND stripe_subscription_id = ?
-              ), ?
+              ), ?, ?
        FROM organization WHERE organization.id = ?
        ON CONFLICT (subscription_id) DO UPDATE SET
          organization_id = excluded.organization_id,
@@ -59,6 +55,7 @@ export async function recordCancellationIntent(
          via = excluded.via,
          reason = excluded.reason,
          previous_status = excluded.previous_status,
+         marker = excluded.marker,
          created_at = excluded.created_at
        WHERE ?`,
     )
@@ -70,12 +67,13 @@ export async function recordCancellationIntent(
       cancellation.via,
       cancellation.reason,
       subscriptionId,
+      marker,
       Math.floor(Date.now() / 1_000),
       organizationId,
       replace ? 1 : 0,
     )
     .run();
-  return Number(stored.meta.changes) > 0;
+  return Number(stored.meta.changes) > 0 ? marker : null;
 }
 
 /**
@@ -106,8 +104,9 @@ export async function forgetRefusedCancellation(
 
 /**
  * Statements that go first in the batch persisting a canceled subscription:
- * the event credited to a recent intent's person, once per subscription,
- * then the intent's removal. The event reads the status stored when the
+ * the event credited to the intent's person when Stripe's cancellation
+ * carries the intent's marker, once per subscription, then the intent's
+ * removal. The event reads the status stored when the
  * intent was made, and does not depend on the persisting write, which skips
  * a subscription the organization does not track (a completed pending
  * Checkout): Stripe has canceled it either way.
@@ -146,9 +145,7 @@ export function canceledSubscriptionStatements(
            ON api_key.id = intent.api_key_id
           AND api_key.created_by = intent.actor_user_id
           AND api_key.organization_id = intent.organization_id
-         WHERE intent.subscription_id = ?
-           AND ? BETWEEN intent.created_at - 60
-                     AND intent.created_at + ${intentWindowSeconds}
+         WHERE intent.subscription_id = ? AND intent.marker = ?
            AND NOT EXISTS (
              SELECT 1 FROM activity_events
              WHERE organization_id = intent.organization_id
@@ -160,7 +157,7 @@ export function canceledSubscriptionStatements(
         new Date(canceledAt * 1_000).toISOString(),
         seatQuantity,
         subscription.id,
-        canceledAt,
+        subscription.cancellation_details?.comment ?? null,
       ),
     database
       .prepare(

@@ -121,7 +121,7 @@ describe("billing deletion", () => {
     });
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_wrong_account":
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_wrong_account?*":
           async () =>
             Response.json(
               { error: { message: "No such subscription" } },
@@ -197,7 +197,7 @@ describe("billing deletion", () => {
     let requestCount = 0;
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_delete_race":
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_delete_race?*":
           async () => {
             requestCount += 1;
             markCancellationStarted();

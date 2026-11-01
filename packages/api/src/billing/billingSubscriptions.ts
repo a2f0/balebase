@@ -371,17 +371,17 @@ export async function cancelStripeSubscription(
           subscriptionId,
           cancellation,
         )
-      : "none";
+      : null;
     if (intent === "resolved") return;
-    const intentStored = intent === "stored";
     let subscription: StripeSubscription;
     try {
       subscription = await deleteStripeSubscription(
         environment,
         subscriptionId,
+        intent ?? undefined,
       );
     } catch (cause) {
-      if (intentStored) {
+      if (intent) {
         await forgetRefusedCancellation(environment.DB, subscriptionId, cause);
       }
       throw cause;
@@ -401,6 +401,7 @@ export async function cancelStripeSubscription(
  * intent is still unresolved, Stripe decides whose it is: a subscription
  * already canceled was canceled by that request, so it is persisted, which
  * credits that request ("resolved"); otherwise this request takes over.
+ * Returns the marker to send with this request's cancellation.
  */
 async function claimCancellationIntent(
   environment: SubscriptionEnvironment,
@@ -408,16 +409,13 @@ async function claimCancellationIntent(
   subscriptionId: string,
   cancellation: SubscriptionCancellation,
 ) {
-  if (
-    await recordCancellationIntent(
-      environment.DB,
-      organizationId,
-      subscriptionId,
-      cancellation,
-    )
-  ) {
-    return "stored";
-  }
+  const marker = await recordCancellationIntent(
+    environment.DB,
+    organizationId,
+    subscriptionId,
+    cancellation,
+  );
+  if (marker) return marker;
   const current = await expandedSubscription(environment, subscriptionId);
   if (current?.status === "canceled") {
     await persistSubscription(
@@ -428,24 +426,32 @@ async function claimCancellationIntent(
     );
     return "resolved";
   }
-  await recordCancellationIntent(
+  return recordCancellationIntent(
     environment.DB,
     organizationId,
     subscriptionId,
     cancellation,
     true,
   );
-  return "stored";
 }
 
+/**
+ * Cancels the subscription now. A `marker` is sent as the cancellation's
+ * comment, which Stripe returns with the subscription, so the cancellation
+ * can be told apart from one made elsewhere.
+ */
 async function deleteStripeSubscription(
   environment: Pick<Bindings, "STRIPE_SECRET_KEY">,
   subscriptionId: string,
+  marker?: string,
 ) {
+  const query = marker
+    ? `?${new URLSearchParams({ "cancellation_details[comment]": marker })}`
+    : "";
   const subscription = parseStripeSubscription(
     await stripeDelete(
       environment,
-      `/v1/subscriptions/${encodeURIComponent(subscriptionId)}`,
+      `/v1/subscriptions/${encodeURIComponent(subscriptionId)}${query}`,
     ),
   );
   if (subscription.status !== "canceled") {

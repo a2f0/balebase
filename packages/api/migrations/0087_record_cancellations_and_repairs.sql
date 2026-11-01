@@ -14,6 +14,9 @@ CREATE TABLE billing_cancellation_intents (
   via TEXT NOT NULL CHECK (via IN ('owner', 'root_admin')),
   reason TEXT NOT NULL CHECK (reason = 'organization_deletion'),
   previous_status TEXT,
+  -- Sent to Stripe as the cancellation's comment; a cancellation is credited
+  -- only when it carries this back.
+  marker TEXT NOT NULL,
   -- Unix seconds.
   created_at INTEGER NOT NULL
 );
