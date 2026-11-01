@@ -235,7 +235,7 @@ describe("account and organization purges", () => {
         .all(),
     ).toEqual([]);
     const purged = events(f, "user.purged");
-    await expect(purged).toEqual(
+    expect(purged).toEqual(
       ["legacy", "self", "target"].map((id) => ({
         ...systemActor("purgeRequestedUsers"),
         action: "user.purged",
@@ -250,7 +250,7 @@ describe("account and organization purges", () => {
         subject_type: "user",
       })),
     );
-    await expect(purged.map(({ details }) => details)).toEqual([
+    expect(purged.map(({ details }) => details)).toEqual([
       {
         requestedAt: "2026-08-01",
         requestedBy: null,
@@ -357,9 +357,7 @@ describe("account and organization purges", () => {
       failed: 0,
     });
     const purged = events(f, "organization.purged");
-    await expect(
-      purged.map(({ root_id, details }) => [root_id, details]),
-    ).toEqual([
+    expect(purged.map(({ root_id, details }) => [root_id, details])).toEqual([
       [
         "gone",
         {
@@ -381,7 +379,7 @@ describe("account and organization purges", () => {
         },
       ],
     ]);
-    await expect(purged[0]).toMatchObject({
+    expect(purged[0]).toMatchObject({
       ...systemActor("purgeDeletedOrganizations"),
       causation_id: "run-9",
       organization_id: null,
@@ -439,17 +437,17 @@ describe("Free-plan retention", () => {
       await purgeExpiredFreeAuditRuns(bindings, "run-r", "2026-07-27"),
     ).toBe(102);
     const purged = events(f, "organization.audit_runs_purged");
-    await expect(
+    expect(
       purged.map(({ organization_id, details }) => [
         organization_id,
-        details.count,
+        (details as { count?: unknown }).count,
       ]),
     ).toEqual([
       ["free", 100],
       ["free", 1],
       ["other", 1],
     ]);
-    await expect(purged[0]).toMatchObject({
+    expect(purged[0]).toMatchObject({
       ...systemActor("purgeExpiredFreeAuditRuns"),
       causation_id: "run-r",
       details: { completedBefore: "2026-07-27", count: 100, retentionDays: 30 },
