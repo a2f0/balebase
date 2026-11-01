@@ -51,9 +51,13 @@ SELECT id, organization_id, root_type, root_id, root_label, subject_type,
        actor_api_key_channel, 'user'
 FROM activity_events;
 
--- Dozens of triggers on other tables write activity_events by name. The legacy
--- rename leaves them as written, so they resolve to the rebuilt table; the
--- modern rename would refuse while the old table is gone.
+-- Dozens of triggers on other tables write activity_events by name. The modern
+-- rename re-parses them and refuses while the old table is gone ("error in
+-- trigger ...: no such table"); the legacy rename leaves them as written, so
+-- they resolve to the rebuilt table. D1 supports this pragma
+-- (developers.cloudflare.com/d1/sql-api/sql-statements); verified with
+-- `wrangler d1 migrations apply DB --local`, after which those triggers still
+-- insert and delete events.
 PRAGMA legacy_alter_table = ON;
 DROP TABLE activity_events;
 ALTER TABLE activity_events_next RENAME TO activity_events;

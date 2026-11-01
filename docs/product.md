@@ -513,9 +513,7 @@ it; each such project's activity shows the removal by Balebase maintenance.
 The deletion rechecks eligibility, so a restore committed first keeps the
 form. Discards and restores appear in the form's Activity as their own events.
 Apply migration `0079_restore_discarded_audit_forms.sql`, which names those
-events, before deploying. The purge records nothing in the projects that lose
-the form: the shared activity model needs a person as the actor, and no person
-runs the job. Its job run keeps the number of forms purged.
+events, before deploying. Its job run keeps the number of forms purged.
 Publishing and unpublishing a form, organization or global, appear in its
 Activity as their own events; a save that keeps the status is an ordinary saved
 version. Organizations see a global form's publications but not its
