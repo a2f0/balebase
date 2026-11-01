@@ -55,7 +55,8 @@ export function EquipmentActivityDetails({ event }: { event: ActivityEvent }) {
         Serial number: {fieldValue("serialNumber", details.serialNumber)} ·
         Purchase date: {fieldValue("purchaseDate", details.purchaseDate)}
       </p>
-      {event.action === "equipment.created" && (
+      {/* Deletions recorded before they kept the holder say nothing. */}
+      {(event.action === "equipment.created" || "assignedTo" in details) && (
         <p>
           Assigned to:{" "}
           {assigneeLabel(
@@ -64,6 +65,9 @@ export function EquipmentActivityDetails({ event }: { event: ActivityEvent }) {
             details.assigneeEmail,
           )}
         </p>
+      )}
+      {typeof details.emailLinkCount === "number" && (
+        <p>Email links removed: {details.emailLinkCount}</p>
       )}
     </div>
   );

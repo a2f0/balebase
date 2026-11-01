@@ -407,7 +407,15 @@ describe("global audit templates", () => {
         )
       ).status,
     ).toBe(200);
-    for (const suffix of ["", "/versions", "/versions/1", "/activity"]) {
+    // A discarded form cannot be opened for editing, but root admins can
+    // still read its versions and history until the purge
+    // (discardedAuditForms.test.ts).
+    for (const [suffix, status] of [
+      ["", 404],
+      ["/versions", 200],
+      ["/versions/1", 200],
+      ["/activity", 200],
+    ] as const) {
       expect(
         (
           await jsonRequest(
@@ -418,7 +426,7 @@ describe("global audit templates", () => {
             admin,
           )
         ).status,
-      ).toBe(404);
+      ).toBe(status);
     }
     const listed = await jsonRequest<TemplateListResponse>(
       fixture,

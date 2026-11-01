@@ -256,6 +256,7 @@ describe("library activity", () => {
     const history = await member<Page>("GET", `${path}/activity`);
     expect(history.body.events.map(({ action }) => action)).toEqual([
       "inbox.email_linked",
+      "library.file_uploaded",
       "library.folder_renamed",
       "library.folder_renamed",
       "library.folder_created",
@@ -280,6 +281,7 @@ describe("library activity", () => {
     );
     expect(feed.body.events.map(({ action }) => action)).toEqual([
       "library.folder_deleted",
+      "inbox.email_unlinked",
       "inbox.email_linked",
       "library.folder_renamed",
       "library.folder_renamed",

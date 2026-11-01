@@ -41,7 +41,7 @@ export function libraryActivitySummary(event: ActivityEvent) {
     case "library.file_deleted":
       return `${textValue(details.filename)} · ${folderLabel(details.folderId, details.folderName)}`;
     case "library.file_moved":
-      return `${textValue(details.filename)} · ${folderLabel(details.fromFolderId, details.fromFolderName)} → ${folderLabel(details.toFolderId, details.toFolderName)}`;
+      return `${textValue(details.filename)} · ${folderLabel(details.fromFolderId, details.fromFolderName)} → ${folderLabel(details.toFolderId, details.toFolderName)}${details.via === "folder_deleted" ? " · Folder deleted" : ""}`;
     case "library.folder_renamed":
       return `${textValue(details.before)} → ${textValue(details.after)}`;
     case "library.folder_deleted":
@@ -52,7 +52,7 @@ export function libraryActivitySummary(event: ActivityEvent) {
       return `${textValue(details.from)} · from ${emailStatusLabels[textValue(details.fromStatus)] ?? "Inbox"}`;
     case "inbox.email_linked":
     case "inbox.email_unlinked":
-      return `${textValue(details.subject)} · ${linkTargetLabels[root.type] ?? "Record"}: ${root.label}`;
+      return `${textValue(details.subject)} · ${linkTargetLabels[root.type] ?? "Record"}: ${root.label}${linkEndedByDeletion(event) ? ` · ${linkTargetLabels[root.type] ?? "Record"} deleted` : ""}`;
     case "business.created":
     case "business.deleted":
       return businessSnapshot(details);
@@ -61,6 +61,11 @@ export function libraryActivitySummary(event: ActivityEvent) {
     default:
       return textValue(details.name) || root.label;
   }
+}
+
+/** An email link that ended because its folder or equipment was deleted. */
+export function linkEndedByDeletion({ action, details }: ActivityEvent) {
+  return action === "inbox.email_unlinked" && details.via === "target_deleted";
 }
 
 function folderLabel(id: unknown, name: unknown) {

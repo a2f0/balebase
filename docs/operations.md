@@ -178,7 +178,7 @@ verify its queued/running/completed history and named output. Check a manual ban
 sync in the same history, confirm duplicate requests share an active run, and
 verify a non-admin session cannot access run history or details. Manual
 requests also appear in `maintenance_requests`, which job history retention does
-not remove.
+not remove; the Jobs page lists them under **Manual requests**.
 
 ## Finance background sync
 

@@ -1,7 +1,11 @@
 import { objectsRoutes } from "@balebase/validators/objects";
 import { type Context, Hono } from "hono";
 import type { ApiEnv, ApiKeyPrincipal } from "../auth/apiEnv";
-import { activityBatch, insertActivity } from "../shared/activity";
+import {
+  activityBatch,
+  findActivity,
+  insertActivity,
+} from "../shared/activity";
 import { maxFilenameBytes, normalizeFilename } from "../shared/filenames";
 import { readBody, respond } from "../shared/respond";
 import {
@@ -147,6 +151,34 @@ objects.get("/:id", async (context) => {
     filename: row.filename,
   });
   return download ?? context.json({ error: "Object data not found." }, 404);
+});
+
+// A file's history: its upload, moves, and deletion. Every member can read
+// file events in the shared feed, so the history stays readable after the
+// file is deleted, for as long as the organization keeps its events.
+objects.get("/:id/activity", async (context) => {
+  const organizationId = context.get("organizationId");
+  const id = context.req.param("id");
+  const known = await context.env.DB.prepare(
+    `SELECT 1 FROM objects
+     WHERE id = ? AND organization_id = ? AND kind = 'library'
+     UNION ALL
+     SELECT 1 FROM activity_events
+     WHERE organization_id = ? AND root_type = 'library_file' AND root_id = ?
+     LIMIT 1`,
+  )
+    .bind(id, organizationId, organizationId, id)
+    .first();
+  if (!known) return context.json({ error: "Object not found." }, 404);
+  const page = await findActivity(
+    context.env.DB,
+    organizationId,
+    context.req.query("cursor"),
+    { id, type: "library_file" },
+  );
+  return page
+    ? respond(context, objectsRoutes.activity, page)
+    : context.json({ error: "Invalid activity cursor." }, 400);
 });
 
 // Moves a document into a folder, or back to the library root with null.

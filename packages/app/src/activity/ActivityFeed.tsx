@@ -29,6 +29,7 @@ import {
   financeConnectionPath,
   financeTransactionPath,
   issuePath,
+  libraryFilePath,
   libraryPath,
   organizationAccessPath,
   organizationPeoplePath,
@@ -47,7 +48,11 @@ import {
 } from "./EquipmentActivity";
 import { financeActionLabels, financeActivitySummary } from "./financeActivity";
 import { groupActivitySummary } from "./groupActivity";
-import { isLibraryActivity, libraryActivitySummary } from "./libraryActivity";
+import {
+  isLibraryActivity,
+  libraryActivitySummary,
+  linkEndedByDeletion,
+} from "./libraryActivity";
 import {
   membershipSummary,
   organizationActionLabels,
@@ -597,7 +602,7 @@ function activityPath(event: ActivityEvent) {
   if (event.root.type.startsWith("finance_")) return financeActivityPath(event);
   // Deleted equipment has no page to open.
   if (event.root.type === "equipment") {
-    return event.action === "equipment.deleted"
+    return event.action === "equipment.deleted" || linkEndedByDeletion(event)
       ? undefined
       : equipmentPath(event.root.id);
   }
@@ -632,13 +637,17 @@ function contractActivityPath(event: ActivityEvent) {
 }
 
 /**
- * Deleted folders and businesses, and files, have no page. An email's events
- * do not link either: an event cannot tell which folder the email is in now.
+ * Deleted folders and businesses have no page; a file's history outlives it.
+ * An email's events do not link: an event cannot tell which folder the email
+ * is in now.
  */
-function libraryActivityPath({ action, root }: ActivityEvent) {
+function libraryActivityPath(event: ActivityEvent) {
+  const { action, root } = event;
   switch (root.type) {
+    case "library_file":
+      return libraryFilePath(root.id);
     case "library_folder":
-      return action === "library.folder_deleted"
+      return action === "library.folder_deleted" || linkEndedByDeletion(event)
         ? undefined
         : libraryPath(root.id);
     case "business":
@@ -687,6 +696,7 @@ const linkLabels: Partial<Record<string, string>> = {
   finance_category: "Open categories",
   finance_connection: "Open connection",
   finance_transaction: "Open transaction",
+  library_file: "Open file history",
   library_folder: "Open folder",
   organization_billing: "Open billing",
   organization_group: "Open groups",

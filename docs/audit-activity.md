@@ -76,11 +76,13 @@ Resource history routes authorize the resource before using `findActivity`.
 A bank connection's history (`GET /api/finance/connections/:id/activity`, MCP
 `list_finance_connection_activity`) stays readable after it is disconnected.
 Shared global form history only exposes published versions to organization
-members. Form events name the version they saved: creation (with the global
-form a copy came from and the published version it started from), saved
-versions, publication,
-unpublication, discards, and restores. Organizations therefore see a global
-form's publications but never its unpublications, discards, or restores.
+members. Root admins read a discarded global form's history and versions
+through `/api/admin/audit-templates/:id/activity` and `/versions` until the
+purge deletes them. Form events name the version they saved: creation (with
+the global form a copy came from and the published version it started from),
+saved versions, publication, unpublication, discards, and restores.
+Organizations therefore see a global form's publications but never its
+unpublications, discards, or restores.
 Adding a producer with restricted details also requires reviewing the shared
 feed's reader permissions, labels, and navigation.
 
@@ -120,8 +122,11 @@ Uploading, moving, and permanently deleting a library file records an event on
 the file (`library_file`) naming its filename, content type, size, and folder,
 never its contents or storage key. Creating, renaming, and deleting a folder
 records one on the folder (`library_folder`); a deletion counts the files it
-returns to the library root and the email links it removes. Moving a file to
-the folder it is in, or renaming a folder to its current name, records nothing.
+returns to the library root and the email links it removes, and records each
+of them on its own record in the same batch: a `library.file_moved` per file
+(`details.via = 'folder_deleted'`) and an `inbox.email_unlinked` per link.
+Moving a file to the folder it is in, or renaming a folder to its current
+name, records nothing.
 A file's deletion commits with its event and queues its bytes for the
 deleted-object cleanup, which retries if removing them fails.
 
@@ -131,10 +136,14 @@ and the folder it left, never its body or attachments; restoring no longer
 erases who trashed it. Linking an email to a folder, equipment, or a
 transaction, and unlinking it, records an event on that record with the email as
 the subject, so a transaction's links need Finance access wherever they are
-read. A folder or equipment deletion counts or drops its links without one event
-per link. When Plaid removes a transaction, its links are hidden with it, and
-kept, without an event. Inbound mail is a provider action with no user actor:
-the stored message and its raw `.eml` are its record.
+read. Deleting a folder or equipment records an `inbox.email_unlinked` for
+each link it removes (`details.via = 'target_deleted'`), attributed to the
+person deleting it, so the email's history shows when and by whom the link
+ended. `equipment.deleted` also keeps who held the item (`assignedTo`,
+`assigneeName`, `assigneeEmail`) and its `emailLinkCount`. When Plaid removes a
+transaction, its links are hidden with it, and kept, without an event. Inbound
+mail is a provider action with no user actor: the stored message and its raw
+`.eml` are its record.
 
 Creating, editing, and deleting a business records an event on the business
 (`business`). Edits list each changed field with its old and new value; a save
@@ -142,8 +151,12 @@ that changes nothing, a duplicate EIN or DUNS number, and a save racing another
 change record nothing. Every member can read the feed, so events show only the
 last four digits of an EIN or DUNS number.
 
-Folders, emails, and businesses show their own history. An email's history also
-lists its links, recorded on the linked records.
+Folders, files, emails, and businesses show their own history. A folder's
+history also lists the file events that name it: uploads into it, moves into
+or out of it, and deletions of files in it. A file's history
+(`GET /api/objects/:id/activity`, MCP `list_library_file_activity`) stays
+readable after the file is deleted, as its events are in the shared feed. An
+email's history also lists its links, recorded on the linked records.
 
 ## Group access
 
@@ -199,15 +212,23 @@ Some histories are not organization activity:
 
 - `user_role_events` records platform role changes: revocations from the Users
   page with the acting admin, and `auth:set-role` changes with the operator who
-  ran the script (`actor_kind = 'operator'`, no user ID). D1 operators read it.
+  ran the script (`actor_kind = 'operator'`, no user ID).
 - `user_deletion_events` records account deletion requests and cancellations.
+  Root admins read both, merged and newest first with each actor's snapshot and
+  kind, from **View history** on the Users page
+  (`GET /api/admin/users/:userId/history`).
 - `maintenance_requests` records every manual maintenance request, including
   one that joins an active run, with the requester's snapshot. It outlives the
   30-day job history and the requester's account. Each request also logs a line
-  on its run, and the run keeps the first requester's name and email.
+  on its run, and the run keeps the first requester's name and email. Root
+  admins read it under **Manual requests** on the Jobs page
+  (`GET /api/admin/jobs/requests`).
 - `user_security_events` records a person's own two-factor and password
   changes by trigger. The person reads it under Account settings → Security;
   root admins read it in D1.
+
+The role, deletion, and maintenance request readers are for root admins only,
+never organization feeds; impersonated sessions are refused.
 
 Better Auth's admin endpoints that would change another person's account or
 act as them (`set-user-password`, `ban-user`, `unban-user`,
@@ -225,9 +246,11 @@ examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `auth/organizationRoleActivity.test.ts`,
 `organizations/membershipActivity.test.ts`,
 `organizations/accessActivity.test.ts`, `issues/issues.test.ts`,
-`library/libraryActivity.test.ts`, `inbox/inboxActivity.test.ts`,
+`library/libraryActivity.test.ts`, `library/recordHistory.test.ts`,
+`inbox/inboxActivity.test.ts`,
 `businesses/businessActivity.test.ts`, `jobs/maintenanceRequests.test.ts`,
-`admin/setUserRole.test.ts`, `users/securityEvents.test.ts`,
+`admin/setUserRole.test.ts`, `admin/platformHistory.test.ts`,
+`admin/discardedAuditForms.test.ts`, `users/securityEvents.test.ts`,
 `contracts/contractActivity.test.ts`, and
 `employeeForms/requirementActivity.test.ts`.
 

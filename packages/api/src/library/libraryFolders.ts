@@ -5,7 +5,11 @@ import {
 import { libraryFolderNameMaxLength } from "@balebase/validators/rules";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
-import { listLinkedEmails, toLinkedEmail } from "../inbox/inboundEmailLinks";
+import {
+  deletedTargetLinkEvents,
+  listLinkedEmails,
+  toLinkedEmail,
+} from "../inbox/inboundEmailLinks";
 import {
   activityBatch,
   findActivity,
@@ -158,8 +162,18 @@ libraryFolders.delete("/:id", async (context) => {
   // Return documents to the library root and drop email links explicitly
   // rather than relying on the foreign-key action and trigger alone. The
   // event counts what the deletion unfiles and unlinks, and outlives the
-  // folder until the organization is purged.
+  // folder until the organization is purged. Each file returned to the root
+  // and each email link removed is also recorded on its own record, so the
+  // file's and the email's histories show the change.
+  const actorId = context.get("authSession").user.id;
   await activityBatch(context.env.DB, context.get("apiKey"), [
+    unfiledFileEvents(context, id),
+    deletedTargetLinkEvents(context.env.DB, {
+      actorId,
+      organizationId,
+      targetId: id,
+      targetType: "library_folder",
+    }),
     folderEvent(context, id, {
       action: "library.folder_deleted",
       details: `json_object(
@@ -200,12 +214,44 @@ libraryFolders.get("/:id/activity", async (context) => {
     context.env.DB,
     organizationId,
     context.req.query("cursor"),
-    { id: folder.id, type: "library_folder" },
+    { id: folder.id, includeFolderFiles: true, type: "library_folder" },
   );
   return page
     ? respond(context, libraryFoldersRoutes.activity, page)
     : context.json({ error: "Invalid activity cursor." }, 400);
 });
+
+/**
+ * One `library.file_moved` per file a folder's deletion returns to the
+ * library root, read from the stored rows in the batch and attributed to the
+ * person deleting the folder.
+ */
+function unfiledFileEvents(context: LibraryContext, folderId: string) {
+  return context.env.DB.prepare(
+    `${insertActivity}
+     SELECT objects.organization_id, 'library_file', objects.id,
+            objects.filename, 'library_file', objects.id,
+            'library.file_moved', actor.id, actor.name, actor.email, ?,
+            json_object('filename', objects.filename,
+                        'fromFolderId', folder.id,
+                        'fromFolderName', folder.name,
+                        'toFolderId', NULL, 'toFolderName', NULL,
+                        'via', 'folder_deleted')
+     FROM objects
+     JOIN library_folders AS folder
+       ON folder.id = objects.folder_id
+      AND folder.organization_id = objects.organization_id
+     JOIN user AS actor ON actor.id = ?
+     WHERE objects.organization_id = ? AND objects.kind = 'library'
+       AND objects.folder_id = ?
+     ORDER BY objects.created_at, objects.id`,
+  ).bind(
+    new Date().toISOString(),
+    context.get("authSession").user.id,
+    context.get("organizationId"),
+    folderId,
+  );
+}
 
 /**
  * Records a folder event in the batch, labelled with the folder's stored name

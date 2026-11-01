@@ -16,6 +16,7 @@ export type ActivitySource =
         | "finance_transaction"
         | "global_audit_template"
         | "inbound_email"
+        | "library_file"
         | "library_folder";
     }
   | undefined;
@@ -53,6 +54,8 @@ export function listActivity(
       return api.inbox.activity(id, cursor);
     case "issue":
       return api.issues.activity(id, cursor);
+    case "library_file":
+      return api.objects.activity(id, cursor);
     case "library_folder":
       return api.libraryFolders.activity(id, cursor);
     case "project":

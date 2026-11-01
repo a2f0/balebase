@@ -27,6 +27,7 @@ import { Projects } from "../projects/Projects";
 import type { WorkspacePage } from "./WorkspaceShell";
 import {
   adminOrganizationPath,
+  adminUserPath,
   globalAuditsPath,
   isWithin,
   recordIdForPath,
@@ -164,9 +165,15 @@ const routes: WorkspaceRoute[] = [
     render: () => <AdminJobs />,
   },
   {
-    matches: exactly("/root/users"),
+    matches: within(adminUserPath()),
     page: "rootUsers",
-    render: ({ user }) => <AdminUsers currentUserId={user.id} />,
+    render: ({ navigate, pathname, user }) => (
+      <AdminUsers
+        currentUserId={user.id}
+        onNavigate={navigate}
+        pathname={pathname}
+      />
+    ),
   },
   {
     matches: within(globalAuditsPath()),
