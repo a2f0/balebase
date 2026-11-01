@@ -4,10 +4,14 @@ import {
   createFixture,
   organizationId,
   proPriceId,
+  sendWebhook,
+  subscriptionEvent,
 } from "../testing/billingFixture";
 import { type FetchCall, withFetch } from "../testing/http";
 import { insertBilling } from "../testing/seed";
+import type { SubscriptionCancellation } from "./billingCancellations";
 import { storePendingCheckout } from "./billingCheckout";
+import { cancelOrganizationSubscription } from "./billingDeletion";
 
 type Fixture = ReturnType<typeof createFixture>;
 
@@ -262,5 +266,169 @@ describe("billing portal activity", () => {
     const response = await openPortal(failing);
     expect(response.status).toBe(500);
     expect(await response.text()).not.toContain("secret");
+  });
+});
+
+describe("subscription cancellation activity", () => {
+  const deleting: SubscriptionCancellation = {
+    actor: { userId: "user-1" },
+    reason: "organization_deletion",
+    via: "owner",
+  };
+
+  function paidFixture() {
+    const fixture = createFixture();
+    insertBilling(fixture.database, organizationId, {
+      seat_quantity: 2,
+      stripe_customer_id: "cus_test",
+      stripe_event_created: 1,
+      stripe_price_id: proPriceId,
+      stripe_status: "active",
+      stripe_subscription_id: "sub_test",
+      stripe_subscription_item_id: "si_test",
+      updated_at: "2026-08-26T12:00:00.000Z",
+    });
+    return fixture;
+  }
+
+  function canceledEvents(fixture: Fixture) {
+    return fixture.database
+      .query<{ actor_user_id: string; details: string }, []>(
+        `SELECT actor_user_id, details FROM activity_events
+         WHERE action = 'billing.subscription_canceled'`,
+      )
+      .all()
+      .map((row) => ({ ...row, details: JSON.parse(row.details) as unknown }));
+  }
+
+  const intents = (fixture: Fixture) =>
+    fixture.database
+      .query("SELECT subscription_id FROM billing_cancellation_intents")
+      .all();
+
+  it("credits the deleter when the webhook persists a cancellation the request could not", async () => {
+    const fixture = paidFixture();
+    const canceled = subscriptionEvent("evt_canceled", 200, "canceled", 2);
+    const object = {
+      ...canceled.data.object,
+      canceled_at: Math.floor(Date.now() / 1_000),
+    };
+    fixture.database.exec(`CREATE TRIGGER fail_activity
+      BEFORE INSERT ON activity_events
+      WHEN NEW.action = 'billing.subscription_canceled'
+      BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END`);
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": async () =>
+          Response.json(object),
+        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
+          Response.json(object),
+      },
+      async ({ requests }) => {
+        await expect(
+          cancelOrganizationSubscription(
+            fixture.bindings,
+            organizationId,
+            deleting,
+          ),
+        ).rejects.toThrow("activity unavailable");
+        // Stripe canceled, but nothing was persisted or recorded.
+        expect(
+          fixture.database
+            .query("SELECT stripe_status FROM organization_billing")
+            .get(),
+        ).toEqual({ stripe_status: "active" });
+        expect(canceledEvents(fixture)).toEqual([]);
+        expect(intents(fixture)).toEqual([{ subscription_id: "sub_test" }]);
+
+        fixture.database.run("DROP TRIGGER fail_activity");
+        expect(
+          (await sendWebhook(fixture, { ...canceled, data: { object } }))
+            .status,
+        ).toBe(200);
+        expect(canceledEvents(fixture)).toEqual([
+          {
+            actor_user_id: "user-1",
+            details: {
+              previousStatus: "active",
+              reason: "organization_deletion",
+              seatQuantity: 2,
+              subscriptionId: "sub_test",
+              via: "owner",
+            },
+          },
+        ]);
+        expect(intents(fixture)).toEqual([]);
+        // Retrying the deletion skips the canceled subscription and records
+        // nothing more.
+        await cancelOrganizationSubscription(
+          fixture.bindings,
+          organizationId,
+          deleting,
+        );
+        expect(
+          requests.filter(({ method }) => method === "DELETE"),
+        ).toHaveLength(1);
+        expect(canceledEvents(fixture)).toHaveLength(1);
+      },
+      { captureErrors: true },
+    );
+  });
+
+  it("credits nobody for a cancellation long after a refused or stale intent", async () => {
+    const fixture = paidFixture();
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": async () =>
+          Response.json(
+            { error: { message: "No such subscription" } },
+            { status: 404 },
+          ),
+      },
+      async () => {
+        await expect(
+          cancelOrganizationSubscription(
+            fixture.bindings,
+            organizationId,
+            deleting,
+          ),
+        ).rejects.toThrow("No such subscription");
+      },
+      { captureErrors: true },
+    );
+    // A definitive refusal leaves no intent behind.
+    expect(intents(fixture)).toEqual([]);
+    // An intent left by an indeterminate failure credits only a cancellation
+    // Stripe reports close to it.
+    fixture.database.run(`INSERT INTO billing_cancellation_intents
+      (subscription_id, organization_id, actor_user_id, via, reason,
+       previous_status, created_at)
+      VALUES ('sub_test', '${organizationId}', 'user-1', 'owner',
+              'organization_deletion', 'active',
+              ${Math.floor(Date.now() / 1_000) - 86_400})`);
+    const canceled = subscriptionEvent("evt_portal", 300, "canceled", 2);
+    const object = {
+      ...canceled.data.object,
+      canceled_at: Math.floor(Date.now() / 1_000),
+    };
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
+          Response.json(object),
+      },
+      async () => {
+        expect(
+          (await sendWebhook(fixture, { ...canceled, data: { object } }))
+            .status,
+        ).toBe(200);
+      },
+    );
+    expect(canceledEvents(fixture)).toEqual([]);
+    expect(intents(fixture)).toEqual([]);
+    expect(
+      fixture.database
+        .query("SELECT stripe_status FROM organization_billing")
+        .get(),
+    ).toEqual({ stripe_status: "canceled" });
   });
 });

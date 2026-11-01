@@ -7,8 +7,8 @@ import {
 } from "../testing/billingFixture";
 import { type FetchCall, withFetch } from "../testing/http";
 import { insertBilling } from "../testing/seed";
+import type { SubscriptionCancellation } from "./billingCancellations";
 import { cancelOrganizationSubscription } from "./billingDeletion";
-import type { SubscriptionCancellation } from "./billingSubscriptions";
 
 const deleting: SubscriptionCancellation = {
   actor: { userId: "user-1" },

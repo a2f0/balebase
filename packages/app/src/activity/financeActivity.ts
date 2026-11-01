@@ -28,7 +28,7 @@ const summaries: Partial<Record<string, (event: ActivityEvent) => string>> = {
   "billing.subscription_canceled": ({ details }) =>
     [
       details.reason === "organization_deletion"
-        ? "Organization deleted"
+        ? "For organization deletion"
         : "Canceled",
       details.via === "root_admin" ? "By a root admin" : "By an owner",
       count(details.seatQuantity, "seat"),

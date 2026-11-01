@@ -1,9 +1,10 @@
-import {
-  type ActivityActor,
-  activityBatch,
-  insertActivity,
-} from "../shared/activity";
 import type { Bindings } from "../types";
+import {
+  canceledSubscriptionStatements,
+  forgetRefusedCancellation,
+  recordCancellationIntent,
+  type SubscriptionCancellation,
+} from "./billingCancellations";
 import {
   attachCheckoutSessionToClaim,
   checkoutDeletionInProgress,
@@ -39,20 +40,6 @@ export const terminalSubscriptionStatuses = new Set([
 
 export type SubscriptionEnvironment = ProPriceEnvironment &
   Pick<Bindings, "DB" | "STRIPE_SECRET_KEY">;
-
-/**
- * A person's cancellation of a paid subscription, recorded with the
- * subscription's persisted state once Stripe confirms it. Only organization
- * deletion cancels on a person's behalf; replacements during Checkout are
- * Stripe-driven and record nothing until the activity model has a system
- * actor.
- */
-export interface SubscriptionCancellation {
-  actor: ActivityActor;
-  reason: "organization_deletion";
-  /** An owner deleting their own organization, or a root admin. */
-  via: "owner" | "root_admin";
-}
 
 export async function refreshSubscription(
   environment: SubscriptionEnvironment,
@@ -246,7 +233,6 @@ async function persistSubscription(
   eventCreated: number,
   knownOrganizationId?: string,
   checkoutSessionId?: string,
-  cancellation?: SubscriptionCancellation,
 ) {
   const customerId = expandableId(subscription.customer);
   const organizationId =
@@ -357,96 +343,18 @@ async function persistSubscription(
     eventCreated,
     now,
   );
-  if (!cancellation) {
+  if (subscription.status !== "canceled") {
     return Number((await upsert.run()).meta.changes) > 0;
   }
-  return persistCancellation(
-    environment.DB,
-    organizationId,
-    subscription,
-    cancellation,
-    Math.max(1, item?.quantity ?? 1),
+  const results = await environment.DB.batch([
+    ...canceledSubscriptionStatements(
+      environment.DB,
+      subscription,
+      Math.max(1, item?.quantity ?? 1),
+    ),
     upsert,
-  );
-}
-
-/**
- * Persists a person's cancellation with its event. The event comes first, so
- * it reads the status the upsert replaces. It does not depend on the upsert,
- * which skips a subscription the organization does not track (a completed
- * pending Checkout): Stripe has canceled it either way.
- */
-async function persistCancellation(
-  database: D1Database,
-  organizationId: string,
-  subscription: StripeSubscription,
-  cancellation: SubscriptionCancellation,
-  seatQuantity: number,
-  upsert: D1PreparedStatement,
-) {
-  const [, persisted] = await activityBatch(
-    database,
-    cancellation.actor.apiKey,
-    [
-      subscriptionCanceledEvent(
-        database,
-        organizationId,
-        subscription,
-        cancellation,
-        seatQuantity,
-        new Date().toISOString(),
-      ),
-      upsert,
-    ],
-  );
-  return Number(persisted?.meta.changes) > 0;
-}
-
-/** Records a person's cancellation once per subscription. */
-function subscriptionCanceledEvent(
-  database: D1Database,
-  organizationId: string,
-  subscription: StripeSubscription,
-  cancellation: SubscriptionCancellation,
-  seatQuantity: number,
-  occurredAt: string,
-) {
-  return database
-    .prepare(
-      `${insertActivity}
-       SELECT organization.id, 'organization_billing', organization.id,
-              organization.name, 'billing_subscription', ?,
-              'billing.subscription_canceled', actor.id, actor.name,
-              actor.email, ?,
-              json_object(
-                'reason', ?, 'via', ?, 'subscriptionId', ?,
-                'previousStatus', (
-                  SELECT stripe_status FROM organization_billing
-                  WHERE organization_id = organization.id
-                    AND stripe_subscription_id = ?
-                ),
-                'seatQuantity', ?)
-       FROM organization JOIN user AS actor ON actor.id = ?
-       WHERE organization.id = ?
-         AND NOT EXISTS (
-           SELECT 1 FROM activity_events
-           WHERE organization_id = organization.id
-             AND action = 'billing.subscription_canceled'
-             AND subject_id = ?
-         )`,
-    )
-    .bind(
-      subscription.id,
-      occurredAt,
-      cancellation.reason,
-      cancellation.via,
-      subscription.id,
-      subscription.id,
-      seatQuantity,
-      cancellation.actor.userId,
-      organizationId,
-      subscription.id,
-    );
+  ]);
+  return Number(results.at(-1)?.meta.changes) > 0;
 }
 
 export async function cancelStripeSubscription(
@@ -456,17 +364,32 @@ export async function cancelStripeSubscription(
   cancellation?: SubscriptionCancellation,
 ) {
   await withSubscriptionSyncLock(environment.DB, subscriptionId, async () => {
-    const subscription = await deleteStripeSubscription(
-      environment,
-      subscriptionId,
-    );
+    if (cancellation) {
+      await recordCancellationIntent(
+        environment.DB,
+        organizationId,
+        subscriptionId,
+        cancellation,
+      );
+    }
+    let subscription: StripeSubscription;
+    try {
+      subscription = await deleteStripeSubscription(
+        environment,
+        subscriptionId,
+      );
+    } catch (cause) {
+      if (cancellation) {
+        await forgetRefusedCancellation(environment.DB, subscriptionId, cause);
+      }
+      throw cause;
+    }
+    // Persisting the cancellation records the intent's event with it.
     await persistSubscription(
       environment,
       subscription,
       Math.floor(Date.now() / 1000),
       organizationId,
-      undefined,
-      cancellation,
     );
   });
 }

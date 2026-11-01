@@ -31,6 +31,8 @@ interface StripeSeatItemResponse {
 export interface StripeSubscription {
   cancel_at?: number | null;
   cancel_at_period_end?: boolean;
+  /** When a canceled subscription ended, in Unix seconds. */
+  canceled_at?: number;
   current_period_end?: number;
   customer: StripeExpandable;
   id: string;
@@ -53,6 +55,7 @@ export interface StripeEvent {
 interface StripePayloadRecord extends Record<string, unknown> {
   cancel_at?: unknown;
   cancel_at_period_end?: unknown;
+  canceled_at?: unknown;
   client_reference_id?: unknown;
   client_secret?: unknown;
   current_period_end?: unknown;
@@ -177,6 +180,11 @@ export function parseStripeSubscription(value: unknown): StripeSubscription {
     "Subscription period end",
   );
   if (periodEnd !== undefined) subscription.current_period_end = periodEnd;
+  const canceledAt =
+    record.canceled_at === null
+      ? undefined
+      : stripeOptionalInteger(record.canceled_at, "Subscription canceled at");
+  if (canceledAt !== undefined) subscription.canceled_at = canceledAt;
   const metadata = stripeOptionalMetadata(record.metadata);
   if (metadata) subscription.metadata = metadata;
   return subscription;

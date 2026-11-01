@@ -1025,7 +1025,7 @@ it("summarizes billing cancellations, portal sessions, and login repairs", async
   const rows = rowElements.map((row) => row.textContent ?? "");
   expect(rows[0]).toContain("Sam canceled the Pro subscription");
   expect(rows[0]).toContain(
-    "Organization deleted · By a root admin · 3 seats · Was active",
+    "For organization deletion · By a root admin · 3 seats · Was active",
   );
   expect(rows[1]).toContain("Pro subscription canceled");
   expect(rows[2]).toContain("Sam opened the Stripe billing portal");
