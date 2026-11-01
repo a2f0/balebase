@@ -8,6 +8,11 @@ const endpoints = {
     path: "/api/admin/users",
     response: "json",
   }),
+  history: endpoint<typeof adminUsersRoutes.history>({
+    method: "GET",
+    path: "/api/admin/users/:userId/history",
+    response: "json",
+  }),
   markForDeletion: endpoint<typeof adminUsersRoutes.markForDeletion>({
     method: "POST",
     path: "/api/admin/users/:userId/deletion",
@@ -30,6 +35,13 @@ export function adminUsersApi(transport: Transport) {
   return {
     list(query: { limit: number; offset: number }) {
       return transport.call(endpoints.list, { query });
+    },
+    /** A person's platform role changes and deletion requests, newest first. */
+    history(userId: string, cursor?: string) {
+      return transport.call(endpoints.history, {
+        params: { userId },
+        query: { cursor },
+      });
     },
     markForDeletion(userId: string, email: string) {
       return transport.call(endpoints.markForDeletion, {

@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import {
   createTemplate,
   findDiscardedTemplate,
+  findRetainedGlobalTemplate,
   findTemplate,
   listTemplateVersions,
   positiveInteger,
@@ -69,10 +70,12 @@ adminAuditTemplates.post("/", async (context) => {
   );
 });
 
+// A discarded form's versions and history stay readable here until the purge
+// deletes them, so root admins can decide whether to restore it. Its form and
+// editor (`GET /:id`) are not: a discarded form must be restored to be edited.
 adminAuditTemplates.get("/:id/versions", async (context) => {
-  const template = await findTemplate(
+  const template = await findRetainedGlobalTemplate(
     context.env.DB,
-    null,
     context.req.param("id"),
   );
   if (!template) return context.json({ error: "Template not found." }, 404);
@@ -85,9 +88,8 @@ adminAuditTemplates.get("/:id/versions/:version", async (context) => {
   const version = positiveInteger(context.req.param("version"));
   if (!version)
     return context.json({ error: "Template version is invalid." }, 400);
-  const template = await findTemplate(
+  const template = await findRetainedGlobalTemplate(
     context.env.DB,
-    null,
     context.req.param("id"),
     version,
   );
@@ -99,9 +101,8 @@ adminAuditTemplates.get("/:id/versions/:version", async (context) => {
 });
 
 adminAuditTemplates.get("/:id/activity", async (context) => {
-  const template = await findTemplate(
+  const template = await findRetainedGlobalTemplate(
     context.env.DB,
-    null,
     context.req.param("id"),
   );
   if (!template) return context.json({ error: "Template not found." }, 404);

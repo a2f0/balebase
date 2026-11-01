@@ -17,7 +17,7 @@ export function AdminDeletionMenu({
   /** Further actions listed after the deletion item. */
   extraItems?: readonly {
     disabled?: boolean;
-    icon: "lock";
+    icon: "list" | "lock";
     id: string;
     label: string;
     onSelect: () => void;

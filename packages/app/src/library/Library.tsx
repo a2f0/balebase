@@ -31,7 +31,7 @@ import {
 import { ActivityFeed } from "../activity/ActivityFeed";
 import { LinkedEmailList } from "../inbox/LinkedEmailList";
 import { ApiDownload } from "../shared/ApiDownload";
-import { AppLink } from "../shared/AppLink";
+import { AppButtonLink, AppLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
 import { countLabel, formatBytes, formatShortDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
@@ -39,6 +39,8 @@ import { useLoad } from "../shared/useLoad";
 import { useMenuDismissal } from "../shared/useMenuDismissal";
 import type { WorkspaceUser } from "../workspace/WorkspaceShell";
 import {
+  libraryFileIdForPath,
+  libraryFilePath,
   libraryFolderIdForPath,
   libraryPath,
 } from "../workspace/workspacePaths";
@@ -53,7 +55,56 @@ interface LibraryProps {
 
 type FolderForm = "create" | "rename";
 
-export function Library({
+/** The library, one folder in it, or one file's history. */
+export function Library(props: LibraryProps) {
+  const fileId = libraryFileIdForPath(props.pathname);
+  return fileId ? (
+    <LibraryFileHistory
+      fileId={fileId}
+      key={fileId}
+      onNavigate={props.onNavigate}
+    />
+  ) : (
+    <LibraryBrowser {...props} />
+  );
+}
+
+/**
+ * A file's upload, moves, and deletion. The history stays readable after the
+ * file is deleted, so the shared feed can link here for any file event.
+ */
+function LibraryFileHistory({
+  fileId,
+  onNavigate,
+}: {
+  fileId: string;
+  onNavigate: (pathname: string) => void;
+}) {
+  return (
+    <Page>
+      <PageHeader
+        back={
+          <Button
+            icon="arrowLeft"
+            onClick={() => onNavigate(libraryPath())}
+            size="sm"
+            variant="ghost"
+          >
+            Library
+          </Button>
+        }
+        description="Who uploaded, moved, or deleted this file, newest first. The history is kept after the file is deleted."
+        eyebrow="File"
+        title="File history"
+      />
+      <PageBody>
+        <ActivityFeed source={{ id: fileId, type: "library_file" }} />
+      </PageBody>
+    </Page>
+  );
+}
+
+function LibraryBrowser({
   initialNotice,
   onNavigate,
   onResendVerification,
@@ -348,6 +399,7 @@ function LibraryContent({
       busy={actions.busy}
       destinations={destinations}
       objects={data.objects}
+      onNavigate={onNavigate}
       onMove={(object, destination) => void actions.move(object, destination)}
       onRemove={(object) => void actions.remove(object)}
     />
@@ -474,12 +526,14 @@ function FileGrid({
   destinations,
   objects,
   onMove,
+  onNavigate,
   onRemove,
 }: {
   busy: boolean;
   destinations: Destination[];
   objects: StoredObject[];
   onMove: (object: StoredObject, destination: string | null) => void;
+  onNavigate: (pathname: string) => void;
   onRemove: (object: StoredObject) => void;
 }) {
   return (
@@ -490,6 +544,7 @@ function FileGrid({
           destinations={destinations}
           key={object.id}
           object={object}
+          onNavigate={onNavigate}
           onMove={(destination) => onMove(object, destination)}
           onRemove={() => onRemove(object)}
         />
@@ -503,12 +558,14 @@ function FileCard({
   destinations,
   object,
   onMove,
+  onNavigate,
   onRemove,
 }: {
   busy: boolean;
   destinations: Destination[];
   object: StoredObject;
   onMove: (destination: string | null) => void;
+  onNavigate: (pathname: string) => void;
   onRemove: () => void;
 }) {
   const [moving, setMoving] = useState(false);
@@ -552,6 +609,14 @@ function FileCard({
             <Icon name="move" size={16} />
           </button>
         )}
+        <AppButtonLink
+          aria-label={`History of ${object.filename}`}
+          href={libraryFilePath(object.id)}
+          icon="list"
+          iconOnly
+          onNavigate={onNavigate}
+          size="sm"
+        />
         <Button
           aria-label={`Delete ${object.filename}`}
           disabled={busy}

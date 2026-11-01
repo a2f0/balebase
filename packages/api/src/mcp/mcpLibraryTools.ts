@@ -31,7 +31,7 @@ export const libraryTools: McpTool[] = [
   },
   {
     description:
-      "Lists one library folder's history, newest first: its creation, renames, and emails linked to it or unlinked.",
+      "Lists one library folder's history, newest first: its creation, renames, emails linked to it or unlinked, and files uploaded into it, moved into or out of it, or deleted from it.",
     descriptions: { ...folderId, ...activityCursor },
     name: "list_library_folder_activity",
     route: libraryFoldersRoutes.activity,
@@ -67,6 +67,17 @@ export const libraryTools: McpTool[] = [
     name: "list_library_files",
     route: objectsRoutes.list,
     title: "List library files",
+  },
+  {
+    description:
+      "Lists one library file's history, newest first: its upload, moves between folders, and deletion. A deleted file's history stays readable.",
+    descriptions: {
+      id: "File id from list_library_files or from a library_file event in list_activity.",
+      ...activityCursor,
+    },
+    name: "list_library_file_activity",
+    route: objectsRoutes.activity,
+    title: "List library file activity",
   },
   {
     description: "Moves a library file into a folder or back to the root.",

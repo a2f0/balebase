@@ -9,6 +9,7 @@ import {
   cancelUserDeletion,
   requestUserDeletion,
 } from "../users/userDeletionActivity";
+import { listUserHistory } from "./platformHistory";
 
 interface AdminUserRow extends Omit<AdminUser, "banned" | "emailVerified"> {
   banned: number;
@@ -19,7 +20,7 @@ export const adminUsers = new Hono<ApiEnv>();
 adminUsers.use("*", async (context, next) => {
   if (context.get("authSession").session.impersonatedBy) {
     return context.json(
-      { error: "An impersonated session cannot manage user deletion." },
+      { error: "An impersonated session cannot manage users." },
       403,
     );
   }
@@ -64,6 +65,27 @@ adminUsers.get("/", async (context) => {
       emailVerified: Boolean(user.emailVerified),
     })),
   });
+});
+
+// Platform history is read here only, by root admins: never through an
+// organization's activity.
+adminUsers.get("/:userId/history", async (context) => {
+  const query = readQuery(
+    context,
+    adminUsersRoutes.history,
+    "Invalid history cursor.",
+  );
+  if (query instanceof Response) return query;
+  const userId = context.req.param("userId");
+  const user = await context.env.DB.prepare(
+    "SELECT id, name, email FROM user WHERE id = ?",
+  )
+    .bind(userId)
+    .first<{ email: string; id: string; name: string }>();
+  if (!user) return context.json({ error: "User not found." }, 404);
+  const history = await listUserHistory(context.env.DB, user.id, query.cursor);
+  if (!history) return context.json({ error: "Invalid history cursor." }, 400);
+  return respond(context, adminUsersRoutes.history, { ...history, user });
 });
 
 adminUsers.post("/:userId/deletion", async (context) => {

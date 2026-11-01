@@ -6,6 +6,7 @@ import { toJobRun } from "../jobs/jobRuns";
 import { waitForLegacyJob } from "../jobs/legacyJobRun";
 import { enqueueMaintenance, maintenanceJobs } from "../jobs/maintenance";
 import { readBody, readQuery, respond } from "../shared/respond";
+import { listMaintenanceRequests } from "./platformHistory";
 
 const adminJobs = new Hono<ApiEnv>();
 adminJobs.get("/", (context) =>
@@ -43,6 +44,23 @@ adminJobs.get("/runs", async (context) => {
   const history = await listJobRuns(context.env.DB, query);
   if (!history) return context.json({ error: "Invalid history cursor." }, 400);
   return respond(context, adminJobsRoutes.runs, history);
+});
+adminJobs.get("/requests", async (context) => {
+  if (context.get("authSession").session.impersonatedBy) {
+    return context.json(
+      { error: "An impersonated session cannot read maintenance requests." },
+      403,
+    );
+  }
+  const query = readQuery(
+    context,
+    adminJobsRoutes.requests,
+    "Invalid request filter.",
+  );
+  if (query instanceof Response) return query;
+  const requests = await listMaintenanceRequests(context.env.DB, query);
+  if (!requests) return context.json({ error: "Invalid history cursor." }, 400);
+  return respond(context, adminJobsRoutes.requests, requests);
 });
 adminJobs.get("/runs/:runId", async (context) => {
   const query = readQuery(
