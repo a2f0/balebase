@@ -7,6 +7,10 @@ const securityEventActions = [
   "two_factor_enabled",
   "two_factor_disabled",
   "password_changed",
+  "two_factor_authenticator_replaced",
+  "two_factor_backup_codes_regenerated",
+  "name_changed",
+  "image_changed",
 ] as const;
 export type SecurityEventAction = (typeof securityEventActions)[number];
 /** How many of a person's latest security changes the account page lists. */
@@ -27,6 +31,10 @@ export const accountSettingsRoutes = {
       events: z.array(
         z.object({
           action: z.enum(securityEventActions),
+          /** The previous and new name, for `name_changed` only. */
+          change: z
+            .object({ after: z.string(), before: z.string() })
+            .nullable(),
           occurredAt: z.string(),
         }),
       ),

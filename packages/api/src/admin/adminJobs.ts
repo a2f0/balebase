@@ -11,6 +11,7 @@ import {
 } from "../jobs/maintenance";
 import { findPlatformActivity } from "../shared/activity";
 import { readBody, readQuery, respond } from "../shared/respond";
+import { listMaintenanceRequests } from "./platformHistory";
 
 const purgeActions = ["user.purged", "organization.purged"] as const;
 
@@ -74,6 +75,23 @@ adminJobs.get("/purges", async (context) => {
   return page
     ? respond(context, adminJobsRoutes.purges, page)
     : context.json({ error: "Invalid activity cursor." }, 400);
+});
+adminJobs.get("/requests", async (context) => {
+  if (context.get("authSession").session.impersonatedBy) {
+    return context.json(
+      { error: "An impersonated session cannot read maintenance requests." },
+      403,
+    );
+  }
+  const query = readQuery(
+    context,
+    adminJobsRoutes.requests,
+    "Invalid request filter.",
+  );
+  if (query instanceof Response) return query;
+  const requests = await listMaintenanceRequests(context.env.DB, query);
+  if (!requests) return context.json({ error: "Invalid history cursor." }, 400);
+  return respond(context, adminJobsRoutes.requests, requests);
 });
 adminJobs.get("/runs/:runId", async (context) => {
   const query = readQuery(

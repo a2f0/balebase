@@ -37,6 +37,11 @@ interface ActivityRoot {
    * as an email's links, which are recorded on the record it was linked to.
    */
   includeSubject?: boolean;
+  /**
+   * Also include library file events that name this folder: uploads into it,
+   * moves into or out of it, and deletions of files in it.
+   */
+  includeFolderFiles?: boolean;
   issueId?: string;
   publishedTemplateOnly?: boolean;
   id: string;
@@ -98,6 +103,14 @@ export async function findActivity(
       "((root_type = ? AND root_id = ?) OR (subject_type = ? AND subject_id = ?))",
     );
     bindings.push(root.type, root.id, root.type, root.id);
+  } else if (root?.includeFolderFiles) {
+    filters.push(
+      `((root_type = ? AND root_id = ?) OR (root_type = 'library_file'
+        AND ? IN (json_extract(details, '$.folderId'),
+                  json_extract(details, '$.fromFolderId'),
+                  json_extract(details, '$.toFolderId'))))`,
+    );
+    bindings.push(root.type, root.id, root.id);
   } else if (root) {
     filters.push("root_type = ? AND root_id = ?");
     bindings.push(root.type, root.id);

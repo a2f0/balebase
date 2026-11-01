@@ -5,6 +5,7 @@ import { purgeSummary, retentionSummary } from "./systemActivity";
 
 /** Labels for membership, invitation and organization lifecycle events. */
 export const organizationActionLabels: Record<string, string> = {
+  "organization.created": "created the organization",
   "organization.deletion_requested": "deleted the organization",
   "organization.invitation_accepted": "accepted an invitation",
   "organization.invitation_canceled": "canceled an invitation",
@@ -34,6 +35,14 @@ export function removalReasonLabel(reason: unknown) {
 export function organizationActivitySummary(event: ActivityEvent) {
   const { action, details } = event;
   switch (action) {
+    case "organization.created":
+      return [
+        textValue(details.name),
+        details.via === "signup" ? "At sign-up" : "",
+        `Founding owner: ${textValue(details.ownerName) || textValue(details.ownerEmail)}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
     case "organization.updated":
       return changes(details.changes).join(" · ") || "No changes";
     case "organization.deletion_requested":
@@ -67,15 +76,37 @@ export function membershipSummary(event: ActivityEvent) {
       textValue(details.inviterName) || textValue(details.inviterEmail);
     return `${person} · ${role}${inviter ? ` · Invited by ${inviter}` : ""}`;
   }
-  const keys = Array.isArray(details.apiKeys) ? details.apiKeys : [];
-  const keyNames = keys
-    .map((key: unknown) => textValue(Reflect.get(Object(key), "name")))
-    .filter(Boolean);
+  return [person, role, ...apiKeyLines(details)].join(" · ");
+}
+
+/**
+ * The API keys a membership change revoked. Removals recorded before keys
+ * were revoked listed the keys they stopped (`apiKeys`) instead.
+ */
+export function apiKeyLines(details: ActivityEvent["details"]) {
+  const names = (value: unknown) =>
+    (Array.isArray(value) ? value : [])
+      .map((key: unknown) => textValue(Reflect.get(Object(key), "name")))
+      .filter(Boolean);
+  const revoked = names(details.revokedApiKeys);
+  const stopped = names(details.apiKeys);
   return [
-    person,
-    role,
-    ...(keyNames.length ? [`API keys stopped: ${keyNames.join(", ")}`] : []),
-  ].join(" · ");
+    ...(revoked.length ? [`API keys revoked: ${revoked.join(", ")}`] : []),
+    ...(stopped.length ? [`API keys stopped: ${stopped.join(", ")}`] : []),
+  ];
+}
+
+const apiKeyRevocationReasons: Record<string, string> = {
+  member_left: "Its creator left",
+  member_removed: "Its creator was removed",
+  role_changed: "Its creator is no longer an owner or admin",
+};
+
+/** Why a key was revoked, when a change to its creator's access did it. */
+export function apiKeyRevocationReason(reason: unknown) {
+  return typeof reason === "string"
+    ? apiKeyRevocationReasons[reason]
+    : undefined;
 }
 
 function viaLabel(via: unknown) {

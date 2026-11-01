@@ -217,6 +217,84 @@ describe("discarded global forms", () => {
     expect(latest.body.events[0]?.action).toBe("audit.template_version_saved");
   });
 
+  it("lets root admins read a discarded form's history and versions until the purge", async () => {
+    const fixture = createFixture();
+    const form = await globalForm(fixture, "Retained form", {
+      unpublished: true,
+    });
+    expect((await discard(fixture, form.id, 3)).status).toBe(200);
+    const read = (path: string, identity?: typeof admin) =>
+      jsonRequest<
+        ActivityResponse & {
+          versions: Array<{ createdBy: { id: string }; version: number }>;
+        }
+      >(fixture, path, "GET", undefined, identity);
+
+    const history = await read(
+      `/admin/audit-templates/${form.id}/activity`,
+      admin,
+    );
+    expect(history.status).toBe(200);
+    expect(
+      history.body.events.map(({ action, actor }) => [action, actor.id]),
+    ).toEqual([
+      ["audit.template_discarded", "user-2"],
+      ["audit.template_unpublished", "user-2"],
+      ["audit.template_published", "user-2"],
+      ["audit.template_created", "user-2"],
+    ]);
+    const versions = await read(
+      `/admin/audit-templates/${form.id}/versions`,
+      admin,
+    );
+    expect(versions.status).toBe(200);
+    expect(
+      versions.body.versions.map(({ createdBy, version }) => [
+        version,
+        createdBy.id,
+      ]),
+    ).toEqual([
+      [4, "user-2"],
+      [3, "user-2"],
+      [2, "user-2"],
+      [1, "user-2"],
+    ]);
+    expect(
+      (await read(`/admin/audit-templates/${form.id}/versions/2`, admin)).body,
+    ).toMatchObject({ template: { status: "published", version: 2 } });
+    // It cannot be opened for editing, and organizations never see it.
+    expect(
+      (await read(`/admin/audit-templates/${form.id}`, admin)).status,
+    ).toBe(404);
+    for (const suffix of ["/activity", "/versions", "/versions/2", ""])
+      expect((await read(`/templates/${form.id}${suffix}`)).status).toBe(404);
+
+    // A restore is still recorded, and history reads on.
+    const restored = await restore(fixture, form.id, 4);
+    expect(restored.status).toBe(200);
+    expect(
+      (await read(`/admin/audit-templates/${form.id}/activity`, admin)).body
+        .events[0]?.action,
+    ).toBe("audit.template_restored");
+
+    // Once purged, nothing remains to read.
+    await discard(fixture, form.id, 5);
+    discardedAt(fixture, form.id, "2026-01-01T00:00:00.000Z");
+    expect(await purgeDiscardedAuditForms(fixture.bindings, "run-1")).toBe(1);
+    for (const suffix of ["/activity", "/versions", "/versions/2"])
+      expect(
+        (await read(`/admin/audit-templates/${form.id}${suffix}`, admin))
+          .status,
+      ).toBe(404);
+    expect(
+      fixture.database
+        .query(
+          "SELECT COUNT(*) AS count FROM activity_events WHERE root_id = ?",
+        )
+        .get(form.id),
+    ).toEqual({ count: 0 });
+  });
+
   it("purges forms discarded at least 30 days ago, keeping audits and restored forms", async () => {
     const fixture = createFixture();
     const now = new Date("2026-10-30T12:00:00.000Z");

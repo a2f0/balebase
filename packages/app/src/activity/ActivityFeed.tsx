@@ -29,6 +29,7 @@ import {
   financeConnectionPath,
   financeTransactionPath,
   issuePath,
+  libraryFilePath,
   libraryPath,
   organizationAccessPath,
   organizationPeoplePath,
@@ -47,8 +48,14 @@ import {
 } from "./EquipmentActivity";
 import { financeActionLabels, financeActivitySummary } from "./financeActivity";
 import { groupActivitySummary } from "./groupActivity";
-import { isLibraryActivity, libraryActivitySummary } from "./libraryActivity";
 import {
+  isLibraryActivity,
+  libraryActivitySummary,
+  linkEndedByDeletion,
+} from "./libraryActivity";
+import {
+  apiKeyLines,
+  apiKeyRevocationReason,
   membershipSummary,
   organizationActionLabels,
   organizationActivitySummary,
@@ -337,7 +344,10 @@ function memberSummary(event: ActivityEvent) {
   const change =
     event.action === "organization.member_two_factor_requirement_changed"
       ? twoFactorSummary(event)
-      : `${formatRoles(textValue(event.details.before))} → ${formatRoles(textValue(event.details.after))}`;
+      : [
+          `${formatRoles(textValue(event.details.before))} → ${formatRoles(textValue(event.details.after))}`,
+          ...apiKeyLines(event.details),
+        ].join(" · ");
   return `${memberLabel(event)} · ${change}`;
 }
 
@@ -579,6 +589,9 @@ function MemberRoleDetails({ event }: { event: ActivityEvent }) {
         {formatRoles(textValue(event.details.before))} →{" "}
         {formatRoles(textValue(event.details.after))}
       </p>
+      {apiKeyLines(event.details).map((line) => (
+        <p key={line}>{line}</p>
+      ))}
     </div>
   );
 }
@@ -610,7 +623,7 @@ function activityPath(event: ActivityEvent) {
   if (event.root.type.startsWith("finance_")) return financeActivityPath(event);
   // Deleted equipment has no page to open.
   if (event.root.type === "equipment") {
-    return event.action === "equipment.deleted"
+    return event.action === "equipment.deleted" || linkEndedByDeletion(event)
       ? undefined
       : equipmentPath(event.root.id);
   }
@@ -645,13 +658,17 @@ function contractActivityPath(event: ActivityEvent) {
 }
 
 /**
- * Deleted folders and businesses, and files, have no page. An email's events
- * do not link either: an event cannot tell which folder the email is in now.
+ * Deleted folders and businesses have no page; a file's history outlives it.
+ * An email's events do not link: an event cannot tell which folder the email
+ * is in now.
  */
-function libraryActivityPath({ action, root }: ActivityEvent) {
+function libraryActivityPath(event: ActivityEvent) {
+  const { action, root } = event;
   switch (root.type) {
+    case "library_file":
+      return libraryFilePath(root.id);
     case "library_folder":
-      return action === "library.folder_deleted"
+      return action === "library.folder_deleted" || linkEndedByDeletion(event)
         ? undefined
         : libraryPath(root.id);
     case "business":
@@ -700,6 +717,7 @@ const linkLabels: Partial<Record<string, string>> = {
   finance_category: "Open categories",
   finance_connection: "Open connection",
   finance_transaction: "Open transaction",
+  library_file: "Open file history",
   library_folder: "Open folder",
   organization_billing: "Open billing",
   organization_group: "Open groups",
@@ -715,7 +733,12 @@ function activityLinkLabel(event: ActivityEvent) {
 
 function apiKeySummary({ details }: ActivityEvent) {
   const access = details.access === "write" ? "Read and write" : "Read only";
-  return `${access} · ${textValue(details.prefix)}…`;
+  const reason = apiKeyRevocationReason(details.reason);
+  return [
+    access,
+    `${textValue(details.prefix)}…`,
+    ...(reason ? [reason] : []),
+  ].join(" · ");
 }
 
 function memberLabel(event: ActivityEvent) {

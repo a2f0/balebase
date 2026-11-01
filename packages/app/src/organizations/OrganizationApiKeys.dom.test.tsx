@@ -48,6 +48,7 @@ function apiKey(overrides: Partial<ApiKey>): ApiKey {
     prefix: "tlk_1234abcd",
     revokedAt: null,
     revokedBy: null,
+    revokedReason: null,
     status: "active",
     ...overrides,
   };

@@ -38,7 +38,9 @@ describe("root admin users", () => {
         ],
       }),
     );
-    ({ container } = await mount(<AdminUsers />));
+    ({ container } = await mount(
+      <AdminUsers onNavigate={() => undefined} pathname="/root/users" />,
+    ));
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
@@ -63,7 +65,11 @@ describe("root admin users", () => {
 async function renderUsers(currentUserId?: string) {
   ({ container } = await mount(
     <>
-      <AdminUsers currentUserId={currentUserId} />
+      <AdminUsers
+        currentUserId={currentUserId}
+        onNavigate={() => undefined}
+        pathname="/root/users"
+      />
       <DialogHost />
     </>,
   ));
@@ -289,4 +295,82 @@ it("refreshes a stale row when another admin already marked it", async () => {
   expect(container.textContent).toContain("Pending deletion");
   await openUserAction("Cancel deletion");
   await act(async () => button("Keep request").click());
+});
+
+it("opens a person's platform history from the Users page", async () => {
+  const target = user("target@example.com", null);
+  respond(async () => Response.json({ total: 1, users: [target] }));
+  const navigations: string[] = [];
+  ({ container } = await mount(
+    <AdminUsers
+      onNavigate={(pathname) => navigations.push(pathname)}
+      pathname="/root/users"
+    />,
+  ));
+  await openUserAction("View history");
+  expect(navigations).toEqual(["/root/users/target%40example.com"]);
+});
+
+it("lists role changes and deletion requests with who made them", async () => {
+  const requests: string[] = [];
+  respond(async (url) => {
+    requests.push(`${url.pathname}${url.search}`);
+    return Response.json({
+      events: [
+        {
+          action: "deletion_canceled",
+          actor: {
+            email: "root@example.com",
+            id: "root",
+            kind: "user",
+            name: "Root Admin",
+          },
+          id: "deletion:2",
+          newRole: null,
+          occurredAt: "2026-10-03T09:00:00.000Z",
+          previousRole: null,
+          requestedAt: "2026-10-02T09:00:00.000Z",
+        },
+        {
+          action: "role_set",
+          actor: {
+            email: "ops@example.com",
+            id: null,
+            kind: "operator",
+            name: "Ops Person",
+          },
+          id: "role:1",
+          newRole: "admin",
+          occurredAt: "2026-10-01T09:00:00.000Z",
+          previousRole: "user",
+          requestedAt: null,
+        },
+      ],
+      nextCursor: null,
+      user: { email: "target@example.com", id: "target", name: "Target" },
+    });
+  });
+  const navigations: string[] = [];
+  ({ container } = await mount(
+    <AdminUsers
+      onNavigate={(pathname) => navigations.push(pathname)}
+      pathname="/root/users/target"
+    />,
+  ));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(requests).toEqual(["/api/admin/users/target/history"]);
+  expect(container.querySelector("h1")?.textContent).toBe("Target");
+  const rows = [...container.querySelectorAll(".rowList .row")].map(
+    (row) => row.textContent ?? "",
+  );
+  expect(rows).toHaveLength(2);
+  expect(rows[0]).toContain("Canceled the account's deletion");
+  expect(rows[0]).toContain("Root Admin");
+  expect(rows[1]).toContain("Set the platform role");
+  expect(rows[1]).toContain("User → Admin");
+  expect(rows[1]).toContain("Operator (auth:set-role)");
+  await act(async () => button("Users").click());
+  expect(navigations).toEqual(["/root/users"]);
 });

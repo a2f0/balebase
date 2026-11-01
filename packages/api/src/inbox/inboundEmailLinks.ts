@@ -19,12 +19,14 @@ export const emailLabel = `COALESCE(
   NULLIF(substr(trim(inbound_emails.subject), 1, 120), ''), '(No subject)')`;
 
 /**
- * Snapshots a link event from the stored link, email, and target. Links are
- * recorded on the record the email is linked to, so they appear in its
- * history, and a transaction's stay behind Finance access; the email is the
- * subject. Binds (action, occurred at, actor, link id, organization).
+ * Snapshots link events from the stored links, emails, and targets that
+ * `where` selects. Links are recorded on the record the email is linked to,
+ * so they appear in its history, and a transaction's stay behind Finance
+ * access; the email is the subject. Binds (action, occurred at, actor), then
+ * the bindings of `where`.
  */
-const linkEvent = `${insertActivity}
+function linkEventSql(where: string, extraDetails = "") {
+  return `${insertActivity}
   SELECT link.organization_id, link.target_type, link.target_id,
          CASE link.target_type
            WHEN 'library_folder' THEN folder.name
@@ -34,7 +36,7 @@ const linkEvent = `${insertActivity}
          'inbound_email', inbound_emails.id, ?, actor.id, actor.name,
          actor.email, ?,
          json_object('subject', ${emailLabel},
-                     'from', inbound_emails.envelope_from)
+                     'from', inbound_emails.envelope_from${extraDetails})
   FROM inbound_email_links AS link
   JOIN inbound_emails ON inbound_emails.id = link.email_id
   JOIN user AS actor ON actor.id = ?
@@ -44,7 +46,46 @@ const linkEvent = `${insertActivity}
     ON link.target_type = 'equipment' AND item.id = link.target_id
   LEFT JOIN plaid_transactions AS txn
     ON link.target_type = 'finance_transaction' AND txn.id = link.target_id
-  WHERE link.id = ? AND link.organization_id = ?`;
+  WHERE ${where}`;
+}
+
+/** One link's event. Binds (action, occurred at, actor, link id, organization). */
+const linkEvent = linkEventSql("link.id = ? AND link.organization_id = ?");
+
+/**
+ * Records the end of every email link to a folder or item of equipment that
+ * the same batch deletes, one `inbox.email_unlinked` per link attributed to
+ * the person deleting it, so each email's history shows its link ended. Put
+ * it before the statements that remove the links and the record.
+ */
+export function deletedTargetLinkEvents(
+  database: D1Database,
+  input: {
+    actorId: string;
+    organizationId: string;
+    targetId: string;
+    targetType: "equipment" | "library_folder";
+  },
+) {
+  return database
+    .prepare(
+      linkEventSql(
+        `link.organization_id = ? AND link.target_type = ?
+           AND link.target_id = ?
+           AND COALESCE(folder.id, item.id) IS NOT NULL
+         ORDER BY link.created_at, link.rowid`,
+        ", 'via', 'target_deleted'",
+      ),
+    )
+    .bind(
+      "inbox.email_unlinked",
+      new Date().toISOString(),
+      input.actorId,
+      input.organizationId,
+      input.targetType,
+      input.targetId,
+    );
+}
 
 interface EmailLinkRow {
   equipment_make: string | null;

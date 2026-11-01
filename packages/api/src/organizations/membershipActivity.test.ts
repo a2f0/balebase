@@ -23,15 +23,35 @@ describe("member removal activity", () => {
 
     const events = await fixture.events();
     expect(events.map(({ action }) => action)).toEqual([
+      "api_key.revoked",
       "equipment.assigned",
       "organization.group_updated",
       "organization.member_removed",
     ]);
-    const [equipment, group, removal] = events;
+    const [revoked, equipment, group, removal] = events;
+    expect(revoked).toMatchObject({
+      actor: { id: fixture.owner.id, name: "Alice", email },
+      details: { access: "read", prefix: "bb_1", reason: "member_removed" },
+      root: { id: "bob-key", label: "Bob's key", type: "api_key" },
+    });
+    expect(fixture.keys()).toEqual([
+      {
+        id: "bob-expired",
+        revoked_at: null,
+        revoked_by: null,
+        revoked_reason: null,
+      },
+      {
+        id: "bob-key",
+        revoked_at: removal?.occurredAt,
+        revoked_by: fixture.owner.id,
+        revoked_reason: "member_removed",
+      },
+    ]);
     expect(removal).toMatchObject({
       actor: { id: fixture.owner.id, name: "Alice", email },
       details: {
-        apiKeys: [{ id: "bob-key", name: "Bob's key" }],
+        revokedApiKeys: [{ id: "bob-key", name: "Bob's key" }],
         role: "admin",
         userEmail: "bob@example.com",
         userId: fixture.bob.id,
@@ -74,10 +94,11 @@ describe("member removal activity", () => {
       members: ["alice", "carol"],
     });
 
-    // Everyone sees the removal and the equipment change; only managers see
-    // the group access it revoked.
+    // Everyone sees the removal, the revoked key and the equipment change;
+    // only managers see the group access it revoked.
     const carolFeed = await fixture.feed(fixture.carol.cookie);
     expect(carolFeed.map(({ action }) => action)).toEqual([
+      "api_key.revoked",
       "equipment.assigned",
       "organization.member_removed",
     ]);
@@ -85,11 +106,12 @@ describe("member removal activity", () => {
     expect(ownerFeed.map(({ action }) => action)).toContain(
       "organization.group_updated",
     );
-    // Bob's own organization records nothing.
+    // Bob's own organization records only its creation.
     expect(
-      (await findActivity(fixture.bindings.DB, fixture.bob.organizationId))
-        ?.events,
-    ).toEqual([]);
+      (
+        await findActivity(fixture.bindings.DB, fixture.bob.organizationId)
+      )?.events.map(({ action }) => action),
+    ).toEqual(["organization.created"]);
     await Promise.all(fixture.pending);
   });
 
@@ -118,6 +140,7 @@ describe("member removal activity", () => {
         details.reason,
       ]),
     ).toEqual([
+      ["api_key.revoked", fixture.bob.id, "member_left"],
       ["equipment.assigned", fixture.bob.id, "member_left"],
       ["organization.group_updated", fixture.bob.id, "member_left"],
       ["organization.member_left", fixture.bob.id, undefined],
@@ -134,7 +157,7 @@ describe("member removal activity", () => {
       "organization.member_removed",
     ]);
     expect(events[0]?.details).toMatchObject({
-      apiKeys: [],
+      revokedApiKeys: [],
       userName: "Carol",
     });
   });
@@ -628,6 +651,13 @@ async function createMembershipFixture() {
       };
       return page.events.filter(({ id }) => id > seeded);
     },
+    keys: () =>
+      database
+        .query(
+          `SELECT id, revoked_at, revoked_by, revoked_reason
+           FROM organization_api_keys ORDER BY id`,
+        )
+        .all(),
     invite: (inviteEmail: string, role: string, cookie = owner.cookie) =>
       post(
         auth,

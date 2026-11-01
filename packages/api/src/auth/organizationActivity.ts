@@ -26,11 +26,13 @@ const actorField = {
 
 /**
  * Records Better Auth's organization access changes with the request's actor.
- * Role changes, invitations, joining by invitation and organization renames
- * carry the actor in the same write, where the triggers of migrations 0057
- * and 0083 record the event. Removing a member and leaving run as one
- * recorded batch instead (memberRemoval.ts). Better Auth checks permissions
- * before each of these writes.
+ * Creating an organization, role changes, invitations, joining by invitation
+ * and organization renames carry the actor in the same write, where the
+ * triggers of migrations 0057, 0083 and 0085 record the event. Removing a
+ * member and leaving run as one recorded batch instead (memberRemoval.ts).
+ * Better Auth checks permissions before each of these writes. Regenerating
+ * two-factor backup codes is marked the same way, so its trigger can tell it
+ * from a backup code being used (migration 0085).
  */
 export function organizationActivity(database: D1Database) {
   return {
@@ -49,7 +51,29 @@ export function organizationActivity(database: D1Database) {
           },
         },
       },
-      organization: { fields: { activityActorId: actorField } },
+      organization: {
+        fields: {
+          activityActorId: actorField,
+          activityCreatedVia: {
+            fieldName: "activity_created_via",
+            input: false,
+            required: false,
+            returned: false,
+            type: "string",
+          },
+        },
+      },
+      twoFactor: {
+        fields: {
+          activityChange: {
+            fieldName: "activity_change",
+            input: false,
+            required: false,
+            returned: false,
+            type: "string",
+          },
+        },
+      },
     },
     init(context) {
       const adapter = context.adapter;
@@ -79,29 +103,10 @@ function auditedWrites(
     async create(input) {
       // Resolve the actor per call, including concurrent HTTP and auth.api
       // requests.
-      const request = await authRequest();
-      if (
-        input.model === "invitation" &&
-        atPath(request, "/organization/invite-member")
-      ) {
-        return adapter.create({
-          ...input,
-          data: { ...input.data, activityActorId: actorOf(request) },
-        });
-      }
-      if (
-        input.model === "member" &&
-        atPath(request, "/organization/accept-invitation")
-      ) {
-        return adapter.create({
-          ...input,
-          data: {
-            ...input.data,
-            activityInvitationId: invitationIdOf(request),
-          },
-        });
-      }
-      return adapter.create(input);
+      const stamp = createStamp(input.model, await authRequest());
+      return adapter.create(
+        stamp ? { ...input, data: { ...input.data, ...stamp } } : input,
+      );
     },
     async delete(input) {
       const request = await authRequest();
@@ -144,20 +149,54 @@ function auditedWrites(
       });
     },
     async update(input) {
-      const request = await authRequest();
-      const recorded =
-        (input.model === "member" &&
-          Object.hasOwn(input.update, "role") &&
-          atPath(request, "/organization/update-member-role")) ||
-        (input.model === "organization" &&
-          atPath(request, "/organization/update"));
-      if (!recorded || !request) return adapter.update(input);
-      return adapter.update({
-        ...input,
-        update: { ...input.update, activityActorId: actorOf(request) },
-      });
+      const stamp = updateStamp(input, await authRequest());
+      return adapter.update(
+        stamp ? { ...input, update: { ...input.update, ...stamp } } : input,
+      );
     },
   };
+}
+
+/** What a created row records about the request that created it. */
+function createStamp(model: string, request: AuthRequest | undefined) {
+  if (model === "organization" && atPath(request, "/organization/create")) {
+    return { activityActorId: actorOf(request), activityCreatedVia: "create" };
+  }
+  if (
+    model === "invitation" &&
+    atPath(request, "/organization/invite-member")
+  ) {
+    return { activityActorId: actorOf(request) };
+  }
+  if (
+    model === "member" &&
+    atPath(request, "/organization/accept-invitation")
+  ) {
+    return { activityInvitationId: invitationIdOf(request) };
+  }
+  return undefined;
+}
+
+/** What an update records about the request that made it. */
+function updateStamp(
+  input: { model: string; update: object },
+  request: AuthRequest | undefined,
+) {
+  if (
+    input.model === "twoFactor" &&
+    Object.hasOwn(input.update, "backupCodes") &&
+    atPath(request, "/two-factor/generate-backup-codes")
+  ) {
+    return { activityChange: "backup_codes_regenerated" };
+  }
+  const recorded =
+    (input.model === "member" &&
+      Object.hasOwn(input.update, "role") &&
+      atPath(request, "/organization/update-member-role")) ||
+    (input.model === "organization" && atPath(request, "/organization/update"));
+  return recorded && request
+    ? { activityActorId: actorOf(request) }
+    : undefined;
 }
 
 /** The request behind an adapter call, if Better Auth is serving one. */

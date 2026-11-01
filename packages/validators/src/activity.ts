@@ -102,6 +102,8 @@ const ActivityDetailsSchema = z
     model: detail,
     name: detail,
     names: detail,
+    ownerEmail: detail,
+    ownerName: detail,
     pageCount: detail,
     personEmail: detail,
     personName: detail,
@@ -125,6 +127,8 @@ const ActivityDetailsSchema = z
     responseType: detail,
     retentionDays: detail,
     revision: detail,
+    /** API keys an access change revoked, as `{ id, name }`. */
+    revokedApiKeys: detail,
     role: detail,
     roleCount: detail,
     serialNumber: detail,

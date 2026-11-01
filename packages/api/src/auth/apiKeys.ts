@@ -7,6 +7,7 @@ import { type Context, Hono } from "hono";
 import {
   canManageOrganization,
   requireManager,
+  stillManages,
 } from "../organizations/organizationMembers";
 import { readBody, respond } from "../shared/respond";
 import type { ApiEnv, ApiKeyChannel, ApiKeyPrincipal } from "./apiEnv";
@@ -26,6 +27,7 @@ interface ApiKeyRow {
   last_used_at: string | null;
   name: string;
   revoked_at: string | null;
+  revoked_reason: ApiKey["revokedReason"];
   revoker_email: string | null;
   revoker_id: string | null;
   revoker_name: string | null;
@@ -312,7 +314,9 @@ apiKeys.post("/", async (context) => {
       ? null
       : new Date(now.getTime() + input.expiresInDays * dayMs).toISOString();
   // The limit is checked in the INSERT itself so concurrent requests cannot
-  // both pass a separate count.
+  // both pass a separate count. So is the creator's role: a key made after a
+  // concurrent demotion or removal would escape the revocation it makes.
+  const manages = stillManages(organizationId, session.user.id);
   const inserted = await context.env.DB.prepare(
     `INSERT INTO organization_api_keys
        (id, organization_id, name, access, token_prefix, token_hash,
@@ -320,7 +324,8 @@ apiKeys.post("/", async (context) => {
      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
      WHERE (SELECT COUNT(*) FROM organization_api_keys
             WHERE organization_id = ? AND revoked_at IS NULL
-              AND (expires_at IS NULL OR expires_at > ?)) < ?`,
+              AND (expires_at IS NULL OR expires_at > ?)) < ?
+       AND ${manages.sql}`,
   )
     .bind(
       id,
@@ -336,9 +341,21 @@ apiKeys.post("/", async (context) => {
       organizationId,
       now.toISOString(),
       maxActiveKeys,
+      ...manages.bindings,
     )
     .run();
   if (inserted.meta.changes === 0) {
+    const current = await context.env.DB.prepare(
+      `SELECT ${manages.sql} AS manages`,
+    )
+      .bind(...manages.bindings)
+      .first<{ manages: number }>();
+    if (!current?.manages) {
+      return context.json(
+        { error: "Organization manager access required." },
+        403,
+      );
+    }
     return context.json(
       {
         error: `An organization can have at most ${maxActiveKeys} active API keys. Revoke one before creating another.`,
@@ -380,7 +397,7 @@ apiKeys.delete("/:id", async (context) => {
 const apiKeySelect = `
   SELECT api_key.id, api_key.name, api_key.access, api_key.token_prefix,
          api_key.created_at, api_key.expires_at, api_key.last_used_at,
-         api_key.revoked_at,
+         api_key.revoked_at, api_key.revoked_reason,
          creator.id AS creator_id, creator.name AS creator_name,
          creator.email AS creator_email, creator_member.role AS creator_role,
          revoker.id AS revoker_id, revoker.name AS revoker_name,
@@ -416,6 +433,7 @@ function toApiKey(row: ApiKeyRow, now: Date): ApiKey {
     name: row.name,
     prefix: row.token_prefix,
     revokedAt: row.revoked_at,
+    revokedReason: row.revoked_reason,
     revokedBy: row.revoker_id
       ? {
           email: row.revoker_email ?? "",

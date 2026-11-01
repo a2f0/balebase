@@ -15,6 +15,7 @@ import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import { useLoad } from "../shared/useLoad";
 import { AdminJobHistory } from "./AdminJobHistory";
+import { AdminMaintenanceRequests } from "./AdminMaintenanceRequests";
 
 export function AdminJobs() {
   const loaded = useLoad(
@@ -98,6 +99,10 @@ export function AdminJobs() {
         <ActivityFeed
           source={{ id: "platform", type: "admin_purges" }}
           title="Purge history"
+        />
+        <AdminMaintenanceRequests
+          jobs={jobs ?? []}
+          key={`requests-${startedRun?.request ?? 0}`}
         />
       </PageBody>
     </Page>

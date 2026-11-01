@@ -162,7 +162,7 @@ describe("system actors", () => {
   });
 
   it("keeps existing events, their IDs, and API key attribution across the rebuild", () => {
-    const database = createTestDatabase({ before: "0085" });
+    const database = createTestDatabase({ before: "0086" });
     seedUser(database, { createdAt: "2026-01-01", id: "person" });
     database.exec(`INSERT INTO activity_events (
         id, organization_id, root_type, root_id, root_label, subject_type,
@@ -171,7 +171,7 @@ describe("system actors", () => {
       VALUES (41, NULL, 'audit_template', 't', 'Form', 'audit_template', 't',
         'audit.template_created', 'person', 'Person', 'person@example.com',
         '2026-01-02', '{"version":1}', 1)`);
-    applyMigrations(database, { from: "0085" });
+    applyMigrations(database, { from: "0086" });
     expect(
       database
         .query(
@@ -656,7 +656,7 @@ describe("trashed email purge", () => {
         ...systemActor("purgeTrashedEmails"),
         details: {
           from: "sender@example.com",
-          reason: "email_purged",
+          via: "email_purged",
           subject: "Subject old",
         },
         root_id: "folder",

@@ -63,7 +63,7 @@ export async function purgeTrashedEmails(
                    'inbox.email_unlinked' AS action,
                    json_object('subject', ${emailLabel},
                                'from', inbound_emails.envelope_from,
-                               'reason', 'email_purged') AS details
+                               'via', 'email_purged') AS details
             FROM inbound_email_links AS link
             JOIN inbound_emails ON inbound_emails.id = link.email_id
             LEFT JOIN library_folders AS folder

@@ -30,6 +30,15 @@ export function libraryFolderIdForPath(pathname: string) {
   return recordIdForPath(pathname, "/library");
 }
 
+/** One library file's history, readable after the file is deleted. */
+export function libraryFilePath(fileId: string) {
+  return `/library/files/${encodeURIComponent(fileId)}`;
+}
+
+export function libraryFileIdForPath(pathname: string) {
+  return recordIdForPath(pathname, "/library/files");
+}
+
 /** The equipment list, or one item of equipment. */
 export function equipmentPath(equipmentId?: string) {
   return equipmentId
@@ -237,7 +246,7 @@ export function organizationSettingsPage(
 export function isRootAdminPath(pathname: string) {
   return (
     pathname === "/root/jobs" ||
-    pathname === "/root/users" ||
+    isWithin(pathname, adminUserPath()) ||
     isWithin(pathname, adminOrganizationPath()) ||
     isWithin(pathname, globalAuditsPath())
   );
@@ -248,6 +257,15 @@ export function organizationPathRequiresAccess(pathname: string) {
     !["/account", "/account/security", "/invite"].includes(pathname) &&
     !isRootAdminPath(pathname)
   );
+}
+
+/** Root admin's user list, or one person's platform history there. */
+export function adminUserPath(userId?: string) {
+  return userId ? `/root/users/${encodeURIComponent(userId)}` : "/root/users";
+}
+
+export function adminUserIdForPath(pathname: string) {
+  return recordIdForPath(pathname, adminUserPath());
 }
 
 /** Root admin's organization list, or one organization there. */
