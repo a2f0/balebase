@@ -17,6 +17,8 @@ import {
 import {
   type ContractEvent,
   type ContractRow,
+  contractSignerCount,
+  contractSigningActivityStatement,
   type EventRow,
   eventStatement,
   type FieldRow,
@@ -261,12 +263,31 @@ async function completeContract(
       httpMetadata: { contentType: "application/pdf" },
     },
   );
-  // The event is recorded under the completion's own condition, in its
-  // transaction, so a completed contract never lacks it.
-  const [, completed] = await database.batch([
+  // The events are recorded under the completion's own condition, in its
+  // transaction, so a completed contract never lacks them.
+  const eventId = crypto.randomUUID();
+  const finalSha256 = await sha256Hex(signed);
+  const [, , completed] = await database.batch([
+    contractSigningActivityStatement(
+      database,
+      {
+        action: "contract.completed",
+        contractEventId: eventId,
+        contractId: contract.id,
+        details: {
+          bindings: [finalSha256],
+          sql: `json_object('signerCount', ${contractSignerCount},
+            'documentSha256', document_sha256, 'finalSha256', ?)`,
+        },
+      },
+      {
+        bindings: [finalKey],
+        sql: `status = 'sent' AND ${uploadStillQueued}`,
+      },
+    ),
     eventStatement(
       database,
-      { contractId: contract.id, type: "completed" },
+      { contractId: contract.id, id: eventId, type: "completed" },
       {
         bindings: [contract.id, finalKey],
         sql: `EXISTS (SELECT 1 FROM contracts WHERE id = ? AND status = 'sent')
@@ -283,7 +304,7 @@ async function completeContract(
       .bind(
         completedAt,
         finalKey,
-        await sha256Hex(signed),
+        finalSha256,
         completedAt,
         contract.id,
         finalKey,

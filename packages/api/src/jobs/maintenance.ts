@@ -120,9 +120,9 @@ export function maintenanceTasks(environment: Bindings): MaintenanceTasks {
     maintainContracts: async () => ({
       reminded: await maintainContracts(environment),
     }),
-    refreshCheckrScreenings: async () => {
+    refreshCheckrScreenings: async (runId) => {
       const { refreshed, skipped, notifications } =
-        await refreshActiveCheckrScreenings(environment);
+        await refreshActiveCheckrScreenings(environment, runId);
       return {
         refreshed,
         skipped,

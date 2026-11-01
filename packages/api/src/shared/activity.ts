@@ -349,11 +349,28 @@ export function maintenanceActor(jobId: string, runId: string): SystemActor {
   return { causation: { id: runId, type: "job_run" }, jobId, type: "system" };
 }
 
+/**
+ * The system source of what a signing link did: Balebase's signing workflow
+ * records a signer's decline and a contract's completion, caused by the
+ * contract's own event, which names the signer.
+ */
+const contractSigningSource = "contractSigning";
+
+/** The signing workflow, as the actor of one contract event's outcome. */
+export function contractSigningActor(contractEventId: string): SystemActor {
+  return {
+    causation: { id: contractEventId, type: "contract_event" },
+    jobId: contractSigningSource,
+    type: "system",
+  };
+}
+
 /** The label stored with a system or provider event. */
 function systemActorName(actor: SystemActor) {
-  return actor.type === "system"
-    ? `${productName} maintenance`
-    : activityProviderNames[actor.provider];
+  if (actor.type === "provider") return activityProviderNames[actor.provider];
+  return actor.jobId === contractSigningSource
+    ? `${productName} signing`
+    : `${productName} maintenance`;
 }
 
 function systemActorBindings(actor: SystemActor) {

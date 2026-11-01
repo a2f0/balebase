@@ -122,6 +122,7 @@ describe("contract activity", () => {
     expect(contractActivity(fixture).map(({ action }) => action)).toEqual([
       "contract.created",
       "contract.sent",
+      "contract.completed",
     ]);
 
     const other = fixture.as("other-user", "org-1");
@@ -168,6 +169,7 @@ describe("contract activity", () => {
     }>("GET", "/api/activity?resourceType=contract");
     expect(feed.body.events.map(({ action }) => action)).toEqual([
       "contract.deleted",
+      "contract.completed",
       "contract.sent",
       "contract.created",
     ]);
@@ -275,14 +277,15 @@ describe("contract activity", () => {
     ).toEqual({ reason: "Wrong rate", signedCount: 0, signerCount: 1 });
   });
 
-  it("completes a contract only together with its completed event", async () => {
+  it("completes a contract only together with its completed events", async () => {
     const fixture = createFixture();
     const id = await fixture.prepare(singleSigner());
     await fixture.json("POST", `/api/contracts/${id}/send`);
+    const token = tokenFrom(fixture.emails[0]);
     failInserts(fixture, "contract_events", "NEW.type = 'completed'");
     const signed = await fixture.json<{ completed: boolean }>(
       "POST",
-      `/api/signing/${tokenFrom(fixture.emails[0])}/sign`,
+      `/api/signing/${token}/sign`,
       { consent: true, signature: png },
     );
     expect(signed.body.completed).toBe(false);
@@ -291,20 +294,78 @@ describe("contract activity", () => {
         .query("SELECT status, final_object_key FROM contracts WHERE id = ?")
         .get(id);
     expect(row()).toEqual({ final_object_key: null, status: "sent" });
-
     fixture.database.exec("DROP TRIGGER fail_audit");
+
+    // The shared event failing holds the completion back too.
+    failInserts(
+      fixture,
+      "activity_events",
+      "NEW.action = 'contract.completed'",
+    );
     await resumeStalledContracts(
       fixture.bindings,
       new Date(Date.now() + 3_600_000),
     );
+    expect(row()).toEqual({ final_object_key: null, status: "sent" });
+    expect(contractActivity(fixture).map(({ action }) => action)).toEqual([
+      "contract.created",
+      "contract.sent",
+    ]);
+    fixture.database.exec("DROP TRIGGER fail_audit");
+
+    await resumeStalledContracts(
+      fixture.bindings,
+      new Date(Date.now() + 7_200_000),
+    );
     expect(row()).toMatchObject({ status: "completed" });
+    const completedEvent = fixture.database
+      .query("SELECT id FROM contract_events WHERE type = 'completed'")
+      .all() as Array<{ id: string }>;
+    expect(completedEvent).toHaveLength(1);
+    // Recorded once, by the signing workflow and caused by the contract's
+    // own completed event; no person is credited.
+    const shared = fixture.database
+      .query(
+        `SELECT actor_type, actor_source, actor_user_id, actor_name,
+                causation_type, causation_id, root_label, details
+         FROM activity_events WHERE action = 'contract.completed'`,
+      )
+      .all() as Array<Record<string, unknown> & { details: string }>;
+    expect(shared).toHaveLength(1);
+    const { finalSha256, documentSha256 } = fixture.database
+      .query(
+        `SELECT final_sha256 AS finalSha256, document_sha256 AS documentSha256
+         FROM contracts WHERE id = ?`,
+      )
+      .get(id) as { documentSha256: string; finalSha256: string };
+    expect(shared[0]).toEqual({
+      actor_name: "Balebase signing",
+      actor_source: "contractSigning",
+      actor_type: "system",
+      actor_user_id: null,
+      causation_id: completedEvent[0]?.id ?? "",
+      causation_type: "contract_event",
+      details: expect.any(String),
+      root_label: "Services agreement",
+    });
+    expect(JSON.parse(shared[0]?.details ?? "{}")).toEqual({
+      documentSha256,
+      finalSha256,
+      signerCount: 1,
+    });
+    // A later sweep finds nothing more to complete or record.
+    await resumeStalledContracts(
+      fixture.bindings,
+      new Date(Date.now() + 10_800_000),
+    );
     expect(
-      fixture.database
-        .query(
-          "SELECT COUNT(*) AS count FROM contract_events WHERE type = 'completed'",
-        )
-        .get(),
-    ).toEqual({ count: 1 });
+      contractActivity(fixture).filter(
+        ({ action }) => action === "contract.completed",
+      ),
+    ).toHaveLength(1);
+    expect((await fixture.json("GET", `/api/signing/${token}`)).status).toBe(
+      200,
+    );
   });
 
   it("attributes contract work to the API key and channel it came through", async () => {
@@ -692,16 +753,67 @@ describe("contract activity", () => {
         })
       ).status,
     ).toBe(200);
+    const decline = () =>
+      fixture.json("POST", `/api/signing/${caiToken}/decline`, {
+        reason: "Wrong rate",
+      });
+    // The shared event failing leaves the signer able to decline later.
+    failInserts(fixture, "activity_events", "NEW.action = 'contract.declined'");
+    expect((await decline()).status).toBe(500);
     expect(
-      (
-        await fixture.json("POST", `/api/signing/${caiToken}/decline`, {
-          reason: "Wrong rate",
-        })
-      ).status,
-    ).toBe(200);
+      fixture.database
+        .query(
+          `SELECT contracts.status, COUNT(contract_events.id) AS declines
+           FROM contracts LEFT JOIN contract_events
+             ON contract_events.contract_id = contracts.id
+            AND contract_events.type = 'declined'
+           WHERE contracts.id = ?`,
+        )
+        .get(id),
+    ).toEqual({ declines: 0, status: "sent" });
+    fixture.database.exec("DROP TRIGGER fail_audit");
+    expect((await decline()).status).toBe(200);
+    // A second decline is refused and records nothing.
+    expect((await decline()).status).not.toBe(200);
+    const declinedEvent = fixture.database
+      .query(
+        "SELECT id, recipient_id FROM contract_events WHERE type = 'declined'",
+      )
+      .get() as { id: string; recipient_id: string };
+    const declines = fixture.database
+      .query(
+        `SELECT actor_type, actor_source, actor_user_id, causation_type,
+                causation_id, root_id, details
+         FROM activity_events WHERE action = 'contract.declined'`,
+      )
+      .all() as Array<Record<string, unknown> & { details: string }>;
+    expect(declines).toEqual([
+      {
+        actor_source: "contractSigning",
+        actor_type: "system",
+        actor_user_id: null,
+        causation_id: declinedEvent.id,
+        causation_type: "contract_event",
+        details: expect.any(String),
+        root_id: id,
+      },
+    ]);
+    expect(JSON.parse(declines[0]?.details ?? "{}")).toEqual({
+      recipientId: declinedEvent.recipient_id,
+      signedCount: 1,
+      signerCount: 2,
+    });
+    for (const text of ["Wrong rate", "cai@example.com", "203.0.113.7"])
+      expect(declines[0]?.details).not.toContain(text);
     expect((await fixture.json("DELETE", `/api/contracts/${id}`)).status).toBe(
       204,
     );
+    // The decline outlives the contract in the shared history.
+    expect(
+      contractActivity(fixture).filter(
+        ({ action }) => action === "contract.declined",
+      ),
+    ).toHaveLength(1);
     const deleted = contractActivity(fixture).at(-1);
     expect(deleted?.action).toBe("contract.deleted");
     expect(JSON.parse(deleted?.details ?? "{}")).toMatchObject({
