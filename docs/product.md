@@ -361,7 +361,8 @@ previewed, so SVG attachments download instead.
 The organization-scoped Equipment page at `/equipment` tracks computers, cell
 phones, and monitors with their make, model, serial number, and purchase date.
 Each item can be assigned to one organization member at a time, and removing a
-member from the organization returns their equipment to unassigned. Every
+member from the organization returns their equipment to unassigned, recorded
+in each item's history with the person who removed them (or who left). Every
 member can view equipment; organization owners and admins add, edit, assign,
 and delete it. Receipts and other inbox emails link to equipment the same way
 they link to folders, and any member can link or unlink them. The API owns the
@@ -407,7 +408,7 @@ drafts, completed, declined, and voided contracts can be deleted. Creating,
 sending, voiding, and deleting a contract, and deleting a template, appear in
 Activity, which keeps a deleted contract's status, document hashes, and signer
 count; a contract's own history names the API key and channel behind changes
-made through a key. Migration `0083_attribute_contract_events.sql` adds that
+made through a key. Migration `0084_attribute_contract_events.sql` adds that
 key attribution.
 
 Contract templates at `/contracts/templates` keep a PDF and placed fields

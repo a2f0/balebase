@@ -149,11 +149,11 @@ organizationSettings.delete("/current", async (context) => {
     );
   }
 
-  const result = await deleteBilledOrganization(
-    context,
-    organizationId,
+  const result = await deleteBilledOrganization(context, organizationId, {
+    apiKey: context.get("apiKey"),
     userId,
-  );
+    via: "owner",
+  });
   if ("response" in result) return result.response;
   const { deletion } = result;
   if (!deletion) {

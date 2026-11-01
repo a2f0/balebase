@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import {
   EmployeeRequirementKindSchema,
   EmployeeRequirementStatusSchema,
@@ -63,6 +64,16 @@ export const adminOrganizationsRoutes = {
     method: "GET",
     path: "/api/admin/organizations/:organizationId",
     response: AdminOrganizationDetailSchema,
+  }),
+  /**
+   * The organization's own history, newest first: renames, deletion
+   * requests and restorations.
+   */
+  activity: route({
+    method: "GET",
+    path: "/api/admin/organizations/:organizationId/activity",
+    query: ActivityQuerySchema,
+    response: ActivityPageSchema,
   }),
   markForDeletion: route({
     method: "DELETE",

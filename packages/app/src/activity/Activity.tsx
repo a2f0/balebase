@@ -9,7 +9,9 @@ const resourceLabels: Record<ActivityResourceType, string> = {
   issue: "Workspace issues",
   equipment: "Equipment",
   project: "Projects",
+  organization: "Organization",
   organization_member: "People",
+  organization_invitation: "Invitations",
   organization_group: "Groups",
   api_key: "API keys",
   finance_transaction: "Transactions",
@@ -30,8 +32,8 @@ function isResourceType(value: string): value is ActivityResourceType {
 }
 
 /**
- * Finance resources need Finance access; groups, billing, and the forms and
- * checks requested of people need a manager.
+ * Finance resources need Finance access; groups, invitations, billing, and the
+ * forms and checks requested of people need a manager.
  */
 function canFilter(
   value: string,
@@ -40,6 +42,7 @@ function canFilter(
   if (value.startsWith("finance_")) return access.canAccessFinance;
   if (
     value === "organization_group" ||
+    value === "organization_invitation" ||
     value === "organization_billing" ||
     value === "employee_requirement"
   )
