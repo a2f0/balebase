@@ -132,5 +132,14 @@ describe("contract labels", () => {
         names,
       ),
     ).toBe("Reminder emailed to Sam Signer");
+    expect(
+      describeContractEvent({ ...event, type: "delivery_failed" }, names),
+    ).toBe("A reminder from Olivia to Sam Signer could not be delivered");
+    expect(
+      describeContractEvent(
+        { ...event, actorName: null, type: "delivery_failed" },
+        names,
+      ),
+    ).toBe("An email to Sam Signer could not be delivered");
   });
 });

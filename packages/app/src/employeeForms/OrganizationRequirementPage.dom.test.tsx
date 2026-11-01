@@ -44,10 +44,41 @@ function requirement(
   };
 }
 
+/** One recorded change to the request, as its history lists it. */
+const dueDateChanged = {
+  action: "employee_requirement.due_date_changed",
+  actor: {
+    apiKey: null,
+    email: "olivia@example.com",
+    id: "owner",
+    name: "Olivia",
+  },
+  details: {
+    after: "2026-10-21",
+    before: "2026-10-14",
+    kind: "background_check",
+    personName: "Pat Person",
+    title: "Background check",
+  },
+  historical: false,
+  id: 7,
+  occurredAt: "2026-10-02T12:00:00.000Z",
+  root: {
+    id: "check",
+    label: "Background check · Pat Person",
+    type: "employee_requirement",
+  },
+  subject: { id: "check", type: "employee_requirement" },
+};
+
 /** Serves the organization's requests and records every change. */
-function stubApi(requirements: EmployeeRequirement[]) {
+function stubApi(requirements: EmployeeRequirement[], reads: string[] = []) {
   const changes: Array<{ body: unknown; method: string; url: string }> = [];
   respond(async ({ href: url }, init) => {
+    if (url.includes("/activity")) {
+      reads.push(url);
+      return Response.json({ events: [dueDateChanged], nextCursor: null });
+    }
     const method = init?.method ?? "GET";
     if (method !== "GET") {
       changes.push({
@@ -177,6 +208,29 @@ describe("a manager's request page", () => {
     expect(card("Next step").textContent).toContain(
       "Review the report in Checkr before making a decision.",
     );
+  });
+
+  it("shows the request's own history and refreshes it after a change", async () => {
+    const reads: string[] = [];
+    stubApi([requirement({ checkrAvailable: true })], reads);
+    await render();
+    await act(async () => {});
+    expect(reads).toEqual([
+      "http://localhost:8787/api/employee-forms/check/activity",
+    ]);
+    expect(container.textContent).toContain(
+      "Olivia changed a request's due date",
+    );
+    expect(container.textContent).toContain("Due 2026-10-14 → 2026-10-21");
+    await fill(
+      container.querySelector<HTMLInputElement>(
+        '[aria-label="Work state for Background check"]',
+      ),
+      "ny",
+    );
+    await act(async () => button("Request background check").click());
+    await act(async () => {});
+    expect(reads).toHaveLength(2);
   });
 
   it("says when the request is gone", async () => {

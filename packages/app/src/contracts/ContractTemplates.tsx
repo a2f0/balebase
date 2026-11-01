@@ -18,6 +18,7 @@ import type {
   TemplateVersion,
 } from "@balebase/validators/contractTemplates";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityFeed } from "../activity/ActivityFeed";
 import { AppLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
 import { formatDate } from "../shared/labels";
@@ -255,6 +256,12 @@ function TemplatePage({
             onDirtyChange={setDirty}
             onSaved={saved}
             template={template}
+          />
+        )}
+        {template && (
+          <ActivityFeed
+            refreshKey={template.currentVersion}
+            source={{ id, type: "contract_template" }}
           />
         )}
       </PageBody>

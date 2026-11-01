@@ -13,7 +13,6 @@ import {
   listFields,
   mailFor,
   type RecipientRow,
-  recordEvent,
 } from "./contractRecords";
 import {
   isSigningToken,
@@ -44,21 +43,35 @@ signing.get("/:token", async (context) => {
   const { contract, recipient } = signer;
   const canSign = signable(contract, recipient);
   if (canSign && recipient.status === "sent") {
-    const viewed = await context.env.DB.prepare(
-      `UPDATE contract_recipients SET status = 'viewed', viewed_at = ?
-       WHERE id = ? AND status = 'sent'`,
-    )
-      .bind(new Date().toISOString(), recipient.id)
-      .run();
-    if (viewed.meta.changes) {
-      await recordEvent(context.env.DB, {
-        contractId: contract.id,
-        ip: clientIp(context),
-        recipientId: recipient.id,
-        type: "viewed",
-        userAgent: context.req.header("user-agent") ?? null,
-      });
-    }
+    // The first view and its event land together, or neither does.
+    const database = context.env.DB;
+    const unviewed = `EXISTS (SELECT 1 FROM contract_recipients
+      WHERE id = ? AND status = 'sent')
+      AND EXISTS (SELECT 1 FROM contracts WHERE id = ? AND status = 'sent')`;
+    await database.batch([
+      eventStatement(
+        database,
+        {
+          contractId: contract.id,
+          ip: clientIp(context),
+          recipientId: recipient.id,
+          type: "viewed",
+          userAgent: context.req.header("user-agent") ?? null,
+        },
+        { bindings: [recipient.id, contract.id], sql: unviewed },
+      ),
+      database
+        .prepare(
+          `UPDATE contract_recipients SET status = 'viewed', viewed_at = ?
+           WHERE id = ? AND ${unviewed}`,
+        )
+        .bind(
+          new Date().toISOString(),
+          recipient.id,
+          recipient.id,
+          contract.id,
+        ),
+    ]);
   }
   const [fields, mail] = await Promise.all([
     listFields(context.env.DB, contract.id),

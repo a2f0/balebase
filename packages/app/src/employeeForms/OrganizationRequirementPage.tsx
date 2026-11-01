@@ -8,6 +8,7 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
+import { ActivityFeed } from "../activity/ActivityFeed";
 import { AppButtonLink, AppLink } from "../shared/AppLink";
 import { formatCalendarDate, formatDate } from "../shared/labels";
 import {
@@ -127,6 +128,10 @@ function ManagedRequirement({
           requirement={requirement}
         />
       </Card>
+      <ActivityFeed
+        refreshKey={requirement}
+        source={{ id: requirement.id, type: "employee_requirement" }}
+      />
     </>
   );
 }

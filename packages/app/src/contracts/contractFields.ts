@@ -238,7 +238,10 @@ export function describeContractEvent(
     case "completed":
       return "Everyone signed; the signed copy was emailed to all parties";
     case "delivery_failed":
-      return `An email to ${who} could not be delivered`;
+      // Only a manual reminder's failure names who sent it.
+      return event.actorName
+        ? `A reminder from ${actor} to ${who} could not be delivered`
+        : `An email to ${who} could not be delivered`;
     default:
       return event.type;
   }

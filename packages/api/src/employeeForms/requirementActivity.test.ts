@@ -398,6 +398,91 @@ describe("employee requirement activity", () => {
     expect(JSON.stringify(requests)).not.toContain("consider");
   });
 
+  it("lists one request's history to managers, page by page", async () => {
+    const fixture = await createFixture();
+    const owner = fixture.app("owner", "owner");
+    const id = await createRequirement(fixture, "form", "W-4");
+    const otherId = await createRequirement(fixture, "form", "I-9");
+    expect(
+      (await owner.request(`/${id}`, patch({ dueDate: "2026-11-01" }))).status,
+    ).toBe(200);
+    type Page = {
+      events: Array<{
+        action: string;
+        actor: { apiKey: unknown; id: string };
+        details: Record<string, unknown>;
+        root: { id: string };
+      }>;
+      nextCursor: string | null;
+    };
+    const read = async (
+      app: ReturnType<Fixture["app"]>,
+      requirementId: string,
+      cursor = "",
+    ) => {
+      const response = await app.request(
+        `/${requirementId}/activity${cursor ? `?cursor=${cursor}` : ""}`,
+      );
+      return {
+        body: (await response.json()) as Page,
+        status: response.status,
+      };
+    };
+    const first = await read(owner, id);
+    expect(first.status).toBe(200);
+    expect(first.body.events.map(({ action }) => action)).toEqual([
+      "employee_requirement.due_date_changed",
+      "employee_requirement.assigned",
+    ]);
+    expect(first.body.events.every(({ root }) => root.id === id)).toBe(true);
+    expect(first.body.events[0]).toMatchObject({
+      actor: { apiKey: null, id: "owner" },
+      details: { after: "2026-11-01", before: "2026-10-01" },
+    });
+    expect(first.body.nextCursor).toBeNull();
+    expect(
+      (await read(owner, otherId)).body.events.map(({ action }) => action),
+    ).toEqual(["employee_requirement.assigned"]);
+
+    // The person it was requested from and other members cannot read it.
+    for (const [user, role] of [
+      ["employee", "member"],
+      ["invitee", "member"],
+    ] as const)
+      expect((await read(fixture.app(user, role), id)).status).toBe(403);
+
+    // A request in another organization is not found.
+    fixture.database
+      .query(
+        "UPDATE employee_requirements SET organization_id = 'org_other' WHERE id = ?",
+      )
+      .run(otherId);
+    expect((await read(owner, otherId)).status).toBe(404);
+    expect((await read(owner, "missing")).status).toBe(404);
+    expect((await read(owner, id, "not-a-cursor")).status).toBe(400);
+
+    // Long histories page 50 events at a time.
+    const insert = fixture.database.query(
+      `INSERT INTO activity_events (organization_id, root_type, root_id,
+         root_label, subject_type, subject_id, action, actor_user_id,
+         actor_name, actor_email, occurred_at, details)
+       VALUES (?, 'employee_requirement', ?, 'W-4', 'employee_requirement', ?,
+         'employee_requirement.due_date_changed', 'owner', 'Owner',
+         'owner@example.com', ?, '{}')`,
+    );
+    for (let index = 0; index < 50; index += 1)
+      insert.run(orgId, id, id, new Date().toISOString());
+    const paged = await read(owner, id);
+    expect(paged.body.events).toHaveLength(50);
+    expect(paged.body.nextCursor).not.toBeNull();
+    const rest = await read(owner, id, paged.body.nextCursor ?? "");
+    expect(rest.body.events.map(({ action }) => action)).toEqual([
+      "employee_requirement.due_date_changed",
+      "employee_requirement.assigned",
+    ]);
+    expect(rest.body.nextCursor).toBeNull();
+  });
+
   it("shows requirement history only to organization managers", async () => {
     const fixture = await createFixture();
     await createRequirement(fixture, "form", "W-4");
