@@ -325,6 +325,21 @@ export async function findDiscardedTemplate(database: D1Database, id: string) {
   return { current, restoredStatus };
 }
 
+/**
+ * A global form, or one of its versions, including a discarded form the purge
+ * has not deleted yet. Only root admins may read through this: organizations
+ * must use `findTemplate`, which hides forms that are not published.
+ */
+export async function findRetainedGlobalTemplate(
+  database: D1Database,
+  id: string,
+  version?: number,
+) {
+  const current = await loadTemplate(database, null, id);
+  if (current?.scope !== "global") return null;
+  return version ? loadTemplate(database, null, id, version) : current;
+}
+
 /** Internal reads also see discarded forms so concurrent writes report stale. */
 async function loadTemplate(
   database: D1Database,

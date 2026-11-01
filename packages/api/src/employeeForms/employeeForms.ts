@@ -9,7 +9,7 @@ import {
   requireManager,
   stillManages,
 } from "../organizations/organizationMembers";
-import { activityBatch, requestActor } from "../shared/activity";
+import { activityBatch, findActivity, requestActor } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import { respondToUnexpectedError } from "../shared/unexpectedError";
 import { CheckrRequestError } from "./checkr";
@@ -263,6 +263,25 @@ employeeForms.patch("/:id", requireManager(), async (context) => {
     return context.json({ error: "The form changed. Please try again." }, 409);
   }
   return respond(context, employeeFormsRoutes.update, { ok: true });
+});
+
+// One request's history, for managers only, as the workspace feed's
+// requested forms and checks are; the person never reads it.
+employeeForms.get("/:id/activity", requireManager(), async (context) => {
+  const row = await findRequirement(context);
+  if (!row) return context.json({ error: "Requirement not found." }, 404);
+  const page = await findActivity(
+    context.env.DB,
+    context.get("organizationId"),
+    context.req.query("cursor"),
+    { id: row.id, type: "employee_requirement" },
+    false,
+    undefined,
+    true,
+  );
+  return page
+    ? respond(context, employeeFormsRoutes.activity, page)
+    : context.json({ error: "Invalid activity cursor." }, 400);
 });
 
 employeeForms.delete("/:id", requireManager(), async (context) => {

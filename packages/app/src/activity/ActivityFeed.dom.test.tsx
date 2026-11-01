@@ -226,9 +226,30 @@ describe("activity feed, mounted", () => {
     respond(async () =>
       Response.json({
         events: [
+          record(
+            8,
+            "contract_template.version_saved",
+            { id: "t2", label: "Offer letter", type: "contract_template" },
+            {
+              fieldCount: 5,
+              name: "Offer letter",
+              previousName: "Offer",
+              roleCount: 2,
+              sourceVersion: 1,
+              version: 2,
+            },
+          ),
+          record(
+            7,
+            "contract_template.created",
+            { id: "t2", label: "Offer", type: "contract_template" },
+            { name: "Offer", pageCount: 2, version: 1 },
+          ),
           record(6, "contract.deleted", contract, {
+            declinedAt: "2026-10-30T12:00:00.000Z",
+            signedCount: 1,
             signerCount: 2,
-            status: "completed",
+            status: "declined",
             templateName: null,
           }),
           record(5, "contract.voided", contract, {
@@ -273,6 +294,8 @@ describe("activity feed, mounted", () => {
         (heading) => heading.textContent,
       ),
     ).toEqual([
+      "Sam via Assistant (MCP) saved a contract template version · Offer letter",
+      "Sam via Assistant (MCP) uploaded a contract template · Offer",
       "Sam via Assistant (MCP) deleted a contract · Lease",
       "Sam via Assistant (MCP) voided a contract · Lease",
       "Sam via Assistant (MCP) sent a contract for signature · Lease",
@@ -285,7 +308,9 @@ describe("activity feed, mounted", () => {
         (summary) => summary.textContent,
       ),
     ).toEqual([
-      "Was Completed · 2 signers",
+      "Version 2 from v1 · Renamed from Offer · 2 roles · 5 fields",
+      "Version 1 · 2 pages",
+      "Was Declined · 1 of 2 signers signed",
       "1 of 2 signers signed · Reason: Wrong rate",
       "2 signers · In order · Due 2026-11-01",
       "Version 3 · 3 versions removed",
@@ -298,6 +323,8 @@ describe("activity feed, mounted", () => {
         link.getAttribute("aria-label"),
       ),
     ).toEqual([
+      "Open template: Offer letter",
+      "Open template: Offer",
       "Open contract: Lease",
       "Open contract: Lease",
       "Open request: W-4 · Bob",
@@ -589,6 +616,40 @@ describe("activity feed, mounted", () => {
     ).toHaveLength(2);
     await click("Apple MacBook Pro");
     expect(navigations).toEqual(["/equipment/laptop%2F1"]);
+  });
+
+  it("shows who held deleted equipment when its deletion recorded them", async () => {
+    const [legacy] = equipmentEvents();
+    if (!legacy) throw new Error("Expected a deletion event.");
+    respond(async () =>
+      Response.json({
+        events: [
+          {
+            ...legacy,
+            details: {
+              ...legacy.details,
+              assignedTo: "bob-user",
+              assigneeEmail: "bob@example.com",
+              assigneeName: "Bob",
+              emailLinkCount: 2,
+            },
+            id: 60,
+          },
+          legacy,
+        ],
+        nextCursor: null,
+      }),
+    );
+    ({ container } = await mount(<Activity onNavigate={() => undefined} />));
+    await settle();
+    const [recorded, older] = [...container.querySelectorAll("details")].map(
+      (details) => details.textContent ?? "",
+    );
+    expect(recorded).toContain("Assigned to: Bob");
+    expect(recorded).toContain("Email links removed: 2");
+    // Deletions recorded before the holder was kept claim nothing.
+    expect(older).not.toContain("Assigned to");
+    expect(older).not.toContain("Email links removed");
   });
 
   it("reads one item's history through its equipment", async () => {
@@ -1057,6 +1118,27 @@ it("shows library, inbox, and business events, linking to records that remain", 
             fromFolderName: "Taxes",
             toFolderId: null,
             toFolderName: null,
+            via: "folder_deleted",
+          },
+        ),
+        recorded(
+          64,
+          "inbox.email_unlinked",
+          { id: "f1", label: "Taxes", type: "library_folder" },
+          {
+            from: "sender@example.com",
+            subject: "Lease renewal",
+            via: "target_deleted",
+          },
+        ),
+        recorded(
+          63,
+          "inbox.email_unlinked",
+          { id: "equipment-2", label: "Apple MacBook", type: "equipment" },
+          {
+            from: "sender@example.com",
+            subject: "Lease renewal",
+            via: "target_deleted",
           },
         ),
       ],
@@ -1079,6 +1161,8 @@ it("shows library, inbox, and business events, linking to records that remain", 
     "Sam restored an email · Lease renewal",
     "Sam deleted a folder · Taxes",
     "Sam moved a file · w2.pdf",
+    "Sam unlinked an email · Taxes",
+    "Sam unlinked an email · Apple MacBook",
   ]);
   expect(
     [...container.querySelectorAll("summary")].map(
@@ -1090,13 +1174,21 @@ it("shows library, inbox, and business events, linking to records that remain", 
     "Lease renewal · Equipment: Dell XPS 13",
     "sender@example.com · from Trash",
     "Taxes · 2 files returned to the library · 1 email link removed",
-    "w2.pdf · Taxes → Library (no folder)",
+    "w2.pdf · Taxes → Library (no folder) · Folder deleted",
+    "Lease renewal · Folder: Taxes · Folder deleted",
+    "Lease renewal · Equipment: Apple MacBook · Equipment deleted",
   ]);
-  for (const label of ["Old Co", "Taxes", "w2.pdf", "Lease renewal"])
+  // Deleted records have no page; a file's history outlives the file.
+  for (const label of ["Old Co", "Taxes", "Lease renewal", "Apple MacBook"])
     expect(container.querySelector(`[aria-label$=": ${label}"]`)).toBeNull();
   await click("Acme Holdings");
   await click("Dell XPS 13");
-  expect(navigations).toEqual(["/businesses/b1", "/equipment/equipment-1"]);
+  await click("w2.pdf");
+  expect(navigations).toEqual([
+    "/businesses/b1",
+    "/equipment/equipment-1",
+    "/library/files/file-1",
+  ]);
   const options = [...container.querySelectorAll("option")].map(
     (option) => option.textContent,
   );

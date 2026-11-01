@@ -75,14 +75,22 @@ MCP `list_activity` tool accepts the same optional `resourceType`; keep that
 filter when passing the next cursor.
 
 Resource history routes authorize the resource before using `findActivity`.
+A contract template's history (`GET /api/contracts/templates/:id/activity`,
+MCP `list_contract_template_activity`) is on its page while it exists. A
+requested form or check's history (`GET /api/employee-forms/:id/activity`,
+MCP `list_employee_requirement_activity`) is on the manager's request page and
+readable only by organization owners and admins, never by the person it was
+requested from.
 A bank connection's history (`GET /api/finance/connections/:id/activity`, MCP
 `list_finance_connection_activity`) stays readable after it is disconnected.
 Shared global form history only exposes published versions to organization
-members. Form events name the version they saved: creation (with the global
-form a copy came from and the published version it started from), saved
-versions, publication,
-unpublication, discards, and restores. Organizations therefore see a global
-form's publications but never its unpublications, discards, or restores.
+members. Root admins read a discarded global form's history and versions
+through `/api/admin/audit-templates/:id/activity` and `/versions` until the
+purge deletes them. Form events name the version they saved: creation (with
+the global form a copy came from and the published version it started from),
+saved versions, publication, unpublication, discards, and restores.
+Organizations therefore see a global form's publications but never its
+unpublications, discards, or restores.
 Adding a producer with restricted details also requires reviewing the shared
 feed's reader permissions, labels, and navigation.
 
@@ -138,8 +146,11 @@ Uploading, moving, and permanently deleting a library file records an event on
 the file (`library_file`) naming its filename, content type, size, and folder,
 never its contents or storage key. Creating, renaming, and deleting a folder
 records one on the folder (`library_folder`); a deletion counts the files it
-returns to the library root and the email links it removes. Moving a file to
-the folder it is in, or renaming a folder to its current name, records nothing.
+returns to the library root and the email links it removes, and records each
+of them on its own record in the same batch: a `library.file_moved` per file
+(`details.via = 'folder_deleted'`) and an `inbox.email_unlinked` per link.
+Moving a file to the folder it is in, or renaming a folder to its current
+name, records nothing.
 A file's deletion commits with its event and queues its bytes for the
 deleted-object cleanup, which retries if removing them fails.
 
@@ -149,10 +160,14 @@ and the folder it left, never its body or attachments; restoring no longer
 erases who trashed it. Linking an email to a folder, equipment, or a
 transaction, and unlinking it, records an event on that record with the email as
 the subject, so a transaction's links need Finance access wherever they are
-read. A folder or equipment deletion counts or drops its links without one event
-per link. When Plaid removes a transaction, its links are hidden with it, and
-kept, without an event. Inbound mail is a provider action with no user actor:
-the stored message and its raw `.eml` are its record.
+read. Deleting a folder or equipment records an `inbox.email_unlinked` for
+each link it removes (`details.via = 'target_deleted'`), attributed to the
+person deleting it, so the email's history shows when and by whom the link
+ended. `equipment.deleted` also keeps who held the item (`assignedTo`,
+`assigneeName`, `assigneeEmail`) and its `emailLinkCount`. When Plaid removes a
+transaction, its links are hidden with it, and kept, without an event. Inbound
+mail is a provider action with no user actor: the stored message and its raw
+`.eml` are its record.
 
 Creating, editing, and deleting a business records an event on the business
 (`business`). Edits list each changed field with its old and new value; a save
@@ -160,8 +175,12 @@ that changes nothing, a duplicate EIN or DUNS number, and a save racing another
 change record nothing. Every member can read the feed, so events show only the
 last four digits of an EIN or DUNS number.
 
-Folders, emails, and businesses show their own history. An email's history also
-lists its links, recorded on the linked records.
+Folders, files, emails, and businesses show their own history. A folder's
+history also lists the file events that name it: uploads into it, moves into
+or out of it, and deletions of files in it. A file's history
+(`GET /api/objects/:id/activity`, MCP `list_library_file_activity`) stays
+readable after the file is deleted, as its events are in the shared feed. An
+email's history also lists its links, recorded on the linked records.
 
 ## Group access
 
@@ -185,20 +204,33 @@ signer's IP and user agent, voids, completion, and failed deliveries. The
 contract page and the certificate of completion read them, and they go with the
 contract when it is deleted. An event a person made through an API key also
 keeps the key's name and REST/MCP channel, which both readers show. A manual
-reminder names its sender; scheduled reminders (and manual ones recorded
-before senders were), completion, and delivery records have no actor. Sends,
-voids, and completions record their event in the same transaction as the
-change.
+reminder names its sender, and so does its failed delivery; scheduled
+reminders (and manual ones recorded before senders were), completion, and
+other delivery records have no actor. Sends, voids, completions, and a
+signer's first view record their event in the same transaction as the change.
+An email cannot share a transaction, so its `notified` or `reminded` event
+follows the send; a failed insert is retried once and logged, and never
+recorded as a failed delivery.
 
 The shared activity records `contract.created`, `contract.sent` (with the
 signer count, signing order, and due date that went out), `contract.voided`,
 and `contract.deleted`, which snapshots the status, document hashes, signer
-count, and template so a deleted agreement still leaves a trace until the
-organization is purged. Signer emails, IPs, and signatures stay out of it.
-Draft autosaves are not recorded; `contract.sent` captures the configuration
-that was sent. Deleting a contract template records
-`contract_template.deleted` with its current version and version count; while
-a template exists, its immutable versions name who saved each one.
+and signed counts, when it was declined, and template so a deleted agreement
+still leaves a trace until the organization is purged. Signer emails, IPs,
+signatures, and decline reasons stay out of it. A decline is the signer's and
+a completion the system's, so neither is a shared event until the shared model
+has a non-user actor; their `contract_events` and the deletion snapshot record
+them. Draft autosaves are not recorded; `contract.sent` captures the
+configuration that was sent.
+
+Uploading a contract template records `contract_template.created` (name,
+page count, and document hash), and each saved version records
+`contract_template.version_saved` (version, the version it was edited from,
+the previous name, role and field counts, signing order, and document hash),
+both under the save's own guard, so a stale save records nothing. Field
+values, messages, and the PDF stay out. Deleting a template records
+`contract_template.deleted` with its current version and version count; these
+events outlive the template until the organization is purged.
 
 Requested forms and checks record assignment, due date and status changes
 (old and new values; a status set by hand is always a manager's), deletion
@@ -217,12 +249,17 @@ Some histories are not organization activity:
 
 - `user_role_events` records platform role changes: revocations from the Users
   page with the acting admin, and `auth:set-role` changes with the operator who
-  ran the script (`actor_kind = 'operator'`, no user ID). D1 operators read it.
+  ran the script (`actor_kind = 'operator'`, no user ID).
 - `user_deletion_events` records account deletion requests and cancellations.
+  Root admins read both, merged and newest first with each actor's snapshot and
+  kind, from **View history** on the Users page
+  (`GET /api/admin/users/:userId/history`).
 - `maintenance_requests` records every manual maintenance request, including
   one that joins an active run, with the requester's snapshot. It outlives the
   30-day job history and the requester's account. Each request also logs a line
-  on its run, and the run keeps the first requester's name and email.
+  on its run, and the run keeps the first requester's name and email. Root
+  admins read it under **Manual requests** on the Jobs page
+  (`GET /api/admin/jobs/requests`).
 - `user_security_events` records a person's own sign-in security and profile
   changes by trigger: two-factor on and off, replacing the authenticator app
   (enrolling again while two-factor is on), regenerating backup codes (the
@@ -231,6 +268,9 @@ Some histories are not organization activity:
   new value) and picture changes (the picture's address is not kept). The
   person reads it under Account settings → Security; root admins read it in
   D1.
+
+The role, deletion, and maintenance request readers are for root admins only,
+never organization feeds; impersonated sessions are refused.
 
 Better Auth's admin endpoints that would change another person's account or
 act as them (`set-user-password`, `ban-user`, `unban-user`,
@@ -249,9 +289,11 @@ examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `organizations/membershipActivity.test.ts`,
 `organizations/accessLifecycle.test.ts`,
 `organizations/accessActivity.test.ts`, `issues/issues.test.ts`,
-`library/libraryActivity.test.ts`, `inbox/inboxActivity.test.ts`,
+`library/libraryActivity.test.ts`, `library/recordHistory.test.ts`,
+`inbox/inboxActivity.test.ts`,
 `businesses/businessActivity.test.ts`, `jobs/maintenanceRequests.test.ts`,
-`admin/setUserRole.test.ts`, `users/securityEvents.test.ts`,
+`admin/setUserRole.test.ts`, `admin/platformHistory.test.ts`,
+`admin/discardedAuditForms.test.ts`, `users/securityEvents.test.ts`,
 `contracts/contractActivity.test.ts`, and
 `employeeForms/requirementActivity.test.ts`.
 

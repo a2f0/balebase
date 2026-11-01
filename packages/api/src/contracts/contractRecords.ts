@@ -89,12 +89,14 @@ export interface EventRow {
   user_agent: string | null;
 }
 
-interface ContractEvent {
+export interface ContractEvent {
   actorUserId?: string | null;
   /** The key a person acted through, if any; its name is kept as a snapshot. */
   apiKey?: ApiKeyPrincipal | undefined;
   contractId: string;
   detail?: string | null;
+  /** A stable ID lets a retried insert recognize one that already landed. */
+  id?: string;
   ip?: string | null;
   recipientId?: string | null;
   type: string;
@@ -184,7 +186,7 @@ export function eventStatement(
 ) {
   const apiKey = event.actorUserId ? event.apiKey : undefined;
   const values = [
-    crypto.randomUUID(),
+    event.id ?? crypto.randomUUID(),
     event.contractId,
     event.recipientId ?? null,
     event.actorUserId ?? null,

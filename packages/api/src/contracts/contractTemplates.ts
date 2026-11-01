@@ -9,6 +9,7 @@ import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
 import {
   activityBatch,
+  findActivity,
   requestActor,
   rowActivityStatement,
 } from "../shared/activity";
@@ -112,9 +113,10 @@ contractTemplates.post("/", async (context) => {
       httpMetadata: { contentType: "application/pdf" },
     },
   );
+  const actor = requestActor(context);
   let created: D1Result[];
   try {
-    created = await context.env.DB.batch([
+    created = await activityBatch(context.env.DB, actor.apiKey, [
       context.env.DB.prepare(
         `INSERT INTO contract_templates (id, organization_id, current_version, created_at, updated_at)
          SELECT ?, ?, 1, ?, ? WHERE ${uploadStillQueued}`,
@@ -136,10 +138,21 @@ contractTemplates.post("/", async (context) => {
         document.bytes.byteLength,
         document.sha256,
         document.pageCount,
-        context.get("authSession").user.id,
+        actor.userId,
         now,
         id,
       ),
+      templateActivityStatement(context.env.DB, {
+        action: "contract_template.created",
+        actorId: actor.userId,
+        details: `json_object('name', version.name, 'version', version.version,
+          'documentSha256', version.document_sha256,
+          'pageCount', version.document_page_count)`,
+        id,
+        occurredAt: now,
+        organizationId,
+        version: 1,
+      }),
     ]);
   } catch (cause) {
     await context.env.STORAGE.delete(objectKey);
@@ -194,6 +207,22 @@ contractTemplates.get("/:id/versions", async (context) => {
   });
 });
 
+// A template's own history, readable by every member while it exists; its
+// deletion stays in the organization's activity.
+contractTemplates.get("/:id/activity", async (context) => {
+  const template = await findVersion(context, context.req.param("id"));
+  if (!template) return notFound(context);
+  const page = await findActivity(
+    context.env.DB,
+    context.get("organizationId"),
+    context.req.query("cursor"),
+    { id: template.template_id, type: "contract_template" },
+  );
+  return page
+    ? respond(context, contractTemplatesRoutes.activity, page)
+    : context.json({ error: "Invalid activity cursor." }, 400);
+});
+
 contractTemplates.get("/:id/document", async (context) => {
   const query = readQuery(
     context,
@@ -239,7 +268,10 @@ contractTemplates.post("/:id/versions", async (context) => {
   if (!fieldsOnDocument(input.definition.fields, source.document_page_count))
     return context.json({ error: offPageError }, 400);
   const now = new Date().toISOString();
-  const saved = await context.env.DB.batch([
+  const organizationId = context.get("organizationId");
+  const actor = requestActor(context);
+  const versionId = crypto.randomUUID();
+  const saved = await activityBatch(context.env.DB, actor.apiKey, [
     context.env.DB.prepare(
       `INSERT INTO contract_template_versions
         (id, template_id, version, name, description, definition_json, document_object_key,
@@ -250,27 +282,44 @@ contractTemplates.post("/:id/versions", async (context) => {
        JOIN contract_template_versions AS source ON source.template_id = family.id AND source.version = ?
        WHERE family.id = ? AND family.organization_id = ? AND family.current_version = ?`,
     ).bind(
-      crypto.randomUUID(),
+      versionId,
       expected + 1,
       input.name,
       input.description,
       JSON.stringify(input.definition),
-      context.get("authSession").user.id,
+      actor.userId,
       now,
       sourceVersion,
       source.template_id,
-      context.get("organizationId"),
+      organizationId,
       expected,
     ),
     context.env.DB.prepare(
       `UPDATE contract_templates SET current_version = ?, updated_at = ?
        WHERE id = ? AND organization_id = ? AND current_version = ?`,
-    ).bind(
-      expected + 1,
-      now,
-      source.template_id,
-      context.get("organizationId"),
-      expected,
+    ).bind(expected + 1, now, source.template_id, organizationId, expected),
+    // Only the version this request inserted, so a stale save records nothing.
+    templateActivityStatement(
+      context.env.DB,
+      {
+        action: "contract_template.version_saved",
+        actorId: actor.userId,
+        details: `json_object('name', version.name, 'version', version.version,
+          'sourceVersion', ?, 'previousName', (SELECT previous.name
+            FROM contract_template_versions AS previous
+            WHERE previous.template_id = contract_templates.id
+              AND previous.version = ?),
+          'documentSha256', version.document_sha256,
+          'roleCount', json_array_length(version.definition_json, '$.roles'),
+          'fieldCount', json_array_length(version.definition_json, '$.fields'),
+          'signingOrder', json_extract(version.definition_json, '$.signingOrder'))`,
+        detailBindings: [sourceVersion, expected],
+        id: source.template_id,
+        occurredAt: now,
+        organizationId,
+        version: expected + 1,
+      },
+      { bindings: [versionId], sql: "version.id = ?" },
     ),
   ]);
   if (!saved[0]?.meta.changes)
@@ -422,6 +471,55 @@ contractTemplates.delete("/:id", async (context) => {
   if (!result.at(-1)?.meta.changes) return notFound(context);
   return context.body(null, 204);
 });
+
+/**
+ * Shared activity about a template, read inside the batch from one of its
+ * versions, which `details` and `condition` name `version`. Records nothing
+ * unless that version exists and matches `condition`. Never the PDF or
+ * field values.
+ */
+function templateActivityStatement(
+  database: D1Database,
+  input: {
+    action: string;
+    actorId: string;
+    details: string;
+    detailBindings?: (string | number | null)[];
+    id: string;
+    occurredAt: string;
+    organizationId: string;
+    version: number;
+  },
+  condition: { bindings: (string | number | null)[]; sql: string } = {
+    bindings: [],
+    sql: "1 = 1",
+  },
+) {
+  const version = `FROM contract_template_versions AS version
+    WHERE version.template_id = contract_templates.id
+      AND version.version = ${Math.trunc(input.version)}`;
+  return rowActivityStatement(
+    database,
+    {
+      action: input.action,
+      actorId: input.actorId,
+      details: {
+        bindings: input.detailBindings ?? [],
+        sql: `(SELECT ${input.details} ${version})`,
+      },
+      id: input.id,
+      label: `COALESCE((SELECT version.name ${version}), 'Contract template')`,
+      occurredAt: input.occurredAt,
+      organizationId: input.organizationId,
+      rootType: "contract_template",
+      table: "contract_templates",
+    },
+    {
+      bindings: condition.bindings,
+      sql: `EXISTS (SELECT 1 ${version} AND (${condition.sql}))`,
+    },
+  );
+}
 
 function findVersion(context: TemplateContext, id: string, version?: number) {
   return context.env.DB.prepare(
