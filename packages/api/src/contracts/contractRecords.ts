@@ -6,11 +6,11 @@ import type {
   SigningOrder,
 } from "@balebase/validators/contracts";
 import type { ApiKeyPrincipal } from "../auth/apiEnv";
+import { rowActivityStatement } from "../shared/activity";
 import {
   contractSigningActor,
-  rowActivityStatement,
   systemActivityRowsStatement,
-} from "../shared/activity";
+} from "../shared/systemActivity";
 import type { ContractMail } from "./contractMail";
 
 export interface ContractRow {

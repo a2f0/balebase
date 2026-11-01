@@ -1,9 +1,8 @@
+import { type ActivityActor, rowActivityStatement } from "../shared/activity";
 import {
-  type ActivityActor,
-  rowActivityStatement,
   type SystemActor,
   systemActivityRowsStatement,
-} from "../shared/activity";
+} from "../shared/systemActivity";
 
 type SqlCondition = { bindings: (string | number | null)[]; sql: string };
 

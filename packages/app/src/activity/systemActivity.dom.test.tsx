@@ -267,4 +267,122 @@ describe("system and provider activity", () => {
       "Organization org-9 · Deleted by Olive Owner (owner) on",
     );
   });
+
+  it("summarizes Stripe's and Plaid's changes", async () => {
+    const provider = (source: string, name: string): ActivityActor => ({
+      ...maintenance,
+      name,
+      source,
+      type: "provider",
+    });
+    const stripe = provider("stripe", "Stripe");
+    const plaid = provider("plaid", "Plaid");
+    const billing = { id: "org", label: "Acme", type: "organization_billing" };
+    const bank = {
+      id: "bank",
+      label: "First Bank",
+      type: "finance_connection",
+    };
+    const subscription = {
+      cancelAtPeriodEnd: false,
+      periodEnd: "2026-11-01T00:00:00.000Z",
+      priceId: "price_pro",
+      seats: 2,
+      status: "active",
+      subscriptionId: "sub_1",
+    };
+    respond(async () =>
+      Response.json({
+        events: [
+          activity(
+            6,
+            "billing.subscription_changed",
+            billing,
+            {
+              after: {
+                ...subscription,
+                cancelAtPeriodEnd: true,
+                priceId: "price_pro_2",
+                seats: 3,
+              },
+              before: subscription,
+              subscriptionId: "sub_1",
+            },
+            stripe,
+          ),
+          activity(
+            5,
+            "billing.subscription_changed",
+            billing,
+            {
+              after: { ...subscription, status: "canceled" },
+              before: subscription,
+              reason: "replaced",
+              subscriptionId: "sub_1",
+            },
+            stripe,
+          ),
+          activity(
+            4,
+            "billing.seats_changed",
+            billing,
+            { after: 3, before: 2, source: "membership" },
+            stripe,
+          ),
+          activity(
+            3,
+            "finance.connection_status_changed",
+            bank,
+            {
+              after: { errorCode: "ITEM_LOGIN_REQUIRED", status: "error" },
+              before: { errorCode: null, status: "active" },
+            },
+            plaid,
+          ),
+          activity(
+            2,
+            "finance.transactions_removed",
+            bank,
+            { count: 2, transactionIds: ["t1", "t2"] },
+            plaid,
+          ),
+          activity(
+            1,
+            "finance.records_carried_over",
+            bank,
+            {
+              accountCount: 1,
+              fromConnectionId: "old",
+              fromInstitutionName: "First Bank",
+              transactionCount: 40,
+            },
+            plaid,
+          ),
+        ],
+        nextCursor: null,
+      }),
+    );
+    const paths: string[] = [];
+    const { container } = await mount(
+      <ActivityFeed onNavigate={(path) => paths.push(path)} />,
+    );
+    await settle();
+    const rows = rowsOf(container);
+    expect(rows[0]).toContain("Stripe updated the Pro subscription");
+    expect(rows[0]).toContain("Provider update");
+    expect(rows[0]).toContain(
+      "Plan changed · 2 → 3 seats · Cancels at period end",
+    );
+    expect(rows[1]).toContain("Active → Canceled · Replaced by a new Checkout");
+    expect(rows[2]).toContain("Stripe changed the subscription's seats");
+    expect(rows[2]).toContain("2 → 3 seats · After a membership change");
+    expect(rows[3]).toContain("Plaid changed the bank connection's status");
+    expect(rows[3]).toContain("Active → Error (ITEM_LOGIN_REQUIRED)");
+    expect(rows[4]).toContain("Plaid removed transactions");
+    expect(rows[4]).toContain("2 transactions withdrawn by the bank");
+    expect(rows[5]).toContain("1 account and 40 transactions from First Bank");
+    for (const row of rows) expect(row).not.toContain("@");
+    expect(container.textContent).toContain("Open billing");
+    expect(container.textContent).toContain("Open connection");
+  });
 });

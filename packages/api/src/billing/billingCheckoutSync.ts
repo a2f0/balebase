@@ -14,6 +14,14 @@ import {
 } from "./stripePayload";
 
 const pendingCheckoutReconciliationLimit = 25;
+
+/**
+ * Confirming a Checkout session, on the person's return or by the pending
+ * Checkout reconciliation, is one cause, so the two record one event.
+ */
+function checkoutCausation(sessionId: string) {
+  return { id: sessionId, type: "stripe_checkout_session" };
+}
 const pendingCheckoutRetrySeconds = 5 * 60;
 
 export async function confirmCheckoutSession(
@@ -45,6 +53,7 @@ export async function confirmCheckoutSession(
     environment,
     subscriptionId,
     Math.floor(Date.now() / 1000),
+    checkoutCausation(sessionId),
     organizationId,
     sessionId,
     session.metadata?.checkout_claim_id,
@@ -169,6 +178,7 @@ export async function reconcilePendingCheckoutEntitlement(
         environment,
         subscriptionId,
         nowSeconds,
+        checkoutCausation(sessionId),
         organizationId,
         sessionId,
         session.metadata?.checkout_claim_id,

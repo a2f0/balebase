@@ -3,7 +3,7 @@ import {
   maintenanceActor,
   type SystemActor,
   systemActivityRowsStatement,
-} from "../shared/activity";
+} from "../shared/systemActivity";
 import type { Bindings } from "../types";
 
 /** A deleted organization past its 30-day restoration window. */

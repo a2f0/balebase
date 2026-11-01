@@ -1,5 +1,9 @@
 import { dispatchJob } from "../jobs/jobRuns";
 import type { Bindings } from "../types";
+import {
+  connectionStatusStatement,
+  syncPageCausation,
+} from "./financeProviderActivity";
 import { type PlaidItemRow, syncPlaidPage } from "./financeSync";
 import type { SyncJobRow } from "./financeSyncJobs";
 import {
@@ -46,6 +50,7 @@ export async function runSyncPage(
       job.organization_id,
       { ...item, cursor: job.cursor },
       requestPlaid,
+      syncPageCausation(job),
     );
     await checkpoint(env, job, page);
   } catch (error) {
@@ -60,6 +65,15 @@ async function checkpoint(
 ) {
   const now = new Date().toISOString();
   const statements = [
+    // Recovery is recorded once the last page lands, with the job's lease.
+    ...(page.has_more
+      ? []
+      : [
+          connectionStatusStatement(env.DB, job, {
+            errorCode: null,
+            status: "active",
+          }),
+        ]),
     env.DB.prepare(`UPDATE job_runs
     SET output_json = json_object('added', added + ?, 'modified', modified + ?,
       'removed', removed + ?, 'pages', pages + 1, 'restarts', restarts),
@@ -119,6 +133,15 @@ async function retryOrFail(env: Bindings, job: SyncJobRow, error: unknown) {
   const code = plaid?.code ?? "SYNC_ERROR";
   const message = plaid?.message ?? "Could not sync this connection.";
   const statements = [
+    // Only a final failure changes the connection; retries record nothing.
+    ...(retry
+      ? []
+      : [
+          connectionStatusStatement(env.DB, job, {
+            errorCode: code,
+            status: "error",
+          }),
+        ]),
     env.DB.prepare(`UPDATE job_runs SET status = ?,
     error_code = ?, error_message = ?, available_at = ?, lease_until = NULL, finished_at = ? WHERE id = ? AND status = 'running' AND lease_until = ?`).bind(
       retry ? "queued" : "failed",

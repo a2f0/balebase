@@ -7,9 +7,10 @@ organization creation, renames, deletion and restoration, group access,
 members' two-factor requirements, API keys (including revocations that a
 change to their creator's access makes), transaction annotations and categories,
 bank connections (connecting, sync requests and settings, login repairs,
-disconnecting, and deleting imported data), expense categories, Pro checkout
-starts, Billing Portal sessions, subscription cancellations made by deleting
-an organization, library
+disconnecting, deleting imported data, and Plaid's status changes, removals,
+and carry-overs), expense categories, Pro checkout starts, Billing Portal
+sessions, subscription cancellations made by deleting an organization,
+Stripe's subscription and seat changes, library
 files and folders, inbox email moves and links, businesses, contracts and
 contract templates, the forms and checks requested of people (including
 Checkr's report updates), and maintenance jobs that purge records. The
@@ -64,8 +65,9 @@ deduplication boundary for provider retries and redelivered runs: a unique
 index allows one event per cause, action, root, and subject, and a redelivery
 records nothing new. Record them with `systemActivityStatement` (one event,
 like `activityStatement`) or `systemActivityRowsStatement` (one event per row
-of a SELECT that snapshots the affected records) from `shared/activity.ts`, in
-the same batch as the change and under the same guard, with
+of a SELECT that snapshots the affected records) from
+`shared/systemActivity.ts`, in the same batch as the change and under the same
+guard, with
 `maintenanceActor(jobId, runId)` or a provider actor. A purge must record its
 events before the guarded `DELETE` so they can snapshot what it removes, and
 keep each event's subject distinct per deletion so later batches of the same
@@ -77,17 +79,58 @@ organizations (as platform purge history, below), the Free-plan retention purge
 removed), the discarded global form purge (`project.form_disabled` with
 `reason: form_purged` on each project that had the form), and the trashed email
 purge (below). Checkr's report changes are provider events (see
-[Contracts](#contracts)). Stripe-driven subscription and seat changes and
-Plaid-driven connection status changes still stay in their current-state
-columns, the provider's own history, and job runs until their producers adopt
-the provider actor.
-A portal change can only be related to the latest `billing.portal_opened`
-event, which names who opened the portal, not who made the change: Stripe's
-portal sessions carry no metadata, so the opener cannot ride along to the
-webhook. A bank login repair (`finance.connection_repaired`) is the app's
-report that Plaid Link update mode succeeded, since Plaid tells only the
-browser; it must consume a single-use update session the reporter opened for
-that connection (`finance_login_repair_sessions`).
+[Contracts](#contracts)).
+
+Stripe and Plaid record their changes as providers, in the same batch as the
+write and only when it changes a stored value; a write that changes nothing,
+or a failed provider request, records nothing:
+
+- `billing.subscription_changed` (root `organization_billing`, subject the
+  Stripe subscription) holds the stored status, price, seats,
+  cancel-at-period-end, and period end before (null for a first subscription)
+  and after. Its cause is the Stripe event (`stripe_event`, also in
+  `details.stripeEventId`) or, for a Checkout confirmed on the person's return
+  or by the pending Checkout reconciliation, the Checkout session
+  (`stripe_checkout_session`); `details.checkoutSessionId` links it to the
+  `billing.checkout_started` event that names who started it. Balebase
+  canceling a subscription that a new Checkout replaced records it on the old
+  subscription with `reason: replaced` and `replacedBySubscriptionId`.
+  A cancellation recorded as a person's `billing.subscription_canceled`
+  (deleting an organization, including when the webhook records it because
+  the request's own write failed) records no Stripe event as well; one
+  Stripe made without the person's marker, as in the Billing Portal while a
+  deletion was being retried, is recorded as Stripe's (cause
+  `stripe_cancellation`, the subscription).
+  A redelivered Stripe event that now reads a newer state stores nothing,
+  since its cause is already recorded; Stripe's own event for that change
+  stores and records it.
+- `billing.seats_changed` (same root and subject) holds the stored seat
+  quantity before and after and its `source`: `membership`, caused by the
+  Stripe request (`stripe_request`, its idempotency key), whose own membership
+  event names the person; or `reconciliation`, caused by the hourly job run
+  (a redelivered run that finds another quantity leaves it to the next run).
+- `finance.connection_status_changed` (root and subject the bank connection,
+  caused by the sync job run) records a status or error code change when a job
+  fails for good (a login error, an error Plaid reports, or retries running
+  out) or a later job finishes; Plaid's error message is left out.
+- `finance.transactions_removed` (same root) counts and lists the shown
+  transactions Plaid withdraws, and `finance.records_carried_over` (subject
+  the disconnected connection) counts the accounts and transactions a new
+  connection takes over from it. Each is caused by the attempt at the job's
+  page (`plaid_sync_page`: the job run, its restarts, its page, and the
+  attempt's lease); a replayed page finds its rows already moved or removed
+  and records nothing.
+
+Billing events are for owners and admins and bank connection events need
+Finance capability, as for people's own events.
+A Billing Portal change is Stripe's `billing.subscription_changed`; it can
+only be related to the latest `billing.portal_opened` event, which names who
+opened the portal, not who made the change: Stripe's portal sessions carry no
+metadata, so the opener cannot ride along to the webhook. A bank login repair
+(`finance.connection_repaired`) is the app's report that Plaid Link update
+mode succeeded, since Plaid tells only the browser; it must consume a
+single-use update session the reporter opened for that connection
+(`finance_login_repair_sessions`).
 
 ## Reading and retaining history
 
@@ -400,8 +443,10 @@ examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `admin/discardedAuditForms.test.ts`, `users/securityEvents.test.ts`,
 `contracts/contractActivity.test.ts`,
 `employeeForms/requirementActivity.test.ts`,
-`employeeForms/screeningActivity.test.ts` (Checkr and the person), and
-`jobs/systemActivity.test.ts` (system actors and purges).
+`employeeForms/screeningActivity.test.ts` (Checkr and the person),
+`jobs/systemActivity.test.ts` (system actors and purges),
+`billing/billingProviderActivity.test.ts` (Stripe), and
+`finance/financeProviderActivity.test.ts` (Plaid).
 
 The repository-owned [audit-trails skill](../skills/audit-trails/SKILL.md)
 reviews mutations, triggers, separate histories, readers, and retention, then

@@ -4,11 +4,11 @@ import { purgeExpiredFreeAuditRuns } from "../billing/billingRetention";
 import { purgeTrashedEmails } from "../inbox/trashedEmailPurge";
 import { purgeDeletedObjects } from "../library/deletedObjectCleanup";
 import { purgeDeletedOrganizations } from "../organizations/organizationPurge";
+import { findActivity } from "../shared/activity";
 import {
-  findActivity,
   maintenanceActor,
   systemActivityStatement,
-} from "../shared/activity";
+} from "../shared/systemActivity";
 import { applyMigrations, createTestDatabase } from "../testing/database";
 import { fixture, now, post } from "../testing/maintenanceFixture";
 import { seedUser } from "../testing/seed";

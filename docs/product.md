@@ -708,9 +708,13 @@ one event recording who deleted it and the number of accounts, transactions,
 annotations, issues (and how many were open), and email links removed; the
 issues and links go with their transactions. Apply migration
 `0081_record_finance_data_deletion.sql` before deploying the Worker that
-records it. Plaid-driven status changes, such
-as a login error and its recovery, are not activity events yet; the latest error
-shows on the connection and in its sync jobs. Completed sync runs and
+records it. Plaid's changes are recorded too, by Plaid: a status change, such
+as a login error, retries running out, or a recovery
+(`finance.connection_status_changed`, with the error code but not Plaid's
+message), transactions Plaid withdraws (`finance.transactions_removed`), and
+the accounts and transactions a new connection takes over from a disconnected
+one (`finance.records_carried_over`). A failure that leaves the connection in
+the same state records nothing new. Completed sync runs and
 operational logs are retained for 30 days; operators can inspect them in the
 Jobs page or D1. Finance-authorized members can read the latest job on the
 connection page.
@@ -977,20 +981,26 @@ the owner or admin, the seat quantity, and the price, visible under **Billing**
 in Activity to owners and admins only; the Checkout session and subscription
 metadata also carry `started_by_user_id`. Opening the Billing Portal records
 `billing.portal_opened` with the opener and the portal session ID (never its
-URL); Stripe's portal sessions take no metadata, so changes made there still
-arrive as Stripe-driven updates and are not tied to the opener. Deleting a Pro
+URL); Stripe's portal sessions take no metadata, so changes made there arrive
+as Stripe's own changes and are not tied to the opener. Deleting a Pro
 organization cancels its subscription first and records
 `billing.subscription_canceled` naming the owner or root admin, the
 subscription, its previous status, and its seats, even when the deletion then
 fails; the deletion event lists the subscriptions it canceled. Apply
 migration `0087_record_cancellations_and_repairs.sql` before deploying the
-Worker that records it. Other subscription status, cancellation, and seat
-quantity changes come from Stripe and are kept as current state and in
-Stripe's own history, not as Activity events. Checkout uses Stripe's hosted page
-unless `STRIPE_PUBLISHABLE_KEY` holds a publishable key from the same Stripe
-account and mode as the secret key; then the billing page embeds Stripe's
-Payment Element, styled with the app's theme tokens. Add the following values to
-the ignored `.secrets/prod/app.env` before local billing work or a production
+Worker that records it. Every other change Stripe reports to the stored
+subscription (status, plan, seats, cancellation at period end, period end,
+and a replacement Checkout's cancellation of the previous subscription),
+including those made in the Billing Portal, records
+`billing.subscription_changed` by Stripe with the values before and after,
+and every stored seat quantity change records `billing.seats_changed` with
+what asked for it (a membership change or the hourly reconciliation), in the
+same transaction. Both are under **Billing**, for owners and admins only.
+Checkout uses Stripe's hosted page unless `STRIPE_PUBLISHABLE_KEY` holds a
+publishable key from the same Stripe account and mode as the secret key; then
+the billing page embeds Stripe's Payment Element, styled with the app's theme
+tokens. Add the following values to the ignored `.secrets/prod/app.env` before
+local billing work or a production
 API deployment:
 
 ```sh

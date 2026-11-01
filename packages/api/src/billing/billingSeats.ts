@@ -1,9 +1,11 @@
+import type { ActivityCausation } from "../shared/systemActivity";
 import type { Bindings } from "../types";
 import {
   isPaidBilling,
   type ProPriceEnvironment,
   paidStatusList,
 } from "./billingEntitlements";
+import { seatChangeStatement } from "./billingProviderActivity";
 import { type BillingRow, countMembers, findBilling } from "./billingRecords";
 import { StripeApiError, stripeGet, stripePost } from "./stripe";
 import { parseStripeSeatItemResponse } from "./stripePayload";
@@ -14,10 +16,17 @@ const subscriptionSyncClaimSeconds = 2 * 60;
 type SeatEnvironment = ProPriceEnvironment &
   Pick<Bindings, "DB" | "STRIPE_SECRET_KEY">;
 
+/**
+ * Sets the subscription's seat quantity to the organization's member count,
+ * in Stripe and in storage. A membership change asks for it; the hourly
+ * reconciliation (`reconciliationRunId`, its job run) also verifies Stripe's
+ * quantity. A stored change records `billing.seats_changed` by Stripe.
+ */
 export async function syncOrganizationSeats(
   environment: SeatEnvironment,
   organizationId: string,
   verifyStripeQuantity = false,
+  reconciliationRunId?: string,
 ) {
   const initialRecord = await findBilling(environment.DB, organizationId);
   if (
@@ -36,6 +45,7 @@ export async function syncOrganizationSeats(
         organizationId,
         lockId,
         verifyStripeQuantity,
+        reconciliationRunId,
       ),
     true,
   );
@@ -46,6 +56,7 @@ async function syncOrganizationSeatsLocked(
   organizationId: string,
   lockId: string,
   verifyStripeQuantity: boolean,
+  reconciliationRunId: string | undefined,
 ) {
   const record = await findBilling(environment.DB, organizationId);
   if (
@@ -60,6 +71,13 @@ async function syncOrganizationSeatsLocked(
     await countMembers(environment.DB, organizationId),
   );
   if (quantity === record.seat_quantity && !verifyStripeQuantity) return false;
+  const change = (causation: ActivityCausation | null): SeatChange => ({
+    causation: reconciliationRunId
+      ? { id: reconciliationRunId, type: "job_run" }
+      : causation,
+    quantity,
+    source: verifyStripeQuantity ? "reconciliation" : "membership",
+  });
   if (verifyStripeQuantity) {
     const stripeItem = parseStripeSeatItemResponse(
       await stripeGet(
@@ -76,12 +94,20 @@ async function syncOrganizationSeatsLocked(
           environment.DB,
           organizationId,
           record.stripe_subscription_item_id,
-          quantity,
+          change(null),
         );
       }
       return false;
     }
   }
+  const idempotencyKey = [
+    "seats",
+    organizationId,
+    record.stripe_subscription_item_id,
+    record.seat_quantity,
+    quantity,
+    record.updated_at,
+  ].join(":");
   const stripeItem = parseStripeSeatItemResponse(
     await stripePost(
       environment,
@@ -90,14 +116,7 @@ async function syncOrganizationSeatsLocked(
         proration_behavior: "create_prorations",
         quantity: String(quantity),
       }),
-      [
-        "seats",
-        organizationId,
-        record.stripe_subscription_item_id,
-        record.seat_quantity,
-        quantity,
-        record.updated_at,
-      ].join(":"),
+      idempotencyKey,
     ),
   );
   if (
@@ -110,7 +129,8 @@ async function syncOrganizationSeatsLocked(
     environment.DB,
     organizationId,
     record.stripe_subscription_item_id,
-    quantity,
+    // The request Stripe applied, whose key it deduplicates by too.
+    change({ id: idempotencyKey, type: "stripe_request" }),
   );
   return true;
 }
@@ -122,7 +142,10 @@ function subscriptionLockId(record: BillingRow) {
   );
 }
 
-export async function reconcileSubscriptionSeats(environment: SeatEnvironment) {
+export async function reconcileSubscriptionSeats(
+  environment: SeatEnvironment,
+  runId?: string,
+) {
   const rows = await environment.DB.prepare(
     `SELECT organization_id
      FROM organization_billing
@@ -138,7 +161,12 @@ export async function reconcileSubscriptionSeats(environment: SeatEnvironment) {
   let firstFailure: unknown;
   for (const row of rows.results) {
     try {
-      await syncOrganizationSeats(environment, row.organization_id, true);
+      await syncOrganizationSeats(
+        environment,
+        row.organization_id,
+        true,
+        runId,
+      );
     } catch (cause) {
       firstFailure ??= cause;
     } finally {
@@ -158,25 +186,45 @@ export async function reconcileSubscriptionSeats(environment: SeatEnvironment) {
   return { checked: rows.results.length };
 }
 
+interface SeatChange {
+  causation: ActivityCausation | null;
+  quantity: number;
+  source: "membership" | "reconciliation";
+}
+
+/** Stores the quantity Stripe confirmed, with its event when it changed. */
 async function updateStoredSeatQuantity(
   database: D1Database,
   organizationId: string,
   subscriptionItemId: string,
-  quantity: number,
+  change: SeatChange,
 ) {
-  await database
-    .prepare(
-      `UPDATE organization_billing
-       SET seat_quantity = ?, updated_at = ?
-       WHERE organization_id = ? AND stripe_subscription_item_id = ?`,
-    )
-    .bind(
-      quantity,
-      new Date().toISOString(),
+  await database.batch([
+    seatChangeStatement(
+      database,
+      change.causation,
       organizationId,
       subscriptionItemId,
-    )
-    .run();
+      change.quantity,
+      change.source,
+    ),
+    // Only a change its event recorded: a redelivered reconciliation run
+    // that finds another quantity leaves it to the next run.
+    database
+      .prepare(
+        `UPDATE organization_billing
+         SET seat_quantity = ?, updated_at = ?
+         WHERE organization_id = ? AND stripe_subscription_item_id = ?
+           AND (changes() > 0 OR seat_quantity = ?)`,
+      )
+      .bind(
+        change.quantity,
+        new Date().toISOString(),
+        organizationId,
+        subscriptionItemId,
+        change.quantity,
+      ),
+  ]);
 }
 
 export async function withSubscriptionSyncLock<T>(

@@ -352,6 +352,16 @@ describe("subscription cancellation activity", () => {
       .map((row) => ({ ...row, details: JSON.parse(row.details) as unknown }));
   }
 
+  /** Stripe's own records of subscription changes. */
+  const stripeChanges = (fixture: Fixture) =>
+    fixture.database
+      .query<{ actor_source: string; status: string }, []>(
+        `SELECT actor_source,
+                json_extract(details, '$.after.status') AS status
+         FROM activity_events WHERE action = 'billing.subscription_changed'`,
+      )
+      .all();
+
   const intents = (fixture: Fixture) =>
     fixture.database
       .query("SELECT subscription_id FROM billing_cancellation_intents")
@@ -397,6 +407,8 @@ describe("subscription cancellation activity", () => {
           },
         ]);
         expect(intents(fixture)).toEqual([]);
+        // The cancellation is the deleter's, not also Stripe's.
+        expect(stripeChanges(fixture)).toEqual([]);
         // Retrying the deletion skips the canceled subscription and records
         // nothing more.
         await cancel(fixture);
@@ -457,6 +469,34 @@ describe("subscription cancellation activity", () => {
     );
   });
 
+  it("records Stripe's cancellation when a deletion retry finds one made elsewhere", async () => {
+    const fixture = paidFixture();
+    const provider = stripe();
+    provider.state.fail.push(503);
+    await withFetch(
+      provider.routes,
+      async ({ requests }) => {
+        await expect(cancel(fixture)).rejects.toThrow("Stripe answered 503");
+        // Someone cancels in the Billing Portal, then the deletion is retried
+        // before Stripe's webhook arrives.
+        provider.state.status = "canceled";
+        provider.state.comment = "Too expensive";
+        await cancel(fixture, secondDeleter);
+        expect(
+          requests.filter(({ method }) => method === "DELETE"),
+        ).toHaveLength(1);
+        expect(canceledEvents(fixture)).toEqual([]);
+        expect(stripeChanges(fixture)).toEqual([
+          { actor_source: "stripe", status: "canceled" },
+        ]);
+        // The webhook that follows records nothing more.
+        expect((await sendWebhook(fixture, provider.event())).status).toBe(200);
+        expect(stripeChanges(fixture)).toHaveLength(1);
+      },
+      { captureErrors: true },
+    );
+  });
+
   it("credits nobody for a cancellation made elsewhere while an intent waits", async () => {
     const fixture = paidFixture();
     const provider = stripe();
@@ -480,6 +520,10 @@ describe("subscription cancellation activity", () => {
         .query("SELECT stripe_status FROM organization_billing")
         .get(),
     ).toEqual({ stripe_status: "canceled" });
+    // The Portal's cancellation is recorded as Stripe's change.
+    expect(stripeChanges(fixture)).toEqual([
+      { actor_source: "stripe", status: "canceled" },
+    ]);
   });
 
   it("leaves no intent after a definitive refusal", async () => {

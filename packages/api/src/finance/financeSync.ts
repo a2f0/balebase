@@ -1,4 +1,9 @@
+import type { ActivityCausation } from "../shared/systemActivity";
 import type { Bindings } from "../types";
+import {
+  carriedOverStatement,
+  removedTransactionsStatement,
+} from "./financeProviderActivity";
 import {
   type PlaidAccount,
   PlaidApiError,
@@ -16,12 +21,14 @@ export interface PlaidItemRow {
 }
 
 /** One bounded page per queue delivery; the job checkpoints its cursor separately.
- * Replaying a page preserves local identifiers, annotations, and categories. */
+ * Replaying a page preserves local identifiers, annotations, and categories.
+ * `causation` names the page in the provider events it records. */
 export async function syncPlaidPage(
   env: Bindings,
   organizationId: string,
   item: PlaidItemRow,
   requestPlaid: PlaidRequest,
+  causation: ActivityCausation,
 ) {
   const accessToken = await decryptAccessToken(env, organizationId, item);
   const response = await requestPlaid<TransactionsSyncResponse>(
@@ -37,8 +44,27 @@ export async function syncPlaidPage(
       },
     },
   );
-  await persistPage(env.DB, organizationId, item.id, response);
+  await persistPage(env.DB, organizationId, item.id, response, causation);
   return response;
+}
+
+/**
+ * The accounts and transactions of disconnected connections that a page
+ * takes over. Their writes, and those of transactions on a carried account,
+ * wait for the page's end to commit together with the event that records
+ * them; the maps let later rows of the page find them.
+ */
+interface CarryOver {
+  /** Each carried account's ID, and the write that moves it. */
+  accounts: Map<string, D1PreparedStatement>;
+  /** The IDs of carried transactions, which the event counts. */
+  carriedTransactionIds: Set<string>;
+  /** Plaid's ID of each carried account, to its ID. */
+  plaidAccountIds: Map<string, string>;
+  /** Plaid's ID of each waiting transaction, to its ID. */
+  plaidTransactionIds: Map<string, string>;
+  /** Each waiting transaction's ID, and its write. */
+  transactions: Map<string, D1PreparedStatement>;
 }
 
 async function persistPage(
@@ -46,12 +72,20 @@ async function persistPage(
   organizationId: string,
   itemId: string,
   page: TransactionsSyncResponse,
+  causation: ActivityCausation,
 ) {
+  const carryOver: CarryOver = {
+    accounts: new Map(),
+    carriedTransactionIds: new Set(),
+    plaidAccountIds: new Map(),
+    plaidTransactionIds: new Map(),
+    transactions: new Map(),
+  };
   const accountIds = new Map<string, string>();
   for (const account of page.accounts) {
     accountIds.set(
       account.account_id,
-      await upsertAccount(database, organizationId, itemId, account),
+      await upsertAccount(database, organizationId, itemId, account, carryOver),
     );
   }
   for (const transaction of [...page.added, ...page.modified]) {
@@ -65,18 +99,40 @@ async function persistPage(
       itemId,
       accountId,
       transaction,
+      carryOver,
     );
   }
-  const removals = page.removed.map(({ transaction_id: transactionId }) =>
+  if (carryOver.accounts.size > 0 || carryOver.carriedTransactionIds.size > 0) {
+    await database.batch([
+      carriedOverStatement(database, causation, organizationId, itemId, {
+        accountIds: [...carryOver.accounts.keys()],
+        transactionIds: [...carryOver.carriedTransactionIds],
+      }),
+      ...carryOver.accounts.values(),
+      ...carryOver.transactions.values(),
+    ]);
+  }
+  if (page.removed.length === 0) return;
+  const removed = page.removed.map(
+    ({ transaction_id: transactionId }) => transactionId,
+  );
+  await database.batch([
+    removedTransactionsStatement(
+      database,
+      causation,
+      organizationId,
+      itemId,
+      removed,
+    ),
     database
       .prepare(
         `UPDATE plaid_transactions
          SET source_status = 'removed', updated_at = ?
-         WHERE plaid_transaction_id = ? AND plaid_item_record_id = ?`,
+         WHERE plaid_item_record_id = ?
+           AND plaid_transaction_id IN (SELECT value FROM json_each(?))`,
       )
-      .bind(new Date().toISOString(), transactionId, itemId),
-  );
-  await runStatements(database, removals);
+      .bind(new Date().toISOString(), itemId, JSON.stringify(removed)),
+  ]);
 }
 
 async function upsertAccount(
@@ -84,27 +140,31 @@ async function upsertAccount(
   organizationId: string,
   itemId: string,
   account: PlaidAccount,
+  carryOver: CarryOver,
 ) {
-  const existing = await database
-    .prepare(
-      `SELECT id FROM plaid_accounts
-       WHERE plaid_item_record_id = ? AND plaid_account_id = ?`,
-    )
-    .bind(itemId, account.account_id)
-    .first<{ id: string }>();
-  const candidates = existing
+  const existingId =
+    carryOver.plaidAccountIds.get(account.account_id) ??
+    (
+      await database
+        .prepare(
+          `SELECT id FROM plaid_accounts
+           WHERE plaid_item_record_id = ? AND plaid_account_id = ?`,
+        )
+        .bind(itemId, account.account_id)
+        .first<{ id: string }>()
+    )?.id;
+  const candidates = existingId
     ? []
     : await disconnectedAccountCandidates(
         database,
         organizationId,
         itemId,
         account,
+        [...carryOver.accounts.keys()],
       );
-  const id =
-    existing?.id ??
-    (candidates.length === 1 ? candidates[0]?.id : undefined) ??
-    crypto.randomUUID();
-  await database
+  const carriedId = candidates.length === 1 ? candidates[0]?.id : undefined;
+  const id = existingId ?? carriedId ?? crypto.randomUUID();
+  const upsert = database
     .prepare(
       `INSERT INTO plaid_accounts
        (id, plaid_account_id, organization_id, plaid_item_record_id, name,
@@ -136,8 +196,13 @@ async function upsertAccount(
       account.balances.available,
       currency(account),
       new Date().toISOString(),
-    )
-    .run();
+    );
+  if (carriedId || carryOver.accounts.has(id)) {
+    carryOver.accounts.set(id, upsert);
+    carryOver.plaidAccountIds.set(account.account_id, id);
+  } else {
+    await upsert.run();
+  }
   return id;
 }
 
@@ -146,6 +211,7 @@ async function disconnectedAccountCandidates(
   organizationId: string,
   itemId: string,
   account: PlaidAccount,
+  carried: string[],
 ) {
   const result = await database
     .prepare(
@@ -163,9 +229,17 @@ async function disconnectedAccountCandidates(
          AND COALESCE(account.mask, '') = COALESCE(?, '')
          AND account.type = ?
          AND COALESCE(account.subtype, '') = COALESCE(?, '')
+         AND account.id NOT IN (SELECT value FROM json_each(?))
        LIMIT 2`,
     )
-    .bind(itemId, organizationId, account.mask, account.type, account.subtype)
+    .bind(
+      itemId,
+      organizationId,
+      account.mask,
+      account.type,
+      account.subtype,
+      JSON.stringify(carried),
+    )
     .all<{ id: string }>();
   return result.results;
 }
@@ -176,35 +250,29 @@ async function upsertTransaction(
   itemId: string,
   accountId: string,
   transaction: PlaidTransaction,
+  carryOver: CarryOver,
 ) {
-  const existing = await findSourceTransaction(
-    database,
-    itemId,
-    transaction.transaction_id,
-  );
-  const pending =
-    !existing && transaction.pending_transaction_id
-      ? await findSourceTransaction(
-          database,
-          itemId,
-          transaction.pending_transaction_id,
-        )
-      : null;
+  const source = async (plaidTransactionId: string) =>
+    carryOver.plaidTransactionIds.get(plaidTransactionId) ??
+    (await findSourceTransaction(database, itemId, plaidTransactionId))?.id;
+  const existingId = await source(transaction.transaction_id);
+  const pendingId =
+    !existingId && transaction.pending_transaction_id
+      ? await source(transaction.pending_transaction_id)
+      : undefined;
   const candidates =
-    existing || pending
+    existingId || pendingId
       ? []
       : await disconnectedTransactionCandidates(
           database,
           organizationId,
           accountId,
           transaction,
+          [...carryOver.transactions.keys()],
         );
-  const id =
-    existing?.id ??
-    pending?.id ??
-    (candidates.length === 1 ? candidates[0]?.id : undefined) ??
-    crypto.randomUUID();
-  await database
+  const carriedId = candidates.length === 1 ? candidates[0]?.id : undefined;
+  const id = existingId ?? pendingId ?? carriedId ?? crypto.randomUUID();
+  const upsert = database
     .prepare(
       `INSERT INTO plaid_transactions
        (id, plaid_transaction_id, organization_id, plaid_item_record_id,
@@ -246,8 +314,18 @@ async function upsertTransaction(
       transaction.pending ? 1 : 0,
       transaction.pending_transaction_id,
       new Date().toISOString(),
-    )
-    .run();
+    );
+  if (carriedId) carryOver.carriedTransactionIds.add(carriedId);
+  if (
+    carriedId ||
+    carryOver.transactions.has(id) ||
+    carryOver.accounts.has(accountId)
+  ) {
+    carryOver.transactions.set(id, upsert);
+    carryOver.plaidTransactionIds.set(transaction.transaction_id, id);
+  } else {
+    await upsert.run();
+  }
 }
 
 function findSourceTransaction(
@@ -269,6 +347,7 @@ async function disconnectedTransactionCandidates(
   organizationId: string,
   accountId: string,
   transaction: PlaidTransaction,
+  carried: string[],
 ) {
   const result = await database
     .prepare(
@@ -285,6 +364,7 @@ async function disconnectedTransactionCandidates(
          AND txn.name = ?
          AND COALESCE(txn.merchant_name, '') = COALESCE(?, '')
          AND txn.pending = ?
+         AND txn.id NOT IN (SELECT value FROM json_each(?))
        LIMIT 2`,
     )
     .bind(
@@ -297,18 +377,10 @@ async function disconnectedTransactionCandidates(
       transaction.name,
       transaction.merchant_name,
       transaction.pending ? 1 : 0,
+      JSON.stringify(carried),
     )
     .all<{ id: string }>();
   return result.results;
-}
-
-async function runStatements(
-  database: D1Database,
-  statements: D1PreparedStatement[],
-) {
-  for (let index = 0; index < statements.length; index += 75) {
-    await database.batch(statements.slice(index, index + 75));
-  }
 }
 
 async function decryptAccessToken(

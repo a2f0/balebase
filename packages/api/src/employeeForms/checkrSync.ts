@@ -1,7 +1,7 @@
 import type { Context } from "hono";
-import type { SystemActor } from "../shared/activity";
 import { isRecord } from "../shared/jsonInput";
 import { readBoundedRequest } from "../shared/storage";
+import type { SystemActor } from "../shared/systemActivity";
 import type { Bindings } from "../types";
 import { verifyCheckrWebhook } from "./checkr";
 import {

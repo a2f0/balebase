@@ -86,7 +86,7 @@ it.
   here, `host.ts` and `apiVersion.ts` in the app). Code that needs a feature
   belongs in that feature, as the activity feed route does in
   `activity/activity.ts` while the recording helpers stay in
-  `shared/activity.ts`.
+  `shared/activity.ts` and `shared/systemActivity.ts`.
 - Send JSON with `respond(context, route, body)`, and read input with
   `readBody(context, route, message)` and `readQuery` from
   `shared/respond.ts`, which answer 400 with the first broken rule's message;

@@ -2,7 +2,7 @@ import { discardedTemplateRetentionDays } from "@balebase/validators/rules";
 import {
   maintenanceActor,
   systemActivityRowsStatement,
-} from "../shared/activity";
+} from "../shared/systemActivity";
 import type { Bindings } from "../types";
 
 const batchSize = 100;

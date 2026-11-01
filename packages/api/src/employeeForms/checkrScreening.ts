@@ -1,10 +1,7 @@
 import { stillManages } from "../organizations/organizationMembers";
-import {
-  type ActivityActor,
-  activityBatch,
-  type SystemActor,
-} from "../shared/activity";
+import { type ActivityActor, activityBatch } from "../shared/activity";
 import { trackedPut } from "../shared/storage";
+import type { SystemActor } from "../shared/systemActivity";
 import type { Bindings } from "../types";
 import {
   CheckrRequestError,
