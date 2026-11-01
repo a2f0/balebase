@@ -145,6 +145,40 @@ describe("Stripe subscription history", () => {
     );
   });
 
+  it("stores no newer state for a redelivered event without its history", async () => {
+    const fixture = createFixture();
+    let current = subscriptionEvent("evt_active", 100, "active", 3);
+    const stripe = {
+      "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
+        Response.json(current.data.object),
+    };
+    await withFetch(stripe, async () => {
+      expect((await sendWebhook(fixture, current)).status).toBe(200);
+      // Its receipt could not be marked processed, so Stripe redelivers it
+      // after the subscription changed again.
+      fixture.database.run("DELETE FROM stripe_webhook_events");
+      const redelivered = current;
+      current = subscriptionEvent("evt_canceled", 101, "canceled", 3);
+      expect((await sendWebhook(fixture, redelivered)).status).toBe(200);
+      expect(billingRow(fixture)).toEqual({
+        seat_quantity: 3,
+        stripe_status: "active",
+      });
+      expect(events(fixture, "billing.subscription_changed")).toHaveLength(1);
+      // Stripe's own event for the change stores and records it.
+      expect((await sendWebhook(fixture, current)).status).toBe(200);
+    });
+    expect(billingRow(fixture)).toEqual({
+      seat_quantity: 3,
+      stripe_status: "canceled",
+    });
+    expect(
+      events(fixture, "billing.subscription_changed").map(
+        (event) => event.causation_id,
+      ),
+    ).toEqual(["evt_active", "evt_canceled"]);
+  });
+
   it("keeps the stored subscription when its event cannot be recorded", async () => {
     const fixture = createFixture();
     proBilling(fixture);
@@ -425,6 +459,41 @@ describe("Stripe seat history", () => {
         causation_type: "job_run",
         details: { after: 1, before: 3, source: "reconciliation" },
       },
+    ]);
+  });
+
+  it("leaves a redelivered run's newer quantity to the next run", async () => {
+    const fixture = createFixture();
+    proBilling(fixture, 3);
+    let stripeQuantity = 1;
+    await withFetch(
+      {
+        "GET https://api.stripe.com/v1/subscription_items/si_test": async () =>
+          Response.json({ id: "si_test", quantity: stripeQuantity }),
+      },
+      async () => {
+        await reconcileSubscriptionSeats(fixture.bindings, "run-1");
+        seedMember(fixture.database, {
+          createdAt: new Date().toISOString(),
+          organizationId,
+          userId: "user-2",
+        });
+        stripeQuantity = 2;
+        await reconcileSubscriptionSeats(fixture.bindings, "run-1");
+        expect(billingRow(fixture)).toEqual({
+          seat_quantity: 1,
+          stripe_status: "active",
+        });
+        await reconcileSubscriptionSeats(fixture.bindings, "run-2");
+      },
+    );
+    expect(billingRow(fixture)).toEqual({
+      seat_quantity: 2,
+      stripe_status: "active",
+    });
+    expect(events(fixture, "billing.seats_changed")).toMatchObject([
+      { causation_id: "run-1", details: { after: 1, before: 3 } },
+      { causation_id: "run-2", details: { after: 2, before: 1 } },
     ]);
   });
 

@@ -208,17 +208,21 @@ async function updateStoredSeatQuantity(
       change.quantity,
       change.source,
     ),
+    // Only a change its event recorded: a redelivered reconciliation run
+    // that finds another quantity leaves it to the next run.
     database
       .prepare(
         `UPDATE organization_billing
          SET seat_quantity = ?, updated_at = ?
-         WHERE organization_id = ? AND stripe_subscription_item_id = ?`,
+         WHERE organization_id = ? AND stripe_subscription_item_id = ?
+           AND (changes() > 0 OR seat_quantity = ?)`,
       )
       .bind(
         change.quantity,
         new Date().toISOString(),
         organizationId,
         subscriptionItemId,
+        change.quantity,
       ),
   ]);
 }

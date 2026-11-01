@@ -93,10 +93,14 @@ or a failed provider request, records nothing:
   canceling a subscription that a new Checkout replaced records it on the old
   subscription with `reason: replaced` and `replacedBySubscriptionId`.
   Canceling while deleting an organization records no Stripe event of its own.
+  A redelivered Stripe event that now reads a newer state stores nothing,
+  since its cause is already recorded; Stripe's own event for that change
+  stores and records it.
 - `billing.seats_changed` (same root and subject) holds the stored seat
   quantity before and after and its `source`: `membership`, caused by the
   Stripe request (`stripe_request`, its idempotency key), whose own membership
-  event names the person; or `reconciliation`, caused by the hourly job run.
+  event names the person; or `reconciliation`, caused by the hourly job run
+  (a redelivered run that finds another quantity leaves it to the next run).
 - `finance.connection_status_changed` (root and subject the bank connection,
   caused by the sync job run) records a status or error code change when a job
   fails for good (a login error, an error Plaid reports, or retries running
@@ -104,9 +108,10 @@ or a failed provider request, records nothing:
 - `finance.transactions_removed` (same root) counts and lists the shown
   transactions Plaid withdraws, and `finance.records_carried_over` (subject
   the disconnected connection) counts the accounts and transactions a new
-  connection takes over from it. Each is caused by the job's page
-  (`plaid_sync_page`, the job run, its restarts, and its page), so a replayed
-  page records nothing new.
+  connection takes over from it. Each is caused by the attempt at the job's
+  page (`plaid_sync_page`: the job run, its restarts, its page, and the
+  attempt's lease); a replayed page finds its rows already moved or removed
+  and records nothing.
 
 Billing events are for owners and admins and bank connection events need
 Finance capability, as for people's own events.

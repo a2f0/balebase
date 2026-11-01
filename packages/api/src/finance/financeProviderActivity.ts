@@ -13,10 +13,15 @@ import type { SyncJobRow } from "./financeSyncJobs";
 
 const connectionLabel = "COALESCE(item.institution_name, 'Bank connection')";
 
-/** The cause of one page of a sync job: a replayed page records nothing new. */
+/**
+ * The cause of one attempt at a page of a sync job: the job, its restarts,
+ * its page, and the lease the attempt holds. A replayed page finds its rows
+ * already carried over or removed and records nothing; one that finds new
+ * changes records them under its own attempt rather than losing them.
+ */
 export function syncPageCausation(job: SyncJobRow): ActivityCausation {
   return {
-    id: `${job.id}:${job.restarts}:${job.pages}`,
+    id: `${job.id}:${job.restarts}:${job.pages}:${job.lease_until}`,
     type: "plaid_sync_page",
   };
 }

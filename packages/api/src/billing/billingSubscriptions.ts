@@ -353,9 +353,10 @@ async function persistSubscription(
          ELSE organization_billing.paid_ended_at
        END,
        updated_at = excluded.updated_at
-     WHERE organization_billing.stripe_subscription_id IS NULL
-        OR organization_billing.stripe_subscription_id =
-           excluded.stripe_subscription_id`,
+     WHERE (organization_billing.stripe_subscription_id IS NULL
+            OR organization_billing.stripe_subscription_id =
+               excluded.stripe_subscription_id)
+       ${cause ? recordedOrUnchanged : ""}`,
   ).bind(
     organizationId,
     customerId,
@@ -394,6 +395,24 @@ function storedSubscription(
     subscriptionId: subscription.id,
   };
 }
+
+/**
+ * Keeps the upsert from changing a tracked field unless the event before it
+ * recorded the change. A cause records one event per subscription, so a
+ * redelivered Stripe event that now reads a newer state (its first delivery
+ * stored but could not mark the receipt processed) would otherwise store
+ * that state without history; Stripe's own event for it stores it instead.
+ * The Checkout path needs no such guard: a Checkout already persisted
+ * returns before writing again.
+ */
+const recordedOrUnchanged = `AND (changes() > 0 OR (
+  organization_billing.stripe_subscription_id IS excluded.stripe_subscription_id
+  AND organization_billing.stripe_status IS excluded.stripe_status
+  AND organization_billing.stripe_price_id IS excluded.stripe_price_id
+  AND organization_billing.seat_quantity IS excluded.seat_quantity
+  AND organization_billing.cancel_at_period_end IS
+      excluded.cancel_at_period_end
+  AND organization_billing.current_period_end IS excluded.current_period_end))`;
 
 /**
  * Runs `write` with, before it in the same batch, the event recording what

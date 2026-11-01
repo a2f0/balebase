@@ -218,7 +218,7 @@ describe("Plaid connection history", () => {
         actor_source: "plaid",
         actor_type: "provider",
         actor_user_id: null,
-        causation_id: `${job}:0:0`,
+        causation_id: expect.stringMatching(new RegExp(`^${job}:0:0:`)),
         causation_type: "plaid_sync_page",
         details: { count: 1, transactionIds: [transaction?.id] },
         root_id: fixture.id,
@@ -279,7 +279,7 @@ describe("Plaid connection history", () => {
         actor_source: "plaid",
         actor_type: "provider",
         actor_user_id: null,
-        causation_id: `${job.body.id}:0:0`,
+        causation_id: expect.stringMatching(new RegExp(`^${job.body.id}:0:0:`)),
         causation_type: "plaid_sync_page",
         details: {
           accountCount: 1,
