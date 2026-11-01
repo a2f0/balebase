@@ -83,7 +83,10 @@ adminOrganizations.get("/:organizationId", async (context) => {
   });
 });
 
-/** Renames, deletion requests and restorations, including while deleted. */
+/**
+ * Renames, deletion requests and restorations, including while deleted, and
+ * the subscriptions a deletion canceled, even when the deletion then failed.
+ */
 adminOrganizations.get("/:organizationId/activity", async (context) => {
   const organizationId = context.req.param("organizationId");
   const query = readQuery(
@@ -104,7 +107,11 @@ adminOrganizations.get("/:organizationId/activity", async (context) => {
     context.env.DB,
     organizationId,
     query.cursor,
-    { id: organizationId, type: "organization" },
+    {
+      alsoActions: ["billing.subscription_canceled"],
+      id: organizationId,
+      type: "organization",
+    },
     false,
     undefined,
     true,

@@ -699,7 +699,12 @@ function organizationActivityPath(event: ActivityEvent) {
       event.action === "organization.member_removed"
       ? undefined
       : organizationPeoplePath(event.root.id);
-  if (event.root.type === "organization_billing") return billingPath;
+  // A canceled subscription is not on the billing page, and root admins read
+  // this event on the organization's admin page, outside it.
+  if (event.root.type === "organization_billing")
+    return event.action === "billing.subscription_canceled"
+      ? undefined
+      : billingPath;
   // Groups have no page of their own; deleted ones have nowhere to go.
   if (event.root.type === "organization_group")
     return event.action === "organization.group_deleted"

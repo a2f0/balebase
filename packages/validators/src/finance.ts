@@ -363,6 +363,15 @@ export const financeRoutes = {
     path: "/api/finance/connections/:id/link-token",
     response: z.object({ expiration: z.string(), linkToken: z.string() }),
   }),
+  /** The app reports that Plaid Link update mode repaired a connection's
+   * login, so the repair is recorded apart from the sync that follows. The
+   * update session's link token is accepted once. */
+  reportLoginRepair: route({
+    method: "POST",
+    path: "/api/finance/connections/:id/login-repairs",
+    body: z.object({ linkToken: requiredText(500) }).strict(),
+    response: "empty",
+  }),
   reportLinkDiagnostics: route({
     method: "POST",
     path: "/api/finance/link-diagnostics",

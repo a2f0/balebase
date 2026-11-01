@@ -1,5 +1,11 @@
 import type { Bindings } from "../types";
 import {
+  canceledSubscriptionStatements,
+  forgetRefusedCancellation,
+  recordCancellationIntent,
+  type SubscriptionCancellation,
+} from "./billingCancellations";
+import {
   attachCheckoutSessionToClaim,
   checkoutDeletionInProgress,
   clearExpiredCheckoutDeletionLease,
@@ -293,7 +299,7 @@ async function persistSubscription(
       .run();
     return Number(persisted.meta.changes) > 0;
   }
-  const persisted = await environment.DB.prepare(
+  const upsert = environment.DB.prepare(
     `INSERT INTO organization_billing
      (organization_id, stripe_customer_id, stripe_subscription_id,
       stripe_subscription_item_id, stripe_price_id, stripe_status,
@@ -324,34 +330,63 @@ async function persistSubscription(
      WHERE organization_billing.stripe_subscription_id IS NULL
         OR organization_billing.stripe_subscription_id =
            excluded.stripe_subscription_id`,
-  )
-    .bind(
-      organizationId,
-      customerId,
-      subscription.id,
-      item?.id ?? null,
-      item?.price.id ?? null,
-      subscription.status,
+  ).bind(
+    organizationId,
+    customerId,
+    subscription.id,
+    item?.id ?? null,
+    item?.price.id ?? null,
+    subscription.status,
+    Math.max(1, item?.quantity ?? 1),
+    cancelAtPeriodEnd ? 1 : 0,
+    periodEnd ? new Date(periodEnd * 1_000).toISOString() : null,
+    eventCreated,
+    now,
+  );
+  if (subscription.status !== "canceled") {
+    return Number((await upsert.run()).meta.changes) > 0;
+  }
+  const results = await environment.DB.batch([
+    ...canceledSubscriptionStatements(
+      environment.DB,
+      subscription,
       Math.max(1, item?.quantity ?? 1),
-      cancelAtPeriodEnd ? 1 : 0,
-      periodEnd ? new Date(periodEnd * 1_000).toISOString() : null,
-      eventCreated,
-      now,
-    )
-    .run();
-  return Number(persisted.meta.changes) > 0;
+    ),
+    upsert,
+  ]);
+  return Number(results.at(-1)?.meta.changes) > 0;
 }
 
 export async function cancelStripeSubscription(
   environment: SubscriptionEnvironment,
   organizationId: string,
   subscriptionId: string,
+  cancellation?: SubscriptionCancellation,
 ) {
   await withSubscriptionSyncLock(environment.DB, subscriptionId, async () => {
-    const subscription = await deleteStripeSubscription(
-      environment,
-      subscriptionId,
-    );
+    const intent = cancellation
+      ? await claimCancellationIntent(
+          environment,
+          organizationId,
+          subscriptionId,
+          cancellation,
+        )
+      : null;
+    if (intent === "resolved") return;
+    let subscription: StripeSubscription;
+    try {
+      subscription = await deleteStripeSubscription(
+        environment,
+        subscriptionId,
+        intent ?? undefined,
+      );
+    } catch (cause) {
+      if (intent) {
+        await forgetRefusedCancellation(environment.DB, subscriptionId, cause);
+      }
+      throw cause;
+    }
+    // Persisting the cancellation records the intent's event with it.
     await persistSubscription(
       environment,
       subscription,
@@ -361,14 +396,62 @@ export async function cancelStripeSubscription(
   });
 }
 
+/**
+ * Stores this request's cancellation intent. When an earlier request's
+ * intent is still unresolved, Stripe decides whose it is: a subscription
+ * already canceled was canceled by that request, so it is persisted, which
+ * credits that request ("resolved"); otherwise this request takes over.
+ * Returns the marker to send with this request's cancellation.
+ */
+async function claimCancellationIntent(
+  environment: SubscriptionEnvironment,
+  organizationId: string,
+  subscriptionId: string,
+  cancellation: SubscriptionCancellation,
+) {
+  const marker = await recordCancellationIntent(
+    environment.DB,
+    organizationId,
+    subscriptionId,
+    cancellation,
+  );
+  if (marker) return marker;
+  const current = await expandedSubscription(environment, subscriptionId);
+  if (current?.status === "canceled") {
+    await persistSubscription(
+      environment,
+      current,
+      Math.floor(Date.now() / 1000),
+      organizationId,
+    );
+    return "resolved";
+  }
+  return recordCancellationIntent(
+    environment.DB,
+    organizationId,
+    subscriptionId,
+    cancellation,
+    true,
+  );
+}
+
+/**
+ * Cancels the subscription now. A `marker` is sent as the cancellation's
+ * comment, which Stripe returns with the subscription, so the cancellation
+ * can be told apart from one made elsewhere.
+ */
 async function deleteStripeSubscription(
   environment: Pick<Bindings, "STRIPE_SECRET_KEY">,
   subscriptionId: string,
+  marker?: string,
 ) {
+  const query = marker
+    ? `?${new URLSearchParams({ "cancellation_details[comment]": marker })}`
+    : "";
   const subscription = parseStripeSubscription(
     await stripeDelete(
       environment,
-      `/v1/subscriptions/${encodeURIComponent(subscriptionId)}`,
+      `/v1/subscriptions/${encodeURIComponent(subscriptionId)}${query}`,
     ),
   );
   if (subscription.status !== "canceled") {

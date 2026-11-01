@@ -1030,6 +1030,95 @@ it("summarizes bank, category, and billing changes and links what still exists",
   ).toHaveLength(4);
 });
 
+it("summarizes billing cancellations, portal sessions, and login repairs", async () => {
+  const change = (
+    id: number,
+    action: string,
+    type: string,
+    details: ActivityEvent["details"],
+    label = "First Bank",
+  ): ActivityEvent => ({
+    ...event(id, ""),
+    action,
+    details,
+    root: { id: `${type}-1`, label, type },
+    subject: { id: `${type}-1`, type },
+  });
+  const changes = [
+    change(
+      5,
+      "billing.subscription_canceled",
+      "organization_billing",
+      {
+        previousStatus: "active",
+        reason: "organization_deletion",
+        seatQuantity: 3,
+        subscriptionId: "sub_1",
+        via: "root_admin",
+      },
+      "Acme",
+    ),
+    change(
+      4,
+      "organization.deletion_requested",
+      "organization",
+      {
+        canceledInvitations: 0,
+        canceledSubscriptionIds: ["sub_1"],
+        via: "owner",
+      },
+      "Acme",
+    ),
+    change(
+      3,
+      "billing.portal_opened",
+      "organization_billing",
+      { portalSessionId: "bps_1" },
+      "Acme",
+    ),
+    change(2, "finance.connection_repaired", "finance_connection", {
+      errorCodeBefore: "ITEM_LOGIN_REQUIRED",
+      institutionName: "First Bank",
+      statusBefore: "error",
+    }),
+    change(1, "finance.connection_data_deleted", "finance_connection", {
+      accountCount: 1,
+      annotationCount: 0,
+      emailLinkCount: 2,
+      institutionName: "First Bank",
+      issueCount: 1,
+      openIssueCount: 1,
+      transactionCount: 5,
+    }),
+  ];
+  respond(async () => Response.json({ events: changes, nextCursor: null }));
+  const paths: string[] = [];
+  ({ container } = await mount(
+    <ActivityFeed onNavigate={(path) => paths.push(path)} />,
+  ));
+  const rowElements = [...container.querySelectorAll(".activityRow")];
+  const rows = rowElements.map((row) => row.textContent ?? "");
+  expect(rows[0]).toContain("Sam canceled the Pro subscription");
+  expect(rows[0]).toContain(
+    "For organization deletion · By a root admin · 3 seats · Was active",
+  );
+  expect(rows[1]).toContain("Pro subscription canceled");
+  expect(rows[2]).toContain("Sam opened the Stripe billing portal");
+  expect(rows[3]).toContain("Sam reported a bank login repair");
+  expect(rows[3]).toContain("First Bank · Was ITEM_LOGIN_REQUIRED");
+  expect(rows[4]).toContain(
+    "Deleted 1 account, 5 transactions, 0 annotations, 1 issue, and 2 email links",
+  );
+  // The canceled subscription has no page; the portal's event opens billing.
+  expect(rowElements[0]?.querySelector("button")).toBeNull();
+  await click("Open billing");
+  await click("Open connection");
+  expect(paths).toEqual([
+    "/organization/billing",
+    "/finance/connections/finance_connection-1",
+  ]);
+});
+
 it("names form publication changes and a copied form's source", async () => {
   const form = (
     id: number,
