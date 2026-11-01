@@ -171,6 +171,13 @@ describe("system actors", () => {
       VALUES (41, NULL, 'audit_template', 't', 'Form', 'audit_template', 't',
         'audit.template_created', 'person', 'Person', 'person@example.com',
         '2026-01-02', '{"version":1}', 1)`);
+    // An event since removed keeps its ID used.
+    database.exec(`INSERT INTO activity_events (
+        id, root_type, root_id, root_label, subject_type, subject_id, action,
+        actor_user_id, actor_name, actor_email, occurred_at, details)
+      VALUES (50, 'x', 'x', 'x', 'x', 'x', 'x.removed', 'person', 'Person', '',
+        '2026-01-02', '{}');
+      DELETE FROM activity_events WHERE id = 50`);
     applyMigrations(database, { from: "0086" });
     expect(
       database
@@ -194,7 +201,7 @@ describe("system actors", () => {
       VALUES ('x', 'x', 'x', 'x', 'x', 'x.y', 'person', 'Person', '', '2026-01-03', '{}')`);
     expect(
       database.query("SELECT MAX(id) AS id FROM activity_events").get(),
-    ).toEqual({ id: 42 });
+    ).toEqual({ id: 51 });
     expect(
       database
         .query(

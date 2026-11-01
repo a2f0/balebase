@@ -51,6 +51,21 @@ SELECT id, organization_id, root_type, root_id, root_label, subject_type,
        actor_api_key_channel, 'user'
 FROM activity_events;
 
+-- Keep AUTOINCREMENT's high-water mark, so an ID once used (and since purged)
+-- is never reused and cursors stay ordered: a placeholder at the old mark
+-- raises the new table's sequence to it, then goes.
+INSERT INTO activity_events_next (
+  id, root_type, root_id, root_label, subject_type, subject_id, action,
+  actor_name, actor_email, occurred_at, details, actor_type, actor_source
+)
+SELECT seq, 'migration', 'migration', 'migration', 'migration', 'migration',
+       'migration.sequence', 'migration', '', '1970-01-01T00:00:00.000Z', '{}',
+       'system', '0086'
+FROM sqlite_sequence
+WHERE name = 'activity_events'
+  AND seq > (SELECT COALESCE(MAX(id), 0) FROM activity_events_next);
+DELETE FROM activity_events_next WHERE action = 'migration.sequence';
+
 -- Dozens of triggers on other tables write activity_events by name. The modern
 -- rename re-parses them and refuses while the old table is gone ("error in
 -- trigger ...: no such table"); the legacy rename leaves them as written, so
