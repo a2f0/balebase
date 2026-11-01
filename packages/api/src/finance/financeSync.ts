@@ -50,17 +50,20 @@ export async function syncPlaidPage(
 
 /**
  * The accounts and transactions of disconnected connections that a page
- * takes over. Their writes wait for the page's end, to commit with the
- * event that records them; the maps let later rows of the page find them.
+ * takes over. Their writes, and those of transactions on a carried account,
+ * wait for the page's end to commit together with the event that records
+ * them; the maps let later rows of the page find them.
  */
 interface CarryOver {
   /** Each carried account's ID, and the write that moves it. */
   accounts: Map<string, D1PreparedStatement>;
+  /** The IDs of carried transactions, which the event counts. */
+  carriedTransactionIds: Set<string>;
   /** Plaid's ID of each carried account, to its ID. */
   plaidAccountIds: Map<string, string>;
-  /** Plaid's ID of each carried transaction, to its ID. */
+  /** Plaid's ID of each waiting transaction, to its ID. */
   plaidTransactionIds: Map<string, string>;
-  /** Each carried transaction's ID, and the write that moves it. */
+  /** Each waiting transaction's ID, and its write. */
   transactions: Map<string, D1PreparedStatement>;
 }
 
@@ -73,6 +76,7 @@ async function persistPage(
 ) {
   const carryOver: CarryOver = {
     accounts: new Map(),
+    carriedTransactionIds: new Set(),
     plaidAccountIds: new Map(),
     plaidTransactionIds: new Map(),
     transactions: new Map(),
@@ -98,11 +102,11 @@ async function persistPage(
       carryOver,
     );
   }
-  if (carryOver.accounts.size > 0 || carryOver.transactions.size > 0) {
+  if (carryOver.accounts.size > 0 || carryOver.carriedTransactionIds.size > 0) {
     await database.batch([
       carriedOverStatement(database, causation, organizationId, itemId, {
         accountIds: [...carryOver.accounts.keys()],
-        transactionIds: [...carryOver.transactions.keys()],
+        transactionIds: [...carryOver.carriedTransactionIds],
       }),
       ...carryOver.accounts.values(),
       ...carryOver.transactions.values(),
@@ -311,7 +315,12 @@ async function upsertTransaction(
       transaction.pending_transaction_id,
       new Date().toISOString(),
     );
-  if (carriedId || carryOver.transactions.has(id)) {
+  if (carriedId) carryOver.carriedTransactionIds.add(carriedId);
+  if (
+    carriedId ||
+    carryOver.transactions.has(id) ||
+    carryOver.accounts.has(accountId)
+  ) {
     carryOver.transactions.set(id, upsert);
     carryOver.plaidTransactionIds.set(transaction.transaction_id, id);
   } else {

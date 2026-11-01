@@ -307,7 +307,45 @@ describe("Plaid connection history", () => {
     ).toEqual({ count: 1 });
   });
 
-  it("carries nothing over when its event cannot be recorded", async () => {
+  it("shows Plaid's changes only to people with Finance access", async () => {
+    const fixture = await connectionFixture();
+    await fixture.sync(failing("ITEM_LOGIN_REQUIRED", 400));
+    const read = (finance: boolean) =>
+      findActivity(
+        fixture.bindings.DB,
+        "org_user-1",
+        undefined,
+        { id: fixture.id, type: "finance_connection" },
+        finance,
+      );
+    expect((await read(false))?.events).toEqual([]);
+    expect((await read(true))?.events).toMatchObject([
+      {
+        action: "finance.connection_status_changed",
+        actor: { email: "", id: null, source: "plaid", type: "provider" },
+      },
+      { action: "finance.sync_requested" },
+      { action: "finance.connection_created" },
+    ]);
+  });
+});
+
+/** Connection 2's page: the carried transaction and a new one. */
+function reconnectionPage() {
+  const page = transactionPage("2");
+  const [carried] = page.added;
+  if (!carried) throw new Error("Missing transaction fixture.");
+  page.added.push({
+    ...carried,
+    amount: 9.5,
+    name: "New purchase",
+    transaction_id: "transaction-new-2",
+  });
+  return page;
+}
+
+describe("carrying records over", () => {
+  it("carries nothing over, and adds nothing on its accounts, when its event cannot be recorded", async () => {
     const fixture = await connectionFixture();
     await fixture.sync();
     const disconnected = await fixture.app.request(
@@ -336,36 +374,34 @@ describe("Plaid connection history", () => {
       `/connections/${reconnected.body.connectionId}/sync-jobs`,
       "POST",
     );
-    await fixture.deliver(
-      job.body.id,
-      pages(() => transactionPage("2")),
-    );
+    await fixture.deliver(job.body.id, pages(reconnectionPage));
     expect(
       fixture.database
         .query("SELECT plaid_item_record_id AS item FROM plaid_transactions")
         .all(),
     ).toEqual([{ item: fixture.id }]);
-  });
-
-  it("shows Plaid's changes only to people with Finance access", async () => {
-    const fixture = await connectionFixture();
-    await fixture.sync(failing("ITEM_LOGIN_REQUIRED", 400));
-    const read = (finance: boolean) =>
-      findActivity(
-        fixture.bindings.DB,
-        "org_user-1",
-        undefined,
-        { id: fixture.id, type: "finance_connection" },
-        finance,
-      );
-    expect((await read(false))?.events).toEqual([]);
-    expect((await read(true))?.events).toMatchObject([
-      {
-        action: "finance.connection_status_changed",
-        actor: { email: "", id: null, source: "plaid", type: "provider" },
-      },
-      { action: "finance.sync_requested" },
-      { action: "finance.connection_created" },
+    expect(
+      fixture.database
+        .query("SELECT plaid_item_record_id AS item FROM plaid_accounts")
+        .all(),
+    ).toEqual([{ item: fixture.id }]);
+    // The retry, with the event recorded, moves both together.
+    fixture.database.exec("DROP TRIGGER fail_carry_activity");
+    fixture.database.run("UPDATE job_runs SET available_at = '2000-01-01'");
+    await fixture.deliver(job.body.id, pages(reconnectionPage));
+    expect(
+      fixture.database
+        .query(
+          `SELECT name, plaid_item_record_id AS item FROM plaid_transactions
+           ORDER BY name`,
+        )
+        .all(),
+    ).toEqual([
+      { item: reconnected.body.connectionId, name: "New purchase" },
+      { item: reconnected.body.connectionId, name: "Test Cafe Purchase" },
+    ]);
+    expect(fixture.events("finance.records_carried_over")).toMatchObject([
+      { details: { accountCount: 1, transactionCount: 1 } },
     ]);
   });
 });
