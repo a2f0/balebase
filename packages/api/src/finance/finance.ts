@@ -42,6 +42,7 @@ import {
   createLinkToken,
   createUpdateLinkToken,
   reportLinkDiagnostics,
+  reportLoginRepair,
   requireEncryptionKey,
 } from "./financeLinkTokens";
 import { financeListingFilters } from "./financeListingFilters";
@@ -124,6 +125,7 @@ export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
   finance.post("/connections/:id/link-token", async (context) =>
     createUpdateLinkToken(context, requestPlaid),
   );
+  finance.post("/connections/:id/login-repairs", reportLoginRepair);
   finance.post("/connections/:id/sync", legacySyncConnection);
   finance.post("/connections/:id/sync-jobs", startConnectionSync);
   finance.get("/connections/:id/sync-status", connectionSyncStatus);
@@ -563,7 +565,29 @@ function connectionDataDeletedEvent(
                     ON txn.id = annotation.transaction_id
                   WHERE txn.plaid_item_record_id = item.id
                     AND txn.organization_id = item.organization_id
-                    AND annotation.organization_id = item.organization_id)
+                    AND annotation.organization_id = item.organization_id),
+                -- Deleting the transactions also deletes their issues (with
+                -- the issues' history) and their email links, by trigger.
+                'issueCount', (SELECT COUNT(*) FROM issues AS issue
+                  JOIN plaid_transactions AS txn ON txn.id = issue.target_id
+                  WHERE issue.organization_id = item.organization_id
+                    AND issue.target_type = 'finance_transaction'
+                    AND txn.plaid_item_record_id = item.id
+                    AND txn.organization_id = item.organization_id),
+                'openIssueCount', (SELECT COUNT(*) FROM issues AS issue
+                  JOIN plaid_transactions AS txn ON txn.id = issue.target_id
+                  WHERE issue.organization_id = item.organization_id
+                    AND issue.target_type = 'finance_transaction'
+                    AND issue.status = 'open'
+                    AND txn.plaid_item_record_id = item.id
+                    AND txn.organization_id = item.organization_id),
+                'emailLinkCount', (SELECT COUNT(*)
+                  FROM inbound_email_links AS link
+                  JOIN plaid_transactions AS txn ON txn.id = link.target_id
+                  WHERE link.organization_id = item.organization_id
+                    AND link.target_type = 'finance_transaction'
+                    AND txn.plaid_item_record_id = item.id
+                    AND txn.organization_id = item.organization_id)
               )
        FROM plaid_items AS item
        JOIN user AS actor ON actor.id = ?

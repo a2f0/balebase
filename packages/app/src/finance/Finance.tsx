@@ -517,7 +517,8 @@ function usePlaidConnect(
       setError(undefined);
       try {
         // Update mode keeps the Item and its access token, so there is no
-        // public token to exchange; a sync confirms the repaired login.
+        // public token to exchange; the repair is recorded, then a sync
+        // confirms the repaired login.
         const connectionId =
           repairing ??
           (
@@ -527,6 +528,7 @@ function usePlaidConnect(
             })
           ).connectionId;
         clearOAuthState();
+        if (repairing) await api.finance.reportPlaidLoginRepair(repairing);
         const result = await api.finance.startSync(connectionId);
         await load();
         setNotice(syncNotice(result));

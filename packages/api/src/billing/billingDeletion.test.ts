@@ -8,6 +8,13 @@ import {
 import { type FetchCall, withFetch } from "../testing/http";
 import { insertBilling } from "../testing/seed";
 import { cancelOrganizationSubscription } from "./billingDeletion";
+import type { SubscriptionCancellation } from "./billingSubscriptions";
+
+const deleting: SubscriptionCancellation = {
+  actor: { userId: "user-1" },
+  reason: "organization_deletion",
+  via: "owner",
+};
 
 describe("billing deletion", () => {
   it("invalidates an in-flight Checkout before organization deletion", async () => {
@@ -55,6 +62,7 @@ describe("billing deletion", () => {
             await cancelOrganizationSubscription(
               fixture.bindings,
               organizationId,
+              deleting,
             ),
           ).toMatchObject({
             canceled: false,
@@ -93,7 +101,11 @@ describe("billing deletion", () => {
     // No routes: any Stripe request fails the test.
     await withFetch({}, async ({ requests }) => {
       expect(
-        await cancelOrganizationSubscription(fixture.bindings, organizationId),
+        await cancelOrganizationSubscription(
+          fixture.bindings,
+          organizationId,
+          deleting,
+        ),
       ).toMatchObject({ canceled: false, checkoutGuard: expect.any(String) });
       expect(requests).toEqual([]);
     });
@@ -118,7 +130,11 @@ describe("billing deletion", () => {
       },
       async () => {
         await expect(
-          cancelOrganizationSubscription(fixture.bindings, organizationId),
+          cancelOrganizationSubscription(
+            fixture.bindings,
+            organizationId,
+            deleting,
+          ),
         ).rejects.toThrow("No such subscription");
         expect(
           fixture.database
@@ -142,6 +158,7 @@ describe("billing deletion", () => {
     const result = await cancelOrganizationSubscription(
       fixture.bindings,
       organizationId,
+      deleting,
     );
     expect(result).toMatchObject({
       canceled: false,
@@ -201,10 +218,15 @@ describe("billing deletion", () => {
           const winner = cancelOrganizationSubscription(
             fixture.bindings,
             organizationId,
+            deleting,
           );
           await cancellationStarted;
           await expect(
-            cancelOrganizationSubscription(fixture.bindings, organizationId),
+            cancelOrganizationSubscription(
+              fixture.bindings,
+              organizationId,
+              deleting,
+            ),
           ).rejects.toThrow("Organization deletion is already in progress.");
           releaseCancellation();
           const result = await winner;

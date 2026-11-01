@@ -6,6 +6,7 @@ import {
   proPriceId,
 } from "../testing/billingFixture";
 import { type FetchCall, withFetch } from "../testing/http";
+import { insertBilling } from "../testing/seed";
 import { storePendingCheckout } from "./billingCheckout";
 
 type Fixture = ReturnType<typeof createFixture>;
@@ -133,5 +134,133 @@ describe("billing activity", () => {
         .get(),
     ).toEqual({ pending_checkout_session_id: null });
     expect(startedEvents(fixture)).toEqual([]);
+  });
+});
+
+describe("billing portal activity", () => {
+  const portalRoute = "POST https://api.stripe.com/v1/billing_portal/sessions";
+  const portalSession = {
+    id: "bps_activity_test",
+    url: "https://billing.stripe.test/session/secret",
+  };
+
+  function withCustomer(fixture: Fixture) {
+    insertBilling(fixture.database, organizationId, {
+      stripe_customer_id: "cus_activity_test",
+      updated_at: "2026-08-26T12:00:00.000Z",
+    });
+  }
+
+  function portalEvents(fixture: Fixture) {
+    return fixture.database
+      .query<
+        {
+          actor_api_key_id: string | null;
+          actor_user_id: string;
+          details: string;
+          root_type: string;
+          subject_id: string;
+        },
+        []
+      >(
+        `SELECT actor_api_key_id, actor_user_id, details, root_type, subject_id
+         FROM activity_events WHERE action = 'billing.portal_opened'`,
+      )
+      .all()
+      .map((row) => ({ ...row, details: JSON.parse(row.details) as unknown }));
+  }
+
+  const openPortal = (fixture: Fixture, response = portalSession) =>
+    withFetch(
+      { [portalRoute]: async () => Response.json(response) },
+      async () => fixture.request("/portal", { method: "POST" }),
+      { captureErrors: true },
+    );
+
+  it("records who opened each portal session, without its URL", async () => {
+    const fixture = createFixture();
+    withCustomer(fixture);
+    const response = await openPortal(fixture);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ url: portalSession.url });
+    expect(portalEvents(fixture)).toEqual([
+      {
+        actor_api_key_id: null,
+        actor_user_id: "user-1",
+        details: { portalSessionId: "bps_activity_test" },
+        root_type: "organization_billing",
+        subject_id: "bps_activity_test",
+      },
+    ]);
+    expect(JSON.stringify(portalEvents(fixture))).not.toContain("secret");
+    const read = (manager: boolean) =>
+      findActivity(
+        fixture.bindings.DB,
+        organizationId,
+        undefined,
+        undefined,
+        true,
+        "organization_billing",
+        manager,
+      );
+    expect((await read(false))?.events).toEqual([]);
+    expect((await read(true))?.events).toMatchObject([
+      { action: "billing.portal_opened", actor: { id: "user-1" } },
+    ]);
+    // Purging the organization removes it with the rest.
+    fixture.database.run(
+      `DELETE FROM organization WHERE id = '${organizationId}'`,
+    );
+    expect(portalEvents(fixture)).toEqual([]);
+  });
+
+  it("records nothing for members, organizations without a customer, or Stripe failures", async () => {
+    const member = createFixture("member");
+    withCustomer(member);
+    expect((await openPortal(member)).status).toBe(403);
+    expect(portalEvents(member)).toEqual([]);
+
+    const noCustomer = createFixture();
+    expect((await openPortal(noCustomer)).status).toBe(409);
+    expect(portalEvents(noCustomer)).toEqual([]);
+
+    const failing = createFixture();
+    withCustomer(failing);
+    const failed = await withFetch(
+      {
+        [portalRoute]: async () =>
+          Response.json(
+            { error: { message: "Stripe unavailable" } },
+            {
+              status: 503,
+            },
+          ),
+      },
+      async () => failing.request("/portal", { method: "POST" }),
+      { captureErrors: true },
+    );
+    expect(failed.status).toBe(502);
+    expect(portalEvents(failing)).toEqual([]);
+  });
+
+  it("hands out no session when the opener lost their role or recording fails", async () => {
+    const demoted = createFixture();
+    withCustomer(demoted);
+    // The session's role says owner, but the stored membership no longer does.
+    demoted.database.run(
+      `UPDATE member SET role = 'member' WHERE organizationId = '${organizationId}' AND userId = 'user-1'`,
+    );
+    expect((await openPortal(demoted)).status).toBe(403);
+    expect(portalEvents(demoted)).toEqual([]);
+
+    const failing = createFixture();
+    withCustomer(failing);
+    failing.database.exec(`CREATE TRIGGER fail_activity
+      BEFORE INSERT ON activity_events
+      WHEN NEW.action = 'billing.portal_opened'
+      BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END`);
+    const response = await openPortal(failing);
+    expect(response.status).toBe(500);
+    expect(await response.text()).not.toContain("secret");
   });
 });

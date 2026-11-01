@@ -1,5 +1,10 @@
 import { productName } from "@balebase/ui/brand";
 import { financeRoutes } from "@balebase/validators/finance";
+import {
+  activityBatch,
+  requestActor,
+  rowActivityStatement,
+} from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import type { Bindings } from "../types";
 import type { FinanceContext } from "./financeContext";
@@ -81,6 +86,47 @@ export async function createUpdateLinkToken(
     expiration: result.expiration,
     linkToken: result.linkToken,
   });
+}
+
+/**
+ * Records that the app's Link update-mode session for this connection
+ * succeeded, so a repaired bank login has its own event, apart from the sync
+ * that follows. Plaid tells only the browser, so this is the app's report;
+ * it holds the connection's status and error code before the repair, never
+ * Plaid tokens or Item IDs. An abandoned Link session never calls it.
+ */
+export async function reportLoginRepair(context: FinanceContext) {
+  const organizationId = context.get("organizationId");
+  const connectionId = context.req.param("id") ?? "";
+  const actor = requestActor(context);
+  const [recorded] = await activityBatch(context.env.DB, actor.apiKey, [
+    rowActivityStatement(
+      context.env.DB,
+      {
+        action: "finance.connection_repaired",
+        actorId: actor.userId,
+        details: {
+          bindings: [],
+          sql: `json_object('institutionName', institution_name,
+            'statusBefore', status, 'errorCodeBefore', error_code)`,
+        },
+        id: connectionId,
+        label: "COALESCE(institution_name, 'Bank connection')",
+        occurredAt: new Date().toISOString(),
+        organizationId,
+        rootType: "finance_connection",
+        table: "plaid_items",
+      },
+      { bindings: [], sql: "status IN ('active', 'error')" },
+    ),
+  ]);
+  if (!recorded?.meta.changes) {
+    return context.json(
+      { error: "Connection not found or disconnected." },
+      404,
+    );
+  }
+  return context.body(null, 204);
 }
 
 async function requestLinkToken(

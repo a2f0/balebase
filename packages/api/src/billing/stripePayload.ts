@@ -225,6 +225,7 @@ export function parseStripeSeatItemResponse(
 export function parseStripePortalSession(value: unknown) {
   const record = stripeRecord(value, "Billing Portal session");
   return {
+    id: stripeString(record.id, "Billing Portal session ID", "bps_"),
     url: stripeString(record.url, "Billing Portal URL", "https://"),
   };
 }

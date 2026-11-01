@@ -5,8 +5,10 @@ checklist Audits feature is one producer alongside equipment, projects, issues,
 organization membership (roles, invitations, joining, leaving and removal),
 organization renames, deletion and restoration, group access, members'
 two-factor requirements, API keys, transaction annotations and categories,
-bank connections (connecting, sync requests and settings, disconnecting, and
-deleting imported data), expense categories, Pro checkout starts, library
+bank connections (connecting, sync requests and settings, login repairs,
+disconnecting, and deleting imported data), expense categories, Pro checkout
+starts, Billing Portal sessions, subscription cancellations made by deleting
+an organization, library
 files and folders, inbox email moves and links, businesses, contracts and
 contract templates, and the forms and checks requested of people. The
 workspace page is `/activity`; individual records can expose the same events
@@ -44,9 +46,12 @@ requires a user actor; extending it to system/provider work needs an explicit
 actor model, never a fabricated human identity. Until then, maintenance jobs
 such as the discarded global form purge record no events: the projects that
 lose a purged form show no removal, and the job run keeps only its count.
-Stripe-driven subscription and seat changes and Plaid-driven connection status
-changes likewise stay in their current-state columns, Stripe's own history, and
-job runs.
+Stripe-driven subscription and seat changes, including those made in the
+Billing Portal, and Plaid-driven connection status changes likewise stay in
+their current-state columns, Stripe's own history, and job runs. A portal
+change can only be related to the latest `billing.portal_opened` event, which
+names who opened the portal, not who made the change: Stripe's portal sessions
+carry no metadata, so the opener cannot ride along to the webhook.
 
 ## Reading and retaining history
 
@@ -68,7 +73,8 @@ as group details, pending invitations, member security settings, billing
 management, and employee records already are. Everyone in the organization
 sees people joining, leaving, being removed or changing role, and organization
 renames. Root admins read the organization's own history (renames, deletion
-and restoration) on its admin detail page, including while it is deleted. The
+and restoration, and the subscription cancellations a deletion made) on its
+admin detail page, including while it is deleted. The
 MCP `list_activity` tool accepts the same optional `resourceType`; keep that
 filter when passing the next cursor.
 
@@ -89,7 +95,9 @@ compliance ledger. Purging an organization removes its activity; purging an
 audit run or form removes that root's history. Deleting a disconnected bank
 connection's imported data removes that connection's and its transactions'
 history, but keeps one `finance.connection_data_deleted` event naming who
-deleted it and how many accounts, transactions, and annotations went. Historical
+deleted it and how many accounts, transactions, annotations, transaction issues
+(and open ones), and email links went; the issues, with their history, and the
+links are deleted with their transactions. Historical
 imports must be marked as such and contain only facts actually retained. Do not
 reconstruct unknown editors, previous values, or timestamps from current state.
 
@@ -109,10 +117,19 @@ deletes the membership. That batch re-checks that the remover still owns or
 administers the organization and never removes the last owner. Deleting an
 organization (by an owner or a root admin, `details.via`) and restoring it
 record events in the same batch as the change; the restoration keeps who had
-deleted it, which the organization row then clears. Rejected requests and
-saves that change nothing record nothing. A membership deleted with no request
-behind it, as when an account is purged, has no actor to record until the
-shared model gains a system actor; equipment is still unassigned then.
+deleted it, which the organization row then clears. Deleting a Pro
+organization first cancels its subscriptions in Stripe, and each cancellation
+Stripe confirms records `billing.subscription_canceled` (the subscription, its
+previous status and seats, `details.via`) with the persisted billing state,
+attributed to the deleting owner or root admin. It stays when the deletion
+then fails or changes nothing, since the paid plan has ended either way, and
+is recorded once per subscription; a Stripe refusal records nothing. The
+deletion event lists the canceled subscription IDs. Root admins see these
+cancellations on the organization's admin page with its lifecycle events.
+Rejected requests and saves that change nothing record nothing. A membership
+deleted with no request behind it, as when an account is purged, has no actor
+to record until the shared model gains a system actor; equipment is still
+unassigned then.
 
 ## Library, inbox, and businesses
 
@@ -225,6 +242,7 @@ examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `auth/organizationRoleActivity.test.ts`,
 `organizations/membershipActivity.test.ts`,
 `organizations/accessActivity.test.ts`, `issues/issues.test.ts`,
+`finance/financeActivity.test.ts`, `billing/billingActivity.test.ts`,
 `library/libraryActivity.test.ts`, `inbox/inboxActivity.test.ts`,
 `businesses/businessActivity.test.ts`, `jobs/maintenanceRequests.test.ts`,
 `admin/setUserRole.test.ts`, `users/securityEvents.test.ts`,

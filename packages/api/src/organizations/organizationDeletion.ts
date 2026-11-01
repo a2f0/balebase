@@ -62,8 +62,9 @@ async function markOrganizationForDeletion(
   database: D1Database,
   organizationId: string,
   actor: OrganizationLifecycleActor,
-  checkoutGuard: string | null,
+  billing: { canceledSubscriptionIds: string[]; checkoutGuard: string | null },
 ): Promise<OrganizationDeletion | undefined> {
+  const { checkoutGuard } = billing;
   const deletedAt = new Date().toISOString();
   const deletedByUserId = actor.userId;
   const results = await activityBatch(database, actor.apiKey, [
@@ -87,14 +88,15 @@ async function markOrganizationForDeletion(
       actor,
       deletedAt,
       {
-        bindings: [actor.via],
+        bindings: [actor.via, JSON.stringify(billing.canceledSubscriptionIds)],
         sql: `json_object(
           'via', ?,
           'canceledInvitations', (
             SELECT COUNT(*) FROM invitation
             WHERE invitation.organizationId = organization.id
               AND invitation.status = 'pending'
-          ))`,
+          ),
+          'canceledSubscriptionIds', json(?))`,
       },
       {
         bindings: [organizationId, deletedAt, deletedByUserId],
@@ -232,9 +234,12 @@ export async function restoreOrganization(
 }
 
 /**
- * Cancels the organization's billing, then marks it for deletion. When the
- * mark fails or changes nothing, checkout is re-enabled so billing can be
- * restarted. A failure carries the response the route sends.
+ * Cancels the organization's billing, then marks it for deletion. Each
+ * cancellation is recorded as it happens (`billing.subscription_canceled`),
+ * so it stays attributed when the mark fails or changes nothing, and the
+ * deletion event names the subscriptions it canceled. When the mark fails or
+ * changes nothing, checkout is re-enabled so billing can be restarted. A
+ * failure carries the response the route sends.
  */
 export async function deleteBilledOrganization(
   context: Context<ApiEnv>,
@@ -245,12 +250,20 @@ export async function deleteBilledOrganization(
   | { deletion: undefined }
   | { response: Response }
 > {
-  let checkoutGuard: string | null;
+  let billing: {
+    canceledSubscriptionIds: string[];
+    checkoutGuard: string | null;
+  };
   try {
-    ({ checkoutGuard } = await cancelOrganizationSubscription(
+    billing = await cancelOrganizationSubscription(
       context.env,
       organizationId,
-    ));
+      {
+        actor: { apiKey: actor.apiKey, userId: actor.userId },
+        reason: "organization_deletion",
+        via: actor.via,
+      },
+    );
   } catch (cause) {
     console.error("Could not cancel organization billing.", cause);
     const error =
@@ -264,14 +277,14 @@ export async function deleteBilledOrganization(
       context.env.DB,
       organizationId,
       actor,
-      checkoutGuard,
+      billing,
     );
   } catch (cause) {
     console.error("Could not record organization deletion.", cause);
     await recoverCheckoutAfterFailedDeletion(
       context.env.DB,
       organizationId,
-      checkoutGuard,
+      billing.checkoutGuard,
     );
     const error =
       "Billing was canceled, but the organization could not be deleted. Checkout was re-enabled so billing can be restarted.";
@@ -281,7 +294,7 @@ export async function deleteBilledOrganization(
     await recoverCheckoutAfterFailedDeletion(
       context.env.DB,
       organizationId,
-      checkoutGuard,
+      billing.checkoutGuard,
     );
   }
   return { deletion };

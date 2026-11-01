@@ -9,8 +9,13 @@ import {
   canManage,
   canManageOrganization,
   requireManager,
+  stillManages,
 } from "../organizations/organizationMembers";
-import { requestActor } from "../shared/activity";
+import {
+  activityBatch,
+  insertActivity,
+  requestActor,
+} from "../shared/activity";
 import { respond } from "../shared/respond";
 import type { Bindings } from "../types";
 import {
@@ -187,11 +192,51 @@ billing.post("/portal", requireBillingManager, async (context) => {
       await stripePost(context.env, "/v1/billing_portal/sessions", parameters),
     );
     if (!portal.url) throw new Error("Stripe did not return a portal URL.");
+    // Recorded before the URL is handed out: when the event cannot be
+    // recorded, or the opener no longer manages the organization, nobody
+    // receives the session.
+    if (!(await recordPortalOpened(context, portal.id))) {
+      return context.json({ error: billingManagerRequired }, 403);
+    }
     return respond(context, billingRoutes.portal, { url: portal.url });
   } catch (cause) {
     return billingError(context, cause);
   }
 });
+
+/**
+ * Records who opened a Billing Portal session. The portal lets them cancel Pro
+ * or change payment details, and Stripe's own history names only the
+ * customer, so this is what ties a later portal change to a person. It holds
+ * the session ID, never the URL, which works as a bearer link.
+ */
+async function recordPortalOpened(
+  context: Context<ApiEnv>,
+  portalSessionId: string,
+) {
+  const organizationId = context.get("organizationId");
+  const actor = requestActor(context);
+  const manages = stillManages(organizationId, actor.userId);
+  const [recorded] = await activityBatch(context.env.DB, actor.apiKey, [
+    context.env.DB.prepare(
+      `${insertActivity}
+       SELECT organization.id, 'organization_billing', organization.id,
+              organization.name, 'billing_portal_session', ?,
+              'billing.portal_opened', actor.id, actor.name, actor.email, ?,
+              json_object('portalSessionId', ?)
+       FROM organization JOIN user AS actor ON actor.id = ?
+       WHERE organization.id = ? AND ${manages.sql}`,
+    ).bind(
+      portalSessionId,
+      new Date().toISOString(),
+      portalSessionId,
+      actor.userId,
+      organizationId,
+      ...manages.bindings,
+    ),
+  ]);
+  return Boolean(recorded?.meta.changes);
+}
 
 async function billingSummary(
   environment: Pick<

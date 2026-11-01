@@ -74,6 +74,8 @@ beforeEach(() => {
       });
     if (url.pathname === "/api/finance/exchange")
       return Response.json({ connectionId: "new" }, { status: 201 });
+    if (url.pathname.endsWith("/login-repairs"))
+      return new Response(null, { status: 204 });
     if (url.pathname.endsWith("/sync-jobs"))
       return Response.json(
         {
@@ -197,8 +199,10 @@ describe("Plaid Link", () => {
     await click("Update login");
     expect(opened.map(({ token }) => token)).toEqual(["link-update"]);
     await succeed(opened[0]);
+    // The repair is recorded before the sync that confirms it.
     expect(requests).toEqual([
       "POST /api/finance/connections/axos/link-token",
+      "POST /api/finance/connections/axos/login-repairs",
       "POST /api/finance/connections/axos/sync-jobs",
     ]);
     expect(diagnostics).toMatchObject([
@@ -250,7 +254,10 @@ describe("Plaid Link", () => {
     expect(opened.map(({ token }) => token)).toEqual(["link-update"]);
     expect(opened[0]?.receivedRedirectUri).toContain("oauth_state_id=state");
     await succeed(opened[0]);
-    expect(requests).toEqual(["POST /api/finance/connections/axos/sync-jobs"]);
+    expect(requests).toEqual([
+      "POST /api/finance/connections/axos/login-repairs",
+      "POST /api/finance/connections/axos/sync-jobs",
+    ]);
     expect(diagnostics).toMatchObject([
       { connectionId: "axos", oauthResume: true, outcome: "success" },
     ]);

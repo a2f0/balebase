@@ -670,16 +670,18 @@ on the connection. Manual sync can start a fresh attempt after failure.
 Sync jobs retain their source, requesting user, timestamps, outcome, and counts.
 Daily runs identify their source without inventing a human actor. The shared
 Activity feed records connecting a bank, manual sync requests, daily-sync
-setting changes with before/after values, disconnects, and deleting a
-connection's imported data, with user and API-key attribution in the same
-transaction as the mutation. Each connection's page shows its own history
-(`GET /api/finance/connections/:id/activity`, MCP
+setting changes with before/after values, login repairs through **Update
+login**, disconnects, and deleting a connection's imported data, with user and
+API-key attribution in the same transaction as the mutation. Each connection's
+page shows its own history (`GET /api/finance/connections/:id/activity`, MCP
 `list_finance_connection_activity`), including after it is disconnected.
 **Bank connections** activity requires Finance access. This activity remains
 until the connection's data or organization is purged; deleting the data keeps
-one event recording who deleted it and the number of accounts, transactions, and
-annotations removed. Apply migration `0081_record_finance_data_deletion.sql`
-before deploying the Worker that records it. Plaid-driven status changes, such
+one event recording who deleted it and the number of accounts, transactions,
+annotations, issues (and how many were open), and email links removed; the
+issues and links go with their transactions. Apply migration
+`0081_record_finance_data_deletion.sql` before deploying the Worker that
+records it. Plaid-driven status changes, such
 as a login error and its recovery, are not activity events yet; the latest error
 shows on the connection and in its sync jobs. Completed sync runs and
 operational logs are retained for 30 days; operators can inspect them in the
@@ -735,8 +737,11 @@ the Connections tab opens Plaid Link in update mode for that same Item. No
 products are requested and no public token is exchanged: the stored access
 token and sync cursor are kept, and the sync that follows resumes where the
 last successful one stopped, so imported records, categories, and annotations
-are untouched. Prefer it over disconnecting and reconnecting, which creates a
-new Item and relies on matching to carry history over.
+are untouched. When Link reports success, the app records
+`finance.connection_repaired` on the connection, naming who repaired it and
+its status and error code before, then starts the sync; an abandoned Link
+session records nothing. Prefer it over disconnecting and reconnecting, which
+creates a new Item and relies on matching to carry history over.
 
 Before retrying, anyone with finance access can check for a wider outage under
 **Bank status** on the connection's page (`/finance/connections/<id>`). It
@@ -934,9 +939,17 @@ Owners and organization admins can upgrade or manage billing at
 Portal. Starting Pro checkout records a `billing.checkout_started` event naming
 the owner or admin, the seat quantity, and the price, visible under **Billing**
 in Activity to owners and admins only; the Checkout session and subscription
-metadata also carry `started_by_user_id`. Subscription status, cancellation, and
-seat quantity changes come from Stripe and are kept as current state and in
-Stripe's own history, not as Activity events. Checkout uses Stripe's hosted page
+metadata also carry `started_by_user_id`. Opening the Billing Portal records
+`billing.portal_opened` with the opener and the portal session ID (never its
+URL); Stripe's portal sessions take no metadata, so changes made there still
+arrive as Stripe-driven updates and are not tied to the opener. Deleting a Pro
+organization cancels its subscription first and records
+`billing.subscription_canceled` naming the owner or root admin, the
+subscription, its previous status, and its seats, even when the deletion then
+fails; the deletion event lists the subscriptions it canceled. Other
+subscription status, cancellation, and seat quantity changes come from Stripe
+and are kept as current state and in Stripe's own history, not as Activity
+events. Checkout uses Stripe's hosted page
 unless `STRIPE_PUBLISHABLE_KEY` holds a publishable key from the same Stripe
 account and mode as the secret key; then the billing page embeds Stripe's
 Payment Element, styled with the app's theme tokens. Add the following values to

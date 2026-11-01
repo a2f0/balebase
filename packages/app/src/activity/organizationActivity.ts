@@ -38,7 +38,7 @@ export function organizationActivitySummary({
     case "organization.updated":
       return changes(details.changes).join(" · ") || "No changes";
     case "organization.deletion_requested":
-      return `${viaLabel(details.via)} · Pending invitations canceled: ${textValue(details.canceledInvitations) || "0"}`;
+      return `${viaLabel(details.via)} · Pending invitations canceled: ${textValue(details.canceledInvitations) || "0"}${canceledSubscriptions(details.canceledSubscriptionIds)}`;
     case "organization.restored":
       return `${viaLabel(details.via)} · Deleted by ${textValue(details.deletedByName) || textValue(details.deletedByEmail) || "someone no longer recorded"}`;
     default:
@@ -73,6 +73,13 @@ export function membershipSummary(event: ActivityEvent) {
     role,
     ...(keyNames.length ? [`API keys stopped: ${keyNames.join(", ")}`] : []),
   ].join(" · ");
+}
+
+/** Deletions recorded before subscriptions were named have none. */
+function canceledSubscriptions(ids: unknown) {
+  return Array.isArray(ids) && ids.length > 0
+    ? " · Pro subscription canceled"
+    : "";
 }
 
 function viaLabel(via: unknown) {

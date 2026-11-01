@@ -49,7 +49,11 @@ describe("organization deletion", () => {
       {
         action: "organization.deletion_requested",
         actor_user_id: "owner-user",
-        details: { canceledInvitations: 1, via: "owner" },
+        details: {
+          canceledInvitations: 1,
+          canceledSubscriptionIds: [],
+          via: "owner",
+        },
         occurred_at: body.deletedAt,
         root_label: expect.any(String),
       },
@@ -258,6 +262,37 @@ describe("organization deletion", () => {
           stripe_status: "canceled",
           stripe_subscription_id: "sub_pending",
         });
+        // The owner is named; the subscription was pending, so it had no
+        // stored status.
+        expect(
+          fixture.database
+            .query(
+              `SELECT actor_user_id, details FROM activity_events
+               WHERE action = 'billing.subscription_canceled'`,
+            )
+            .all()
+            .map((row) => {
+              const { actor_user_id, details } = row as {
+                actor_user_id: string;
+                details: string;
+              };
+              return { actor_user_id, details: JSON.parse(details) as unknown };
+            }),
+        ).toEqual([
+          {
+            actor_user_id: "owner-user",
+            details: {
+              previousStatus: null,
+              reason: "organization_deletion",
+              seatQuantity: 2,
+              subscriptionId: "sub_pending",
+              via: "owner",
+            },
+          },
+        ]);
+        expect(lifecycleEvents(fixture.database)).toMatchObject([
+          { details: { canceledSubscriptionIds: ["sub_pending"] } },
+        ]);
       },
     );
   });

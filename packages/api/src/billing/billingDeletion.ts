@@ -9,6 +9,7 @@ import {
 } from "./billingRecords";
 import {
   cancelStripeSubscription,
+  type SubscriptionCancellation,
   type SubscriptionEnvironment,
   terminalSubscriptionStatuses,
 } from "./billingSubscriptions";
@@ -20,9 +21,16 @@ import {
 
 const checkoutDeletionLeaseSeconds = 5 * 60;
 
+/**
+ * Cancels the organization's paid and pending subscriptions before it is
+ * deleted. Each cancellation Stripe confirms is recorded for the person
+ * deleting the organization at once, whether or not the deletion then
+ * commits, because the paid plan has already ended.
+ */
 export async function cancelOrganizationSubscription(
   environment: SubscriptionEnvironment,
   organizationId: string,
+  cancellation: SubscriptionCancellation,
 ) {
   const deletion = await disableCheckoutForDeletion(
     environment.DB,
@@ -30,7 +38,11 @@ export async function cancelOrganizationSubscription(
   );
   if (!deletion) {
     if (!(await organizationExists(environment.DB, organizationId))) {
-      return { canceled: false, checkoutGuard: null };
+      return {
+        canceled: false,
+        canceledSubscriptionIds: [],
+        checkoutGuard: null,
+      };
     }
     throw new StripeApiError(
       "Organization deletion is already in progress.",
@@ -56,6 +68,7 @@ export async function cancelOrganizationSubscription(
         environment,
         organizationId,
         subscriptionId,
+        cancellation,
       );
     }
     await forgetPendingCheckout(environment.DB, organizationId);
@@ -63,6 +76,7 @@ export async function cancelOrganizationSubscription(
       canceled:
         subscriptionIds.size > 0 ||
         Boolean(record?.pending_checkout_session_id),
+      canceledSubscriptionIds: [...subscriptionIds],
       checkoutGuard,
     };
   } catch (cause) {
