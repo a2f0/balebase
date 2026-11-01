@@ -40,7 +40,7 @@ API paths are relative to `packages/api/src`, which has a folder per feature.
 | Finance and billing | `finance/finance*.ts`, `finance/plaid*.ts`, `billing/billing*.ts` (checkout, subscriptions, seats, webhook, retention, deletion), scheduled jobs in `jobs/` |
 | Contracts and employee records | `contracts/contracts.ts`, `contracts/contractDraft.ts`, `contracts/contractWorkflow.ts`, `contracts/contractTemplates.ts`, `contracts/contractRecords.ts`, `employeeForms/employeeForms.ts`, `employeeForms/screening*.ts`, Checkr handlers in `employeeForms/checkr*.ts` |
 | Library, inbox, business records | file and folder routes in `library/`, `inbox/email.ts`, `businesses/businesses.ts`, attachment handlers |
-| Administrative and maintenance work | admin routes in `admin/`, auth role hooks, the scheduled worker and maintenance jobs in `jobs/` (including `inbox/trashedEmailPurge.ts`), system actors in `shared/activity.ts` |
+| Administrative and maintenance work | admin routes in `admin/`, auth role hooks, the scheduled worker and maintenance jobs in `jobs/` (including `inbox/trashedEmailPurge.ts`), system actors in `shared/systemActivity.ts` |
 
 Resolve actual filenames with `rg --files`; this map is a starting point,
 not a coverage claim. Inspect route mounts and contract definitions to discover

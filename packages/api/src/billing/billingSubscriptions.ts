@@ -1,3 +1,4 @@
+import type { ActivityCausation } from "../shared/systemActivity";
 import type { Bindings } from "../types";
 import {
   attachCheckoutSessionToClaim,
@@ -12,6 +13,12 @@ import {
   paidStatuses,
   paidStatusList,
 } from "./billingEntitlements";
+import {
+  type BillingGuard,
+  type StoredSubscription,
+  type SubscriptionChangeCause,
+  subscriptionChangeStatement,
+} from "./billingProviderActivity";
 import {
   clearSettledCheckout,
   findBilling,
@@ -35,15 +42,22 @@ export const terminalSubscriptionStatuses = new Set([
 export type SubscriptionEnvironment = ProPriceEnvironment &
   Pick<Bindings, "DB" | "STRIPE_SECRET_KEY">;
 
+/**
+ * Stores the subscription's current state from Stripe. `causation` is what
+ * reported it (a Stripe event, or a Checkout session), recorded with the
+ * `billing.subscription_changed` event a real change makes.
+ */
 export async function refreshSubscription(
   environment: SubscriptionEnvironment,
   subscriptionId: string,
   eventCreated: number,
+  causation: ActivityCausation,
   knownOrganizationId?: string,
   checkoutSessionId?: string,
   checkoutClaimId?: string,
 ) {
   const checkoutRefresh = Boolean(checkoutSessionId && knownOrganizationId);
+  const cause: SubscriptionChangeCause = { causation, checkoutSessionId };
   return withSubscriptionSyncLock(
     environment.DB,
     subscriptionId,
@@ -74,6 +88,7 @@ export async function refreshSubscription(
           checkoutSessionId,
           checkoutClaimId,
           subscription,
+          cause,
         ))
       ) {
         return false;
@@ -82,6 +97,7 @@ export async function refreshSubscription(
         environment,
         subscription,
         eventCreated,
+        cause,
         knownOrganizationId,
         checkoutSessionId,
       );
@@ -120,6 +136,7 @@ async function prepareCheckoutSubscriptionReplacement(
   checkoutSessionId: string,
   checkoutClaimId: string | undefined,
   subscription: StripeSubscription,
+  cause: SubscriptionChangeCause,
 ) {
   await clearExpiredCheckoutDeletionLease(
     environment.DB,
@@ -174,6 +191,7 @@ async function prepareCheckoutSubscriptionReplacement(
       environment,
       organizationId,
       existing.stripe_subscription_id,
+      { ...cause, replacedBySubscriptionId: subscription.id },
     );
   }
   return true;
@@ -221,10 +239,16 @@ async function expandedSubscription(
   );
 }
 
+/**
+ * Stores the subscription's state and, in the same batch, records what
+ * changed as `billing.subscription_changed` by Stripe, unless `cause` is null
+ * because a person's own event records the change.
+ */
 async function persistSubscription(
   environment: ProPriceEnvironment & Pick<Bindings, "DB">,
   subscription: StripeSubscription,
   eventCreated: number,
+  cause: SubscriptionChangeCause | null,
   knownOrganizationId?: string,
   checkoutSessionId?: string,
 ) {
@@ -244,16 +268,20 @@ async function persistSubscription(
     return false;
   }
   const item = findProSubscriptionItem(subscription, environment);
-  const periodEnd = item?.current_period_end ?? subscription.current_period_end;
-  const cancelAtPeriodEnd =
-    subscription.cancel_at_period_end === true ||
-    subscription.cancel_at != null;
+  const stored = storedSubscription(subscription, environment);
+  const { cancelAtPeriodEnd } = stored;
   // paid_ended_at marks when a paid status lapsed, so retention can grant a
   // grace period. Stripe reports no end time for unpaid or paused
   // subscriptions, and processing time is never earlier than the real end.
   const now = new Date().toISOString();
+  const persist = (write: D1PreparedStatement, guard: BillingGuard) =>
+    writeWithChange(
+      environment.DB,
+      write,
+      cause && { cause, guard, organizationId, stored },
+    );
   if (checkoutSessionId) {
-    const persisted = await environment.DB.prepare(
+    const update = environment.DB.prepare(
       `UPDATE organization_billing
        SET stripe_customer_id = ?, stripe_subscription_id = ?,
            stripe_subscription_item_id = ?, stripe_price_id = ?,
@@ -271,29 +299,33 @@ async function persistSubscription(
          AND (pending_checkout_session_id = ?
               OR (stripe_subscription_id = ?
                   AND pending_checkout_session_id IS NULL))`,
-    )
-      .bind(
-        customerId,
-        subscription.id,
-        item?.id ?? null,
-        item?.price.id ?? null,
-        subscription.status,
-        Math.max(1, item?.quantity ?? 1),
-        cancelAtPeriodEnd ? 1 : 0,
-        periodEnd ? new Date(periodEnd * 1_000).toISOString() : null,
-        eventCreated,
-        subscription.status,
-        now,
-        ...Array<string>(settledCheckoutBindings).fill(checkoutSessionId),
-        now,
-        organizationId,
-        checkoutSessionId,
-        subscription.id,
-      )
-      .run();
-    return Number(persisted.meta.changes) > 0;
+    ).bind(
+      customerId,
+      subscription.id,
+      item?.id ?? null,
+      stored.priceId,
+      subscription.status,
+      stored.seats,
+      cancelAtPeriodEnd ? 1 : 0,
+      stored.periodEnd,
+      eventCreated,
+      subscription.status,
+      now,
+      ...Array<string>(settledCheckoutBindings).fill(checkoutSessionId),
+      now,
+      organizationId,
+      checkoutSessionId,
+      subscription.id,
+    );
+    return persist(update, {
+      bindings: [checkoutSessionId, subscription.id],
+      sql: `billing.checkout_disabled_at IS NULL
+            AND (billing.pending_checkout_session_id = ?
+                 OR (billing.stripe_subscription_id = ?
+                     AND billing.pending_checkout_session_id IS NULL))`,
+    });
   }
-  const persisted = await environment.DB.prepare(
+  const upsert = environment.DB.prepare(
     `INSERT INTO organization_billing
      (organization_id, stripe_customer_id, stripe_subscription_id,
       stripe_subscription_item_id, stripe_price_id, stripe_status,
@@ -324,28 +356,86 @@ async function persistSubscription(
      WHERE organization_billing.stripe_subscription_id IS NULL
         OR organization_billing.stripe_subscription_id =
            excluded.stripe_subscription_id`,
-  )
-    .bind(
-      organizationId,
-      customerId,
-      subscription.id,
-      item?.id ?? null,
-      item?.price.id ?? null,
-      subscription.status,
-      Math.max(1, item?.quantity ?? 1),
-      cancelAtPeriodEnd ? 1 : 0,
-      periodEnd ? new Date(periodEnd * 1_000).toISOString() : null,
-      eventCreated,
-      now,
-    )
-    .run();
-  return Number(persisted.meta.changes) > 0;
+  ).bind(
+    organizationId,
+    customerId,
+    subscription.id,
+    item?.id ?? null,
+    stored.priceId,
+    subscription.status,
+    stored.seats,
+    cancelAtPeriodEnd ? 1 : 0,
+    stored.periodEnd,
+    eventCreated,
+    now,
+  );
+  return persist(upsert, {
+    bindings: [subscription.id],
+    sql: `billing.stripe_subscription_id IS NULL
+          OR billing.stripe_subscription_id = ?`,
+  });
 }
 
+/** The subscription's fields as `organization_billing` stores them. */
+function storedSubscription(
+  subscription: StripeSubscription,
+  environment: ProPriceEnvironment,
+): StoredSubscription {
+  const item = findProSubscriptionItem(subscription, environment);
+  const periodEnd = item?.current_period_end ?? subscription.current_period_end;
+  return {
+    cancelAtPeriodEnd:
+      subscription.cancel_at_period_end === true ||
+      subscription.cancel_at != null,
+    periodEnd: periodEnd ? new Date(periodEnd * 1_000).toISOString() : null,
+    priceId: item?.price.id ?? null,
+    seats: Math.max(1, item?.quantity ?? 1),
+    status: subscription.status,
+    subscriptionId: subscription.id,
+  };
+}
+
+/**
+ * Runs `write` with, before it in the same batch, the event recording what
+ * it changes, if anything. Returns whether `write` changed the row.
+ */
+async function writeWithChange(
+  database: D1Database,
+  write: D1PreparedStatement,
+  change: {
+    cause: SubscriptionChangeCause;
+    guard: BillingGuard;
+    organizationId: string;
+    stored: StoredSubscription;
+  } | null,
+) {
+  const results = await database.batch(
+    change
+      ? [
+          subscriptionChangeStatement(
+            database,
+            change.cause,
+            change.organizationId,
+            change.stored,
+            change.guard,
+          ),
+          write,
+        ]
+      : [write],
+  );
+  return Number(results.at(-1)?.meta.changes) > 0;
+}
+
+/**
+ * Cancels the subscription in Stripe and stores it. `cause` is set when a
+ * new Checkout replaced it; without one, as when deleting an organization,
+ * Stripe's confirmation records no event of its own.
+ */
 export async function cancelStripeSubscription(
   environment: SubscriptionEnvironment,
   organizationId: string,
   subscriptionId: string,
+  cause: SubscriptionChangeCause | null = null,
 ) {
   await withSubscriptionSyncLock(environment.DB, subscriptionId, async () => {
     const subscription = await deleteStripeSubscription(
@@ -356,6 +446,7 @@ export async function cancelStripeSubscription(
       environment,
       subscription,
       Math.floor(Date.now() / 1000),
+      cause,
       organizationId,
     );
   });

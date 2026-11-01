@@ -1,7 +1,7 @@
 import {
   maintenanceActor,
   systemActivityRowsStatement,
-} from "../shared/activity";
+} from "../shared/systemActivity";
 import type { Bindings } from "../types";
 import { reconcilePendingCheckoutEntitlements } from "./billingCheckoutSync";
 import {

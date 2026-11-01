@@ -109,6 +109,7 @@ async function processStripeEvent(
   environment: SubscriptionEnvironment,
   event: StripeEvent,
 ) {
+  const causation = { id: event.id, type: "stripe_event" };
   if (event.type === "checkout.session.completed") {
     const session = parseStripeCheckoutSession(event.data.object);
     const organizationId =
@@ -120,6 +121,7 @@ async function processStripeEvent(
         environment,
         subscriptionId,
         event.created,
+        causation,
         organizationId,
         session.id,
         session.metadata?.checkout_claim_id,
@@ -129,7 +131,12 @@ async function processStripeEvent(
   }
   if (event.type.startsWith("customer.subscription.")) {
     const subscriptionId = stripeObjectId(event.data.object, "sub_");
-    await refreshSubscription(environment, subscriptionId, event.created);
+    await refreshSubscription(
+      environment,
+      subscriptionId,
+      event.created,
+      causation,
+    );
     return;
   }
   if (
@@ -137,7 +144,8 @@ async function processStripeEvent(
     event.type === "invoice.payment_failed"
   ) {
     const id = stripeInvoiceSubscriptionId(event.data.object);
-    if (id) await refreshSubscription(environment, id, event.created);
+    if (id)
+      await refreshSubscription(environment, id, event.created, causation);
   }
 }
 

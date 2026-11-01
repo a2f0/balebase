@@ -116,7 +116,8 @@ export function maintenanceTasks(environment: Bindings): MaintenanceTasks {
     purgeStripeWebhookReceipts: async () => ({
       purged: await purgeStripeWebhookReceipts(environment),
     }),
-    reconcileSubscriptionSeats: () => reconcileSubscriptionSeats(environment),
+    reconcileSubscriptionSeats: (runId) =>
+      reconcileSubscriptionSeats(environment, runId),
     maintainContracts: async () => ({
       reminded: await maintainContracts(environment),
     }),
