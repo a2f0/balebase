@@ -486,8 +486,10 @@ async function writeWithChange(
 
 /**
  * Cancels the subscription in Stripe and stores it. A `cancellation` is a
- * person's (deleting an organization), recorded as theirs. `cause` is set
- * when a new Checkout replaced it, recorded as Stripe's change.
+ * person's (deleting an organization), recorded as theirs when Stripe's
+ * cancellation carries their marker. `cause` is set when a new Checkout
+ * replaced it; otherwise a cancellation nobody is credited with is
+ * recorded as Stripe's.
  */
 export async function cancelStripeSubscription(
   environment: SubscriptionEnvironment,
@@ -524,10 +526,22 @@ export async function cancelStripeSubscription(
       environment,
       subscription,
       Math.floor(Date.now() / 1000),
-      cause,
+      cause ?? stripeCancellation(subscriptionId),
       organizationId,
     );
   });
+}
+
+/**
+ * Stripe's cancellation of a subscription, recorded as Stripe's change when
+ * no person's intent is credited with it, as when it was canceled in the
+ * Billing Portal while a deletion's intent waited. A subscription is
+ * canceled once, so it is its own cause.
+ */
+function stripeCancellation(subscriptionId: string): SubscriptionChangeCause {
+  return {
+    causation: { id: subscriptionId, type: "stripe_cancellation" },
+  };
 }
 
 /**
@@ -556,7 +570,7 @@ async function claimCancellationIntent(
       environment,
       current,
       Math.floor(Date.now() / 1000),
-      null,
+      stripeCancellation(subscriptionId),
       organizationId,
     );
     return "resolved";

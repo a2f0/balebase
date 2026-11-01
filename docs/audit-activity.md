@@ -97,7 +97,10 @@ or a failed provider request, records nothing:
   subscription with `reason: replaced` and `replacedBySubscriptionId`.
   A cancellation recorded as a person's `billing.subscription_canceled`
   (deleting an organization, including when the webhook records it because
-  the request's own write failed) records no Stripe event as well.
+  the request's own write failed) records no Stripe event as well; one
+  Stripe made without the person's marker, as in the Billing Portal while a
+  deletion was being retried, is recorded as Stripe's (cause
+  `stripe_cancellation`, the subscription).
   A redelivered Stripe event that now reads a newer state stores nothing,
   since its cause is already recorded; Stripe's own event for that change
   stores and records it.

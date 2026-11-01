@@ -469,6 +469,34 @@ describe("subscription cancellation activity", () => {
     );
   });
 
+  it("records Stripe's cancellation when a deletion retry finds one made elsewhere", async () => {
+    const fixture = paidFixture();
+    const provider = stripe();
+    provider.state.fail.push(503);
+    await withFetch(
+      provider.routes,
+      async ({ requests }) => {
+        await expect(cancel(fixture)).rejects.toThrow("Stripe answered 503");
+        // Someone cancels in the Billing Portal, then the deletion is retried
+        // before Stripe's webhook arrives.
+        provider.state.status = "canceled";
+        provider.state.comment = "Too expensive";
+        await cancel(fixture, secondDeleter);
+        expect(
+          requests.filter(({ method }) => method === "DELETE"),
+        ).toHaveLength(1);
+        expect(canceledEvents(fixture)).toEqual([]);
+        expect(stripeChanges(fixture)).toEqual([
+          { actor_source: "stripe", status: "canceled" },
+        ]);
+        // The webhook that follows records nothing more.
+        expect((await sendWebhook(fixture, provider.event())).status).toBe(200);
+        expect(stripeChanges(fixture)).toHaveLength(1);
+      },
+      { captureErrors: true },
+    );
+  });
+
   it("credits nobody for a cancellation made elsewhere while an intent waits", async () => {
     const fixture = paidFixture();
     const provider = stripe();
