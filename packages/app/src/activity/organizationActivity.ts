@@ -46,7 +46,7 @@ export function organizationActivitySummary(event: ActivityEvent) {
     case "organization.updated":
       return changes(details.changes).join(" · ") || "No changes";
     case "organization.deletion_requested":
-      return `${viaLabel(details.via)} · Pending invitations canceled: ${textValue(details.canceledInvitations) || "0"}`;
+      return `${viaLabel(details.via)} · Pending invitations canceled: ${textValue(details.canceledInvitations) || "0"}${canceledSubscriptions(details.canceledSubscriptionIds)}`;
     case "organization.purged":
       return purgeSummary(event);
     case "organization.audit_runs_purged":
@@ -107,6 +107,13 @@ export function apiKeyRevocationReason(reason: unknown) {
   return typeof reason === "string"
     ? apiKeyRevocationReasons[reason]
     : undefined;
+}
+
+/** Deletions recorded before subscriptions were named have none. */
+function canceledSubscriptions(ids: unknown) {
+  return Array.isArray(ids) && ids.length > 0
+    ? " · Pro subscription canceled"
+    : "";
 }
 
 function viaLabel(via: unknown) {

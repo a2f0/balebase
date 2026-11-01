@@ -43,11 +43,16 @@ let container: HTMLElement;
 let opened: PlaidConfig[];
 let requests: string[];
 let diagnostics: unknown[];
+/** Statuses the next login-repair reports answer with; 204 once empty. */
+let repairAnswers: number[];
+let repairBodies: unknown[];
 
 beforeEach(() => {
   opened = [];
   requests = [];
   diagnostics = [];
+  repairAnswers = [];
+  repairBodies = [];
   dom.localStorage.clear();
   dom.history.replaceState(null, "", "/finance/connections");
   Object.assign(dom, {
@@ -74,6 +79,13 @@ beforeEach(() => {
       });
     if (url.pathname === "/api/finance/exchange")
       return Response.json({ connectionId: "new" }, { status: 201 });
+    if (url.pathname.endsWith("/login-repairs")) {
+      repairBodies.push(JSON.parse(String(init?.body)));
+      const status = repairAnswers.shift() ?? 204;
+      return status === 204
+        ? new Response(null, { status })
+        : Response.json({ error: "Unavailable" }, { status });
+    }
     if (url.pathname.endsWith("/sync-jobs"))
       return Response.json(
         {
@@ -197,14 +209,71 @@ describe("Plaid Link", () => {
     await click("Update login");
     expect(opened.map(({ token }) => token)).toEqual(["link-update"]);
     await succeed(opened[0]);
+    // The repair is recorded before the sync that confirms it.
     expect(requests).toEqual([
       "POST /api/finance/connections/axos/link-token",
+      "POST /api/finance/connections/axos/login-repairs",
       "POST /api/finance/connections/axos/sync-jobs",
     ]);
     expect(diagnostics).toMatchObject([
       { mode: "update", oauthResume: false, outcome: "success" },
     ]);
     expect(dom.localStorage.length).toBe(0);
+  });
+
+  it("keeps a repair report that fails and retries it on the next visit", async () => {
+    repairAnswers.push(503);
+    await mountConnections();
+    await click("Update login");
+    await succeed(opened[0]);
+    // The sync still starts; the report waits in storage.
+    expect(requests).toEqual([
+      "POST /api/finance/connections/axos/link-token",
+      "POST /api/finance/connections/axos/login-repairs",
+      "POST /api/finance/connections/axos/sync-jobs",
+    ]);
+    expect(repairBodies).toEqual([{ linkToken: "link-update" }]);
+    expect(container.textContent).toContain(
+      "its history could not be saved yet",
+    );
+    expect(
+      JSON.parse(
+        dom.localStorage.getItem("balebase.plaid.pendingRepairs") ?? "[]",
+      ),
+    ).toMatchObject([{ connectionId: "axos", linkToken: "link-update" }]);
+    requests = [];
+    await mountConnections();
+    expect(requests).toEqual([
+      "POST /api/finance/connections/axos/login-repairs",
+    ]);
+    expect(
+      dom.localStorage.getItem("balebase.plaid.pendingRepairs"),
+    ).toBeNull();
+    // A report another account or organization made is kept for when it
+    // signs back in, until its Link session would have expired.
+    const pending = (createdAt: number) =>
+      dom.localStorage.setItem(
+        "balebase.plaid.pendingRepairs",
+        JSON.stringify([
+          { connectionId: "axos", createdAt, linkToken: "link-elsewhere" },
+        ]),
+      );
+    pending(Date.now());
+    repairAnswers.push(404);
+    requests = [];
+    await mountConnections();
+    expect(requests).toEqual([
+      "POST /api/finance/connections/axos/login-repairs",
+    ]);
+    expect(
+      JSON.parse(
+        dom.localStorage.getItem("balebase.plaid.pendingRepairs") ?? "[]",
+      ),
+    ).toMatchObject([{ linkToken: "link-elsewhere" }]);
+    pending(Date.now() - 5 * 60 * 60 * 1_000);
+    requests = [];
+    await mountConnections();
+    expect(requests).toEqual([]);
   });
 
   it("keeps a new connection when another tab starts an update meanwhile", async () => {
@@ -250,7 +319,10 @@ describe("Plaid Link", () => {
     expect(opened.map(({ token }) => token)).toEqual(["link-update"]);
     expect(opened[0]?.receivedRedirectUri).toContain("oauth_state_id=state");
     await succeed(opened[0]);
-    expect(requests).toEqual(["POST /api/finance/connections/axos/sync-jobs"]);
+    expect(requests).toEqual([
+      "POST /api/finance/connections/axos/login-repairs",
+      "POST /api/finance/connections/axos/sync-jobs",
+    ]);
     expect(diagnostics).toMatchObject([
       { connectionId: "axos", oauthResume: true, outcome: "success" },
     ]);

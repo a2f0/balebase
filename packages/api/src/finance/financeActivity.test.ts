@@ -165,6 +165,184 @@ describe("bank connection activity", () => {
   });
 });
 
+describe("login repair activity", () => {
+  /** The finance routes as another member, user-2. */
+  function otherMemberApp(fixture: Fixture) {
+    const app = new Hono<ApiTestEnv>();
+    app.use(
+      "*",
+      withTestSession({
+        email: "other@example.com",
+        name: "Other Person",
+        organizationId: "org_user-1",
+        userId: "user-2",
+      }),
+    );
+    app.route("/api/finance", createFinanceRouter(fixture.requestPlaid));
+    return app;
+  }
+
+  async function brokenConnection(fixture: Fixture, app = fixture.app) {
+    const { body } = await exchange(fixture, app);
+    fixture.database
+      .query(
+        `UPDATE plaid_items SET status = 'error',
+           error_code = 'ITEM_LOGIN_REQUIRED', error_message = 'Log in again'
+         WHERE id = ?`,
+      )
+      .run(body.connectionId);
+    const id = body.connectionId;
+    const openLink = async (linkApp = app) =>
+      (
+        await jsonRequest<{ linkToken: string }>(
+          linkApp,
+          fixture.bindings,
+          `/connections/${id}/link-token`,
+          "POST",
+        )
+      ).body.linkToken;
+    const repair = (linkToken: string, repairApp = app, connectionId = id) =>
+      jsonRequest(
+        repairApp,
+        fixture.bindings,
+        `/connections/${connectionId}/login-repairs`,
+        "POST",
+        { linkToken },
+      );
+    return { id, openLink, repair };
+  }
+
+  it("records who repaired a login and what was wrong, once per Link session", async () => {
+    const fixture = await createFixture();
+    const { id, openLink, repair } = await brokenConnection(fixture);
+    const linkToken = await openLink();
+    expect((await repair(linkToken)).status).toBe(204);
+    const recorded = events(fixture, "finance.connection_repaired");
+    expect(recorded).toEqual([
+      {
+        action: "finance.connection_repaired",
+        actor_api_key_channel: null,
+        actor_api_key_id: null,
+        actor_user_id: "user-1",
+        details: {
+          errorCodeBefore: "ITEM_LOGIN_REQUIRED",
+          institutionName: "First Bank",
+          statusBefore: "error",
+        },
+        root_id: id,
+        root_label: "First Bank",
+        root_type: "finance_connection",
+      },
+    ]);
+    for (const secret of ["item-sandbox", "access-sandbox", linkToken])
+      expect(JSON.stringify(recorded)).not.toContain(secret);
+    // The session is used up: replaying the report records nothing.
+    expect((await repair(linkToken)).status).toBe(404);
+    expect(events(fixture, "finance.connection_repaired")).toHaveLength(1);
+    expect(
+      fixture.database
+        .query("SELECT COUNT(*) AS count FROM finance_login_repair_sessions")
+        .get(),
+    ).toEqual({ count: 0 });
+    // Finance history only.
+    const visible = (includeFinance: boolean) =>
+      findActivity(
+        fixture.bindings.DB,
+        "org_user-1",
+        undefined,
+        undefined,
+        includeFinance,
+        "finance_connection",
+      );
+    expect((await visible(false))?.events).toEqual([]);
+    expect((await visible(true))?.events).toMatchObject([
+      { action: "finance.connection_repaired" },
+      { action: "finance.connection_created" },
+    ]);
+  });
+
+  it("records the state from when Link opened, even after the sync cleared it", async () => {
+    const fixture = await createFixture();
+    const { id, openLink, repair } = await brokenConnection(fixture);
+    const linkToken = await openLink();
+    // The sync that follows the repair succeeds before the report arrives.
+    fixture.database
+      .query(
+        "UPDATE plaid_items SET status = 'active', error_code = NULL, error_message = NULL WHERE id = ?",
+      )
+      .run(id);
+    expect((await repair(linkToken)).status).toBe(204);
+    expect(events(fixture, "finance.connection_repaired")).toMatchObject([
+      {
+        details: {
+          errorCodeBefore: "ITEM_LOGIN_REQUIRED",
+          statusBefore: "error",
+        },
+      },
+    ]);
+  });
+
+  it("attributes a key-made repair to the key", async () => {
+    const fixture = await createFixture();
+    const app = apiKeyApp(fixture, fixture.requestPlaid);
+    const { openLink, repair } = await brokenConnection(fixture, app);
+    expect((await repair(await openLink())).status).toBe(204);
+    expect(events(fixture, "finance.connection_repaired")).toMatchObject([
+      { actor_api_key_channel: "mcp", actor_api_key_id: "key-1" },
+    ]);
+  });
+
+  it("refuses reports without the reporter's own open Link session for that bank", async () => {
+    const fixture = await createFixture();
+    const { openLink, repair } = await brokenConnection(fixture);
+    const other = await exchange(fixture, fixture.app, {
+      institutionId: "ins_2",
+      institutionName: "Second Bank",
+    });
+    // No session opened yet, or a made-up token.
+    expect((await repair("link-sandbox-test")).status).toBe(404);
+    const linkToken = await openLink();
+    expect((await repair("link-made-up")).status).toBe(404);
+    // Another member, another organization, or another bank.
+    expect((await repair(linkToken, otherMemberApp(fixture))).status).toBe(404);
+    expect(
+      (await repair(linkToken, testApp("organization-2", fixture.requestPlaid)))
+        .status,
+    ).toBe(404);
+    expect(
+      (await repair(linkToken, fixture.app, other.body.connectionId)).status,
+    ).toBe(404);
+    // An expired session.
+    fixture.database.run(
+      "UPDATE finance_login_repair_sessions SET expires_at = '2000-01-01T00:00:00.000Z'",
+    );
+    expect((await repair(linkToken)).status).toBe(404);
+    expect((await repair("")).status).toBe(400);
+    expect(events(fixture, "finance.connection_repaired")).toEqual([]);
+  });
+
+  it("keeps the session when recording fails, and records nothing once disconnected", async () => {
+    const fixture = await createFixture();
+    const { id, openLink, repair } = await brokenConnection(fixture);
+    const linkToken = await openLink();
+    failActivity(fixture, "finance.connection_repaired");
+    expect((await repair(linkToken)).status).toBe(500);
+    expect(events(fixture, "finance.connection_repaired")).toEqual([]);
+    fixture.database.run("DROP TRIGGER fail_activity");
+    // The failed report left its session, so the app's retry records it.
+    expect((await repair(linkToken)).status).toBe(204);
+    const next = await openLink();
+    await jsonRequest(
+      fixture.app,
+      fixture.bindings,
+      `/connections/${id}`,
+      "DELETE",
+    );
+    expect((await repair(next)).status).toBe(404);
+    expect(events(fixture, "finance.connection_repaired")).toHaveLength(1);
+  });
+});
+
 describe("connection data deletion activity", () => {
   async function disconnectedConnection(fixture: Fixture, app = fixture.app) {
     const { body } = await exchange(fixture, app);
@@ -210,7 +388,10 @@ describe("connection data deletion activity", () => {
         details: {
           accountCount: 1,
           annotationCount: 1,
+          emailLinkCount: 0,
           institutionName: "First Bank",
+          issueCount: 0,
+          openIssueCount: 0,
           transactionCount: 1,
         },
         root_id: id,
@@ -244,6 +425,72 @@ describe("connection data deletion activity", () => {
     // Purging the organization removes the record with the rest.
     fixture.database.run("DELETE FROM organization WHERE id = 'org_user-1'");
     expect(events(fixture, "finance.connection_data_deleted")).toEqual([]);
+  });
+
+  it("counts the issues and email links the deletion removes", async () => {
+    const fixture = await createFixture();
+    const { id, remove } = await disconnectedConnection(fixture);
+    const other = await exchange(fixture, fixture.app, {
+      institutionId: "ins_2",
+      institutionName: "Second Bank",
+    });
+    await jsonRequest(
+      fixture.app,
+      fixture.bindings,
+      `/connections/${other.body.connectionId}/sync`,
+      "POST",
+    );
+    const transactionOf = (connectionId: string) =>
+      fixture.database
+        .query<{ id: string }, [string]>(
+          "SELECT id FROM plaid_transactions WHERE plaid_item_record_id = ? LIMIT 1",
+        )
+        .get(connectionId)?.id ?? "";
+    const deleted = transactionOf(id);
+    const kept = transactionOf(other.body.connectionId);
+    const now = "2026-08-19T12:00:00.000Z";
+    for (const [issueId, target, status] of [
+      ["issue-open", deleted, "open"],
+      ["issue-resolved", deleted, "resolved"],
+      ["issue-kept", kept, "open"],
+    ] as [string, string, string][])
+      fixture.database
+        .query(
+          `INSERT INTO issues (id, organization_id, target_type, target_id,
+             title, status, created_by, created_at, updated_at)
+           VALUES (?, 'org_user-1', 'finance_transaction', ?, 'Receipt', ?,
+                   'user-1', ?, ?)`,
+        )
+        .run(issueId, target, status, now, now);
+    fixture.database.run(`INSERT INTO inbound_emails
+      (id, organization_id, envelope_from, envelope_to, raw_object_key,
+       raw_size, received_at)
+      VALUES ('email-1', 'org_user-1', 'a@example.com', 'b@example.com',
+              'raw/email-1', 1, '${now}')`);
+    for (const [linkId, target] of [
+      ["link-deleted", deleted],
+      ["link-kept", kept],
+    ] as [string, string][])
+      fixture.database
+        .query(
+          `INSERT INTO inbound_email_links
+             (id, organization_id, email_id, target_type, target_id,
+              created_at)
+           VALUES (?, 'org_user-1', 'email-1', 'finance_transaction', ?, ?)`,
+        )
+        .run(linkId, target, now);
+    expect((await remove()).status).toBe(204);
+    expect(
+      events(fixture, "finance.connection_data_deleted")[0]?.details,
+    ).toMatchObject({ emailLinkCount: 1, issueCount: 2, openIssueCount: 1 });
+    // The triggers removed exactly what the event counts.
+    expect(
+      fixture.database
+        .query(
+          "SELECT (SELECT group_concat(id) FROM issues) AS issues, (SELECT group_concat(id) FROM inbound_email_links) AS links",
+        )
+        .get(),
+    ).toEqual({ issues: "issue-kept", links: "link-kept" });
   });
 
   it("attributes a key-made deletion to the key", async () => {

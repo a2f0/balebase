@@ -31,6 +31,11 @@ interface StripeSeatItemResponse {
 export interface StripeSubscription {
   cancel_at?: number | null;
   cancel_at_period_end?: boolean;
+  /** When a canceled subscription ended, in Unix seconds. */
+  canceled_at?: number;
+  /** The comment given with a cancellation, such as the deleting request's
+   * marker. */
+  cancellation_details?: { comment: string | null };
   current_period_end?: number;
   customer: StripeExpandable;
   id: string;
@@ -53,8 +58,11 @@ export interface StripeEvent {
 interface StripePayloadRecord extends Record<string, unknown> {
   cancel_at?: unknown;
   cancel_at_period_end?: unknown;
+  canceled_at?: unknown;
+  cancellation_details?: unknown;
   client_reference_id?: unknown;
   client_secret?: unknown;
+  comment?: unknown;
   current_period_end?: unknown;
   customer?: unknown;
   data?: unknown;
@@ -177,9 +185,30 @@ export function parseStripeSubscription(value: unknown): StripeSubscription {
     "Subscription period end",
   );
   if (periodEnd !== undefined) subscription.current_period_end = periodEnd;
+  const canceledAt =
+    record.canceled_at === null
+      ? undefined
+      : stripeOptionalInteger(record.canceled_at, "Subscription canceled at");
+  if (canceledAt !== undefined) subscription.canceled_at = canceledAt;
+  const cancellationComment = stripeCancellationComment(
+    record.cancellation_details,
+  );
+  if (cancellationComment !== undefined) {
+    subscription.cancellation_details = { comment: cancellationComment };
+  }
   const metadata = stripeOptionalMetadata(record.metadata);
   if (metadata) subscription.metadata = metadata;
   return subscription;
+}
+
+function stripeCancellationComment(value: unknown) {
+  if (value === undefined || value === null) return undefined;
+  const details = stripeRecord(value, "Subscription cancellation details");
+  if (details.comment === "") return null;
+  return stripeOptionalNullableString(
+    details.comment,
+    "Subscription cancellation comment",
+  );
 }
 
 function parseStripeSubscriptionItem(value: unknown): StripeSubscriptionItem {
@@ -225,6 +254,7 @@ export function parseStripeSeatItemResponse(
 export function parseStripePortalSession(value: unknown) {
   const record = stripeRecord(value, "Billing Portal session");
   return {
+    id: stripeString(record.id, "Billing Portal session ID", "bps_"),
     url: stripeString(record.url, "Billing Portal URL", "https://"),
   };
 }

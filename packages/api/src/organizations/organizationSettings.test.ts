@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { describe, expect, it, setSystemTime } from "bun:test";
+import { echoCancellation } from "../testing/billingFixture";
 import { testBindings } from "../testing/bindings";
 import { toD1 } from "../testing/d1";
 import { createTestDatabase } from "../testing/database";
@@ -49,7 +50,11 @@ describe("organization deletion", () => {
       {
         action: "organization.deletion_requested",
         actor_user_id: "owner-user",
-        details: { canceledInvitations: 1, via: "owner" },
+        details: {
+          canceledInvitations: 1,
+          canceledSubscriptionIds: [],
+          via: "owner",
+        },
         occurred_at: body.deletedAt,
         root_label: expect.any(String),
       },
@@ -146,8 +151,8 @@ describe("organization deletion", () => {
     insertPaidBilling(fixture.database, targetOrganizationId);
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": () =>
-          Response.json(canceledSubscription(targetOrganizationId)),
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_test?*":
+          echoCancellation(canceledSubscription(targetOrganizationId)),
       },
       async ({ requests }) => {
         const response = await fixture
@@ -157,7 +162,9 @@ describe("organization deletion", () => {
         expect(requests.map(({ method, url }) => ({ method, url }))).toEqual([
           {
             method: "DELETE",
-            url: "https://api.stripe.com/v1/subscriptions/sub_test",
+            url: expect.stringMatching(
+              /^https:\/\/api\.stripe\.com\/v1\/subscriptions\/sub_test\?cancellation_details/,
+            ),
           },
         ]);
         expect(
@@ -232,8 +239,8 @@ describe("organization deletion", () => {
               status: "complete",
               subscription: "sub_pending",
             }),
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_pending": () =>
-          Response.json(
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_pending?*":
+          echoCancellation(
             canceledSubscription(targetOrganizationId, "sub_pending"),
           ),
       },
@@ -249,7 +256,9 @@ describe("organization deletion", () => {
           },
           {
             method: "DELETE",
-            url: "https://api.stripe.com/v1/subscriptions/sub_pending",
+            url: expect.stringMatching(
+              /^https:\/\/api\.stripe\.com\/v1\/subscriptions\/sub_pending\?cancellation_details/,
+            ),
           },
         ]);
         expect(
@@ -263,6 +272,37 @@ describe("organization deletion", () => {
           stripe_status: "canceled",
           stripe_subscription_id: "sub_pending",
         });
+        // The owner is named; the subscription was pending, so it had no
+        // stored status.
+        expect(
+          fixture.database
+            .query(
+              `SELECT actor_user_id, details FROM activity_events
+               WHERE action = 'billing.subscription_canceled'`,
+            )
+            .all()
+            .map((row) => {
+              const { actor_user_id, details } = row as {
+                actor_user_id: string;
+                details: string;
+              };
+              return { actor_user_id, details: JSON.parse(details) as unknown };
+            }),
+        ).toEqual([
+          {
+            actor_user_id: "owner-user",
+            details: {
+              previousStatus: null,
+              reason: "organization_deletion",
+              seatQuantity: 2,
+              subscriptionId: "sub_pending",
+              via: "owner",
+            },
+          },
+        ]);
+        expect(lifecycleEvents(fixture.database)).toMatchObject([
+          { details: { canceledSubscriptionIds: ["sub_pending"] } },
+        ]);
       },
     );
   });
@@ -272,7 +312,7 @@ describe("organization deletion", () => {
     insertPaidBilling(fixture.database, targetOrganizationId);
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": () =>
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_test?*": () =>
           Response.json(
             { error: { message: "Stripe unavailable" } },
             { status: 503 },
@@ -314,8 +354,8 @@ describe("organization deletion", () => {
     );
     await withFetch(
       {
-        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": () =>
-          Response.json(canceledSubscription(targetOrganizationId)),
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_test?*":
+          echoCancellation(canceledSubscription(targetOrganizationId)),
       },
       async () => {
         const response = await fixture
