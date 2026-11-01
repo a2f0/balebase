@@ -234,9 +234,30 @@ describe("activity feed, mounted", () => {
     respond(async () =>
       Response.json({
         events: [
+          record(
+            8,
+            "contract_template.version_saved",
+            { id: "t2", label: "Offer letter", type: "contract_template" },
+            {
+              fieldCount: 5,
+              name: "Offer letter",
+              previousName: "Offer",
+              roleCount: 2,
+              sourceVersion: 1,
+              version: 2,
+            },
+          ),
+          record(
+            7,
+            "contract_template.created",
+            { id: "t2", label: "Offer", type: "contract_template" },
+            { name: "Offer", pageCount: 2, version: 1 },
+          ),
           record(6, "contract.deleted", contract, {
+            declinedAt: "2026-10-30T12:00:00.000Z",
+            signedCount: 1,
             signerCount: 2,
-            status: "completed",
+            status: "declined",
             templateName: null,
           }),
           record(5, "contract.voided", contract, {
@@ -281,6 +302,8 @@ describe("activity feed, mounted", () => {
         (heading) => heading.textContent,
       ),
     ).toEqual([
+      "Sam via Assistant (MCP) saved a contract template version · Offer letter",
+      "Sam via Assistant (MCP) uploaded a contract template · Offer",
       "Sam via Assistant (MCP) deleted a contract · Lease",
       "Sam via Assistant (MCP) voided a contract · Lease",
       "Sam via Assistant (MCP) sent a contract for signature · Lease",
@@ -293,7 +316,9 @@ describe("activity feed, mounted", () => {
         (summary) => summary.textContent,
       ),
     ).toEqual([
-      "Was Completed · 2 signers",
+      "Version 2 from v1 · Renamed from Offer · 2 roles · 5 fields",
+      "Version 1 · 2 pages",
+      "Was Declined · 1 of 2 signers signed",
       "1 of 2 signers signed · Reason: Wrong rate",
       "2 signers · In order · Due 2026-11-01",
       "Version 3 · 3 versions removed",
@@ -306,6 +331,8 @@ describe("activity feed, mounted", () => {
         link.getAttribute("aria-label"),
       ),
     ).toEqual([
+      "Open template: Offer letter",
+      "Open template: Offer",
       "Open contract: Lease",
       "Open contract: Lease",
       "Open request: W-4 · Bob",

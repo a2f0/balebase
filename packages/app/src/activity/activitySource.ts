@@ -10,6 +10,8 @@ export type ActivitySource =
         | "audit_run"
         | "audit_template"
         | "business"
+        | "contract_template"
+        | "employee_requirement"
         | "equipment"
         | "issue"
         | "project"
@@ -45,6 +47,10 @@ export function listActivity(
       return api.audits.templateActivity(id, cursor);
     case "business":
       return api.businesses.activity(id, cursor);
+    case "contract_template":
+      return api.contractTemplates.activity(id, cursor);
+    case "employee_requirement":
+      return api.employeeForms.activity(id, cursor);
     case "equipment":
       return api.equipment.activity(id, cursor);
     case "finance_connection":

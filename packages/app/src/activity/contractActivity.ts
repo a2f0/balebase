@@ -55,10 +55,25 @@ export function contractActivitySummary({ action, details }: ActivityEvent) {
     case "contract.deleted":
       return [
         `Was ${label(contractStatuses, details.status)}`,
-        count(details.signerCount, "signer", "signers"),
+        typeof details.signedCount === "number"
+          ? `${details.signedCount} of ${count(details.signerCount, "signer", "signers")} signed`
+          : count(details.signerCount, "signer", "signers"),
         details.templateName
           ? `From ${textValue(details.templateName)} · v${textValue(details.templateVersion)}`
           : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    case "contract_template.created":
+      return `Version 1 · ${count(details.pageCount, "page", "pages")}`;
+    case "contract_template.version_saved":
+      return [
+        `Version ${textValue(details.version)} from v${textValue(details.sourceVersion)}`,
+        details.previousName && details.previousName !== details.name
+          ? `Renamed from ${textValue(details.previousName)}`
+          : "",
+        count(details.roleCount, "role", "roles"),
+        count(details.fieldCount, "field", "fields"),
       ]
         .filter(Boolean)
         .join(" · ");

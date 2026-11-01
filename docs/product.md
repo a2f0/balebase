@@ -413,11 +413,12 @@ re-emails signers who have not signed once the interval has passed since their
 last email, and **Send reminder** emails them immediately, at most once an
 hour. A sent contract can be voided, which invalidates its signing links;
 drafts, completed, declined, and voided contracts can be deleted. Creating,
-sending, voiding, and deleting a contract, and deleting a template, appear in
-Activity, which keeps a deleted contract's status, document hashes, and signer
-count; a contract's own history names the API key and channel behind changes
-made through a key. Migration `0084_attribute_contract_events.sql` adds that
-key attribution.
+sending, voiding, and deleting a contract, and uploading, saving a version
+of, and deleting a template, appear in Activity, which keeps a deleted
+contract's status, document hashes, and signer, signed, and decline details;
+a template's page lists its own history, and a contract's own history
+names the API key and channel behind changes made through a key. Migration
+`0084_attribute_contract_events.sql` adds that key attribution.
 
 Contract templates at `/contracts/templates` keep a PDF and placed fields
 without assigning actual people. Fields belong to named signer roles such as
@@ -816,10 +817,11 @@ My documents (`/me/requests/<request>`) it shows the person what was asked,
 its status, due date, and work location, what happens next, and their
 controls (start the background check, upload, download). A manager's page
 (`/organization/requests/<request>`) adds who it's for, the Checkr stage,
-report status and result, a next step for the current stage, and the same
-controls as the People list. When Checkr isn't configured, both pages say so:
-the manager runs the check outside Balebase and sets its status by hand, and
-the person sees that there is nothing for them to do.
+report status and result, a next step for the current stage, the same
+controls as the People list, and the request's own history. When Checkr
+isn't configured, both pages say so: the manager runs the check outside
+Balebase and sets its status by hand, and the person sees that there is
+nothing for them to do.
 
 Background checks use Checkr's self-hosted flow. A manager requests a check
 with the person's US work state and optional city, and Balebase emails the

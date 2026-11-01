@@ -507,7 +507,12 @@ contracts.delete("/:id", async (context) => {
           sql: `json_object('status', status,
             'documentSha256', document_sha256, 'finalSha256', final_sha256,
             'signerCount', ${contractSignerCount},
+            'signedCount', (SELECT COUNT(*) FROM contract_recipients
+              WHERE contract_recipients.contract_id = contracts.id
+                AND contract_recipients.status = 'signed'),
             'sentAt', sent_at, 'completedAt', completed_at,
+            'declinedAt', (SELECT MAX(declined_at) FROM contract_recipients
+              WHERE contract_recipients.contract_id = contracts.id),
             'voidedAt', voided_at,
             'templateName', template_name,
             'templateVersion', template_version)`,
