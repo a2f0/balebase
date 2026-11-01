@@ -770,7 +770,9 @@ and its status and error code before, then starts the sync. Plaid tells only
 the browser, so this is the app's report: it must name, by its link token, an
 update session the same person opened for that connection in the last four
 hours, and each session is accepted once (`finance_login_repair_sessions`
-keeps the token's hash). An abandoned Link session records nothing. Prefer it
+keeps the token's hash). A report the API cannot be reached for stays in the
+browser and is retried on the next visit. An abandoned Link session records
+nothing. Prefer it
 over disconnecting and reconnecting, which creates a new Item and relies on
 matching to carry history over.
 

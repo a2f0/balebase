@@ -48,6 +48,10 @@ import {
 } from "./financeConnectionActions";
 import { selectFinanceAccount } from "./financeTransactions";
 import {
+  reportLoginRepair,
+  retryPendingLoginRepairs,
+} from "./loginRepairReports";
+import {
   linkDiagnostics,
   linkErrorMessage,
   type PlaidLinkSession,
@@ -528,14 +532,20 @@ function usePlaidConnect(
               name: metadata.institution?.name ?? null,
             })
           ).connectionId;
-        clearOAuthState();
         // The Link session's token shows this report follows the update
-        // session the API opened; it is accepted once.
-        if (repairing)
-          await api.finance.reportPlaidLoginRepair(repairing, linkToken);
+        // session the API opened; it is accepted once. It is kept to retry
+        // before the OAuth state goes, so a failure cannot lose it.
+        const recorded = repairing
+          ? await reportLoginRepair(repairing, linkToken)
+          : true;
+        clearOAuthState();
         const result = await api.finance.startSync(connectionId);
         await load();
         setNotice(syncNotice(result));
+        if (!recorded)
+          setError(
+            "The login was repaired, but its history could not be saved yet. It will be retried.",
+          );
       } catch (cause) {
         setError(errorMessage(cause, "Could not update finances."));
         await load();
@@ -546,6 +556,9 @@ function usePlaidConnect(
     [load, setError, setNotice],
   );
   useOAuthResume(complete, resumedOAuth, setBusy, setError);
+  useEffect(() => {
+    void retryPendingLoginRepairs();
+  }, []);
 
   const start = async (
     linkToken: () => Promise<{ linkToken: string }>,

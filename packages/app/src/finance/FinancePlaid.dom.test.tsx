@@ -43,11 +43,16 @@ let container: HTMLElement;
 let opened: PlaidConfig[];
 let requests: string[];
 let diagnostics: unknown[];
+/** Statuses the next login-repair reports answer with; 204 once empty. */
+let repairAnswers: number[];
+let repairBodies: unknown[];
 
 beforeEach(() => {
   opened = [];
   requests = [];
   diagnostics = [];
+  repairAnswers = [];
+  repairBodies = [];
   dom.localStorage.clear();
   dom.history.replaceState(null, "", "/finance/connections");
   Object.assign(dom, {
@@ -74,8 +79,13 @@ beforeEach(() => {
       });
     if (url.pathname === "/api/finance/exchange")
       return Response.json({ connectionId: "new" }, { status: 201 });
-    if (url.pathname.endsWith("/login-repairs"))
-      return new Response(null, { status: 204 });
+    if (url.pathname.endsWith("/login-repairs")) {
+      repairBodies.push(JSON.parse(String(init?.body)));
+      const status = repairAnswers.shift() ?? 204;
+      return status === 204
+        ? new Response(null, { status })
+        : Response.json({ error: "Unavailable" }, { status });
+    }
     if (url.pathname.endsWith("/sync-jobs"))
       return Response.json(
         {
@@ -209,6 +219,50 @@ describe("Plaid Link", () => {
       { mode: "update", oauthResume: false, outcome: "success" },
     ]);
     expect(dom.localStorage.length).toBe(0);
+  });
+
+  it("keeps a repair report that fails and retries it on the next visit", async () => {
+    repairAnswers.push(503);
+    await mountConnections();
+    await click("Update login");
+    await succeed(opened[0]);
+    // The sync still starts; the report waits in storage.
+    expect(requests).toEqual([
+      "POST /api/finance/connections/axos/link-token",
+      "POST /api/finance/connections/axos/login-repairs",
+      "POST /api/finance/connections/axos/sync-jobs",
+    ]);
+    expect(repairBodies).toEqual([{ linkToken: "link-update" }]);
+    expect(container.textContent).toContain(
+      "its history could not be saved yet",
+    );
+    expect(
+      JSON.parse(
+        dom.localStorage.getItem("balebase.plaid.pendingRepairs") ?? "[]",
+      ),
+    ).toEqual([{ connectionId: "axos", linkToken: "link-update" }]);
+    requests = [];
+    await mountConnections();
+    expect(requests).toEqual([
+      "POST /api/finance/connections/axos/login-repairs",
+    ]);
+    expect(
+      dom.localStorage.getItem("balebase.plaid.pendingRepairs"),
+    ).toBeNull();
+    // A refused report is dropped rather than retried forever.
+    dom.localStorage.setItem(
+      "balebase.plaid.pendingRepairs",
+      JSON.stringify([{ connectionId: "axos", linkToken: "link-old" }]),
+    );
+    repairAnswers.push(404);
+    requests = [];
+    await mountConnections();
+    expect(requests).toEqual([
+      "POST /api/finance/connections/axos/login-repairs",
+    ]);
+    expect(
+      dom.localStorage.getItem("balebase.plaid.pendingRepairs"),
+    ).toBeNull();
   });
 
   it("keeps a new connection when another tab starts an update meanwhile", async () => {
