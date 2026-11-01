@@ -7,6 +7,8 @@ import {
   type SentEmail,
   samplePdf,
   signers,
+  type Template,
+  templateVersion,
   timestamp,
   uploadTemplate,
 } from "../testing/contractFixture";
@@ -148,7 +150,9 @@ describe("contract activity", () => {
       completedAt: expect.any(String),
       documentSha256: before.body.contract.document.sha256,
       finalSha256: before.body.contract.finalSha256,
+      declinedAt: null,
       sentAt: expect.any(String),
+      signedCount: 1,
       signerCount: 1,
       status: "completed",
       templateName: null,
@@ -446,7 +450,10 @@ describe("contract activity", () => {
         )
       ).status,
     ).toBe(404);
-    expect(contractActivity(fixture)).toEqual([]);
+    const created = contractActivity(fixture);
+    expect(created.map(({ action }) => action)).toEqual([
+      "contract_template.created",
+    ]);
 
     failInserts(fixture, "activity_events", "1 = 1");
     expect(
@@ -462,7 +469,7 @@ describe("contract activity", () => {
       (await agent.json("DELETE", `/api/contracts/templates/${template.id}`))
         .status,
     ).toBe(404);
-    const events = contractActivity(fixture);
+    const events = contractActivity(fixture).slice(created.length);
     expect(events).toMatchObject([
       {
         action: "contract_template.deleted",
@@ -478,5 +485,326 @@ describe("contract activity", () => {
       version: 1,
       versionCount: 1,
     });
+  });
+  it("records a template's upload and each saved version, once each", async () => {
+    const fixture = createFixture();
+    seedKey(fixture);
+    const agent = fixture.as("owner-user", "org-1", viaKey);
+    const elsewhere = fixture.as("other-user", "org-2");
+    const uploadAs = async (client: typeof agent) => {
+      const form = new FormData();
+      form.set("file", new File([await samplePdf()], "Offer letter.pdf"));
+      return client.request("/api/contracts/templates", {
+        body: form,
+        method: "POST",
+      });
+    };
+
+    // A failed event takes the upload with it.
+    failInserts(
+      fixture,
+      "activity_events",
+      "NEW.action = 'contract_template.created'",
+    );
+    expect((await uploadAs(agent)).status).toBe(500);
+    fixture.database.exec("DROP TRIGGER fail_audit");
+    expect(
+      fixture.database
+        .query("SELECT COUNT(*) AS count FROM contract_templates")
+        .get(),
+    ).toEqual({ count: 0 });
+    expect(contractActivity(fixture)).toEqual([]);
+
+    const uploaded = await uploadAs(agent);
+    expect(uploaded.status).toBe(201);
+    const template = ((await uploaded.json()) as { template: Template })
+      .template;
+    const [created] = contractActivity(fixture);
+    expect(created).toMatchObject({
+      action: "contract_template.created",
+      actor_api_key_channel: "mcp",
+      actor_api_key_name: "Assistant",
+      actor_user_id: "owner-user",
+      organization_id: "org-1",
+      root_id: template.id,
+      root_label: "Offer letter",
+    });
+    expect(JSON.parse(created?.details ?? "{}")).toEqual({
+      documentSha256: template.document.sha256,
+      name: "Offer letter",
+      pageCount: 2,
+      version: 1,
+    });
+
+    const save = (client: typeof agent, body: unknown) =>
+      client.json<{ template: Template }>(
+        "POST",
+        `/api/contracts/templates/${template.id}/versions`,
+        body,
+      );
+    const version2 = templateVersion(template);
+    // Another organization's save, and a failed event, record nothing.
+    expect((await save(elsewhere, version2)).status).toBe(404);
+    failInserts(
+      fixture,
+      "activity_events",
+      "NEW.action = 'contract_template.version_saved'",
+    );
+    expect((await save(agent, version2)).status).toBe(500);
+    fixture.database.exec("DROP TRIGGER fail_audit");
+    const versions = () =>
+      fixture.database
+        .query(
+          `SELECT family.current_version AS current,
+                  (SELECT COUNT(*) FROM contract_template_versions
+                   WHERE template_id = family.id) AS count
+           FROM contract_templates AS family WHERE id = ?`,
+        )
+        .get(template.id);
+    expect(versions()).toEqual({ count: 1, current: 1 });
+    expect(contractActivity(fixture)).toHaveLength(1);
+
+    expect((await save(agent, version2)).status).toBe(201);
+    // A save on top of a stale version is refused and claims nothing.
+    expect((await save(fixture, version2)).status).toBe(409);
+    expect(versions()).toEqual({ count: 2, current: 2 });
+    const saved = contractActivity(fixture).slice(1);
+    expect(saved).toMatchObject([
+      {
+        action: "contract_template.version_saved",
+        actor_api_key_channel: "mcp",
+        actor_api_key_name: "Assistant",
+        actor_user_id: "owner-user",
+        root_id: template.id,
+        root_label: "Employment agreement",
+      },
+    ]);
+    expect(JSON.parse(saved[0]?.details ?? "{}")).toEqual({
+      documentSha256: template.document.sha256,
+      fieldCount: 5,
+      name: "Employment agreement",
+      previousName: "Offer letter",
+      roleCount: 2,
+      signingOrder: "sequential",
+      sourceVersion: 1,
+      version: 2,
+    });
+    // Field values and messages stay out of the shared history.
+    expect(saved[0]?.details).not.toContain("Please review");
+
+    // A session save names the person and no key.
+    expect(
+      (
+        await save(fixture, {
+          ...version2,
+          expectedCurrentVersion: 2,
+          sourceVersion: 1,
+        })
+      ).status,
+    ).toBe(201);
+    expect(contractActivity(fixture).at(-1)).toMatchObject({
+      action: "contract_template.version_saved",
+      actor_api_key_name: null,
+      actor_user_id: "owner-user",
+    });
+    expect(
+      JSON.parse(contractActivity(fixture).at(-1)?.details ?? "{}"),
+    ).toMatchObject({
+      previousName: "Employment agreement",
+      sourceVersion: 1,
+      version: 3,
+    });
+    expect(
+      fixture.database.query("SELECT * FROM activity_api_key_context").all(),
+    ).toEqual([]);
+  });
+
+  it("lists a template's own history to members while it exists", async () => {
+    const fixture = createFixture();
+    const template = await uploadTemplate(fixture);
+    const other = await uploadTemplate(fixture);
+    await fixture.json(
+      "POST",
+      `/api/contracts/templates/${template.id}/versions`,
+      templateVersion(template),
+    );
+    type Page = {
+      events: Array<{ action: string; root: { id: string } }>;
+      nextCursor: string | null;
+    };
+    const history = (
+      client: Pick<typeof fixture, "json">,
+      id: string,
+      query = "",
+    ) =>
+      client.json<Page>(
+        "GET",
+        `/api/contracts/templates/${id}/activity${query}`,
+      );
+    const member = fixture.as("other-user", "org-1");
+    for (const client of [fixture, member]) {
+      const page = await history(client, template.id);
+      expect(page.status).toBe(200);
+      expect(page.body.events.map(({ action }) => action)).toEqual([
+        "contract_template.version_saved",
+        "contract_template.created",
+      ]);
+      expect(page.body.nextCursor).toBeNull();
+    }
+    expect(
+      (await history(fixture, other.id)).body.events.map(({ root }) => root.id),
+    ).toEqual([other.id]);
+    expect(
+      (await history(fixture.as("other-user", "org-2"), template.id)).status,
+    ).toBe(404);
+    expect((await history(fixture, template.id, "?cursor=x")).status).toBe(400);
+
+    // Deleting it ends its page; the workspace feed keeps all of it.
+    await fixture.json("DELETE", `/api/contracts/templates/${template.id}`);
+    expect((await history(fixture, template.id)).status).toBe(404);
+    const feed = await fixture.json<Page>(
+      "GET",
+      "/api/activity?resourceType=contract_template",
+    );
+    expect(
+      feed.body.events
+        .filter(({ root }) => root.id === template.id)
+        .map(({ action }) => action),
+    ).toEqual([
+      "contract_template.deleted",
+      "contract_template.version_saved",
+      "contract_template.created",
+    ]);
+  });
+
+  it("keeps a declined contract's decline and signatures when it is deleted", async () => {
+    const fixture = createFixture();
+    const id = await fixture.prepare(
+      draft({ fields: draft().fields.filter(({ type }) => type !== "text") }),
+    );
+    await fixture.json("POST", `/api/contracts/${id}/send`);
+    const [samToken, caiToken] = fixture.emails.map(tokenFrom);
+    expect(
+      (
+        await fixture.json("POST", `/api/signing/${samToken}/sign`, {
+          consent: true,
+          signature: png,
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await fixture.json("POST", `/api/signing/${caiToken}/decline`, {
+          reason: "Wrong rate",
+        })
+      ).status,
+    ).toBe(200);
+    expect((await fixture.json("DELETE", `/api/contracts/${id}`)).status).toBe(
+      204,
+    );
+    const deleted = contractActivity(fixture).at(-1);
+    expect(deleted?.action).toBe("contract.deleted");
+    expect(JSON.parse(deleted?.details ?? "{}")).toMatchObject({
+      declinedAt: expect.any(String),
+      signedCount: 1,
+      signerCount: 2,
+      status: "declined",
+    });
+    // The reason, signer emails, and IPs stay out of the shared history.
+    for (const text of ["Wrong rate", "cai@example.com", "203.0.113.7"])
+      expect(deleted?.details).not.toContain(text);
+  });
+
+  it("records a signer's first view together with its status, once", async () => {
+    const fixture = createFixture();
+    const id = await fixture.prepare(singleSigner());
+    await fixture.json("POST", `/api/contracts/${id}/send`);
+    const token = tokenFrom(fixture.emails[0]);
+    const recipient = () =>
+      fixture.database
+        .query("SELECT status, viewed_at FROM contract_recipients")
+        .get() as { status: string; viewed_at: string | null };
+    const views = () =>
+      fixture.database
+        .query(
+          "SELECT ip, user_agent FROM contract_events WHERE type = 'viewed'",
+        )
+        .all();
+    const open = () =>
+      fixture.request(`/api/signing/${token}`, {
+        headers: { "cf-connecting-ip": "203.0.113.9", "user-agent": "Probe" },
+      });
+
+    failInserts(fixture, "contract_events", "NEW.type = 'viewed'");
+    expect((await open()).status).toBe(500);
+    expect(recipient()).toEqual({ status: "sent", viewed_at: null });
+    fixture.database.exec("DROP TRIGGER fail_audit");
+
+    expect((await open()).status).toBe(200);
+    expect((await open()).status).toBe(200);
+    expect(recipient()).toMatchObject({ status: "viewed" });
+    expect(views()).toEqual([{ ip: "203.0.113.9", user_agent: "Probe" }]);
+  });
+
+  it("names the sender of a manual reminder that could not be sent", async () => {
+    const fixture = createFixture();
+    seedKey(fixture);
+    const agent = fixture.as("owner-user", "org-1", viaKey);
+    const id = await fixture.prepare(singleSigner());
+    await fixture.json("POST", `/api/contracts/${id}/send`);
+    const email = fixture.bindings.EMAIL as unknown as {
+      send: (message: unknown) => Promise<unknown>;
+    };
+    const send = email.send;
+    const backdate = () =>
+      fixture.database
+        .query("UPDATE contract_recipients SET last_reminded_at = ?")
+        .run(new Date(Date.now() - 2 * 3_600_000).toISOString());
+    const remind = () =>
+      agent.json<{ reminded: number }>("POST", `/api/contracts/${id}/remind`);
+    type Event = {
+      actorName: string | null;
+      apiKey: { channel: string; name: string } | null;
+      type: string;
+    };
+    const events = async () =>
+      (
+        await fixture.json<{ contract: { events: Event[] } }>(
+          "GET",
+          `/api/contracts/${id}`,
+        )
+      ).body.contract.events;
+
+    backdate();
+    email.send = async () => {
+      throw new Error("Mail is down.");
+    };
+    expect((await remind()).body.reminded).toBe(0);
+    expect((await events()).at(-1)).toMatchObject({
+      actorName: "Olivia Owner",
+      apiKey: { channel: "mcp", name: "Assistant" },
+      type: "delivery_failed",
+    });
+
+    // A sent reminder whose record fails is retried, never called a failure.
+    email.send = send;
+    backdate();
+    fixture.hooks.before("INSERT INTO contract_events", () => {
+      throw new Error("audit unavailable");
+    });
+    expect((await remind()).body.reminded).toBe(1);
+    const types = (await events()).map(({ type }) => type);
+    expect(types.filter((type) => type === "delivery_failed")).toHaveLength(1);
+    expect(types.at(-1)).toBe("reminded");
+
+    // A record whose response is lost after it landed is not made twice.
+    backdate();
+    fixture.hooks.after("INSERT INTO contract_events", () => {
+      throw new Error("The response was lost.");
+    });
+    expect((await remind()).body.reminded).toBe(1);
+    expect(
+      (await events()).filter(({ type }) => type === "reminded"),
+    ).toHaveLength(2);
   });
 });

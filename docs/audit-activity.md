@@ -73,6 +73,12 @@ MCP `list_activity` tool accepts the same optional `resourceType`; keep that
 filter when passing the next cursor.
 
 Resource history routes authorize the resource before using `findActivity`.
+A contract template's history (`GET /api/contracts/templates/:id/activity`,
+MCP `list_contract_template_activity`) is on its page while it exists. A
+requested form or check's history (`GET /api/employee-forms/:id/activity`,
+MCP `list_employee_requirement_activity`) is on the manager's request page and
+readable only by organization owners and admins, never by the person it was
+requested from.
 A bank connection's history (`GET /api/finance/connections/:id/activity`, MCP
 `list_finance_connection_activity`) stays readable after it is disconnected.
 Shared global form history only exposes published versions to organization
@@ -167,20 +173,33 @@ signer's IP and user agent, voids, completion, and failed deliveries. The
 contract page and the certificate of completion read them, and they go with the
 contract when it is deleted. An event a person made through an API key also
 keeps the key's name and REST/MCP channel, which both readers show. A manual
-reminder names its sender; scheduled reminders (and manual ones recorded
-before senders were), completion, and delivery records have no actor. Sends,
-voids, and completions record their event in the same transaction as the
-change.
+reminder names its sender, and so does its failed delivery; scheduled
+reminders (and manual ones recorded before senders were), completion, and
+other delivery records have no actor. Sends, voids, completions, and a
+signer's first view record their event in the same transaction as the change.
+An email cannot share a transaction, so its `notified` or `reminded` event
+follows the send; a failed insert is retried once and logged, and never
+recorded as a failed delivery.
 
 The shared activity records `contract.created`, `contract.sent` (with the
 signer count, signing order, and due date that went out), `contract.voided`,
 and `contract.deleted`, which snapshots the status, document hashes, signer
-count, and template so a deleted agreement still leaves a trace until the
-organization is purged. Signer emails, IPs, and signatures stay out of it.
-Draft autosaves are not recorded; `contract.sent` captures the configuration
-that was sent. Deleting a contract template records
-`contract_template.deleted` with its current version and version count; while
-a template exists, its immutable versions name who saved each one.
+and signed counts, when it was declined, and template so a deleted agreement
+still leaves a trace until the organization is purged. Signer emails, IPs,
+signatures, and decline reasons stay out of it. A decline is the signer's and
+a completion the system's, so neither is a shared event until the shared model
+has a non-user actor; their `contract_events` and the deletion snapshot record
+them. Draft autosaves are not recorded; `contract.sent` captures the
+configuration that was sent.
+
+Uploading a contract template records `contract_template.created` (name,
+page count, and document hash), and each saved version records
+`contract_template.version_saved` (version, the version it was edited from,
+the previous name, role and field counts, signing order, and document hash),
+both under the save's own guard, so a stale save records nothing. Field
+values, messages, and the PDF stay out. Deleting a template records
+`contract_template.deleted` with its current version and version count; these
+events outlive the template until the organization is purged.
 
 Requested forms and checks record assignment, due date and status changes
 (old and new values; a status set by hand is always a manager's), deletion

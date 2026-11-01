@@ -29,6 +29,11 @@ const endpoints = {
     path: "/api/contracts/templates/:id/versions",
     response: "json",
   }),
+  activity: endpoint<typeof contractTemplatesRoutes.activity>({
+    method: "GET",
+    path: "/api/contracts/templates/:id/activity",
+    response: "json",
+  }),
   document: endpoint<typeof contractTemplatesRoutes.document>({
     method: "GET",
     path: "/api/contracts/templates/:id/document",
@@ -79,6 +84,13 @@ export function contractTemplatesApi(transport: Transport) {
           params: { id },
         })
       ).versions;
+    },
+    /** The template's history, newest first. */
+    activity(id: string, cursor?: string) {
+      return transport.call(endpoints.activity, {
+        params: { id },
+        query: { cursor },
+      });
     },
     /** Saves a new version on top of the one being edited. */
     async saveVersion(
