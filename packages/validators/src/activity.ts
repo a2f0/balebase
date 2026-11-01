@@ -17,14 +17,6 @@ const ActivityApiKeySchema = z.object({
 const ActivityActorTypeSchema = z.enum(["user", "system", "provider"]);
 export type ActivityActorType = z.infer<typeof ActivityActorTypeSchema>;
 
-/** Providers whose changes activity can record, with their display names. */
-export const activityProviderNames = {
-  checkr: "Checkr",
-  plaid: "Plaid",
-  stripe: "Stripe",
-} as const;
-export type ActivityProvider = keyof typeof activityProviderNames;
-
 /**
  * The actor of an event. Only a person has an ID and email; a system or
  * provider actor names its `source` (the maintenance job's ID, or the

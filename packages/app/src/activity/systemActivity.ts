@@ -1,9 +1,9 @@
 import { productName } from "@balebase/ui/brand";
-import {
-  type ActivityActor,
-  type ActivityEvent,
-  activityProviderNames,
+import type {
+  ActivityActor,
+  ActivityEvent,
 } from "@balebase/validators/activity";
+import { activityProviderNames } from "@balebase/validators/rules";
 import { formatDate } from "../shared/labels";
 import { textValue } from "./activityLabels";
 

@@ -1,11 +1,13 @@
 import { productName } from "@balebase/ui/brand";
-import {
-  type ActivityActorType,
-  type ActivityEvent,
-  type ActivityProvider,
-  type ActivityResourceType,
-  activityProviderNames,
+import type {
+  ActivityActorType,
+  ActivityEvent,
+  ActivityResourceType,
 } from "@balebase/validators/activity";
+import {
+  type ActivityProvider,
+  activityProviderNames,
+} from "@balebase/validators/rules";
 import type { Context } from "hono";
 import type { ApiEnv, ApiKeyChannel, ApiKeyPrincipal } from "../auth/apiEnv";
 import { cursorPage } from "./cursorPagination";
