@@ -1,6 +1,11 @@
 import { accountSettingsRoutes } from "@balebase/validators/accountSettings";
 import { Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
+import {
+  maintenanceActor,
+  type SystemActor,
+  systemActivityRowsStatement,
+} from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import type { Bindings } from "../types";
 import {
@@ -62,10 +67,33 @@ userDeletion.delete("/", async (context) => {
   return respond(context, accountSettingsRoutes.cancelDeletion, { ok: true });
 });
 
+/**
+ * An account whose deletion request is past its 30-day window and that
+ * nothing retained still needs. Unqualified columns are the user row's.
+ */
+const purgeableUser = `user.id = ? AND user.id NOT LIKE 'system:%'
+  AND instr(',' || replace(COALESCE(user.role, ''), ' ', '') || ',', ',admin,') = 0
+  AND EXISTS (SELECT 1 FROM user_deletion_requests
+              WHERE user_id = user.id AND julianday(requested_at) <= julianday(?))
+  AND NOT EXISTS (SELECT 1 FROM member JOIN organization ON organization.id = member.organizationId
+                  WHERE member.userId = user.id AND organization.deletedAt IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM contracts
+                  WHERE created_by = user.id OR sent_by = user.id)
+  AND NOT EXISTS (SELECT 1 FROM contract_events WHERE actor_user_id = user.id)`;
+
+/**
+ * Purges accounts requested for deletion at least 30 days ago. Each purge
+ * records `user.purged`, platform activity that root admins read, in the
+ * transaction that deletes the account: when it was requested, and who asked
+ * (a root admin by snapshot; the person themselves by ID only). It keeps
+ * nothing else about the purged person.
+ */
 export async function purgeRequestedUsers(
   environment: Pick<Bindings, "DB">,
+  runId: string,
   now = new Date(),
 ) {
+  const actor = maintenanceActor("purgeRequestedUsers", runId);
   const cutoff = new Date(
     now.getTime() - 30 * 24 * 60 * 60 * 1000,
   ).toISOString();
@@ -88,20 +116,13 @@ export async function purgeRequestedUsers(
       // Recheck the request atomically: cancellation must win if committed first.
       // Preserve contract attribution whose foreign keys otherwise become null.
       // Restrictive foreign keys protect the remaining financial/audit history.
-      const result = await environment.DB.prepare(
-        `DELETE FROM user WHERE id = ? AND id NOT LIKE 'system:%'
-         AND instr(',' || replace(COALESCE(role, ''), ' ', '') || ',', ',admin,') = 0
-         AND EXISTS (SELECT 1 FROM user_deletion_requests
-                     WHERE user_id = user.id AND julianday(requested_at) <= julianday(?))
-         AND NOT EXISTS (SELECT 1 FROM member JOIN organization ON organization.id = member.organizationId
-                         WHERE member.userId = user.id AND organization.deletedAt IS NULL)
-         AND NOT EXISTS (SELECT 1 FROM contracts
-                         WHERE created_by = user.id OR sent_by = user.id)
-         AND NOT EXISTS (SELECT 1 FROM contract_events WHERE actor_user_id = user.id)
-         RETURNING id`,
-      )
-        .bind(userId, cutoff)
-        .first<{ id: string }>();
+      const [, deleted] = await environment.DB.batch<{ id: string }>([
+        purgeRecord(environment.DB, actor, now, userId, cutoff),
+        environment.DB.prepare(
+          `DELETE FROM user WHERE ${purgeableUser} RETURNING id`,
+        ).bind(userId, cutoff),
+      ]);
+      const result = deleted?.results[0];
       if (result) {
         purged += 1;
         console.log({ event: "user_purged", userId });
@@ -121,4 +142,37 @@ export async function purgeRequestedUsers(
     }
   }
   return { purged, blocked };
+}
+
+function purgeRecord(
+  database: D1Database,
+  actor: SystemActor,
+  now: Date,
+  userId: string,
+  cutoff: string,
+) {
+  const requester = `request.requested_by_user_id IS NOT NULL
+    AND request.requested_by_user_id <> user.id`;
+  return systemActivityRowsStatement(database, actor, now.toISOString(), {
+    bindings: [userId, cutoff],
+    sql: `SELECT NULL AS organization_id, 'user' AS root_type,
+                 user.id AS root_id, user.id AS root_label,
+                 'user' AS subject_type, user.id AS subject_id,
+                 'user.purged' AS action,
+                 json_object(
+                   'requestedAt', request.requested_at,
+                   'via', CASE
+                     WHEN request.requested_by_user_id IS NULL THEN NULL
+                     WHEN request.requested_by_user_id = user.id THEN 'self'
+                     ELSE 'root_admin' END,
+                   'requestedBy', request.requested_by_user_id,
+                   'requestedByName',
+                     CASE WHEN ${requester} THEN request.requested_by_name END,
+                   'requestedByEmail',
+                     CASE WHEN ${requester} THEN request.requested_by_email END
+                 ) AS details
+          FROM user
+          JOIN user_deletion_requests AS request ON request.user_id = user.id
+          WHERE ${purgeableUser}`,
+  });
 }

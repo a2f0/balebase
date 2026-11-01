@@ -168,6 +168,8 @@ describe("audit activity", () => {
       email: "second@example.com",
       id: "user-2",
       name: "Second Person",
+      source: null,
+      type: "user",
     });
   });
 

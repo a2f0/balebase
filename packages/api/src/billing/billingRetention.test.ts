@@ -40,7 +40,7 @@ describe("billing retention", () => {
     );
 
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(1);
     expect(
       fixture.database.query("SELECT id FROM audits ORDER BY id").all(),
@@ -69,7 +69,7 @@ describe("billing retention", () => {
     const summary = await fixture.request("/", undefined);
     expect(await summary.json()).toMatchObject({ plan: "pro" });
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(0);
     expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([
       { id: "partial-pro-row-old" },
@@ -96,7 +96,7 @@ describe("billing retention", () => {
     const summary = await fixture.request("/", undefined);
     expect(await summary.json()).toMatchObject({ plan: "free" });
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(0);
     expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([
       { id: "unknown-price-old" },
@@ -135,7 +135,11 @@ describe("billing retention", () => {
         );
 
         expect(
-          await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+          await purgeExpiredFreeAuditRuns(
+            fixture.bindings,
+            "run-1",
+            "2026-07-27",
+          ),
         ).toBe(0);
         expect(
           fixture.database
@@ -166,13 +170,13 @@ describe("billing retention", () => {
       );
     }
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(500);
     expect(
       fixture.database.query("SELECT COUNT(*) AS count FROM audits").get(),
     ).toEqual({ count: 105 });
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(105);
   });
 
@@ -191,7 +195,7 @@ describe("billing retention", () => {
     );
 
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(0);
     expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([
       { id: "pending-checkout-old" },
@@ -213,7 +217,7 @@ describe("billing retention", () => {
     );
 
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(0);
     fixture.database
       .query(
@@ -222,7 +226,7 @@ describe("billing retention", () => {
       )
       .run(organizationId);
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(1);
   });
 
@@ -244,6 +248,7 @@ describe("billing retention", () => {
     expect(
       await purgeExpiredFreeAuditRuns(
         fixture.bindings,
+        "run-1",
         "2026-07-27",
         "2026-08-01T00:00:00.000Z",
       ),
@@ -254,6 +259,7 @@ describe("billing retention", () => {
     expect(
       await purgeExpiredFreeAuditRuns(
         fixture.bindings,
+        "run-1",
         "2026-07-27",
         "2026-08-01T00:00:01.000Z",
       ),
@@ -276,7 +282,7 @@ describe("billing retention", () => {
     );
 
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(0);
     expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([
       { id: "deletion-in-flight-old" },
@@ -324,7 +330,11 @@ describe("billing retention", () => {
       },
       async () => {
         expect(
-          await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+          await purgeExpiredFreeAuditRuns(
+            fixture.bindings,
+            "run-1",
+            "2026-07-27",
+          ),
         ).toBe(0);
         expect(
           fixture.database
@@ -368,7 +378,11 @@ describe("billing retention", () => {
       },
       async () => {
         expect(
-          await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+          await purgeExpiredFreeAuditRuns(
+            fixture.bindings,
+            "run-1",
+            "2026-07-27",
+          ),
         ).toBe(1);
         expect(
           fixture.database
@@ -412,7 +426,11 @@ describe("billing retention", () => {
       },
       async () => {
         expect(
-          await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+          await purgeExpiredFreeAuditRuns(
+            fixture.bindings,
+            "run-1",
+            "2026-07-27",
+          ),
         ).toBe(1);
         expect(requests).toEqual([
           "https://api.stripe.com/v1/checkout/sessions/cs_retention_abandoned",
@@ -443,7 +461,11 @@ describe("billing retention", () => {
       },
       async () => {
         expect(
-          await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+          await purgeExpiredFreeAuditRuns(
+            fixture.bindings,
+            "run-1",
+            "2026-07-27",
+          ),
         ).toBe(1);
         expect(
           fixture.database.query("SELECT id FROM audits ORDER BY id").all(),
@@ -459,7 +481,7 @@ describe("billing retention", () => {
     const { STRIPE_PRO_PRICE_ID: _priceId, ...missingPriceBindings } =
       fixture.bindings;
     await expect(
-      purgeExpiredFreeAuditRuns(missingPriceBindings, "2026-07-27"),
+      purgeExpiredFreeAuditRuns(missingPriceBindings, "run-1", "2026-07-27"),
     ).rejects.toThrow(
       "Stripe Pro price configuration is required for retention cleanup.",
     );
@@ -478,7 +500,7 @@ describe("billing retention", () => {
       )
       .run();
     expect(
-      await purgeExpiredFreeAuditRuns(fixture.bindings, "2026-07-27"),
+      await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1", "2026-07-27"),
     ).toBe(0);
     expect(fixture.database.query("SELECT id FROM audits").all()).toEqual([
       { id: "active-old" },

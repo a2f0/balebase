@@ -167,7 +167,11 @@ preserve the original date and actor and do not create another event. Pending
 attribution is visible only to root admins, who also read the full history
 from **View history** in the row menu at `/root/users`
 (`/root/users/<user-id>`, `GET /api/admin/users/:userId/history`). History
-remains after cancellation and is removed when the target account is purged.
+remains after cancellation and is removed when the target account is purged;
+the purge then leaves a `user.purged` record in **Root Admin → Jobs → Purge
+history** naming the requester (a root admin by name and email, the account
+holder by ID only) and the request date, but not the purged account's name or
+email (migration `0086_record_system_activity.sql`).
 
 Root admins can revoke another account's root admin role from the **Users** row
 menu after a confirmation. The API refuses to revoke the caller's own role,
@@ -219,7 +223,10 @@ for each organization are removed together and their files are queued for
 **Purge deleted files**, which waits at least 15 minutes for uploads to finish
 and retries storage failures. File cleanup removes 25 objects per run, so a large
 backlog can take days to drain; root admins can start additional cleanup runs.
-User accounts are retained and follow the separate account-deletion policy.
+User accounts are retained and follow the separate account-deletion policy. Each
+purge records `organization.purged` in **Root Admin → Jobs → Purge history**
+with who deleted the organization and how (owner or root admin), but not its
+name; the organization's own activity is removed with it.
 
 Root Admin → Jobs shows each job's run schedule. Production maintenance is
 queued hourly at 17 minutes past the hour (UTC); staging maintenance is manual
@@ -355,8 +362,9 @@ Archived. The message toolbar archives email or moves it to Trash; archived
 email leaves the Inbox but keeps its attachments and links, remains available
 from linked records, and can be moved back to Inbox. Linked email cannot be
 moved to Trash, including email with Finance links hidden from the current
-user. Email in Trash is eligible for removal by the manual `emails:purge`
-command after 30 days and can be restored until it is purged. Legacy email
+user. Email in Trash is eligible for removal by the on-request **Purge trashed
+email** maintenance job after 30 days and can be restored until it is purged.
+Legacy email
 already in Trash keeps its links but is hidden from
 linked records until restored. Links to
 transactions that Plaid has since removed are hidden. Creating, removing, or
@@ -517,15 +525,14 @@ restore never publishes it. The **Purge discarded global forms** job
 least 30 days ago per run, with their versions and history, as part of hourly
 production maintenance or from **Root Admin → Jobs**. Audits started from a
 purged form keep their own copy of it, and projects it was turned on for lose
-it. The deletion rechecks eligibility, so a restore committed first keeps the
+it; each such project's activity shows the removal by Balebase maintenance.
+The deletion rechecks eligibility, so a restore committed first keeps the
 form. Discards and restores appear in the form's Activity as their own events.
 Until the purge, **History** on a discarded form shows its Activity, so root
 admins can see who made and published it before restoring it, and its
 versions stay readable through `/api/admin/audit-templates/:id/versions`.
 Apply migration `0079_restore_discarded_audit_forms.sql`, which names those
-events, before deploying. The purge records nothing in the projects that lose
-the form: the shared activity model needs a person as the actor, and no person
-runs the job. Its job run keeps the number of forms purged.
+events, before deploying. Its job run keeps the number of forms purged.
 Publishing and unpublishing a form, organization or global, appear in its
 Activity as their own events; a save that keeps the status is an ordinary saved
 version. Organizations see a global form's publications but not its
@@ -945,7 +952,9 @@ never returns them.
 Every organization starts on the cardless Free plan with one usable member
 seat, up to five organization form templates, and 30 days of audit-run history.
 An hourly Worker task removes older Free-plan audit runs and their associated
-issue images. Balebase Pro costs $10 per active organization member each month
+issue images, and records on the organization's activity how many runs it
+removed (`organization.audit_runs_purged`, by Balebase maintenance). Balebase
+Pro costs $10 per active organization member each month
 and includes unlimited form templates and audit history. Membership hooks update
 the licensed Stripe subscription quantity, and an hourly reconciliation repairs
 any quantity drift.

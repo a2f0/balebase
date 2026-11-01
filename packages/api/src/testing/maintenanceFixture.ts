@@ -85,9 +85,9 @@ export function fixture(role = "admin", impersonatedBy?: string) {
       ),
     insertUser,
     beforeUserDelete: (callback: () => void) =>
-      hooks.before(/^DELETE FROM user WHERE/, callback, { method: "first" }),
+      hooks.before(/^DELETE FROM user WHERE/, callback, { method: "batch" }),
     beforeOrganizationPurge: (callback: () => void) =>
-      hooks.before(/^DELETE FROM organization/, callback, { method: "first" }),
+      hooks.before(/^DELETE FROM organization/, callback, { method: "batch" }),
     request: (path: string, init?: RequestInit) =>
       app.request(path, init, bindings, {
         waitUntil() {},

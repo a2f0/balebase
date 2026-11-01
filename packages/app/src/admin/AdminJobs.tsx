@@ -10,6 +10,7 @@ import {
 } from "@balebase/ui/react";
 import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
 import { useCallback, useState } from "react";
+import { ActivityFeed } from "../activity/ActivityFeed";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import { useLoad } from "../shared/useLoad";
@@ -94,6 +95,10 @@ export function AdminJobs() {
           key={startedRun?.request ?? 0}
           jobs={jobs ?? []}
           initialRun={startedRun?.run}
+        />
+        <ActivityFeed
+          source={{ id: "platform", type: "admin_purges" }}
+          title="Purge history"
         />
         <AdminMaintenanceRequests
           jobs={jobs ?? []}

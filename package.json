@@ -25,7 +25,6 @@
     "deploy:verify": "bash scripts/deploy/verifyDeployment.sh",
     "deploy:website": "bash scripts/deploy/deployWebsite.sh",
     "dev": "bunx --bun --no-install turbo run dev",
-    "emails:purge": "bash scripts/admin/purgeEmails.sh",
     "format": "bun --bun run lint:biome:fix && bun --bun run lint:markdown:fix",
     "hooks:check": "agent-tool hooks check",
     "hooks:install": "agent-tool hooks install --apply",

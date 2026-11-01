@@ -686,10 +686,12 @@ The purge queues the organization's uploads, raw messages and attachments,
 contract documents, templates, employee forms, and screening consents for file
 cleanup.
 
-Each organization's eligibility check, deletion, foreign-key cascades, and
-file-cleanup tombstones commit in one D1 statement. A restore committed first
-prevents the purge; a purged organization cannot be restored. User accounts
-are retained.
+Each organization's eligibility check, deletion, foreign-key cascades,
+file-cleanup tombstones, and purge record commit in one D1 batch. A restore
+committed first prevents the purge; a purged organization cannot be restored.
+User accounts are retained. The purge record (`organization.purged`, like
+`user.purged` for accounts) appears under **Root Admin → Jobs → Purge
+history** with who deleted the organization and how, but not its name.
 The **Purge deleted files** job removes the queued R2 objects in later batches,
 after its 15-minute upload grace period, and retries storage failures. In staging,
 run that job manually after the grace period to finish file deletion.
@@ -702,24 +704,22 @@ Discarded forms**. The **Purge discarded global forms** job
 (`purgeDiscardedAuditForms`) permanently deletes up to 100 per run once their
 discard is at least 30 days old, with their versions and activity; its saved
 output reports `purged`. It runs with hourly maintenance in production and from
-**Root Admin → Jobs → Run now** in either tier. Each run is one D1 statement
+**Root Admin → Jobs → Run now** in either tier. Each run is one D1 batch
 that rechecks eligibility, so a restore committed first keeps the form. Audits
-started from a purged form keep their snapshot.
+started from a purged form keep their snapshot, and each project that had the
+form turned on records its removal by the job.
 
 Inbox messages can be moved to Trash and restored by organization members.
 Deleted messages retain their deletion time and initiating user in D1, while
-their raw message and attachments remain in R2. Preview or permanently purge
-messages that have been in Trash for at least 30 days with:
-
-```sh
-bun run emails:purge --dry-run
-bun run emails:purge
-```
-
-The command targets Cloudflare's remote D1 database and R2 bucket by default.
-Pass `--local` to use local Wrangler storage. It removes the raw message and
-attachment objects before deleting the D1 email; the attachment rows are then
-removed through their foreign-key cascade.
+their raw message and attachments remain in R2. The **Purge trashed email** job
+(`purgeTrashedEmails`) permanently deletes up to 100 messages per run that have
+been in Trash for at least 30 days. It is not scheduled: start it from
+**Root Admin → Jobs → Run now**, which records who requested it. Each run
+records every purge in the email's history and every link it removes on the
+linked record, deletes the D1 rows (attachments and links cascade), and queues
+the raw message and attachments for the **Purge deleted files** job, which
+deletes them from R2 only after the purge commits and retries failures. A
+message restored before the run is kept. Its saved output reports `purged`.
 
 Production URLs are `api.balebase.com`, `app.balebase.com`, and
 `balebase.com`. See [`terraform/README.md`](../terraform/README.md) for state and

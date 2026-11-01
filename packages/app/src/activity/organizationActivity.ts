@@ -1,6 +1,7 @@
 import type { ActivityEvent } from "@balebase/validators/activity";
 import { formatRoles } from "../organizations/organizationState";
 import { textValue } from "./activityLabels";
+import { purgeSummary, retentionSummary } from "./systemActivity";
 
 /** Labels for membership, invitation and organization lifecycle events. */
 export const organizationActionLabels: Record<string, string> = {
@@ -31,10 +32,8 @@ export function removalReasonLabel(reason: unknown) {
 }
 
 /** One line for an organization or invitation event. */
-export function organizationActivitySummary({
-  action,
-  details,
-}: ActivityEvent) {
+export function organizationActivitySummary(event: ActivityEvent) {
+  const { action, details } = event;
   switch (action) {
     case "organization.created":
       return [
@@ -48,6 +47,10 @@ export function organizationActivitySummary({
       return changes(details.changes).join(" · ") || "No changes";
     case "organization.deletion_requested":
       return `${viaLabel(details.via)} · Pending invitations canceled: ${textValue(details.canceledInvitations) || "0"}`;
+    case "organization.purged":
+      return purgeSummary(event);
+    case "organization.audit_runs_purged":
+      return retentionSummary(event);
     case "organization.restored":
       return `${viaLabel(details.via)} · Deleted by ${textValue(details.deletedByName) || textValue(details.deletedByEmail) || "someone no longer recorded"}`;
     default:

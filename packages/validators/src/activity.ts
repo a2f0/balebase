@@ -10,7 +10,23 @@ const ActivityApiKeySchema = z.object({
   name: z.string(),
 });
 
+/**
+ * Who made a change: a person (`user`), Balebase's own maintenance
+ * (`system`), or a provider such as Stripe, Plaid, or Checkr (`provider`).
+ */
+const ActivityActorTypeSchema = z.enum(["user", "system", "provider"]);
+export type ActivityActorType = z.infer<typeof ActivityActorTypeSchema>;
+
+/**
+ * The actor of an event. Only a person has an ID and email; a system or
+ * provider actor names its `source` (the maintenance job's ID, or the
+ * provider) and has an empty email. `name` is always a display label.
+ */
 export const ActivityActorSchema = PersonSchema.extend({
+  id: z.string().nullable(),
+  /** The maintenance job or provider behind a system or provider change. */
+  source: z.string().nullable(),
+  type: ActivityActorTypeSchema,
   /** Set when the person acted through an API key. */
   apiKey: ActivityApiKeySchema.nullish(),
 });
@@ -33,6 +49,7 @@ const ActivityDetailsSchema = z
     assignedTo: detail,
     assigneeEmail: detail,
     assigneeName: detail,
+    attachmentCount: detail,
     before: detail,
     beforeEmail: detail,
     beforeName: detail,
@@ -42,9 +59,13 @@ const ActivityDetailsSchema = z
     checkrReport: detail,
     clientCompletedAt: detail,
     clientStartedAt: detail,
+    completedBefore: detail,
     consentsRemoved: detail,
     copiedFrom: detail,
+    count: detail,
     declinedAt: detail,
+    deletedAt: detail,
+    deletedBy: detail,
     deletedByEmail: detail,
     deletedByName: detail,
     description: detail,
@@ -53,10 +74,12 @@ const ActivityDetailsSchema = z
     ein: detail,
     email: detail,
     emailLinkCount: detail,
+    equipmentLinkCount: detail,
     fieldCount: detail,
     fileCount: detail,
     filename: detail,
     folderId: detail,
+    folderLinkCount: detail,
     folderName: detail,
     from: detail,
     fromFolderId: detail,
@@ -88,8 +111,13 @@ const ActivityDetailsSchema = z
     removedMembers: detail,
     renamedFrom: detail,
     replaced: detail,
+    requestedAt: detail,
+    requestedBy: detail,
+    requestedByEmail: detail,
+    requestedByName: detail,
     rerequest: detail,
     responseType: detail,
+    retentionDays: detail,
     revision: detail,
     /** API keys an access change revoked, as `{ id, name }`. */
     revokedApiKeys: detail,

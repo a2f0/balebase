@@ -1,5 +1,6 @@
 import type { ActivityEvent } from "@balebase/validators/activity";
 import { textValue } from "./activityLabels";
+import { emailPurgeSummary, systemReasonLabel } from "./systemActivity";
 
 /** Library, inbox, and business events, whatever record they are on. */
 export function isLibraryActivity({ action }: ActivityEvent) {
@@ -52,7 +53,18 @@ export function libraryActivitySummary(event: ActivityEvent) {
       return `${textValue(details.from)} · from ${emailStatusLabels[textValue(details.fromStatus)] ?? "Inbox"}`;
     case "inbox.email_linked":
     case "inbox.email_unlinked":
-      return `${textValue(details.subject)} · ${linkTargetLabels[root.type] ?? "Record"}: ${root.label}${linkEndedByDeletion(event) ? ` · ${linkTargetLabels[root.type] ?? "Record"} deleted` : ""}`;
+      return [
+        textValue(details.subject),
+        `${linkTargetLabels[root.type] ?? "Record"}: ${root.label}`,
+        linkEndedByDeletion(event)
+          ? `${linkTargetLabels[root.type] ?? "Record"} deleted`
+          : "",
+        systemReasonLabel(details.via),
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    case "inbox.email_purged":
+      return emailPurgeSummary(event);
     case "business.created":
     case "business.deleted":
       return businessSnapshot(details);

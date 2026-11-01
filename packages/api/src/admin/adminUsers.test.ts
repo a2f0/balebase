@@ -44,7 +44,9 @@ it("lets root admins mark and cancel users with durable actor history", async ()
     ],
   });
   // The existing purge respects the waiting period and eventually consumes this queue.
-  expect(await purgeRequestedUsers(f.bindings, new Date(requestedAt))).toEqual({
+  expect(
+    await purgeRequestedUsers(f.bindings, "run-1", new Date(requestedAt)),
+  ).toEqual({
     purged: 0,
     blocked: 0,
   });
@@ -94,7 +96,11 @@ it("lets root admins mark and cancel users with durable actor history", async ()
       .status,
   ).toBe(200);
   expect(
-    await purgeRequestedUsers(f.bindings, new Date(Date.now() + 31 * 86400000)),
+    await purgeRequestedUsers(
+      f.bindings,
+      "run-1",
+      new Date(Date.now() + 31 * 86400000),
+    ),
   ).toEqual({ purged: 1, blocked: 0 });
   expect(f.database.query("SELECT * FROM user_deletion_events").all()).toEqual(
     [],

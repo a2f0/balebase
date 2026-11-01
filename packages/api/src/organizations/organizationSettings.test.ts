@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setSystemTime } from "bun:test";
 import { testBindings } from "../testing/bindings";
 import { toD1 } from "../testing/d1";
 import { createTestDatabase } from "../testing/database";
@@ -54,14 +54,19 @@ describe("organization deletion", () => {
         root_label: expect.any(String),
       },
     ]);
-    // Repeating it changes and records nothing.
-    expect(
-      (
-        await fixture
-          .app("owner-user", "owner")
-          .request("/current", { method: "DELETE" })
-      ).status,
-    ).toBe(409);
+    // Repeating it changes and records nothing, even in the same millisecond.
+    setSystemTime(new Date(body.deletedAt));
+    try {
+      expect(
+        (
+          await fixture
+            .app("owner-user", "owner")
+            .request("/current", { method: "DELETE" })
+        ).status,
+      ).toBe(409);
+    } finally {
+      setSystemTime();
+    }
     expect(lifecycleEvents(fixture.database)).toHaveLength(1);
     expect(
       fixture.database

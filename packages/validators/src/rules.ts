@@ -148,3 +148,11 @@ export const employeeRequirementLimits = {
   requirements: 20,
   title: 100,
 } as const;
+
+/** Providers whose changes activity can record, with their display names. */
+export const activityProviderNames = {
+  checkr: "Checkr",
+  plaid: "Plaid",
+  stripe: "Stripe",
+} as const;
+export type ActivityProvider = keyof typeof activityProviderNames;

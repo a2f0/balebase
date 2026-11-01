@@ -9,7 +9,8 @@ change to their creator's access makes), transaction annotations and categories,
 bank connections (connecting, sync requests and settings, disconnecting, and
 deleting imported data), expense categories, Pro checkout starts, library
 files and folders, inbox email moves and links, businesses, contracts and
-contract templates, and the forms and checks requested of people. The
+contract templates, the forms and checks requested of people, and maintenance
+jobs that purge records. The
 workspace page is `/activity`; individual records can expose the same events
 in their own history. Contract signing also has a separate history (see
 [Contracts](#contracts)). Coverage is incremental: an empty shared feed does
@@ -30,8 +31,9 @@ An event identifies:
 - The root resource and its label at the time of the change.
 - The subject that changed, which can differ from the root: an issue or image
   may belong to an audit run or a transaction.
-- The actor's identity snapshot and occurrence time. API-key requests also
-  retain the key name and REST/MCP channel.
+- The actor and occurrence time. A person (`actor_type = 'user'`) is kept as
+  an identity snapshot; API-key requests also retain the key name and REST/MCP
+  channel. Work no person did names its source instead (see below).
 - Allowlisted details sufficient to understand the change, including old and
   new values when useful. Keep secrets and sensitive document contents out.
 
@@ -40,14 +42,39 @@ mutation. Conditional writes must emit an event only when the intended change
 succeeds; stale saves, denied requests, and no-ops must not claim a change.
 Use `activityBatch` with the request's API key so trigger and explicit events
 receive the same attribution. Audit failures must roll back the related change.
-Provider retries need a stable deduplication boundary. The current shared model
-requires a user actor; extending it to system/provider work needs an explicit
-actor model, never a fabricated human identity. Until then, maintenance jobs
-such as the discarded global form purge record no events: the projects that
-lose a purged form show no removal, and the job run keeps only its count.
-Stripe-driven subscription and seat changes and Plaid-driven connection status
-changes likewise stay in their current-state columns, Stripe's own history, and
-job runs.
+Never fabricate a human identity for work no person did. Events record an
+explicit actor type (migration `0086_record_system_activity.sql`):
+
+- `user`: a person; `actor_user_id` and the name and email snapshot are set.
+  A CHECK constraint keeps every user event tied to a user.
+- `system`: Balebase's own maintenance. `actor_source` is the maintenance job's
+  ID (such as `purgeDiscardedAuditForms`); readers show "Balebase maintenance".
+- `provider`: a provider's change. `actor_source` is the provider (`stripe`,
+  `plaid`, or `checkr`); readers show its name.
+
+System and provider events have no user ID and an empty email, and never name
+an API key. `causation_type` and `causation_id` say what caused them: the job
+run (`job_run`) or a provider's event ID (such as `stripe_event`). They are the
+deduplication boundary for provider retries and redelivered runs: a unique
+index allows one event per cause, action, root, and subject, and a redelivery
+records nothing new. Record them with `systemActivityStatement` (one event,
+like `activityStatement`) or `systemActivityRowsStatement` (one event per row
+of a SELECT that snapshots the affected records) from `shared/activity.ts`, in
+the same batch as the change and under the same guard, with
+`maintenanceActor(jobId, runId)` or a provider actor. A purge must record its
+events before the guarded `DELETE` so they can snapshot what it removes, and
+keep each event's subject distinct per deletion so later batches of the same
+run are not taken for redeliveries.
+
+Maintenance jobs record their changes this way: the purges of accounts and
+organizations (as platform purge history, below), the Free-plan retention purge
+(`organization.audit_runs_purged` on the organization, with the number of runs
+removed), the discarded global form purge (`project.form_disabled` with
+`reason: form_purged` on each project that had the form), and the trashed email
+purge (below). Stripe-driven subscription and seat changes, Plaid-driven
+connection status changes, and Checkr report changes still stay in their
+current-state columns, the provider's own history, and job runs until their
+producers adopt the provider actor.
 
 ## Reading and retaining history
 
@@ -96,7 +123,9 @@ feed's reader permissions, labels, and navigation.
 
 History follows the resource's documented retention. It is not an immutable
 compliance ledger. Purging an organization removes its activity; purging an
-audit run or form removes that root's history. Deleting a disconnected bank
+audit run or form removes that root's history, though the Free-plan retention
+purge leaves its count on the organization and the form purge leaves each
+affected project's removal. Deleting a disconnected bank
 connection's imported data removes that connection's and its transactions'
 history, but keeps one `finance.connection_data_deleted` event naming who
 deleted it and how many accounts, transactions, and annotations went. Historical
@@ -124,8 +153,8 @@ organization (by an owner or a root admin, `details.via`) and restoring it
 record events in the same batch as the change; the restoration keeps who had
 deleted it, which the organization row then clears. Rejected requests and
 saves that change nothing record nothing. A membership deleted with no request
-behind it, as when an account is purged, has no actor to record until the
-shared model gains a system actor; equipment is still unassigned then.
+behind it, as when an account is purged, is not recorded on the organization
+yet; equipment is still unassigned then.
 
 An API key acts as its creator, so a change that leaves the creator neither
 owner nor admin ends the key for good: a role change revokes the creator's
@@ -164,7 +193,15 @@ read. Deleting a folder or equipment records an `inbox.email_unlinked` for
 each link it removes (`details.via = 'target_deleted'`), attributed to the
 person deleting it, so the email's history shows when and by whom the link
 ended. `equipment.deleted` also keeps who held the item (`assignedTo`,
-`assigneeName`, `assigneeEmail`) and its `emailLinkCount`. When Plaid removes a
+`assigneeName`, `assigneeEmail`) and its `emailLinkCount`. The **Purge trashed
+email** job (`purgeTrashedEmails`, run on request from **Root Admin → Jobs**;
+it replaced the `emails:purge` operator script) permanently deletes email that
+has been in Trash for 30 days. In the same transaction it records
+`inbox.email_purged` on the email, by the job, counting its attachments and
+folder and equipment links but naming no transaction, and
+`inbox.email_unlinked` (`details.via = 'email_purged'`) on each record a legacy
+trashed email was still linked to. Its raw message and attachments are removed
+by the deleted-file cleanup after that commits. When Plaid removes a
 transaction, its links are hidden with it, and kept, without an event. Inbound
 mail is a provider action with no user actor: the stored message and its raw
 `.eml` are its record.
@@ -241,7 +278,8 @@ supersedes). Manager writes re-check in the transaction that the actor is
 still an owner or admin. Details never hold filenames, screening results, or
 consent contents. The person's signed authorizations keep their own record
 (`employee_screening_consents`). Checkr's report status and result changes
-are not recorded yet: they come from the provider and need a system actor.
+are not recorded yet: they come from the provider, whose events need the
+provider actor.
 
 ## Platform and account history
 
@@ -260,6 +298,16 @@ Some histories are not organization activity:
   on its run, and the run keeps the first requester's name and email. Root
   admins read it under **Manual requests** on the Jobs page
   (`GET /api/admin/jobs/requests`).
+- Platform purge history: when the purge jobs delete an account or an
+  organization, they record `user.purged` or `organization.purged` as activity
+  with no organization, by the job, in the transaction that deletes it. It
+  keeps the opaque ID, when the deletion was requested, and who asked: a root
+  admin or owner by name and email, the account holder by ID only, or nobody
+  for older requests that recorded no requester. It never keeps the purged
+  account's name or email or the organization's name, and survives job history
+  and the requester's own purge. Root admins read it under **Root Admin → Jobs
+  → Purge history** (`GET /api/admin/jobs/purges`); impersonated sessions and
+  everyone else cannot.
 - `user_security_events` records a person's own sign-in security and profile
   changes by trigger: two-factor on and off, replacing the authenticator app
   (enrolling again while two-factor is on), regenerating backup codes (the
@@ -294,8 +342,9 @@ examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `businesses/businessActivity.test.ts`, `jobs/maintenanceRequests.test.ts`,
 `admin/setUserRole.test.ts`, `admin/platformHistory.test.ts`,
 `admin/discardedAuditForms.test.ts`, `users/securityEvents.test.ts`,
-`contracts/contractActivity.test.ts`, and
-`employeeForms/requirementActivity.test.ts`.
+`contracts/contractActivity.test.ts`,
+`employeeForms/requirementActivity.test.ts`, and
+`jobs/systemActivity.test.ts` (system actors and purges).
 
 The repository-owned [audit-trails skill](../skills/audit-trails/SKILL.md)
 reviews mutations, triggers, separate histories, readers, and retention, then

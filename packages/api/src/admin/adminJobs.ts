@@ -4,19 +4,29 @@ import type { ApiEnv } from "../auth/apiEnv";
 import { jobRunDetail, listJobRuns } from "../jobs/jobHistory";
 import { toJobRun } from "../jobs/jobRuns";
 import { waitForLegacyJob } from "../jobs/legacyJobRun";
-import { enqueueMaintenance, maintenanceJobs } from "../jobs/maintenance";
+import {
+  enqueueMaintenance,
+  isScheduled,
+  maintenanceJobs,
+} from "../jobs/maintenance";
+import { findPlatformActivity } from "../shared/activity";
 import { readBody, readQuery, respond } from "../shared/respond";
 import { listMaintenanceRequests } from "./platformHistory";
+
+const purgeActions = ["user.purged", "organization.purged"] as const;
 
 const adminJobs = new Hono<ApiEnv>();
 adminJobs.get("/", (context) =>
   respond(context, adminJobsRoutes.list, {
     jobs: [
       ...maintenanceJobs.map((job) => ({
-        ...job,
+        description: job.description,
+        id: job.id,
+        name: job.name,
         manual: true,
-        runSchedule:
-          "Every hour at 17 minutes past the hour (UTC) in production. Manual only in staging.",
+        runSchedule: isScheduled(job)
+          ? "Every hour at 17 minutes past the hour (UTC) in production. Manual only in staging."
+          : "Manual only.",
       })),
       ...(context.req.query("all") === "true"
         ? [
@@ -44,6 +54,27 @@ adminJobs.get("/runs", async (context) => {
   const history = await listJobRuns(context.env.DB, query);
   if (!history) return context.json({ error: "Invalid history cursor." }, 400);
   return respond(context, adminJobsRoutes.runs, history);
+});
+/** Purge records outlive both the purged records and the 30-day job history. */
+adminJobs.get("/purges", async (context) => {
+  // Like account management, it names who asked for each deletion.
+  if (context.get("authSession").session.impersonatedBy) {
+    return context.json({ error: "Insufficient permissions." }, 403);
+  }
+  const query = readQuery(
+    context,
+    adminJobsRoutes.purges,
+    "Invalid activity cursor.",
+  );
+  if (query instanceof Response) return query;
+  const page = await findPlatformActivity(
+    context.env.DB,
+    purgeActions,
+    query.cursor,
+  );
+  return page
+    ? respond(context, adminJobsRoutes.purges, page)
+    : context.json({ error: "Invalid activity cursor." }, 400);
 });
 adminJobs.get("/requests", async (context) => {
   if (context.get("authSession").session.impersonatedBy) {

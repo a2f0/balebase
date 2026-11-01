@@ -66,7 +66,14 @@ export interface TestIdentity {
 export interface ActivityResponse {
   events: Array<{
     action: string;
-    actor: { apiKey: unknown; email: string; id: string; name: string };
+    actor: {
+      apiKey: unknown;
+      email: string;
+      id: string | null;
+      name: string;
+      source: string | null;
+      type: string;
+    };
     details: Record<string, unknown>;
     historical: boolean;
     id: number;
