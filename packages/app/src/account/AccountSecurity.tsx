@@ -22,9 +22,12 @@ interface TotpSetup {
 type SecurityAction = "disable" | "enable" | "regenerate" | "verify";
 
 export function AccountSecurity({
+  onHistoryChanged,
   onSecurityChanged,
   twoFactorEnabled,
 }: {
+  /** Called after a recorded change that leaves two-factor on. */
+  onHistoryChanged?: (() => void) | undefined;
   onSecurityChanged: () => Promise<unknown>;
   twoFactorEnabled: boolean;
 }) {
@@ -45,7 +48,10 @@ export function AccountSecurity({
   const enrollment = useMfaEnrollment(workflow);
   const maintenance = useMfaMaintenance({
     ...workflow,
-    onRecoveryCodes: enrollment.showRecoveryCodes,
+    onRecoveryCodes: (codes) => {
+      enrollment.showRecoveryCodes(codes);
+      onHistoryChanged?.();
+    },
   });
   return (
     <AccountSecurityPage

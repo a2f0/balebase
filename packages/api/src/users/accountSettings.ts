@@ -40,18 +40,30 @@ accountSettings.patch("/default-organization", async (context) => {
 });
 
 // Triggers record these when Better Auth changes the person's two-factor
-// setting or password (migration 0082). Only the person reads them here; root
-// admins read them in D1.
+// setting, authenticator, backup codes, password, name or picture (migrations
+// 0082 and 0085). Only the person reads them here; root admins read them in D1.
 accountSettings.get("/security-events", async (context) => {
   const { results } = await context.env.DB.prepare(
-    `SELECT action, occurred_at FROM user_security_events
+    `SELECT action, occurred_at,
+            json_extract(details, '$.before') AS before_value,
+            json_extract(details, '$.after') AS after_value
+     FROM user_security_events
      WHERE user_id = ? ORDER BY id DESC LIMIT ?`,
   )
     .bind(context.get("authSession").user.id, securityEventLimit)
-    .all<{ action: SecurityEventAction; occurred_at: string }>();
+    .all<{
+      action: SecurityEventAction;
+      after_value: string | null;
+      before_value: string | null;
+      occurred_at: string;
+    }>();
   return respond(context, accountSettingsRoutes.securityEvents, {
     events: results.map((row) => ({
       action: row.action,
+      change:
+        row.action === "name_changed"
+          ? { after: row.after_value ?? "", before: row.before_value ?? "" }
+          : null,
       occurredAt: row.occurred_at,
     })),
   });

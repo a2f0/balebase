@@ -34,6 +34,7 @@ export function AccountSettings({
   twoFactorEnabled: boolean;
 }) {
   const security = pathname === "/account/security";
+  const [historyVersion, setHistoryVersion] = useState(0);
   return (
     <Page narrow>
       <PageHeader
@@ -66,10 +67,16 @@ export function AccountSettings({
         {security ? (
           <>
             <AccountSecurity
+              onHistoryChanged={() =>
+                setHistoryVersion((version) => version + 1)
+              }
               onSecurityChanged={onSessionChanged}
               twoFactorEnabled={twoFactorEnabled}
             />
-            <AccountSecurityHistory twoFactorEnabled={twoFactorEnabled} />
+            <AccountSecurityHistory
+              refreshKey={historyVersion}
+              twoFactorEnabled={twoFactorEnabled}
+            />
           </>
         ) : (
           <AccountGeneral

@@ -69,7 +69,11 @@ async function history(fixture: Fixture, cookies: CookieJar) {
   );
   expect(response.status).toBe(200);
   return (await response.json()) as {
-    events: { action: string; occurredAt: string }[];
+    events: {
+      action: string;
+      change: { after: string; before: string } | null;
+      occurredAt: string;
+    }[];
   };
 }
 
@@ -264,4 +268,173 @@ it("keeps two-factor enrollment and removal consistent when they cannot be recor
     { email, action: "two_factor_enabled" },
     { email, action: "two_factor_disabled" },
   ]);
+});
+
+const twoFactorRow = (fixture: Fixture) =>
+  fixture.database
+    .query(
+      `SELECT secret, backupCodes, verified, activity_change FROM twoFactor
+       JOIN user ON user.id = twoFactor.userId WHERE user.email = ?`,
+    )
+    .get(email) as {
+    activity_change: string | null;
+    backupCodes: string;
+    secret: string;
+    verified: number;
+  };
+
+async function enrolled(fixture: Fixture) {
+  const cookies = await signUp(fixture, email);
+  const enable = () =>
+    post(
+      fixture.auth,
+      "/two-factor/enable",
+      { password: originalPassword },
+      cookies.header(),
+    );
+  // Starting again before verifying is still the first enrollment.
+  expect((await enable()).status).toBe(200);
+  const { totpURI } = (await (await enable()).json()) as { totpURI: string };
+  expect(recorded(fixture)).toEqual([]);
+  const verified = await post(
+    fixture.auth,
+    "/two-factor/verify-totp",
+    { code: await totpCode(totpURI) },
+    cookies.header(),
+  );
+  expect(verified.status).toBe(200);
+  cookies.absorb(verified);
+  return { cookies, enable };
+}
+
+it("records replacing the authenticator and regenerating backup codes, not using one", async () => {
+  const fixture = await createFixture();
+  const { cookies, enable } = await enrolled(fixture);
+  const regenerate = (password: string) =>
+    post(
+      fixture.auth,
+      "/two-factor/generate-backup-codes",
+      { password },
+      cookies.header(),
+    );
+  const wrong = "not the password at all";
+  expect(
+    (
+      await post(
+        fixture.auth,
+        "/two-factor/enable",
+        { password: wrong },
+        cookies.header(),
+      )
+    ).status,
+  ).not.toBe(200);
+  expect((await regenerate(wrong)).status).not.toBe(200);
+  expect(recorded(fixture)).toEqual([{ email, action: "two_factor_enabled" }]);
+
+  // Better Auth limits two-factor requests per address; these are few.
+  const allowRequests = () =>
+    fixture.database.exec("DELETE FROM rateLimit WHERE key IS NOT NULL");
+  allowRequests();
+  const original = twoFactorRow(fixture);
+  expect((await enable()).status).toBe(200);
+  const replaced = twoFactorRow(fixture);
+  expect(replaced.secret).not.toBe(original.secret);
+  expect(replaced.verified).toBe(1);
+  const regenerated = await regenerate(originalPassword);
+  expect(regenerated.status).toBe(200);
+  const { backupCodes } = (await regenerated.json()) as {
+    backupCodes: string[];
+  };
+  expect(twoFactorRow(fixture)).toMatchObject({
+    activity_change: null,
+    secret: replaced.secret,
+  });
+  expect(twoFactorRow(fixture).backupCodes).not.toBe(replaced.backupCodes);
+
+  // Using a backup code rewrites the codes but regenerates nothing.
+  const beforeUse = twoFactorRow(fixture).backupCodes;
+  allowRequests();
+  const used = await post(
+    fixture.auth,
+    "/two-factor/verify-backup-code",
+    { code: backupCodes[0] },
+    cookies.header(),
+  );
+  expect(used.status).toBe(200);
+  expect(twoFactorRow(fixture).backupCodes).not.toBe(beforeUse);
+
+  expect(recorded(fixture)).toEqual([
+    { email, action: "two_factor_enabled" },
+    { email, action: "two_factor_authenticator_replaced" },
+    { email, action: "two_factor_backup_codes_regenerated" },
+  ]);
+  cookies.absorb(used);
+  expect((await history(fixture, cookies)).events).toMatchObject([
+    { action: "two_factor_backup_codes_regenerated", change: null },
+    { action: "two_factor_authenticator_replaced", change: null },
+    { action: "two_factor_enabled", change: null },
+  ]);
+});
+
+it("keeps the old authenticator and backup codes when the change cannot be recorded", async () => {
+  const fixture = await createFixture();
+  const { cookies, enable } = await enrolled(fixture);
+  const original = twoFactorRow(fixture);
+  rejectHistory(fixture);
+  expect((await enable()).status).not.toBe(200);
+  expect(
+    (
+      await post(
+        fixture.auth,
+        "/two-factor/generate-backup-codes",
+        { password: originalPassword },
+        cookies.header(),
+      )
+    ).status,
+  ).not.toBe(200);
+  allowHistory(fixture);
+  expect(twoFactorRow(fixture)).toEqual(original);
+  expect(recorded(fixture)).toEqual([{ email, action: "two_factor_enabled" }]);
+});
+
+it("records profile name and picture changes once, with the old and new name", async () => {
+  const fixture = await createFixture();
+  const cookies = await signUp(fixture, email);
+  const update = (data: Record<string, unknown>) =>
+    post(fixture.auth, "/update-user", data, cookies.header());
+  expect((await update({ name: "Example Person" })).status).toBe(200);
+  expect(recorded(fixture)).toEqual([]);
+  expect((await update({ name: "Renamed Person" })).status).toBe(200);
+  expect((await update({ image: "https://example.com/me.png" })).status).toBe(
+    200,
+  );
+  expect((await update({ image: "https://example.com/me.png" })).status).toBe(
+    200,
+  );
+  expect(recorded(fixture)).toEqual([
+    { email, action: "name_changed" },
+    { email, action: "image_changed" },
+  ]);
+  expect((await history(fixture, cookies)).events).toMatchObject([
+    { action: "image_changed", change: null },
+    {
+      action: "name_changed",
+      change: { before: "Example Person", after: "Renamed Person" },
+    },
+  ]);
+  // The picture's address is not kept.
+  expect(
+    fixture.database
+      .query(
+        "SELECT details FROM user_security_events WHERE action = 'image_changed'",
+      )
+      .get(),
+  ).toEqual({ details: null });
+
+  rejectHistory(fixture);
+  expect((await update({ name: "Third Name" })).status).not.toBe(200);
+  allowHistory(fixture);
+  expect(
+    fixture.database.query("SELECT name FROM user WHERE email = ?").get(email),
+  ).toEqual({ name: "Renamed Person" });
 });

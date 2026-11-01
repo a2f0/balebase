@@ -371,11 +371,20 @@ async function provisionDefaultOrganization(
   }
 
   const adapter = context.context.adapter;
+  // The new person founds it; migration 0085's trigger records the creation.
   const organizationRecord = await adapter.create<
-    { createdAt: Date; name: string; slug: string },
+    {
+      activityActorId: string;
+      activityCreatedVia: "signup";
+      createdAt: Date;
+      name: string;
+      slug: string;
+    },
     { id: string }
   >({
     data: {
+      activityActorId: user.id,
+      activityCreatedVia: "signup",
       createdAt: new Date(),
       name: defaultOrganizationName(user.name),
       slug: `personal-${user.id.toLowerCase()}`,

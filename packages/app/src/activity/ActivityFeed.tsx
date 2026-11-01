@@ -54,6 +54,8 @@ import {
   linkEndedByDeletion,
 } from "./libraryActivity";
 import {
+  apiKeyLines,
+  apiKeyRevocationReason,
   membershipSummary,
   organizationActionLabels,
   organizationActivitySummary,
@@ -332,7 +334,10 @@ function memberSummary(event: ActivityEvent) {
   const change =
     event.action === "organization.member_two_factor_requirement_changed"
       ? twoFactorSummary(event)
-      : `${formatRoles(textValue(event.details.before))} → ${formatRoles(textValue(event.details.after))}`;
+      : [
+          `${formatRoles(textValue(event.details.before))} → ${formatRoles(textValue(event.details.after))}`,
+          ...apiKeyLines(event.details),
+        ].join(" · ");
   return `${memberLabel(event)} · ${change}`;
 }
 
@@ -573,6 +578,9 @@ function MemberRoleDetails({ event }: { event: ActivityEvent }) {
         {formatRoles(textValue(event.details.before))} →{" "}
         {formatRoles(textValue(event.details.after))}
       </p>
+      {apiKeyLines(event.details).map((line) => (
+        <p key={line}>{line}</p>
+      ))}
     </div>
   );
 }
@@ -714,7 +722,12 @@ function activityLinkLabel(event: ActivityEvent) {
 
 function apiKeySummary({ details }: ActivityEvent) {
   const access = details.access === "write" ? "Read and write" : "Read only";
-  return `${access} · ${textValue(details.prefix)}…`;
+  const reason = apiKeyRevocationReason(details.reason);
+  return [
+    access,
+    `${textValue(details.prefix)}…`,
+    ...(reason ? [reason] : []),
+  ].join(" · ");
 }
 
 function memberLabel(event: ActivityEvent) {

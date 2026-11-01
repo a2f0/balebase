@@ -306,7 +306,16 @@ async function createRoleActivityFixture() {
         },
         cookie,
       ),
-    history: () => findActivity(bindings.DB, owner.organizationId),
+    // Sign-up recorded the organization's creation; these tests read roles.
+    history: () =>
+      findActivity(
+        bindings.DB,
+        owner.organizationId,
+        undefined,
+        undefined,
+        false,
+        "organization_member",
+      ),
     member: () =>
       fixture.database
         .query(

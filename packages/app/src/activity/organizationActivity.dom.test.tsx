@@ -155,6 +155,63 @@ describe("organization membership activity", () => {
     expect(rows[7]).toContain("By an owner · Pending invitations canceled: 1");
   });
 
+  it("shows the organization's creation and the API keys access changes revoke", async () => {
+    const key = { id: "key-1", label: "Reporting", type: "api_key" };
+    respond(async () =>
+      Response.json({
+        events: [
+          activity(4, "api_key.revoked", key, {
+            access: "write",
+            prefix: "tlk_1234abcd",
+            reason: "role_changed",
+          }),
+          activity(3, "organization.member_role_changed", bobMember, {
+            after: "member",
+            before: "admin",
+            revokedApiKeys: [{ id: "key-1", name: "Reporting" }],
+            userName: "Bob",
+          }),
+          activity(2, "organization.member_removed", bobMember, {
+            revokedApiKeys: [{ id: "key-2", name: "Agent" }],
+            role: "admin",
+            userName: "Bob",
+          }),
+          activity(
+            1,
+            "organization.created",
+            { id: "org-1", label: "Sam's Organization", type: "organization" },
+            {
+              name: "Sam's Organization",
+              ownerEmail: "sam@example.com",
+              ownerName: "Sam",
+              slug: "personal-sam",
+              via: "signup",
+            },
+          ),
+        ],
+        nextCursor: null,
+      }),
+    );
+    const { container } = await mount(
+      <ActivityFeed onNavigate={() => undefined} />,
+    );
+    await settle();
+    const rows = [...container.querySelectorAll(".activityRow")].map(
+      (row) => row.textContent ?? "",
+    );
+    expect(rows[0]).toContain("Sam revoked an API key");
+    expect(rows[0]).toContain(
+      "Read and write · tlk_1234abcd… · Its creator is no longer an owner or admin",
+    );
+    expect(rows[1]).toContain("Sam changed an organization role");
+    expect(rows[1]).toContain("API keys revoked: Reporting");
+    expect(rows[2]).toContain("Bob · Admin · API keys revoked: Agent");
+    expect(rows[3]).toContain("Sam created the organization");
+    expect(rows[3]).toContain(
+      "Sam's Organization · At sign-up · Founding owner: Sam",
+    );
+  });
+
   it("offers the Invitations filter only to organization managers", async () => {
     respond(async () => Response.json({ events: [], nextCursor: null }));
     const view = await mount(<Activity canManage onNavigate={() => {}} />);

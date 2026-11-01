@@ -34,6 +34,20 @@ const ApiKeySchema = z.object({
   prefix: z.string(),
   revokedAt: z.string().nullable(),
   revokedBy: PersonSchema.nullable(),
+  /**
+   * Why the key was revoked when a change to its creator's access did it:
+   * their role (`role_changed`), their removal or leaving, or a loss of access
+   * before such revocations were recorded (`creator_access_ended`, with no
+   * revoker). Null when a manager revoked it on the API keys page.
+   */
+  revokedReason: z
+    .enum([
+      "role_changed",
+      "member_removed",
+      "member_left",
+      "creator_access_ended",
+    ])
+    .nullable(),
   /** `inactive` keys belong to someone who no longer manages the organization. */
   status: z.enum(["active", "expired", "inactive", "revoked"]),
 });
