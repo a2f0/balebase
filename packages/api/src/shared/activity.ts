@@ -344,7 +344,7 @@ export function maintenanceActor(jobId: string, runId: string): SystemActor {
  * records a signer's decline and a contract's completion, caused by the
  * contract's own event, which names the signer.
  */
-export const contractSigningSource = "contractSigning";
+const contractSigningSource = "contractSigning";
 
 /** The signing workflow, as the actor of one contract event's outcome. */
 export function contractSigningActor(contractEventId: string): SystemActor {

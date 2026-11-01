@@ -5,10 +5,12 @@ import { readBoundedRequest } from "../shared/storage";
 import type { Bindings } from "../types";
 import { verifyCheckrWebhook } from "./checkr";
 import {
-  type CheckrAttemptRow,
   type CheckrScreeningRow,
-  recoverCheckrAttempt,
   refreshCheckrScreening,
+} from "./checkrRefresh";
+import {
+  type CheckrAttemptRow,
+  recoverCheckrAttempt,
   reportSettleMs,
 } from "./checkrScreening";
 import { sendPendingScreeningNotifications } from "./screeningNotifications";

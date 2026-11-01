@@ -14,8 +14,8 @@ import {
   checkrPackageScreenings,
   checkrTestMode,
 } from "./checkr";
+import { refreshCheckrScreening } from "./checkrRefresh";
 import {
-  refreshCheckrScreening,
   requestCheckrScreening,
   submitCheckrScreening,
 } from "./checkrScreening";
