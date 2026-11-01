@@ -2,7 +2,7 @@ import { productName } from "@balebase/ui/brand";
 import { contractsRoutes } from "@balebase/validators/contracts";
 import { contractTemplatesRoutes } from "@balebase/validators/contractTemplates";
 import { employeeFormsRoutes } from "@balebase/validators/employeeForms";
-import type { McpTool } from "./mcpToolSchema";
+import { activityCursor, type McpTool } from "./mcpToolSchema";
 
 /** A field box on a page, with coordinates as fractions of the page. */
 function placedField(
@@ -141,6 +141,14 @@ export const contractTools: McpTool[] = [
   },
   {
     description:
+      "Lists one contract template's history, newest first, 50 events per page: who created it and saved each version, and through which API key. Pass nextCursor to page.",
+    descriptions: { ...templateId, ...activityCursor },
+    name: "list_contract_template_activity",
+    route: contractTemplatesRoutes.activity,
+    title: "List contract template activity",
+  },
+  {
+    description:
       "Saves a new version of a contract template. Earlier versions and contracts made from them do not change.",
     descriptions: {
       ...templateId,
@@ -232,6 +240,14 @@ export const contractTools: McpTool[] = [
     name: "update_employee_requirement",
     route: employeeFormsRoutes.update,
     title: "Update employee requirement",
+  },
+  {
+    description:
+      "Lists one employee requirement's history, newest first, 50 events per page: assignment, due date and status changes, uploads, and background check requests. Organization owners and admins only. Pass nextCursor to page.",
+    descriptions: { ...requirementId, ...activityCursor },
+    name: "list_employee_requirement_activity",
+    route: employeeFormsRoutes.activity,
+    title: "List employee requirement activity",
   },
   {
     description:

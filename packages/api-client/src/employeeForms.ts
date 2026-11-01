@@ -31,6 +31,11 @@ const endpoints = {
     path: "/api/employee-forms/:id",
     response: "json",
   }),
+  activity: endpoint<typeof employeeFormsRoutes.activity>({
+    method: "GET",
+    path: "/api/employee-forms/:id/activity",
+    response: "json",
+  }),
   upload: endpoint<typeof employeeFormsRoutes.upload>({
     method: "POST",
     path: "/api/employee-forms/:id/document",
@@ -98,6 +103,13 @@ export function employeeFormsApi(transport: Transport) {
     },
     delete(id: string) {
       return transport.call(endpoints.delete, { params: { id } });
+    },
+    /** One request's history, newest first; managers only. */
+    activity(id: string, cursor?: string) {
+      return transport.call(endpoints.activity, {
+        params: { id },
+        query: { cursor },
+      });
     },
     upload(id: string, file: File) {
       const body = new FormData();

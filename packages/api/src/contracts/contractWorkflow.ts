@@ -122,19 +122,46 @@ export async function notifyRecipients(
     if (!link) continue;
     try {
       await sendSigningRequest(environment, mail, recipient, link, reminder);
-      delivered += 1;
-      await recordEvent(database, {
-        actorUserId: actor?.userId ?? null,
-        apiKey: actor?.apiKey,
-        contractId: contract.id,
-        recipientId: recipient.id,
-        type: reminder ? "reminded" : "notified",
-      });
     } catch (cause) {
-      await recordDeliveryFailure(database, contract.id, recipient.id, cause);
+      await recordDeliveryFailure(
+        database,
+        contract.id,
+        recipient.id,
+        cause,
+        actor,
+      );
+      continue;
     }
+    delivered += 1;
+    // An email cannot share a transaction with its record, so the event
+    // follows the send; a failed insert is retried once, never reported as a
+    // failed delivery.
+    await recordAfterSend(database, {
+      actorUserId: actor?.userId ?? null,
+      apiKey: actor?.apiKey,
+      contractId: contract.id,
+      recipientId: recipient.id,
+      type: reminder ? "reminded" : "notified",
+    });
   }
   return delivered;
+}
+
+async function recordAfterSend(
+  database: D1Database,
+  event: Parameters<typeof recordEvent>[1],
+) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await recordEvent(database, event);
+      return;
+    } catch (cause) {
+      if (attempt >= 2) {
+        console.error("A sent contract email could not be recorded.", cause);
+        return;
+      }
+    }
+  }
 }
 
 /**
@@ -394,14 +421,21 @@ async function deliverCompletion(
   }
 }
 
+/**
+ * Records an email that could not be sent; a manual reminder's names the
+ * person who sent it, and their key.
+ */
 async function recordDeliveryFailure(
   database: D1Database,
   contractId: string,
   recipientId: string | null,
   cause: unknown,
+  actor?: ActivityActor,
 ) {
   console.error("Contract email could not be sent.", cause);
   await recordEvent(database, {
+    actorUserId: actor?.userId ?? null,
+    apiKey: actor?.apiKey,
     contractId,
     detail: cause instanceof Error ? cause.message : null,
     recipientId,
@@ -443,7 +477,10 @@ export function describeEvent(
     case "voided":
       return `Voided by ${actor}`;
     case "delivery_failed":
-      return `Email to ${who} could not be delivered`;
+      // Only a manual reminder's failure names who sent it.
+      return event.actor_user_id
+        ? `Reminder from ${actor} to ${who} could not be delivered`
+        : `Email to ${who} could not be delivered`;
     default:
       return event.type;
   }

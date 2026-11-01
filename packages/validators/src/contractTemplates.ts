@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import {
   ContractDocumentSchema,
   ContractTitleSchema,
@@ -215,6 +216,12 @@ export const contractTemplatesRoutes = {
     method: "GET",
     path: "/api/contracts/templates/:id/versions",
     response: z.object({ versions: z.array(TemplateVersionSchema) }),
+  }),
+  activity: route({
+    method: "GET",
+    path: "/api/contracts/templates/:id/activity",
+    query: ActivityQuerySchema,
+    response: ActivityPageSchema,
   }),
   document: route({
     method: "GET",
