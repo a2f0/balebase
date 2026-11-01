@@ -375,6 +375,62 @@ describe("subscription cancellation activity", () => {
     );
   });
 
+  it("keeps the first deleter's intent through a refused retry before the webhook", async () => {
+    const fixture = paidFixture();
+    const canceled = subscriptionEvent("evt_canceled", 200, "canceled", 2);
+    const object = {
+      ...canceled.data.object,
+      canceled_at: Math.floor(Date.now() / 1_000),
+    };
+    fixture.database.exec(`CREATE TRIGGER fail_activity
+      BEFORE INSERT ON activity_events
+      WHEN NEW.action = 'billing.subscription_canceled'
+      BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END`);
+    let stripeCanceled = false;
+    await withFetch(
+      {
+        "DELETE https://api.stripe.com/v1/subscriptions/sub_test": async () => {
+          if (stripeCanceled)
+            return Response.json(
+              { error: { message: "No such subscription" } },
+              { status: 404 },
+            );
+          stripeCanceled = true;
+          return Response.json(object);
+        },
+        "GET https://api.stripe.com/v1/subscriptions/sub_test": async () =>
+          Response.json(object),
+      },
+      async () => {
+        await expect(
+          cancelOrganizationSubscription(
+            fixture.bindings,
+            organizationId,
+            deleting,
+          ),
+        ).rejects.toThrow("activity unavailable");
+        fixture.database.run("DROP TRIGGER fail_activity");
+        // Someone else retries before the webhook arrives; Stripe refuses,
+        // since it already canceled for the first request.
+        await expect(
+          cancelOrganizationSubscription(fixture.bindings, organizationId, {
+            ...deleting,
+            actor: { userId: "user-2" },
+          }),
+        ).rejects.toThrow("No such subscription");
+        expect(intents(fixture)).toEqual([{ subscription_id: "sub_test" }]);
+        expect(
+          (await sendWebhook(fixture, { ...canceled, data: { object } }))
+            .status,
+        ).toBe(200);
+        expect(canceledEvents(fixture)).toMatchObject([
+          { actor_user_id: "user-1", details: { via: "owner" } },
+        ]);
+      },
+      { captureErrors: true },
+    );
+  });
+
   it("credits nobody for a cancellation long after a refused or stale intent", async () => {
     const fixture = paidFixture();
     await withFetch(

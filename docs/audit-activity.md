@@ -126,8 +126,9 @@ then fails or changes nothing, since the paid plan has ended either way, and
 is recorded once per subscription; a Stripe refusal records nothing. Who is
 canceling is stored before Stripe is asked (`billing_cancellation_intents`,
 migration 0085), so when the request cannot persist the cancellation, the
-webhook that reports it records the event instead; only a cancellation
-Stripe reports within 15 minutes of that intent is credited to it. The
+webhook that reports it records the event instead; a retry keeps an
+unresolved intent from the last 15 minutes, and only a cancellation Stripe
+reports within that window of the intent is credited to it. The
 deletion event lists the canceled subscription IDs. Root admins see these
 cancellations on the organization's admin page with its lifecycle events.
 Rejected requests and saves that change nothing record nothing. A membership

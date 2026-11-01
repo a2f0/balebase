@@ -27,7 +27,9 @@ const intentWindowSeconds = 15 * 60;
  * Stores who is about to cancel a subscription before Stripe is asked to.
  * Whichever write persists the cancellation (this request, or a webhook when
  * this request's write fails) records the event from it, so the person is
- * never lost once Stripe has canceled. The latest request wins.
+ * never lost once Stripe has canceled. A recent unresolved intent is kept, as
+ * its request may have canceled already; only a stale one is replaced.
+ * Returns whether this request's intent is the stored one.
  */
 export async function recordCancellationIntent(
   database: D1Database,
@@ -35,7 +37,7 @@ export async function recordCancellationIntent(
   subscriptionId: string,
   cancellation: SubscriptionCancellation,
 ) {
-  await database
+  const stored = await database
     .prepare(
       `INSERT INTO billing_cancellation_intents (
          subscription_id, organization_id, actor_user_id, api_key_id,
@@ -55,7 +57,9 @@ export async function recordCancellationIntent(
          via = excluded.via,
          reason = excluded.reason,
          previous_status = excluded.previous_status,
-         created_at = excluded.created_at`,
+         created_at = excluded.created_at
+       WHERE billing_cancellation_intents.created_at
+             < excluded.created_at - ${intentWindowSeconds}`,
     )
     .bind(
       subscriptionId,
@@ -69,12 +73,14 @@ export async function recordCancellationIntent(
       organizationId,
     )
     .run();
+  return Number(stored.meta.changes) > 0;
 }
 
 /**
- * Drops the intent when Stripe definitively refused the cancellation. After
- * an indeterminate failure (a 5xx or a dropped connection) Stripe may still
- * have canceled, so the intent stays for the webhook.
+ * Drops this request's intent when Stripe definitively refused the
+ * cancellation. After an indeterminate failure (a 5xx or a dropped
+ * connection) Stripe may still have canceled, so the intent stays for the
+ * webhook, as does an earlier request's intent this one did not replace.
  */
 export async function forgetRefusedCancellation(
   database: D1Database,

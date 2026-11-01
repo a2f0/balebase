@@ -364,14 +364,14 @@ export async function cancelStripeSubscription(
   cancellation?: SubscriptionCancellation,
 ) {
   await withSubscriptionSyncLock(environment.DB, subscriptionId, async () => {
-    if (cancellation) {
-      await recordCancellationIntent(
-        environment.DB,
-        organizationId,
-        subscriptionId,
-        cancellation,
-      );
-    }
+    const intentStored = cancellation
+      ? await recordCancellationIntent(
+          environment.DB,
+          organizationId,
+          subscriptionId,
+          cancellation,
+        )
+      : false;
     let subscription: StripeSubscription;
     try {
       subscription = await deleteStripeSubscription(
@@ -379,7 +379,7 @@ export async function cancelStripeSubscription(
         subscriptionId,
       );
     } catch (cause) {
-      if (cancellation) {
+      if (intentStored) {
         await forgetRefusedCancellation(environment.DB, subscriptionId, cause);
       }
       throw cause;
