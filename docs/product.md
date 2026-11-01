@@ -177,14 +177,19 @@ target account is purged. Apply migration `0077_record_user_role_activity.sql`
 before deploying. `auth:set-role` changes record `role_set` events with an
 operator actor (migration `0082_record_account_history.sql`).
 
-**Account settings → Security** lists the person's latest 50 security changes:
-turning two-factor authentication on or off and changing or resetting their
-password (`GET /api/account-settings/security-events`). Database triggers record
+**Account settings → Security** lists the person's latest 50 security and
+profile changes: turning two-factor authentication on or off, replacing the
+authenticator app, regenerating backup codes, changing or resetting their
+password, and changing their name (with the old and new name) or picture
+(`GET /api/account-settings/security-events`). Database triggers record
 each change in `user_security_events` in the statement that makes it, so a
 failed verification, a wrong password, or a change that cannot be recorded
 changes nothing. Every remaining path to these changes is the person's own
 session or password reset link, so the event names no separate actor. Changes
-made before migration `0082_record_account_history.sql` were not recorded. Only
+made before migration `0082_record_account_history.sql` (and, for the
+authenticator, backup codes, name and picture, before
+`0085_record_access_lifecycle.sql`) were not recorded. Using a backup code to
+sign in changes nothing that is listed. Only
 the person reads the list in the app; root admins read it in D1. It is removed
 when the account is purged. Signing out other sessions is not recorded: Better
 Auth deletes those session rows the same way it signs a session out.
@@ -296,7 +301,11 @@ session. A key counts as two-factor verified only when the session that created
 it was; if the organization later requires two-factor authentication, create a
 new key after signing in with it. A key stops working when it is revoked or
 expires, when its creator is no longer an owner or admin there, or when the
-organization is deleted. Send it as `Authorization: Bearer <key>`. Keys reach
+organization is deleted. Changing the creator's role below admin, removing
+them, or their leaving revokes their unexpired keys, recorded as
+`api_key.revoked` naming who made the change and why, and the API keys page
+shows the reason; regaining the role or rejoining does not bring a key back.
+Send it as `Authorization: Bearer <key>`. Keys reach
 the workspace routes: activity, audits, businesses, contracts, employee forms,
 equipment, finance, inbox, library folders and files, groups, `/api/me`, and the
 people list. Read keys may only use `GET`. Account settings, billing,

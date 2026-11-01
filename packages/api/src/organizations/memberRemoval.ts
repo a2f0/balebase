@@ -4,7 +4,8 @@
  * writes that carry no actor, so the request's removal runs here instead:
  * the events read the stored membership, groups, equipment and API keys
  * before the deletes, and every statement holds only while the removal is
- * still allowed. Nothing in this module may import a route module, because
+ * still allowed. The person's unexpired API keys here are revoked, so they
+ * stay stopped if the person rejoins. Nothing in this module may import a route module, because
  * auth.ts imports it.
  */
 
@@ -59,7 +60,12 @@ const insertEvent = `INSERT INTO activity_events (
   action, actor_user_id, actor_name, actor_email, occurred_at, details
 )`;
 
-/** The membership's end, with the role and API keys it held. */
+/** The person's unrevoked, unexpired API keys in the organization. */
+const liveKeys = `organization_id = member.organizationId
+  AND created_by = member.userId AND revoked_at IS NULL
+  AND (expires_at IS NULL OR expires_at > ?)`;
+
+/** The membership's end, with the role it held and the API keys it revokes. */
 function membershipEvent(
   database: D1Database,
   removal: MemberRemoval,
@@ -75,18 +81,11 @@ function membershipEvent(
               json_object(
                 'role', member.role, 'userId', person.id,
                 'userName', person.name, 'userEmail', person.email,
-                -- The keys this removal stops: a key works only while it is
-                -- unrevoked and unexpired and its creator manages the
-                -- organization.
-                'apiKeys', json((
+                'revokedApiKeys', json((
                   SELECT json_group_array(json_object('id', id, 'name', name))
                   FROM (
                     SELECT id, name FROM organization_api_keys
-                    WHERE organization_id = member.organizationId
-                      AND created_by = member.userId AND revoked_at IS NULL
-                      AND (expires_at IS NULL OR expires_at > ?)
-                      AND (instr(${roles("member.role")}, ',owner,') > 0
-                           OR instr(${roles("member.role")}, ',admin,') > 0)
+                    WHERE ${liveKeys}
                     ORDER BY created_at, id
                   )
                 )))
@@ -193,6 +192,36 @@ function equipmentEvents(
     );
 }
 
+/**
+ * Revokes the person's live keys, attributed to the remover (or the person
+ * leaving); migration 0085's trigger records each `api_key.revoked`.
+ */
+function apiKeyRevocations(
+  database: D1Database,
+  removal: MemberRemoval,
+  occurredAt: string,
+) {
+  const allowed = removalAllowed(removal);
+  return database
+    .prepare(
+      `UPDATE organization_api_keys
+       SET revoked_at = ?, revoked_by = ?, revoked_reason = ?
+       WHERE id IN (
+         SELECT organization_api_keys.id FROM organization_api_keys
+         JOIN member ON member.id = ?
+         WHERE ${liveKeys}
+       ) AND ${allowed.sql}`,
+    )
+    .bind(
+      occurredAt,
+      removal.actorId,
+      removal.reason,
+      removal.memberId,
+      occurredAt,
+      ...allowed.bindings,
+    );
+}
+
 /** Releases the person's group seats and grants, as Better Auth would. */
 function groupDeletes(database: D1Database, removal: MemberRemoval) {
   const allowed = removalAllowed(removal);
@@ -233,6 +262,7 @@ export async function removeMemberWithActivity(
     membershipEvent(database, removal, occurredAt),
     groupEvents(database, removal, occurredAt),
     equipmentEvents(database, removal, occurredAt),
+    apiKeyRevocations(database, removal, occurredAt),
     ...groupDeletes(database, removal),
     database
       .prepare(`DELETE FROM member WHERE id = ? AND ${allowed.sql}`)

@@ -3,8 +3,9 @@
 Activity is the shared history of consequential changes across Balebase. The
 checklist Audits feature is one producer alongside equipment, projects, issues,
 organization membership (roles, invitations, joining, leaving and removal),
-organization renames, deletion and restoration, group access, members'
-two-factor requirements, API keys, transaction annotations and categories,
+organization creation, renames, deletion and restoration, group access,
+members' two-factor requirements, API keys (including revocations that a
+change to their creator's access makes), transaction annotations and categories,
 bank connections (connecting, sync requests and settings, disconnecting, and
 deleting imported data), expense categories, Pro checkout starts, library
 files and folders, inbox email moves and links, businesses, contracts and
@@ -66,9 +67,10 @@ deletion and restoration, and requested forms and checks
 (`employee_requirement`) are visible only to organization owners and admins,
 as group details, pending invitations, member security settings, billing
 management, and employee records already are. Everyone in the organization
-sees people joining, leaving, being removed or changing role, and organization
-renames. Root admins read the organization's own history (renames, deletion
-and restoration) on its admin detail page, including while it is deleted. The
+sees people joining, leaving, being removed or changing role, API keys being
+created and revoked, and the organization's creation and renames. Root admins
+read the organization's own history (creation, renames, deletion and
+restoration) on its admin detail page, including while it is deleted. The
 MCP `list_activity` tool accepts the same optional `resourceType`; keep that
 filter when passing the next cursor.
 
@@ -96,23 +98,39 @@ reconstruct unknown editors, previous values, or timestamps from current state.
 ## Organization membership
 
 Better Auth's organization endpoints carry the request's actor into the write
-they make (`auth/organizationActivity.ts`), so the triggers of migrations 0057
-and 0083 record each change atomically with it: role changes, invitations
-sent, canceled (including the cancel a re-invite makes) or declined, a person
+they make (`auth/organizationActivity.ts`), so the triggers of migrations 0057,
+0083 and 0085 record each change atomically with it: creating an organization
+(`organization.created`, at sign-up or from `/organization/create`, naming the
+creator as founding owner and `details.via`), role changes, invitations sent,
+canceled (including the cancel a re-invite makes) or declined, a person
 joining by invitation (actor: the person; details: the role and the inviter),
 and organization renames, URL name and logo changes. Removing a member and
 leaving run as one batch (`organizations/memberRemoval.ts`) that records the
-membership's end with its role and the API keys it stops, each group the
-person loses as a group update, and each equipment item returned to
-unassigned, all attributed to the remover (or to the person leaving), then
-deletes the membership. That batch re-checks that the remover still owns or
-administers the organization and never removes the last owner. Deleting an
+membership's end with its role and the API keys it revokes
+(`revokedApiKeys`), each group the person loses as a group update, and each
+equipment item returned to unassigned, all attributed to the remover (or to
+the person leaving), then revokes the person's unexpired keys and deletes the
+membership. That batch re-checks that the remover still owns or administers
+the organization and never removes the last owner. Deleting an
 organization (by an owner or a root admin, `details.via`) and restoring it
 record events in the same batch as the change; the restoration keeps who had
 deleted it, which the organization row then clears. Rejected requests and
 saves that change nothing record nothing. A membership deleted with no request
 behind it, as when an account is purged, has no actor to record until the
 shared model gains a system actor; equipment is still unassigned then.
+
+An API key acts as its creator, so a change that leaves the creator neither
+owner nor admin ends the key for good: a role change revokes the creator's
+unexpired keys in the same statement (listed in the role event's
+`revokedApiKeys`), as removal and leaving do in their batch. Each revocation
+records `api_key.revoked` with the person who made the change and
+`details.reason` (`role_changed`, `member_removed`, `member_left`); the key's
+`revoked_reason` keeps it for the API keys page. Regaining the role or
+rejoining never restores a key; the person makes a new one. Removals recorded
+before migration 0085 list the keys they stopped as `apiKeys`; those keys,
+and any other key whose creator had already lost access, were revoked by that
+migration with `revoked_reason = 'creator_access_ended'` and no revoker or
+event, because no person made that change.
 
 ## Library, inbox, and businesses
 
@@ -205,9 +223,14 @@ Some histories are not organization activity:
   one that joins an active run, with the requester's snapshot. It outlives the
   30-day job history and the requester's account. Each request also logs a line
   on its run, and the run keeps the first requester's name and email.
-- `user_security_events` records a person's own two-factor and password
-  changes by trigger. The person reads it under Account settings → Security;
-  root admins read it in D1.
+- `user_security_events` records a person's own sign-in security and profile
+  changes by trigger: two-factor on and off, replacing the authenticator app
+  (enrolling again while two-factor is on), regenerating backup codes (the
+  write for `/two-factor/generate-backup-codes` carries a mark, so using a
+  backup code records nothing), password changes and resets, and name (old and
+  new value) and picture changes (the picture's address is not kept). The
+  person reads it under Account settings → Security; root admins read it in
+  D1.
 
 Better Auth's admin endpoints that would change another person's account or
 act as them (`set-user-password`, `ban-user`, `unban-user`,
@@ -224,6 +247,7 @@ examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `equipment/equipment.test.ts`, `projects/projects.test.ts`, `auth/apiKeys.test.ts`,
 `auth/organizationRoleActivity.test.ts`,
 `organizations/membershipActivity.test.ts`,
+`organizations/accessLifecycle.test.ts`,
 `organizations/accessActivity.test.ts`, `issues/issues.test.ts`,
 `library/libraryActivity.test.ts`, `inbox/inboxActivity.test.ts`,
 `businesses/businessActivity.test.ts`, `jobs/maintenanceRequests.test.ts`,

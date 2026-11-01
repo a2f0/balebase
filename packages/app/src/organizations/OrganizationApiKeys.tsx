@@ -360,11 +360,24 @@ function ConnectionCard() {
   );
 }
 
+const revocationReasons: Record<
+  NonNullable<ApiKey["revokedReason"]>,
+  string
+> = {
+  creator_access_ended: "its creator had already lost access",
+  member_left: "its creator left",
+  member_removed: "its creator was removed",
+  role_changed: "its creator is no longer an owner or admin",
+};
+
 function usageSummary(apiKey: ApiKey) {
   if (apiKey.revokedAt) {
+    const reason = apiKey.revokedReason
+      ? ` because ${revocationReasons[apiKey.revokedReason]}`
+      : "";
     return `Revoked ${formatDate(apiKey.revokedAt)}${
       apiKey.revokedBy ? ` by ${apiKey.revokedBy.name}` : ""
-    }`;
+    }${reason}`;
   }
   const used = apiKey.lastUsedAt
     ? `Last used ${formatDate(apiKey.lastUsedAt)}`

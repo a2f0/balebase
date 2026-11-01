@@ -51,6 +51,40 @@ it("lists the person's security changes and refreshes in place when two-factor c
   expect(paths).toHaveLength(2);
 });
 
+it("names a changed name's old and new value and every recorded change", async () => {
+  respond(async () =>
+    Response.json({
+      events: [
+        {
+          action: "name_changed",
+          change: { after: "Sam Lee", before: "Sam" },
+          occurredAt: "2026-10-31T12:00:00.000Z",
+        },
+        ...[
+          "image_changed",
+          "two_factor_authenticator_replaced",
+          "two_factor_backup_codes_regenerated",
+          "a_future_change",
+        ].map((action) => ({
+          action,
+          change: null,
+          occurredAt: "2026-10-30T12:00:00.000Z",
+        })),
+      ],
+    }),
+  );
+  const view = await mount(<AccountSecurityHistory twoFactorEnabled />);
+  await settle();
+  const items = [...view.container.querySelectorAll("li")].map(
+    (item) => item.textContent ?? "",
+  );
+  expect(items[0]).toContain('Name changed from "Sam" to "Sam Lee"');
+  expect(items[1]).toContain("Profile picture changed");
+  expect(items[2]).toContain("Authenticator app replaced");
+  expect(items[3]).toContain("Backup codes regenerated");
+  expect(items[4]).toContain("Account changed");
+});
+
 it("says when nothing has been recorded", async () => {
   respond(async () => Response.json({ events: [] }));
   const view = await mount(<AccountSecurityHistory twoFactorEnabled />);

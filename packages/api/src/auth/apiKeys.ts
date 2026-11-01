@@ -26,6 +26,7 @@ interface ApiKeyRow {
   last_used_at: string | null;
   name: string;
   revoked_at: string | null;
+  revoked_reason: ApiKey["revokedReason"];
   revoker_email: string | null;
   revoker_id: string | null;
   revoker_name: string | null;
@@ -380,7 +381,7 @@ apiKeys.delete("/:id", async (context) => {
 const apiKeySelect = `
   SELECT api_key.id, api_key.name, api_key.access, api_key.token_prefix,
          api_key.created_at, api_key.expires_at, api_key.last_used_at,
-         api_key.revoked_at,
+         api_key.revoked_at, api_key.revoked_reason,
          creator.id AS creator_id, creator.name AS creator_name,
          creator.email AS creator_email, creator_member.role AS creator_role,
          revoker.id AS revoker_id, revoker.name AS revoker_name,
@@ -416,6 +417,7 @@ function toApiKey(row: ApiKeyRow, now: Date): ApiKey {
     name: row.name,
     prefix: row.token_prefix,
     revokedAt: row.revoked_at,
+    revokedReason: row.revoked_reason,
     revokedBy: row.revoker_id
       ? {
           email: row.revoker_email ?? "",

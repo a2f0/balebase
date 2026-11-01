@@ -42,7 +42,7 @@ export function accountSettingsApi(transport: Transport) {
         body: { organizationId },
       });
     },
-    /** The signed-in person's latest two-factor and password changes. */
+    /** The signed-in person's latest security and profile changes. */
     securityEvents() {
       return transport.call(endpoints.securityEvents);
     },
