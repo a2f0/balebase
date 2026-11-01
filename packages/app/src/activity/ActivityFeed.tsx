@@ -55,6 +55,12 @@ import {
 } from "./organizationActivity";
 import { projectActivitySummary } from "./projectActivity";
 import { RecordActivityDetails } from "./RecordActivity";
+import {
+  actorDetail,
+  actorName,
+  purgeSummary,
+  systemActionLabels,
+} from "./systemActivity";
 
 const actionLabels: Record<string, string> = {
   "finance.daily_sync_changed": "changed daily sync",
@@ -131,6 +137,7 @@ const actionLabels: Record<string, string> = {
   "project.updated": "edited a project",
   ...financeActionLabels,
   ...organizationActionLabels,
+  ...systemActionLabels,
 };
 
 export function ActivityFeed({
@@ -139,12 +146,14 @@ export function ActivityFeed({
   refreshKey,
   resourceType,
   source,
+  title,
 }: {
   compact?: boolean;
   onNavigate?: (pathname: string) => void;
   refreshKey?: unknown;
   resourceType?: ActivityResourceType | undefined;
   source?: ActivitySource;
+  title?: string;
 }) {
   const {
     error,
@@ -164,7 +173,7 @@ export function ActivityFeed({
           Refresh activity
         </Button>
       }
-      title={compact ? "Recent activity" : "Activity"}
+      title={title ?? (compact ? "Recent activity" : "Activity")}
     >
       {error && <Banner tone="danger">{error}</Banner>}
       {items ? (
@@ -259,8 +268,8 @@ function CompactActivityRow({
     <li className="row activityRow activityRowCompact">
       <div className="activityCompactHeading">
         <p className="activityHeading">
-          <strong title={event.actor.email}>
-            {event.actor.name || event.actor.email}
+          <strong title={actorDetail(event.actor)}>
+            {actorName(event.actor)}
           </strong>
           <ApiKeyAttribution actor={event.actor} />{" "}
           {actionLabels[event.action] ?? event.action}
@@ -297,7 +306,7 @@ function CompactActivityRow({
           <span className="activitySummary">{activitySummary(event)}</span>
         </summary>
         <div className="activityExpanded">
-          <p className="activityMeta">{event.actor.email}</p>
+          <p className="activityMeta">{actorDetail(event.actor)}</p>
           <ActivityDetails event={event} />
         </div>
       </details>
@@ -318,6 +327,7 @@ const rootSummaries: Partial<Record<string, (event: ActivityEvent) => string>> =
     organization_invitation: organizationActivitySummary,
     organization_member: memberSummary,
     project: projectActivitySummary,
+    user: purgeSummary,
   };
 
 function memberSummary(event: ActivityEvent) {
@@ -369,14 +379,14 @@ function ActivityRow({
     <li className="row activityRow">
       <div className="rowMain activityMain">
         <p className="activityHeading">
-          <strong title={event.actor.email}>
-            {event.actor.name || event.actor.email}
+          <strong title={actorDetail(event.actor)}>
+            {actorName(event.actor)}
           </strong>
           <ApiKeyAttribution actor={event.actor} />{" "}
           {actionLabels[event.action] ?? event.action}
         </p>
         <p className="activityMeta">
-          {event.actor.email} ·{" "}
+          {actorDetail(event.actor)} ·{" "}
           <time dateTime={event.occurredAt}>
             {formatDateTime(event.occurredAt)}
           </time>
@@ -410,6 +420,7 @@ const detailSummaries: Partial<
   organization_group: groupActivitySummary,
   organization_invitation: organizationActivitySummary,
   project: projectActivitySummary,
+  user: purgeSummary,
 };
 
 function ActivityDetails({ event }: { event: ActivityEvent }) {

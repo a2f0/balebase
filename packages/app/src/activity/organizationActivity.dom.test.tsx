@@ -10,7 +10,13 @@ const { mount, respond, settle } = installDom({
   globals: () => ({ IntersectionObserver: IntersectionObserverFixture }),
 });
 
-const sam = { email: "sam@example.com", id: "sam-user", name: "Sam" };
+const sam = {
+  email: "sam@example.com",
+  id: "sam-user",
+  name: "Sam",
+  source: null,
+  type: "user" as const,
+};
 
 function activity(
   id: number,

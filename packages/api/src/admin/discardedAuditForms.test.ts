@@ -244,7 +244,9 @@ describe("discarded global forms", () => {
         FROM audit_template_versions WHERE template_id = ? AND version = 2`)
       .run(old.id);
 
-    expect(await purgeDiscardedAuditForms(fixture.bindings, now)).toBe(2);
+    expect(await purgeDiscardedAuditForms(fixture.bindings, "run-1", now)).toBe(
+      2,
+    );
     const families = fixture.database
       .query("SELECT id FROM audit_template_families")
       .all()
@@ -279,7 +281,9 @@ describe("discarded global forms", () => {
       recent.id,
     ]);
     expect((await restore(fixture, old.id, 4)).status).toBe(404);
-    expect(await purgeDiscardedAuditForms(fixture.bindings, now)).toBe(0);
+    expect(await purgeDiscardedAuditForms(fixture.bindings, "run-1", now)).toBe(
+      0,
+    );
   });
 
   it("never purges organization forms or forms that are not discarded", async () => {
@@ -299,7 +303,7 @@ describe("discarded global forms", () => {
         "UPDATE audit_template_versions SET status = 'discarded' WHERE template_id = ?",
       )
       .run(local.body.template.id);
-    expect(await purgeDiscardedAuditForms(fixture.bindings)).toBe(0);
+    expect(await purgeDiscardedAuditForms(fixture.bindings, "run-1")).toBe(0);
   });
 
   it("reports a restore that loses the race to the purge as not found", async () => {

@@ -6,6 +6,7 @@ import { reconcileSubscriptionSeats } from "../billing/billingSeats";
 import { purgeStripeWebhookReceipts } from "../billing/billingWebhook";
 import { maintainContracts } from "../contracts/contractReminders";
 import { refreshActiveCheckrScreenings } from "../employeeForms/checkrSync";
+import { purgeTrashedEmails } from "../inbox/trashedEmailPurge";
 import { purgeDeletedObjects } from "../library/deletedObjectCleanup";
 import { purgeDeletedOrganizations } from "../organizations/organizationPurge";
 import { captureApiError } from "../shared/diagnostics";
@@ -38,6 +39,13 @@ export const maintenanceJobs = [
     name: "Purge discarded global forms",
     description:
       "Permanently deletes up to 100 global audit forms discarded at least 30 days ago, with their versions and history. Audits started from them keep their own copies. Restoration is no longer possible after the purge.",
+  },
+  {
+    id: "purgeTrashedEmails",
+    name: "Purge trashed email",
+    description:
+      "Permanently deletes up to 100 inbox emails that have been in Trash for at least 30 days, with their attachments and links, and queues their files for the Purge deleted files job. Each email's history records the purge. Restoration is no longer possible after the purge.",
+    scheduled: false,
   },
   {
     id: "purgeDeletedObjects",
@@ -76,23 +84,31 @@ export const maintenanceJobs = [
 ] as const;
 
 export type MaintenanceJobId = (typeof maintenanceJobs)[number]["id"];
-type MaintenanceTasks = Record<MaintenanceJobId, () => Promise<JobOutput>>;
+/** Each task receives its run's ID, the cause its system events record. */
+type MaintenanceTasks = Record<
+  MaintenanceJobId,
+  (runId: string) => Promise<JobOutput>
+>;
 type RunSource =
   | { trigger: "manual"; actorUserId: string }
   | { trigger: "scheduled"; cron: string; scheduledTime: number };
 
 export function maintenanceTasks(environment: Bindings): MaintenanceTasks {
   return {
-    purgeDeletedOrganizations: () => purgeDeletedOrganizations(environment),
-    purgeRequestedUsers: () => purgeRequestedUsers(environment),
+    purgeDeletedOrganizations: (runId) =>
+      purgeDeletedOrganizations(environment, runId),
+    purgeRequestedUsers: (runId) => purgeRequestedUsers(environment, runId),
     purgeDeletedObjects: async () => ({
       purged: await purgeDeletedObjects(environment),
     }),
-    purgeExpiredFreeAuditRuns: async () => ({
-      purged: await purgeExpiredFreeAuditRuns(environment),
+    purgeExpiredFreeAuditRuns: async (runId) => ({
+      purged: await purgeExpiredFreeAuditRuns(environment, runId),
     }),
-    purgeDiscardedAuditForms: async () => ({
-      purged: await purgeDiscardedAuditForms(environment),
+    purgeDiscardedAuditForms: async (runId) => ({
+      purged: await purgeDiscardedAuditForms(environment, runId),
+    }),
+    purgeTrashedEmails: async (runId) => ({
+      purged: await purgeTrashedEmails(environment, runId),
     }),
     purgePendingAuditIssueImages: async () => ({
       purged: await purgePendingAuditIssueImages(environment),
@@ -240,7 +256,7 @@ function manualRequestStatements(
 export async function runMaintenanceJob(
   database: D1Database,
   job: JobRow,
-  task: (() => Promise<JobOutput>) | undefined,
+  task: ((runId: string) => Promise<JobOutput>) | undefined,
 ) {
   console.log({
     event: "background_job",
@@ -252,7 +268,7 @@ export async function runMaintenanceJob(
   let errorCode: string | null = null;
   try {
     if (!task) throw new Error("Unknown job handler.");
-    output = await task();
+    output = await task(job.id);
   } catch (cause) {
     if (cause instanceof MaintenanceFailure) output = cause.output;
     console.error(
@@ -297,8 +313,10 @@ export async function runScheduledMaintenance(
   );
   // Newly scheduled cleanup waits for retention. An existing active manual run
   // is reused and can overlap; its per-object claims and grace periods still apply.
-  for (const { id } of maintenanceJobs) {
-    if (id !== "purgeExpiredFreeAuditRuns")
+  for (const job of maintenanceJobs) {
+    const { id } = job;
+    // Trashed email is purged only on request, as the operator script did.
+    if (id !== "purgeExpiredFreeAuditRuns" && isScheduled(job))
       await enqueueMaintenance(
         env,
         id,
@@ -306,4 +324,9 @@ export async function runScheduledMaintenance(
         id === "purgeDeletedObjects" ? retention.id : null,
       );
   }
+}
+
+/** Whether hourly maintenance queues the job; others run only on request. */
+export function isScheduled(job: (typeof maintenanceJobs)[number]) {
+  return !("scheduled" in job) || job.scheduled;
 }

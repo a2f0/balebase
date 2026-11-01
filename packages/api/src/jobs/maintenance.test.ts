@@ -303,7 +303,7 @@ it("preserves completed results for older apps and never reports queued work as 
   const oldCatalog = (await (await f.request("/jobs")).json()) as {
     jobs: { id: string }[];
   };
-  expect(oldCatalog.jobs).toHaveLength(10);
+  expect(oldCatalog.jobs).toHaveLength(11);
   const catalog = (await (await f.request("/jobs?all=true")).json()) as {
     jobs: { id: string }[];
   };

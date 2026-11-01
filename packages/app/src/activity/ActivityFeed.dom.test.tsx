@@ -36,7 +36,13 @@ async function renderFeed(sourceId: string, refreshKey = 0) {
 function event(id: number, after: string): ActivityEvent {
   return {
     action: "audit.answer_changed",
-    actor: { email: "sam@example.com", id: "user-1", name: "Sam" },
+    actor: {
+      email: "sam@example.com",
+      id: "user-1",
+      name: "Sam",
+      source: null,
+      type: "user",
+    },
     details: {
       after,
       before: "pass",
@@ -211,6 +217,8 @@ describe("activity feed, mounted", () => {
         email: "sam@example.com",
         id: "user-1",
         name: "Sam",
+        source: null,
+        type: "user",
       },
       details,
       root,
@@ -798,7 +806,13 @@ it("names who changed an expense category, using the names recorded then", async
   ): ActivityEvent => ({
     ...event(id, ""),
     action: "finance.transaction_categorized",
-    actor: { email: `${name.toLowerCase()}@example.com`, id: name, name },
+    actor: {
+      email: `${name.toLowerCase()}@example.com`,
+      id: name,
+      name,
+      source: null,
+      type: "user",
+    },
     root: { type: "finance_transaction", id: "txn-1", label: "Coffee" },
     subject: { type: "finance_transaction", id: "txn-1" },
     details,

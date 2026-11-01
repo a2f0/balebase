@@ -47,6 +47,8 @@ export function mount(element: HTMLElement) {
   const fetchJobs = async (input: RequestInfo | URL) => {
     const url = new URL(String(input));
     if (url.pathname.endsWith("/jobs")) return Response.json({ jobs });
+    if (url.pathname.endsWith("/purges"))
+      return Response.json({ events: [], nextCursor: null });
     if (url.pathname.endsWith("/runs"))
       return Response.json({
         runs: [

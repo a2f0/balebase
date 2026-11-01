@@ -148,7 +148,9 @@ describe("billing subscriptions", () => {
           organizationId,
           "2026-06-01",
         );
-        expect(await purgeExpiredFreeAuditRuns(fixture.bindings)).toBe(0);
+        expect(await purgeExpiredFreeAuditRuns(fixture.bindings, "run-1")).toBe(
+          0,
+        );
 
         // A stale event refetches Stripe's current state, so it neither clears
         // the marker nor moves the grace period forward.

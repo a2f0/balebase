@@ -20,6 +20,11 @@ const endpoints = {
     path: "/api/admin/jobs/runs",
     response: "json",
   }),
+  purges: endpoint<typeof adminJobsRoutes.purges>({
+    method: "GET",
+    path: "/api/admin/jobs/purges",
+    response: "json",
+  }),
   detail: endpoint<typeof adminJobsRoutes.detail>({
     method: "GET",
     path: "/api/admin/jobs/runs/:runId",
@@ -43,6 +48,10 @@ export function adminJobsApi(transport: Transport) {
     },
     runs(query: RouteInput<typeof adminJobsRoutes.runs>["query"] = {}) {
       return transport.call(endpoints.runs, { query });
+    },
+    /** The purge history of accounts and organizations, newest first. */
+    purges(cursor?: string) {
+      return transport.call(endpoints.purges, { query: { cursor } });
     },
     detail(runId: string, before?: string) {
       return transport.call(endpoints.detail, {

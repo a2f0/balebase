@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import { route } from "./route";
 
 const JobDefinitionSchema = z.object({
@@ -95,6 +96,13 @@ export const adminJobsRoutes = {
       runs: z.array(JobRunSchema),
       nextCursor: z.string().nullable(),
     }),
+  }),
+  /** Purged accounts and organizations, newest first; kept after job history. */
+  purges: route({
+    method: "GET",
+    path: "/api/admin/jobs/purges",
+    query: ActivityQuerySchema,
+    response: ActivityPageSchema,
   }),
   detail: route({
     method: "GET",

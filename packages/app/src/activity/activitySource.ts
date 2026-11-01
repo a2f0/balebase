@@ -6,6 +6,7 @@ export type ActivitySource =
       id: string;
       type:
         | "admin_organization"
+        | "admin_purges"
         | "audit_run"
         | "audit_template"
         | "business"
@@ -23,7 +24,8 @@ export type ActivitySource =
 /**
  * One page of a record's history, or the organization's without a source. A
  * global form's history is read through Global Audits, when managing it, and
- * an organization's own history by root admins through its admin page.
+ * an organization's own history by root admins through its admin page, and
+ * the purge history of accounts and organizations on the admin Jobs page.
  */
 export function listActivity(
   source?: ActivitySource,
@@ -35,6 +37,8 @@ export function listActivity(
   switch (source.type) {
     case "admin_organization":
       return api.adminOrganizations.activity(id, cursor);
+    case "admin_purges":
+      return api.adminJobs.purges(cursor);
     case "audit_run":
       return api.audits.runActivity(id, cursor);
     case "audit_template":
