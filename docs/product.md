@@ -766,13 +766,13 @@ token and sync cursor are kept, and the sync that follows resumes where the
 last successful one stopped, so imported records, categories, and annotations
 are untouched. When Link reports success, the app reports the repair, which
 records `finance.connection_repaired` on the connection with who reported it
-and its status and error code before, then starts the sync. Plaid tells only
-the browser, so this is the app's report: it must name, by its link token, an
-update session the same person opened for that connection in the last four
-hours, and each session is accepted once (`finance_login_repair_sessions`
-keeps the token's hash). A report the API cannot be reached for stays in the
-browser and is retried on the next visit. An abandoned Link session records
-nothing. Prefer it
+and its status and error code when Link opened, then starts the sync. Plaid
+tells only the browser, so this is the app's report: it must name, by its link
+token, an update session the same person opened for that connection in the last
+four hours, and each session is accepted once (`finance_login_repair_sessions`
+keeps the token's hash and that state). A report the API cannot take yet stays
+in the browser and is retried on later visits until its session would expire.
+An abandoned Link session records nothing. Prefer it
 over disconnecting and reconnecting, which creates a new Item and relies on
 matching to carry history over.
 

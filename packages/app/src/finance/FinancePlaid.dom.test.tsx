@@ -240,7 +240,7 @@ describe("Plaid Link", () => {
       JSON.parse(
         dom.localStorage.getItem("balebase.plaid.pendingRepairs") ?? "[]",
       ),
-    ).toEqual([{ connectionId: "axos", linkToken: "link-update" }]);
+    ).toMatchObject([{ connectionId: "axos", linkToken: "link-update" }]);
     requests = [];
     await mountConnections();
     expect(requests).toEqual([
@@ -249,11 +249,16 @@ describe("Plaid Link", () => {
     expect(
       dom.localStorage.getItem("balebase.plaid.pendingRepairs"),
     ).toBeNull();
-    // A refused report is dropped rather than retried forever.
-    dom.localStorage.setItem(
-      "balebase.plaid.pendingRepairs",
-      JSON.stringify([{ connectionId: "axos", linkToken: "link-old" }]),
-    );
+    // A report another account or organization made is kept for when it
+    // signs back in, until its Link session would have expired.
+    const pending = (createdAt: number) =>
+      dom.localStorage.setItem(
+        "balebase.plaid.pendingRepairs",
+        JSON.stringify([
+          { connectionId: "axos", createdAt, linkToken: "link-elsewhere" },
+        ]),
+      );
+    pending(Date.now());
     repairAnswers.push(404);
     requests = [];
     await mountConnections();
@@ -261,8 +266,14 @@ describe("Plaid Link", () => {
       "POST /api/finance/connections/axos/login-repairs",
     ]);
     expect(
-      dom.localStorage.getItem("balebase.plaid.pendingRepairs"),
-    ).toBeNull();
+      JSON.parse(
+        dom.localStorage.getItem("balebase.plaid.pendingRepairs") ?? "[]",
+      ),
+    ).toMatchObject([{ linkToken: "link-elsewhere" }]);
+    pending(Date.now() - 5 * 60 * 60 * 1_000);
+    requests = [];
+    await mountConnections();
+    expect(requests).toEqual([]);
   });
 
   it("keeps a new connection when another tab starts an update meanwhile", async () => {

@@ -261,6 +261,27 @@ describe("login repair activity", () => {
     ]);
   });
 
+  it("records the state from when Link opened, even after the sync cleared it", async () => {
+    const fixture = await createFixture();
+    const { id, openLink, repair } = await brokenConnection(fixture);
+    const linkToken = await openLink();
+    // The sync that follows the repair succeeds before the report arrives.
+    fixture.database
+      .query(
+        "UPDATE plaid_items SET status = 'active', error_code = NULL, error_message = NULL WHERE id = ?",
+      )
+      .run(id);
+    expect((await repair(linkToken)).status).toBe(204);
+    expect(events(fixture, "finance.connection_repaired")).toMatchObject([
+      {
+        details: {
+          errorCodeBefore: "ITEM_LOGIN_REQUIRED",
+          statusBefore: "error",
+        },
+      },
+    ]);
+  });
+
   it("attributes a key-made repair to the key", async () => {
     const fixture = await createFixture();
     const app = apiKeyApp(fixture, fixture.requestPlaid);

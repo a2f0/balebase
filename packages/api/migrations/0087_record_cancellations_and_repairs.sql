@@ -31,5 +31,9 @@ CREATE TABLE finance_login_repair_sessions (
     REFERENCES organization (id) ON DELETE CASCADE,
   connection_id TEXT NOT NULL REFERENCES plaid_items (id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES user (id) ON DELETE CASCADE,
+  -- The connection's state when the session opened: the sync after a repair
+  -- clears it before a delayed report arrives.
+  status_before TEXT NOT NULL,
+  error_code_before TEXT,
   expires_at TEXT NOT NULL
 );

@@ -5,14 +5,19 @@ import { api } from "../shared/apiClient";
  * Login repairs Plaid confirmed in this browser that the API has not yet
  * recorded. Plaid tells only the browser, so a report lost to a network
  * failure or a closed tab would leave the repair with no history; each one
- * stays here until the API records it or refuses it for good.
+ * stays here until the API records it, or for as long as its Link session
+ * lasts. A refusal does not drop it: the report may belong to another
+ * account or organization than the one signed in now, and is retried after
+ * a switch back. A malformed one is dropped.
  */
 const pendingRepairsKey = "balebase.plaid.pendingRepairs";
 
-const refusals = new Set([400, 403, 404, 409, 410, 422]);
+/** As long as the API keeps an update-mode Link session. */
+const pendingMilliseconds = 4 * 60 * 60 * 1_000;
 
 interface PendingRepair {
   connectionId: string;
+  createdAt: number;
   linkToken: string;
 }
 
@@ -21,7 +26,12 @@ function pendingRepairs(): PendingRepair[] {
     const stored: unknown = JSON.parse(
       localStorage.getItem(pendingRepairsKey) ?? "[]",
     );
-    return Array.isArray(stored) ? stored.filter(isPendingRepair) : [];
+    const now = Date.now();
+    return Array.isArray(stored)
+      ? stored
+          .filter(isPendingRepair)
+          .filter(({ createdAt }) => now - createdAt < pendingMilliseconds)
+      : [];
   } catch {
     return [];
   }
@@ -32,6 +42,7 @@ function isPendingRepair(value: unknown): value is PendingRepair {
     typeof value === "object" &&
     value !== null &&
     typeof Reflect.get(value, "connectionId") === "string" &&
+    typeof Reflect.get(value, "createdAt") === "number" &&
     typeof Reflect.get(value, "linkToken") === "string"
   );
 }
@@ -60,9 +71,7 @@ async function send(repair: PendingRepair) {
       repair.linkToken,
     );
   } catch (cause) {
-    // A refused report (no such session, already recorded, or expired)
-    // never succeeds on retry; a signed-out or rate-limited one may.
-    if (cause instanceof ApiError && refusals.has(cause.status)) forget(repair);
+    if (cause instanceof ApiError && cause.status === 400) forget(repair);
     return false;
   }
   forget(repair);
@@ -74,7 +83,7 @@ async function send(repair: PendingRepair) {
  * cannot be reached. Returns whether it was recorded now.
  */
 export function reportLoginRepair(connectionId: string, linkToken: string) {
-  const repair = { connectionId, linkToken };
+  const repair = { connectionId, createdAt: Date.now(), linkToken };
   storePending([...pendingRepairs(), repair]);
   return send(repair);
 }

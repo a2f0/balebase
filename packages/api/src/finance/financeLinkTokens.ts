@@ -94,8 +94,11 @@ const repairSessionMilliseconds = 4 * 60 * 60 * 1_000;
 
 /**
  * Remembers an update-mode Link session, so the app can report its success
- * once (`reportLoginRepair`). Only the link token's hash is kept, until the
- * report or four hours; expired sessions are cleared here.
+ * once (`reportLoginRepair`). It keeps the connection's status and error
+ * code as they were when the session opened, since the sync that follows
+ * the repair clears them before a delayed report arrives. Only the link
+ * token's hash is kept, until the report or four hours; expired sessions are
+ * cleared here.
  */
 async function storeRepairSession(
   context: FinanceContext,
@@ -113,15 +116,16 @@ async function storeRepairSession(
       .prepare(
         `INSERT OR REPLACE INTO finance_login_repair_sessions
            (link_token_hash, organization_id, connection_id, user_id,
-            expires_at)
-         VALUES (?, ?, ?, ?, ?)`,
+            status_before, error_code_before, expires_at)
+         SELECT ?, organization_id, id, ?, status, error_code, ?
+         FROM plaid_items WHERE id = ? AND organization_id = ?`,
       )
       .bind(
         await tokenHash(linkToken.linkToken),
-        context.get("organizationId"),
-        connectionId,
         context.get("authSession").user.id,
         new Date(Date.now() + repairSessionMilliseconds).toISOString(),
+        connectionId,
+        context.get("organizationId"),
       ),
   ]);
 }
@@ -147,9 +151,10 @@ export async function reportLoginRepair(context: FinanceContext) {
   const connectionId = context.req.param("id") ?? "";
   const actor = requestActor(context);
   const database = context.env.DB;
+  const hash = await tokenHash(input.linkToken);
   const repairSession = {
     bindings: [
-      await tokenHash(input.linkToken),
+      hash,
       organizationId,
       connectionId,
       actor.userId,
@@ -166,10 +171,14 @@ export async function reportLoginRepair(context: FinanceContext) {
       {
         action: "finance.connection_repaired",
         actorId: actor.userId,
+        // The state when the session opened, before any sync cleared it.
         details: {
-          bindings: [],
+          bindings: [hash, hash],
           sql: `json_object('institutionName', institution_name,
-            'statusBefore', status, 'errorCodeBefore', error_code)`,
+            'statusBefore', (SELECT status_before
+              FROM finance_login_repair_sessions WHERE link_token_hash = ?),
+            'errorCodeBefore', (SELECT error_code_before
+              FROM finance_login_repair_sessions WHERE link_token_hash = ?))`,
         },
         id: connectionId,
         label: "COALESCE(institution_name, 'Bank connection')",
