@@ -11,7 +11,7 @@ import {
   post,
 } from "../testing/authFixture";
 import { testBindings } from "../testing/bindings";
-import { toD1 } from "../testing/d1";
+import { queryHooks, toD1 } from "../testing/d1";
 import { applyMigrations, createTestDatabase } from "../testing/database";
 import { insertBilling } from "../testing/seed";
 import { testApp } from "../testing/session";
@@ -136,6 +136,41 @@ describe("API keys after their creator's access changes", () => {
     expect(fixture.keys().every(({ revoked_by }) => revoked_by === null)).toBe(
       true,
     );
+  });
+
+  it("refuses a key whose creator is demoted while creating it", async () => {
+    const fixture = await createAccessFixture();
+    expect((await fixture.changeRole("admin")).status).toBe(200);
+    const hooks = queryHooks();
+    hooks.before("INSERT INTO organization_api_keys", () => {
+      fixture.database.exec(
+        "UPDATE member SET role = 'member' WHERE id = 'bob'",
+      );
+    });
+    const response = await app.request(
+      "/api/organization-settings/api-keys",
+      {
+        body: JSON.stringify({
+          access: "write",
+          expiresInDays: 30,
+          name: "Late key",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: fixture.bob.cookie,
+          origin: "https://app.test",
+        },
+        method: "POST",
+      },
+      {
+        ...fixture.bindings,
+        DB: toD1(fixture.database, { onQuery: hooks.onQuery }),
+      },
+      executionContext(fixture.pending),
+    );
+    expect(response.status).toBe(403);
+    expect(fixture.keys()).toEqual([]);
+    await Promise.all(fixture.pending);
   });
 
   it("keeps the role and key when the key's revocation cannot be recorded", async () => {

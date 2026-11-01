@@ -31,23 +31,28 @@ function eventLabel({ action, change }: SecurityEvent) {
 
 /**
  * The person's own recent sign-in security and profile changes. It refreshes
- * when the two-factor setting changes, keeping the current list on screen.
+ * when the two-factor setting or `refreshKey` changes, keeping the current
+ * list on screen.
  */
 export function AccountSecurityHistory({
+  refreshKey = 0,
   twoFactorEnabled,
 }: {
+  /** Changes after a recorded change that leaves the setting as it was. */
+  refreshKey?: number;
   twoFactorEnabled: boolean;
 }) {
   const { data, error, reload } = useLoad(
     loadEvents,
     "Could not load security history.",
   );
-  const shown = useRef(twoFactorEnabled);
+  const shown = useRef(`${twoFactorEnabled}:${refreshKey}`);
   useEffect(() => {
-    if (shown.current === twoFactorEnabled) return;
-    shown.current = twoFactorEnabled;
+    const current = `${twoFactorEnabled}:${refreshKey}`;
+    if (shown.current === current) return;
+    shown.current = current;
     void reload();
-  }, [reload, twoFactorEnabled]);
+  }, [refreshKey, reload, twoFactorEnabled]);
   return (
     <Card
       title="Security history"

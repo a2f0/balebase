@@ -43,10 +43,17 @@ function Workspace({ identity }: { identity: string }) {
   return null;
 }
 
-async function mountPage(onSecurityChanged: () => Promise<unknown>) {
+async function mountPage(
+  onSecurityChanged: () => Promise<unknown>,
+  onHistoryChanged?: () => void,
+) {
   const page = (identity: string) => (
     <>
-      <AccountSecurity onSecurityChanged={onSecurityChanged} twoFactorEnabled />
+      <AccountSecurity
+        onHistoryChanged={onHistoryChanged}
+        onSecurityChanged={onSecurityChanged}
+        twoFactorEnabled
+      />
       <Workspace identity={identity} />
       <DialogHost />
     </>
@@ -74,13 +81,20 @@ async function submit(title: string, submitLabel: string) {
 describe("recovery code regeneration", () => {
   it("asks first, sends nothing when cancelled, and regenerates once confirmed", async () => {
     const requests = stubAuth();
-    await mountPage(async () => {});
+    let historyChanged = 0;
+    await mountPage(
+      async () => {},
+      () => {
+        historyChanged += 1;
+      },
+    );
 
     await submit("Recovery codes", "Generate new codes");
     expect(openDialog()?.textContent).toContain("Generate new recovery codes?");
     await click(queryButton("Cancel", openDialog()));
     expect(requests).toEqual([]);
     expect(container.textContent).not.toContain("aaaa-bbbb");
+    expect(historyChanged).toBe(0);
 
     await submit("Recovery codes", "Generate new codes");
     await click(queryButton("Generate new codes", openDialog()));
@@ -92,6 +106,8 @@ describe("recovery code regeneration", () => {
     ]);
     expect(container.textContent).toContain("aaaa-bbbb");
     expect(container.textContent).toContain("New recovery codes generated.");
+    // The security history below lists the regeneration.
+    expect(historyChanged).toBe(1);
   });
 });
 

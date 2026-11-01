@@ -49,6 +49,10 @@ it("lists the person's security changes and refreshes in place when two-factor c
   await view.render(<AccountSecurityHistory twoFactorEnabled />);
   await settle();
   expect(paths).toHaveLength(2);
+  // A change that keeps two-factor on, such as new backup codes, does.
+  await view.render(<AccountSecurityHistory refreshKey={1} twoFactorEnabled />);
+  await settle();
+  expect(paths).toHaveLength(3);
 });
 
 it("names a changed name's old and new value and every recorded change", async () => {
