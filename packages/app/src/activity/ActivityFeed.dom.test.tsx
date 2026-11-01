@@ -197,6 +197,124 @@ describe("activity feed, mounted", () => {
     expect(requests.at(-1)?.search).toBe("");
   });
 
+  it("shows contract and request history, linking only to records that remain", async () => {
+    const record = (
+      id: number,
+      action: string,
+      root: ActivityEvent["root"],
+      details: ActivityEvent["details"],
+    ): ActivityEvent => ({
+      ...event(id, ""),
+      action,
+      actor: {
+        apiKey: { channel: "mcp", id: "key", name: "Assistant" },
+        email: "sam@example.com",
+        id: "user-1",
+        name: "Sam",
+      },
+      details,
+      root,
+      subject: { id: root.id, type: root.type },
+    });
+    const contract = { id: "c/1", label: "Lease", type: "contract" };
+    const request = {
+      id: "r1",
+      label: "W-4 · Bob",
+      type: "employee_requirement",
+    };
+    const person = { kind: "form", personName: "Bob", title: "W-4" };
+    respond(async () =>
+      Response.json({
+        events: [
+          record(6, "contract.deleted", contract, {
+            signerCount: 2,
+            status: "completed",
+            templateName: null,
+          }),
+          record(5, "contract.voided", contract, {
+            reason: "Wrong rate",
+            signedCount: 1,
+            signerCount: 2,
+          }),
+          record(4, "contract.sent", contract, {
+            dueDate: "2026-11-01",
+            signerCount: 2,
+            signingOrder: "sequential",
+          }),
+          record(
+            3,
+            "contract_template.deleted",
+            { id: "t1", label: "Offer", type: "contract_template" },
+            { version: 3, versionCount: 3 },
+          ),
+          record(2, "employee_requirement.status_changed", request, {
+            ...person,
+            after: "complete",
+            before: "submitted",
+            checkrReport: false,
+          }),
+          record(1, "employee_requirement.document_uploaded", request, {
+            ...person,
+            replaced: true,
+            revision: 2,
+            uploadedBySubject: false,
+          }),
+        ],
+        nextCursor: null,
+      }),
+    );
+    const navigations: string[] = [];
+    ({ container } = await mount(
+      <Activity canManage onNavigate={(path) => navigations.push(path)} />,
+    ));
+    await settle();
+    expect(
+      [...container.querySelectorAll(".activityHeading")].map(
+        (heading) => heading.textContent,
+      ),
+    ).toEqual([
+      "Sam via Assistant (MCP) deleted a contract · Lease",
+      "Sam via Assistant (MCP) voided a contract · Lease",
+      "Sam via Assistant (MCP) sent a contract for signature · Lease",
+      "Sam via Assistant (MCP) deleted a contract template · Offer",
+      "Sam via Assistant (MCP) changed a request's status · W-4 · Bob",
+      "Sam via Assistant (MCP) uploaded a requested form · W-4 · Bob",
+    ]);
+    expect(
+      [...container.querySelectorAll("summary")].map(
+        (summary) => summary.textContent,
+      ),
+    ).toEqual([
+      "Was Completed · 2 signers",
+      "1 of 2 signers signed · Reason: Wrong rate",
+      "2 signers · In order · Due 2026-11-01",
+      "Version 3 · 3 versions removed",
+      "W-4 · Form · Bob · Submitted → Complete (set by hand)",
+      "W-4 · Form · Bob · Revision 2 · By a manager · Replaced the previous file",
+    ]);
+    // Deleted records have no page; the rest open their own.
+    expect(
+      [...container.querySelectorAll(".activityResource")].map((link) =>
+        link.getAttribute("aria-label"),
+      ),
+    ).toEqual([
+      "Open contract: Lease",
+      "Open contract: Lease",
+      "Open request: W-4 · Bob",
+      "Open request: W-4 · Bob",
+    ]);
+    await click("Open contract: Lease");
+    await click("Open request: W-4 · Bob");
+    expect(navigations).toEqual([
+      "/contracts/c%2F1",
+      "/organization/requests/r1",
+    ]);
+    expect(container.textContent).toContain("Requested forms and checks");
+    ({ container } = await mount(<Activity onNavigate={() => {}} />));
+    await settle();
+    expect(container.textContent).not.toContain("Requested forms and checks");
+  });
+
   it("ignores a response from the previous resource filter", async () => {
     let resolvePrevious: ((response: Response) => void) | undefined;
     respond(async (url) => {

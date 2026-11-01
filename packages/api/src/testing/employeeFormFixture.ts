@@ -1,7 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { expect } from "bun:test";
 import { Hono } from "hono";
-import type { AuthVariables } from "../auth/apiEnv";
 import { handleCheckrWebhook } from "../employeeForms/checkrSync";
 import { employeeForms } from "../employeeForms/employeeForms";
 import {
@@ -16,6 +15,8 @@ import { seedAccount, seedMember } from "./seed";
 import { testApp } from "./session";
 
 export const orgId = "org_owner";
+/** The owner's write key, which `app(..., { apiKey: true })` acts through. */
+const apiKeyId = "owner-key";
 
 interface CheckrCall {
   body: FormData | string | null;
@@ -289,9 +290,12 @@ export async function createFixture(migrations: { before?: string } = {}) {
       via: { apiKey?: boolean; impersonatedBy?: string } = {},
     ) => employeeFormsClient(bindings, userId, role, via),
     bindings,
-    /** Runs `action` before the next `run()` of a statement containing `sql`. */
-    beforeRun: (sql: string, action: () => void) =>
-      hooks.before(sql, action, { method: "run" }),
+    /**
+     * Runs `action` before the next write containing `sql`, alone or in a
+     * batch; a batch's hooks run before its transaction, as a concurrent
+     * request would.
+     */
+    beforeRun: (sql: string, action: () => void) => hooks.before(sql, action),
     database,
     emails,
     files,
@@ -325,6 +329,14 @@ function seedPeople(database: Database) {
     (id, organizationId, email, role, status, expiresAt, createdAt, inviterId)
     VALUES ('invite', ?, 'invitee@example.com', 'member', 'pending', ?, ?, 'owner')`)
     .run(orgId, "2026-10-01", now());
+  database
+    .query(
+      `INSERT INTO organization_api_keys
+       (id, organization_id, name, access, token_prefix, token_hash,
+        created_by, created_at)
+       VALUES (?, ?, 'Assistant', 'write', 'test', 'hash', 'owner', ?)`,
+    )
+    .run(apiKeyId, orgId, now());
 }
 
 function employeeFormsClient(
@@ -346,7 +358,10 @@ function employeeFormsClient(
     if (via.apiKey) {
       context.set("apiKey", {
         access: "write",
-      } as AuthVariables["apiKey"] & object);
+        channel: "mcp",
+        id: apiKeyId,
+        organizationId: orgId,
+      });
     }
     await next();
   });

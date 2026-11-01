@@ -1,3 +1,5 @@
+import { stillManages } from "../organizations/organizationMembers";
+import { type ActivityActor, activityBatch } from "../shared/activity";
 import { trackedPut } from "../shared/storage";
 import type { Bindings } from "../types";
 import {
@@ -8,6 +10,10 @@ import {
   getCheckrReport,
   uploadCheckrConsent,
 } from "./checkr";
+import {
+  jsonBoolean,
+  requirementActivityStatement,
+} from "./requirementActivity";
 import { buildScreeningConsentPdf } from "./screeningConsentPdf";
 import type { ScreeningDisclosures } from "./screeningDisclosures";
 import { sendPendingScreeningNotifications } from "./screeningNotifications";
@@ -99,34 +105,63 @@ export async function refreshCheckrScreening(
   return { reportStatus, result: report.result ?? null, notifications };
 }
 
-/** Asks the person to complete a background check at a work location. */
+/**
+ * Asks the person to complete a background check at a work location. The
+ * request names the manager who made it; a re-request after a canceled report
+ * keeps the superseded report's ID in that history.
+ */
 export async function requestCheckrScreening(
   database: D1Database,
   organizationId: string,
   requirementId: string,
   state: string,
   city: string | null,
+  actor: ActivityActor,
 ) {
   const now = new Date().toISOString();
-  const updated = await database
-    .prepare(
-      `UPDATE employee_requirements
-       SET checkr_work_state = ?, checkr_work_city = ?,
-           checkr_requested_at = ?, checkr_report_id = NULL,
-           checkr_report_status = NULL, checkr_result = NULL,
-           checkr_consent_id = NULL, checkr_candidate_id = NULL,
-           checkr_start_package = NULL, checkr_refresh_requested_at = NULL,
-           status = 'pending', completed_at = NULL,
-           checkr_refresh_revision = checkr_refresh_revision + 1,
-           updated_at = ?
-       WHERE id = ? AND organization_id = ? AND kind = 'background_check'
+  const manages = stillManages(organizationId, actor.userId);
+  const guard = {
+    bindings: [requirementId, organizationId, ...manages.bindings],
+    sql: `id = ? AND organization_id = ? AND kind = 'background_check'
          AND checkr_starting_at IS NULL AND checkr_start_nonce IS NULL
          AND (checkr_report_id IS NULL OR
-              checkr_report_status IN ('canceled', 'partially_canceled'))`,
-    )
-    .bind(state, city, now, now, requirementId, organizationId)
-    .run();
-  return updated.meta.changes > 0;
+              checkr_report_status IN ('canceled', 'partially_canceled'))
+         AND ${manages.sql}`,
+  };
+  const [, updated] = await activityBatch(database, actor.apiKey, [
+    requirementActivityStatement(
+      database,
+      {
+        action: "employee_requirement.screening_requested",
+        actorId: actor.userId,
+        details: {
+          bindings: [state, city],
+          sql: `'workState', ?, 'workCity', ?,
+            'rerequest', ${jsonBoolean("checkr_requested_at IS NOT NULL")},
+            'previousReportId', checkr_report_id,
+            'previousReportStatus', checkr_report_status`,
+        },
+        organizationId,
+        requirementId,
+      },
+      guard,
+    ),
+    database
+      .prepare(
+        `UPDATE employee_requirements
+         SET checkr_work_state = ?, checkr_work_city = ?,
+             checkr_requested_at = ?, checkr_report_id = NULL,
+             checkr_report_status = NULL, checkr_result = NULL,
+             checkr_consent_id = NULL, checkr_candidate_id = NULL,
+             checkr_start_package = NULL, checkr_refresh_requested_at = NULL,
+             status = 'pending', completed_at = NULL,
+             checkr_refresh_revision = checkr_refresh_revision + 1,
+             updated_at = ?
+         WHERE ${guard.sql}`,
+      )
+      .bind(state, city, now, now, ...guard.bindings),
+  ]);
+  return (updated?.meta.changes ?? 0) > 0;
 }
 
 export interface ScreeningSubject {

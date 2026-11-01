@@ -204,7 +204,10 @@ export function describeContractEvent(
 ) {
   const who =
     (event.recipientId && recipientNames.get(event.recipientId)) || "A signer";
-  const actor = event.actorName ?? "Someone";
+  const via = event.apiKey
+    ? ` via ${event.apiKey.name} (${event.apiKey.channel === "mcp" ? "MCP" : "API"})`
+    : "";
+  const actor = `${event.actorName ?? "Someone"}${via}`;
   switch (event.type) {
     case "created_from_template":
       return `${actor} created it from ${event.detail ?? "a template"}`;
@@ -215,7 +218,11 @@ export function describeContractEvent(
     case "notified":
       return `Signing request emailed to ${who}`;
     case "reminded":
-      return `Reminder emailed to ${who}`;
+      // Scheduled reminders, and manual ones from before senders were
+      // recorded, have no actor.
+      return event.actorName
+        ? `${actor} emailed ${who} a reminder`
+        : `Reminder emailed to ${who}`;
     case "viewed":
       return `${who} opened it`;
     case "signed":

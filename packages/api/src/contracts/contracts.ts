@@ -8,6 +8,7 @@ import {
 } from "@balebase/validators/contracts";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
+import { activityBatch, requestActor } from "../shared/activity";
 import { normalizeFilename } from "../shared/filenames";
 import { readBody, respond } from "../shared/respond";
 import {
@@ -27,6 +28,10 @@ import { sendVoided } from "./contractMail";
 import { InvalidPdfError, inspectPdf, sha256Hex } from "./contractPdf";
 import {
   type ContractRow,
+  contractActivityStatement,
+  contractCreatedActivity,
+  contractExists,
+  contractSignerCount,
   type EventRow,
   eventStatement,
   type FieldRow,
@@ -36,7 +41,6 @@ import {
   listRecipients,
   mailFor,
   type RecipientRow,
-  recordEvent,
 } from "./contractRecords";
 import { contractTemplates } from "./contractTemplates";
 import { firstSigners, notifyRecipients } from "./contractWorkflow";
@@ -135,9 +139,10 @@ contracts.post("/", async (context) => {
       httpMetadata: { contentType: "application/pdf" },
     },
   );
+  const apiKey = context.get("apiKey");
   let created: D1Result[];
   try {
-    created = await context.env.DB.batch([
+    created = await activityBatch(context.env.DB, apiKey, [
       context.env.DB.prepare(
         `INSERT INTO contracts
            (id, organization_id, title, document_object_key,
@@ -160,12 +165,10 @@ contracts.post("/", async (context) => {
       ),
       eventStatement(
         context.env.DB,
-        { actorUserId: userId, contractId: id, type: "created" },
-        {
-          bindings: [id],
-          sql: "EXISTS (SELECT 1 FROM contracts WHERE id = ?)",
-        },
+        { actorUserId: userId, apiKey, contractId: id, type: "created" },
+        contractExists(id),
       ),
+      contractCreatedActivity(context.env.DB, userId, id, organizationId),
     ]);
   } catch (cause) {
     await context.env.STORAGE.delete(objectKey);
@@ -261,30 +264,60 @@ contracts.post("/:id/send", async (context) => {
   ]);
   const problem = sendProblem(recipients, fields);
   if (problem) return context.json({ error: problem }, 400);
-  const userId = context.get("authSession").user.id;
+  const actor = requestActor(context);
+  const userId = actor.userId;
   const now = new Date().toISOString();
   // Only the revision that was validated goes out: a save landing meanwhile
-  // bumps it and this send is refused.
-  const sent = await database
-    .prepare(
-      `UPDATE contracts
-       SET status = 'sent', sent_at = ?, sent_by = ?, updated_at = ?
-       WHERE id = ? AND organization_id = ? AND status = 'draft'
-         AND revision = ?`,
-    )
-    .bind(now, userId, now, contract.id, organizationId, contract.revision)
-    .run();
-  if (!sent.meta.changes) {
+  // bumps it and this send is refused, with neither event recorded. The
+  // shared event snapshots the configuration that was sent.
+  const stillDraft = {
+    bindings: [contract.id, organizationId, contract.revision],
+    sql: `EXISTS (SELECT 1 FROM contracts WHERE id = ? AND organization_id = ?
+            AND status = 'draft' AND revision = ?)`,
+  };
+  const sent = await activityBatch(database, actor.apiKey, [
+    eventStatement(
+      database,
+      {
+        actorUserId: userId,
+        apiKey: actor.apiKey,
+        contractId: contract.id,
+        type: "sent",
+      },
+      stillDraft,
+    ),
+    contractActivityStatement(
+      database,
+      {
+        action: "contract.sent",
+        actorId: userId,
+        contractId: contract.id,
+        details: {
+          bindings: [],
+          sql: `json_object('signerCount', ${contractSignerCount},
+            'signingOrder', signing_order, 'dueDate', due_date,
+            'reminderIntervalDays', reminder_interval_days,
+            'documentSha256', document_sha256)`,
+        },
+        organizationId,
+      },
+      stillDraft,
+    ),
+    database
+      .prepare(
+        `UPDATE contracts
+         SET status = 'sent', sent_at = ?, sent_by = ?, updated_at = ?
+         WHERE id = ? AND organization_id = ? AND status = 'draft'
+           AND revision = ?`,
+      )
+      .bind(now, userId, now, contract.id, organizationId, contract.revision),
+  ]);
+  if (!sent.at(-1)?.meta.changes) {
     return context.json(
       { error: "The draft changed while it was being sent. Send it again." },
       409,
     );
   }
-  await recordEvent(database, {
-    actorUserId: userId,
-    contractId: contract.id,
-    type: "sent",
-  });
   const sending = {
     ...contract,
     sent_at: now,
@@ -348,6 +381,7 @@ contracts.post("/:id/remind", async (context) => {
     due,
     true,
     now,
+    requestActor(context),
   );
   return respond(context, contractsRoutes.remind, {
     contract: await detailFor(context, contract.id),
@@ -372,26 +406,55 @@ contracts.post("/:id/void", async (context) => {
   if (input instanceof Response) return input;
   const { reason } = input;
   const now = new Date().toISOString();
-  const voided = await database
-    .prepare(
-      `UPDATE contracts
-       SET status = 'voided', voided_at = ?, void_reason = ?, updated_at = ?
-       WHERE id = ? AND organization_id = ? AND status = 'sent'`,
-    )
-    .bind(now, reason || null, now, contract.id, organizationId)
-    .run();
-  if (!voided.meta.changes) {
+  const actor = requestActor(context);
+  const stillSent = {
+    bindings: [contract.id, organizationId],
+    sql: `EXISTS (SELECT 1 FROM contracts WHERE id = ? AND organization_id = ?
+            AND status = 'sent')`,
+  };
+  const voided = await activityBatch(database, actor.apiKey, [
+    eventStatement(
+      database,
+      {
+        actorUserId: actor.userId,
+        apiKey: actor.apiKey,
+        contractId: contract.id,
+        detail: reason || null,
+        type: "voided",
+      },
+      stillSent,
+    ),
+    contractActivityStatement(
+      database,
+      {
+        action: "contract.voided",
+        actorId: actor.userId,
+        contractId: contract.id,
+        details: {
+          bindings: [reason?.slice(0, 500) || null],
+          sql: `json_object('reason', ?, 'signerCount', ${contractSignerCount},
+            'signedCount', (SELECT COUNT(*) FROM contract_recipients
+              WHERE contract_recipients.contract_id = contracts.id
+                AND contract_recipients.status = 'signed'))`,
+        },
+        organizationId,
+      },
+      stillSent,
+    ),
+    database
+      .prepare(
+        `UPDATE contracts
+         SET status = 'voided', voided_at = ?, void_reason = ?, updated_at = ?
+         WHERE id = ? AND organization_id = ? AND status = 'sent'`,
+      )
+      .bind(now, reason || null, now, contract.id, organizationId),
+  ]);
+  if (!voided.at(-1)?.meta.changes) {
     return context.json(
       { error: "Only contracts awaiting signatures can be voided." },
       409,
     );
   }
-  await recordEvent(database, {
-    actorUserId: context.get("authSession").user.id,
-    contractId: contract.id,
-    detail: reason || null,
-    type: "voided",
-  });
   const mail = await mailFor(database, contract);
   for (const recipient of await listRecipients(database, contract.id)) {
     if (!recipient.notified_at || recipient.status === "signed") continue;
@@ -408,7 +471,9 @@ contracts.post("/:id/void", async (context) => {
 
 // Deletes a contract that is not awaiting signatures; its files are queued
 // for the deleted-object cleanup in the same batch, under the same condition,
-// so a delete racing a send never queues a live document.
+// so a delete racing a send never queues a live document. The contract's own
+// events go with it, so the shared activity keeps a snapshot of what was
+// deleted until the organization is purged.
 contracts.delete("/:id", async (context) => {
   const database = context.env.DB;
   const organizationId = context.get("organizationId");
@@ -429,7 +494,28 @@ contracts.delete("/:id", async (context) => {
     ["contract-document", contract.document_object_key],
     ["contract-final", contract.final_object_key],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
-  const deleted = await database.batch([
+  const actor = requestActor(context);
+  const deleted = await activityBatch(database, actor.apiKey, [
+    contractActivityStatement(
+      database,
+      {
+        action: "contract.deleted",
+        actorId: actor.userId,
+        contractId: contract.id,
+        details: {
+          bindings: [],
+          sql: `json_object('status', status,
+            'documentSha256', document_sha256, 'finalSha256', final_sha256,
+            'signerCount', ${contractSignerCount},
+            'sentAt', sent_at, 'completedAt', completed_at,
+            'voidedAt', voided_at,
+            'templateName', template_name,
+            'templateVersion', template_version)`,
+        },
+        organizationId,
+      },
+      { bindings: [], sql: "status <> 'sent'" },
+    ),
     ...keys.map(([kind, key]) =>
       database
         .prepare(
@@ -604,6 +690,10 @@ function toField(row: FieldRow): ContractField {
 function toEvent(row: EventRow): ContractEvent {
   return {
     actorName: row.actor_name,
+    apiKey:
+      row.api_key_name && row.api_key_channel
+        ? { channel: row.api_key_channel, name: row.api_key_name }
+        : null,
     createdAt: row.created_at,
     detail: row.detail,
     id: row.id,

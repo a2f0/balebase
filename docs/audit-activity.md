@@ -7,11 +7,12 @@ organization renames, deletion and restoration, group access, members'
 two-factor requirements, API keys, transaction annotations and categories,
 bank connections (connecting, sync requests and settings, disconnecting, and
 deleting imported data), expense categories, Pro checkout starts, library
-files and folders, inbox email moves and links, and businesses.
-The workspace page is `/activity`; individual records can expose the same
-events in their own history. Contract signing also has a
-separate history. Coverage is incremental: an empty shared feed does not prove
-no changes occurred.
+files and folders, inbox email moves and links, businesses, contracts and
+contract templates, and the forms and checks requested of people. The
+workspace page is `/activity`; individual records can expose the same events
+in their own history. Contract signing also has a separate history (see
+[Contracts](#contracts)). Coverage is incremental: an empty shared feed does
+not prove no changes occurred.
 
 ## Recording a change
 
@@ -54,20 +55,22 @@ cursor pagination. Its optional `resourceType` filter selects the root type
 before pagination. The Activity page offers all resources, audits, forms,
 workspace issues, equipment, projects, the organization, people, invitations,
 groups, API keys, transactions, bank connections, expense categories, billing,
-library files, library folders, inbox email, and businesses. Audit and
-transaction filters include issues attached to those roots; workspace issues
-are standalone issues. Transaction, bank connection, and expense category
-activity requires Finance capability even when a caller supplies the filter
-directly, including emails linked to a transaction. Group events, invitation
-events (they name invited addresses), two-factor requirement changes, billing
-events, and the organization's deletion and restoration are visible only to
-organization owners and admins, as group details, pending invitations, member
-security settings, and billing management already are. Everyone in the
-organization sees people joining, leaving, being removed or changing role,
-and organization renames. Root admins read the organization's own history
-(renames, deletion and restoration) on its admin detail page, including while
-it is deleted. The MCP `list_activity` tool accepts the same optional
-`resourceType`; keep that filter when passing the next cursor.
+library files, library folders, inbox email, businesses, contracts, contract
+templates, and requested forms and checks. Audit and transaction filters
+include issues attached to those roots; workspace issues are standalone issues.
+Transaction, bank connection, and expense category activity requires Finance
+capability even when a caller supplies the filter directly, including emails
+linked to a transaction. Group events, invitation events (they name invited
+addresses), two-factor requirement changes, billing events, the organization's
+deletion and restoration, and requested forms and checks
+(`employee_requirement`) are visible only to organization owners and admins,
+as group details, pending invitations, member security settings, billing
+management, and employee records already are. Everyone in the organization
+sees people joining, leaving, being removed or changing role, and organization
+renames. Root admins read the organization's own history (renames, deletion
+and restoration) on its admin detail page, including while it is deleted. The
+MCP `list_activity` tool accepts the same optional `resourceType`; keep that
+filter when passing the next cursor.
 
 Resource history routes authorize the resource before using `findActivity`.
 A bank connection's history (`GET /api/finance/connections/:id/activity`, MCP
@@ -156,6 +159,40 @@ only writer apart from member removal, which records each group the person
 loses. Group and two-factor requirement writes re-check in the transaction
 that the actor is still an owner or admin.
 
+## Contracts
+
+Each contract keeps its own events (`contract_events`): creation, sending,
+signing-link emails and reminders, views, signatures and declines with the
+signer's IP and user agent, voids, completion, and failed deliveries. The
+contract page and the certificate of completion read them, and they go with the
+contract when it is deleted. An event a person made through an API key also
+keeps the key's name and REST/MCP channel, which both readers show. A manual
+reminder names its sender; scheduled reminders (and manual ones recorded
+before senders were), completion, and delivery records have no actor. Sends,
+voids, and completions record their event in the same transaction as the
+change.
+
+The shared activity records `contract.created`, `contract.sent` (with the
+signer count, signing order, and due date that went out), `contract.voided`,
+and `contract.deleted`, which snapshots the status, document hashes, signer
+count, and template so a deleted agreement still leaves a trace until the
+organization is purged. Signer emails, IPs, and signatures stay out of it.
+Draft autosaves are not recorded; `contract.sent` captures the configuration
+that was sent. Deleting a contract template records
+`contract_template.deleted` with its current version and version count; while
+a template exists, its immutable versions name who saved each one.
+
+Requested forms and checks record assignment, due date and status changes
+(old and new values; a status set by hand is always a manager's), deletion
+(with the number of signed screening authorizations removed with it), each
+document upload (revision, and whether the person or a manager uploaded it),
+and background-check requests (work location, and the report a re-request
+supersedes). Manager writes re-check in the transaction that the actor is
+still an owner or admin. Details never hold filenames, screening results, or
+consent contents. The person's signed authorizations keep their own record
+(`employee_screening_consents`). Checkr's report status and result changes
+are not recorded yet: they come from the provider and need a system actor.
+
 ## Platform and account history
 
 Some histories are not organization activity:
@@ -190,7 +227,9 @@ examples live in `packages/api/src`: `audits/auditActivity.test.ts`,
 `organizations/accessActivity.test.ts`, `issues/issues.test.ts`,
 `library/libraryActivity.test.ts`, `inbox/inboxActivity.test.ts`,
 `businesses/businessActivity.test.ts`, `jobs/maintenanceRequests.test.ts`,
-`admin/setUserRole.test.ts`, and `users/securityEvents.test.ts`.
+`admin/setUserRole.test.ts`, `users/securityEvents.test.ts`,
+`contracts/contractActivity.test.ts`, and
+`employeeForms/requirementActivity.test.ts`.
 
 The repository-owned [audit-trails skill](../skills/audit-trails/SKILL.md)
 reviews mutations, triggers, separate histories, readers, and retention, then

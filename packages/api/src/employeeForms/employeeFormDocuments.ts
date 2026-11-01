@@ -1,7 +1,8 @@
 import { employeeFormsRoutes } from "@balebase/validators/employeeForms";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
-import { canManage } from "../organizations/organizationMembers";
+import { canManage, stillManages } from "../organizations/organizationMembers";
+import { activityBatch, requestActor } from "../shared/activity";
 import { normalizeFilename } from "../shared/filenames";
 import { respond } from "../shared/respond";
 import {
@@ -10,7 +11,15 @@ import {
   trackedPut,
   uploadStillQueued,
 } from "../shared/storage";
-import { canAccessRequirement, findRequirement } from "./employeeFormRecords";
+import {
+  canAccessRequirement,
+  findRequirement,
+  type RequirementRow,
+} from "./employeeFormRecords";
+import {
+  jsonBoolean,
+  requirementActivityStatement,
+} from "./requirementActivity";
 
 /** Uploading and downloading the document a form requirement asks for. */
 export const employeeFormDocuments = new Hono<ApiEnv>();
@@ -49,33 +58,12 @@ employeeFormDocuments.post("/:id/document", async (context) => {
       file,
       { httpMetadata: { contentType: file.type } },
     );
-    const updated = await context.env.DB.prepare(
-      `UPDATE employee_requirements
-       SET document_key = ?, document_filename = ?, document_size = ?,
-           document_revision = document_revision + 1,
-           status = 'submitted', completed_at = NULL, updated_at = ?
-       WHERE id = ? AND organization_id = ? AND document_key IS ?
-         AND ${uploadStillQueued}
-         AND (? = 1 OR EXISTS (
-           SELECT 1 FROM member WHERE member.id = employee_requirements.member_id
-             AND member.organizationId = ? AND member.userId = ?
-         ))`,
-    )
-      .bind(
-        key,
-        filename,
-        file.size,
-        new Date().toISOString(),
-        row.id,
-        context.get("organizationId"),
-        row.document_key,
-        key,
-        canManage(context) ? 1 : 0,
-        context.get("organizationId"),
-        context.get("authSession").user.id,
-      )
-      .run();
-    if (!updated.meta.changes) {
+    const updated = await linkDocument(context, row, {
+      filename,
+      key,
+      size: file.size,
+    });
+    if (!updated) {
       await context.env.STORAGE.delete(key).catch(console.error);
       return context.json(
         { error: "The form changed. Please try again." },
@@ -123,3 +111,77 @@ employeeFormDocuments.get("/:id/document", async (context) => {
   });
   return download ?? context.json({ error: "Document not found." }, 404);
 });
+
+/**
+ * Links an uploaded document to the requirement and records who uploaded it,
+ * in one transaction. A manager may replace the person's document; either way
+ * the event is recorded under the update's own guard. Returns whether it
+ * linked.
+ */
+async function linkDocument(
+  context: Context<ApiEnv>,
+  row: RequirementRow,
+  upload: { filename: string; key: string; size: number },
+) {
+  const organizationId = context.get("organizationId");
+  const actor = requestActor(context);
+  const manages = canManage(context)
+    ? stillManages(organizationId, actor.userId)
+    : { bindings: [], sql: "0" };
+  const subject = `EXISTS (
+    SELECT 1 FROM member WHERE member.id = employee_requirements.member_id
+      AND member.organizationId = ? AND member.userId = ?
+  )`;
+  const guard = {
+    bindings: [
+      row.id,
+      organizationId,
+      row.document_key,
+      upload.key,
+      ...manages.bindings,
+      organizationId,
+      actor.userId,
+    ],
+    sql: `id = ? AND organization_id = ? AND document_key IS ?
+       AND ${uploadStillQueued}
+       AND (${manages.sql} OR ${subject})`,
+  };
+  const database = context.env.DB;
+  const [, updated] = await activityBatch(database, actor.apiKey, [
+    requirementActivityStatement(
+      database,
+      {
+        action: "employee_requirement.document_uploaded",
+        actorId: actor.userId,
+        details: {
+          bindings: [organizationId, actor.userId, upload.size],
+          sql: `'revision', document_revision + 1,
+            'previousRevision', document_revision,
+            'replaced', ${jsonBoolean("document_key IS NOT NULL")},
+            'previousStatus', status,
+            'uploadedBySubject', ${jsonBoolean(subject)},
+            'size', ?`,
+        },
+        organizationId,
+        requirementId: row.id,
+      },
+      guard,
+    ),
+    database
+      .prepare(
+        `UPDATE employee_requirements
+         SET document_key = ?, document_filename = ?, document_size = ?,
+             document_revision = document_revision + 1,
+             status = 'submitted', completed_at = NULL, updated_at = ?
+         WHERE ${guard.sql}`,
+      )
+      .bind(
+        upload.key,
+        upload.filename,
+        upload.size,
+        new Date().toISOString(),
+        ...guard.bindings,
+      ),
+  ]);
+  return Boolean(updated?.meta.changes);
+}

@@ -22,13 +22,19 @@ const resourceLabels: Record<ActivityResourceType, string> = {
   library_folder: "Library folders",
   inbound_email: "Inbox",
   business: "Businesses",
+  contract: "Contracts",
+  contract_template: "Contract templates",
+  employee_requirement: "Requested forms and checks",
 };
 
 function isResourceType(value: string): value is ActivityResourceType {
   return Object.hasOwn(resourceLabels, value);
 }
 
-/** Finance resources need Finance access; groups, invitations and billing need a manager. */
+/**
+ * Finance resources need Finance access; groups, invitations, billing, and the
+ * forms and checks requested of people need a manager.
+ */
 function canFilter(
   value: string,
   access: { canAccessFinance: boolean; canManage: boolean },
@@ -37,7 +43,8 @@ function canFilter(
   if (
     value === "organization_group" ||
     value === "organization_invitation" ||
-    value === "organization_billing"
+    value === "organization_billing" ||
+    value === "employee_requirement"
   )
     return access.canManage;
   return true;

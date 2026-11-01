@@ -22,6 +22,8 @@ import {
   auditTemplatePath,
   billingPath,
   businessPath,
+  contractPath,
+  contractTemplatePath,
   equipmentPath,
   financeCategoriesPath,
   financeConnectionPath,
@@ -30,10 +32,15 @@ import {
   libraryPath,
   organizationAccessPath,
   organizationPeoplePath,
+  organizationRequirementPath,
   projectPath,
 } from "../workspace/workspacePaths";
 import { assigneeLabel, textValue } from "./activityLabels";
 import { type ActivitySource, listActivity } from "./activitySource";
+import {
+  contractActivitySummary,
+  requirementActivitySummary,
+} from "./contractActivity";
 import {
   EquipmentActivityDetails,
   equipmentActivitySummary,
@@ -94,6 +101,17 @@ const actionLabels: Record<string, string> = {
   "audit.template_restored": "restored the form",
   "audit.template_unpublished": "unpublished the form",
   "audit.template_version_saved": "saved a form version",
+  "contract.created": "created a contract",
+  "contract.deleted": "deleted a contract",
+  "contract.sent": "sent a contract for signature",
+  "contract.voided": "voided a contract",
+  "contract_template.deleted": "deleted a contract template",
+  "employee_requirement.assigned": "requested a form or check",
+  "employee_requirement.deleted": "removed a request",
+  "employee_requirement.document_uploaded": "uploaded a requested form",
+  "employee_requirement.due_date_changed": "changed a request's due date",
+  "employee_requirement.screening_requested": "requested a background check",
+  "employee_requirement.status_changed": "changed a request's status",
   "equipment.assigned": "changed the equipment assignee",
   "equipment.created": "added equipment",
   "equipment.deleted": "deleted equipment",
@@ -291,6 +309,9 @@ function CompactActivityRow({
 const rootSummaries: Partial<Record<string, (event: ActivityEvent) => string>> =
   {
     api_key: apiKeySummary,
+    contract: contractActivitySummary,
+    contract_template: contractActivitySummary,
+    employee_requirement: requirementActivitySummary,
     equipment: equipmentActivitySummary,
     organization: organizationActivitySummary,
     organization_group: groupActivitySummary,
@@ -382,6 +403,9 @@ const detailSummaries: Partial<
   Record<string, (event: ActivityEvent) => string>
 > = {
   api_key: apiKeySummary,
+  contract: contractActivitySummary,
+  contract_template: contractActivitySummary,
+  employee_requirement: requirementActivitySummary,
   organization: organizationActivitySummary,
   organization_group: groupActivitySummary,
   organization_invitation: organizationActivitySummary,
@@ -585,8 +609,25 @@ function activityPath(event: ActivityEvent) {
       ? undefined
       : projectPath(event.root.id);
   if (event.root.type === "audit_run") return auditRunPath(event.root.id);
+  return contractActivityPath(event);
+}
+
+/** Pages of contracts, templates, and requests, which go once deleted. */
+const contractRecordPaths: Partial<Record<string, (id: string) => string>> = {
+  contract: contractPath,
+  contract_template: contractTemplatePath,
+  employee_requirement: organizationRequirementPath,
+};
+
+/** Forms; contracts, templates, and requests until deleted; then library. */
+function contractActivityPath(event: ActivityEvent) {
   if (event.root.type === "audit_template")
     return auditTemplatePath(event.root.id);
+  const recordPath = contractRecordPaths[event.root.type];
+  if (recordPath)
+    return event.action.endsWith(".deleted")
+      ? undefined
+      : recordPath(event.root.id);
   return libraryActivityPath(event);
 }
 
@@ -635,20 +676,28 @@ function organizationActivityPath(event: ActivityEvent) {
   return undefined;
 }
 
+/** The button that opens an event's record, by root type. */
+const linkLabels: Partial<Record<string, string>> = {
+  audit_run: "Open audit",
+  business: "Open business",
+  contract: "Open contract",
+  contract_template: "Open template",
+  employee_requirement: "Open request",
+  equipment: "Open equipment",
+  finance_category: "Open categories",
+  finance_connection: "Open connection",
+  finance_transaction: "Open transaction",
+  library_folder: "Open folder",
+  organization_billing: "Open billing",
+  organization_group: "Open groups",
+  organization_member: "Open member",
+  project: "Open project",
+};
+
 function activityLinkLabel(event: ActivityEvent) {
   if (event.subject.type === "issue" || event.subject.type === "audit_issue")
     return "Open issue";
-  if (event.root.type === "finance_connection") return "Open connection";
-  if (event.root.type === "finance_category") return "Open categories";
-  if (event.root.type === "organization_billing") return "Open billing";
-  if (event.root.type === "finance_transaction") return "Open transaction";
-  if (event.root.type === "equipment") return "Open equipment";
-  if (event.root.type === "organization_member") return "Open member";
-  if (event.root.type === "organization_group") return "Open groups";
-  if (event.root.type === "project") return "Open project";
-  if (event.root.type === "library_folder") return "Open folder";
-  if (event.root.type === "business") return "Open business";
-  return event.root.type === "audit_run" ? "Open audit" : "Open form";
+  return linkLabels[event.root.type] ?? "Open form";
 }
 
 function apiKeySummary({ details }: ActivityEvent) {

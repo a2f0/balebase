@@ -54,7 +54,7 @@ export const workspaceTools: McpTool[] = [
     descriptions: {
       ...activityCursor,
       resourceType:
-        "Root resource type. Audit and transaction histories include their attached issues; issue means standalone workspace issues.",
+        "Root resource type. Audit and transaction histories include their attached issues; issue means standalone workspace issues. employee_requirement (forms and checks requested of people) needs an organization owner or admin.",
     },
     name: "list_activity",
     route: activityRoutes.list,
