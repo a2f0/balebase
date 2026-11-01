@@ -15,6 +15,49 @@ const {
 let container: HTMLElement;
 let root: Root;
 
+function lifecycleEvent(
+  id: number,
+  action: string,
+  details: Record<string, unknown>,
+) {
+  return {
+    action,
+    actor: {
+      apiKey: null,
+      email: "root@example.com",
+      id: "root",
+      name: "Rae Root",
+    },
+    details,
+    historical: false,
+    id,
+    occurredAt: "2026-10-20T12:00:00.000Z",
+    root: {
+      id: "other/org",
+      label: "Other organization",
+      type: "organization",
+    },
+    subject: { id: "other/org", type: "organization" },
+  };
+}
+
+function history() {
+  return {
+    events: [
+      lifecycleEvent(2, "organization.restored", {
+        deletedByEmail: "pat@example.com",
+        deletedByName: "Pat Person",
+        via: "root_admin",
+      }),
+      lifecycleEvent(1, "organization.deletion_requested", {
+        canceledInvitations: 2,
+        via: "root_admin",
+      }),
+    ],
+    nextCursor: null,
+  };
+}
+
 function detail(id = "other/org"): AdminOrganizationDetail {
   return {
     organization: {
@@ -82,6 +125,27 @@ function button(text: string) {
 }
 
 describe("root organization details", () => {
+  it("shows who deleted and restored the organization", async () => {
+    const requests: string[] = [];
+    respond(async (url) => {
+      requests.push(url.pathname);
+      return Response.json(
+        url.pathname.endsWith("/activity") ? history() : detail(),
+      );
+    });
+    await render("/root/organizations/other%2Forg");
+    await act(async () => {});
+    expect(requests).toContain("/api/admin/organizations/other%2Forg/activity");
+    const rows = [...container.querySelectorAll(".activityRow")].map(
+      (row) => row.textContent,
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain("Rae Root restored the organization");
+    expect(rows[0]).toContain("Deleted by Pat Person");
+    expect(rows[1]).toContain("Rae Root deleted the organization");
+    expect(rows[1]).toContain("Pending invitations canceled: 2");
+  });
+
   it.each([0, 3])(
     "shows %i Plaid items in the list and overview",
     async (count) => {
@@ -126,6 +190,7 @@ describe("root organization details", () => {
         method: init?.method ?? "GET",
         credentials: init?.credentials,
       });
+      if (url.endsWith("/activity")) return Response.json(history());
       return Response.json(
         url.endsWith("/other%2Forg")
           ? fixture
@@ -172,6 +237,7 @@ describe("root organization details", () => {
       "GET",
       "GET",
       "GET",
+      "GET",
     ]);
     expect(
       requests.every((request) => request.credentials === "include"),
@@ -179,6 +245,7 @@ describe("root organization details", () => {
     expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
       "/api/admin/organizations",
       "/api/admin/organizations/other%2Forg",
+      "/api/admin/organizations/other%2Forg/activity",
       "/api/admin/organizations",
     ]);
   });

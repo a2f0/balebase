@@ -1,5 +1,6 @@
 import type { ActivityEvent } from "@balebase/validators/activity";
 import { textValue } from "./activityLabels";
+import { removalReasonLabel } from "./organizationActivity";
 
 const capabilityLabels: Record<string, string> = { finance: "Finance" };
 
@@ -27,6 +28,7 @@ function listed(label: string, values: string[]) {
 /** What a group event granted, revoked, or held, on one line. */
 export function groupActivitySummary({ action, details }: ActivityEvent) {
   if (action === "organization.group_updated") {
+    const reason = removalReasonLabel(details.reason);
     const parts = [
       ...(details.renamedFrom
         ? [`Renamed from ${textValue(details.renamedFrom)}`]
@@ -35,6 +37,10 @@ export function groupActivitySummary({ action, details }: ActivityEvent) {
       ...listed("Removed", people(details.removedMembers)),
       ...listed("Access granted", capabilities(details.addedCapabilities)),
       ...listed("Access removed", capabilities(details.removedCapabilities)),
+      // A membership ended: the person lost the group's access with it.
+      ...(reason
+        ? [reason, ...listed("Access lost", capabilities(details.capabilities))]
+        : []),
     ];
     return parts.join(" · ") || "No changes";
   }

@@ -35,7 +35,7 @@ API paths are relative to `packages/api/src`, which has a folder per feature.
 
 | Slice | Entry points and evidence |
 | --- | --- |
-| Access and organization lifecycle | `auth/auth.ts`, `auth/organizationRoleActivity.ts`, `organizations/organizationMembers.ts`, `organizations/organizationGroups.ts`, `organizations/organizationSettings.ts`, `organizations/organizationDeletion.ts`, `organizations/organizationPurge.ts`, `auth/apiKeys.ts` |
+| Access and organization lifecycle | `auth/auth.ts`, `auth/organizationActivity.ts`, `organizations/memberRemoval.ts`, `organizations/organizationMembers.ts`, `organizations/organizationGroups.ts`, `organizations/organizationSettings.ts`, `organizations/organizationDeletion.ts`, `organizations/organizationPurge.ts`, `auth/apiKeys.ts` |
 | Audits, issues, equipment | `audits/audits.ts`, `audits/auditTemplates.ts`, `audits/auditRunDiscard.ts`, `audits/auditIssueImages.ts`, `audits/auditIssueImageRemoval.ts`, `issues/issues.ts`, `equipment/equipment.ts` |
 | Finance and billing | `finance/finance*.ts`, `finance/plaid*.ts`, `billing/billing*.ts` (checkout, subscriptions, seats, webhook, retention, deletion), scheduled jobs in `jobs/` |
 | Contracts and employee records | `contracts/contracts.ts`, `contracts/contractDraft.ts`, `contracts/contractWorkflow.ts`, `contracts/contractTemplates.ts`, `contracts/contractRecords.ts`, `employeeForms/employeeForms.ts`, `employeeForms/screening*.ts`, Checkr handlers in `employeeForms/checkr*.ts` |

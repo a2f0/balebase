@@ -16,6 +16,7 @@ import type {
 } from "@balebase/validators/adminOrganizations";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { useCallback } from "react";
+import { ActivityFeed } from "../activity/ActivityFeed";
 import { api } from "../shared/apiClient";
 import { countLabel, formatCalendarDate, formatDate } from "../shared/labels";
 import { useLoad } from "../shared/useLoad";
@@ -69,6 +70,10 @@ export function AdminOrganizationDetails({
             <OrganizationOverview organization={detail.organization} />
             <OrganizationPeople members={detail.members} />
             <OrganizationRequirements requirements={detail.requirements} />
+            <ActivityFeed
+              refreshKey={detail}
+              source={{ id: organizationId, type: "admin_organization" }}
+            />
           </>
         ) : busy ? (
           <LoadingState label="Loading organization details…" />

@@ -322,7 +322,9 @@ describe("equipment", () => {
       serialNumber: "",
       type: "computer",
     });
-    // Leaving the organization unassigns without an actor.
+    // A raw membership delete (no request, as in a purge) unassigns without
+    // an actor. Removal and leaving through Better Auth record it
+    // (organizations/membershipActivity.test.ts).
     database.query("DELETE FROM member WHERE userId = 'member-user'").run();
     await owner.json("PATCH", `/api/equipment/${id}`, {
       assigneeId: "owner-user",

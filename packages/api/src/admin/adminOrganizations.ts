@@ -10,7 +10,8 @@ import {
   restoreOrganization,
 } from "../organizations/organizationDeletion";
 import { listOrganizationMembers } from "../organizations/organizationMembers";
-import { respond } from "../shared/respond";
+import { findActivity } from "../shared/activity";
+import { readQuery, respond } from "../shared/respond";
 import type { Bindings } from "../types";
 
 const adminOrganizations = new Hono<ApiEnv>();
@@ -80,6 +81,37 @@ adminOrganizations.get("/:organizationId", async (context) => {
     members,
     requirements,
   });
+});
+
+/** Renames, deletion requests and restorations, including while deleted. */
+adminOrganizations.get("/:organizationId/activity", async (context) => {
+  const organizationId = context.req.param("organizationId");
+  const query = readQuery(
+    context,
+    adminOrganizationsRoutes.activity,
+    "Invalid activity cursor.",
+  );
+  if (query instanceof Response) return query;
+  const organization = await context.env.DB.prepare(
+    "SELECT id FROM organization WHERE id = ?",
+  )
+    .bind(organizationId)
+    .first();
+  if (!organization) {
+    return context.json({ error: "Organization not found." }, 404);
+  }
+  const page = await findActivity(
+    context.env.DB,
+    organizationId,
+    query.cursor,
+    { id: organizationId, type: "organization" },
+    false,
+    undefined,
+    true,
+  );
+  return page
+    ? respond(context, adminOrganizationsRoutes.activity, page)
+    : context.json({ error: "Invalid activity cursor." }, 400);
 });
 
 function toAdminOrganization(organization: OrganizationRow): AdminOrganization {
@@ -164,11 +196,11 @@ async function listAdminRequirements(
 adminOrganizations.delete("/:organizationId", async (context) => {
   const organizationId = context.req.param("organizationId");
   const actor = context.get("authSession").user;
-  const result = await deleteBilledOrganization(
-    context,
-    organizationId,
-    actor.id,
-  );
+  const result = await deleteBilledOrganization(context, organizationId, {
+    apiKey: context.get("apiKey"),
+    userId: actor.id,
+    via: "root_admin",
+  });
   if ("response" in result) return result.response;
   const { deletion } = result;
   if (!deletion) {
@@ -196,7 +228,15 @@ adminOrganizations.delete("/:organizationId", async (context) => {
 
 adminOrganizations.post("/:organizationId/restore", async (context) => {
   const organizationId = context.req.param("organizationId");
-  const restoration = await restoreOrganization(context.env.DB, organizationId);
+  const restoration = await restoreOrganization(
+    context.env.DB,
+    organizationId,
+    {
+      apiKey: context.get("apiKey"),
+      userId: context.get("authSession").user.id,
+      via: "root_admin",
+    },
+  );
   if (!restoration) {
     const organization = await context.env.DB.prepare(
       "SELECT deletedAt FROM organization WHERE id = ?",

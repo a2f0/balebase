@@ -13,6 +13,11 @@ const endpoints = {
     path: "/api/admin/organizations/:organizationId",
     response: "json",
   }),
+  activity: endpoint<typeof adminOrganizationsRoutes.activity>({
+    method: "GET",
+    path: "/api/admin/organizations/:organizationId/activity",
+    response: "json",
+  }),
   markForDeletion: endpoint<typeof adminOrganizationsRoutes.markForDeletion>({
     method: "DELETE",
     path: "/api/admin/organizations/:organizationId",
@@ -35,6 +40,13 @@ export function adminOrganizationsApi(transport: Transport) {
     get(organizationId: string) {
       return transport.call(endpoints.get, {
         params: { organizationId },
+      });
+    },
+    /** The organization's renames, deletion requests and restorations. */
+    activity(organizationId: string, cursor?: string) {
+      return transport.call(endpoints.activity, {
+        params: { organizationId },
+        query: { cursor },
       });
     },
     markForDeletion(organizationId: string) {

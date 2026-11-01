@@ -2,6 +2,7 @@ import type { ActivityEvent } from "@balebase/validators/activity";
 import { equipmentTypeLabel } from "../equipment/equipmentLabels";
 import { formatCalendarDate } from "../shared/labels";
 import { assigneeLabel, textValue } from "./activityLabels";
+import { removalReasonLabel } from "./organizationActivity";
 
 interface EquipmentChange {
   after: unknown;
@@ -69,7 +70,8 @@ export function EquipmentActivityDetails({ event }: { event: ActivityEvent }) {
 }
 
 function assigneeChange({ details }: ActivityEvent) {
-  return `${assigneeLabel(details.before, details.beforeName, details.beforeEmail)} → ${assigneeLabel(details.after, details.afterName, details.afterEmail)}`;
+  const reason = removalReasonLabel(details.reason);
+  return `${assigneeLabel(details.before, details.beforeName, details.beforeEmail)} → ${assigneeLabel(details.after, details.afterName, details.afterEmail)}${reason ? ` · ${reason}` : ""}`;
 }
 
 function changeLabel({ after, before, field }: EquipmentChange) {

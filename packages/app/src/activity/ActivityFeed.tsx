@@ -41,6 +41,11 @@ import {
 import { financeActionLabels, financeActivitySummary } from "./financeActivity";
 import { groupActivitySummary } from "./groupActivity";
 import { isLibraryActivity, libraryActivitySummary } from "./libraryActivity";
+import {
+  membershipSummary,
+  organizationActionLabels,
+  organizationActivitySummary,
+} from "./organizationActivity";
 import { projectActivitySummary } from "./projectActivity";
 import { RecordActivityDetails } from "./RecordActivity";
 
@@ -107,6 +112,7 @@ const actionLabels: Record<string, string> = {
   "project.member_removed": "removed a project member",
   "project.updated": "edited a project",
   ...financeActionLabels,
+  ...organizationActionLabels,
 };
 
 export function ActivityFeed({
@@ -286,18 +292,27 @@ const rootSummaries: Partial<Record<string, (event: ActivityEvent) => string>> =
   {
     api_key: apiKeySummary,
     equipment: equipmentActivitySummary,
+    organization: organizationActivitySummary,
     organization_group: groupActivitySummary,
+    organization_invitation: organizationActivitySummary,
     organization_member: memberSummary,
     project: projectActivitySummary,
   };
 
 function memberSummary(event: ActivityEvent) {
+  if (membershipActions.has(event.action)) return membershipSummary(event);
   const change =
     event.action === "organization.member_two_factor_requirement_changed"
       ? twoFactorSummary(event)
       : `${formatRoles(textValue(event.details.before))} → ${formatRoles(textValue(event.details.after))}`;
   return `${memberLabel(event)} · ${change}`;
 }
+
+const membershipActions = new Set([
+  "organization.member_joined",
+  "organization.member_left",
+  "organization.member_removed",
+]);
 
 function activitySummary(event: ActivityEvent) {
   const { details } = event;
@@ -367,7 +382,9 @@ const detailSummaries: Partial<
   Record<string, (event: ActivityEvent) => string>
 > = {
   api_key: apiKeySummary,
+  organization: organizationActivitySummary,
   organization_group: groupActivitySummary,
+  organization_invitation: organizationActivitySummary,
   project: projectActivitySummary,
 };
 
@@ -377,7 +394,9 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
   const summary = isLibraryActivity(event)
     ? libraryActivitySummary(event)
     : (financeActivitySummary(event) ??
-      detailSummaries[event.root.type]?.(event));
+      (membershipActions.has(event.action)
+        ? membershipSummary(event)
+        : detailSummaries[event.root.type]?.(event)));
   if (summary !== undefined)
     return <p className="activityDetails">{summary}</p>;
   if (event.root.type === "equipment") {
@@ -601,8 +620,12 @@ function financeActivityPath(event: ActivityEvent) {
 }
 
 function organizationActivityPath(event: ActivityEvent) {
+  // People who left or were removed have no member page.
   if (event.root.type === "organization_member")
-    return organizationPeoplePath(event.root.id);
+    return event.action === "organization.member_left" ||
+      event.action === "organization.member_removed"
+      ? undefined
+      : organizationPeoplePath(event.root.id);
   if (event.root.type === "organization_billing") return billingPath;
   // Groups have no page of their own; deleted ones have nowhere to go.
   if (event.root.type === "organization_group")
