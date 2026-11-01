@@ -15,6 +15,7 @@ import {
   stampContract,
 } from "./contractPdf";
 import {
+  type ContractEvent,
   type ContractRow,
   type EventRow,
   eventStatement,
@@ -147,13 +148,20 @@ export async function notifyRecipients(
   return delivered;
 }
 
-async function recordAfterSend(
-  database: D1Database,
-  event: Parameters<typeof recordEvent>[1],
-) {
+async function recordAfterSend(database: D1Database, event: ContractEvent) {
+  // One ID for every attempt, so an insert that landed before its response
+  // was lost is not recorded twice.
+  const id = crypto.randomUUID();
   for (let attempt = 1; ; attempt += 1) {
     try {
-      await recordEvent(database, event);
+      await eventStatement(
+        database,
+        { ...event, id },
+        {
+          bindings: [id],
+          sql: "NOT EXISTS (SELECT 1 FROM contract_events WHERE id = ?)",
+        },
+      ).run();
       return;
     } catch (cause) {
       if (attempt >= 2) {

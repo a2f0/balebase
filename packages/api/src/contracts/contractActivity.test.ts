@@ -796,5 +796,15 @@ describe("contract activity", () => {
     const types = (await events()).map(({ type }) => type);
     expect(types.filter((type) => type === "delivery_failed")).toHaveLength(1);
     expect(types.at(-1)).toBe("reminded");
+
+    // A record whose response is lost after it landed is not made twice.
+    backdate();
+    fixture.hooks.after("INSERT INTO contract_events", () => {
+      throw new Error("The response was lost.");
+    });
+    expect((await remind()).body.reminded).toBe(1);
+    expect(
+      (await events()).filter(({ type }) => type === "reminded"),
+    ).toHaveLength(2);
   });
 });
