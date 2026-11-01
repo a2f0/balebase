@@ -198,7 +198,12 @@ describe("system and provider activity", () => {
             "billing.subscription_changed",
             billing,
             {
-              after: { ...subscription, cancelAtPeriodEnd: true, seats: 3 },
+              after: {
+                ...subscription,
+                cancelAtPeriodEnd: true,
+                priceId: "price_pro_2",
+                seats: 3,
+              },
               before: subscription,
               subscriptionId: "sub_1",
             },
@@ -264,7 +269,9 @@ describe("system and provider activity", () => {
     const rows = rowsOf(container);
     expect(rows[0]).toContain("Stripe updated the Pro subscription");
     expect(rows[0]).toContain("Provider update");
-    expect(rows[0]).toContain("2 → 3 seats · Cancels at period end");
+    expect(rows[0]).toContain(
+      "Plan changed · 2 → 3 seats · Cancels at period end",
+    );
     expect(rows[1]).toContain("Active → Canceled · Replaced by a new Checkout");
     expect(rows[2]).toContain("Stripe changed the subscription's seats");
     expect(rows[2]).toContain("2 → 3 seats · After a membership change");

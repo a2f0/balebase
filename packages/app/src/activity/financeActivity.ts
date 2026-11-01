@@ -29,6 +29,7 @@ function count(value: unknown, singular: string) {
 interface SubscriptionState {
   cancelAtPeriodEnd?: unknown;
   periodEnd?: unknown;
+  priceId?: unknown;
   seats?: unknown;
   status?: unknown;
 }
@@ -43,7 +44,7 @@ function state<T extends object>(value: unknown): T | null {
   return typeof value === "object" && value !== null ? (value as T) : null;
 }
 
-/** What Stripe changed: status, seats, cancellation, and the period end. */
+/** What Stripe changed: status, plan, seats, cancellation, and period end. */
 function subscriptionSummary({ details }: ActivityEvent) {
   const before = state<SubscriptionState>(details.before);
   const after = state<SubscriptionState>(details.after) ?? {};
@@ -52,6 +53,7 @@ function subscriptionSummary({ details }: ActivityEvent) {
   if (!before) parts.push(`Started · ${status(after.status)}`);
   else if (before.status !== after.status)
     parts.push(`${status(before.status)} → ${status(after.status)}`);
+  if (before && before.priceId !== after.priceId) parts.push("Plan changed");
   if (before && before.seats !== after.seats)
     parts.push(`${textValue(before.seats)} → ${count(after.seats, "seat")}`);
   else if (!before) parts.push(count(after.seats, "seat"));
