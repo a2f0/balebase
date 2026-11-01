@@ -48,9 +48,13 @@ function isPendingRepair(value: unknown): value is PendingRepair {
 }
 
 function storePending(repairs: PendingRepair[]) {
-  if (repairs.length)
-    localStorage.setItem(pendingRepairsKey, JSON.stringify(repairs));
-  else localStorage.removeItem(pendingRepairsKey);
+  try {
+    if (repairs.length)
+      localStorage.setItem(pendingRepairsKey, JSON.stringify(repairs));
+    else localStorage.removeItem(pendingRepairsKey);
+  } catch {
+    // Storage that is full or blocked only loses the retry, not the report.
+  }
 }
 
 function forget(repair: PendingRepair) {
