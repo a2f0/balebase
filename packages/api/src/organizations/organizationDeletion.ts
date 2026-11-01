@@ -97,9 +97,11 @@ async function markOrganizationForDeletion(
           ))`,
       },
       {
+        // changes() is the UPDATE just before: a repeat in the same
+        // millisecond matches the stored deletedAt but changed nothing.
         bindings: [organizationId, deletedAt, deletedByUserId],
         sql: `organization.id = ? AND organization.deletedAt = ?
-          AND organization.deletedByUserId = ?`,
+          AND organization.deletedByUserId = ? AND changes() > 0`,
       },
     ),
     database
