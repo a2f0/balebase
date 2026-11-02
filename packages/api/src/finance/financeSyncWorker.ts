@@ -156,9 +156,10 @@ async function retryOrFail(env: Bindings, job: SyncJobRow, error: unknown) {
   if (!retry) {
     statements.push(
       env.DB.prepare(`UPDATE plaid_items SET status = 'error', error_code = ?,
-      error_message = ?, updated_at = ? WHERE id = ? AND changes() > 0`).bind(
+      error_message = ?, last_failed_sync_at = ?, updated_at = ? WHERE id = ? AND changes() > 0`).bind(
         code,
         message,
+        now,
         now,
         job.connection_id,
       ),

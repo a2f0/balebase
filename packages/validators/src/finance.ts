@@ -94,6 +94,8 @@ const FinanceConnectionDetailSchema = z.object({
     institutionId: z.string().nullable(),
     institutionName: z.string().nullable(),
     lastSyncedAt: z.string().nullable(),
+    /** When a sync last failed after its retries; null if none is on record. */
+    lastFailedSyncAt: z.string().nullable(),
     plaidItemId: z.string(),
     status: z.string(),
     transactions: ImportedHistorySchema,
@@ -411,6 +413,7 @@ export const financeRoutes = {
         errorCode: true,
         errorMessage: true,
         lastSyncedAt: true,
+        lastFailedSyncAt: true,
         syncJob: true,
       }),
     }),

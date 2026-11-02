@@ -218,6 +218,12 @@ function ConnectionSummary({ connection }: { connection: Connection }) {
               ? formatDateTime(connection.lastSyncedAt)
               : "Not synced yet"}
           </dd>
+          <dt>Last failed sync</dt>
+          <dd>
+            {connection.lastFailedSyncAt
+              ? formatDateTime(connection.lastFailedSyncAt)
+              : "None recorded"}
+          </dd>
           {connection.disconnectedAt && (
             <>
               <dt>Disconnected</dt>

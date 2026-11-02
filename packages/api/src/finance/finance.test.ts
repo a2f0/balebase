@@ -636,6 +636,7 @@ describe("finance", () => {
       },
     });
     expect(synced.body.connection.lastSyncedAt).toBeString();
+    expect(synced.body.connection.lastFailedSyncAt).toBeNull();
     expect(synced.body.accounts).toEqual([
       {
         availableBalance: 1200,
@@ -655,18 +656,29 @@ describe("finance", () => {
 
     failSync = true;
     expect((await sync()).status).toBe(502);
-    expect((await detail()).body.connection).toMatchObject({
+    const failed = (await detail()).body.connection;
+    expect(failed).toMatchObject({
       errorCode: "ITEM_LOGIN_REQUIRED",
       errorMessage: "The login details of this item have changed.",
+      lastSyncedAt: synced.body.connection.lastSyncedAt,
       status: "error",
     });
+    expect(Date.parse(failed.lastFailedSyncAt ?? "")).toBeGreaterThanOrEqual(
+      Date.parse(synced.body.connection.lastSyncedAt ?? ""),
+    );
     failSync = false;
     expect((await sync()).status).toBe(200);
-    expect((await detail()).body.connection).toMatchObject({
+    const recovered = (await detail()).body.connection;
+    expect(recovered).toMatchObject({
       errorCode: null,
       errorMessage: null,
+      // A later success keeps the failure on record.
+      lastFailedSyncAt: failed.lastFailedSyncAt,
       status: "active",
     });
+    expect(Date.parse(recovered.lastSyncedAt ?? "")).toBeGreaterThanOrEqual(
+      Date.parse(failed.lastFailedSyncAt ?? ""),
+    );
 
     const disconnected = await app.request(
       financePath(`/connections/${id}`),
@@ -825,6 +837,7 @@ interface ConnectionDetail {
   accounts: Record<string, unknown>[];
   connection: {
     disconnectedAt: string | null;
+    lastFailedSyncAt: string | null;
     lastSyncedAt: string | null;
     status: string;
     transactions: { count: number };
