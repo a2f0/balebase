@@ -250,11 +250,14 @@ describe("organization API keys", () => {
       expect(document.activeElement).toBe(selected);
       expect(selected?.getAttribute("aria-selected")).toBe("true");
       expect(selected?.tabIndex).toBe(0);
+      const panel = container.querySelector('[role="tabpanel"]');
+      expect(panel?.getAttribute("aria-labelledby")).toBe(selected?.id);
+      // Client names hold spaces; the IDs that tie tab and panel must not.
+      expect(selected?.id).not.toMatch(/\s/);
+      expect(selected?.getAttribute("aria-controls")).toBe(panel?.id);
       expect(
-        container
-          .querySelector('[role="tabpanel"]')
-          ?.getAttribute("aria-labelledby"),
-      ).toBe(selected?.id);
+        document.getElementById(panel?.getAttribute("aria-labelledby") ?? ""),
+      ).toBe(selected ?? null);
       expect(
         container.querySelectorAll('[role="tab"][tabindex="0"]').length,
       ).toBe(1);

@@ -132,6 +132,13 @@ describe("a member's page", () => {
     expect(text).toContain("W-9");
     expect(text).not.toContain("Owner form");
     expect(queryButton("Send requests", container)).toBeTruthy();
+    expect(
+      [
+        ...container.querySelectorAll(
+          '[aria-label="Member sections"] [role="tab"]',
+        ),
+      ].map((tab) => tab.textContent),
+    ).toEqual(["Profile", "Forms and checks"]);
     expect(requests).toHaveLength(1);
   });
 
@@ -179,6 +186,9 @@ describe("a member's page", () => {
 
     expect(container.textContent).toContain("Olivia Owner");
     expect(container.textContent).not.toContain("Forms and checks");
+    // With only the profile to show, there is no tab strip or tab panel.
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
+    expect(container.querySelector('[role="tabpanel"]')).toBeNull();
     expect(requests).toEqual([]);
   });
 

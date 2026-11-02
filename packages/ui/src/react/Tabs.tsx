@@ -35,12 +35,23 @@ export function useSectionTabs<Id extends string>(
   const base = useId();
   const [chosen, setChosen] = useState<Id | undefined>(initial);
   const selected = tabs.find(({ id }) => id === chosen)?.id ?? tabs[0]?.id;
-  const tabId = (id: Id) => `${base}-tab-${id}`;
-  const panelId = (id: Id) => `${base}-panel-${id}`;
+  // Section IDs can hold spaces ("Claude Code"), so DOM IDs use positions.
+  const position = (id: Id) => tabs.findIndex((tab) => tab.id === id);
+  const tabId = (id: Id) => `${base}-tab-${position(id)}`;
+  const panelId = (id: Id) => `${base}-panel-${position(id)}`;
+  const strip = tabs.length > 1;
   return {
     panel(id: Id, children: ReactNode) {
-      if (!tabs.some((tab) => tab.id === id)) return null;
+      if (position(id) < 0) return null;
       if (mount === "selected" && id !== selected) return null;
+      // A lone section has no tab to name it, so it is an ordinary block.
+      if (!strip) {
+        return (
+          <div className="tabPanel" key={id}>
+            {children}
+          </div>
+        );
+      }
       return (
         <div
           aria-labelledby={tabId(id)}
