@@ -49,6 +49,43 @@ it("marks each organization's starting Finance group as built in", () => {
   add("twice-first", "Finance", "twice", "2026-10-30T02:23:46.531Z", true);
   add("twice-second", "Finance 2", "twice", "2026-10-30T02:23:50.000Z", true);
 
+  // Sign-up's group with its Finance access revoked: still named Finance.
+  organization.run("revoked", "Revoked", "revoked", "2026-10-21T12:48:31.158Z");
+  add(
+    "revoked-finance",
+    "Finance",
+    "revoked",
+    "2026-10-21T12:48:31.357Z",
+    false,
+  );
+  // Revoked and renamed: its recorded creation granted Finance.
+  organization.run("renamed", "Renamed", "renamed", "2026-10-23T11:51:38.494Z");
+  add(
+    "renamed-finance",
+    "Payables",
+    "renamed",
+    "2026-10-23T11:51:38.575Z",
+    false,
+  );
+  database
+    .query(
+      `INSERT INTO activity_events (organization_id, root_type, root_id,
+         root_label, subject_type, subject_id, action, actor_user_id,
+         actor_name, actor_email, occurred_at, details)
+       VALUES ('renamed', 'organization_group', ?, 'Finance',
+         'organization_group', ?, 'organization.group_created', 'owner',
+         'Owner', 'owner@example.com', '2026-10-23T11:51:38.575Z', ?)`,
+    )
+    .run(
+      "renamed-finance",
+      "renamed-finance",
+      JSON.stringify({
+        capabilities: ["finance"],
+        members: [],
+        name: "Finance",
+      }),
+    );
+
   applyMigrations(database, { from: "0089" });
 
   expect(
@@ -63,6 +100,16 @@ it("marks each organization's starting Finance group as built in", () => {
       kind: "finance",
       organization_id: "legacy",
       team_id: "team_finance_legacy",
+    },
+    {
+      kind: "finance",
+      organization_id: "renamed",
+      team_id: "renamed-finance",
+    },
+    {
+      kind: "finance",
+      organization_id: "revoked",
+      team_id: "revoked-finance",
     },
     { kind: "finance", organization_id: "signup", team_id: "signup-finance" },
     { kind: "finance", organization_id: "twice", team_id: "twice-first" },
