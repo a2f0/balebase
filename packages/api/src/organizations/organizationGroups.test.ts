@@ -3,7 +3,7 @@ import { testBindings } from "../testing/bindings";
 import { toD1 } from "../testing/d1";
 import { createTestDatabase } from "../testing/database";
 import { requester } from "../testing/http";
-import { seedAccount, seedUser } from "../testing/seed";
+import { seedAccount, seedGroup, seedUser } from "../testing/seed";
 import { testApp } from "../testing/session";
 import type { Bindings } from "../types";
 import { organizationGroups, requireCapability } from "./organizationGroups";
@@ -21,6 +21,14 @@ describe("organization groups", () => {
     expect(listed.status).toBe(200);
     expect(listed.body.groups).toMatchObject([
       {
+        builtIn: "admins",
+        capabilities: [],
+        id: "admins",
+        memberUserIds: ["owner-user"],
+        name: "Admins",
+      },
+      {
+        builtIn: "finance",
         capabilities: ["finance"],
         memberUserIds: ["owner-user"],
         name: "Finance",
@@ -30,7 +38,7 @@ describe("organization groups", () => {
       "member-user",
       "owner-user",
     ]);
-    const groupId = listed.body.groups[0]?.id;
+    const groupId = listed.body.groups[1]?.id;
     expect(groupId).toBeString();
 
     const memberAccess = await member<AccessListing>("GET", "/access");
@@ -153,10 +161,132 @@ describe("organization groups", () => {
       (await owner<GroupListing>("GET", "/")).body.groups,
     ).not.toContainEqual(expect.objectContaining({ name: "Operations" }));
   });
+
+  it("keeps built-in groups: Finance can change but not be deleted, Admins follows roles", async () => {
+    const fixture = createFixture();
+    const owner = groupsApp(fixture.bindings, "owner-user");
+    const financeId = "team_finance_org_owner-user";
+
+    expect(await owner("DELETE", `/${financeId}`)).toMatchObject({
+      body: { error: "Built-in groups can't be deleted." },
+      status: 409,
+    });
+    const renamed = await owner("PATCH", `/${financeId}`, {
+      capabilities: ["finance"],
+      name: "Accounts",
+      userIds: ["owner-user", "member-user"],
+    });
+    expect(renamed.status).toBe(200);
+    const admins = { capabilities: [], name: "Admins", userIds: [] };
+    for (const [method, body] of [
+      ["PATCH", admins],
+      ["DELETE", undefined],
+    ] as const) {
+      expect(await owner(method, "/admins", body)).toMatchObject({
+        body: {
+          error:
+            "The Admins group follows member roles. Change a member's role in People.",
+        },
+        status: 409,
+      });
+    }
+
+    fixture.database.exec(
+      "UPDATE member SET role = 'admin' WHERE id = 'member-record'",
+    );
+    const { groups } = (await owner<GroupListing>("GET", "/")).body;
+    expect(groups.map(({ builtIn, name }) => [builtIn, name])).toEqual([
+      ["admins", "Admins"],
+      ["finance", "Accounts"],
+    ]);
+    expect(groups[0]?.memberUserIds.toSorted()).toEqual([
+      "member-user",
+      "owner-user",
+    ]);
+    const events = fixture.database
+      .query("SELECT action FROM activity_events WHERE root_id = ? ORDER BY id")
+      .all(financeId);
+    expect(events).toEqual([{ action: "organization.group_updated" }]);
+  });
+
+  it("refuses to delete a group that became built in during the request", async () => {
+    const database = createFixture().database;
+    seedGroup(database, { id: "payables", name: "Payables", organizationId });
+    const bindings = testBindings({
+      DB: toD1(database, {
+        onQuery: ({ sql }) => {
+          if (sql.startsWith('DELETE FROM "team"'))
+            database.exec(
+              `INSERT OR IGNORE INTO organization_builtin_group
+               (team_id, organization_id, kind) VALUES ('payables', '${organizationId}', 'finance')`,
+            );
+        },
+      }),
+    });
+    // The organization's own built-in Finance group is replaced in this test.
+    database.exec(
+      "DELETE FROM organization_builtin_group WHERE team_id = 'team_finance_org_owner-user'",
+    );
+    const owner = groupsApp(bindings, "owner-user");
+    expect(await owner("DELETE", "/payables")).toMatchObject({
+      body: { error: "Built-in groups can't be deleted." },
+      status: 409,
+    });
+    expect(
+      database.query("SELECT id FROM team WHERE id = 'payables'").get(),
+    ).toEqual({ id: "payables" });
+    expect(
+      database
+        .query(
+          "SELECT COUNT(*) AS count FROM activity_events WHERE root_id = 'payables'",
+        )
+        .get(),
+    ).toEqual({ count: 0 });
+  });
+
+  it("reads a group's history, and the Admins group's role changes, for managers", async () => {
+    const fixture = createFixture();
+    const owner = groupsApp(fixture.bindings, "owner-user");
+    const member = groupsApp(fixture.bindings, "member-user");
+    const financeId = "team_finance_org_owner-user";
+    await owner("PATCH", `/${financeId}`, {
+      capabilities: [],
+      name: "Finance",
+      userIds: ["owner-user"],
+    });
+    fixture.database
+      .query(
+        `INSERT INTO activity_events (organization_id, root_type, root_id,
+           root_label, subject_type, subject_id, action, actor_user_id,
+           actor_name, actor_email, occurred_at, details)
+         VALUES (?, 'organization_member', 'member-record', 'member', 'organization_member',
+           'member-record', 'organization.member_role_changed', 'owner-user', 'Owner',
+           'owner@example.com', ?, '{}')`,
+      )
+      .run(organizationId, now());
+
+    const history = await owner<{ events: { action: string }[] }>(
+      "GET",
+      `/${financeId}/activity`,
+    );
+    expect(history.body.events.map(({ action }) => action)).toEqual([
+      "organization.group_updated",
+    ]);
+    const roles = await owner<{ events: { action: string }[] }>(
+      "GET",
+      "/admins/activity",
+    );
+    expect(roles.body.events.map(({ action }) => action)).toEqual([
+      "organization.member_role_changed",
+    ]);
+    expect((await owner("GET", "/missing/activity")).status).toBe(404);
+    expect((await member("GET", `/${financeId}/activity`)).status).toBe(403);
+  });
 });
 
 interface GroupListing {
   groups: {
+    builtIn: string | null;
     capabilities: string[];
     id: string;
     memberUserIds: string[];

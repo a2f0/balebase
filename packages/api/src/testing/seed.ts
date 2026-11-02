@@ -93,6 +93,8 @@ export function seedGroup(
     id?: string;
     capabilities?: string[];
     userIds?: string[];
+    /** Marks the group as one the product keeps, as sign-up's Finance group. */
+    builtIn?: "finance";
   },
 ) {
   const name = group.name ?? "Finance";
@@ -119,6 +121,21 @@ export function seedGroup(
          (organization_id, team_id, capability) VALUES (?, ?, ?)`,
       )
       .run(group.organizationId, id, capability);
+  // Databases stopped before migration 0089 have no built-in groups.
+  if (
+    group.builtIn &&
+    database
+      .query(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'organization_builtin_group'",
+      )
+      .get()
+  )
+    database
+      .query(
+        `INSERT INTO organization_builtin_group (team_id, organization_id, kind)
+         VALUES (?, ?, ?)`,
+      )
+      .run(id, group.organizationId, group.builtIn);
   return id;
 }
 
@@ -147,7 +164,11 @@ export function seedAccount(
     role: "owner",
     userId: user.id,
   });
-  seedGroup(database, { organizationId, userIds: [user.id] });
+  seedGroup(database, {
+    builtIn: "finance",
+    organizationId,
+    userIds: [user.id],
+  });
   return { memberId, organizationId, userId: user.id };
 }
 

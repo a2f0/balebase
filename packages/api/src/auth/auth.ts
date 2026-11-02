@@ -445,6 +445,13 @@ async function createDefaultFinanceGroup(
          ("organization_id", "team_id", "capability") VALUES (?, ?, 'finance')`,
       )
       .bind(organizationId, groupId),
+    // The starting Finance group is kept: it can change, not be deleted.
+    database
+      .prepare(
+        `INSERT INTO organization_builtin_group (team_id, organization_id, kind)
+         VALUES (?, ?, 'finance')`,
+      )
+      .bind(groupId, organizationId),
     // The organization's creator grants themselves Finance access.
     groupCreatedActivity(database, {
       actorId: userId,

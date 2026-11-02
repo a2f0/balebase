@@ -20,7 +20,8 @@ export type ActivitySource =
         | "global_audit_template"
         | "inbound_email"
         | "library_file"
-        | "library_folder";
+        | "library_folder"
+        | "organization_group";
     }
   | undefined;
 
@@ -68,6 +69,8 @@ export function listActivity(
       return api.objects.activity(id, cursor);
     case "library_folder":
       return api.libraryFolders.activity(id, cursor);
+    case "organization_group":
+      return api.organizationGroups.activity(id, cursor);
     case "project":
       return api.projects.activity(id, cursor);
   }
