@@ -310,6 +310,9 @@ function configuredOrganizationPlugin(env: Bindings, waitUntil: WaitUntil) {
     },
     teams: {
       allowRemovingAllTeams: true,
+      // Better Auth's default team, named after the organization, granted no
+      // access and had no history; the Finance group is the starting group.
+      defaultTeam: { enabled: false },
       enabled: true,
       maximumTeams: 50,
     },
