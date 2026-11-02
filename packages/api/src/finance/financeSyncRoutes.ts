@@ -28,13 +28,15 @@ async function requestSync(context: FinanceContext) {
 export async function connectionSyncStatus(context: FinanceContext) {
   const id = context.req.param("id") ?? "";
   const row = await context.env.DB.prepare(`SELECT status, error_code,
-    error_message, last_synced_at FROM plaid_items WHERE id = ? AND organization_id = ?`)
+    error_message, last_synced_at, last_failed_sync_at FROM plaid_items
+    WHERE id = ? AND organization_id = ?`)
     .bind(id, context.get("organizationId"))
     .first<{
       status: string;
       error_code: string | null;
       error_message: string | null;
       last_synced_at: string | null;
+      last_failed_sync_at: string | null;
     }>();
   if (!row) return context.json({ error: "Connection not found." }, 404);
   return respond(context, financeRoutes.syncStatus, {
@@ -43,6 +45,7 @@ export async function connectionSyncStatus(context: FinanceContext) {
       errorCode: row.error_code,
       errorMessage: row.error_message,
       lastSyncedAt: row.last_synced_at,
+      lastFailedSyncAt: row.last_failed_sync_at,
       syncJob: await latestSyncJob(context.env.DB, id),
     },
   });

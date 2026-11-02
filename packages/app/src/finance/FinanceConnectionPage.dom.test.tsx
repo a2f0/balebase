@@ -6,6 +6,7 @@ import type {
   FinanceInstitutionHealth,
 } from "@balebase/validators/finance";
 import { act } from "react";
+import { formatDateTime } from "../shared/labels";
 import { holdTimers, installDom } from "../testing/dom";
 import { FinanceConnectionPage } from "./FinanceConnectionPage";
 import { syncPollMs } from "./financeConnectionActions";
@@ -45,6 +46,7 @@ function detail(
       id: "item-1",
       institutionId: "ins_109508",
       institutionName: "First Platypus Bank",
+      lastFailedSyncAt: null,
       lastSyncedAt: "2026-10-18T12:00:00.000Z",
       plaidItemId: "plaid-item-1",
       status: "active",
@@ -154,6 +156,7 @@ describe("Finance connection page", () => {
     expect(text).toContain("Plaid Gold Checking");
     expect(text).toContain("plaid-item-1");
     expect(text).not.toContain("Last error");
+    expect(text).toContain("Last failed syncNone recorded");
     expect(text).toContain("42 transactions · ");
     const account = container.querySelector<HTMLAnchorElement>(
       ".rowTarget[href='/finance/accounts/account-1']",
@@ -187,6 +190,7 @@ describe("Finance connection page", () => {
           ? detail({
               errorCode: "ITEM_LOGIN_REQUIRED",
               errorMessage: "The login details of this item have changed.",
+              lastFailedSyncAt: "2026-10-28T00:01:01.389Z",
               status: "error",
             })
           : detail(),
@@ -198,6 +202,9 @@ describe("Finance connection page", () => {
     expect(text).toContain("The login details of this item have changed.");
     expect(text).toContain("Last error");
     expect(text).toContain("ITEM_LOGIN_REQUIRED");
+    expect(text).toContain(
+      `Last failed sync${formatDateTime("2026-10-28T00:01:01.389Z")}`,
+    );
     expect(button("Sync now").disabled).toBe(false);
   });
 

@@ -372,6 +372,15 @@ describe("durable finance sync", () => {
         .query("SELECT status, error_code FROM plaid_items")
         .get(),
     ).toEqual({ status: "error", error_code: "INTERNAL_SERVER_ERROR" });
+    // Only the final failure is recorded on the connection, at the job's end.
+    const { finished_at } = fixture.database
+      .query("SELECT finished_at FROM job_runs")
+      .get() as { finished_at: string };
+    expect(
+      fixture.database
+        .query("SELECT last_failed_sync_at FROM plaid_items")
+        .get(),
+    ).toEqual({ last_failed_sync_at: finished_at });
     const retry = await fixture.request<{ id: string }>("/sync-jobs", "POST");
     expect(retry.body.id).not.toBe(job.id);
     await fixture.deliver(retry.body.id);

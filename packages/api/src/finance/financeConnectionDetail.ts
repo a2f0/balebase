@@ -20,6 +20,7 @@ interface ConnectionRow {
   id: string;
   institution_id: string | null;
   institution_name: string | null;
+  last_failed_sync_at: string | null;
   last_synced_at: string | null;
   last_transaction_date: string | null;
   plaid_item_id: string;
@@ -55,7 +56,7 @@ export async function connectionDetail(context: FinanceContext) {
         `SELECT item.id, item.plaid_item_id, item.institution_id,
                 item.institution_name, item.status, item.error_code,
                 item.error_message, item.daily_sync, item.created_at, item.last_synced_at,
-                item.disconnected_at, creator.name AS created_by_name,
+                item.last_failed_sync_at, item.disconnected_at, creator.name AS created_by_name,
                 creator.email AS created_by_email,
                 COUNT(txn.id) AS transaction_count,
                 MIN(txn.transaction_date) AS first_transaction_date,
@@ -142,6 +143,7 @@ function toConnection(
     institutionId: row.institution_id,
     institutionName: row.institution_name,
     lastSyncedAt: row.last_synced_at,
+    lastFailedSyncAt: row.last_failed_sync_at,
     plaidItemId: row.plaid_item_id,
     status: row.status,
     transactions: {

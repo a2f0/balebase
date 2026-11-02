@@ -34,7 +34,8 @@ untrusted text, quotes, or SQL fragments into this remote command.
   cd packages/api
   bunx --bun wrangler d1 execute DB --remote --json --command "
     SELECT id, organization_id, institution_id, institution_name, status,
-           error_code, error_message, last_synced_at, updated_at, disconnected_at
+           error_code, error_message, last_synced_at, last_failed_sync_at,
+           updated_at, disconnected_at
     FROM plaid_items
     WHERE id = 'REPLACE_CONNECTION_ID'
       AND organization_id = 'REPLACE_ORGANIZATION_ID';
@@ -48,9 +49,11 @@ untrusted text, quotes, or SQL fragments into this remote command.
 )
 ```
 
-Record the last successful sync and first observed failed job with explicit
-UTC timestamps. `ITEM_LOGIN_REQUIRED` means the existing Item needs user
-reauthorization; it does not establish why reauthorization fails. A failed job
+Record the last successful sync (`last_synced_at`), the latest failed sync
+(`last_failed_sync_at`, also shown as **Last failed sync** on the connection's
+page), and the first observed failed job with explicit UTC timestamps.
+`ITEM_LOGIN_REQUIRED` means the existing Item needs user reauthorization; it
+does not establish why reauthorization fails. A failed job
 with zero pages is different from a stuck queue or an import that partially ran.
 Check job logs when needed, keeping the same connection and organization scope.
 
