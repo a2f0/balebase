@@ -5,7 +5,9 @@ import {
   Card,
   EmptyState,
   LoadingState,
+  SectionTabs,
   Toast,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { ActivityFeed } from "../activity/ActivityFeed";
@@ -101,37 +103,77 @@ function ManagedRequirement({
       </>
     );
   }
-  const badge = requirementBadge(requirement);
   return (
     <>
       {back}
       {error && <Toast tone="danger">{error}</Toast>}
       {notice && <Toast tone="success">{notice}</Toast>}
-      <Card
-        actions={<Badge tone={badge.tone}>{badge.label}</Badge>}
-        description={requirementKinds[requirement.kind].label}
-        title={requirement.title}
-      >
-        <RequirementFacts onNavigate={onNavigate} requirement={requirement} />
-        {requirement.checkrResult && (
-          <CheckrResult
-            completedAt={requirement.completedAt}
-            result={requirement.checkrResult}
-          />
-        )}
-      </Card>
-      <Card title="Next step">
-        <p>{managerNextStep(requirement)}</p>
-        <RequirementActions
-          action={action}
-          busy={busy}
-          requirement={requirement}
-        />
-      </Card>
-      <ActivityFeed
-        refreshKey={requirement}
-        source={{ id: requirement.id, type: "employee_requirement" }}
+      <RequirementSections
+        action={action}
+        busy={busy}
+        onNavigate={onNavigate}
+        requirement={requirement}
       />
+    </>
+  );
+}
+
+/** The request's details and next step, and its history, as tabs. */
+function RequirementSections({
+  action,
+  busy,
+  onNavigate,
+  requirement,
+}: {
+  action: ReturnType<typeof useManagedRequirements>["action"];
+  busy: boolean;
+  onNavigate: (pathname: string) => void;
+  requirement: EmployeeRequirement;
+}) {
+  const sections = useSectionTabs([
+    { id: "details", label: "Details" },
+    { id: "activity", label: "Activity" },
+  ]);
+  const badge = requirementBadge(requirement);
+  return (
+    <>
+      <SectionTabs label="Request sections">{sections.tabs}</SectionTabs>
+      {sections.panel(
+        "details",
+        <>
+          <Card
+            actions={<Badge tone={badge.tone}>{badge.label}</Badge>}
+            description={requirementKinds[requirement.kind].label}
+            title={requirement.title}
+          >
+            <RequirementFacts
+              onNavigate={onNavigate}
+              requirement={requirement}
+            />
+            {requirement.checkrResult && (
+              <CheckrResult
+                completedAt={requirement.completedAt}
+                result={requirement.checkrResult}
+              />
+            )}
+          </Card>
+          <Card title="Next step">
+            <p>{managerNextStep(requirement)}</p>
+            <RequirementActions
+              action={action}
+              busy={busy}
+              requirement={requirement}
+            />
+          </Card>
+        </>,
+      )}
+      {sections.panel(
+        "activity",
+        <ActivityFeed
+          refreshKey={requirement}
+          source={{ id: requirement.id, type: "employee_requirement" }}
+        />,
+      )}
     </>
   );
 }

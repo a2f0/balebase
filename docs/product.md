@@ -551,6 +551,14 @@ images. Answer history includes the previous and new values; each question also
 shows its last saved editor. Unsaved answers are labeled, and concurrent edits
 require reloading before overwriting another person's saved work.
 
+Record pages put each part of the record on its own tab, with **Activity**
+last: a project's **Members**, **Audit forms**, and **Activity**; a library
+folder's **Files**, **Emails**, and **Activity**; an audit's **Checklist**,
+**Issues**, and **Activity**. Equipment, businesses, issues, contract and audit
+templates, finance connections, accounts, and transactions, inbox messages,
+requests, members, and root admin organizations and jobs follow the same
+pattern. Switching tabs keeps unsaved edits on the others.
+
 `/api/audits/templates/:id/activity` and `/api/audits/runs/:id/activity`
 provide resource histories. Shared global form activity is visible through
 its form history.

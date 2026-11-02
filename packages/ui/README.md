@@ -82,7 +82,8 @@ both themes, so `.onDark` regions need no theme-specific styles.
   `badgeInfo`, `badgeAccent`, `badgeDot`; `banner` + `bannerSuccess`,
   `bannerWarning`, `bannerDanger`, `bannerNeutral`
 - **States:** `emptyState`, `emptyStateCompact`, `emptyStatePlain`, `spinner`
-- **Navigation:** `tabs` + `tab` (`aria-current="page"`), `segmented`
+- **Navigation:** `tabs` + `tab` (`aria-current="page"` for links,
+  `aria-selected` for section tabs), `sectionTabs`, `tabPanel`, `segmented`
   (children use `aria-pressed`/`aria-checked`/`aria-current`;
   `data-tone="success"` or `"danger"` tints a pressed answer; `segmentedFill`
   makes equal-width options), `popover`, `menuItem`, `menuLabel`,
@@ -101,8 +102,15 @@ both themes, so `.onDark` regions need no theme-specific styles.
 ## React primitives
 
 - `Page` (`narrow` for forms and settings), `PageHeader` (`eyebrow`,
-  `title`, `description`, `actions`, `back`, `tabs`), `PageBody`, and
-  `PageSection` (`title`, `description`, `actions`).
+  `title`, `description`, `actions`, `back`, `tabs`, `tabsKind`), `PageBody`,
+  and `PageSection` (`title`, `description`, `actions`).
+- `useSectionTabs` splits one page into tabs: a record's details, its related
+  lists, and its Activity each get a tab, with Activity last. Pass its `tabs`
+  to `PageHeader` with `tabsKind="panels"`, or to `SectionTabs` when the page
+  already has header tabs, and wrap each section in `panel(id, …)`. Hidden
+  panels stay mounted, so unsaved edits survive a switch; `mount: "selected"`
+  starts each panel afresh. Header `tabs` without `tabsKind` are links to other
+  pages, marked with `aria-current="page"`.
 - `Card` (`title`, `description`, `actions`, `footer`, `flush` for row
   lists and tables, `onSubmit` to render the card as a form). Its title is
   an `h2`, or an `h3` inside a `PageSection`; a lone footer action sits at

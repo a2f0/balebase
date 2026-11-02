@@ -9,6 +9,7 @@ import {
   PageHeader,
   PageSection,
   Toast,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type {
   EquipmentInput,
@@ -16,7 +17,7 @@ import type {
 } from "@balebase/validators/equipment";
 import type { Person } from "@balebase/validators/fields";
 import type { LinkedEmail } from "@balebase/validators/inbox";
-import { useCallback, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
 import { LinkedEmailList } from "../inbox/LinkedEmailList";
 import { api } from "../shared/apiClient";
@@ -95,6 +96,11 @@ export function EquipmentDetailPage({
     unlink,
   } = useEquipmentDetail(id, onNavigate);
   const item = detail?.equipment;
+  const sections = useSectionTabs([
+    { id: "details", label: "Details" },
+    { id: "emails", label: "Emails and receipts" },
+    { id: "activity", label: "Activity" },
+  ]);
   return (
     <Page>
       <EquipmentDetailHeader
@@ -103,7 +109,11 @@ export function EquipmentDetailPage({
         item={item}
         onBack={() => onNavigate(equipmentPath())}
         onDelete={() => item && void remove(item)}
-        onEdit={() => setEditing(true)}
+        onEdit={() => {
+          sections.select("details");
+          setEditing(true);
+        }}
+        tabs={item && sections.tabs}
         unavailable={Boolean(error)}
       />
       <PageBody>
@@ -113,47 +123,56 @@ export function EquipmentDetailPage({
           !error && <LoadingState label="Loading equipment…" />
         ) : (
           <>
-            {editing ? (
-              <EquipmentForm
-                initial={item}
-                members={detail.members}
-                onCancel={() => setEditing(false)}
-                onSave={async (input) => {
-                  const saved = await save(input, "Equipment updated.");
-                  if (saved) setEditing(false);
-                  return saved;
-                }}
-                types={detail.types}
-              />
-            ) : (
-              <EquipmentDetails
-                busy={busy}
-                canManage={detail.canManage}
-                item={item}
-                members={detail.members}
-                onAssign={(assigneeId) =>
-                  void save(
-                    { assigneeId },
-                    assigneeId
-                      ? "Equipment assigned."
-                      : "Equipment unassigned.",
-                  )
-                }
-              />
+            {sections.panel(
+              "details",
+              editing ? (
+                <EquipmentForm
+                  initial={item}
+                  members={detail.members}
+                  onCancel={() => setEditing(false)}
+                  onSave={async (input) => {
+                    const saved = await save(input, "Equipment updated.");
+                    if (saved) setEditing(false);
+                    return saved;
+                  }}
+                  types={detail.types}
+                />
+              ) : (
+                <EquipmentDetails
+                  busy={busy}
+                  canManage={detail.canManage}
+                  item={item}
+                  members={detail.members}
+                  onAssign={(assigneeId) =>
+                    void save(
+                      { assigneeId },
+                      assigneeId
+                        ? "Equipment assigned."
+                        : "Equipment unassigned.",
+                    )
+                  }
+                />
+              ),
             )}
-            <LinkedEmailList
-              busy={busy}
-              description="Receipts and other Inbox messages linked to this equipment."
-              emails={detail.emails}
-              emptyText="Open a receipt in the Inbox and link it to this equipment."
-              onNavigate={onNavigate}
-              onUnlink={(email) => void unlink(email)}
-              title="Emails and receipts"
-            />
-            <ActivityFeed
-              refreshKey={item}
-              source={{ id, type: "equipment" }}
-            />
+            {sections.panel(
+              "emails",
+              <LinkedEmailList
+                busy={busy}
+                description="Receipts and other Inbox messages linked to this equipment."
+                emails={detail.emails}
+                emptyText="Open a receipt in the Inbox and link it to this equipment."
+                onNavigate={onNavigate}
+                onUnlink={(email) => void unlink(email)}
+                title="Emails and receipts"
+              />,
+            )}
+            {sections.panel(
+              "activity",
+              <ActivityFeed
+                refreshKey={item}
+                source={{ id, type: "equipment" }}
+              />,
+            )}
           </>
         )}
       </PageBody>
@@ -168,6 +187,7 @@ function EquipmentDetailHeader({
   onBack,
   onDelete,
   onEdit,
+  tabs,
   unavailable,
 }: {
   busy: boolean;
@@ -176,6 +196,7 @@ function EquipmentDetailHeader({
   onBack: () => void;
   onDelete: () => void;
   onEdit: () => void;
+  tabs: ReactNode;
   unavailable: boolean;
 }) {
   let title = "Loading…";
@@ -206,6 +227,9 @@ function EquipmentDetailHeader({
         </Button>
       }
       eyebrow={item ? equipmentTypeLabel(item.type) : "Equipment"}
+      tabs={tabs}
+      tabsKind="panels"
+      tabsLabel="Equipment sections"
       title={title}
     />
   );

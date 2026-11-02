@@ -7,6 +7,7 @@ import {
   PageHeader,
   PageSection,
   Toast,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type { Business } from "@balebase/validators/businesses";
 import {
@@ -53,6 +54,10 @@ export function BusinessDetailPage({
   const [notice, setNotice] = useState<string>();
   const { copyNotice, onCopy } = useIdentifierCopy();
   const editButton = useFocusWhenFolded(editing);
+  const sections = useSectionTabs([
+    { id: "details", label: "Details" },
+    { id: "activity", label: "Activity" },
+  ]);
   const business = detail?.business;
   const error = failure ?? loaded.error;
   const announce = (message: string) => {
@@ -72,7 +77,10 @@ export function BusinessDetailPage({
             {detail?.canManage && !editing && (
               <Button
                 icon="edit"
-                onClick={() => setEditing(true)}
+                onClick={() => {
+                  sections.select("details");
+                  setEditing(true);
+                }}
                 ref={editButton}
               >
                 Edit
@@ -84,6 +92,9 @@ export function BusinessDetailPage({
           </>
         }
         eyebrow="Business"
+        tabs={business && sections.tabs}
+        tabsKind="panels"
+        tabsLabel="Business sections"
         title={business?.name ?? "Business details"}
       />
       <PageBody>
@@ -94,28 +105,33 @@ export function BusinessDetailPage({
         )}
         {!business && !error && <LoadingState label="Loading business…" />}
         {business &&
-          (editing ? (
-            <BusinessEditCard
-              business={business}
-              onCancel={() => setEditing(false)}
-              onError={fail}
-              onSaved={(updated) => {
-                loaded.setData((current) =>
-                  current ? { ...current, business: updated } : current,
-                );
-                setEditing(false);
-                announce("Business updated.");
-              }}
-            />
-          ) : (
-            <BusinessDetailCard business={business} onCopy={onCopy} />
-          ))}
-        {business && (
-          <ActivityFeed
-            refreshKey={business}
-            source={{ id: business.id, type: "business" }}
-          />
-        )}
+          sections.panel(
+            "details",
+            editing ? (
+              <BusinessEditCard
+                business={business}
+                onCancel={() => setEditing(false)}
+                onError={fail}
+                onSaved={(updated) => {
+                  loaded.setData((current) =>
+                    current ? { ...current, business: updated } : current,
+                  );
+                  setEditing(false);
+                  announce("Business updated.");
+                }}
+              />
+            ) : (
+              <BusinessDetailCard business={business} onCopy={onCopy} />
+            ),
+          )}
+        {business &&
+          sections.panel(
+            "activity",
+            <ActivityFeed
+              refreshKey={business}
+              source={{ id: business.id, type: "business" }}
+            />,
+          )}
       </PageBody>
     </Page>
   );

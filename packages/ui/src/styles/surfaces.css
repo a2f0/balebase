@@ -967,6 +967,25 @@ a.row:focus-visible {
   margin-bottom: -1px;
 }
 
+/* A tab strip inside a page body, under the page's own tabs. */
+.sectionTabs {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sectionTabs > .tab {
+  margin-bottom: -1px;
+}
+
+.tabPanel {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-8);
+}
+
+.tabPanel[hidden] {
+  display: none;
+}
+
 .pageBody {
   display: grid;
   max-width: calc(var(--page-width) + var(--page-gutter) * 2);

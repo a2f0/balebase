@@ -13,6 +13,7 @@ import {
   PageHeader,
   PageSection,
   Toast,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type { LinkedEmail } from "@balebase/validators/inbox";
 import type {
@@ -23,6 +24,7 @@ import type { StoredObject } from "@balebase/validators/objects";
 import { libraryFolderNameMaxLength } from "@balebase/validators/rules";
 import {
   type FormEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useRef,
@@ -118,6 +120,7 @@ function LibraryBrowser({
   const chooseFile = () => fileInput.current?.click();
   const error = actions.error ?? data.error;
   const unavailable = Boolean(folderId && data.error && !data.detail);
+  const sections = useFolderSections(folderId);
 
   return (
     <Page>
@@ -130,6 +133,7 @@ function LibraryBrowser({
         onNewFolder={() => actions.setFolderForm("create")}
         onRenameFolder={() => actions.setFolderForm("rename")}
         onUpload={chooseFile}
+        tabs={folderId && data.detail ? sections.tabs : undefined}
         unavailable={unavailable}
       />
       <input
@@ -190,6 +194,7 @@ function LibraryBrowser({
             folderId={folderId}
             onNavigate={onNavigate}
             onUpload={chooseFile}
+            panel={sections.panel}
           />
         )}
       </PageBody>
@@ -275,6 +280,25 @@ function useLibraryActions(
   };
 }
 
+/**
+ * A folder's files, linked emails, and history, each on its own tab. Opening
+ * another folder starts on its files.
+ */
+function useFolderSections(folderId: string | undefined) {
+  const sections = useSectionTabs([
+    { id: "files", label: "Files" },
+    { id: "emails", label: "Emails" },
+    { id: "activity", label: "Activity" },
+  ] as const);
+  const openedFolder = useRef(folderId);
+  if (openedFolder.current !== folderId) {
+    openedFolder.current = folderId;
+    sections.select("files");
+  }
+  return sections;
+}
+
+type FolderSections = ReturnType<typeof useFolderSections>;
 type LibraryData = ReturnType<typeof useLibraryData>;
 type LibraryActions = ReturnType<typeof useLibraryActions>;
 
@@ -287,6 +311,7 @@ function LibraryHeader({
   onNewFolder,
   onRenameFolder,
   onUpload,
+  tabs,
   unavailable,
 }: {
   busy: boolean;
@@ -297,6 +322,7 @@ function LibraryHeader({
   onNewFolder: () => void;
   onRenameFolder: () => void;
   onUpload: () => void;
+  tabs: FolderSections["tabs"] | undefined;
   unavailable: boolean;
 }) {
   const upload = (
@@ -358,6 +384,9 @@ function LibraryHeader({
         </Button>
       }
       eyebrow="Folder"
+      tabs={tabs}
+      tabsKind="panels"
+      tabsLabel="Folder sections"
       title={detail?.folder.name ?? (unavailable ? "Folder" : "Loading…")}
     />
   );
@@ -369,12 +398,14 @@ function LibraryContent({
   folderId,
   onNavigate,
   onUpload,
+  panel,
 }: {
   actions: LibraryActions;
   data: LibraryData;
   folderId: string | undefined;
   onNavigate: (pathname: string) => void;
   onUpload: () => void;
+  panel: FolderSections["panel"];
 }) {
   if (!data.objects || !data.folders || (folderId && !data.detail)) {
     if (!data.error) return <LoadingState label="Loading library…" />;
@@ -412,37 +443,15 @@ function LibraryContent({
 
   if (data.detail) {
     return (
-      <>
-        <PageSection actions={fileCount} title="Files">
-          {data.objects.length ? (
-            files
-          ) : (
-            <EmptyState
-              actions={
-                <Button icon="upload" onClick={onUpload} variant="primary">
-                  Choose a file
-                </Button>
-              }
-              icon="folder"
-              title="This folder is empty"
-            >
-              Upload a file here, or move one in from the library.
-            </EmptyState>
-          )}
-        </PageSection>
-        <LinkedEmailList
-          busy={actions.busy}
-          description="Inbox messages linked to this folder."
-          emails={data.detail.emails}
-          emptyText="Open a message in the Inbox and link it to this folder."
-          onNavigate={onNavigate}
-          onUnlink={(email) => void actions.unlink(email)}
-        />
-        <ActivityFeed
-          refreshKey={data.detail}
-          source={{ id: data.detail.folder.id, type: "library_folder" }}
-        />
-      </>
+      <FolderContent
+        actions={actions}
+        detail={data.detail}
+        fileCount={fileCount}
+        files={data.objects.length ? files : undefined}
+        onNavigate={onNavigate}
+        onUpload={onUpload}
+        panel={panel}
+      />
     );
   }
 
@@ -476,6 +485,66 @@ function LibraryContent({
           </EmptyState>
         )}
       </PageSection>
+    </>
+  );
+}
+
+/** One folder's files, linked emails, and history, each on its own tab. */
+function FolderContent({
+  actions,
+  detail,
+  fileCount,
+  files,
+  onNavigate,
+  onUpload,
+  panel,
+}: {
+  actions: LibraryActions;
+  detail: LibraryFolderDetail;
+  fileCount: ReactNode;
+  files: ReactNode;
+  onNavigate: (pathname: string) => void;
+  onUpload: () => void;
+  panel: FolderSections["panel"];
+}) {
+  return (
+    <>
+      {panel(
+        "files",
+        <PageSection actions={fileCount} title="Files">
+          {files ?? (
+            <EmptyState
+              actions={
+                <Button icon="upload" onClick={onUpload} variant="primary">
+                  Choose a file
+                </Button>
+              }
+              icon="folder"
+              title="This folder is empty"
+            >
+              Upload a file here, or move one in from the library.
+            </EmptyState>
+          )}
+        </PageSection>,
+      )}
+      {panel(
+        "emails",
+        <LinkedEmailList
+          busy={actions.busy}
+          description="Inbox messages linked to this folder."
+          emails={detail.emails}
+          emptyText="Open a message in the Inbox and link it to this folder."
+          onNavigate={onNavigate}
+          onUnlink={(email) => void actions.unlink(email)}
+        />,
+      )}
+      {panel(
+        "activity",
+        <ActivityFeed
+          refreshKey={detail}
+          source={{ id: detail.folder.id, type: "library_folder" }}
+        />,
+      )}
     </>
   );
 }

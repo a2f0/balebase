@@ -6,7 +6,9 @@ import {
   Card,
   EmptyState,
   LoadingState,
+  SectionTabs,
   Toast,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { EmployeeForms } from "../employeeForms/EmployeeForms";
@@ -58,6 +60,11 @@ export function OrganizationMemberDetail({
   const data = state.data;
   const member = data?.members.find(({ id }) => id === memberId);
   const back = <BackToPeople onNavigate={onNavigate} />;
+  const canManage = canManageOrganization(data?.memberRole);
+  const sections = useSectionTabs([
+    { id: "profile", label: "Profile" },
+    canManage && { id: "requirements", label: "Forms and checks" },
+  ]);
 
   if (!data) {
     return (
@@ -91,45 +98,51 @@ export function OrganizationMemberDetail({
     );
   }
 
-  const canManage = canManageOrganization(data.memberRole);
   const isSelf = data.currentMemberId === member.id;
   return (
     <>
       {back}
       {state.error && <Toast tone="danger">{state.error}</Toast>}
       {state.notice && <Toast tone="success">{state.notice}</Toast>}
-      <MemberProfile
-        busy={state.busy}
-        canManage={canManage}
-        isSelf={isSelf}
-        member={member}
-        onRemove={async () => {
-          if (
-            await removeOrganizationMember(
-              member,
-              organization,
-              state,
-              onAccessChanged,
-            )
-          ) {
-            onNavigate(organizationPeoplePath());
-          }
-        }}
-        onRoleChange={actions.updateMemberRole}
-        onTwoFactorRequiredChange={actions.updateTwoFactorRequirement}
-        roles={editableOrganizationRoles(
-          data.memberRole,
-          member.role,
-          data.members.map(({ role }) => role),
-        )}
-      />
-      {isSelf && <MyDocumentsNotice onNavigate={onNavigate} />}
-      {canManage && (
+      <SectionTabs label="Member sections">{sections.tabs}</SectionTabs>
+      {sections.panel(
+        "profile",
+        <>
+          <MemberProfile
+            busy={state.busy}
+            canManage={canManage}
+            isSelf={isSelf}
+            member={member}
+            onRemove={async () => {
+              if (
+                await removeOrganizationMember(
+                  member,
+                  organization,
+                  state,
+                  onAccessChanged,
+                )
+              ) {
+                onNavigate(organizationPeoplePath());
+              }
+            }}
+            onRoleChange={actions.updateMemberRole}
+            onTwoFactorRequiredChange={actions.updateTwoFactorRequirement}
+            roles={editableOrganizationRoles(
+              data.memberRole,
+              member.role,
+              data.members.map(({ role }) => role),
+            )}
+          />
+          {isSelf && <MyDocumentsNotice onNavigate={onNavigate} />}
+        </>,
+      )}
+      {sections.panel(
+        "requirements",
         <EmployeeForms
           key={member.id}
           onNavigate={onNavigate}
           scope={{ kind: "member", memberId: member.id }}
-        />
+        />,
       )}
     </>
   );

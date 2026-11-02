@@ -6,6 +6,7 @@ import {
   Page,
   PageBody,
   Toast,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type {
   AuditDetail,
@@ -13,6 +14,7 @@ import type {
   AuditRun,
 } from "@balebase/validators/audits";
 import {
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -137,6 +139,7 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
     useAuditRun(id);
   const { busy, notice, run, ...action } = useAction("Could not update audit.");
   const error = action.error ?? loadError;
+  const sections = useRunSections();
 
   /** Runs a change, then reloads the audit so the page shows what was stored. */
   async function perform(change: () => Promise<unknown>, success: string) {
@@ -181,6 +184,7 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
         notice={notice}
         onSave={save}
         status={detail.audit.status}
+        tabs={sections.tabs}
         templateVersion={detail.audit.templateVersion}
       />
       <PageBody className="runBody">
@@ -210,12 +214,28 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
             dispatch({ itemId, response, type: "answered" })
           }
           onIssuesChanged={refreshIssues}
+          panel={sections.panel}
           responses={responses}
         />
-        <ActivityFeed refreshKey={detail} source={{ id, type: "audit_run" }} />
+        {sections.panel(
+          "activity",
+          <ActivityFeed
+            refreshKey={detail}
+            source={{ id, type: "audit_run" }}
+          />,
+        )}
       </PageBody>
     </Page>
   );
+}
+
+/** The audit's checklist, issues, and history, each on its own tab. */
+function useRunSections() {
+  return useSectionTabs([
+    { id: "checklist", label: "Checklist" },
+    { id: "issues", label: "Issues" },
+    { id: "activity", label: "Activity" },
+  ] as const);
 }
 
 /** The checklist and its issues; a discarded audit shows them read-only. */
@@ -224,41 +244,58 @@ function RunWork({
   detail,
   onAnswer,
   onIssuesChanged,
+  panel,
   responses,
 }: {
   auditId: string;
   detail: AuditDetail;
   onAnswer: (itemId: string, response: string) => void;
   onIssuesChanged: () => Promise<void>;
+  panel: ReturnType<typeof useRunSections>["panel"];
   responses: Record<string, string>;
 }) {
-  return (
-    // A disabled fieldset turns every answer and issue control read-only.
+  // A disabled fieldset turns every answer and issue control read-only.
+  const editable = (children: ReactNode) => (
     <fieldset
       className="fieldset runEditable"
       disabled={Boolean(detail.audit.deletedAt)}
     >
-      <AuditChecklist
-        definition={detail.audit.definition}
-        issueContext={{
-          audit: detail.audit,
-          auditId,
-          issues: detail.issues,
-          members: detail.members,
-          onCreated: onIssuesChanged,
-        }}
-        onChange={onAnswer}
-        responses={responses}
-      />
-      <AuditIssuePanel
-        auditId={auditId}
-        definition={detail.audit.definition}
-        issues={detail.issues}
-        members={detail.members}
-        onChange={onIssuesChanged}
-        responses={responses}
-      />
+      {children}
     </fieldset>
+  );
+  return (
+    <>
+      {panel(
+        "checklist",
+        editable(
+          <AuditChecklist
+            definition={detail.audit.definition}
+            issueContext={{
+              audit: detail.audit,
+              auditId,
+              issues: detail.issues,
+              members: detail.members,
+              onCreated: onIssuesChanged,
+            }}
+            onChange={onAnswer}
+            responses={responses}
+          />,
+        ),
+      )}
+      {panel(
+        "issues",
+        editable(
+          <AuditIssuePanel
+            auditId={auditId}
+            definition={detail.audit.definition}
+            issues={detail.issues}
+            members={detail.members}
+            onChange={onIssuesChanged}
+            responses={responses}
+          />,
+        ),
+      )}
+    </>
   );
 }
 

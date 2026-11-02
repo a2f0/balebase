@@ -7,6 +7,7 @@ import {
   PageHeader,
   PageSection,
   Toast,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type { JobDefinition, JobRun } from "@balebase/validators/adminJobs";
 import { useCallback, useState } from "react";
@@ -30,6 +31,12 @@ export function AdminJobs() {
     run: JobRun;
     request: number;
   }>();
+  const sections = useSectionTabs([
+    { id: "jobs", label: "Available jobs" },
+    { id: "history", label: "Run history" },
+    { id: "requests", label: "Manual requests" },
+    { id: "purges", label: "Purge history" },
+  ]);
 
   async function trigger(job: JobDefinition) {
     if (!(await confirmJobRun(job))) return;
@@ -41,6 +48,8 @@ export function AdminJobs() {
         run,
         request: (previous?.request ?? 0) + 1,
       }));
+      // The new run opens in the history.
+      sections.select("history");
     } catch (cause) {
       setFailure(
         `${errorMessage(cause, "Could not start the job.")} Check recent runs before trying again.`,
@@ -56,56 +65,92 @@ export function AdminJobs() {
         eyebrow="Root Admin"
         title="Jobs"
         description="Run maintenance and inspect background jobs, logs, and saved output."
+        tabs={sections.tabs}
+        tabsKind="panels"
+        tabsLabel="Job sections"
       />
       <PageBody>
         {error && <Toast tone="danger">{error}</Toast>}
-        <PageSection title="Available jobs">
-          <p className="textSm textSubtle">
-            Maintenance applies across the platform. Jobs continue after you
-            close this page. Completed runs and their logs are kept for 30 days.
-            Schedules show when jobs are queued; actual start times depend on
-            queue availability and any preceding jobs.
-          </p>
-          {!jobs && !error && <LoadingState label="Loading jobs…" />}
-          <div className="stack stackMd">
-            {jobs?.map((job) => (
-              <div className="adminJobRow" key={job.id}>
-                <div className="adminJobSummary">
-                  <strong>{job.name}</strong>
-                  <p className="textSm textSubtle">{job.description}</p>
-                  <p className="textSm">
-                    <strong>Run schedule:</strong>{" "}
-                    {job.runSchedule ?? "Schedule unavailable."}
-                  </p>
-                </div>
-                {job.manual && (
-                  <Button
-                    busy={busy === job.id}
-                    disabled={busy !== undefined}
-                    onClick={() => void trigger(job)}
-                  >
-                    Run now
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        </PageSection>
-        <AdminJobHistory
-          key={startedRun?.request ?? 0}
-          jobs={jobs ?? []}
-          initialRun={startedRun?.run}
-        />
-        <ActivityFeed
-          source={{ id: "platform", type: "admin_purges" }}
-          title="Purge history"
-        />
-        <AdminMaintenanceRequests
-          jobs={jobs ?? []}
-          key={`requests-${startedRun?.request ?? 0}`}
-        />
+        {sections.panel(
+          "jobs",
+          <AvailableJobs
+            busy={busy}
+            failed={Boolean(error)}
+            jobs={jobs}
+            onRun={trigger}
+          />,
+        )}
+        {sections.panel(
+          "history",
+          <AdminJobHistory
+            key={startedRun?.request ?? 0}
+            jobs={jobs ?? []}
+            initialRun={startedRun?.run}
+          />,
+        )}
+        {sections.panel(
+          "requests",
+          <AdminMaintenanceRequests
+            jobs={jobs ?? []}
+            key={`requests-${startedRun?.request ?? 0}`}
+          />,
+        )}
+        {sections.panel(
+          "purges",
+          <ActivityFeed
+            source={{ id: "platform", type: "admin_purges" }}
+            title="Purge history"
+          />,
+        )}
       </PageBody>
     </Page>
+  );
+}
+
+function AvailableJobs({
+  busy,
+  failed,
+  jobs,
+  onRun,
+}: {
+  busy: string | undefined;
+  failed: boolean;
+  jobs: JobDefinition[] | undefined;
+  onRun: (job: JobDefinition) => Promise<void>;
+}) {
+  return (
+    <PageSection title="Available jobs">
+      <p className="textSm textSubtle">
+        Maintenance applies across the platform. Jobs continue after you close
+        this page. Completed runs and their logs are kept for 30 days. Schedules
+        show when jobs are queued; actual start times depend on queue
+        availability and any preceding jobs.
+      </p>
+      {!jobs && !failed && <LoadingState label="Loading jobs…" />}
+      <div className="stack stackMd">
+        {jobs?.map((job) => (
+          <div className="adminJobRow" key={job.id}>
+            <div className="adminJobSummary">
+              <strong>{job.name}</strong>
+              <p className="textSm textSubtle">{job.description}</p>
+              <p className="textSm">
+                <strong>Run schedule:</strong>{" "}
+                {job.runSchedule ?? "Schedule unavailable."}
+              </p>
+            </div>
+            {job.manual && (
+              <Button
+                busy={busy === job.id}
+                disabled={busy !== undefined}
+                onClick={() => void onRun(job)}
+              >
+                Run now
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+    </PageSection>
   );
 }
 

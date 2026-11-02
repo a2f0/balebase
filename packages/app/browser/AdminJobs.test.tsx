@@ -71,6 +71,8 @@ it("keeps long job descriptions beside actions and expands run details in place"
       expect(layout).toHaveLength(2);
       expect(layout.every((row) => row.beside && row.aligned)).toBe(true);
       expect(layout[0]?.right).toBe(layout[1]?.right);
+      // Run history is its own tab.
+      await page.click('[role="tab"][aria-controls$="history"]');
       await page.click(".adminJobHistoryItem button");
       await page.waitForSelector(".adminJobRunDetails pre");
       const expanded = await page.evaluate(() => {

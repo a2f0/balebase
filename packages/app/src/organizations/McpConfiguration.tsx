@@ -1,5 +1,4 @@
-import { Button, Toast } from "@balebase/ui/react";
-import { type KeyboardEvent, useId, useState } from "react";
+import { Button, SectionTabs, Toast, useSectionTabs } from "@balebase/ui/react";
 import { apiUrl } from "../shared/config";
 import { useClipboard } from "../shared/useClipboard";
 
@@ -10,8 +9,11 @@ const clients = ["Claude Code", "Codex", "Generic"] as const;
 type Client = (typeof clients)[number];
 
 export function McpConfiguration({ token }: { token?: string | undefined }) {
-  const [client, setClient] = useState<Client>("Claude Code");
-  const id = useId();
+  const sections = useSectionTabs(
+    clients.map((name) => ({ id: name, label: name })),
+    // Each client starts afresh, without the last one's copy notice.
+    { mount: "selected" },
+  );
   const key = token ?? "YOUR_API_KEY";
   return (
     <div className="formGrid">
@@ -21,36 +23,15 @@ export function McpConfiguration({ token }: { token?: string | undefined }) {
           cannot be shown again. If you no longer have yours, create a new key.
         </p>
       )}
-      <div aria-label="MCP client" className="tabs" role="tablist">
-        {clients.map((name, index) => (
-          <button
-            aria-controls={`${id}-panel`}
-            aria-selected={client === name}
-            className="tab"
-            id={`${id}-${index}`}
-            key={name}
-            onClick={() => setClient(name)}
-            onKeyDown={(event) => switchTab(event, name, setClient)}
-            role="tab"
-            tabIndex={client === name ? 0 : -1}
-            type="button"
-          >
-            {name}
-          </button>
-        ))}
-      </div>
-      {/* The panel starts with instructions, so keyboard users can focus it. */}
-      <div
-        aria-labelledby={`${id}-${clients.indexOf(client)}`}
-        className="formGrid"
-        id={`${id}-panel`}
-        key={client}
-        role="tabpanel"
-        // biome-ignore lint/a11y/noNoninteractiveTabindex: tab panels with introductory text need a keyboard focus stop.
-        tabIndex={0}
-      >
-        <ClientConfiguration client={client} token={key} />
-      </div>
+      <SectionTabs label="MCP client">{sections.tabs}</SectionTabs>
+      {clients.map((name) =>
+        sections.panel(
+          name,
+          <div className="formGrid" key={name}>
+            <ClientConfiguration client={name} token={key} />
+          </div>,
+        ),
+      )}
       <p className="textSm textMuted">
         The same header works for <code className="codeChip">{apiUrl}/api</code>{" "}
         workspace routes. Account, billing, and key management stay
@@ -58,26 +39,6 @@ export function McpConfiguration({ token }: { token?: string | undefined }) {
       </p>
     </div>
   );
-}
-
-function switchTab(
-  event: KeyboardEvent<HTMLButtonElement>,
-  client: Client,
-  select: (client: Client) => void,
-) {
-  const index = clients.indexOf(client);
-  const next = new Map([
-    ["ArrowLeft", (index + clients.length - 1) % clients.length],
-    ["ArrowRight", (index + 1) % clients.length],
-    ["End", clients.length - 1],
-    ["Home", 0],
-  ]).get(event.key);
-  if (next === undefined) return;
-  event.preventDefault();
-  select(clients[next] ?? "Claude Code");
-  event.currentTarget.parentElement
-    ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-    [next]?.focus();
 }
 
 function ClientConfiguration({

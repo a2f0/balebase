@@ -9,6 +9,7 @@ import {
   PageBody,
   PageHeader,
   PageSection,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type {
   AdminOrganizationDetail,
@@ -42,6 +43,12 @@ export function AdminOrganizationDetails({
     ),
     "Could not load organization details.",
   );
+  const sections = useSectionTabs([
+    { id: "overview", label: "Overview" },
+    { id: "people", label: "People" },
+    { id: "requirements", label: "Employee forms and checks" },
+    { id: "activity", label: "Activity" },
+  ]);
   return (
     <Page>
       <PageHeader
@@ -61,19 +68,34 @@ export function AdminOrganizationDetails({
         }
         description="Organization details, people, and employee checks."
         eyebrow="Root Admin"
+        tabs={detail && sections.tabs}
+        tabsKind="panels"
+        tabsLabel="Organization sections"
         title={detail?.organization.name ?? "Organization details"}
       />
       <PageBody>
         {error && <Banner tone="danger">{error}</Banner>}
         {detail ? (
           <>
-            <OrganizationOverview organization={detail.organization} />
-            <OrganizationPeople members={detail.members} />
-            <OrganizationRequirements requirements={detail.requirements} />
-            <ActivityFeed
-              refreshKey={detail}
-              source={{ id: organizationId, type: "admin_organization" }}
-            />
+            {sections.panel(
+              "overview",
+              <OrganizationOverview organization={detail.organization} />,
+            )}
+            {sections.panel(
+              "people",
+              <OrganizationPeople members={detail.members} />,
+            )}
+            {sections.panel(
+              "requirements",
+              <OrganizationRequirements requirements={detail.requirements} />,
+            )}
+            {sections.panel(
+              "activity",
+              <ActivityFeed
+                refreshKey={detail}
+                source={{ id: organizationId, type: "admin_organization" }}
+              />,
+            )}
           </>
         ) : busy ? (
           <LoadingState label="Loading organization details…" />

@@ -3,7 +3,11 @@ import { act } from "react";
 import { installDom } from "../testing/dom";
 import { Library } from "./Library";
 
-const { mount, respond } = installDom({ url: "http://localhost:5173/" });
+const {
+  mount,
+  respond,
+  window: dom,
+} = installDom({ url: "http://localhost:5173/" });
 
 const user = { email: "sam@example.com", emailVerified: true, name: "Sam" };
 
@@ -87,4 +91,61 @@ it("reads a file's history, even once the file is gone", async () => {
   expect(requests).toEqual(["/api/objects/file%2F1/activity"]);
   expect(container.querySelector("h1")?.textContent).toBe("File history");
   expect(container.textContent).toContain("Sam deleted a file");
+});
+
+it("puts a folder's files, emails, and activity on separate tabs", async () => {
+  const folder = {
+    createdAt: "2026-10-01T09:00:00.000Z",
+    emailCount: 0,
+    fileCount: 0,
+    id: "folder-1",
+    name: "Leases",
+  };
+  respond(async (url) => {
+    if (url.pathname.endsWith("/activity"))
+      return Response.json({ events: [], nextCursor: null });
+    if (url.pathname === "/api/library/folders/folder-1")
+      return Response.json({ emails: [], folder });
+    if (url.pathname === "/api/library/folders")
+      return Response.json({ folders: [folder] });
+    return Response.json({ objects: [] });
+  });
+  const { container } = await mount(
+    <Library
+      onNavigate={() => undefined}
+      onResendVerification={async () => undefined}
+      pathname="/library/folder-1"
+      user={user}
+    />,
+  );
+  await settle();
+  const tabs = [
+    ...container.querySelectorAll<HTMLButtonElement>(
+      '[aria-label="Folder sections"] [role="tab"]',
+    ),
+  ];
+  expect(tabs.map((tab) => tab.textContent)).toEqual([
+    "Files",
+    "Emails",
+    "Activity",
+  ]);
+  const visible = () =>
+    [...container.querySelectorAll<HTMLElement>('[role="tabpanel"]')]
+      .filter((panel) => !panel.hidden)
+      .map((panel) => panel.getAttribute("aria-labelledby") ?? undefined);
+  expect(visible()).toEqual([tabs[0]?.id]);
+  expect(container.textContent).toContain("This folder is empty");
+
+  await act(async () => tabs[2]?.click());
+  expect(visible()).toEqual([tabs[2]?.id]);
+  await act(async () => {
+    tabs[2]?.dispatchEvent(
+      new dom.KeyboardEvent("keydown", {
+        bubbles: true,
+        key: "ArrowLeft",
+      }) as never,
+    );
+  });
+  expect(visible()).toEqual([tabs[1]?.id]);
+  expect(document.activeElement).toBe(tabs[1] ?? null);
 });

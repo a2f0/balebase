@@ -113,6 +113,39 @@ function checkbox(container: HTMLElement, label: string) {
 }
 
 describe("project detail", () => {
+  it("shows members, audit forms, and activity on separate tabs", async () => {
+    stubApi(true);
+    const container = await render();
+    const strip = container.querySelector(
+      '[role="tablist"][aria-label="Project sections"]',
+    );
+    const tabs = [...(strip?.querySelectorAll('[role="tab"]') ?? [])];
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "Members",
+      "Audit forms",
+      "Activity",
+    ]);
+    const shown = () =>
+      [...container.querySelectorAll('[role="tabpanel"]')]
+        .filter((panel) => !(panel as HTMLElement).hidden)
+        .map((panel) =>
+          document.getElementById(panel.getAttribute("aria-labelledby") ?? ""),
+        )
+        .map((tab) => tab?.textContent);
+    expect(shown()).toEqual(["Members"]);
+    expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
+
+    await click(queryButton("Activity", container));
+    expect(shown()).toEqual(["Activity"]);
+    expect(tabs[2]?.getAttribute("aria-selected")).toBe("true");
+    expect(tabs[0]?.getAttribute("tabindex")).toBe("-1");
+
+    // Hidden sections stay mounted, so their state survives a switch.
+    expect(checkbox(container, "Site walk")).toBeTruthy();
+    await click(queryButton("Audit forms", container));
+    expect(shown()).toEqual(["Audit forms"]);
+  });
+
   it("lets a manager add members and turn audit forms on and off", async () => {
     const { writes } = stubApi(true);
     const container = await render();

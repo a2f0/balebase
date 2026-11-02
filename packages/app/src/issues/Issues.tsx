@@ -10,6 +10,7 @@ import {
   PageHeader,
   PageSection,
   Select,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type { Issue, IssueInput } from "@balebase/validators/issues";
 import { useCallback, useState } from "react";
@@ -215,6 +216,15 @@ function IssueDetail({
   // A reload replaces edits in the form with what was stored.
   const [formVersion, setFormVersion] = useState(0);
   const [busy, setBusy] = useState(false);
+  const sections = useSectionTabs([
+    { id: "details", label: "Details" },
+    // Transaction issues have no photos.
+    issue?.target.type !== "finance_transaction" && {
+      id: "photos",
+      label: "Photos",
+    },
+    { id: "activity", label: "Activity" },
+  ]);
   async function reload() {
     setFailure(undefined);
     // A failed reload keeps the form, and its unsaved edits, in place.
@@ -242,6 +252,9 @@ function IssueDetail({
     <Page>
       <PageHeader
         eyebrow="Issues"
+        tabs={issue && sections.tabs}
+        tabsKind="panels"
+        tabsLabel="Issue sections"
         title={issue?.title ?? "Issue"}
         actions={
           <Button onClick={() => onNavigate("/issues")}>All issues</Button>
@@ -261,52 +274,89 @@ function IssueDetail({
         {!issue && !error && <LoadingState label="Loading issue…" />}
         {issue && (
           <>
-            <IssueSource issue={issue} onNavigate={onNavigate} />
-            <PageSection
-              title={issue.status === "open" ? "Open issue" : "Resolved issue"}
-              actions={
-                <Button
-                  busy={busy}
-                  disabled={!issue.target.available}
-                  onClick={() =>
-                    void save({
-                      status: issue.status === "open" ? "resolved" : "open",
-                    }).catch((cause: unknown) =>
-                      setFailure(errorMessage(cause, "Could not save issue.")),
-                    )
-                  }
-                >
-                  {issue.status === "open" ? "Resolve issue" : "Reopen issue"}
-                </Button>
-              }
-            >
-              <Card>
-                <IssueForm
-                  key={`${id}:${formVersion}`}
-                  initial={{
-                    title: issue.title,
-                    description: issue.description,
-                    priority: issue.priority,
-                    assignedTo: issue.assignedTo?.id ?? null,
-                  }}
-                  onSave={save}
-                  onError={setFailure}
-                  label="Save changes"
-                  disabled={busy || !issue.target.available}
-                />
-              </Card>
-            </PageSection>
-            {issue.target.type !== "finance_transaction" && (
-              <IssueImages issueId={id} />
+            {sections.panel(
+              "details",
+              <IssueDetails
+                busy={busy}
+                formKey={`${id}:${formVersion}`}
+                issue={issue}
+                onError={setFailure}
+                onNavigate={onNavigate}
+                save={save}
+              />,
             )}
-            <ActivityFeed
-              source={{ type: "issue", id }}
-              refreshKey={issue.revision}
-            />
+            {sections.panel("photos", <IssueImages issueId={id} />)}
+            {sections.panel(
+              "activity",
+              <ActivityFeed
+                source={{ type: "issue", id }}
+                refreshKey={issue.revision}
+              />,
+            )}
           </>
         )}
       </PageBody>
     </Page>
+  );
+}
+
+/** Where the issue came from, and its status and fields to edit. */
+function IssueDetails({
+  busy,
+  formKey,
+  issue,
+  onError,
+  onNavigate,
+  save,
+}: {
+  busy: boolean;
+  /** A new key replaces unsaved edits with the stored issue. */
+  formKey: string;
+  issue: Issue;
+  onError: (message: string) => void;
+  onNavigate: (path: string) => void;
+  save: (
+    input: Partial<IssueInput> & { status?: Issue["status"] },
+  ) => Promise<void>;
+}) {
+  return (
+    <>
+      <IssueSource issue={issue} onNavigate={onNavigate} />
+      <PageSection
+        title={issue.status === "open" ? "Open issue" : "Resolved issue"}
+        actions={
+          <Button
+            busy={busy}
+            disabled={!issue.target.available}
+            onClick={() =>
+              void save({
+                status: issue.status === "open" ? "resolved" : "open",
+              }).catch((cause: unknown) =>
+                onError(errorMessage(cause, "Could not save issue.")),
+              )
+            }
+          >
+            {issue.status === "open" ? "Resolve issue" : "Reopen issue"}
+          </Button>
+        }
+      >
+        <Card>
+          <IssueForm
+            key={formKey}
+            initial={{
+              title: issue.title,
+              description: issue.description,
+              priority: issue.priority,
+              assignedTo: issue.assignedTo?.id ?? null,
+            }}
+            onSave={save}
+            onError={onError}
+            label="Save changes"
+            disabled={busy || !issue.target.available}
+          />
+        </Card>
+      </PageSection>
+    </>
   );
 }
 

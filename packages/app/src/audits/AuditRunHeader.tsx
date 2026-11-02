@@ -10,6 +10,7 @@ import {
   PageHeader,
 } from "@balebase/ui/react";
 import type { AuditRun } from "@balebase/validators/audits";
+import type { ReactNode } from "react";
 import { formatDateTime, formatLabel } from "../shared/labels";
 
 // The audit run page's header, status line, and loading state.
@@ -23,6 +24,7 @@ export function RunHeader({
   onBack,
   onSave,
   status,
+  tabs,
   templateVersion,
 }: {
   busy: boolean;
@@ -33,6 +35,7 @@ export function RunHeader({
   onBack: () => void;
   onSave: (status: "completed" | "in_progress") => Promise<void>;
   status: string;
+  tabs: ReactNode;
   templateVersion: number | null;
 }) {
   // Mirrors the save result inside the phone action bar; the banners announce it.
@@ -89,6 +92,9 @@ export function RunHeader({
           {templateVersion ? <span>Template v{templateVersion}</span> : null}
         </>
       }
+      tabs={tabs}
+      tabsKind="panels"
+      tabsLabel="Audit sections"
       title={name}
     />
   );
