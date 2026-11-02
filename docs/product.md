@@ -266,8 +266,9 @@ and configuration actions and is separate from this application's user actions.
 Organization owners and organization admins can manage groups and group
 members at `/organization`. Groups use Better Auth teams underneath and can
 grant application capabilities. Every organization starts with a Finance group
-containing its initial owner; Finance navigation and every `/api/finance`
-request require membership in a group with the Finance capability.
+containing its initial owner, and with no other group: Better Auth's default
+team is turned off. Finance navigation and every `/api/finance` request
+require membership in a group with the Finance capability.
 
 **Organization → Access** lists groups as compact rows; each opens a group
 page (`/organization/access/groups/<id>`) with **Members**, **Access** (name
