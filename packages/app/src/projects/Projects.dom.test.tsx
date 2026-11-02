@@ -113,6 +113,49 @@ function checkbox(container: HTMLElement, label: string) {
 }
 
 describe("project detail", () => {
+  it("shows members, audit forms, and activity on separate tabs", async () => {
+    const { writes } = stubApi(true);
+    const container = await render();
+    const strip = container.querySelector(
+      '[role="tablist"][aria-label="Project sections"]',
+    );
+    const tabs = [...(strip?.querySelectorAll('[role="tab"]') ?? [])];
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "Members",
+      "Audit forms",
+      "Activity",
+    ]);
+    const shown = () =>
+      [...container.querySelectorAll<HTMLElement>('[role="tabpanel"]')]
+        .filter((panel) => !panel.hidden)
+        .map(
+          (panel) =>
+            document.getElementById(panel.getAttribute("aria-labelledby") ?? "")
+              ?.textContent,
+        );
+    expect(shown()).toEqual(["Members"]);
+    expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
+
+    // A choice left unsaved on one tab survives a visit to another.
+    const choice = () =>
+      container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Add a member"]',
+      );
+    await fill(choice(), "sam");
+    await click(queryButton("Activity", container));
+    expect(shown()).toEqual(["Activity"]);
+    expect(tabs[2]?.getAttribute("aria-selected")).toBe("true");
+    expect(tabs[0]?.getAttribute("tabindex")).toBe("-1");
+    await click(queryButton("Audit forms", container));
+    expect(shown()).toEqual(["Audit forms"]);
+    await click(queryButton("Members", container));
+    expect(shown()).toEqual(["Members"]);
+    expect(choice()?.value).toBe("sam");
+    await click(queryButton("Add member", container));
+    await settle();
+    expect(writes).toEqual(["PUT /api/projects/project-1/members/sam"]);
+  });
+
   it("lets a manager add members and turn audit forms on and off", async () => {
     const { writes } = stubApi(true);
     const container = await render();

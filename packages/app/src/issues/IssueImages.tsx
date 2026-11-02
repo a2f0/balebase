@@ -1,4 +1,9 @@
-import { Banner, PageSection } from "@balebase/ui/react";
+import {
+  Banner,
+  EmptyState,
+  LoadingState,
+  PageSection,
+} from "@balebase/ui/react";
 import { useCallback } from "react";
 import { ApiImage } from "../shared/ApiImage";
 import { api } from "../shared/apiClient";
@@ -14,10 +19,13 @@ export function IssueImages({ issueId }: { issueId: string }) {
   );
   const images = loaded.data ?? [];
   const error = loaded.error && "Could not load issue photos.";
-  if (!images.length && !error) return null;
   return (
     <PageSection title="Photos">
       {error && <Banner tone="danger">{error}</Banner>}
+      {!loaded.data && !error && <LoadingState label="Loading photos…" />}
+      {loaded.data && !images.length && (
+        <EmptyState compact icon="image" title="No photos" />
+      )}
       <div className="cluster">
         {images.map((image) => (
           <ApiImage

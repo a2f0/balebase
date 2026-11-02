@@ -277,6 +277,47 @@ describe("workspace issues, mounted", () => {
   });
 });
 
+it("gives a workspace issue a Photos tab that says when it has none", async () => {
+  const workspaceIssue: Issue = {
+    ...issue,
+    target: {
+      type: "workspace",
+      id: "workspace",
+      itemId: null,
+      label: "Workspace",
+      available: true,
+    },
+  };
+  respond((url) => {
+    if (url.pathname === "/api/issues/issue-1")
+      return Response.json({ issue: workspaceIssue });
+    if (url.pathname === "/api/offline/issues/issue-1/images")
+      return Response.json({ images: [] });
+    return baseResponse(url);
+  });
+  await show(
+    <Issues
+      pathname="/issues/issue-1"
+      canAccessFinance
+      onNavigate={() => undefined}
+    />,
+  );
+  const tabs = [
+    ...container.querySelectorAll('[aria-label="Issue sections"] [role="tab"]'),
+  ];
+  expect(tabs.map((tab) => tab.textContent)).toEqual([
+    "Details",
+    "Photos",
+    "Activity",
+  ]);
+  await click(tabs[1]);
+  const panel = document.getElementById(
+    tabs[1]?.getAttribute("aria-controls") ?? "",
+  );
+  expect(panel?.hidden).toBe(false);
+  expect(panel?.textContent).toContain("No photos");
+});
+
 it("handles malformed issue links without a render exception", async () => {
   const requests: string[] = [];
   respond((url) => {

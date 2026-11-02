@@ -11,8 +11,10 @@ import {
   Page,
   PageBody,
   PageHeader,
+  type SectionTabState,
   Select,
   Toast,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type {
   AuditTemplate,
@@ -198,6 +200,10 @@ export function AuditTemplateBuilder({
     setNotice,
   } = useTemplateBuilder({ id, manageGlobal, onNavigate });
   const back = backLink(manageGlobal, onNavigate);
+  const tabs = useSectionTabs([
+    { id: "form", label: "Form" },
+    { id: "activity", label: "Activity" },
+  ] as const);
   if (!template) return <BuilderLoading back={back} error={error?.message} />;
 
   return (
@@ -210,6 +216,7 @@ export function AuditTemplateBuilder({
         currentStatus={currentStatus ?? template.status}
         onSave={save}
         onVersionChange={selectVersion}
+        tabs={tabs.tabs}
         template={template}
         versions={versions ?? []}
       />
@@ -222,11 +229,14 @@ export function AuditTemplateBuilder({
           setNotice(undefined);
         }}
         onNavigate={onNavigate}
+        panel={tabs.panel}
         template={template}
       />
     </Page>
   );
 }
+
+type BuilderSections = SectionTabState<"activity" | "form">;
 
 /** A global form being managed returns to Global Audits. */
 function backLink(
@@ -244,6 +254,7 @@ function BuilderBody({
   notice,
   onChange,
   onNavigate,
+  panel,
   template,
 }: {
   error: ErrorNotice | undefined;
@@ -251,6 +262,7 @@ function BuilderBody({
   notice: string | undefined;
   onChange: (template: AuditTemplate) => void;
   onNavigate: (pathname: string) => void;
+  panel: BuilderSections["panel"];
   template: AuditTemplate;
 }) {
   const sections = template.definition.sections;
@@ -278,53 +290,59 @@ function BuilderBody({
         onNavigate={onNavigate}
         template={template}
       />
-      <fieldset className="fieldset auditBuilderFields">
-        <TemplateDetails template={template} update={onChange} />
-        <div className="stack">
-          <div className="sectionHeader">
-            <h2 className="sectionTitle">Sections</h2>
-            <span className="sectionCount">
-              {countLabel(sections.length, "section")} ·{" "}
-              {countLabel(questionCount(sections), "question")}
-            </span>
+      {panel(
+        "form",
+        <fieldset className="fieldset auditBuilderFields">
+          <TemplateDetails template={template} update={onChange} />
+          <div className="stack">
+            <div className="sectionHeader">
+              <h2 className="sectionTitle">Sections</h2>
+              <span className="sectionCount">
+                {countLabel(sections.length, "section")} ·{" "}
+                {countLabel(questionCount(sections), "question")}
+              </span>
+            </div>
+            {sections.map((section, index) => (
+              <SectionEditor
+                canRemove={sections.length > 1}
+                count={sections.length}
+                entry={sectionDrag.entryState(index)}
+                handle={sectionDrag.handleProps(index)}
+                index={index}
+                key={section.id}
+                onShift={(step) => moveSection(index, index + step, "number")}
+                onChange={(nextSection) =>
+                  updateSections(replaceById(sections, nextSection))
+                }
+                onRemove={() =>
+                  updateSections(
+                    sections.filter((candidate) => candidate.id !== section.id),
+                  )
+                }
+                section={section}
+              />
+            ))}
+            <Button
+              block
+              className="auditAddButton"
+              icon="add"
+              onClick={() => updateSections([...sections, newSection()])}
+            >
+              Add section
+            </Button>
           </div>
-          {sections.map((section, index) => (
-            <SectionEditor
-              canRemove={sections.length > 1}
-              count={sections.length}
-              entry={sectionDrag.entryState(index)}
-              handle={sectionDrag.handleProps(index)}
-              index={index}
-              key={section.id}
-              onShift={(step) => moveSection(index, index + step, "number")}
-              onChange={(nextSection) =>
-                updateSections(replaceById(sections, nextSection))
-              }
-              onRemove={() =>
-                updateSections(
-                  sections.filter((candidate) => candidate.id !== section.id),
-                )
-              }
-              section={section}
-            />
-          ))}
-          <Button
-            block
-            className="auditAddButton"
-            icon="add"
-            onClick={() => updateSections([...sections, newSection()])}
-          >
-            Add section
-          </Button>
-        </div>
-      </fieldset>
-      <ActivityFeed
-        refreshKey={template.currentVersion}
-        source={{
-          id: template.id,
-          type: manageGlobal ? "global_audit_template" : "audit_template",
-        }}
-      />
+        </fieldset>,
+      )}
+      {panel(
+        "activity",
+        <ActivityFeed
+          refreshKey={template.currentVersion}
+          source={{
+            id: template.id,
+            type: manageGlobal ? "global_audit_template" : "audit_template",
+          }}
+        />,
+      )}
     </PageBody>
   );
 }
@@ -388,6 +406,7 @@ function BuilderHeader({
   manageGlobal,
   onSave,
   onVersionChange,
+  tabs,
   template,
   versions,
 }: {
@@ -398,6 +417,7 @@ function BuilderHeader({
   manageGlobal: boolean;
   onSave: (status?: TemplatePublication) => Promise<void>;
   onVersionChange: (version: number) => Promise<void>;
+  tabs: BuilderSections["tabs"];
   template: AuditTemplate;
   versions: AuditTemplateVersion[];
 }) {
@@ -462,6 +482,9 @@ function BuilderHeader({
           {" · "}Version {template.version} of {template.currentVersion}
         </>
       }
+      tabs={tabs}
+      tabsKind="panels"
+      tabsLabel="Template sections"
       title={customizing ? "Customize template" : "Edit template"}
     />
   );

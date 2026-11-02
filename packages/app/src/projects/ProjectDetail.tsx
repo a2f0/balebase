@@ -10,6 +10,7 @@ import {
   PageSection,
   Select,
   Toast,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type { Person } from "@balebase/validators/fields";
 import type {
@@ -105,6 +106,7 @@ export function ProjectDetailPage({
   } = useProjectDetail(id, onNavigate);
   const project = detail?.project;
   const canEdit = Boolean(detail?.canManage && project && !editing);
+  const sections = useProjectSections();
   let title = "Loading…";
   if (project) title = project.name;
   else if (error) title = "Project unavailable";
@@ -145,6 +147,9 @@ export function ProjectDetailPage({
         }
         description={project?.description || undefined}
         eyebrow="Project"
+        tabs={project && sections.tabs}
+        tabsKind="panels"
+        tabsLabel="Project sections"
         title={title}
       />
       <PageBody>
@@ -161,35 +166,79 @@ export function ProjectDetailPage({
                 onSave={(input) => saveEdit(editing, input)}
               />
             )}
-            <ProjectMembers
+            <ProjectSections
               busy={busy}
-              canManage={detail.canManage}
-              directory={detail.directory}
-              members={project.members}
-              onAdd={(userId) =>
-                void change(() => api.projects.addMember(id, userId))
-              }
-              onRemove={(userId) =>
-                void change(() => api.projects.removeMember(id, userId))
-              }
-            />
-            <ProjectForms
-              available={detail.availableForms}
-              busy={busy}
-              canManage={detail.canManage}
-              enabled={project.forms}
-              onToggle={(templateId, on) =>
-                void change(() => api.projects.setForm(id, templateId, on))
-              }
-            />
-            <ActivityFeed
-              refreshKey={project}
-              source={{ id, type: "project" }}
+              change={change}
+              detail={detail}
+              id={id}
+              panel={sections.panel}
             />
           </>
         )}
       </PageBody>
     </Page>
+  );
+}
+
+/** A project's members, audit forms, and history, each on its own tab. */
+function useProjectSections() {
+  return useSectionTabs([
+    { id: "members", label: "Members" },
+    { id: "forms", label: "Audit forms" },
+    { id: "activity", label: "Activity" },
+  ] as const);
+}
+
+function ProjectSections({
+  busy,
+  change,
+  detail,
+  id,
+  panel,
+}: {
+  busy: boolean;
+  change: ReturnType<typeof useProjectDetail>["change"];
+  detail: NonNullable<ReturnType<typeof useProjectDetail>["detail"]>;
+  id: string;
+  panel: ReturnType<typeof useProjectSections>["panel"];
+}) {
+  return (
+    <>
+      {panel(
+        "members",
+        <ProjectMembers
+          busy={busy}
+          canManage={detail.canManage}
+          directory={detail.directory}
+          members={detail.project.members}
+          onAdd={(userId) =>
+            void change(() => api.projects.addMember(id, userId))
+          }
+          onRemove={(userId) =>
+            void change(() => api.projects.removeMember(id, userId))
+          }
+        />,
+      )}
+      {panel(
+        "forms",
+        <ProjectForms
+          available={detail.availableForms}
+          busy={busy}
+          canManage={detail.canManage}
+          enabled={detail.project.forms}
+          onToggle={(templateId, on) =>
+            void change(() => api.projects.setForm(id, templateId, on))
+          }
+        />,
+      )}
+      {panel(
+        "activity",
+        <ActivityFeed
+          refreshKey={detail.project}
+          source={{ id, type: "project" }}
+        />,
+      )}
+    </>
   );
 }
 

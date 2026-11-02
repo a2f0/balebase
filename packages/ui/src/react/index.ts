@@ -19,4 +19,10 @@ export { Icon } from "./Icon";
 export { Avatar, BrandMark, Logo } from "./Identity";
 export { Page, PageBody, PageHeader, PageSection } from "./Page";
 export { Select } from "./Select";
+export {
+  type SectionTab,
+  type SectionTabState,
+  SectionTabs,
+  useSectionTabs,
+} from "./Tabs";
 export { Toast, ToastProvider } from "./Toast";

@@ -10,7 +10,9 @@ import {
   Page,
   PageBody,
   PageHeader,
+  SectionTabs,
   Toast,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type {
   InboundEmailDetail,
@@ -566,15 +568,43 @@ function MessageDetail({
           onNavigate={context.onNavigate}
         />
       </header>
-      <pre className="inboxBody">{readableBody(email)}</pre>
-      {email.attachments.length > 0 && (
-        <AttachmentList email={email} folder={folder} />
-      )}
-      <ActivityFeed
-        refreshKey={email}
-        source={{ id: email.id, type: "inbound_email" }}
-      />
+      <MessageSections email={email} folder={folder} key={email.id} />
     </article>
+  );
+}
+
+/** The message and its history, as tabs that reset for each message. */
+function MessageSections({
+  email,
+  folder,
+}: {
+  email: InboundEmailDetail;
+  folder: InboxFolder;
+}) {
+  const sections = useSectionTabs([
+    { id: "message", label: "Message" },
+    { id: "activity", label: "Activity" },
+  ]);
+  return (
+    <>
+      <SectionTabs label="Message sections">{sections.tabs}</SectionTabs>
+      {sections.panel(
+        "message",
+        <>
+          <pre className="inboxBody">{readableBody(email)}</pre>
+          {email.attachments.length > 0 && (
+            <AttachmentList email={email} folder={folder} />
+          )}
+        </>,
+      )}
+      {sections.panel(
+        "activity",
+        <ActivityFeed
+          refreshKey={email}
+          source={{ id: email.id, type: "inbound_email" }}
+        />,
+      )}
+    </>
   );
 }
 

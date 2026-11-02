@@ -10,6 +10,7 @@ import {
   PageHeader,
   PageSection,
   Toast,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type {
   FinanceConnectionAccount,
@@ -56,6 +57,7 @@ export function FinanceConnectionPage({
     id,
     onNavigate,
   );
+  const sections = useConnectionSections();
   return (
     <Page>
       <PageHeader
@@ -74,6 +76,9 @@ export function FinanceConnectionPage({
           </>
         }
         eyebrow="Finance connection"
+        tabs={data && sections.tabs}
+        tabsKind="panels"
+        tabsLabel="Connection sections"
         title={data?.connection.institutionName ?? "Connection"}
       />
       <PageBody>
@@ -81,47 +86,92 @@ export function FinanceConnectionPage({
         {notice && <Toast tone="success">{notice}</Toast>}
         {!data && !error && <LoadingState label="Loading connection…" />}
         {data && (
-          <>
-            <ConnectionSummary connection={data.connection} />
-            <FinanceInstitutionHealth
-              // A new connection starts with no answer from the last one.
-              key={data.connection.id}
-              connection={data.connection}
-              onNavigate={onNavigate}
-            />
-            <FinanceSyncSettings
-              id={id}
-              dailySync={data.connection.dailySync}
-              onSaved={(dailySync) =>
-                setData(
-                  (current) =>
-                    current && {
-                      ...current,
-                      connection: { ...current.connection, dailySync },
-                    },
-                )
-              }
-              status={data.connection.status}
-            />
-            <ConnectionAccounts
-              accounts={data.accounts}
-              onNavigate={onNavigate}
-            />
-            <PageSection
-              description="Identifiers as Plaid reports them. Plaid support asks for the Item ID."
-              title="Source data"
-            >
-              <FinanceSourceFields fields={sourceFields(data)} />
-            </PageSection>
-            <ActivityFeed
-              // Changes that record activity, not every sync status poll.
-              refreshKey={`${data.connection.status}:${data.connection.dailySync}:${data.connection.syncJob?.id}`}
-              source={{ id, type: "finance_connection" }}
-            />
-          </>
+          <ConnectionSections
+            data={data}
+            id={id}
+            onNavigate={onNavigate}
+            panel={sections.panel}
+            setData={setData}
+          />
         )}
       </PageBody>
     </Page>
+  );
+}
+
+/** A connection's overview, accounts, source data, and history tabs. */
+function useConnectionSections() {
+  return useSectionTabs([
+    { id: "overview", label: "Overview" },
+    { id: "accounts", label: "Accounts" },
+    { id: "source", label: "Source data" },
+    { id: "activity", label: "Activity" },
+  ] as const);
+}
+
+function ConnectionSections({
+  data,
+  id,
+  onNavigate,
+  panel,
+  setData,
+}: {
+  data: FinanceConnectionDetail;
+  id: string;
+  onNavigate: (path: string) => void;
+  panel: ReturnType<typeof useConnectionSections>["panel"];
+  setData: Dispatch<SetStateAction<FinanceConnectionDetail | undefined>>;
+}) {
+  return (
+    <>
+      {panel(
+        "overview",
+        <>
+          <ConnectionSummary connection={data.connection} />
+          <FinanceInstitutionHealth
+            // A new connection starts with no answer from the last one.
+            key={data.connection.id}
+            connection={data.connection}
+            onNavigate={onNavigate}
+          />
+          <FinanceSyncSettings
+            id={id}
+            dailySync={data.connection.dailySync}
+            onSaved={(dailySync) =>
+              setData(
+                (current) =>
+                  current && {
+                    ...current,
+                    connection: { ...current.connection, dailySync },
+                  },
+              )
+            }
+            status={data.connection.status}
+          />
+        </>,
+      )}
+      {panel(
+        "accounts",
+        <ConnectionAccounts accounts={data.accounts} onNavigate={onNavigate} />,
+      )}
+      {panel(
+        "source",
+        <PageSection
+          description="Identifiers as Plaid reports them. Plaid support asks for the Item ID."
+          title="Source data"
+        >
+          <FinanceSourceFields fields={sourceFields(data)} />
+        </PageSection>,
+      )}
+      {panel(
+        "activity",
+        <ActivityFeed
+          // Changes that record activity, not every sync status poll.
+          refreshKey={`${data.connection.status}:${data.connection.dailySync}:${data.connection.syncJob?.id}`}
+          source={{ id, type: "finance_connection" }}
+        />,
+      )}
+    </>
   );
 }
 

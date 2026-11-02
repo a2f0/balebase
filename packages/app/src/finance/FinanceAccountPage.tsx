@@ -10,6 +10,7 @@ import {
   PageBody,
   PageHeader,
   PageSection,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type { FinanceAccountDetail } from "@balebase/validators/finance";
 import { useCallback } from "react";
@@ -38,6 +39,11 @@ export function FinanceAccountPage({
   onNavigate: (path: string) => void;
 }) {
   const { data, error, setData } = useAccount(id);
+  const sections = useSectionTabs([
+    { id: "overview", label: "Overview" },
+    { id: "transactions", label: "Recent transactions" },
+    { id: "source", label: "Source data" },
+  ]);
   return (
     <Page>
       <PageHeader
@@ -53,6 +59,9 @@ export function FinanceAccountPage({
           )
         }
         eyebrow="Finance account"
+        tabs={data && sections.tabs}
+        tabsKind="panels"
+        tabsLabel="Account sections"
         title={data?.account.name ?? "Account"}
       />
       <PageBody>
@@ -60,31 +69,42 @@ export function FinanceAccountPage({
         {!data && !error && <LoadingState label="Loading account…" />}
         {data && (
           <>
-            <AccountSummary data={data} onNavigate={onNavigate} />
-            <FinanceSyncSettings
-              id={data.connection.id}
-              dailySync={data.connection.dailySync}
-              onSaved={(dailySync) =>
-                setData(
-                  (current) =>
-                    current && {
-                      ...current,
-                      connection: { ...current.connection, dailySync },
-                    },
-                )
-              }
-              status={data.connection.status}
-            />
-            <RecentTransactions
-              onNavigate={onNavigate}
-              transactions={data.recentTransactions}
-            />
-            <PageSection
-              description="Values as Plaid reports them. Plaid support asks for the account and Item IDs."
-              title="Source data"
-            >
-              <FinanceSourceFields fields={sourceFields(data)} />
-            </PageSection>
+            {sections.panel(
+              "overview",
+              <>
+                <AccountSummary data={data} onNavigate={onNavigate} />
+                <FinanceSyncSettings
+                  id={data.connection.id}
+                  dailySync={data.connection.dailySync}
+                  onSaved={(dailySync) =>
+                    setData(
+                      (current) =>
+                        current && {
+                          ...current,
+                          connection: { ...current.connection, dailySync },
+                        },
+                    )
+                  }
+                  status={data.connection.status}
+                />
+              </>,
+            )}
+            {sections.panel(
+              "transactions",
+              <RecentTransactions
+                onNavigate={onNavigate}
+                transactions={data.recentTransactions}
+              />,
+            )}
+            {sections.panel(
+              "source",
+              <PageSection
+                description="Values as Plaid reports them. Plaid support asks for the account and Item IDs."
+                title="Source data"
+              >
+                <FinanceSourceFields fields={sourceFields(data)} />
+              </PageSection>,
+            )}
           </>
         )}
       </PageBody>

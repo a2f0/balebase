@@ -11,13 +11,20 @@ import {
   PageHeader,
   Select,
   Toast,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type {
   ContractTemplate,
   ContractTemplateSummary,
   TemplateVersion,
 } from "@balebase/validators/contractTemplates";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
 import { AppLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
@@ -179,21 +186,8 @@ function TemplatePage({
   id: string;
   onNavigate: (pathname: string) => void;
 }) {
-  const page = useTemplatePage(id, onNavigate);
-  const {
-    template,
-    error,
-    notice,
-    setNotice,
-    dirty,
-    setDirty,
-    mapping,
-    setMapping,
-    loading,
-    saved,
-    deleting,
-    setWorking,
-  } = page;
+  const { page, sections } = useTemplateSections(id, onNavigate);
+  const { template, error, notice, setNotice, loading } = page;
   return (
     <Page className="contractPageLayout">
       <PageHeader
@@ -211,6 +205,9 @@ function TemplatePage({
           </Button>
         }
         description={template?.document.filename}
+        tabs={template && sections.tabs}
+        tabsKind="panels"
+        tabsLabel="Template sections"
         eyebrow={
           template
             ? `Contract template · v${template.version}`
@@ -237,36 +234,85 @@ function TemplatePage({
             {notice}
           </Toast>
         )}
-        {!template || loading ? (
-          !error && <LoadingState label="Loading template…" />
-        ) : mapping ? (
-          <ContractTemplateMapping
-            key={`${id}:${template.version}:mapping`}
-            onBusyChange={setWorking}
-            onCancel={() => setMapping(false)}
-            onCreated={(contractId) => onNavigate(contractPath(contractId))}
-            template={template}
-          />
-        ) : (
-          <ContractTemplateEditor
-            dirty={dirty}
-            disabled={deleting}
-            key={`${id}:${template.version}`}
-            onBusyChange={setWorking}
-            onDirtyChange={setDirty}
-            onSaved={saved}
-            template={template}
-          />
-        )}
-        {template && (
-          <ActivityFeed
-            refreshKey={template.currentVersion}
-            source={{ id, type: "contract_template" }}
-          />
-        )}
+        {!template || loading
+          ? !error && <LoadingState label="Loading template…" />
+          : sections.panel(
+              "template",
+              <TemplateWork id={id} onNavigate={onNavigate} page={page} />,
+            )}
+        {template &&
+          sections.panel(
+            "activity",
+            <ActivityFeed
+              refreshKey={template.currentVersion}
+              source={{ id, type: "contract_template" }}
+            />,
+          )}
       </PageBody>
     </Page>
   );
+}
+
+/** The open version's editor, or the mapping that starts a contract from it. */
+function TemplateWork({
+  id,
+  onNavigate,
+  page,
+}: {
+  id: string;
+  onNavigate: (pathname: string) => void;
+  page: TemplatePageState;
+}) {
+  const {
+    deleting,
+    dirty,
+    mapping,
+    saved,
+    setDirty,
+    setMapping,
+    setWorking,
+    template,
+  } = page;
+  if (!template) return null;
+  return mapping ? (
+    <ContractTemplateMapping
+      key={`${id}:${template.version}:mapping`}
+      onBusyChange={setWorking}
+      onCancel={() => setMapping(false)}
+      onCreated={(contractId) => onNavigate(contractPath(contractId))}
+      template={template}
+    />
+  ) : (
+    <ContractTemplateEditor
+      dirty={dirty}
+      disabled={deleting}
+      key={`${id}:${template.version}`}
+      onBusyChange={setWorking}
+      onDirtyChange={setDirty}
+      onSaved={saved}
+      template={template}
+    />
+  );
+}
+
+/** The template and its history as tabs; starting a contract shows the template. */
+function useTemplateSections(
+  id: string,
+  onNavigate: (pathname: string) => void,
+) {
+  const sections = useSectionTabs([
+    { id: "template", label: "Template" },
+    { id: "activity", label: "Activity" },
+  ] as const);
+  const loaded = useTemplatePage(id, onNavigate);
+  const page: TemplatePageState = {
+    ...loaded,
+    setMapping: (value: SetStateAction<boolean>) => {
+      if (value === true) sections.select("template");
+      loaded.setMapping(value);
+    },
+  };
+  return { page, sections };
 }
 
 /** Lets a late response skip navigation once the user has left. */

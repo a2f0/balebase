@@ -8,6 +8,7 @@ import {
   PageBody,
   PageHeader,
   PageSection,
+  useSectionTabs,
 } from "@balebase/ui/react";
 import type {
   FinanceTransaction,
@@ -36,10 +37,18 @@ export function FinanceTransactionPage({
     () => ({ status: "all", type: "finance_transaction", targetId: id, q: "" }),
     [id],
   );
+  const sections = useSectionTabs([
+    { id: "issues", label: "Issues" },
+    { id: "source", label: "Source data" },
+    { id: "activity", label: "Activity" },
+  ]);
   return (
     <Page>
       <PageHeader
         eyebrow="Finance"
+        tabs={data && sections.tabs}
+        tabsKind="panels"
+        tabsLabel="Transaction sections"
         title={
           data?.transaction.merchantName ??
           data?.transaction.name ??
@@ -74,24 +83,33 @@ export function FinanceTransactionPage({
                 />
               </ul>
             </Card>
-            <FinanceTransactionSourceData
-              source={data.source}
-              transaction={data.transaction}
-            />
-            <PageSection
-              title="Issues"
-              actions={
-                <Button onClick={() => onNavigate(transactionIssuePath(id))}>
-                  Raise issue
-                </Button>
-              }
-            >
-              <IssueList filters={filters} onNavigate={onNavigate} />
-            </PageSection>
-            <ActivityFeed
-              source={{ type: "finance_transaction", id }}
-              refreshKey={data.transaction}
-            />
+            {sections.panel(
+              "issues",
+              <PageSection
+                title="Issues"
+                actions={
+                  <Button onClick={() => onNavigate(transactionIssuePath(id))}>
+                    Raise issue
+                  </Button>
+                }
+              >
+                <IssueList filters={filters} onNavigate={onNavigate} />
+              </PageSection>,
+            )}
+            {sections.panel(
+              "source",
+              <FinanceTransactionSourceData
+                source={data.source}
+                transaction={data.transaction}
+              />,
+            )}
+            {sections.panel(
+              "activity",
+              <ActivityFeed
+                source={{ type: "finance_transaction", id }}
+                refreshKey={data.transaction}
+              />,
+            )}
           </>
         )}
       </PageBody>
