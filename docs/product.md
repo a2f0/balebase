@@ -269,6 +269,15 @@ grant application capabilities. Every organization starts with a Finance group
 containing its initial owner; Finance navigation and every `/api/finance`
 request require membership in a group with the Finance capability.
 
+**Organization → Access** lists groups as compact rows; each opens a group
+page (`/organization/access/groups/<id>`) with **Members**, **Access** (name
+and Finance access), and **History** tabs. Built-in groups cannot be deleted:
+the starting Finance group can be renamed and its members and access changed,
+and the **Admins** group lists every owner and admin, follows member roles, is
+read-only, and shows role changes as its history. Apply migration
+`0089_mark_built_in_groups.sql` before deploying; it marks each organization's
+starting Finance group as built in.
+
 Authentication needs a strong `BETTER_AUTH_SECRET` in the ignored
 `.secrets/prod/app.env`. Production password reset additionally requires
 Cloudflare Email Sending to be enabled for `auth.balebase.com`, with

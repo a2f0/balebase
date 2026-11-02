@@ -523,15 +523,15 @@ describe("activity feed, mounted", () => {
     );
     expect(rows[0]).toContain("Sam deleted a group");
     expect(rows[0]).toContain("No members · No access");
-    expect(rows[0]).not.toContain("Open groups");
+    expect(rows[0]).not.toContain("Open group");
     expect(rows[1]).toContain("Sam changed a group");
     expect(rows[1]).toContain(
       "Renamed from Books · Added: Bob · Removed: ann@example.com · Access removed: Finance",
     );
     expect(rows[2]).toContain("Sam created a group");
     expect(rows[2]).toContain("Members: Bob · Access: Finance");
-    await click("Open groups");
-    expect(navigations).toEqual(["/organization/access"]);
+    await click("Open group");
+    expect(navigations).toEqual(["/organization/access/groups/group-1"]);
   });
 
   it.each([true, false])(

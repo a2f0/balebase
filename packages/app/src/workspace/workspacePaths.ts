@@ -200,6 +200,17 @@ export const billingPath = "/organization/billing";
 /** Groups and the access they grant. */
 export const organizationAccessPath = "/organization/access";
 
+/** The group list, or one group's page. */
+export function organizationGroupPath(groupId?: string) {
+  return groupId
+    ? `${organizationAccessPath}/groups/${encodeURIComponent(groupId)}`
+    : organizationAccessPath;
+}
+
+export function organizationGroupIdForPath(pathname: string) {
+  return recordIdForPath(pathname, `${organizationAccessPath}/groups`);
+}
+
 /** The People list, or one member's page. */
 export function organizationPeoplePath(memberId?: string) {
   return memberId
@@ -237,7 +248,11 @@ export function organizationSettingsPage(
   ) {
     return "people";
   }
-  if (pathname === organizationAccessPath) return "access";
+  if (
+    pathname === organizationAccessPath ||
+    organizationGroupIdForPath(pathname)
+  )
+    return "access";
   if (pathname === "/organization/api-keys") return "api-keys";
   if (pathname === billingPath) return "billing";
   return "general";

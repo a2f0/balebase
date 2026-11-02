@@ -21,6 +21,7 @@ import { throwIfRefused } from "../shared/errors";
 import { useAction } from "../shared/useAction";
 import {
   organizationAccessPath,
+  organizationGroupIdForPath,
   organizationMemberIdForPath,
   organizationRequirementIdForPath,
   organizationSettingsPage,
@@ -89,6 +90,7 @@ export function OrganizationSettings({
         <OrganizationSettingsPageContent
           accessError={accessError}
           canManage={canManage}
+          groupId={organizationGroupIdForPath(pathname)}
           memberId={organizationMemberIdForPath(pathname)}
           memberRole={memberRole}
           onAccessChanged={onAccessChanged}
@@ -108,6 +110,7 @@ export function OrganizationSettings({
 function OrganizationSettingsPageContent({
   accessError,
   canManage,
+  groupId,
   memberId,
   memberRole,
   onAccessChanged,
@@ -121,6 +124,7 @@ function OrganizationSettingsPageContent({
 }: {
   accessError: string | undefined;
   canManage: boolean;
+  groupId: string | undefined;
   memberId: string | undefined;
   memberRole: string | undefined;
   onAccessChanged: () => Promise<void>;
@@ -169,7 +173,9 @@ function OrganizationSettingsPageContent({
     }
     return page === "access" ? (
       <OrganizationAccessSettings
+        groupId={groupId}
         onAccessChanged={onAccessChanged}
+        onNavigate={onNavigate}
         organizationId={organization.id}
       />
     ) : (

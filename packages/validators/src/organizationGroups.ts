@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
 import { requiredText } from "./fields";
 import { OrganizationMemberSchema } from "./organizationSettings";
 import { route } from "./route";
@@ -9,7 +10,16 @@ export type OrganizationCapability = z.infer<
   typeof OrganizationCapabilitySchema
 >;
 
+/** The id of the Admins group, which follows member roles and has no row. */
+export const adminsGroupId = "admins";
+
 const OrganizationGroupSchema = z.object({
+  /**
+   * Groups the product keeps: `admins` lists owners and admins and cannot be
+   * changed here; `finance` is the organization's starting Finance group,
+   * which can be edited but not deleted.
+   */
+  builtIn: z.enum(["admins", "finance"]).nullable(),
   capabilities: z.array(OrganizationCapabilitySchema),
   createdAt: z.string(),
   id: z.string(),
@@ -73,5 +83,15 @@ export const organizationGroupsRoutes = {
     method: "DELETE",
     path: "/api/organization-groups/:id",
     response: "empty",
+  }),
+  /**
+   * One group's history, newest first; the Admins group's is its members'
+   * role changes.
+   */
+  activity: route({
+    method: "GET",
+    path: "/api/organization-groups/:id/activity",
+    query: ActivityQuerySchema,
+    response: ActivityPageSchema,
   }),
 };

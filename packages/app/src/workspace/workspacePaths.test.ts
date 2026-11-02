@@ -30,6 +30,8 @@ import {
   myRequirementIdForPath,
   myRequirementPath,
   myScreeningIdForPath,
+  organizationGroupIdForPath,
+  organizationGroupPath,
   organizationMemberIdForPath,
   organizationPathRequiresAccess,
   organizationPeoplePath,
@@ -198,6 +200,16 @@ describe("workspace paths", () => {
     ).toBeUndefined();
     expect(organizationSettingsPage("/organization/requests")).toBe("general");
     expect(organizationSettingsPage("/organization/access")).toBe("access");
+    expect(organizationSettingsPage(organizationGroupPath("team/1"))).toBe(
+      "access",
+    );
+    expect(organizationGroupPath("team/1")).toBe(
+      "/organization/access/groups/team%2F1",
+    );
+    expect(organizationGroupIdForPath(organizationGroupPath("team/1"))).toBe(
+      "team/1",
+    );
+    expect(organizationGroupPath()).toBe("/organization/access");
     expect(organizationSettingsPage("/organization/api-keys")).toBe("api-keys");
     expect(organizationSettingsPage("/organization/unknown")).toBe("general");
   });

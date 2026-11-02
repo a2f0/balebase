@@ -1,12 +1,14 @@
 import {
+  adminsGroupId,
   type OrganizationCapability,
   type OrganizationGroup,
   organizationGroupsRoutes,
 } from "@balebase/validators/organizationGroups";
+import type { OrganizationMember } from "@balebase/validators/organizationSettings";
 import { type Context, Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { ApiEnv } from "../auth/apiEnv";
-import { activityBatch, requestActor } from "../shared/activity";
+import { activityBatch, findActivity, requestActor } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import {
   groupCreatedActivity,
@@ -15,6 +17,7 @@ import {
   type SqlFragment,
 } from "./groupActivity";
 import {
+  canManageOrganization,
   countOrganizationOwners,
   listOrganizationMembers,
   requireManager,
@@ -24,8 +27,12 @@ import {
 const invalidGroup =
   "A valid group name, members, and capabilities are required.";
 const managerRequired = "Organization manager access required.";
+const adminsFollowRoles =
+  "The Admins group follows member roles. Change a member's role in People.";
+const builtInKept = "Built-in groups can't be deleted.";
 
 interface GroupRow {
+  built_in: "finance" | null;
   created_at: string;
   id: string;
   name: string;
@@ -69,29 +76,66 @@ organizationGroups.get("/access", async (context) => {
 
 organizationGroups.get("/", requireManager(), async (context) => {
   const organizationId = context.get("organizationId");
-  const [groups, capabilities, groupMembers, members] = await Promise.all([
-    listGroups(context.env.DB, organizationId),
-    listGroupCapabilities(context.env.DB, organizationId),
-    listGroupMembers(context.env.DB, organizationId),
-    listOrganizationMembers(context.env.DB, organizationId),
-  ]);
+  const [groups, capabilities, groupMembers, members, createdAt] =
+    await Promise.all([
+      listGroups(context.env.DB, organizationId),
+      listGroupCapabilities(context.env.DB, organizationId),
+      listGroupMembers(context.env.DB, organizationId),
+      listOrganizationMembers(context.env.DB, organizationId),
+      organizationCreatedAt(context.env.DB, organizationId),
+    ]);
   return respond(context, organizationGroupsRoutes.list, {
-    groups: groups.map(
-      (group): OrganizationGroup => ({
-        capabilities: capabilities
-          .filter(({ team_id: teamId }) => teamId === group.id)
-          .map(({ capability }) => capability),
-        createdAt: group.created_at,
-        id: group.id,
-        memberUserIds: groupMembers
-          .filter(({ team_id: teamId }) => teamId === group.id)
-          .map(({ user_id: userId }) => userId),
-        name: group.name,
-        updatedAt: group.updated_at,
-      }),
-    ),
+    groups: [
+      adminsGroup(members, createdAt),
+      ...groups.map(
+        (group): OrganizationGroup => ({
+          builtIn: group.built_in,
+          capabilities: capabilities
+            .filter(({ team_id: teamId }) => teamId === group.id)
+            .map(({ capability }) => capability),
+          createdAt: group.created_at,
+          id: group.id,
+          memberUserIds: groupMembers
+            .filter(({ team_id: teamId }) => teamId === group.id)
+            .map(({ user_id: userId }) => userId),
+          name: group.name,
+          updatedAt: group.updated_at,
+        }),
+      ),
+    ],
     members,
   });
+});
+
+organizationGroups.get("/:id/activity", requireManager(), async (context) => {
+  const groupId = context.req.param("id") ?? "";
+  const organizationId = context.get("organizationId");
+  const admins = groupId === adminsGroupId;
+  if (
+    !admins &&
+    !(await groupExists(context.env.DB, organizationId, groupId))
+  ) {
+    return context.json({ error: "Group not found." }, 404);
+  }
+  const page = await findActivity(
+    context.env.DB,
+    organizationId,
+    context.req.query("cursor"),
+    admins
+      ? // Who became or stopped being an owner or admin, and when.
+        {
+          alsoActions: ["organization.member_role_changed"],
+          id: adminsGroupId,
+          type: "organization_group",
+        }
+      : { id: groupId, type: "organization_group" },
+    false,
+    undefined,
+    true,
+  );
+  return page
+    ? respond(context, organizationGroupsRoutes.activity, page)
+    : context.json({ error: "Invalid activity cursor." }, 400);
 });
 
 organizationGroups.post("/", requireManager(), async (context) => {
@@ -140,6 +184,9 @@ organizationGroups.patch("/:id", requireManager(), async (context) => {
     invalidGroup,
   );
   if (input instanceof Response) return input;
+  if (groupId === adminsGroupId) {
+    return context.json({ error: adminsFollowRoles }, 409);
+  }
   const organizationId = context.get("organizationId");
   if (!(await groupExists(context.env.DB, organizationId, groupId))) {
     return context.json({ error: "Group not found." }, 404);
@@ -173,14 +220,22 @@ organizationGroups.patch("/:id", requireManager(), async (context) => {
 organizationGroups.delete("/:id", requireManager(), async (context) => {
   const groupId = context.req.param("id");
   const organizationId = context.get("organizationId");
+  if (groupId === adminsGroupId) {
+    return context.json({ error: adminsFollowRoles }, 409);
+  }
   if (
     !groupId ||
     !(await groupExists(context.env.DB, organizationId, groupId))
   ) {
     return context.json({ error: "Group not found." }, 404);
   }
+  if (await isBuiltIn(context.env.DB, groupId)) {
+    return context.json({ error: builtInKept }, 409);
+  }
   if (!(await deleteGroup(context, groupId))) {
-    return groupWriteRefused(context, groupId);
+    return (await isBuiltIn(context.env.DB, groupId))
+      ? context.json({ error: builtInKept }, 409)
+      : groupWriteRefused(context, groupId);
   }
   return context.body(null, 204);
 });
@@ -248,12 +303,67 @@ async function listGroups(database: D1Database, organizationId: string) {
   const result = await database
     .prepare(
       `SELECT "id", "name", "createdAt" AS created_at,
-              "updatedAt" AS updated_at
-       FROM "team" WHERE "organizationId" = ? ORDER BY "name" ASC`,
+              "updatedAt" AS updated_at, builtin.kind AS built_in
+       FROM "team"
+       LEFT JOIN organization_builtin_group AS builtin
+         ON builtin.team_id = "team"."id"
+       WHERE "organizationId" = ?
+       ORDER BY builtin.kind IS NULL, "name" ASC`,
     )
     .bind(organizationId)
     .all<GroupRow>();
   return result.results;
+}
+
+/**
+ * The organization's owners and admins as a group. It grants no capability
+ * of its own: managers' access comes from their role.
+ */
+function adminsGroup(
+  members: OrganizationMember[],
+  createdAt: string,
+): OrganizationGroup {
+  return {
+    builtIn: "admins",
+    capabilities: [],
+    createdAt,
+    id: adminsGroupId,
+    memberUserIds: members
+      .filter(({ role }) => canManageOrganization(role))
+      .map(({ user }) => user.id),
+    name: "Admins",
+    updatedAt: null,
+  };
+}
+
+async function organizationCreatedAt(
+  database: D1Database,
+  organizationId: string,
+) {
+  const row = await database
+    .prepare(
+      'SELECT "createdAt" AS created_at FROM "organization" WHERE "id" = ?',
+    )
+    .bind(organizationId)
+    .first<{ created_at: string }>();
+  return String(row?.created_at ?? "");
+}
+
+async function isBuiltIn(database: D1Database, groupId: string) {
+  return Boolean(
+    await database
+      .prepare("SELECT 1 FROM organization_builtin_group WHERE team_id = ?")
+      .bind(groupId)
+      .first(),
+  );
+}
+
+/** Whether the group is one the product keeps. */
+function builtInGroup(groupId: string) {
+  return {
+    bindings: [groupId],
+    sql: "EXISTS (SELECT 1 FROM organization_builtin_group WHERE team_id = ?)",
+  };
 }
 
 async function listGroupCapabilities(
@@ -452,7 +562,16 @@ async function updateGroup(
 }
 
 async function deleteGroup(context: Context<ApiEnv>, groupId: string) {
-  const write = groupWrite(context, groupId);
+  const managing = groupWrite(context, groupId);
+  const kept = builtInGroup(groupId);
+  // A group that became built in meanwhile stays, with its history.
+  const write = {
+    ...managing,
+    guard: {
+      bindings: [...managing.guard.bindings, ...kept.bindings],
+      sql: `${managing.guard.sql} AND NOT ${kept.sql}`,
+    },
+  };
   const { database, event, guard, organizationId } = write;
   const writable = writableGroup(write);
   const results = await activityBatch(database, write.actor.apiKey, [

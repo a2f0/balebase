@@ -31,7 +31,7 @@ import {
   issuePath,
   libraryFilePath,
   libraryPath,
-  organizationAccessPath,
+  organizationGroupPath,
   organizationPeoplePath,
   organizationRequirementPath,
   projectPath,
@@ -705,11 +705,11 @@ function organizationActivityPath(event: ActivityEvent) {
     return event.action === "billing.subscription_canceled"
       ? undefined
       : billingPath;
-  // Groups have no page of their own; deleted ones have nowhere to go.
+  // Deleted groups have nowhere to go.
   if (event.root.type === "organization_group")
     return event.action === "organization.group_deleted"
       ? undefined
-      : organizationAccessPath;
+      : organizationGroupPath(event.root.id);
   return undefined;
 }
 
@@ -727,7 +727,7 @@ const linkLabels: Partial<Record<string, string>> = {
   library_file: "Open file history",
   library_folder: "Open folder",
   organization_billing: "Open billing",
-  organization_group: "Open groups",
+  organization_group: "Open group",
   organization_member: "Open member",
   project: "Open project",
 };

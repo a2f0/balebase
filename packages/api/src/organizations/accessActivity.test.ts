@@ -5,7 +5,7 @@ import { testBindings } from "../testing/bindings";
 import { type D1Options, toD1 } from "../testing/d1";
 import { createTestDatabase } from "../testing/database";
 import { requester } from "../testing/http";
-import { seedAccount, seedMember, seedUser } from "../testing/seed";
+import { seedAccount, seedGroup, seedMember, seedUser } from "../testing/seed";
 import { testApp } from "../testing/session";
 import { organizationGroups } from "./organizationGroups";
 import { organizationSettings } from "./organizationSettings";
@@ -163,6 +163,12 @@ describe("group access activity", () => {
 
   it("rolls back the change when its history cannot be written", async () => {
     const fixture = createFixture();
+    // The built-in Finance group cannot be deleted at all.
+    const payables = seedGroup(fixture.database, {
+      name: "Payables",
+      organizationId,
+      userIds: ["owner-user"],
+    });
     const before = fixture.groupRows();
     fixture.database.exec(`CREATE TRIGGER reject_activity
       BEFORE INSERT ON activity_events
@@ -181,7 +187,7 @@ describe("group access activity", () => {
     expect(fixture.groupRows()).toEqual(before);
     const deleted = await request(
       "DELETE",
-      `/api/organization-groups/${financeGroupId}`,
+      `/api/organization-groups/${payables}`,
     );
     expect(deleted.status).toBe(500);
     expect(fixture.groupRows()).toEqual(before);
@@ -189,6 +195,10 @@ describe("group access activity", () => {
 
   it("refuses a manager demoted after the request began", async () => {
     const fixture = createFixture();
+    const payables = seedGroup(fixture.database, {
+      name: "Receivables",
+      organizationId,
+    });
     fixture.database.exec(
       "UPDATE member SET role = 'member' WHERE id = 'member_owner-user'",
     );
@@ -197,7 +207,7 @@ describe("group access activity", () => {
     for (const [method, path] of [
       ["PATCH", `/api/organization-groups/${financeGroupId}`],
       ["POST", "/api/organization-groups"],
-      ["DELETE", `/api/organization-groups/${financeGroupId}`],
+      ["DELETE", `/api/organization-groups/${payables}`],
     ] as const) {
       const response = await request(method, path, {
         capabilities: ["finance"],

@@ -33,6 +33,11 @@ const endpoints = {
     path: "/api/organization-groups/:id",
     response: "empty",
   }),
+  activity: endpoint<typeof organizationGroupsRoutes.activity>({
+    method: "GET",
+    path: "/api/organization-groups/:id/activity",
+    response: "json",
+  }),
 };
 
 export function organizationGroupsApi(transport: Transport) {
@@ -56,6 +61,13 @@ export function organizationGroupsApi(transport: Transport) {
     delete(id: string) {
       return transport.call(endpoints.delete, {
         params: { id },
+      });
+    },
+    /** One group's history, newest first. */
+    activity(id: string, cursor?: string) {
+      return transport.call(endpoints.activity, {
+        params: { id },
+        query: { cursor },
       });
     },
   };
