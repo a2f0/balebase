@@ -16,7 +16,13 @@ journals. Attribute historical findings to their PR and recheck them before
 claiming current upstream status or production safety.
 
 Use the `update-dependencies` skill installed from the pinned
-`@a2f0/agent-tool` package in the active harness.
+`@a2f0/agent-tool` package in the active harness. Regenerate, never hand-edit,
+its managed permissions. The upstream catalog intentionally allows guarded
+post-merge feature-branch cleanup and cancellation of superseded CI runs as
+`share` operations; merge/publish remain `release` operations. Its renderer
+compares allow/ask decisions, so equal-decision `read`/`share` variants can
+appear under the `read` heading without changing the effective permission.
+See the [catalog][permission-catalog] and [cleanup guards][cleanup-guards].
 
 ## Compatibility
 
@@ -66,11 +72,21 @@ one compatibility group. AndroidX Core 1.19 requires compile SDK 37 and AGP 9.1
 or later; the app's target SDK and minimum Android version are separate policies.
 Run mobile sync, an Android debug build and unsigned release bundle, and an
 unsigned iOS simulator build before shipping native dependency changes.
-Use an isolated Gradle init script with `androidComponents.finalizeDsl` to set
-release `signingConfig = null`, and verify the resulting AAB has no signing
-entries. Changing signing in `projectsEvaluated` is too late: AGP may already
-have captured the debug-signing fallback. Do not use release credentials for
-this build gate.
+Use the [validation-only Gradle init script][unsigned-gradle] to set release
+`signingConfig = null`, and verify the resulting AAB has no signing entries.
+Changing signing in `projectsEvaluated` is too late: AGP may already have
+captured the debug-signing fallback. The init script instead uses
+`androidComponents.finalizeDsl`. From the repository root:
+
+```sh
+packages/app-capacitor/android/gradlew -p packages/app-capacitor/android \
+  -I "$PWD/packages/app-capacitor/android/unsigned-validation.init.gradle" \
+  --no-daemon --max-workers=2 assembleDebug bundleRelease
+```
+
+Inspect `packages/app-capacitor/android/app/build/outputs/bundle/release/`:
+the AAB must contain no `META-INF/*.SF`, `*.RSA`, `*.DSA` or `*.EC` entries.
+Do not use release credentials or upload this validation artifact.
 
 Mobile sync restores the bootstrap wrapper JAR from the exact Capacitor CLI
 template. The checksum-pinned Gradle distribution in `gradle-wrapper.properties`
@@ -166,6 +182,9 @@ or active constraints into this guide.
 [xcode]: https://github.com/apache/cordova-node-xcode/blob/4.0.0/RELEASENOTES.md
 [stripe-js]: https://github.com/stripe/stripe-js/releases/tag/v10.0.0
 [better-auth]: https://www.better-auth.com/docs/guides/1-7-upgrade-guide
+[permission-catalog]: https://github.com/a2f0/agent-tool/blob/b1b9d0419233082bb5f4946566c2e84605ae42f3/src/permissions/catalog.ts
+[cleanup-guards]: https://github.com/a2f0/agent-tool/blob/b1b9d0419233082bb5f4946566c2e84605ae42f3/src/workflows/repository.ts
+[unsigned-gradle]: ../packages/app-capacitor/android/unsigned-validation.init.gradle
 [typescript]: https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html
 [astro]: https://docs.astro.build/en/guides/upgrade-to/v7/
 [astro-advisory]: https://github.com/withastro/astro/security/advisories/GHSA-26w7-cxv4-gfx2

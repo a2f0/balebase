@@ -1,0 +1,10 @@
+// Validation only: never load release signing credentials for this build.
+allprojects {
+    plugins.withId("com.android.application") {
+        androidComponents.finalizeDsl { extension ->
+            extension.buildTypes.named("release") {
+                signingConfig = null
+            }
+        }
+    }
+}
