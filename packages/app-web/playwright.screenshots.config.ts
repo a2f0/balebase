@@ -4,9 +4,21 @@ const apiPort = 34010;
 const appPort = 34020;
 const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
 const appBaseUrl = `http://127.0.0.1:${appPort}`;
+// Phones are captured as the whole screen, like an installed app, rather than
+// Playwright's iPhone 13 Safari viewport (390x664), whose missing browser
+// chrome made framed captures look too wide. Keeping the profile's UA, touch
+// input, and 3x scale gives 1170x2532 images; galleries size their frames
+// from each image's own width and height.
+const iPhoneScreen = { width: 390, height: 844 };
+const iPhone = {
+  ...devices["iPhone 13"],
+  viewport: iPhoneScreen,
+  screen: iPhoneScreen,
+};
 // The seeded owner the capture signs in as; a placeholder, not a secret.
+// The continuity genesis's owner (packages/api/scripts/continuity.ts).
 const owner = {
-  email: "jordan@harborline.example",
+  email: "jordan@harborline.example.com",
   password: "screenshot capture password",
 };
 
@@ -32,7 +44,7 @@ export default defineConfig({
     browserName: "chromium",
     colorScheme: "light",
     locale: "en-US",
-    timezoneId: "America/New_York",
+    timezoneId: "America/Los_Angeles",
   },
   metadata: { apiBaseUrl, owner },
   projects: [
@@ -48,7 +60,7 @@ export default defineConfig({
     },
     {
       name: "mobile",
-      use: { ...devices["iPhone 13"], browserName: "chromium" },
+      use: { ...iPhone, browserName: "chromium" },
     },
   ],
   webServer: [
