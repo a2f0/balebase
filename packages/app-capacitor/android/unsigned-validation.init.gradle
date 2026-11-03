@@ -1,0 +1,10 @@
+// Validation only: disable release signing; invoke without keystore passwords.
+allprojects {
+    plugins.withId("com.android.application") {
+        androidComponents.finalizeDsl { extension ->
+            extension.buildTypes.named("release") {
+                signingConfig = null
+            }
+        }
+    }
+}

@@ -10,7 +10,9 @@ const {
   settle,
   window: dom,
 } = installDom({ url: "http://localhost:5173/" });
-let Workspace: (props: { initialPath: string }) => React.JSX.Element;
+let OrganizationGate: typeof import("./OrganizationGate").OrganizationGate;
+let OrganizationBilling: typeof import("../billing/OrganizationBilling").OrganizationBilling;
+let useOrganizationAccess: typeof import("./useOrganizationAccess").useOrganizationAccess;
 let container: HTMLElement;
 
 const freeStatus: BillingStatus = {
@@ -24,43 +26,42 @@ const freeStatus: BillingStatus = {
 };
 
 beforeAll(async () => {
-  const { OrganizationGate } = await import("./OrganizationGate");
-  const { OrganizationBilling } = await import(
-    "../billing/OrganizationBilling"
-  );
-  const { useOrganizationAccess } = await import("./useOrganizationAccess");
-  // The workspace wiring from App: the real access hook gates each page, and
-  // Billing refreshes that access after Checkout, as OrganizationSettings does.
-  Workspace = function Workspace({ initialPath }: { initialPath: string }) {
-    const [pathname, setPathname] = useState(initialPath);
-    const access = useOrganizationAccess("user-1", "org-1");
-    if (access.isPending) return <p>Loading workspace</p>;
-    return (
-      <>
-        <nav>
-          <button onClick={() => setPathname("/audits")} type="button">
-            Audits
-          </button>
-        </nav>
-        <OrganizationGate
-          access={access}
-          navigate={setPathname}
-          pathname={pathname}
-          signOut={async () => {}}
-        >
-          {pathname === "/organization/billing" ? (
-            <OrganizationBilling
-              onPlanChanged={access.refresh}
-              organizationId="org-1"
-            />
-          ) : (
-            <p>Audits page</p>
-          )}
-        </OrganizationGate>
-      </>
-    );
-  };
+  ({ OrganizationGate } = await import("./OrganizationGate"));
+  ({ OrganizationBilling } = await import("../billing/OrganizationBilling"));
+  ({ useOrganizationAccess } = await import("./useOrganizationAccess"));
 });
+
+// The workspace wiring from App: the real access hook gates each page, and
+// Billing refreshes that access after Checkout, as OrganizationSettings does.
+function Workspace({ initialPath }: { initialPath: string }) {
+  const [pathname, setPathname] = useState(initialPath);
+  const access = useOrganizationAccess("user-1", "org-1");
+  if (access.isPending) return <p>Loading workspace</p>;
+  return (
+    <>
+      <nav>
+        <button onClick={() => setPathname("/audits")} type="button">
+          Audits
+        </button>
+      </nav>
+      <OrganizationGate
+        access={access}
+        navigate={setPathname}
+        pathname={pathname}
+        signOut={async () => {}}
+      >
+        {pathname === "/organization/billing" ? (
+          <OrganizationBilling
+            onPlanChanged={access.refresh}
+            organizationId="org-1"
+          />
+        ) : (
+          <p>Audits page</p>
+        )}
+      </OrganizationGate>
+    </>
+  );
+}
 
 afterEach(() => {
   dom.history.replaceState(null, "", "/");

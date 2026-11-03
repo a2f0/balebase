@@ -123,6 +123,47 @@ MD018 = true
   expect(result.output).toContain("Linting: 1 file");
 });
 
+test("the CLI's regex engine skips front matter and preserves line offsets", () => {
+  const directory = fixture(
+    `[tool.markdownlint-cli2.config]\ndefault = false\nMD018 = true\n`,
+    "---\n#Ignored front matter\n---\n# Good\n\n#Missing space\n",
+  );
+  const result = lint(directory);
+  expect(result.status).toBe(1);
+  expect(result.output).toContain("good.md:6");
+  expect(result.output).toContain("MD018");
+  expect(result.output).not.toContain("good.md:2");
+});
+
+test("the CLI owner's regex engine bounds repeated lookbehind matching", () => {
+  // The old quadratic engine exceeds this generous bound; 2.8.7 is linear.
+  // Keep the child kill timeout so a regression cannot hang the test process.
+  const directory = fixture("");
+  const probe = join(directory, "regex.cjs");
+  writeFileSync(
+    probe,
+    `const { createRequire } = require("node:module");
+const { realpathSync } = require("node:fs");
+const cliRequire = createRequire(realpathSync(${JSON.stringify(cli)}));
+const ownerRequire = createRequire(realpathSync(cliRequire.resolve("markdownlint")));
+const { RE2JS } = ownerRequire("re2js");
+const matcher = RE2JS.compile("(?<=a)b", RE2JS.LOOKBEHINDS).matcher("ab".repeat(100000));
+let count = 0;
+while (matcher.find()) count++;
+if (count !== 100000) throw new Error("Lost lookbehind matches: " + count);
+console.log(count);
+`,
+  );
+  const result = spawnSync(process.execPath, [probe], {
+    cwd: directory,
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+  expect(result.error).toBeUndefined();
+  expect(result.status).toBe(0);
+  expect(result.stdout.trim()).toBe("100000");
+}, 15_000);
+
 test("malformed TOML remains a fatal configuration error", () => {
   const directory = fixture("[tool.markdownlint-cli2]\nignores = [\n");
   const result = lint(directory);

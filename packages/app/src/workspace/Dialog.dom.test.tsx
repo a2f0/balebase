@@ -22,6 +22,25 @@ const {
   window: dom,
 } = installDom({ url: "http://localhost:5173" });
 
+function NavigationWorkspace({
+  onNavigated,
+}: {
+  onNavigated: (pathname: string) => void;
+}) {
+  useWorkspaceNavigation(onNavigated);
+  return null;
+}
+
+const signedIn = (userId: string, activeOrganizationId: string) => ({
+  session: { activeOrganizationId },
+  user: { id: userId },
+});
+type Session = ReturnType<typeof signedIn>;
+function Workspace({ session, shown }: { session: Session; shown: string }) {
+  useDismissDialogsOnWorkspaceChange(session, shown);
+  return null;
+}
+
 /** Mounts the host beside a button that stands in for whatever opened it. */
 async function mountHost(page?: ReactNode) {
   const { container, unmount } = await mount(
@@ -246,14 +265,10 @@ describe("dismissDialogs", () => {
 
   it("is how a page change answers the question its old page asked", async () => {
     const pages: string[] = [];
-    function Workspace() {
-      useWorkspaceNavigation(onNavigated);
-      return null;
-    }
     const onNavigated = (pathname: string) => {
       pages.push(pathname);
     };
-    await mountHost(<Workspace />);
+    await mountHost(<NavigationWorkspace onNavigated={onNavigated} />);
     const { answer } = await open(() =>
       confirmDialog({
         confirmLabel: "Generate new codes",
@@ -275,11 +290,7 @@ describe("dismissDialogs", () => {
 
 describe("guarded Back with a question open", () => {
   it("answers the open question no, then asks about unsaved changes", async () => {
-    function Workspace() {
-      useWorkspaceNavigation(() => {});
-      return null;
-    }
-    await mountHost(<Workspace />);
+    await mountHost(<NavigationWorkspace onNavigated={() => {}} />);
     const removeGuard = addNavigationGuard(confirmDiscardChanges);
     try {
       const { answer } = await open(() => confirmDialog(deletion));
@@ -297,15 +308,6 @@ describe("guarded Back with a question open", () => {
 });
 
 describe("useDismissDialogsOnWorkspaceChange", () => {
-  const signedIn = (userId: string, activeOrganizationId: string) => ({
-    session: { activeOrganizationId },
-    user: { id: userId },
-  });
-  type Session = ReturnType<typeof signedIn>;
-  function Workspace({ session, shown }: { session: Session; shown: string }) {
-    useDismissDialogsOnWorkspaceChange(session, shown);
-    return null;
-  }
   const render = (session: Session, shown: string) =>
     renderInDom(
       <>

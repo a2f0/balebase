@@ -504,13 +504,25 @@ describe("workspace issues", () => {
       )
       .run(now);
     // Migration 0075 adds the starter templates and their creation events.
-    const auditHistory = f.db.query(
-      "SELECT * FROM activity_events WHERE root_type <> 'audit_template'",
-    );
-    const events = auditHistory.all();
+    const auditHistory = () =>
+      f.db
+        .prepare<Record<string, unknown>, []>(
+          "SELECT * FROM activity_events WHERE root_type <> 'audit_template'",
+        )
+        .all();
+    const events = auditHistory();
     applyMigrations(f.db, { from: "0062" });
     expect(f.db.query("PRAGMA foreign_key_check").all()).toEqual([]);
-    expect(auditHistory.all()).toEqual(events);
+    // Preserve every legacy field and verify the new actor-column defaults.
+    expect(auditHistory()).toEqual(
+      events.map((event) => ({
+        ...event,
+        actor_source: null,
+        actor_type: "user",
+        causation_id: null,
+        causation_type: null,
+      })),
+    );
     expect(
       f.db
         .query("SELECT deletion_pending FROM objects WHERE id = 'image'")
