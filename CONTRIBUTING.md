@@ -319,7 +319,10 @@ names on the day canon gives, on a fixed clock. Teammates' accounts and the Pro
 subscription are written directly, and the API's outside services are
 in-process stand-ins (`scripts/screenshotServices.ts`): email lands in an
 outbox the seed reads signing links from, images keep their bytes, and a fake
-Plaid answers with the canon bank feed. Bump the pin to take a canon change.
+Plaid answers with the canon bank feed. Bump the pin to take a canon change;
+`scripts/screenshotSeed.test.ts`, part of the API suite, replays the seed and
+checks what it built, and an audit issue new to canon needs its checklist item
+in `scripts/screenshotRecords.ts`.
 Balebase has no profile pictures or equipment photos, so the canon's avatars
 and equipment photos are not shown.
 

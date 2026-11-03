@@ -159,15 +159,24 @@ interface AuditRun {
   };
 }
 
-/** The issues an audit raised, each on its own checklist item. */
-function auditIssues(auditId: string) {
-  return continuity.issues.filter((issue) => issue.audit === auditId);
-}
+/**
+ * The checklist item each audit issue is about, by canon issue ID. Canon
+ * describes the finding; which question of Balebase's global forms it fails
+ * is Balebase's to say.
+ */
+const issueItems: Record<string, string> = {
+  // NFPA 70E readiness checklist
+  "corroded-breaker-2b": "review-1",
+  "east-switchgear-labels": "protection-3",
+  // US residential core checklist
+  "unit-14-gfci": "res-elec-011",
+};
 
-function checkItems(run: AuditRun) {
-  return run.audit.definition.sections.flatMap((section) =>
-    section.items.filter((item) => item.responseType === "check"),
-  );
+function issueItem(issue: ContinuityIssue) {
+  const item = issueItems[issue.id];
+  if (!item)
+    throw new Error(`Map audit issue ${issue.id} to a checklist item.`);
+  return item;
 }
 
 /**
@@ -182,24 +191,21 @@ function auditSteps(): Step[] {
       const id = idOf(context, `audit:${audit.id}`);
       const run = await send<AuditRun>("GET", `/api/audits/runs/${id}`);
       const failed = new Set(
-        checkItems(run)
-          .slice(0, auditIssues(audit.id).length)
-          .map((item) => item.id),
+        continuity.issues
+          .filter((issue) => issue.audit === audit.id)
+          .map(issueItem),
       );
       const sections = run.audit.definition.sections;
-      const answered = complete ? sections : sections.slice(0, 1);
-      const responses = Object.fromEntries(
-        answered.flatMap((section) =>
-          section.items.map((item) => [
-            item.id,
-            item.responseType === "text"
-              ? "Checked on site."
-              : failed.has(item.id)
-                ? "fail"
-                : "pass",
-          ]),
-        ),
-      );
+      const answered = (complete ? sections : sections.slice(0, 1))
+        .flatMap((section) => section.items)
+        .filter((item) => complete || !failed.has(item.id));
+      const responses = Object.fromEntries([
+        ...answered.map((item) => [
+          item.id,
+          item.responseType === "text" ? "Checked on site." : "pass",
+        ]),
+        ...[...failed].map((id) => [id, "fail"]),
+      ]);
       await send("PATCH", `/api/audits/runs/${id}`, {
         expectedRevision: run.audit.revision,
         responses,
@@ -272,23 +278,18 @@ async function raiseIssue(context: StepContext, issue: ContinuityIssue) {
     "/api/issues",
     issueFields(context, issue),
   );
-  context.ids.set(`issue:${issue.title}`, issueId);
+  context.ids.set(`issue:${issue.id}`, issueId);
 }
 
 async function raiseAuditIssue(context: StepContext, issue: ContinuityIssue) {
   const send = await context.as(issue.createdBy);
   const auditId = idOf(context, `audit:${issue.audit}`);
-  const run = await send<AuditRun>("GET", `/api/audits/runs/${auditId}`);
-  const position = auditIssues(issue.audit ?? "").indexOf(issue);
-  const item = checkItems(run)[position];
-  if (!item)
-    throw new Error(`The audit has no checklist item for ${issue.title}.`);
   const { issueId } = await send<{ issueId: string }>(
     "POST",
     `/api/audits/runs/${auditId}/issues`,
-    { ...issueFields(context, issue), itemId: item.id },
+    { ...issueFields(context, issue), itemId: issueItem(issue) },
   );
-  context.ids.set(`issue:${issue.title}`, issueId);
+  context.ids.set(`issue:${issue.id}`, issueId);
   if (!issue.photo) return;
   const filename = path.basename(issue.photo);
   await send(
@@ -300,7 +301,7 @@ async function raiseAuditIssue(context: StepContext, issue: ContinuityIssue) {
 
 async function resolveIssue(context: StepContext, issue: ContinuityIssue) {
   const send = await context.as(issue.assignee ?? issue.createdBy);
-  const id = idOf(context, `issue:${issue.title}`);
+  const id = idOf(context, `issue:${issue.id}`);
   if (issue.audit) {
     await send("PATCH", `/api/audits/issues/${id}`, { status: "resolved" });
     return;

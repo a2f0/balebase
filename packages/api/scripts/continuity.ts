@@ -26,6 +26,7 @@ interface Person {
 }
 
 interface Issue {
+  id: string;
   title: string;
   description: string;
   priority: "critical" | "high" | "low" | "medium";
