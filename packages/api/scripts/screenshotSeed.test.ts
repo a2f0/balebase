@@ -92,10 +92,11 @@ test("audits fail the items their issues name and carry the site photos", () => 
      FROM audits JOIN issues ON issues.target_id = audits.id
      WHERE audits.status = 'completed'`,
   );
-  expect(completed?.raised_at.slice(0, 10)).toBe(
-    completed?.completed_at.slice(0, 10),
+  if (!completed) throw new Error("The seed completed no audit.");
+  expect(completed.raised_at.slice(0, 10)).toBe(
+    completed.completed_at.slice(0, 10),
   );
-  expect(completed?.raised_at < (completed?.completed_at ?? "")).toBe(true);
+  expect(completed.raised_at < completed.completed_at).toBe(true);
 });
 
 test("the bank feed is synced, filed under its categories, and reviewed", () => {

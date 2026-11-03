@@ -326,11 +326,15 @@ in `scripts/screenshotRecords.ts`.
 Balebase has no profile pictures or equipment photos, so the canon's avatars
 and equipment photos are not shown.
 
-To browse the seeded workspace, run the API alone with
-`bun run --cwd packages/api screenshots:api`, start the web app with
-`VITE_API_URL=http://127.0.0.1:34010 bun run --cwd packages/app-web dev`, and
-sign in as `jordan@harborline.example.com` with the placeholder password in
-the capture config.
+To browse the seeded workspace, run the API alone, then the web app on the
+origin the API trusts, and sign in as `jordan@harborline.example.com` with
+the placeholder password in the capture config:
+
+```sh
+bun run --cwd packages/api screenshots:api
+VITE_API_URL=http://127.0.0.1:34010 bun run --cwd packages/app-web dev \
+  --host 127.0.0.1 --port 34020 --strictPort
+```
 
 It writes `.screenshots/<layout>/<theme>/<screen>.png`, replacing only the PNGs
 of the layouts it captures; `SCREENSHOT_OUTPUT_DIR` sends a local look
