@@ -16,7 +16,7 @@ journals. Attribute historical findings to their PR and recheck them before
 claiming current upstream status or production safety.
 
 Use the `update-dependencies` skill installed from the pinned
-`@a2f0/agent-tool` package for either harness.
+`@a2f0/agent-tool` package in the active harness.
 
 ## Compatibility
 
@@ -67,27 +67,32 @@ Android release lint can resolve it independently of orientation qualifiers.
 
 ## Security fixes and remaining constraints
 
-Markdownlint CLI 0.23.3 pins smol-toml 1.8.0, which is affected by
-[GHSA-r4xh-jqrq-34v2][toml-advisory]. An exact-parent override selects the fixed
-1.9.1 parser. Its null-prototype objects expose a Markdownlint 0.41.1
+Markdownlint CLI now supplies the fixed smol-toml parser for
+[GHSA-r4xh-jqrq-34v2][toml-advisory], so its exact-parent override is no longer
+needed. The parser's null-prototype objects still expose Markdownlint's
 `instanceof Object` incompatibility: nested TOML rule options, disabled rules,
-and warning severity are silently lost. A Bun-generated patch recognizes
-null-prototype objects; `bun run test:markdownlint` exercises the actual CLI
-with TOML, JSON, and the repository JSONC configuration. Remove the override
-when the CLI permits the fixed parser; remove the patch when Markdownlint
-preserves the same regression cases without it. Confirm removal with a fresh audit.
+and warning severity are silently lost. Carry the Bun-generated behavioral
+patch forward when upgrading Markdownlint; `bun run test:markdownlint`
+exercises the actual CLI with TOML, JSON, and the repository JSONC configuration.
+Remove the patch only when the unpatched owner passes every regression case;
+confirm removal with a fresh audit.
 
-Capacitor CLI's `xcode@3.0.1` requires UUID 7. Its exact-parent override
-selects the patched CommonJS-compatible 11.1.1 release for
-[GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq).
-Xcode's only UUID call is `v4()` without arguments; the advisory affects other
-UUID methods with caller-provided buffers.
-`packages/app-capacitor/tests/xcodeUuidOverride.test.ts` loads UUID through
-the installed Capacitor CLI's Xcode dependency and checks project ID generation,
-parse/add/write/reparse behavior, and output-buffer bounds. It runs in the normal
-test and CI gate without requiring Xcode. Also run mobile sync and an unsigned
-iOS build when changing this override. Remove it when the owner selects a fixed
-version and those checks pass without the override.
+Markdownlint 0.42.0 pins RE2JS 2.8.6, affected by
+[quadratic repeated lookbehind matching][re2js-advisory]. Its exact-parent
+override selects the first patched release, 2.8.7, which retains the same
+module exports and matching API; its Node 20 floor is below the CLI's Node 22
+floor, and the repository runs it on Bun. `test:markdownlint` checks actual
+CLI front-matter processing and the resolved owner's repeated lookbehind
+matching in a time-bounded child. Remove the override when Markdownlint
+selects a fixed release and both checks plus the fresh audit pass.
+
+Capacitor CLI's Xcode owner now uses `crypto.randomUUID()` instead of the
+vulnerable UUID package, so the exact-parent UUID override is retired.
+`packages/app-capacitor/tests/xcodeProject.test.ts` resolves the actual CLI's
+Xcode dependency and checks project ID generation and parse/add/write/reparse
+behavior. Keep this regression and the native SDK build gates when changing
+the owner; a successful JavaScript install alone does not validate iOS projects.
+See the [Xcode 4 migration][xcode].
 
 Keep Wrangler and the API's Miniflare pin aligned with the exact Miniflare
 version supported by the stable Wrangler release. Miniflare 5 still carries a
@@ -100,15 +105,14 @@ this group. Prefer the owner's fixed Sharp and Undici releases over overrides.
 and exposure analysis. They explain the retained choices, not a fresh audit or
 a claim about today's available upstream fixes:
 
-- Braces 3.0.3, owned by Markdownlint's Micromatch dependency, had no published
-  fixed release for [GHSA-vfj7-8cjw-p6xm][braces-advisory].
+- Braces 3.0.3, owned by Markdownlint's Micromatch dependency, was reported by
+  [GHSA-vfj7-8cjw-p6xm][braces-advisory]; that advisory has been withdrawn.
+  Withdrawal is not an upstream patch or a general security clearance.
 - KaTeX 0.16.47 remained inside Micromark's math extension's supported range;
   the advisory required 0.18.2, outside that range.
-- HTTP Cache Semantics 4.3.0 satisfied Astro's range, but its [shared cache
-  advisory][cache-advisory] had no maintainer-confirmed patched version. The
-  inspected Astro cache immediately expired the affected zero-TTL entries and
-  did not pass `max-stale`. Being outside an advisory's published range alone
-  did not prove the library flaw fixed.
+- HTTP Cache Semantics 4.3.0 satisfied Astro's range. Its [shared cache
+  advisory][cache-advisory] has since been withdrawn, not fixed by a
+  maintainer-confirmed release. The original exposure analysis remains in PR #95.
 
 Recheck advisories, owner ranges, and exposure when upgrading. Remove a constraint
 when a supported owner upgrade or a tested, narrowly scoped compatibility patch
@@ -144,6 +148,8 @@ of selected and constrained dependencies, audits, checks, warnings, previews,
 review, merge, and deployment results there; promote only ongoing procedures
 or active constraints into this guide.
 
+[re2js-advisory]: https://github.com/le0pard/re2js/security/advisories/GHSA-gg6h-894w-4m9c
+[xcode]: https://github.com/apache/cordova-node-xcode/blob/4.0.0/RELEASENOTES.md
 [stripe-js]: https://github.com/stripe/stripe-js/releases/tag/v10.0.0
 [better-auth]: https://www.better-auth.com/docs/guides/1-7-upgrade-guide
 [typescript]: https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html

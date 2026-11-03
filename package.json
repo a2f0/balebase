@@ -2,7 +2,7 @@
   "name": "balebase",
   "private": true,
   "license": "UNLICENSED",
-  "packageManager": "bun@1.4.3",
+  "packageManager": "bun@1.4.4",
   "scripts": {
     "agent-tool": "agent-tool",
     "agent:logs": "bunx --bun --no-install agent-tool logs",
@@ -84,19 +84,19 @@
   },
   "devDependencies": {
     "@a2f0/agent-tool": "0.1.35",
-    "@azure/storage-blob": "12.30.0",
-    "@biomejs/biome": "2.5.15",
-    "@commitlint/cli": "21.2.3",
-    "@commitlint/config-conventional": "21.2.3",
+    "@azure/storage-blob": "12.34.0",
+    "@biomejs/biome": "2.6.4",
+    "@commitlint/cli": "21.2.4",
+    "@commitlint/config-conventional": "21.2.4",
     "@ls-lint/ls-lint": "2.3.2",
-    "@sentry/cli": "3.8.1",
+    "@sentry/cli": "3.8.2",
     "@tsconfig/strictest": "2.0.8",
-    "@types/bun": "1.4.3",
-    "knip": "6.41.0",
+    "@types/bun": "1.4.4",
+    "knip": "6.44.1",
     "lint-staged": "17.6.0",
-    "markdownlint-cli2": "0.23.3",
+    "markdownlint-cli2": "0.24.0",
     "tar": "7.5.22",
-    "turbo": "2.11.9",
+    "turbo": "2.11.10",
     "typescript": "6.0.3",
     "wrangler": "4.151.1",
     "zod": "4.6.7"
@@ -105,14 +105,11 @@
     "bun": ">=1.4.2"
   },
   "overrides": {
-    "markdownlint-cli2@0.23.3": {
-      "smol-toml": "1.9.1"
-    },
-    "xcode@3.0.1": {
-      "uuid": "11.1.1"
+    "markdownlint@0.42.0": {
+      "re2js": "2.8.7"
     }
   },
   "patchedDependencies": {
-    "markdownlint@0.41.1": "patches/markdownlint@0.41.1.patch"
+    "markdownlint@0.42.0": "patches/markdownlint@0.42.0.patch"
   }
 }

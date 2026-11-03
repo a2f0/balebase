@@ -674,10 +674,6 @@ a.row:focus-visible {
     border-bottom: 0;
   }
 
-  .tableStack .table tbody tr:hover td {
-    background: transparent;
-  }
-
   .tableStack .table td,
   .tableStack .table td:first-child,
   .tableStack .table td:last-child {
@@ -719,6 +715,10 @@ a.row:focus-visible {
     grid-column: 2;
     grid-template-columns: auto;
     justify-items: end;
+  }
+
+  .tableStack .table tbody tr:hover td {
+    background: transparent;
   }
 }
 

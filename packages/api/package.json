@@ -19,17 +19,17 @@
     "@balebase/ui": "workspace:*",
     "@balebase/validators": "workspace:*",
     "@better-auth/core": "1.7.2",
-    "@modelcontextprotocol/server": "2.3.1",
+    "@modelcontextprotocol/server": "2.4.0",
     "better-auth": "1.7.2",
-    "hono": "4.13.13",
+    "hono": "4.13.16",
     "pdf-lib": "1.17.1",
-    "postal-mime": "4.0.8",
+    "postal-mime": "4.2.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@a2f0/balebase-continuity": "github:a2f0/balebase-continuity#20fe9ba1dc97051d018bc3a29ae48267639bc8f8",
     "@cloudflare/workers-types": "5.20261016.1",
-    "@types/bun": "1.4.3",
+    "@types/bun": "1.4.4",
     "miniflare": "5.20261012.1-beta"
   }
 }

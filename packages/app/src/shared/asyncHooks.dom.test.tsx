@@ -7,20 +7,35 @@ import { useLoad } from "./useLoad";
 
 const { mount } = installDom();
 
+function HookProbe<Props, Result>({
+  hook,
+  props,
+  onResult,
+}: {
+  hook: (props: Props) => Result;
+  props: Props;
+  onResult: (result: Result) => void;
+}) {
+  onResult(hook(props));
+  return null;
+}
+
 /** Renders a hook and returns a getter for its latest result. */
 async function renderHook<Props, Result>(
   hook: (props: Props) => Result,
   props: Props,
 ) {
   let result: Result | undefined;
-  function Probe(current: { props: Props }) {
-    result = hook(current.props);
-    return null;
-  }
-  const view = await mount(<Probe props={props} />);
+  const onResult = (next: Result) => {
+    result = next;
+  };
+  const view = await mount(
+    <HookProbe hook={hook} props={props} onResult={onResult} />,
+  );
   return {
     current: () => result as Result,
-    rerender: (next: Props) => view.render(<Probe props={next} />),
+    rerender: (next: Props) =>
+      view.render(<HookProbe hook={hook} props={next} onResult={onResult} />),
   };
 }
 

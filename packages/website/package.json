@@ -18,12 +18,12 @@
   "dependencies": {
     "@balebase/diagnostics": "workspace:*",
     "@balebase/ui": "workspace:*",
-    "astro": "7.4.0"
+    "astro": "7.4.5"
   },
   "devDependencies": {
     "@a2f0/agent-tool": "0.1.35",
-    "@astrojs/check": "0.9.10",
-    "@types/bun": "1.4.3",
-    "puppeteer-core": "25.14.0"
+    "@astrojs/check": "0.9.12",
+    "@types/bun": "1.4.4",
+    "puppeteer-core": "25.16.0"
   }
 }
