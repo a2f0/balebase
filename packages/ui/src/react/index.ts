@@ -3,7 +3,7 @@ export { Badge, type BadgeTone } from "./Badge";
 export { Banner } from "./Banner";
 export { Button, ButtonLink, buttonClass } from "./Button";
 export { Card } from "./Card";
-export { ContextMenu } from "./ContextMenu";
+export { ContextMenu, type ContextMenuButtonProps } from "./ContextMenu";
 export { cx } from "./cx";
 export {
   type ConfirmOptions,
@@ -17,6 +17,7 @@ export { EmptyState, LoadingState } from "./EmptyState";
 export { Field, PasswordField } from "./Field";
 export { Icon } from "./Icon";
 export { Avatar, BrandMark, Logo } from "./Identity";
+export { MenuButton } from "./MenuButton";
 export { Page, PageBody, PageHeader, PageSection } from "./Page";
 export { Select } from "./Select";
 export {

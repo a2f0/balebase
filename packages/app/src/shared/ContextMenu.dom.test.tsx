@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { ContextMenu } from "@balebase/ui/react";
+import { ContextMenu, MenuButton } from "@balebase/ui/react";
 import { act } from "react";
 import { installDom } from "../testing/dom";
 
@@ -258,6 +258,54 @@ describe("shared context menu", () => {
     await act(async () => trigger?.click());
     expect(menu()?.getAttribute("aria-label")).toBe("Number actions");
     expect(document.activeElement).toBe(items()[0] ?? null);
+  });
+
+  it("opens one menu from a row's right-click and from its menu button", async () => {
+    const selected: string[] = [];
+    const renderRow = (disabled: boolean) => (
+      <ContextMenu
+        disabled={disabled}
+        items={[
+          { id: "open", label: "Open", onSelect: () => selected.push("open") },
+        ]}
+        label="Row actions"
+      >
+        {(row, menuButton) => (
+          <section {...row}>
+            <span className="rowText">Row</span>
+            <MenuButton {...menuButton} label="Row actions" />
+          </section>
+        )}
+      </ContextMenu>
+    );
+    const view = await mount(renderRow(false));
+    container = view.container;
+    const trigger = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Row actions"]',
+    );
+    expect(trigger?.getAttribute("aria-haspopup")).toBe("menu");
+    expect(trigger?.getAttribute("aria-expanded")).toBe("false");
+
+    await act(async () => trigger?.click());
+    expect(menu()?.getAttribute("aria-label")).toBe("Row actions");
+    expect(trigger?.getAttribute("aria-expanded")).toBe("true");
+    await key(document.activeElement, "Escape");
+    expect(document.activeElement).toBe(trigger);
+    expect(trigger?.getAttribute("aria-expanded")).toBe("false");
+
+    await contextClick(container.querySelector(".rowText"));
+    expect(items().map((item) => item.textContent)).toEqual(["Open"]);
+    await act(async () => items()[0]?.click());
+    expect(selected).toEqual(["open"]);
+
+    // Disabled, the row keeps the browser's own menu and the button is inert.
+    await view.render(renderRow(true));
+    expect(
+      (await contextClick(container.querySelector(".rowText")))
+        .defaultPrevented,
+    ).toBe(false);
+    await act(async () => trigger?.click());
+    expect(menu()).toBeNull();
   });
 
   it("removes an open portal when its target unmounts", async () => {

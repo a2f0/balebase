@@ -54,6 +54,94 @@ it("links each file to its history", async () => {
   expect(navigations).toEqual(["/library/files/file%2F1"]);
 });
 
+it("offers a file's actions on right-click and moves it from its menu", async () => {
+  const moves: unknown[] = [];
+  respond(async (url, init) => {
+    if (init?.method && init.method !== "GET") {
+      moves.push({
+        body: JSON.parse(String(init.body)),
+        method: init.method,
+        path: url.pathname,
+      });
+      return Response.json({ object: {} });
+    }
+    if (url.pathname === "/api/objects")
+      return Response.json({
+        objects: [
+          {
+            contentType: "application/pdf",
+            createdAt: "2026-10-01T09:00:00.000Z",
+            filename: "lease.pdf",
+            folderId: null,
+            id: "file/1",
+            objectKey: "key",
+            size: 10,
+          },
+        ],
+      });
+    return Response.json({
+      folders: [
+        {
+          createdAt: "2026-10-01T09:00:00.000Z",
+          emailCount: 0,
+          fileCount: 0,
+          id: "folder-1",
+          name: "Leases",
+        },
+      ],
+    });
+  });
+  const navigations: string[] = [];
+  const { container } = await mount(
+    <Library
+      onNavigate={(pathname) => navigations.push(pathname)}
+      onResendVerification={async () => undefined}
+      pathname="/"
+      user={user}
+    />,
+  );
+  await settle();
+  const labels = () =>
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].map(
+      (item) => item.textContent,
+    );
+  const event = new dom.MouseEvent("contextmenu", {
+    bubbles: true,
+    cancelable: true,
+    clientX: 40,
+    clientY: 60,
+  });
+  await act(async () =>
+    container.querySelector(".fileMeta")?.dispatchEvent(event as never),
+  );
+  expect(event.defaultPrevented).toBeTrue();
+  expect(labels()).toEqual(["Move to Leases", "View history", "Delete"]);
+  await act(async () =>
+    document
+      .querySelectorAll<HTMLButtonElement>('[role="menuitem"]')[1]
+      ?.click(),
+  );
+  expect(navigations).toEqual(["/library/files/file%2F1"]);
+
+  const move = container.querySelector<HTMLButtonElement>(
+    '[aria-label="Move lease.pdf"]',
+  );
+  expect(move?.getAttribute("aria-haspopup")).toBe("menu");
+  await act(async () => move?.click());
+  expect(labels()).toEqual(["Move to Leases"]);
+  await act(async () =>
+    document.querySelector<HTMLButtonElement>('[role="menuitem"]')?.click(),
+  );
+  await settle();
+  expect(moves).toEqual([
+    {
+      body: { folderId: "folder-1" },
+      method: "PATCH",
+      path: "/api/objects/file%2F1",
+    },
+  ]);
+});
+
 it("reads a file's history, even once the file is gone", async () => {
   const requests: string[] = [];
   respond(async (url) => {

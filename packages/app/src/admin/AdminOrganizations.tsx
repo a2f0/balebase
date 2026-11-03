@@ -26,7 +26,7 @@ import {
   adminOrganizationIdForPath,
   adminOrganizationPath,
 } from "../workspace/workspacePaths";
-import { AdminDeletionMenu } from "./AdminDeletionMenu";
+import { AdminActionRow } from "./AdminActionRow";
 import { AdminIdentity } from "./AdminIdentity";
 import { AdminOrganizationDetails } from "./AdminOrganizationDetails";
 
@@ -231,7 +231,7 @@ function OrganizationTable({
   organizations,
 }: OrganizationTableActions & { organizations: AdminOrganization[] }) {
   return (
-    <div className="tableWrap">
+    <div className="tableWrap tableStack">
       <table className="table adminOrganizationTable">
         <thead>
           <tr>
@@ -248,7 +248,6 @@ function OrganizationTable({
               Plaid items
             </th>
             <th scope="col">Status</th>
-            <th scope="col">Marked by</th>
             <th scope="col">Created</th>
             <th scope="col">
               <span className="srOnly">Actions</span>
@@ -279,9 +278,27 @@ function OrganizationTableRow({
   onRestore,
   organization,
 }: OrganizationTableActions & { organization: AdminOrganization }) {
+  const pending = Boolean(organization.deletedAt);
   return (
-    <tr>
-      <td>
+    <AdminActionRow
+      busy={action?.organizationId === organization.id}
+      disabled={action !== undefined}
+      extraItems={[
+        {
+          icon: "list",
+          id: "details",
+          label: "View details",
+          onSelect: () => onNavigate(adminOrganizationPath(organization.id)),
+        },
+      ]}
+      label={pending ? "Restore" : "Mark for deletion"}
+      name={organization.name}
+      onSelect={() =>
+        void (pending ? onRestore : onMarkForDeletion)(organization)
+      }
+      pending={pending}
+    >
+      <td data-label="Organization">
         <div className="adminIdentityText adminOrganization">
           <AppLink
             className="adminOrganizationName adminOrganizationLink"
@@ -293,7 +310,7 @@ function OrganizationTableRow({
           <span className="adminSlug mono">{organization.slug}</span>
         </div>
       </td>
-      <td>
+      <td data-label="Owner">
         {organization.ownerName || organization.ownerEmail ? (
           <AdminIdentity
             detail={
@@ -307,35 +324,29 @@ function OrganizationTableRow({
           <span className="textSubtle">No default owner</span>
         )}
       </td>
-      <td className="adminNumeric tabular">{organization.memberCount}</td>
-      <td className="adminNumeric tabular">{organization.plaidItemCount}</td>
-      <td>
-        <OrganizationStatus deletedAt={organization.deletedAt} />
+      <td className="adminNumeric tabular" data-label="Members">
+        {organization.memberCount}
       </td>
-      <td>
-        <DeletedBy organization={organization} />
+      <td className="adminNumeric tabular" data-label="Plaid items">
+        {organization.plaidItemCount}
       </td>
-      <td className="adminDate tabular">
+      <td data-label="Status">
+        <OrganizationStatus organization={organization} />
+      </td>
+      <td className="adminDate tabular" data-label="Created">
         {formatDate(organization.createdAt)}
       </td>
-      <td className="adminActions">
-        <OrganizationActionMenu
-          action={action}
-          onMarkForDeletion={onMarkForDeletion}
-          onRestore={onRestore}
-          organization={organization}
-        />
-      </td>
-    </tr>
+    </AdminActionRow>
   );
 }
 
+/** Active, or pending deletion since when and marked by whom. */
 function OrganizationStatus({
-  deletedAt,
+  organization,
 }: {
-  deletedAt: AdminOrganization["deletedAt"];
+  organization: AdminOrganization;
 }) {
-  if (!deletedAt) {
+  if (!organization.deletedAt) {
     return (
       <Badge dot tone="success">
         Active
@@ -348,46 +359,16 @@ function OrganizationStatus({
         Pending deletion
       </Badge>
       <span className="textXs textSubtle tabular">
-        Since {formatDate(deletedAt)}
+        Since {formatDate(organization.deletedAt)}
+      </span>
+      <span className="textXs textSubtle adminMarkedBy">
+        Marked by{" "}
+        {organization.deletedByEmail ??
+          organization.deletedByName ??
+          organization.deletedByUserId ??
+          "Not recorded"}
       </span>
     </div>
-  );
-}
-
-function DeletedBy({ organization }: { organization: AdminOrganization }) {
-  if (!organization.deletedAt) {
-    return <span className="textSubtle">—</span>;
-  }
-  return (
-    <AdminIdentity
-      detail={
-        organization.deletedByEmail ??
-        organization.deletedByUserId ??
-        "Not recorded"
-      }
-      name={organization.deletedByName ?? "Unknown"}
-    />
-  );
-}
-
-function OrganizationActionMenu({
-  action,
-  onMarkForDeletion,
-  onRestore,
-  organization,
-}: OrganizationActions & { organization: AdminOrganization }) {
-  const pending = Boolean(organization.deletedAt);
-  return (
-    <AdminDeletionMenu
-      busy={action?.organizationId === organization.id}
-      disabled={action !== undefined}
-      label={pending ? "Restore" : "Mark for deletion"}
-      name={organization.name}
-      onSelect={() =>
-        void (pending ? onRestore : onMarkForDeletion)(organization)
-      }
-      pending={pending}
-    />
   );
 }
 

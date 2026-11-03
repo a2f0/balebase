@@ -1,7 +1,13 @@
-import { Button, ContextMenu } from "@balebase/ui/react";
+import { ContextMenu, MenuButton } from "@balebase/ui/react";
+import type { ReactNode } from "react";
 
-export function AdminDeletionMenu({
+/**
+ * A root admin table row whose actions open from its last cell's menu button,
+ * or by right-clicking (or pressing the menu key) anywhere on the row.
+ */
+export function AdminActionRow({
   busy = false,
+  children,
   deletionDisabled,
   disabled = false,
   extraItems = [],
@@ -11,8 +17,11 @@ export function AdminDeletionMenu({
   pending,
 }: {
   busy?: boolean;
+  /** The row's cells before its actions cell. */
+  children: ReactNode;
   /** Disables only the deletion item; defaults to `disabled`. */
   deletionDisabled?: boolean;
+  /** Keeps the menu closed, as while another row's action runs. */
   disabled?: boolean;
   /** Further actions listed after the deletion item. */
   extraItems?: readonly {
@@ -27,8 +36,10 @@ export function AdminDeletionMenu({
   onSelect: () => void;
   pending: boolean;
 }) {
+  const menuLabel = `Actions for ${name}`;
   return (
     <ContextMenu
+      disabled={disabled}
       items={[
         {
           disabled: (deletionDisabled ?? disabled) || busy,
@@ -42,20 +53,20 @@ export function AdminDeletionMenu({
           disabled: item.disabled || busy,
         })),
       ]}
-      label={`Actions for ${name}`}
-      openOnClick
+      label={menuLabel}
     >
-      {(props) => (
-        <Button
-          {...props}
-          aria-haspopup="menu"
-          aria-label={`Actions for ${name}`}
-          busy={busy}
-          disabled={disabled}
-          icon="more"
-          size="sm"
-          variant="ghost"
-        />
+      {(row, menuButton) => (
+        <tr {...row}>
+          {children}
+          <td className="adminActions tableActions">
+            <MenuButton
+              {...menuButton}
+              busy={busy}
+              disabled={disabled}
+              label={menuLabel}
+            />
+          </td>
+        </tr>
       )}
     </ContextMenu>
   );
