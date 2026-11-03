@@ -299,6 +299,26 @@ it("rows the phone captures on the home page, linking to the gallery", async () 
       "/screenshots/mobile/projects/",
       "/screenshots/mobile/audit/",
     ]);
+    // The carousel renders the page's one link to the full gallery.
+    const viewAll = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLAnchorElement>("#main a")]
+        .filter((link) => link.textContent?.trim() === "See every screen")
+        .map((link) => ({
+          href: link.getAttribute("href"),
+          inControls: link.matches(
+            ".shots-carousel-controls > .shots-carousel-view-all",
+          ),
+        })),
+    );
+    expect(viewAll).toEqual([{ href: "/screenshots/", inControls: true }]);
+    expect(
+      Object.values(await contrasts(page, [".shots-carousel-view-all"]))[0],
+    ).toBeGreaterThanOrEqual(4.5);
+    await Promise.all([
+      page.waitForNavigation(),
+      page.click(".shots-carousel-view-all"),
+    ]);
+    expect(new URL(page.url()).pathname).toBe("/screenshots/");
   } finally {
     await page.close();
   }

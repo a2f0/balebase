@@ -198,10 +198,9 @@ const phoneTour = readGalleryManifest().entries.some(
             link-base={galleryPath}
             manifest={galleryManifestUrl}
             project="mobile"
+            view-all-href={`${galleryPath}/`}
+            view-all-label="See every screen"
           />
-          <a class="button phoneTourLink" href={`${galleryPath}/`}>
-            See every screen <Icon name="arrowRight" />
-          </a>
         </div>
         <script>
           import { defineScreenshotElements } from "@a2f0/agent-tool/screenshots/gallery";
