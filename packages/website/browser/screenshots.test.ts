@@ -136,15 +136,9 @@ async function openSite(width: number) {
 /** The gallery's selection and its current screen's image. */
 function current(page: Page) {
   return page.evaluate(() => {
-    const root = document.querySelector<HTMLElement>(".shots-gallery");
-    const title = document.querySelector(".shots-title")?.textContent;
-    const image = [
-      ...document.querySelectorAll<HTMLImageElement>(".shots-slide img"),
-    ].find(
-      (candidate) =>
-        candidate.currentSrc.includes(
-          `/${root?.getAttribute("data-project")}/${root?.getAttribute("data-theme")}/`,
-        ) && candidate.getBoundingClientRect().left >= 0,
+    const root = document.querySelector(".shots-gallery");
+    const image = document.querySelector<HTMLImageElement>(
+      ".shots-slide[data-active] img.shots-image",
     );
     return {
       heading: document.querySelector("#page-title")?.textContent,
@@ -152,9 +146,26 @@ function current(page: Page) {
       loaded: (image?.naturalWidth ?? 0) > 0,
       project: root?.getAttribute("data-project"),
       theme: root?.getAttribute("data-theme"),
-      title,
+      title: document.querySelector(".shots-title")?.textContent,
     };
   });
+}
+
+/** Waits until the current screen's image shows a capture in `theme`. */
+function shown(page: Page, theme: string) {
+  return page.waitForFunction(
+    (wanted) => {
+      const image = document.querySelector<HTMLImageElement>(
+        ".shots-slide[data-active] img.shots-image",
+      );
+      return (
+        (image?.naturalWidth ?? 0) > 0 &&
+        image?.currentSrc.includes(`/${wanted}/`)
+      );
+    },
+    {},
+    theme,
+  );
 }
 
 it("shows the first capture and switches themes", async () => {
@@ -162,11 +173,7 @@ it("shows the first capture and switches themes", async () => {
   try {
     await page.goto("https://website.test/screenshots/");
     await page.waitForSelector(".shots-gallery[data-state='ready']");
-    await page.waitForFunction(() =>
-      [...document.querySelectorAll<HTMLImageElement>(".shots-slide img")].some(
-        (image) => image.naturalWidth > 0,
-      ),
-    );
+    await shown(page, "light");
     expect(await current(page)).toMatchObject({
       image: "/screenshot-gallery/img/web/light/projects.png?v=0",
       loaded: true,
@@ -175,7 +182,7 @@ it("shows the first capture and switches themes", async () => {
       title: "Projects",
     });
     await page.click(".shots-icon-button[data-action='theme']");
-    await page.waitForSelector(".shots-gallery[data-theme='dark']");
+    await shown(page, "dark");
     expect((await current(page)).image).toBe(
       "/screenshot-gallery/img/web/dark/projects.png?v=0",
     );
