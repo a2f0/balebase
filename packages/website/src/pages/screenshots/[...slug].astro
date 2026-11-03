@@ -7,6 +7,7 @@
 import "@a2f0/agent-tool/screenshots/gallery.css";
 import "../../styles/screenshots.css";
 import { screenshotRoutes } from "@a2f0/agent-tool/screenshots/manifest";
+import { productName } from "@balebase/ui/brand";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import {
   galleryManifestUrl,
@@ -40,8 +41,8 @@ const page = galleryPage(manifest, project, screen);
         <h1 class="title" id="page-title">{page.heading}</h1>
         <p class="lead">
           Harborline Electric, a sample company, runs its jobs, audits, books,
-          and paperwork in Balebase. Switch between desktop, tablet, and phone,
-          and between light and dark themes.
+          and paperwork in {productName}. Switch between desktop, tablet, and
+          phone, and between light and dark themes.
         </p>
       </div>
       <screenshot-gallery
@@ -51,7 +52,7 @@ const page = galleryPage(manifest, project, screen);
         heading-id="page-title"
         initial-project={project}
         initial-screen={screen}
-        label="Balebase screenshots"
+        label={`${productName} screenshots`}
         manifest={galleryManifestUrl}
         title-template={galleryTitleTemplate}
       >

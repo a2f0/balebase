@@ -19,9 +19,13 @@ import { productName } from "@balebase/ui/brand";
 export const galleryManifestUrl = "/screenshot-gallery/manifest.json";
 export const galleryPath = "/screenshots";
 
+// Browser tests build against a fixture gallery instead of the staged one.
+const { SCREENSHOT_GALLERY_MANIFEST } = process.env;
+
 /** Reads the staged manifest; paths are relative to the website package. */
 export function readGalleryManifest(
-  file = "public/screenshot-gallery/manifest.json",
+  file = SCREENSHOT_GALLERY_MANIFEST ||
+    "public/screenshot-gallery/manifest.json",
 ): ScreenshotManifest {
   if (!existsSync(file)) return EMPTY_MANIFEST;
   return parseScreenshotManifest(JSON.parse(readFileSync(file, "utf8")));
