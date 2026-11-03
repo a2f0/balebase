@@ -87,11 +87,25 @@ test("only production lists a sitemap; only staging sends noindex", () => {
     "<loc>https://balebase.com/",
     "<loc>https://balebase.com/privacy/",
   ]);
-  expect(production._headers).toBeUndefined();
+  expect(production._headers).not.toContain("X-Robots-Tag");
   const staging = searchFiles("staging", ["", "privacy/"]);
   expect(staging["robots.txt"]).toBe("User-agent: *\nAllow: /\n");
   expect(staging["sitemap.xml"]).toBeUndefined();
-  expect(staging._headers).toBe("/*\n  X-Robots-Tag: noindex, nofollow\n");
+  expect(staging._headers).toStartWith(
+    "/*\n  X-Robots-Tag: noindex, nofollow\n",
+  );
+});
+
+test("gallery images are cached for good and its manifest is revalidated", () => {
+  for (const tier of ["production", "staging"] as const)
+    expect(searchFiles(tier, [""])._headers).toContain(
+      [
+        "/screenshot-gallery/manifest.json",
+        "  Cache-Control: no-cache",
+        "/screenshot-gallery/img/*",
+        "  Cache-Control: public, max-age=31536000, immutable",
+      ].join("\n"),
+    );
 });
 
 // The real Astro build of each tier, as the deploy scripts run it.
@@ -155,8 +169,15 @@ describe("built tiers", () => {
     for (const page of built.filter((file) => file !== "404.html"))
       expect(read("production", page)).not.toContain("noindex");
     expect(read("production", "sitemap.xml")).not.toContain("404");
+    // The screenshot gallery is a canonical, listed page even with no capture.
+    expect(read("production", "screenshots/index.html")).toContain(
+      '<link rel="canonical" href="https://balebase.com/screenshots/">',
+    );
+    expect(read("production", "sitemap.xml")).toContain(
+      "<loc>https://balebase.com/screenshots/</loc>",
+    );
     expect(read("production", "robots.txt")).toContain("Sitemap:");
-    expect(existsSync(join(out("production"), "_headers"))).toBe(false);
+    expect(read("production", "_headers")).not.toContain("X-Robots-Tag");
     const json = read("production", "index.html").match(
       /<script type="application\/ld\+json">([^<]+)<\/script>/,
     )?.[1];

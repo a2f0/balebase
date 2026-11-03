@@ -19,6 +19,9 @@ packages/*/public/favicon.svg
 packages/*/public/favicon.ico
 packages/*/public/apple-touch-icon.png
 packages/*/public/og-image.png
+# The website's screenshot gallery, staged from the shared capture on each
+# dev or build.
+packages/website/public/screenshot-gallery
 *.tsbuildinfo
 
 # Terraform local state and plans

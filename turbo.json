@@ -29,6 +29,12 @@
     "test": {
       "dependsOn": ["^build"],
       "outputs": []
+    },
+    "@balebase/website#build": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "outputs": ["dist/**"],
+      "env": ["PUBLIC_*"]
     }
   }
 }

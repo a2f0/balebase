@@ -1,0 +1,67 @@
+---
+/*
+ * The screenshot gallery: /screenshots/ and one deep link per captured
+ * layout and screen (/screenshots/<project>/<screen>/), all rendering the
+ * same <screenshot-gallery> from @a2f0/agent-tool.
+ */
+import "@a2f0/agent-tool/screenshots/gallery.css";
+import "../../styles/screenshots.css";
+import { screenshotRoutes } from "@a2f0/agent-tool/screenshots/manifest";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import {
+  galleryManifestUrl,
+  galleryPage,
+  galleryPath,
+  galleryTitleTemplate,
+  readGalleryManifest,
+} from "../../screenshots";
+
+// getStaticPaths runs before the rest of the frontmatter, so it reads the
+// manifest itself.
+export function getStaticPaths() {
+  return screenshotRoutes(readGalleryManifest());
+}
+
+interface Props {
+  project?: string;
+  screen?: string;
+}
+
+const { project, screen } = Astro.props;
+const manifest = readGalleryManifest();
+const page = galleryPage(manifest, project, screen);
+---
+
+<BaseLayout description={page.description} title={page.title}>
+  <section aria-labelledby="page-title" class="screenshotsPage">
+    <div class="container screenshotsInner">
+      <div class="screenshotsIntro">
+        <p class="eyebrow">Product tour</p>
+        <h1 class="title" id="page-title">{page.heading}</h1>
+        <p class="lead">
+          Harborline Electric, a sample company, runs its jobs, audits, books,
+          and paperwork in Balebase. Switch between desktop, tablet, and phone,
+          and between light and dark themes.
+        </p>
+      </div>
+      <screenshot-gallery
+        base-path={galleryPath}
+        empty-message="Screenshots are on their way."
+        error-message="The screenshots could not be loaded."
+        heading-id="page-title"
+        initial-project={project}
+        initial-screen={screen}
+        label="Balebase screenshots"
+        manifest={galleryManifestUrl}
+        title-template={galleryTitleTemplate}
+      >
+        <noscript>The screenshot gallery needs JavaScript.</noscript>
+      </screenshot-gallery>
+    </div>
+  </section>
+  <script>
+    import { defineScreenshotElements } from "@a2f0/agent-tool/screenshots/gallery";
+
+    defineScreenshotElements();
+  </script>
+</BaseLayout>

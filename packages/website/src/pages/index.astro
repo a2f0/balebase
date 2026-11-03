@@ -5,9 +5,16 @@ import BusinessPreview from "../components/BusinessPreview.astro";
 import Icon from "../components/Icon.astro";
 import StoreBadges from "../components/StoreBadges.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
+import {
+  galleryManifestUrl,
+  galleryPath,
+  readGalleryManifest,
+} from "../screenshots";
 import { homeStructuredData } from "../search";
 import { appUrl } from "../site";
+import "@a2f0/agent-tool/screenshots/gallery.css";
 import "../styles/home.css";
+import "../styles/screenshots.css";
 
 // Keep pricing copy tied to the plans shared with the billing page.
 const [free, pro] = plans;
@@ -95,6 +102,10 @@ const essentials: { icon: IconName; text: string; title: string }[] = [
 ];
 
 const description = `${productName} is small business management software for expenses, contracts, employee forms, documents, equipment, and audits. Start free and add your team as you grow.`;
+// The phone row shows only once a capture has been staged.
+const phoneTour = readGalleryManifest().entries.some(
+  (entry) => entry.project === "mobile",
+);
 ---
 
 <BaseLayout
@@ -166,6 +177,40 @@ const description = `${productName} is small business management software for ex
       </div>
     </div>
   </section>
+
+  {
+    phoneTour && (
+      <section aria-labelledby="tour-title" class="band bandSunken phoneTour">
+        <div class="container screenshotsInner">
+          <div class="bandIntro">
+            <p class="eyebrow eyebrowDot">On your phone</p>
+            <h2 class="title" id="tour-title">
+              The whole workspace,{" "}
+              <span class="serifAccent">wherever the job is.</span>
+            </h2>
+            <p class="lead">
+              A sample electrical contractor's projects, audits, and books, as
+              {" "}{productName} shows them on a phone.
+            </p>
+          </div>
+          <screenshot-carousel
+            label={`${productName} on a phone`}
+            link-base={galleryPath}
+            manifest={galleryManifestUrl}
+            project="mobile"
+          />
+          <a class="button phoneTourLink" href={`${galleryPath}/`}>
+            See every screen <Icon name="arrowRight" />
+          </a>
+        </div>
+        <script>
+          import { defineScreenshotElements } from "@a2f0/agent-tool/screenshots/gallery";
+
+          defineScreenshotElements();
+        </script>
+      </section>
+    )
+  }
 
   <section aria-labelledby="how-title" class="band bandInk onDark" id="how-it-works">
     <div class="container">
