@@ -213,14 +213,24 @@ describe("starter template seeding", () => {
         .query("SELECT id, created_by, created_at FROM audit_template_families")
         .all(),
       versions: database
-        .query("SELECT * FROM audit_template_versions WHERE version = 1")
+        .prepare<Record<string, unknown>, []>(
+          "SELECT * FROM audit_template_versions WHERE version = 1",
+        )
         .all(),
     });
     const before = seeded();
     expect(before.events).toHaveLength(ids.length);
 
     applyMigrations(database, { from: "0075" });
-    expect(seeded()).toEqual(before);
+    // Fresh SELECT * includes columns added by later migrations, too.
+    expect(seeded()).toEqual({
+      ...before,
+      versions: before.versions.map((version) => ({
+        ...version,
+        copied_from_template_id: null,
+        copied_from_version: null,
+      })),
+    });
   });
 
   it("publishes a raised version through a generated migration", async () => {

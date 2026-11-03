@@ -7,6 +7,7 @@ import { useLoad } from "./useLoad";
 
 const { mount } = installDom();
 
+// Each renderHook call keeps the same hook identity across all rerenders.
 function HookProbe<Props, Result>({
   hook,
   props,

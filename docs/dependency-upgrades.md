@@ -24,6 +24,14 @@ Use the `update-dependencies` skill installed from the pinned
   The native TypeScript 7 release removes APIs used by language tooling.
   Explicit Bun types in the workspace tsconfigs account for TypeScript 6's
   new default type inclusion. See the [TypeScript 6 release notes][typescript].
+- Bun's Node declarations resolve through the dependency graph: the Azure
+  Storage tooling's [Apache Arrow][arrow] requires Node 25 types while
+  `bun-types` accepts `*`. No direct Node type pin is declared; retain the
+  manager's compatible selection and validate all workspace typechecks when
+  the owner updates. This is not a Node runtime pin.
+- SQLite migration snapshots must prepare fresh `SELECT *` statements after
+  schema changes and assert the new columns' defaults alongside unchanged
+  legacy fields. Older Bun statement metadata could hide those new columns.
 - Better Auth and `@better-auth/core` stay aligned on 1.7.2 while the
   database has the 1.7.0 `account.issuer NOT NULL` column and issuer unique
   index. Releases from 1.7.3 stop writing that field; sign-up then fails. The
@@ -148,6 +156,7 @@ of selected and constrained dependencies, audits, checks, warnings, previews,
 review, merge, and deployment results there; promote only ongoing procedures
 or active constraints into this guide.
 
+[arrow]: https://registry.npmjs.org/apache-arrow/21.2.0
 [re2js-advisory]: https://github.com/le0pard/re2js/security/advisories/GHSA-gg6h-894w-4m9c
 [xcode]: https://github.com/apache/cordova-node-xcode/blob/4.0.0/RELEASENOTES.md
 [stripe-js]: https://github.com/stripe/stripe-js/releases/tag/v10.0.0

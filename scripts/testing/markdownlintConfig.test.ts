@@ -144,10 +144,10 @@ const { realpathSync } = require("node:fs");
 const cliRequire = createRequire(realpathSync(${JSON.stringify(cli)}));
 const ownerRequire = createRequire(realpathSync(cliRequire.resolve("markdownlint")));
 const { RE2JS } = ownerRequire("re2js");
-const matcher = RE2JS.compile("(?<=a)b", RE2JS.LOOKBEHINDS).matcher("ab".repeat(16000));
+const matcher = RE2JS.compile("(?<=a)b", RE2JS.LOOKBEHINDS).matcher("ab".repeat(100000));
 let count = 0;
 while (matcher.find()) count++;
-if (count !== 16000) throw new Error("Lost lookbehind matches: " + count);
+if (count !== 100000) throw new Error("Lost lookbehind matches: " + count);
 console.log(count);
 `,
   );
@@ -158,7 +158,7 @@ console.log(count);
   });
   expect(result.error).toBeUndefined();
   expect(result.status).toBe(0);
-  expect(result.stdout.trim()).toBe("16000");
+  expect(result.stdout.trim()).toBe("100000");
 }, 15_000);
 
 test("malformed TOML remains a fatal configuration error", () => {
