@@ -220,9 +220,10 @@ function contrasts(page: Page, selectors: string[]) {
         if (!element) return [selector, 0];
         const fore = luminance(getComputedStyle(element).color);
         const back = luminance(background(element));
-        const ratio =
-          (Math.max(fore, back) + 0.05) / (Math.min(fore, back) + 0.05);
-        return [selector, Math.round(ratio * 10) / 10];
+        return [
+          selector,
+          (Math.max(fore, back) + 0.05) / (Math.min(fore, back) + 0.05),
+        ];
       }),
     );
   }, selectors);
