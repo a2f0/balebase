@@ -48,7 +48,3 @@ screenshot-carousel {
 
   margin-inline: calc(var(--page-gutter) * -1);
 }
-
-.phoneTourLink {
-  justify-self: center;
-}
