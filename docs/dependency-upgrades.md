@@ -79,7 +79,8 @@ captured the debug-signing fallback. The init script instead uses
 `androidComponents.finalizeDsl`. From the repository root:
 
 ```sh
-packages/app-capacitor/android/gradlew -p packages/app-capacitor/android \
+env -u ANDROID_KEYSTORE_STORE_PASS -u ANDROID_KEYSTORE_KEY_PASS \
+  packages/app-capacitor/android/gradlew -p packages/app-capacitor/android \
   -I "$PWD/packages/app-capacitor/android/unsigned-validation.init.gradle" \
   --no-daemon --max-workers=2 assembleDebug bundleRelease
 ```
