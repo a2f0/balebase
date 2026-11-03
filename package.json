@@ -83,7 +83,7 @@
     "*.md": "bun --bun x markdownlint-cli2 --fix"
   },
   "devDependencies": {
-    "@a2f0/agent-tool": "0.1.35",
+    "@a2f0/agent-tool": "0.1.38",
     "@azure/storage-blob": "12.34.0",
     "@biomejs/biome": "2.6.4",
     "@commitlint/cli": "21.2.4",
@@ -98,7 +98,7 @@
     "tar": "7.5.22",
     "turbo": "2.11.10",
     "typescript": "6.0.3",
-    "wrangler": "4.151.1",
+    "wrangler": "4.157.0",
     "zod": "4.6.7"
   },
   "engines": {

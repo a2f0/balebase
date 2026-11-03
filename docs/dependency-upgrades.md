@@ -66,6 +66,11 @@ one compatibility group. AndroidX Core 1.19 requires compile SDK 37 and AGP 9.1
 or later; the app's target SDK and minimum Android version are separate policies.
 Run mobile sync, an Android debug build and unsigned release bundle, and an
 unsigned iOS simulator build before shipping native dependency changes.
+Use an isolated Gradle init script with `androidComponents.finalizeDsl` to set
+release `signingConfig = null`, and verify the resulting AAB has no signing
+entries. Changing signing in `projectsEvaluated` is too late: AGP may already
+have captured the debug-signing fallback. Do not use release credentials for
+this build gate.
 
 Mobile sync restores the bootstrap wrapper JAR from the exact Capacitor CLI
 template. The checksum-pinned Gradle distribution in `gradle-wrapper.properties`

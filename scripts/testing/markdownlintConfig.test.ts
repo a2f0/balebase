@@ -131,10 +131,13 @@ test("the CLI's regex engine skips front matter and preserves line offsets", () 
   const result = lint(directory);
   expect(result.status).toBe(1);
   expect(result.output).toContain("good.md:6");
+  expect(result.output).toContain("MD018");
   expect(result.output).not.toContain("good.md:2");
 });
 
 test("the CLI owner's regex engine bounds repeated lookbehind matching", () => {
+  // The old quadratic engine exceeds this generous bound; 2.8.7 is linear.
+  // Keep the child kill timeout so a regression cannot hang the test process.
   const directory = fixture("");
   const probe = join(directory, "regex.cjs");
   writeFileSync(
