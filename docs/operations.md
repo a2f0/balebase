@@ -274,6 +274,11 @@ bun run deploy:verify   # check all production URLs
 `DEPLOY_TIER=staging` selects staging for `deploy:verify` and
 `deploy:email:verify`; `bun run deploy:staging:verify` is the shortcut.
 
+Website builds publish the shared screenshot capture
+([screenshots](../CONTRIBUTING.md#screenshots)) and refuse one that is
+running, failed, or uncommitted; check the take-screenshots skill's `status`
+before deploying the website.
+
 ## Deploy staging
 
 Staging uses separate Workers, a D1 database, an R2 bucket, and Terraform state

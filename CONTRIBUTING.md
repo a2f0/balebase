@@ -354,6 +354,17 @@ to that workspace's shared artifact store, so every clone reads the newest
 capture instead of recapturing; the store records the capture's commit in
 `.screenshots/capture.json`. No build or deploy captures them.
 
+The website shows them at `/screenshots/` (one deep link per layout and
+screen, `/screenshots/<layout>/<screen>/`) and in a phone row on the home
+page, with `@a2f0/agent-tool`'s gallery elements. Its `dev` and `build` first
+run `bun run --cwd packages/website screenshots`, which stages the capture
+into the ignored `packages/website/public/screenshot-gallery/` with a
+manifest, as the `screenshots` section of `agent-tool.json` lists them
+(labels, alt text, and order). It refuses a capture that is running, failed,
+or dirty, so check `status` before deploying the website. Without a capture
+the pages build with an empty gallery. Add a new screen to that list as well
+as to `screens.ts`.
+
 ## Keep changes readable
 
 - Keep related behavior together. Extract a module when it has a clear job;
