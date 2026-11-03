@@ -86,6 +86,16 @@ test("audits fail the items their issues name and carry the site photos", () => 
     "SELECT responses FROM audits",
   ))
     expect(Object.values(JSON.parse(responses))).toContain("fail");
+  // An issue raised on the day its audit completes comes first.
+  const [completed] = rows<{ completed_at: string; raised_at: string }>(
+    `SELECT audits.completed_at, issues.created_at AS raised_at
+     FROM audits JOIN issues ON issues.target_id = audits.id
+     WHERE audits.status = 'completed'`,
+  );
+  expect(completed?.raised_at.slice(0, 10)).toBe(
+    completed?.completed_at.slice(0, 10),
+  );
+  expect(completed?.raised_at < (completed?.completed_at ?? "")).toBe(true);
 });
 
 test("the bank feed is synced, filed under its categories, and reviewed", () => {

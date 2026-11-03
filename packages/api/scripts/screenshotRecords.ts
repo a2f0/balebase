@@ -43,13 +43,17 @@ const officeManager =
   organization.owner;
 
 export function recordSteps(): Step[] {
+  const audits = auditSteps();
   return [
     ...groupSteps(),
     ...businessSteps(),
     ...equipmentSteps(),
     ...projectSteps(),
-    ...auditSteps(),
+    // Issues raised on an audit's first or last day come after its start and
+    // before its completion.
+    ...audits.starts,
     ...issueSteps(),
+    ...audits.completions,
     ...financeSteps(),
     ...contractSteps(),
     ...librarySteps(),
@@ -184,8 +188,10 @@ function issueItem(issue: ContinuityIssue) {
  * fail the items its issues are about and pass the rest; an audit still in
  * progress has only its first section answered.
  */
-function auditSteps(): Step[] {
-  return continuity.audits.flatMap((audit) => {
+function auditSteps() {
+  const starts: Step[] = [];
+  const completions: Step[] = [];
+  for (const audit of continuity.audits) {
     const answer = async (context: StepContext, complete: boolean) => {
       const send = await context.as(audit.startedBy);
       const id = idOf(context, `audit:${audit.id}`);
@@ -224,15 +230,14 @@ function auditSteps(): Step[] {
         if (audit.status === "in_progress") await answer(context, false);
       },
     };
-    if (audit.status !== "completed") return [start];
-    return [
-      start,
-      {
+    starts.push(start);
+    if (audit.status === "completed")
+      completions.push({
         day: audit.completedOn ?? asOf,
         run: (context) => answer(context, true),
-      },
-    ];
-  });
+      });
+  }
+  return { completions, starts };
 }
 
 /**
@@ -241,8 +246,6 @@ function auditSteps(): Step[] {
  * resolved by their assignee on the day canon gives.
  */
 function issueSteps(): Step[] {
-  // Listed after the audits, so an issue raised on its audit's first or last
-  // day comes after the start and before the completion.
   return continuity.issues.flatMap((issue) => {
     const raise: Step = {
       day: issue.raisedOn,
