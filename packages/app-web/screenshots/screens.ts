@@ -5,10 +5,16 @@ import { expect, type Page, type TestInfo } from "playwright/test";
 export const themes = ["light", "dark"] as const;
 export type Theme = (typeof themes)[number];
 
-/** A captured page: its route, file stem, and text that proves it loaded. */
+/**
+ * A captured page: its file stem, the route that lists it, the text of the
+ * link to follow from there for a record page (whose ID the seed's API
+ * chose), the section tab to show, and text that proves it loaded.
+ */
 export interface Screen {
   name: string;
   route: string;
+  open?: string;
+  tab?: string;
   ready: string;
 }
 
@@ -25,21 +31,38 @@ export const screens: readonly Screen[] = [
   },
   { name: "audits", route: "/audits", ready: "NFPA 70E" },
   {
-    name: "equipment",
-    route: "/equipment",
-    ready: "ThinkPad X1 Carbon Gen 13",
+    name: "audit",
+    route: "/audits",
+    open: "Started by Luis Ferreira",
+    tab: "Issues",
+    ready: "Missing arc-flash labels on east switchgear",
   },
+  { name: "equipment", route: "/equipment", ready: "FM-14R Rugged" },
   {
     name: "businesses",
     route: "/businesses",
-    ready: "Harborline Electric LLC",
+    ready: "Harborline Field Services Inc.",
   },
-  { name: "activity", route: "/activity", ready: "Warehouse 7 lighting" },
+  {
+    name: "contracts",
+    route: "/contracts",
+    ready: "Riverside Clinic retrofit agreement",
+  },
+  {
+    name: "contract",
+    route: "/contracts",
+    open: "Oak Street inspection services",
+    ready: "Owen McAllister",
+  },
+  { name: "finance", route: "/finance", ready: "Northgate Electrical Supply" },
+  { name: "library", route: "/", ready: "Insurance" },
+  { name: "activity", route: "/activity", ready: "Dana Whitlock" },
   {
     name: "organization",
     route: "/organization/people",
-    ready: "Priya Natarajan",
+    ready: "Tomas Lindqvist",
   },
+  { name: "groups", route: "/organization/access", ready: "Field crew" },
 ];
 
 // index.html applies this key before first paint (packages/app/src/account/theme.ts).
@@ -55,13 +78,19 @@ const stillCss = `
   }
 `;
 
-/** `.screenshots` at the repository root, three levels above this file. */
+const { SCREENSHOT_OUTPUT_DIR: outputDirectory } = process.env;
+
+/**
+ * `.screenshots` at the repository root, three levels above this file, or
+ * `SCREENSHOT_OUTPUT_DIR` (relative to the root) for a capture kept out of the
+ * shared store.
+ */
 export const screenshotRoot = path.resolve(
   import.meta.dirname,
   "..",
   "..",
   "..",
-  ".screenshots",
+  outputDirectory || ".screenshots",
 );
 
 /**
@@ -106,6 +135,12 @@ export async function pinTheme(page: Page, theme: Theme) {
 /** Opens a screen and waits until its seeded content has fully rendered. */
 export async function openScreen(page: Page, screen: Screen) {
   await page.goto(screen.route);
+  if (screen.open) {
+    const link = page.getByText(screen.open).first();
+    await expect(link).toBeVisible({ timeout: 30_000 });
+    await link.click();
+  }
+  if (screen.tab) await page.getByRole("tab", { name: screen.tab }).click();
   await page.addStyleTag({ content: stillCss });
   await expect(page.getByText(screen.ready).first()).toBeVisible({
     timeout: 30_000,

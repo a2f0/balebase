@@ -1,215 +1,197 @@
 import type { Database } from "bun:sqlite";
 import { seedMember, seedUser } from "../src/testing/seed";
+import { continuity, person } from "./continuity";
+import {
+  recordSteps,
+  type Sender,
+  type Step,
+  type StepContext,
+} from "./screenshotRecords";
+import type { SentMessage } from "./screenshotServices";
 
 /**
- * The organization screenshot capture shows. Records go through the API's own
- * routes, so they carry the activity a real workspace would; only the
- * teammates, who never sign in, are written directly.
+ * The organization screenshot capture shows: Harborline Electric from the
+ * pinned continuity genesis (scripts/continuity.ts). Records go through the
+ * API's own routes, each sent by the person canon says did it on the day it
+ * says, so they carry the activity a real workspace would. Only the
+ * teammates' accounts, who join without an invitation email, are written
+ * directly.
  */
-const { SCREENSHOT_EMAIL, SCREENSHOT_PASSWORD } = process.env;
-// The capture's config passes the owner's placeholder credentials.
-const screenshotOwner = {
-  email: SCREENSHOT_EMAIL ?? "jordan@harborline.example",
-  name: "Jordan Avery",
-  password: SCREENSHOT_PASSWORD ?? "screenshot capture password",
-};
-
-const organizationName = "Harborline Electric";
-
-const teammates = [
-  { id: "screenshot_priya", name: "Priya Natarajan", role: "admin" },
-  { id: "screenshot_marcus", name: "Marcus Bell", role: "member" },
-  { id: "screenshot_elena", name: "Elena Ruiz", role: "member" },
-] as const;
-
-const projects = [
-  {
-    name: "Riverside Clinic retrofit",
-    description:
-      "Panel upgrades and arc-flash labeling across the clinic's three floors.",
-    members: ["screenshot_priya", "screenshot_marcus"],
-    forms: ["nfpa70e_global"],
-  },
-  {
-    name: "Oak Street apartments",
-    description: "Residential inspections for the 24-unit renovation.",
-    members: ["screenshot_elena"],
-    forms: ["us_residential_core_global"],
-  },
-  {
-    name: "Warehouse 7 lighting",
-    description: "LED conversion and emergency lighting tests.",
-    members: [],
-    forms: [],
-  },
-] as const;
-
-const issues = [
-  {
-    title: "Replace corroded breaker in panel 2B",
-    priority: "critical",
-    assignedTo: "screenshot_marcus",
-    description: "Found during the second-floor walkthrough; panel tagged out.",
-  },
-  {
-    title: "Missing arc-flash labels on east switchgear",
-    priority: "high",
-    assignedTo: "screenshot_priya",
-    description: "Labels need the updated incident energy values.",
-  },
-  {
-    title: "Confirm GFCI coverage in unit 14 kitchen",
-    priority: "medium",
-    assignedTo: "screenshot_elena",
-    description: "",
-  },
-  {
-    title: "Order spare emergency ballast kits",
-    priority: "low",
-    assignedTo: null,
-    description: "Six kits for the warehouse aisle fixtures.",
-  },
-] as const;
-
-const equipment = [
-  {
-    type: "computer",
-    make: "Lenovo",
-    model: "ThinkPad X1 Carbon Gen 13",
-    serialNumber: "PF4KX2Q9",
-    purchaseDate: "2026-02-14",
-    assigneeId: "screenshot_priya",
-  },
-  {
-    type: "cell_phone",
-    make: "Apple",
-    model: "iPhone 17 Pro",
-    serialNumber: "F2LZQ8H1N7",
-    purchaseDate: "2026-09-22",
-    assigneeId: "screenshot_marcus",
-  },
-  {
-    type: "monitor",
-    make: "Dell",
-    model: "UltraSharp U2725QE",
-    serialNumber: "CN-0X7G2M",
-    purchaseDate: "2025-11-03",
-    assigneeId: null,
-  },
-  {
-    type: "cell_phone",
-    make: "Samsung",
-    model: "Galaxy S26",
-    serialNumber: "R5CY31KQ8ZT",
-    purchaseDate: "2026-05-30",
-    assigneeId: "screenshot_elena",
-  },
-] as const;
-
-const businesses = [
-  {
-    name: "Harborline Electric LLC",
-    ein: "84-2917365",
-    streetAddress: "410 Wharf Road",
-    city: "Portland",
-    state: "ME",
-    zip: "04101",
-    incorporationDate: "2019-04-08",
-  },
-  {
-    name: "Harborline Field Services Inc.",
-    ein: "87-5520194",
-    streetAddress: "18 Commercial Street",
-    city: "Portland",
-    state: "ME",
-    zip: "04101",
-    incorporationDate: "2023-01-17",
-  },
-] as const;
 
 type Request = (path: string, init?: RequestInit) => Promise<Response>;
 
-/** Seeds the capture's organization, failing on any refused request. */
-export async function seedScreenshotData({
-  database,
-  request,
-}: {
+export interface SeedHost {
   database: Database;
   request: Request;
-}) {
-  const send = sender(request);
-  await send("POST", "/api/auth/sign-up/email", {
-    ...screenshotOwner,
+  /** Moves the seeding clock to the start of a canon day (`YYYY-MM-DD`). */
+  setDay: (day: string) => void;
+  /** Email the API sent, oldest first. */
+  outbox: SentMessage[];
+}
+
+const { SCREENSHOT_EMAIL, SCREENSHOT_PASSWORD } = process.env;
+// The capture's config passes the owner's placeholder credentials; teammates
+// sign in with the same placeholder.
+const password = SCREENSHOT_PASSWORD ?? "screenshot capture password";
+const owner = person(continuity.organization.owner);
+
+if (SCREENSHOT_EMAIL !== undefined && SCREENSHOT_EMAIL !== owner.email)
+  throw new Error(
+    `The capture signs in as ${SCREENSHOT_EMAIL}, but the continuity owner is ${owner.email}.`,
+  );
+
+/** Seeds the capture's organization, failing on any refused request. */
+export async function seedScreenshotData(host: SeedHost) {
+  let day = "";
+  const sessions = new Map<string, { day: string; send: Sender }>();
+  const context: StepContext = {
+    // Sessions expire on the seeding clock too, so each person signs in again
+    // on every day they act.
+    as: async (id) => {
+      const current = sessions.get(id);
+      if (current?.day === day) return current.send;
+      const send = sender(host.request);
+      // Better Auth rate-limits sign-ins, and the seed signs in many times.
+      host.database.query("DELETE FROM rateLimit").run();
+      await send("POST", "/api/auth/sign-in/email", {
+        email: person(id).email,
+        password,
+      });
+      sessions.set(id, { day, send });
+      return send;
+    },
+    anonymous: sender(host.request),
+    ids: new Map(),
+    // Teammates are keyed on their canon ID; the owner signed up for theirs.
+    userId: (id) => {
+      const row = host.database
+        .query("SELECT id FROM user WHERE email = ?")
+        .get(person(id).email) as { id: string } | null;
+      if (!row) throw new Error(`${id} has no Balebase account.`);
+      return row.id;
+    },
+    outbox: host.outbox,
+  };
+  const steps: Step[] = [
+    { day: owner.joinedOn ?? continuity.asOf, run: () => found(host) },
+    ...recordSteps(),
+  ];
+  // Canon order: the sort is stable, so steps on one day keep their order.
+  steps.sort((a, b) => a.day.localeCompare(b.day));
+  for (const step of steps) {
+    day = step.day;
+    host.setDay(day);
+    await step.run(context);
+  }
+}
+
+/** Signs the owner up and adds the teammates who hold a seat. */
+async function found({ database, request }: SeedHost) {
+  await sender(request)("POST", "/api/auth/sign-up/email", {
+    email: owner.email,
+    name: owner.name,
+    password,
     termsAccepted: true,
   });
-  const owner = database
+  const { organizationId, userId } = database
     .query(
       `SELECT user.id AS userId, member.organizationId
        FROM user JOIN member ON member.userId = user.id
        WHERE user.email = ?`,
     )
-    .get(screenshotOwner.email) as { organizationId: string; userId: string };
-  database
-    .query("UPDATE user SET emailVerified = 1 WHERE id = ?")
-    .run(owner.userId);
+    .get(owner.email) as { organizationId: string; userId: string };
+  database.query("UPDATE user SET emailVerified = 1 WHERE id = ?").run(userId);
   database
     .query("UPDATE organization SET name = ? WHERE id = ?")
-    .run(organizationName, owner.organizationId);
-  for (const teammate of teammates) {
-    seedUser(database, {
-      id: teammate.id,
-      name: teammate.name,
-      email: `${teammate.id.replace("screenshot_", "")}@harborline.example`,
-      defaultOrganizationId: owner.organizationId,
-    });
-    seedMember(database, {
-      organizationId: owner.organizationId,
-      userId: teammate.id,
-      role: teammate.role,
-    });
-  }
-  await send("POST", "/api/auth/sign-in/email", {
-    email: screenshotOwner.email,
-    password: screenshotOwner.password,
-  });
-  await seedRecords(send);
-}
-
-async function seedRecords(send: Sender) {
-  for (const project of projects) {
-    const { project: created } = await send<{ project: { id: string } }>(
-      "POST",
-      "/api/projects",
-      { name: project.name, description: project.description },
+    .run(continuity.organization.name, organizationId);
+  const teammates = continuity.people.filter(
+    (teammate) => teammate.role && teammate.id !== owner.id,
+  );
+  for (const teammate of teammates)
+    addTeammate(database, teammate, userId, organizationId);
+  // A seat for everyone: Stripe's side of a Pro subscription, which only a
+  // Stripe webhook could otherwise write.
+  database
+    .query(
+      `INSERT INTO organization_billing
+       (organization_id, stripe_customer_id, stripe_subscription_id,
+        stripe_price_id, stripe_status, seat_quantity, updated_at)
+       VALUES (?, 'cus_screenshot', 'sub_screenshot', ?, 'active', ?, ?)`,
+    )
+    .run(
+      organizationId,
+      screenshotProPrice,
+      teammates.length + 1,
+      new Date().toISOString(),
     );
-    for (const userId of project.members)
-      await send("PUT", `/api/projects/${created.id}/members/${userId}`);
-    for (const templateId of project.forms)
-      await send("PUT", `/api/projects/${created.id}/forms/${templateId}`);
-  }
-  for (const issue of issues) await send("POST", "/api/issues", issue);
-  for (const item of equipment) await send("POST", "/api/equipment", item);
-  for (const business of businesses)
-    await send("POST", "/api/businesses", business);
-  await send("POST", "/api/audits/templates/nfpa70e_global/runs");
 }
 
-type Sender = ReturnType<typeof sender>;
+/** The Pro price the screenshot API's billing bindings name. */
+export const screenshotProPrice = "price_screenshot_pro";
 
-/** Sends JSON requests with the session the sign-in set. */
-function sender(request: Request) {
+/**
+ * A member keyed on their canon person ID: user and membership rows, and a
+ * copy of the owner's credential account, so they sign in with the same
+ * placeholder password.
+ */
+function addTeammate(
+  database: Database,
+  teammate: (typeof continuity.people)[number],
+  ownerId: string,
+  organizationId: string,
+) {
+  const joined = `${teammate.joinedOn ?? continuity.asOf}T16:00:00.000Z`;
+  seedUser(database, {
+    createdAt: joined,
+    defaultOrganizationId: organizationId,
+    email: teammate.email,
+    id: teammate.id,
+    name: teammate.name,
+  });
+  seedMember(database, {
+    createdAt: joined,
+    organizationId,
+    role: teammate.role ?? "member",
+    userId: teammate.id,
+  });
+  const account = database
+    .query("SELECT * FROM account WHERE userId = ?")
+    .get(ownerId) as Record<string, string | number | null>;
+  const row = {
+    ...account,
+    accountId: teammate.id,
+    createdAt: joined,
+    id: `account_${teammate.id}`,
+    updatedAt: joined,
+    userId: teammate.id,
+  };
+  const columns = Object.keys(row);
+  database
+    .query(
+      `INSERT INTO account (${columns.map((column) => `"${column}"`).join(", ")})
+       VALUES (${columns.map(() => "?").join(", ")})`,
+    )
+    .run(...Object.values(row));
+}
+
+/** Sends JSON, a form, or a file, with the session its sign-in set. */
+function sender(request: Request): Sender {
   let cookie = "";
-  return async <T = unknown>(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<T> => {
+  return async <T = unknown>(method: string, path: string, body?: unknown) => {
     const headers: Record<string, string> = { cookie };
-    if (body !== undefined) headers["content-type"] = "application/json";
+    let payload: BodyInit | undefined;
+    if (body instanceof FormData) payload = body;
+    else if (body instanceof Blob) {
+      payload = body;
+      headers["content-type"] = body.type;
+    } else if (body !== undefined) {
+      payload = JSON.stringify(body);
+      headers["content-type"] = "application/json";
+    }
     const response = await request(path, {
       method,
       headers,
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(payload === undefined ? {} : { body: payload }),
     });
     const setCookie = response.headers.getSetCookie();
     if (setCookie.length)

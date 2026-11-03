@@ -57,6 +57,12 @@ variable "client_hostname" {
   default     = "app.balebase.com"
 }
 
+variable "continuity_hostname" {
+  description = "Hostname for the balebase-continuity gallery Worker."
+  type        = string
+  default     = "continuity.balebase.com"
+}
+
 variable "api_hostname" {
   description = "Hostname for the API Worker."
   type        = string
@@ -73,6 +79,12 @@ variable "client_worker_name" {
   description = "Deployed name of the client Worker."
   type        = string
   default     = "balebase-client"
+}
+
+variable "continuity_worker_name" {
+  description = "Deployed name of the balebase-continuity gallery Worker, which a2f0/balebase-continuity deploys."
+  type        = string
+  default     = "balebase-continuity"
 }
 
 variable "api_worker_name" {

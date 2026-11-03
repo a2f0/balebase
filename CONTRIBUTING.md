@@ -304,27 +304,48 @@ Playwright's bundled Chromium. Install it once with
 Playwright, so `bun run screenshots --project=mobile` captures one layout.
 
 The capture starts its own servers on ports 34010 and 34020 and never reuses
-running ones: the API over an in-memory database that
-`packages/api/scripts/screenshotSeed.ts` fills with one organization through
-the API's own routes, on a fixed clock, and the web app pointed at it. It needs
-no `.secrets` and reaches no deployed service. The capture lives in
-`packages/app-web/playwright.screenshots.config.ts` and
+running ones: the API over an in-memory database, and the web app pointed at
+it. It needs no `.secrets` and reaches no deployed service. The capture lives
+in `packages/app-web/playwright.screenshots.config.ts` and
 `packages/app-web/screenshots/`, apart from every check and test suite.
 
+The data comes from [a2f0/balebase-continuity](https://github.com/a2f0/balebase-continuity),
+pinned by commit as `@a2f0/balebase-continuity` in `packages/api`: Harborline
+Electric, its people, equipment, projects, audits with site photos, issues,
+bank feed, contracts with their PDFs, and library documents. Its
+`docs/balebase.md` is the contract. `packages/api/scripts/screenshotSeed.ts`
+replays it through the API's own routes, each record sent by the person canon
+names on the day canon gives, on a fixed clock. Teammates' accounts and the Pro
+subscription are written directly, and the API's outside services are
+in-process stand-ins (`scripts/screenshotServices.ts`): email lands in an
+outbox the seed reads signing links from, images keep their bytes, and a fake
+Plaid answers with the canon bank feed. Bump the pin to take a canon change.
+Balebase has no profile pictures or equipment photos, so the canon's avatars
+and equipment photos are not shown.
+
+To browse the seeded workspace, run the API alone with
+`bun run --cwd packages/api screenshots:api`, start the web app with
+`VITE_API_URL=http://127.0.0.1:34010 bun run --cwd packages/app-web dev`, and
+sign in as `jordan@harborline.example.com` with the placeholder password in
+the capture config.
+
 It writes `.screenshots/<layout>/<theme>/<screen>.png`, replacing only the PNGs
-of the layouts it captures:
+of the layouts it captures; `SCREENSHOT_OUTPUT_DIR` sends a local look
+somewhere else:
 
 - layouts `web` (1440×900 at 2×, 2880×1800 pixels), `ipad` (iPad Pro 11,
-  1668×2388), and `mobile` (iPhone 13, 1170×1992);
+  1668×2388), and `mobile` (the iPhone 13 profile with its whole 390×844
+  screen as the viewport, like an installed app, 1170×2532);
 - themes `light` and `dark`, pinned through the stored theme preference;
-- screens `projects`, `issues`, `audits`, `equipment`, `businesses`,
-  `activity`, and `organization`, named in `screenshots/screens.ts`; a
-  gallery that shows them keeps these names.
+- screens `projects`, `issues`, `audits`, `audit`, `equipment`, `businesses`,
+  `contracts`, `contract`, `finance`, `library`, `activity`, `organization`,
+  and `groups`, named in `screenshots/screens.ts`; a gallery that shows them
+  keeps these names.
 
 `.screenshots` is ignored. In a clone the matrix workspace manages, it links
 to that workspace's shared artifact store, so every clone reads the newest
 capture instead of recapturing; the store records the capture's commit in
-`.screenshots/capture.json`. No build or deploy captures or publishes them.
+`.screenshots/capture.json`. No build or deploy captures them.
 
 ## Keep changes readable
 
