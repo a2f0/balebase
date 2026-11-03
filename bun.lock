@@ -5,7 +5,7 @@
     "": {
       "name": "balebase",
       "devDependencies": {
-        "@a2f0/agent-tool": "0.1.32",
+        "@a2f0/agent-tool": "0.1.33",
         "@azure/storage-blob": "12.30.0",
         "@biomejs/biome": "2.5.15",
         "@commitlint/cli": "21.2.3",
@@ -174,7 +174,7 @@
         "astro": "7.4.0",
       },
       "devDependencies": {
-        "@a2f0/agent-tool": "0.1.32",
+        "@a2f0/agent-tool": "0.1.33",
         "@astrojs/check": "0.9.10",
         "@types/bun": "1.4.3",
         "puppeteer-core": "25.14.0",
@@ -193,7 +193,7 @@
     },
   },
   "packages": {
-    "@a2f0/agent-tool": ["@a2f0/agent-tool@0.1.32", "", { "dependencies": { "@resvg/resvg-wasm": "2.6.2" }, "bin": { "agent-tool": "src/index.ts" } }, "sha512-EW0QaQlrgNIpJfGXlq6ikftmgc8LV/3G2dTWJPaIETKPEQtLssjVSYHfBARsMY+LNhPwM1/6kcbb9MGLRQBjaQ=="],
+    "@a2f0/agent-tool": ["@a2f0/agent-tool@0.1.33", "", { "dependencies": { "@resvg/resvg-wasm": "2.6.2" }, "bin": { "agent-tool": "src/index.ts" } }, "sha512-LL+5k1B2/h4JwLpZ7hMkSkkLQowX/KWoRfKVBuHbV9gU/Wb9MtY9sng5pw23WJMhLjRph5nYxTqXj5jHseCczQ=="],
 
     "@a2f0/balebase-continuity": ["@a2f0/balebase-continuity@github:a2f0/balebase-continuity#20fe9ba", {}, "a2f0-balebase-continuity-20fe9ba", "sha512-xxXkcSYmEiDZQphGIxr5lDnik22otos6bVcrkt9bcefP4t3QZMTs26i36dbdMQMrsqAI2rkhHGiWySp38EV6wA=="],
 
