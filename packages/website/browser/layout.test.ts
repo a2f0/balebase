@@ -12,7 +12,14 @@ import {
 import { storeBadgeHref, storeListings } from "../src/site";
 
 const siteRoot = fileURLToPath(new URL("..", import.meta.url));
-const pages = ["/", "/terms/", "/privacy/", "/data-retention/", "/404.html"];
+const pages = [
+  "/",
+  "/terms/",
+  "/privacy/",
+  "/data-retention/",
+  "/screenshots/",
+  "/404.html",
+];
 const publicRoot = join(siteRoot, "public");
 const types: Record<string, string> = {
   ".css": "text/css",

@@ -1,0 +1,77 @@
+/*
+ * The shared screenshot elements (@a2f0/agent-tool/screenshots/gallery.css)
+ * in Balebase's design tokens. The site is light only, so the elements take
+ * the tokens rather than following the system color scheme; the theme toggle
+ * still shows the dark captures.
+ */
+screenshot-gallery,
+screenshot-carousel {
+  --shots-font: var(--font-sans);
+  --shots-ink: var(--color-text);
+  --shots-ink-muted: var(--color-text-muted);
+  --shots-surface: var(--color-surface);
+  --shots-surface-raised: var(--color-paper-muted);
+  --shots-border: var(--color-border-subtle);
+  --shots-accent: var(--color-ink);
+  --shots-accent-ink: var(--color-lime);
+  --shots-focus: var(--focus-color);
+  --shots-radius: var(--radius-xl);
+  --shots-bezel: var(--color-ink);
+  --shots-bezel-edge: var(--color-ink-line-strong);
+  --shots-shadow: var(--shadow-lg);
+}
+
+/*
+ * The elements mark their parts with `data-theme` for the capture shown,
+ * which Balebase's tokens and base styles read as a themed region; keep the
+ * gallery's own text and controls in the site's light theme.
+ */
+screenshot-gallery [data-theme],
+screenshot-carousel [data-theme] {
+  color: var(--shots-ink);
+  color-scheme: light;
+}
+
+/*
+ * The shared stylesheet wraps every rule in :where(), so @balebase/ui's
+ * `button { color: inherit }` outranks the colors it gives its buttons.
+ */
+screenshot-gallery .shots-toggle-button[aria-pressed="true"] {
+  color: var(--shots-accent-ink);
+}
+
+screenshot-gallery .shots-lightbox-close {
+  color: var(--color-ink);
+}
+
+.screenshotsInner {
+  display: grid;
+  /* The gallery's scroll track must not widen the page. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-8);
+}
+
+.screenshotsPage {
+  padding-block: var(--space-12) var(--space-24);
+}
+
+.screenshotsIntro {
+  display: grid;
+  max-width: 46rem;
+  gap: var(--space-4);
+}
+
+.phoneTour .bandIntro {
+  margin-bottom: 0;
+}
+
+/* The home page's phone row, under its own band heading. */
+.phoneTour screenshot-carousel {
+  --shots-carousel-padding: var(--page-gutter);
+
+  margin-inline: calc(var(--page-gutter) * -1);
+}
+
+.phoneTourLink {
+  justify-self: center;
+}

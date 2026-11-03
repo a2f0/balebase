@@ -37,9 +37,21 @@ export const socialImage = {
 };
 
 /**
+ * Cache rules for the screenshot gallery: its images change URL (`?v=`) when
+ * recaptured, so they never expire; the manifest naming them is revalidated.
+ */
+const galleryHeaders = [
+  "/screenshot-gallery/manifest.json",
+  "  Cache-Control: no-cache",
+  "/screenshot-gallery/img/*",
+  "  Cache-Control: public, max-age=31536000, immutable",
+];
+
+/**
  * Files written beside the built pages: robots.txt for both tiers, the
- * sitemap for production, and a staging-wide X-Robots-Tag in _headers, which
- * Cloudflare applies to every asset and HTML response.
+ * sitemap for production, and _headers, which Cloudflare applies to every
+ * matching asset and HTML response: the gallery's cache rules, and on
+ * staging an X-Robots-Tag for every path.
  */
 export function searchFiles(
   tier: ReleaseTier,
@@ -49,7 +61,7 @@ export function searchFiles(
   if (tier === "staging") {
     return {
       "robots.txt": `${robots.join("\n")}\n`,
-      _headers: `/*\n  X-Robots-Tag: ${noindex}\n`,
+      _headers: `${["/*", `  X-Robots-Tag: ${noindex}`, ...galleryHeaders].join("\n")}\n`,
     };
   }
   const urls = [...new Set(pathnames.map(canonicalUrl))].toSorted();
@@ -62,6 +74,7 @@ export function searchFiles(
       "</urlset>",
       "",
     ].join("\n"),
+    _headers: `${galleryHeaders.join("\n")}\n`,
   };
 }
 

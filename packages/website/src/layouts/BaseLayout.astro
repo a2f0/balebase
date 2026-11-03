@@ -79,7 +79,13 @@ const url = robots === null ? canonicalUrl(Astro.url.pathname) : null;
     <script>
       import { initClickTracking } from "@balebase/diagnostics/clickTracking";
 
-      const pages = new Set(["/", "/privacy", "/terms", "/data-retention"]);
+      const pages = new Set([
+        "/",
+        "/privacy",
+        "/terms",
+        "/data-retention",
+        "/screenshots",
+      ]);
 
       initClickTracking({
         app: "website",
@@ -89,6 +95,8 @@ const url = robots === null ? canonicalUrl(Astro.url.pathname) : null;
         },
         page: () => {
           const path = window.location.pathname.replace(/\/$/, "") || "/";
+          // Every gallery deep link counts as the gallery.
+          if (path.startsWith("/screenshots/")) return "/screenshots";
           return pages.has(path) ? path : "/other";
         },
       });

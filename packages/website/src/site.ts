@@ -9,6 +9,7 @@ export const siteSections = [
   { href: "/#product", label: "Features" },
   { href: "/#how-it-works", label: "How it works" },
   { href: "/#pricing", label: "Pricing" },
+  { href: "/screenshots/", label: "Screenshots" },
 ] as const;
 
 export type StoreListing = {

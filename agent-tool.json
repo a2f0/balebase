@@ -276,5 +276,96 @@
         "executable": true
       }
     ]
+  },
+  "screenshots": {
+    "source": ".screenshots",
+    "targets": {
+      "website": {
+        "dir": "packages/website/public/screenshot-gallery",
+        "urlPrefix": "/screenshot-gallery/",
+        "projects": {
+          "web": {
+            "label": "Desktop",
+            "frame": "none"
+          },
+          "ipad": {
+            "label": "Tablet",
+            "frame": "tablet"
+          },
+          "mobile": {
+            "label": "Phone",
+            "frame": "phone"
+          }
+        },
+        "themes": ["light", "dark"],
+        "screens": [
+          {
+            "name": "projects",
+            "label": "Projects",
+            "alt": "Projects: the Harborline Electric job list with each project's crew and audit forms."
+          },
+          {
+            "name": "issues",
+            "label": "Issues",
+            "alt": "Issues: open and resolved work items with priority, assignee, and where each was raised."
+          },
+          {
+            "name": "audits",
+            "label": "Audits",
+            "alt": "Audits: in-progress and completed safety audits started from the NFPA 70E and residential checklists."
+          },
+          {
+            "name": "audit",
+            "label": "Audit",
+            "alt": "An NFPA 70E audit in progress, showing the issues it raised with their site photos."
+          },
+          {
+            "name": "equipment",
+            "label": "Equipment",
+            "alt": "Equipment: company laptops, phones, and a monitor with serial numbers, purchase dates, and assignees."
+          },
+          {
+            "name": "businesses",
+            "label": "Businesses",
+            "alt": "Businesses: the company's legal entities with EINs, addresses, and incorporation dates."
+          },
+          {
+            "name": "contracts",
+            "label": "Contracts",
+            "alt": "Contracts: completed, sent, and draft agreements with their signing status."
+          },
+          {
+            "name": "contract",
+            "label": "Contract",
+            "alt": "A contract out for signature, with each signer's status in routing order."
+          },
+          {
+            "name": "finance",
+            "label": "Finance",
+            "alt": "Finance: bank and card balances above categorized, reviewed transactions."
+          },
+          {
+            "name": "library",
+            "label": "Library",
+            "alt": "Library: shared document folders for safety, insurance, and fleet records."
+          },
+          {
+            "name": "activity",
+            "label": "Activity",
+            "alt": "Activity: who changed what and when across the organization."
+          },
+          {
+            "name": "organization",
+            "label": "People",
+            "alt": "People: the organization's members with their roles."
+          },
+          {
+            "name": "groups",
+            "label": "Groups",
+            "alt": "Groups: the Admins, Finance, and Field crew groups and what each can do."
+          }
+        ]
+      }
+    }
   }
 }
