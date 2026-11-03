@@ -82,4 +82,5 @@ else
   check_hostname "balebase.com" "balebase-website"
   check_hostname "app.balebase.com" "balebase-client"
   check_hostname "api.balebase.com" "balebase-api"
+  check_hostname "continuity.balebase.com" "balebase-continuity"
 fi

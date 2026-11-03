@@ -81,6 +81,11 @@ locals {
       hostname = var.website_hostname
       service  = var.website_worker_name
     }
+    # a2f0/balebase-continuity's gallery Worker, deployed from that repository.
+    continuity = {
+      hostname = var.continuity_hostname
+      service  = var.continuity_worker_name
+    }
   }
 }
 

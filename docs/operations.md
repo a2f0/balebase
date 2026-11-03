@@ -330,6 +330,23 @@ For later infrastructure changes, use `bun run terraform:staging:plan` and
 `bun run terraform:staging:apply`. Cloudflare Email Routing subaddressing must
 be enabled once for the zone, as described in the inbound email setup above.
 
+## Continuity gallery
+
+`continuity.balebase.com` serves the gallery Worker `balebase-continuity`,
+which [a2f0/balebase-continuity](https://github.com/a2f0/balebase-continuity)
+builds and deploys from its own checkout with this account's production
+Cloudflare credentials. That repository holds the fictional company whose
+genesis seeds Balebase's screenshots. Only the hostname lives here: the
+production stack attaches it in `local.worker_domains` (variables
+`continuity_hostname` and `continuity_worker_name`), and `deploy:domains`
+checks it with the other production hostnames. Deploy the Worker first; the
+hostname cannot attach to a Worker that does not exist. The gallery is not
+for search, so it sends `X-Robots-Tag: noindex, nofollow` itself:
+
+```sh
+curl -sI https://continuity.balebase.com/ | grep -i x-robots-tag  # noindex
+```
+
 ## Search indexing
 
 Only production is indexable. The website and app builds take their tier from

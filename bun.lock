@@ -26,7 +26,7 @@
     },
     "packages/api": {
       "name": "@balebase/api",
-      "version": "0.1.98",
+      "version": "0.1.99",
       "dependencies": {
         "@balebase/diagnostics": "workspace:*",
         "@balebase/ui": "workspace:*",
@@ -40,6 +40,7 @@
         "zod": "4.6.7",
       },
       "devDependencies": {
+        "@a2f0/balebase-continuity": "github:a2f0/balebase-continuity#20fe9ba1dc97051d018bc3a29ae48267639bc8f8",
         "@cloudflare/workers-types": "5.20261016.1",
         "@types/bun": "1.4.3",
         "miniflare": "5.20261012.1-beta",
@@ -103,7 +104,7 @@
     },
     "packages/app-web": {
       "name": "@balebase/app-web",
-      "version": "0.1.73",
+      "version": "0.1.74",
       "dependencies": {
         "@balebase/app": "workspace:*",
         "@balebase/diagnostics": "workspace:*",
@@ -192,6 +193,8 @@
   },
   "packages": {
     "@a2f0/agent-tool": ["@a2f0/agent-tool@0.1.31", "", { "dependencies": { "@resvg/resvg-wasm": "2.6.2" }, "bin": { "agent-tool": "src/index.ts" } }, "sha512-KrkeKPlyU0z9ROBU+HP/rAK//jRLCnzvjYH412REIoeZvnjq+vjSo41HsQGjPJ1RXVO30RPFHfCkK1IhU0rncQ=="],
+
+    "@a2f0/balebase-continuity": ["@a2f0/balebase-continuity@github:a2f0/balebase-continuity#20fe9ba", {}, "a2f0-balebase-continuity-20fe9ba", "sha512-xxXkcSYmEiDZQphGIxr5lDnik22otos6bVcrkt9bcefP4t3QZMTs26i36dbdMQMrsqAI2rkhHGiWySp38EV6wA=="],
 
     "@a2f0/ct-client": ["@a2f0/ct-client@0.1.4", "", {}, "sha512-b6JYVDpKMEbkPgMdd55D6JM+S45sqxTJj9wx687wjrGZEN2DBSE7M7v02Xxyh33QwUpv+kzG7NTBqQtR6tDgXg=="],
 
