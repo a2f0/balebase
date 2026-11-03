@@ -156,7 +156,7 @@ function OrganizationPeople({ members }: { members: OrganizationMember[] }) {
       {members.length === 0 ? (
         <EmptyState compact icon="organization" title="No members found." />
       ) : (
-        <div className="tableWrap">
+        <div className="tableWrap tableStack">
           <table className="table">
             <thead>
               <tr>
@@ -169,15 +169,17 @@ function OrganizationPeople({ members }: { members: OrganizationMember[] }) {
             <tbody>
               {members.map((member) => (
                 <tr key={member.id}>
-                  <td>
+                  <td data-label="Person">
                     <AdminIdentity
                       detail={member.user.email}
                       name={member.user.name}
                     />
                   </td>
-                  <td>{formatStatus(member.role)}</td>
-                  <td>{member.twoFactorEnabled ? "Enabled" : "Not enabled"}</td>
-                  <td className="adminDate tabular">
+                  <td data-label="Role">{formatStatus(member.role)}</td>
+                  <td data-label="Two-factor authentication">
+                    {member.twoFactorEnabled ? "Enabled" : "Not enabled"}
+                  </td>
+                  <td className="adminDate tabular" data-label="Last active">
                     {member.lastActiveAt
                       ? formatDate(member.lastActiveAt)
                       : "Never"}
@@ -206,7 +208,7 @@ function OrganizationRequirements({
           title="No requirements assigned yet."
         />
       ) : (
-        <div className="tableWrap">
+        <div className="tableWrap tableStack">
           <table className="table">
             <thead>
               <tr>
@@ -221,8 +223,8 @@ function OrganizationRequirements({
             <tbody>
               {requirements.map((requirement) => (
                 <tr key={requirement.id}>
-                  <td>{requirement.title}</td>
-                  <td>
+                  <td data-label="Requirement">{requirement.title}</td>
+                  <td data-label="Person">
                     <AdminIdentity
                       detail={
                         requirement.targetName
@@ -232,10 +234,10 @@ function OrganizationRequirements({
                       name={requirement.targetName ?? requirement.targetEmail}
                     />
                   </td>
-                  <td className="adminDate">
+                  <td className="adminDate" data-label="Due">
                     {formatCalendarDate(requirement.dueDate)}
                   </td>
-                  <td>
+                  <td data-label="Status">
                     <Badge
                       tone={
                         requirement.status === "complete"
@@ -246,10 +248,10 @@ function OrganizationRequirements({
                       {formatStatus(requirement.status)}
                     </Badge>
                   </td>
-                  <td>
+                  <td data-label="Checkr result">
                     <ScreeningResult requirement={requirement} />
                   </td>
-                  <td>
+                  <td data-label="Report">
                     {requirement.checkrReportUrl ? (
                       <ButtonLink
                         aria-label={`View ${requirement.title} report for ${requirement.targetName ?? requirement.targetEmail}`}

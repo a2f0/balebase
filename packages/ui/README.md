@@ -131,7 +131,12 @@ both themes, so `.onDark` regions need no theme-specific styles.
 - `confirmDialog` and `promptDialog` ask in the app's own dialog, which
   `DialogHost`, mounted once at the root, shows; `dismissDialogs` answers
   every open one with no when the page that asked is gone.
-- `ContextMenu` attaches a menu of actions to an existing element.
+- `ContextMenu` attaches a menu of actions to an existing element. Rows and
+  cards that also show a `MenuButton` spread the menu's second render argument
+  on it, so right-click, the menu key, and the button open the same actions.
+- `.tableWrap.tableStack` keeps a table from scrolling sideways: when its
+  wrapper is narrower than 64rem, each row becomes a card and every cell shows
+  its `data-label`.
 - `Icon` renders a name from `@balebase/ui/icons`; `Avatar`, `BrandMark`, and
   `Logo` render identity.
 

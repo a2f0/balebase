@@ -1,13 +1,14 @@
 import {
   Banner,
   Button,
-  buttonClass,
   Card,
+  ContextMenu,
   confirmDialog,
   EmptyState,
   Field,
   Icon,
   LoadingState,
+  MenuButton,
   Page,
   PageBody,
   PageHeader,
@@ -38,7 +39,6 @@ import { api } from "../shared/apiClient";
 import { countLabel, formatBytes, formatShortDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
-import { useMenuDismissal } from "../shared/useMenuDismissal";
 import type { WorkspaceUser } from "../workspace/WorkspaceShell";
 import {
   libraryFileIdForPath,
@@ -637,85 +637,92 @@ function FileCard({
   onNavigate: (pathname: string) => void;
   onRemove: () => void;
 }) {
-  const [moving, setMoving] = useState(false);
-  const card = useRef<HTMLElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const close = useCallback(() => setMoving(false), []);
-  useMenuDismissal(moving, card, trigger, close);
+  const moveItems = destinations.map((destination) => ({
+    disabled: busy,
+    icon: destination.id ? ("folder" as const) : ("library" as const),
+    id: `move-${destination.id ?? "root"}`,
+    label: `Move to ${destination.name}`,
+    onSelect: () => onMove(destination.id),
+  }));
   return (
-    <article className="card cardInteractive fileCard" ref={card}>
-      <ApiDownload
-        plain
-        filename={object.filename}
-        className="fileCardLink"
-        href={api.objects.downloadUrl(object.id)}
-      >
-        <div className="filePreview">
-          <Icon name="document" size={28} strokeWidth={1.5} />
-          <span className="filePreviewExtension">
-            {extensionFor(object.filename)}
-          </span>
-        </div>
-        <div className="fileMeta">
-          <strong className="truncate">{object.filename}</strong>
-          <span>
-            {formatBytes(object.size)} · {formatShortDate(object.createdAt)}
-          </span>
-        </div>
-      </ApiDownload>
-      <div className="fileActions" data-open={moving || undefined}>
-        {destinations.length > 0 && (
-          <button
-            aria-expanded={moving}
-            aria-haspopup="menu"
-            aria-label={`Move ${object.filename}`}
-            className={buttonClass({ iconOnly: true, size: "sm" })}
-            disabled={busy}
-            onClick={() => setMoving((open) => !open)}
-            ref={trigger}
-            type="button"
+    <ContextMenu
+      items={[
+        ...moveItems,
+        {
+          icon: "list",
+          id: "history",
+          label: "View history",
+          onSelect: () => onNavigate(libraryFilePath(object.id)),
+        },
+        {
+          disabled: busy,
+          icon: "trash",
+          id: "delete",
+          label: "Delete",
+          onSelect: onRemove,
+        },
+      ]}
+      label={`Actions for ${object.filename}`}
+    >
+      {(card) => (
+        <article className="card cardInteractive fileCard" {...card}>
+          <ApiDownload
+            plain
+            filename={object.filename}
+            className="fileCardLink"
+            href={api.objects.downloadUrl(object.id)}
           >
-            <Icon name="move" size={16} />
-          </button>
-        )}
-        <AppButtonLink
-          aria-label={`History of ${object.filename}`}
-          href={libraryFilePath(object.id)}
-          icon="list"
-          iconOnly
-          onNavigate={onNavigate}
-          size="sm"
-        />
-        <Button
-          aria-label={`Delete ${object.filename}`}
-          disabled={busy}
-          icon="trash"
-          iconOnly
-          onClick={onRemove}
-          size="sm"
-        />
-      </div>
-      {moving && (
-        <div className="popover fileMoveMenu" role="menu">
-          <p className="menuLabel">Move to</p>
-          {destinations.map((destination) => (
-            <button
-              className="menuItem"
-              key={destination.id ?? "root"}
-              onClick={() => {
-                setMoving(false);
-                onMove(destination.id);
-              }}
-              role="menuitem"
-              type="button"
-            >
-              <Icon name={destination.id ? "folder" : "library"} />
-              <span className="truncate">{destination.name}</span>
-            </button>
-          ))}
-        </div>
+            <div className="filePreview">
+              <Icon name="document" size={28} strokeWidth={1.5} />
+              <span className="filePreviewExtension">
+                {extensionFor(object.filename)}
+              </span>
+            </div>
+            <div className="fileMeta">
+              <strong className="truncate">{object.filename}</strong>
+              <span>
+                {formatBytes(object.size)} · {formatShortDate(object.createdAt)}
+              </span>
+            </div>
+          </ApiDownload>
+          <div className="fileActions">
+            {moveItems.length > 0 && (
+              <ContextMenu
+                disabled={busy}
+                items={moveItems}
+                label={`Move ${object.filename}`}
+              >
+                {(_, menuButton) => (
+                  <MenuButton
+                    {...menuButton}
+                    disabled={busy}
+                    icon="move"
+                    label={`Move ${object.filename}`}
+                    variant="secondary"
+                  />
+                )}
+              </ContextMenu>
+            )}
+            <AppButtonLink
+              aria-label={`History of ${object.filename}`}
+              href={libraryFilePath(object.id)}
+              icon="list"
+              iconOnly
+              onNavigate={onNavigate}
+              size="sm"
+            />
+            <Button
+              aria-label={`Delete ${object.filename}`}
+              disabled={busy}
+              icon="trash"
+              iconOnly
+              onClick={onRemove}
+              size="sm"
+            />
+          </div>
+        </article>
       )}
-    </article>
+    </ContextMenu>
   );
 }
 

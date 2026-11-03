@@ -17,7 +17,7 @@ import { api } from "../shared/apiClient";
 import { countLabel, formatDate } from "../shared/labels";
 import { useLoad } from "../shared/useLoad";
 import { adminUserIdForPath, adminUserPath } from "../workspace/workspacePaths";
-import { AdminDeletionMenu } from "./AdminDeletionMenu";
+import { AdminActionRow } from "./AdminActionRow";
 import { AdminIdentity } from "./AdminIdentity";
 import { AdminUserHistory } from "./AdminUserHistory";
 import { useAdminUserDeletion } from "./adminUserDeletion";
@@ -171,7 +171,7 @@ function UserTable({
   onNavigate: (pathname: string) => void;
 }) {
   return (
-    <div className="tableWrap">
+    <div className="tableWrap tableStack">
       <table className="table adminUsersTable">
         <thead>
           <tr>
@@ -216,59 +216,56 @@ function UserRow({
   const status = statusFor(user);
   const isAdmin = hasRole(user.role, "admin");
   return (
-    <tr>
-      <td>
+    <AdminActionRow
+      busy={lifecycle.userId === user.id}
+      deletionDisabled={!user.deletionRequestedAt && isAdmin}
+      disabled={lifecycle.userId !== undefined}
+      extraItems={[
+        ...(isAdmin
+          ? [
+              {
+                // Revoking your own access would lock you out.
+                disabled: user.id === currentUserId,
+                icon: "lock" as const,
+                id: "revoke-admin",
+                label: "Revoke root admin",
+                onSelect: () => void lifecycle.revokeAdmin(user),
+              },
+            ]
+          : []),
+        {
+          icon: "list",
+          id: "history",
+          label: "View history",
+          onSelect: () => onNavigate(adminUserPath(user.id)),
+        },
+      ]}
+      label={user.deletionRequestedAt ? "Cancel deletion" : "Mark for deletion"}
+      name={user.email}
+      onSelect={() => void lifecycle.update(user)}
+      pending={Boolean(user.deletionRequestedAt)}
+    >
+      <td data-label="User">
         <AdminIdentity avatar detail={user.email} name={user.name} />
       </td>
-      <td>
+      <td data-label="Status">
         <Badge dot tone={status.tone}>
           {status.label}
         </Badge>
       </td>
-      <td>
+      <td data-label="Role">
         <RoleBadge role={user.role ?? "user"} />
       </td>
-      <td className="adminDate tabular">{formatDate(user.createdAt)}</td>
-      <td className="adminDate tabular">
+      <td className="adminDate tabular" data-label="Joined">
+        {formatDate(user.createdAt)}
+      </td>
+      <td className="adminDate tabular" data-label="Last active">
         {user.lastActiveAt ? formatDate(user.lastActiveAt) : "Never"}
       </td>
-      <td>
+      <td data-label="Deletion">
         <UserDeletionStatus user={user} />
       </td>
-      <td className="adminActions">
-        <AdminDeletionMenu
-          busy={lifecycle.userId === user.id}
-          deletionDisabled={!user.deletionRequestedAt && isAdmin}
-          disabled={lifecycle.userId !== undefined}
-          extraItems={[
-            ...(isAdmin
-              ? [
-                  {
-                    // Revoking your own access would lock you out.
-                    disabled: user.id === currentUserId,
-                    icon: "lock" as const,
-                    id: "revoke-admin",
-                    label: "Revoke root admin",
-                    onSelect: () => void lifecycle.revokeAdmin(user),
-                  },
-                ]
-              : []),
-            {
-              icon: "list",
-              id: "history",
-              label: "View history",
-              onSelect: () => onNavigate(adminUserPath(user.id)),
-            },
-          ]}
-          label={
-            user.deletionRequestedAt ? "Cancel deletion" : "Mark for deletion"
-          }
-          name={user.email}
-          onSelect={() => void lifecycle.update(user)}
-          pending={Boolean(user.deletionRequestedAt)}
-        />
-      </td>
-    </tr>
+    </AdminActionRow>
   );
 }
 

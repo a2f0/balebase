@@ -97,18 +97,6 @@
   box-shadow: var(--shadow-xs);
 }
 
-/* The card clips overflow, so the menu stays inside it and scrolls. */
-.fileMoveMenu {
-  position: absolute;
-  top: calc(var(--space-2) + var(--control-height-sm) + var(--space-1));
-  right: var(--space-2);
-  left: var(--space-2);
-  z-index: var(--z-popover);
-  min-width: 0;
-  max-height: calc(100% - var(--control-height-sm) - var(--space-5));
-  overflow-y: auto;
-}
-
 /* Linked emails on a folder or a piece of equipment (LinkedEmailList). */
 .linkedEmail {
   flex-wrap: nowrap;
@@ -129,7 +117,7 @@
 
 .fileCard:hover .fileActions,
 .fileCard:focus-within .fileActions,
-.fileActions[data-open] {
+.fileActions:has([aria-expanded="true"]) {
   opacity: 1;
 }
 

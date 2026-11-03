@@ -4,7 +4,13 @@ import { act } from "react";
 import { installDom } from "../testing/dom";
 import { AdminUsers } from "./AdminUsers";
 
-const { button, fill, mount, respond } = installDom({
+const {
+  button,
+  fill,
+  mount,
+  respond,
+  window: dom,
+} = installDom({
   url: "http://localhost:5173/root/users",
 });
 let container: HTMLElement;
@@ -308,6 +314,36 @@ it("opens a person's platform history from the Users page", async () => {
     />,
   ));
   await openUserAction("View history");
+  expect(navigations).toEqual(["/root/users/target%40example.com"]);
+});
+
+it("offers a row's menu actions on right-click anywhere in the row", async () => {
+  const target = user("target@example.com", null);
+  respond(async () => Response.json({ total: 1, users: [target] }));
+  const navigations: string[] = [];
+  ({ container } = await mount(
+    <AdminUsers
+      onNavigate={(pathname) => navigations.push(pathname)}
+      pathname="/root/users"
+    />,
+  ));
+  const cell = container.querySelector("tbody td");
+  const event = new dom.MouseEvent("contextmenu", {
+    bubbles: true,
+    cancelable: true,
+    clientX: 40,
+    clientY: 60,
+  });
+  await act(async () => cell?.dispatchEvent(event as never));
+  expect(event.defaultPrevented).toBeTrue();
+  const items = [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+  ];
+  expect(items.map((item) => item.textContent)).toEqual([
+    "Mark for deletion",
+    "View history",
+  ]);
+  await act(async () => items[1]?.click());
   expect(navigations).toEqual(["/root/users/target%40example.com"]);
 });
 

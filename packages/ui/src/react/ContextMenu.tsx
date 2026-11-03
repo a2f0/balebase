@@ -27,6 +27,13 @@ interface ContextMenuTargetProps {
   onKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
 }
 
+/** Spread on a button inside the target that opens the same menu on click. */
+export interface ContextMenuButtonProps {
+  "aria-expanded": boolean;
+  "aria-haspopup": "menu";
+  onClick: (event: MouseEvent<HTMLElement>) => void;
+}
+
 interface MenuLocation {
   trigger: HTMLElement;
   x: number;
@@ -35,27 +42,35 @@ interface MenuLocation {
 
 /**
  * Attach the supplied handlers to an existing element, preserving its layout.
- * With `openOnClick`, a plain click opens the menu too, below the element,
- * for a control whose only job is to offer these actions.
+ * The second argument opens the same menu below a button inside the element
+ * (a row's `MenuButton`), so right-click and the button offer one list.
+ * With `openOnClick`, a plain click on the element itself opens the menu,
+ * for a control whose only job is to offer these actions. `disabled` keeps
+ * the menu closed, as while one of its actions is running.
  */
 export function ContextMenu({
   children,
+  disabled = false,
   items,
   label,
   openOnClick = false,
 }: {
-  children: (props: ContextMenuTargetProps) => ReactNode;
+  children: (
+    props: ContextMenuTargetProps,
+    menuButton: ContextMenuButtonProps,
+  ) => ReactNode;
+  disabled?: boolean;
   items: readonly ContextMenuAction[];
   label: string;
   openOnClick?: boolean;
 }) {
-  const { close, location, targetProps } = useContextMenu(
-    items.length > 0,
+  const { close, location, menuButton, targetProps } = useContextMenu(
+    !disabled && items.length > 0,
     openOnClick,
   );
   return (
     <>
-      {children(targetProps)}
+      {children(targetProps, menuButton)}
       {location &&
         createPortal(
           <ContextMenuPanel
@@ -109,7 +124,12 @@ function useContextMenu(enabled: boolean, openOnClick: boolean) {
   if (openOnClick) {
     targetProps.onClick = (event: MouseEvent<HTMLElement>) => open(event);
   }
-  return { close, location, targetProps };
+  const menuButton: ContextMenuButtonProps = {
+    "aria-expanded": location !== undefined,
+    "aria-haspopup": "menu",
+    onClick: (event: MouseEvent<HTMLElement>) => open(event),
+  };
+  return { close, location, menuButton, targetProps };
 }
 
 function isEditable(target: EventTarget) {

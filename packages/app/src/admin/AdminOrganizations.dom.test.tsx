@@ -366,6 +366,46 @@ it("confirms organization deletion from a menu and offers confirmed restoration"
   expect(container.textContent).not.toContain("Pending deletion");
 });
 
+it("offers the row's actions on right-click, including its details", async () => {
+  const organization = detail().organization;
+  const mutations: string[] = [];
+  respond(async (_url, init) => {
+    if (init?.method && init.method !== "GET") mutations.push(init.method);
+    return Response.json({ organizations: [organization] });
+  });
+  const paths: string[] = [];
+  await render(undefined, (path) => paths.push(path));
+  const rightClick = async () => {
+    const event = new dom.MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 40,
+      clientY: 60,
+    });
+    await act(async () =>
+      container.querySelector(".adminSlug")?.dispatchEvent(event as never),
+    );
+    expect(event.defaultPrevented).toBeTrue();
+    return [
+      ...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+    ];
+  };
+  const items = await rightClick();
+  expect(items.map((item) => item.textContent)).toEqual([
+    "Mark for deletion",
+    "View details",
+  ]);
+  await act(async () => items[1]?.click());
+  expect(paths).toEqual(["/root/organizations/other%2Forg"]);
+
+  await act(async () => (await rightClick())[0]?.click());
+  expect(document.querySelector("dialog[open]")?.textContent).toContain(
+    `Mark ${organization.name} for deletion?`,
+  );
+  await act(async () => button("Cancel").click());
+  expect(mutations).toEqual([]);
+});
+
 it("keeps an organization active and displays a failed deletion", async () => {
   const organization = detail().organization;
   respond(async (_url, init) =>
