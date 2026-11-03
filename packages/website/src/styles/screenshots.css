@@ -21,29 +21,6 @@ screenshot-carousel {
   --shots-shadow: var(--shadow-lg);
 }
 
-/*
- * The elements mark their parts with `data-theme` for the capture shown,
- * which Balebase's tokens and base styles read as a themed region; keep the
- * gallery's own text and controls in the site's light theme.
- */
-screenshot-gallery [data-theme],
-screenshot-carousel [data-theme] {
-  color: var(--shots-ink);
-  color-scheme: light;
-}
-
-/*
- * The shared stylesheet wraps every rule in :where(), so @balebase/ui's
- * `button { color: inherit }` outranks the colors it gives its buttons.
- */
-screenshot-gallery .shots-toggle-button[aria-pressed="true"] {
-  color: var(--shots-accent-ink);
-}
-
-screenshot-gallery .shots-lightbox-close {
-  color: var(--color-ink);
-}
-
 .screenshotsInner {
   display: grid;
   /* The gallery's scroll track must not widen the page. */

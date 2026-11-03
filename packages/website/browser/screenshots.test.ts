@@ -145,7 +145,7 @@ function current(page: Page) {
       image: image?.currentSrc.replace(location.origin, ""),
       loaded: (image?.naturalWidth ?? 0) > 0,
       project: root?.getAttribute("data-project"),
-      theme: root?.getAttribute("data-theme"),
+      theme: root?.getAttribute("data-shots-theme"),
       title: document.querySelector(".shots-title")?.textContent,
     };
   });
@@ -186,6 +186,73 @@ it("shows the first capture and switches themes", async () => {
     expect((await current(page)).image).toBe(
       "/screenshot-gallery/img/web/dark/projects.png?v=0",
     );
+  } finally {
+    await page.close();
+  }
+}, 30_000);
+
+/** Text-to-background contrast of each selected element, as WCAG ratios. */
+function contrasts(page: Page, selectors: string[]) {
+  return page.evaluate((wanted) => {
+    const channels = (color: string) =>
+      (color.match(/[\d.]+/g) ?? []).map(Number);
+    const luminance = (color: string) => {
+      const [r = 0, g = 0, b = 0] = channels(color)
+        .slice(0, 3)
+        .map((value) => {
+          const c = value / 255;
+          return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+        });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    /** The nearest opaque-enough background behind `element`. */
+    const background = (element: Element | null): string => {
+      for (let node = element; node; node = node.parentElement) {
+        const color = getComputedStyle(node).backgroundColor;
+        const alpha = color.startsWith("rgba") ? channels(color)[3] : 1;
+        if ((alpha ?? 0) >= 0.5) return color;
+      }
+      return "rgb(255, 255, 255)";
+    };
+    return Object.fromEntries(
+      wanted.map((selector) => {
+        const element = document.querySelector(selector);
+        if (!element) return [selector, 0];
+        const fore = luminance(getComputedStyle(element).color);
+        const back = luminance(background(element));
+        return [
+          selector,
+          (Math.max(fore, back) + 0.05) / (Math.min(fore, back) + 0.05),
+        ];
+      }),
+    );
+  }, selectors);
+}
+
+it("keeps the gallery's text and controls readable in both themes", async () => {
+  const page = await openSite(1440);
+  try {
+    await page.goto("https://website.test/screenshots/");
+    await page.waitForSelector(".shots-gallery[data-state='ready']");
+    const text = [
+      ".shots-title",
+      ".shots-toggle-button[aria-pressed='true']",
+      ".shots-toggle-button[aria-pressed='false']",
+    ];
+    for (const ratio of Object.values(await contrasts(page, text))) {
+      expect(ratio).toBeGreaterThanOrEqual(4.5);
+    }
+    await page.click(".shots-icon-button[data-action='theme']");
+    await shown(page, "dark");
+    expect(await current(page)).toMatchObject({ theme: "dark" });
+    for (const ratio of Object.values(await contrasts(page, text))) {
+      expect(ratio).toBeGreaterThanOrEqual(4.5);
+    }
+    await page.click(".shots-slide[data-active] .shots-frame");
+    await page.waitForSelector(".shots-lightbox[open] .shots-lightbox-close");
+    expect(
+      Object.values(await contrasts(page, [".shots-lightbox-close"]))[0],
+    ).toBeGreaterThanOrEqual(3);
   } finally {
     await page.close();
   }
