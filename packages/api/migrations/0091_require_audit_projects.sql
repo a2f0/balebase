@@ -10,6 +10,16 @@ ALTER TABLE projects ADD COLUMN deleted_by_user_id TEXT
 CREATE INDEX projects_organization_deleted_idx
 ON projects (organization_id, deleted_at);
 
+-- A project row goes only with its organization, whose purge cascades to its
+-- projects and their audits. Refusing any other delete keeps an audit's
+-- project in place, including from the previous Worker, which hard-deletes
+-- projects until this release replaces it.
+CREATE TRIGGER projects_soft_delete_only BEFORE DELETE ON projects
+WHEN EXISTS (SELECT 1 FROM organization WHERE id = OLD.organization_id)
+BEGIN
+  SELECT RAISE(ABORT, 'Projects are deleted softly; set deleted_at instead.');
+END;
+
 -- Audits started without a project cannot satisfy the constraint and are
 -- removed, as agreed for this pre-release change. Their delete triggers
 -- remove their issues and history; issue photos are tombstoned for storage

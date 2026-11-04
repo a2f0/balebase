@@ -21,6 +21,16 @@ export function DeletedProjects({
   );
   const action = useAction("Could not restore the project.");
   const listing = loaded.data;
+  // A failed load says so, so deleted projects stay within reach.
+  if (!listing && loaded.error)
+    return (
+      <PageSection title="Deleted projects">
+        <Toast tone="danger">{loaded.error}</Toast>
+        <Button icon="refresh" onClick={() => void loaded.reload()} size="sm">
+          Retry
+        </Button>
+      </PageSection>
+    );
   if (!listing?.projects.length) return null;
 
   const restore = (id: string) =>

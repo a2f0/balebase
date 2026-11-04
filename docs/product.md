@@ -429,7 +429,8 @@ published forms on and off), and **Activity**. Creating, editing,
 deleting, and restoring a project, membership changes, and form changes are
 recorded in Activity, which keeps a deleted project's history. Migration
 `0078_create_projects.sql` adds the project tables, and
-`0091_require_audit_projects.sql` the soft delete.
+`0091_require_audit_projects.sql` the soft delete, with a trigger that refuses
+deleting a project row except through its organization's purge.
 
 ## Contracts and e-signature
 

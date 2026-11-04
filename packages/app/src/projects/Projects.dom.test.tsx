@@ -546,6 +546,26 @@ describe("project detail", () => {
     expect(visited).toEqual(["/projects/old-site"]);
   });
 
+  it("says when deleted projects could not load, and retries", async () => {
+    let failing = true;
+    respond(async (url) => {
+      if (url.pathname === "/api/projects/deleted")
+        return failing
+          ? Response.json({ error: "Unavailable" }, { status: 503 })
+          : Response.json({ canManage: true, projects: [] });
+      return Response.json({ canManage: true, projects: [] });
+    });
+    const { container } = await mount(
+      <Projects onNavigate={() => {}} pathname="/projects" />,
+    );
+    await settle();
+    expect(container.textContent).toContain("Deleted projects");
+    failing = false;
+    await click(queryButton("Retry", container));
+    await settle();
+    expect(container.textContent).not.toContain("Deleted projects");
+  });
+
   it("saves only the edited fields from the revision it loaded", async () => {
     stubApi(true);
     const container = await render();

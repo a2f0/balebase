@@ -82,6 +82,13 @@ describe("audit projects", () => {
     expect(() => insert(null)).toThrow("NOT NULL constraint failed");
     expect(() => insert("missing")).toThrow("FOREIGN KEY constraint failed");
     insert("project_org_user-1");
+    // A project is never deleted outright under its audits, even by a
+    // Worker from before soft deletion.
+    expect(() =>
+      database
+        .query("DELETE FROM projects WHERE id = 'project_org_user-1'")
+        .run(),
+    ).toThrow("Projects are deleted softly");
     // Purging the organization removes its projects and their audits.
     database.query("DELETE FROM organization WHERE id = 'org_user-1'").run();
     expect(database.query("SELECT id FROM audits").all()).toEqual([]);
