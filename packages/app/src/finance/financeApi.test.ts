@@ -19,13 +19,14 @@ describe("finance API", () => {
     ]);
   });
 
-  it("combines account, category, year, expense, and pagination filters", async () => {
+  it("combines account, category, name, year, expense, and pagination filters", async () => {
     const cursor = JSON.stringify({ date: "2025-08-01", id: "txn/1" });
     const requested = await captureRequests(async () => {
       await api.finance.data(
         {
           accountIds: ["checking/1", "savings"],
           categorySlug: "meals-2",
+          name: "Olive Garden",
           year: 2025,
           uncategorized: true,
         },
@@ -39,6 +40,7 @@ describe("finance API", () => {
       "savings",
     ]);
     expect(url.searchParams.get("category")).toBe("meals-2");
+    expect(url.searchParams.get("name")).toBe("Olive Garden");
     expect(url.searchParams.get("year")).toBe("2025");
     expect(url.searchParams.get("uncategorized")).toBe("true");
     expect(url.searchParams.get("cursor")).toBe(cursor);
