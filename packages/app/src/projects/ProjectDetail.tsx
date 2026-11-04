@@ -19,6 +19,14 @@ import type {
 } from "@balebase/validators/projects";
 import { useCallback, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
+import {
+  readAuditTemplateView,
+  storeAuditTemplateView,
+} from "../audits/auditTemplateView";
+import {
+  TemplateCollections,
+  TemplateViewSwitcher,
+} from "../audits/TemplateCollections";
 import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
@@ -332,6 +340,40 @@ function ProjectMembers({
   );
 }
 
+const managerFormCopy = {
+  global: {
+    description: "Published forms available in every organization.",
+    emptyMessage: "No global forms are published yet.",
+    emptyTitle: "No global forms",
+    title: "Global forms",
+  },
+  organization: {
+    description: "This organization's published forms.",
+    emptyMessage:
+      "Publish an organization form from Audits to turn it on here.",
+    emptyTitle: "No published organization forms",
+    title: "Organization forms",
+  },
+};
+
+const memberFormCopy = {
+  global: {
+    ...managerFormCopy.global,
+    emptyMessage: undefined,
+    emptyTitle: "No global forms turned on",
+  },
+  organization: {
+    ...managerFormCopy.organization,
+    emptyMessage: undefined,
+    emptyTitle: "No organization forms turned on",
+  },
+};
+
+/**
+ * The audit forms the project can use, laid out like the Audits page's
+ * collections. Managers see every published form and turn each on or off;
+ * members see the ones turned on. Forms are edited from Audits, not here.
+ */
 function ProjectForms({
   available,
   busy,
@@ -345,55 +387,72 @@ function ProjectForms({
   enabled: Form[];
   onToggle: (templateId: string, on: boolean) => void;
 }) {
-  const forms = canManage ? available : enabled;
+  const [view, setView] = useState(() => readAuditTemplateView());
+  const isOn = (form: Form) => enabled.some((entry) => entry.id === form.id);
   return (
     <PageSection
       actions={
-        <span className="sectionCount">
-          {countLabel(enabled.length, "form")} on
-        </span>
+        <div className="auditTemplateToolbar">
+          <span className="sectionCount">
+            {countLabel(enabled.length, "form")} on
+          </span>
+          <TemplateViewSwitcher
+            onChange={(next) => {
+              setView(next);
+              storeAuditTemplateView(next);
+            }}
+            view={view}
+          />
+        </div>
       }
       description="Turn on the audit forms this project uses. Only published forms are listed and downloaded."
       title="Audit forms"
     >
-      {forms.length ? (
-        <Card>
-          <div className="stack">
-            {forms.map((form) => {
-              const on = enabled.some((entry) => entry.id === form.id);
-              const label = `${form.name} · v${form.version}${form.scope === "global" ? " · Global" : ""}`;
-              return canManage ? (
-                <label className="check" key={form.id}>
-                  <input
-                    checked={on}
-                    disabled={busy}
-                    onChange={(event) =>
-                      onToggle(form.id, event.target.checked)
-                    }
-                    type="checkbox"
-                  />
-                  {label}
-                </label>
-              ) : (
-                <p key={form.id}>{label}</p>
-              );
-            })}
-          </div>
-        </Card>
-      ) : (
-        <EmptyState
-          compact
-          icon="audits"
-          title={
-            canManage ? "No published audit forms" : "No audit forms turned on"
-          }
-        >
-          {canManage
-            ? "Publish an organization form, or wait for a published global form, to turn it on here."
-            : undefined}
-        </EmptyState>
-      )}
+      <TemplateCollections
+        actions={
+          canManage
+            ? (form) => (
+                <FormToggle
+                  busy={busy}
+                  name={form.name}
+                  on={isOn(form)}
+                  onChange={(on) => onToggle(form.id, on)}
+                />
+              )
+            : undefined
+        }
+        copy={canManage ? managerFormCopy : memberFormCopy}
+        templates={canManage ? available : enabled}
+        view={view}
+      />
     </PageSection>
+  );
+}
+
+function FormToggle({
+  busy,
+  name,
+  on,
+  onChange,
+}: {
+  busy: boolean;
+  name: string;
+  on: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <label className="check auditTemplateToggle">
+      <input
+        aria-checked={on}
+        aria-label={`Use ${name} in this project`}
+        checked={on}
+        disabled={busy}
+        onChange={(event) => onChange(event.target.checked)}
+        role="switch"
+        type="checkbox"
+      />
+      {on ? "On" : "Off"}
+    </label>
   );
 }
 

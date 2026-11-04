@@ -1,12 +1,9 @@
-import type {
-  Project,
-  ProjectForm,
-  ProjectSummary,
-} from "@balebase/validators/projects";
+import type { Project, ProjectSummary } from "@balebase/validators/projects";
 import {
   projectFormFilter,
   type TemplateRow,
   templateSelect,
+  toTemplate,
 } from "../audits/auditTemplates";
 
 interface ProjectRow {
@@ -112,7 +109,7 @@ export async function findProject(
   ]);
   return {
     ...toSummary(row),
-    forms: forms.results.map(toProjectForm),
+    forms: forms.results.map(toTemplate),
     members: members.results,
   };
 }
@@ -130,7 +127,7 @@ export async function listAvailableForms(
     )
     .bind(organizationId)
     .all<TemplateRow>();
-  return results.map(toProjectForm);
+  return results.map(toTemplate);
 }
 
 /** One published form the organization can turn on for a project, or null. */
@@ -143,7 +140,7 @@ export async function findAvailableForm(
     .prepare(`${templateSelect} WHERE family.id = ? AND ${projectFormFilter()}`)
     .bind(templateId, organizationId)
     .first<TemplateRow>();
-  return row ? toProjectForm(row) : null;
+  return row ? toTemplate(row) : null;
 }
 
 function toSummary(row: ProjectRow): ProjectSummary {
@@ -157,14 +154,5 @@ function toSummary(row: ProjectRow): ProjectSummary {
     name: row.name,
     revision: row.revision,
     updatedAt: row.updated_at,
-  };
-}
-
-function toProjectForm(row: TemplateRow): ProjectForm {
-  return {
-    id: row.id,
-    name: row.name,
-    scope: row.scope,
-    version: row.version,
   };
 }

@@ -14,8 +14,11 @@ import type { AuditTemplateSummary } from "@balebase/validators/audits";
 import { discardedTemplateRetentionDays } from "@balebase/validators/rules";
 import { useCallback, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
-import { TemplateStats, templateStatusTone } from "../audits/AuditHome";
 import { AuditTemplateBuilder } from "../audits/AuditTemplateBuilder";
+import {
+  TemplateStats,
+  templateStatusTone,
+} from "../audits/TemplateCollections";
 import { AppButtonLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
 import { countLabel, formatDate, formatLabel } from "../shared/labels";

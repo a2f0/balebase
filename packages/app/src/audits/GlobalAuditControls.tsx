@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 import { api } from "../shared/apiClient";
 import { formatLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
-import { templateStatusTone } from "./AuditHome";
+import { templateStatusTone } from "./TemplateCollections";
 
 type SavePublication = (
   status: NonNullable<TemplatePublication>,

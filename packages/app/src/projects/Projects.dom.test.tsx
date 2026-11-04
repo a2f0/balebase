@@ -14,9 +14,47 @@ beforeAll(async () => {
 
 const owner = { email: "owner@example.com", id: "owner", name: "Olivia" };
 const member = { email: "sam@example.com", id: "sam", name: "Sam" };
+function publishedForm(
+  id: string,
+  name: string,
+  scope: ProjectForm["scope"],
+  version: number,
+): ProjectForm {
+  return {
+    createdAt: "2026-09-01T00:00:00.000Z",
+    currentVersion: version,
+    definition: {
+      sections: [
+        {
+          id: "exits",
+          items: [
+            {
+              id: "exits-clear",
+              prompt: "Exits clear",
+              required: true,
+              responseType: "check",
+            },
+          ],
+          title: "Exits",
+        },
+      ],
+      version: 1,
+    },
+    description: `${name} checklist`,
+    id,
+    name,
+    savedAt: "2026-09-01T00:00:00.000Z",
+    savedBy: owner,
+    scope,
+    status: "published",
+    updatedAt: "2026-09-01T00:00:00.000Z",
+    version,
+  };
+}
+
 const forms: ProjectForm[] = [
-  { id: "walk", name: "Site walk", scope: "organization", version: 3 },
-  { id: "nfpa", name: "NFPA 70E", scope: "global", version: 1 },
+  publishedForm("walk", "Site walk", "organization", 3),
+  publishedForm("nfpa", "NFPA 70E", "global", 1),
 ];
 
 const edits: unknown[] = [];
@@ -24,9 +62,13 @@ const edits: unknown[] = [];
 /**
  * Serves one project, applying member and form changes, and records writes.
  * `elsewhere` is merged into the project when a member is added, as another
- * manager's saved edit would be.
+ * manager's saved edit would be; `initial` into the project as first served.
  */
-function stubApi(canManage: boolean, elsewhere: Partial<Project> = {}) {
+function stubApi(
+  canManage: boolean,
+  elsewhere: Partial<Project> = {},
+  initial: Partial<Project> = {},
+) {
   const writes: string[] = [];
   edits.length = 0;
   let project: Project = {
@@ -41,6 +83,7 @@ function stubApi(canManage: boolean, elsewhere: Partial<Project> = {}) {
     name: "Hospital renovation",
     revision: 0,
     updatedAt: "2026-10-01T00:00:00.000Z",
+    ...initial,
   };
   respond(async (url, init) => {
     const method = init?.method ?? "GET";
@@ -106,10 +149,21 @@ async function render() {
   return container;
 }
 
-function checkbox(container: HTMLElement, label: string) {
-  return [...container.querySelectorAll("label.check")]
-    .find((entry) => entry.textContent?.startsWith(label))
-    ?.querySelector("input") as HTMLInputElement | null;
+function toggle(container: HTMLElement, name: string) {
+  return container.querySelector<HTMLInputElement>(
+    `input[role="switch"][aria-label="Use ${name} in this project"]`,
+  );
+}
+
+/** The collection a form is listed in, by the collection's heading. */
+function collectionOf(container: HTMLElement, name: string) {
+  return [...container.querySelectorAll(".auditCollection")]
+    .find((section) =>
+      [...section.querySelectorAll(".auditTemplateName, .rowTitle")].some(
+        (title) => title.textContent === name,
+      ),
+    )
+    ?.querySelector(".auditCollectionTitle")?.firstChild?.textContent;
 }
 
 describe("project detail", () => {
@@ -170,16 +224,16 @@ describe("project detail", () => {
     await settle();
     expect(container.textContent).toContain("sam@example.com");
 
-    const walk = checkbox(container, "Site walk · v3");
+    const walk = toggle(container, "Site walk");
     expect(walk?.checked).toBe(false);
-    expect(checkbox(container, "NFPA 70E · v1 · Global")).toBeTruthy();
+    expect(toggle(container, "NFPA 70E")?.checked).toBe(false);
     await click(walk);
     await settle();
-    expect(checkbox(container, "Site walk")?.checked).toBe(true);
+    expect(toggle(container, "Site walk")?.checked).toBe(true);
     expect(container.textContent).toContain("1 form on");
-    await click(checkbox(container, "Site walk"));
+    await click(toggle(container, "Site walk"));
     await settle();
-    expect(checkbox(container, "Site walk")?.checked).toBe(false);
+    expect(toggle(container, "Site walk")?.checked).toBe(false);
 
     await click(queryButton("Remove Sam", container));
     await settle();
@@ -189,6 +243,25 @@ describe("project detail", () => {
       "DELETE /api/projects/project-1/forms/walk",
       "DELETE /api/projects/project-1/members/sam",
     ]);
+  });
+
+  it("lists forms as the Audits page does, without editing them", async () => {
+    stubApi(true);
+    const container = await render();
+    expect(collectionOf(container, "NFPA 70E")).toBe("Global forms");
+    expect(collectionOf(container, "Site walk")).toBe("Organization forms");
+    const card = toggle(container, "Site walk")?.closest(".auditTemplateCard");
+    expect(card?.textContent).toContain("Site walk checklist");
+    expect(card?.textContent).toContain("Published");
+    expect(card?.textContent).toContain("1 item");
+    expect(card?.textContent).toContain("v3");
+    for (const label of ["Edit", "Customize", "Start audit"])
+      expect(queryButton(label, card as HTMLElement)).toBeFalsy();
+
+    await click(queryButton("List", container));
+    const row = toggle(container, "Site walk")?.closest(".auditTemplateRow");
+    expect(row?.textContent).toContain("Site walk checklist");
+    expect(collectionOf(container, "NFPA 70E")).toBe("Global forms");
   });
 
   it("saves only the edited fields from the revision it loaded", async () => {
@@ -261,7 +334,17 @@ describe("project detail", () => {
     expect(container.querySelector("select")).toBeNull();
     expect(container.querySelector('input[type="checkbox"]')).toBeNull();
     expect(queryButton("Edit", container)).toBeFalsy();
-    expect(container.textContent).toContain("No audit forms turned on");
+    expect(container.textContent).toContain("No global forms turned on");
+    expect(container.textContent).toContain("No organization forms turned on");
     expect(writes).toEqual([]);
+  });
+
+  it("shows members the forms turned on, without switches", async () => {
+    const walk = forms.filter((form) => form.id === "walk");
+    stubApi(false, {}, { formCount: 1, forms: walk });
+    const container = await render();
+    expect(collectionOf(container, "Site walk")).toBe("Organization forms");
+    expect(container.textContent).not.toContain("NFPA 70E");
+    expect(container.querySelector('input[role="switch"]')).toBeNull();
   });
 });

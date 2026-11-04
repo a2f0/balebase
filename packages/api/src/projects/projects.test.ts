@@ -11,6 +11,24 @@ import { testApp } from "../testing/session";
 import { projects } from "./projects";
 
 const timestamp = "2026-10-01T12:00:00.000Z";
+/** A stored checklist with one item, as published forms have. */
+const formDefinition = JSON.stringify({
+  sections: [
+    {
+      id: "exits",
+      items: [
+        {
+          id: "exits-clear",
+          prompt: "Exits clear",
+          required: true,
+          responseType: "check",
+        },
+      ],
+      title: "Exits",
+    },
+  ],
+  version: 1,
+});
 const databases: Database[] = [];
 afterEach(() => {
   for (const database of databases.splice(0)) database.close();
@@ -82,6 +100,15 @@ describe("projects", () => {
       ["NFPA 70E", 1],
       ["Site walk v2", 2],
     ]);
+    // Whole forms, so the project lists them as the Audits page does.
+    expect(project.forms[1]).toMatchObject({
+      definition: JSON.parse(formDefinition),
+      scope: "organization",
+      status: "published",
+    });
+    expect(
+      detail.body.availableForms.find((form) => form.id === "org-form"),
+    ).toMatchObject({ definition: JSON.parse(formDefinition) });
 
     const listing = await as("member-user", "member")<{
       canManage: boolean;
@@ -524,11 +551,12 @@ function seed(database: Database) {
       `INSERT INTO audit_template_versions
          (id, template_id, version, name, description, definition, status,
           created_by, created_at)
-       VALUES (?, ?, ?, ?, '', '{"version":1,"sections":[]}', ?, 'owner-user', ?)`,
+       VALUES (?, ?, ?, ?, '', ?, ?, 'owner-user', ?)`,
       `${id}-v${version}`,
       id,
       version,
       name,
+      formDefinition,
       status,
       timestamp,
     );
