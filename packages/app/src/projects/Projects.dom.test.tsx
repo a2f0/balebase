@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from "bun:test";
+import { productName } from "@balebase/ui/brand";
 import { DialogHost } from "@balebase/ui/react";
 import type { Project, ProjectForm } from "@balebase/validators/projects";
 import { DeviceContext, type DeviceState } from "../offline/offlineContext";
@@ -471,7 +472,9 @@ describe("project detail", () => {
         </DeviceContext.Provider>,
       );
       await settle();
-      expect(container.textContent).toContain("Could not reach Balebase.");
+      expect(container.textContent).toContain(
+        `Could not reach ${productName}.`,
+      );
       expect(container.textContent).toContain(
         pathname === "/projects" ? "Your projects" : "Site walk",
       );

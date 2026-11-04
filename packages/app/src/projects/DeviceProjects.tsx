@@ -1,3 +1,4 @@
+import { productName } from "@balebase/ui/brand";
 import {
   Banner,
   Button,
@@ -26,8 +27,7 @@ import {
 } from "./ProjectAuditForms";
 
 /** Shown over the device's copy when the API cannot be reached. */
-export const unreachableNotice =
-  "Could not reach Balebase. Showing this device's copy; it syncs when the connection returns.";
+export const unreachableNotice = `Could not reach ${productName}. Showing this device's copy; it syncs when the connection returns.`;
 
 /**
  * Projects as this device keeps them, for when it is offline or signed out:
