@@ -191,27 +191,37 @@ function DeviceAuditRow({
   );
 }
 
-/** Where a device audit is: a draft, waiting to sync, held back, or synced. */
+/**
+ * Where a device audit is: a draft, waiting to sync, held back, or synced.
+ * It is synced only once its issues and their photos are too, so the device
+ * keeps showing it while any of its work is still here.
+ */
 function deviceAuditState(
   audit: OfflineAudit,
   workspace: OfflineWorkspace,
 ): { error?: string; label: string; synced: boolean; tone: BadgeTone } {
   if (!audit.queued) return { label: "Draft", synced: false, tone: "neutral" };
-  const job = workspace.jobs.find((entry) => entry.id === audit.id);
-  if (job?.status === "synced")
+  const ids = new Set([audit.id]);
+  for (const issue of workspace.issues)
+    if (issue.operation.auditId === audit.id) {
+      ids.add(issue.operation.id);
+      for (const image of issue.images) ids.add(image.id);
+    }
+  const jobs = workspace.jobs.filter((job) => ids.has(job.id));
+  const left = jobs.filter((job) => job.status !== "synced");
+  const own = jobs.find((job) => job.id === audit.id);
+  if (own?.status === "synced" && !left.length)
     return { label: "Synced", synced: true, tone: "success" };
-  if (job?.status === "blocked")
-    return {
-      ...(job.error ? { error: job.error } : {}),
-      label: "Not synced",
-      synced: false,
-      tone: "danger",
-    };
+  const error = left.find((job) => job.error)?.error;
   return {
-    ...(job?.error ? { error: job.error } : {}),
-    label: "Waiting to sync",
+    ...(error ? { error } : {}),
+    label: left.some((job) => job.status === "blocked")
+      ? "Not synced"
+      : own?.status === "synced"
+        ? "Issues waiting to sync"
+        : "Waiting to sync",
     synced: false,
-    tone: "warning",
+    tone: left.some((job) => job.status === "blocked") ? "danger" : "warning",
   };
 }
 

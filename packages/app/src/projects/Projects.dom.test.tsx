@@ -388,6 +388,69 @@ describe("project detail", () => {
     ]);
   });
 
+  it("counts an audit synced only once its issues and photos are", async () => {
+    stubApi(false);
+    const [walk] = forms;
+    if (!walk) throw new Error("Missing form.");
+    const job = (
+      id: string,
+      status: OfflineWorkspace["jobs"][number]["status"],
+      error?: string,
+    ) => ({
+      attempts: 1,
+      dependsOn: [],
+      id,
+      operation: { id, type: "image" as const, filename: "", issueId: "" },
+      retryAt: 0,
+      status,
+      ...(error ? { error } : {}),
+    });
+    const device = deviceWith(
+      [
+        {
+          id: "audit",
+          projectId: "project-1",
+          queued: true,
+          responses: {},
+          startedAt: "2026-10-01T00:00:00.000Z",
+          template: walk,
+        },
+      ],
+      [
+        job("audit", "synced"),
+        job("issue", "synced"),
+        job("photo", "blocked", "Photo refused"),
+      ],
+    );
+    const workspace = device.workspace;
+    if (!workspace) throw new Error("Missing workspace.");
+    workspace.issues = [
+      {
+        images: [{ filename: "a.png", id: "photo" }],
+        operation: {
+          assignedTo: null,
+          auditId: "audit",
+          description: "",
+          id: "issue",
+          itemId: "item",
+          priority: "medium",
+          title: "Cracked cover",
+          type: "issue",
+        },
+      },
+    ];
+    const visited: string[] = [];
+    const container = await render(device, (pathname) =>
+      visited.push(pathname),
+    );
+    const panel = await openTab(container, "Audit forms");
+    const row = panel.querySelector(".rowList .row")?.textContent;
+    expect(row).toContain("Not synced");
+    expect(row).toContain("Photo refused");
+    await click(queryButton("View", panel));
+    expect(visited).toEqual(["/projects/project-1/audits/audit"]);
+  });
+
   it("keeps audits for projects the device no longer lists within reach", async () => {
     const [walk] = forms;
     if (!walk) throw new Error("Missing form.");
