@@ -72,13 +72,12 @@ export function runBun(
   execFileSync(process.execPath, args, { cwd, env, stdio: "inherit" });
 }
 
-/** Upload attempts before a deploy gives up on its source maps. */
-export const sourceMapUploadAttempts = 3;
 /**
- * Seconds each attempt waits for Sentry to process the bundle. Processing has
- * taken over 200 seconds on slow days, past sentry-cli's own 300 second wait.
+ * Upload attempts before a deploy gives up on its source maps. Each attempt
+ * waits for Sentry's processing, which sentry-cli abandons after 300 seconds
+ * whatever `--wait-for` asks; slow days have needed a second attempt.
  */
-export const sourceMapProcessingSeconds = 600;
+export const sourceMapUploadAttempts = 3;
 
 /**
  * Uploads the release's maps and waits until Sentry has processed them, so
@@ -132,8 +131,7 @@ function uploadOnce(
     "map",
     "--validate",
     "--strict",
-    "--wait-for",
-    String(sourceMapProcessingSeconds),
+    "--wait",
     artifacts.directory,
   ]);
 }

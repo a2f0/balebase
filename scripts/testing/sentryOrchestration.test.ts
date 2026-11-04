@@ -278,12 +278,8 @@ test("a slow Sentry upload is retried, then the API publishes", async () => {
       (command) => command.tool === "sentry-cli",
     );
     expect(uploads).toHaveLength(3);
-    // Each attempt waits longer than sentry-cli's default for processing.
-    for (const upload of uploads) {
-      expect(upload.args).toContain("--wait-for");
-      expect(upload.args?.[upload.args.indexOf("--wait-for") + 1]).toBe("600");
-      expect(upload.args).not.toContain("--wait");
-    }
+    // Each attempt waits for Sentry to process the maps.
+    for (const upload of uploads) expect(upload.args).toContain("--wait");
     expect(result.commands.at(-1)).toEqual({
       tool: "published",
       contents: "exact API bundle",
