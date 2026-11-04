@@ -9,6 +9,12 @@ const user = {
   email: "inspector@example.com",
   emailVerified: true,
 };
+const site = {
+  id: "project-1",
+  name: "Site",
+  description: "",
+  formIds: ["form"],
+};
 
 function form(id: string, name: string, version: number) {
   return {
@@ -16,7 +22,7 @@ function form(id: string, name: string, version: number) {
     name,
     description: "Checklist",
     scope: "organization",
-    status: "draft",
+    status: "published",
     version,
     currentVersion: version,
     createdAt: "2026-10-01T00:00:00.000Z",
@@ -28,19 +34,24 @@ function form(id: string, name: string, version: number) {
 }
 
 /**
- * The API for one account. Change `server` to sign out, fail the next forms
- * requests, or publish new form versions.
+ * The API for one account. Change `server` to sign out, fail the next sync
+ * requests, or change what the person's projects hold; bump `revision` with
+ * each change so the next sync answers with a new cursor.
  */
-function fakeApi(projectFormIds: string[]) {
+function fakeApi(projects = [site]) {
   const requests: string[] = [];
+  /** The `after` cursor each sync request sent, if any. */
+  const syncs: (string | null)[] = [];
   const server = {
-    failForms: 0,
-    projectFormIds,
+    failSync: 0,
+    forms: [form("form", "Safety inspection", 2)],
+    projects,
+    revision: 1,
     signedIn: true,
-    templates: [form("form", "Safety inspection", 2), form("roof", "Roof", 1)],
   };
   const api = (request: Request) => {
-    const path = new URL(request.url).pathname;
+    const url = new URL(request.url);
+    const path = url.pathname;
     requests.push(path);
     if (path === "/api/auth/get-session")
       return Response.json(
@@ -67,22 +78,32 @@ function fakeApi(projectFormIds: string[]) {
         memberRole: "member",
         ownerCount: 1,
       });
-    if (path === "/api/offline/forms") {
-      if (server.failForms > 0) {
-        server.failForms -= 1;
+    if (path === "/api/offline/sync") {
+      const after = url.searchParams.get("after");
+      // Record a wrong scope as a cursor no assertion expects.
+      syncs.push(
+        url.searchParams.get("userId") === user.id &&
+          url.searchParams.get("organizationId") === "org-1"
+          ? after
+          : "wrong scope",
+      );
+      if (server.failSync > 0) {
+        server.failSync -= 1;
         return Response.json({ error: "Unavailable" }, { status: 503 });
       }
+      const cursor = `cursor-${server.revision}`;
+      if (after === cursor) return Response.json({ changed: false, cursor });
       return Response.json({
+        changed: true,
+        cursor,
+        forms: server.forms,
         members: [user],
-        projectFormIds: server.projectFormIds,
-        templates: server.templates,
+        projects: server.projects,
       });
     }
     return Response.json([]);
   };
-  const formRequests = () =>
-    requests.filter((path) => path === "/api/offline/forms").length;
-  return { api, formRequests, requests, server };
+  return { api, requests, server, syncs };
 }
 
 async function open(page: Page, pathname = "/") {
@@ -96,17 +117,25 @@ async function open(page: Page, pathname = "/") {
   );
 }
 
-/** Waits, in real time, until `count` forms requests have been made. */
-async function formsRequested(formRequests: () => number, count: number) {
+/** Waits, in real time, until at least `count` sync requests have been made. */
+async function syncsRequested(syncs: unknown[], count: number) {
   const deadline = Date.now() + 10_000;
-  while (formRequests() < count && Date.now() < deadline) await Bun.sleep(50);
-  expect(formRequests()).toBe(count);
+  while (syncs.length < count && Date.now() < deadline) await Bun.sleep(50);
+  expect(syncs.length).toBeGreaterThanOrEqual(count);
+}
+
+function savedCursor(page: Page, cursor: string) {
+  return page.waitForFunction(
+    async (expected) => (await window.offlineTest.read())?.cursor === expected,
+    { polling: 100 },
+    cursor,
+  );
 }
 
 function savedVersion(page: Page, version: number) {
   return page.waitForFunction(
     async (expected) =>
-      (await window.offlineTest.read())?.templates.find(
+      (await window.offlineTest.read())?.forms.find(
         (entry) => entry.id === "form",
       )?.version === expected,
     { polling: 100 },
@@ -114,64 +143,99 @@ function savedVersion(page: Page, version: number) {
   );
 }
 
-it("downloads the forms of the person's projects when they sign in", async () => {
-  const { api, formRequests } = fakeApi(["form"]);
+/** Drops and restores the connection, which starts another sync. */
+async function reconnect(page: Page) {
+  await page.setOfflineMode(true);
+  await page.setOfflineMode(false);
+}
+
+it("syncs the person's projects and forms to the device when they sign in", async () => {
+  const { api, syncs } = fakeApi();
   await withOfflineBrowser(async (page) => {
     // The device already holds version 1 of the project form.
     await page.evaluate(() => window.offlineTest.seed());
     await page.evaluate(() => window.offlineTest.lock());
     await open(page);
-    await formsRequested(formRequests, 1);
+    await syncsRequested(syncs, 1);
     await savedVersion(page, 2);
+    // The seeded device has never stored a sync, so it sends no cursor.
+    expect(syncs[0]).toBeNull();
     const saved = await page.evaluate(() => window.offlineTest.read());
-    // Only project forms; started audits keep their own copy of the form.
-    expect(saved?.templates.map((entry) => entry.id)).toEqual(["form"]);
+    expect(saved?.cursor).toBe("cursor-1");
+    expect(saved?.projects).toEqual([site]);
+    expect(saved?.forms.map((entry) => entry.id)).toEqual(["form"]);
+    expect(saved?.members.map((entry) => entry.id)).toEqual([user.id]);
+    // Started audits keep their own copy of the form.
     expect(saved?.audits[0]?.template.version).toBe(1);
     expect(await page.evaluate(() => window.offlineTest.activeKey())).toBe(
       saved?.key ?? "",
     );
-    // Once per sign-in: reconnecting does not download again.
-    await page.setOfflineMode(true);
-    await page.setOfflineMode(false);
-    await Bun.sleep(300);
-    expect(formRequests()).toBe(1);
   }, api);
 }, 30_000);
 
-it("leaves the device untouched for someone whose projects have no forms", async () => {
-  const { api, formRequests } = fakeApi([]);
+it("sends its cursor on the next sync and keeps stored data when nothing changed", async () => {
+  const { api, server, syncs } = fakeApi();
   await withOfflineBrowser(async (page) => {
     await open(page);
-    await formsRequested(formRequests, 1);
+    await savedCursor(page, "cursor-1");
+    const first = await page.evaluate(() => window.offlineTest.read());
+    const count = syncs.length;
+    await reconnect(page);
+    await syncsRequested(syncs, count + 1);
+    expect(syncs.at(-1)).toBe("cursor-1");
+    // The server answered `changed: false`: wait for any write, then compare.
     await Bun.sleep(300);
-    expect(
-      await page.evaluate(() => window.offlineTest.read()),
-    ).toBeUndefined();
-    expect(
-      await page.evaluate(() => window.offlineTest.activeKey()),
-    ).toBeNull();
+    expect(await page.evaluate(() => window.offlineTest.read())).toEqual(first);
+    // A change on the server arrives as the whole set with a new cursor.
+    server.forms = [form("form", "Safety inspection", 3)];
+    server.revision = 2;
+    const before = syncs.length;
+    await reconnect(page);
+    await syncsRequested(syncs, before + 1);
+    expect(syncs[before]).toBe("cursor-1");
+    await savedCursor(page, "cursor-2");
+    await savedVersion(page, 3);
   }, api);
 }, 30_000);
 
-it("retries a failed download when the device reconnects", async () => {
-  const { api, formRequests, server } = fakeApi(["form"]);
-  server.failForms = 1;
+it("stores an empty project list and a cursor for someone with no projects", async () => {
+  const { api, server, syncs } = fakeApi([]);
+  server.forms = [];
   await withOfflineBrowser(async (page) => {
     await open(page);
-    await formsRequested(formRequests, 1);
+    await syncsRequested(syncs, 1);
+    await savedCursor(page, "cursor-1");
+    const saved = await page.evaluate(() => window.offlineTest.read());
+    expect(saved?.projects).toEqual([]);
+    expect(saved?.forms).toEqual([]);
+    expect(saved?.audits).toEqual([]);
+    expect(await page.evaluate(() => window.offlineTest.activeKey())).toBe(
+      saved?.key ?? "",
+    );
+  }, api);
+}, 30_000);
+
+it("retries a failed sync when the device reconnects", async () => {
+  const { api, server, syncs } = fakeApi();
+  server.failSync = 1;
+  await withOfflineBrowser(async (page) => {
+    await open(page);
+    await syncsRequested(syncs, 1);
     await Bun.sleep(300);
-    expect(
-      await page.evaluate(() => window.offlineTest.read()),
-    ).toBeUndefined();
-    await page.setOfflineMode(true);
-    await page.setOfflineMode(false);
-    await formsRequested(formRequests, 2);
+    // The device is prepared, but holds nothing from the failed sync.
+    const prepared = await page.evaluate(() => window.offlineTest.read());
+    expect(prepared?.cursor).toBeUndefined();
+    expect(prepared?.forms).toEqual([]);
+    expect(prepared?.projects).toEqual([]);
+    await reconnect(page);
+    await syncsRequested(syncs, 2);
     await savedVersion(page, 2);
+    await savedCursor(page, "cursor-1");
   }, api);
 }, 30_000);
 
-it("downloads again after signing out and back into the same account", async () => {
-  const { api, formRequests, server } = fakeApi(["form"]);
+it("syncs again after signing out and back into the same account", async () => {
+  const { api, server, syncs } = fakeApi();
   await withOfflineBrowser(async (page) => {
     await open(page);
     await savedVersion(page, 2);
@@ -184,53 +248,61 @@ it("downloads again after signing out and back into the same account", async () 
         document.getElementById("session-state")?.textContent === "signed-out",
       { polling: 100 },
     );
-    server.templates = [form("form", "Safety inspection", 3)];
+    server.forms = [form("form", "Safety inspection", 3)];
+    server.revision = 2;
+    const before = syncs.length;
     server.signedIn = true;
     await page.evaluate(() => window.offlineAppTest.refreshSession());
-    await formsRequested(formRequests, 2);
+    await syncsRequested(syncs, before + 1);
     await savedVersion(page, 3);
     const saved = await page.evaluate(() => window.offlineTest.read());
+    expect(saved?.cursor).toBe("cursor-2");
     expect(await page.evaluate(() => window.offlineTest.activeKey())).toBe(
       saved?.key ?? "",
     );
   }, api);
 }, 30_000);
 
-it("does not download or unlock from the add-account page", async () => {
-  const { api, formRequests } = fakeApi(["form"]);
+it("does not sync or unlock from the add-account page", async () => {
+  const { api, syncs } = fakeApi();
   await withOfflineBrowser(async (page) => {
     await page.evaluate(() => window.offlineTest.seed());
     await open(page, "/add-account");
     await Bun.sleep(1_000);
-    expect(formRequests()).toBe(0);
+    expect(syncs).toHaveLength(0);
     expect(
       await page.evaluate(() => window.offlineTest.activeKey()),
     ).toBeNull();
   }, api);
 }, 30_000);
 
-it("does not unlock the device when the account signs out during the download", async () => {
-  let releaseForms: (() => void) | undefined;
+it("does not unlock the device when the account signs out during the sync", async () => {
+  let releaseSync: (() => void) | undefined;
   const held = new Promise<void>((resolve) => {
-    releaseForms = resolve;
+    releaseSync = resolve;
   });
-  const { api: serve, formRequests, requests } = fakeApi(["form"]);
+  const { api: serve, syncs } = fakeApi();
   const api = async (request: Request) => {
-    const path = new URL(request.url).pathname;
-    if (path !== "/api/offline/forms") return serve(request);
-    requests.push(path);
-    await held;
+    if (new URL(request.url).pathname === "/api/offline/sync") await held;
     return serve(request);
   };
   await withOfflineBrowser(async (page) => {
+    const request = page.waitForRequest(
+      (entry) => new URL(entry.url()).pathname === "/api/offline/sync",
+    );
     await open(page);
-    await formsRequested(formRequests, 1);
-    // Signing out locks the device while the forms request is still open.
+    await request;
+    // Signing out locks the device while the sync request is still open.
     await page.evaluate(() => window.offlineTest.lock());
-    releaseForms?.();
+    releaseSync?.();
+    await syncsRequested(syncs, 1);
     await Bun.sleep(500);
     expect(
       await page.evaluate(() => window.offlineTest.activeKey()),
     ).toBeNull();
+    // The answer for the old identity was dropped, not stored.
+    const saved = await page.evaluate(() => window.offlineTest.read());
+    expect(saved?.cursor).toBeUndefined();
+    expect(saved?.projects).toEqual([]);
   }, api);
 }, 30_000);

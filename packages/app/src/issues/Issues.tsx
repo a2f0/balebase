@@ -83,9 +83,6 @@ function IssuesIndex({
         }
       />
       <PageBody>
-        <Button icon="download" onClick={() => onNavigate("/offline")}>
-          Create issues offline with photos
-        </Button>
         <fieldset className="issueToolbar" aria-label="Issue filters">
           <Field label="Status">
             <Select

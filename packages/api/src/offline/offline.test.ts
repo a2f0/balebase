@@ -109,22 +109,30 @@ it("rejects wrong account and organization, invalid answers, and inaccessible te
   );
   expect(f.db.query("SELECT id FROM offline_operations").all()).toEqual([]);
   expect(f.db.query("SELECT id FROM audits").all()).toEqual([]);
-  expect(
-    (await f.request("GET", "/forms?userId=user-2&organizationId=org_user-1"))
-      .status,
-  ).toBe(403);
 });
 
-it("names the listed forms turned on for the person's projects", async () => {
+interface Synced {
+  changed: boolean;
+  cursor: string;
+  forms?: { id: string; version: number }[];
+  members?: { id: string; name: string }[];
+  projects?: {
+    description: string;
+    formIds: string[];
+    id: string;
+    name: string;
+  }[];
+}
+
+it("syncs the person's projects and their published forms by cursor", async () => {
   const f = fixture();
-  const forms = async () =>
-    (
-      await f.request<{
-        projectFormIds: string[];
-        templates: { id: string }[];
-      }>("GET", "/forms?userId=user-1&organizationId=org_user-1")
-    ).body;
-  expect((await forms()).projectFormIds).toEqual([]);
+  const first = await f.sync();
+  expect(first).toMatchObject({ changed: true, forms: [], projects: [] });
+  expect(first.members?.map((person) => person.id)).toEqual(["user-1"]);
+  expect(await f.sync(first.cursor)).toEqual({
+    changed: false,
+    cursor: first.cursor,
+  });
   f.db.exec(`
     INSERT INTO projects (id, organization_id, name, created_at, updated_at)
     VALUES ('mine', 'org_user-1', 'Mine', '2026-10-01', '2026-10-01'),
@@ -132,7 +140,8 @@ it("names the listed forms turned on for the person's projects", async () => {
            ('elsewhere', 'org_user-2', 'Elsewhere', '2026-10-01', '2026-10-01');
     INSERT INTO project_members (project_id, organization_id, user_id, added_at)
     VALUES ('mine', 'org_user-1', 'user-1', '2026-10-01'),
-           ('theirs', 'org_user-1', 'user-2', '2026-10-01');
+           ('theirs', 'org_user-1', 'user-2', '2026-10-01'),
+           ('elsewhere', 'org_user-2', 'user-1', '2026-10-01');
     INSERT INTO audit_template_families
       (id, scope, organization_id, current_version, created_by, created_at, updated_at)
     VALUES ('hidden', 'global', NULL, 1, 'user-1', '2026-10-01', '2026-10-01');
@@ -142,29 +151,143 @@ it("names the listed forms turned on for the person's projects", async () => {
     INSERT INTO project_audit_forms (project_id, organization_id, template_id, added_at)
     VALUES ('mine', 'org_user-1', 'form', '2026-10-01'),
            ('mine', 'org_user-1', 'hidden', '2026-10-01'),
-           ('theirs', 'org_user-1', 'nfpa70e_global', '2026-10-01');
+           ('mine', 'org_user-1', 'nfpa70e_global', '2026-10-01'),
+           ('theirs', 'org_user-1', 'us_residential_core_global', '2026-10-01');
   `);
-  // The organization's own form is still a draft.
-  expect((await forms()).projectFormIds).toEqual([]);
-  f.db.exec(
-    "UPDATE audit_template_versions SET status = 'published' WHERE template_id = 'form' AND version = 2",
-  );
-  const listed = await forms();
-  // Not another member's project, and not a form the organization cannot use.
-  expect(listed.projectFormIds).toEqual(["form"]);
-  expect(listed.templates.map((template) => template.id)).toContain(
-    "nfpa70e_global",
-  );
-  // Unpublishing it stops the download; it stays listed for downloading by
-  // hand.
-  f.db.exec(
-    "UPDATE audit_template_versions SET status = 'unpublished' WHERE template_id = 'form' AND version = 2",
-  );
-  const unpublished = await forms();
-  expect(unpublished.projectFormIds).toEqual([]);
-  expect(unpublished.templates.map((template) => template.id)).toContain(
+  const bound = await f.sync(first.cursor);
+  expect(bound.cursor).not.toBe(first.cursor);
+  // Not another member's project or organization, and not a draft: the
+  // organization form's current version 2 is still a draft.
+  expect(bound.projects).toEqual([
+    { description: "", formIds: ["nfpa70e_global"], id: "mine", name: "Mine" },
+  ]);
+  expect(bound.forms?.map((form) => form.id)).toEqual(["nfpa70e_global"]);
+
+  // Publishing a new version changes the cursor and serves that version.
+  f.publish("form", 3, "published");
+  const published = await f.sync(bound.cursor);
+  expect(published.projects?.[0]?.formIds.sort()).toEqual([
     "form",
+    "nfpa70e_global",
+  ]);
+  expect(published.forms?.find((form) => form.id === "form")?.version).toBe(3);
+
+  // Unpublishing removes it; the set is whole, so it is simply absent.
+  f.publish("form", 4, "unpublished");
+  const unpublished = await f.sync(published.cursor);
+  expect(unpublished.forms?.map((form) => form.id)).toEqual(["nfpa70e_global"]);
+
+  // Renaming the project, then removing the person, each change the set.
+  f.db.exec("UPDATE projects SET name = 'Renamed' WHERE id = 'mine'");
+  const renamed = await f.sync(unpublished.cursor);
+  expect(renamed.projects?.map((project) => project.name)).toEqual(["Renamed"]);
+  f.db.exec("DELETE FROM project_members WHERE user_id = 'user-1'");
+  const removed = await f.sync(renamed.cursor);
+  expect(removed).toMatchObject({ changed: true, forms: [], projects: [] });
+
+  // Changes in another organization leave this cursor alone.
+  f.db.exec("UPDATE projects SET name = 'Moved' WHERE id = 'elsewhere'");
+  expect((await f.sync(removed.cursor)).changed).toBe(false);
+  expect(
+    (await f.request("GET", "/sync?userId=user-2&organizationId=org_user-1"))
+      .status,
+  ).toBe(403);
+});
+
+it("changes the cursor when global forms, membership, or names change", async () => {
+  const f = fixture();
+  f.db.exec(`
+    INSERT INTO projects (id, organization_id, name, created_at, updated_at)
+    VALUES ('mine', 'org_user-1', 'Mine', '2026-10-01', '2026-10-01');
+    INSERT INTO project_members (project_id, organization_id, user_id, added_at)
+    VALUES ('mine', 'org_user-1', 'user-1', '2026-10-01');
+    INSERT INTO project_audit_forms (project_id, organization_id, template_id, added_at)
+    VALUES ('mine', 'org_user-1', 'nfpa70e_global', '2026-10-01');
+  `);
+  let cursor = (await f.sync()).cursor;
+  const changes = [
+    // A global form's new version.
+    () => f.publish("nfpa70e_global", 0, "published"),
+    // Someone joins, and is renamed.
+    () =>
+      seedMember(f.db, {
+        createdAt: "2026-10-01",
+        organizationId: "org_user-1",
+        userId: "user-2",
+      }),
+    () => f.db.exec("UPDATE user SET name = 'Renamed' WHERE id = 'user-2'"),
+    // The person leaves the organization: their projects no longer count.
+    () =>
+      f.db.exec(
+        "DELETE FROM member WHERE userId = 'user-1' AND organizationId = 'org_user-1'",
+      ),
+  ];
+  for (const change of changes) {
+    change();
+    const next = await f.sync(cursor);
+    expect(next.changed).toBe(true);
+    cursor = next.cursor;
+  }
+  expect(await f.sync(cursor)).toMatchObject({ changed: false });
+  // Their membership was removed directly, so the sync reads as theirs but
+  // lists nothing.
+  const left = await f.sync();
+  expect(left.projects).toEqual([]);
+  expect(left.members?.map((person) => person.name)).toEqual(["Renamed"]);
+});
+
+it("records an audit against its project, which may be gone by sync time", async () => {
+  const f = fixture();
+  f.db.exec(`
+    INSERT INTO projects (id, organization_id, name, created_at, updated_at)
+    VALUES ('mine', 'org_user-1', 'Mine', '2026-10-01', '2026-10-01'),
+           ('elsewhere', 'org_user-2', 'Elsewhere', '2026-10-01', '2026-10-01');
+  `);
+  const onProject = audit();
+  const deleted = { ...audit(), projectId: "deleted" };
+  const foreign = { ...audit(), projectId: "elsewhere" };
+  for (const operation of [onProject, deleted, foreign])
+    expect((await f.apply(operation)).status).toBe(201);
+  expect(
+    f.db
+      .query("SELECT id, project_id FROM audits ORDER BY created_at, id")
+      .all(),
+  ).toEqual(
+    expect.arrayContaining([
+      { id: onProject.id, project_id: "mine" },
+      { id: deleted.id, project_id: null },
+      { id: foreign.id, project_id: null },
+    ]),
   );
+  f.db.exec("DELETE FROM projects WHERE id = 'mine'");
+  expect(
+    f.db.query("SELECT project_id FROM audits WHERE id = ?").get(onProject.id),
+  ).toEqual({ project_id: null });
+});
+
+it("syncs work on a downloaded version after the form is unpublished or discarded", async () => {
+  const f = fixture();
+  f.publish("form", 3, "unpublished");
+  expect((await f.apply(audit())).status).toBe(201);
+  f.publish("form", 4, "discarded");
+  expect((await f.apply(audit())).status).toBe(201);
+  // A global form unpublished after download.
+  f.db
+    .query(
+      "INSERT INTO audit_template_families (id, scope, organization_id, current_version, created_by, created_at, updated_at) VALUES ('global-form', 'global', NULL, 1, 'user-1', '2026-10-01', '2026-10-01')",
+    )
+    .run();
+  f.db
+    .query(
+      "INSERT INTO audit_template_versions (id, template_id, version, name, description, definition, status, created_by, created_at) VALUES ('global-form-1', 'global-form', 1, 'Global', '', ?, 'published', 'user-1', '2026-10-01')",
+    )
+    .run(JSON.stringify(definition));
+  f.publish("global-form", 2, "unpublished");
+  expect(
+    (await f.apply({ ...audit(), templateId: "global-form" })).status,
+  ).toBe(201);
+  // A version that was never published was never downloaded.
+  expect((await f.apply({ ...audit(), templateVersion: 2 })).status).toBe(409);
 });
 
 it("rolls back receipts and domain writes if history fails, then retries successfully", async () => {
@@ -261,6 +384,7 @@ function audit(): Extract<OfflineOperation, { type: "audit" }> {
   return {
     type: "audit",
     id: crypto.randomUUID(),
+    projectId: "mine",
     templateId: "form",
     templateVersion: 1,
     responses: { check: "pass" },
@@ -275,14 +399,16 @@ function fixture() {
   db.exec(
     "INSERT INTO audit_template_families (id, scope, organization_id, current_version, created_by, created_at, updated_at) VALUES ('form', 'organization', 'org_user-1', 2, 'user-1', '2026-10-01', '2026-10-01')",
   );
+  // Version 1 was published and downloaded; version 2 is a draft.
   for (const version of [1, 2])
     db.query(
-      "INSERT INTO audit_template_versions (id, template_id, version, name, description, definition, created_by, created_at) VALUES (?, 'form', ?, ?, '', ?, 'user-1', '2026-10-01')",
+      "INSERT INTO audit_template_versions (id, template_id, version, name, description, definition, status, created_by, created_at) VALUES (?, 'form', ?, ?, '', ?, ?, 'user-1', '2026-10-01')",
     ).run(
       `version-${version}`,
       version,
       version === 1 ? "Downloaded" : "New name",
       JSON.stringify(definition),
+      version === 1 ? "published" : "draft",
     );
   const app = testApp({ "/": offline }, scope);
   const hooks = queryHooks();
@@ -293,5 +419,38 @@ function fixture() {
     request,
     apply: (operation: OfflineOperation, identity = scope) =>
       request("POST", "/operations", { ...identity, operation }),
+    /** Saves the form's next version (`version`, or the one after its current) with `status`. */
+    publish(templateId: string, version: number, status: string) {
+      const next =
+        version ||
+        (
+          db
+            .query(
+              "SELECT current_version FROM audit_template_families WHERE id = ?",
+            )
+            .get(templateId) as { current_version: number }
+        ).current_version + 1;
+      db.query(
+        "INSERT INTO audit_template_versions (id, template_id, version, name, description, definition, status, created_by, created_at) VALUES (?, ?, ?, 'Form', '', ?, ?, 'user-1', '2026-10-02')",
+      ).run(
+        `${templateId}-${next}`,
+        templateId,
+        next,
+        JSON.stringify(definition),
+        status,
+      );
+      db.query(
+        "UPDATE audit_template_families SET current_version = ? WHERE id = ?",
+      ).run(next, templateId);
+    },
+    async sync(after?: string) {
+      const query = new URLSearchParams({
+        ...scope,
+        ...(after ? { after } : {}),
+      });
+      const response = await request<Synced>("GET", `/sync?${query}`);
+      expect(response.status).toBe(200);
+      return response.body;
+    },
   };
 }

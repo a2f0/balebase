@@ -2,11 +2,12 @@ import { DialogHost } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { OfflineWorkspacePage } from "../src/offline/OfflineWorkspacePage";
+import { DeviceContext } from "../src/offline/offlineContext";
 import {
   activateOfflineWorkspace,
   activeOfflineKey,
   changeOfflineWorkspace,
+  emptyOfflineWorkspace,
   lockOfflineWorkspace,
   offlineImage,
   offlineScopeKey,
@@ -21,6 +22,7 @@ import {
   startOfflineAudit,
 } from "../src/offline/offlineWork";
 import { useOfflineWorkspace } from "../src/offline/useOfflineWorkspace";
+import { DeviceProjects } from "../src/projects/DeviceProjects";
 import { useWorkspaceNavigation } from "../src/workspace/navigationGuard";
 
 const user = {
@@ -30,12 +32,18 @@ const user = {
 };
 const scope = { userId: user.id, organizationId: "org-1" };
 const key = offlineScopeKey(scope);
+const project = {
+  id: "project-1",
+  name: "Site",
+  description: "",
+  formIds: ["form"],
+};
 const template: AuditTemplate = {
   id: "form",
   name: "Safety inspection",
   description: "Offline checklist",
   scope: "organization",
-  status: "draft",
+  status: "published",
   version: 1,
   currentVersion: 1,
   createdAt: "2026-10-01T00:00:00.000Z",
@@ -61,48 +69,51 @@ const template: AuditTemplate = {
   },
 };
 
+/** The device's projects, as the App shows them, without the rest of the App. */
 function App() {
-  const offline = useOfflineWorkspace();
+  const device = useOfflineWorkspace();
   const [path, setPath] = useState(location.pathname);
   const navigate = useWorkspaceNavigation(setPath);
   if (path.startsWith("/issues/")) return <p>Synced issue</p>;
+  if (path.startsWith("/audits/runs/")) return <p>Synced audit</p>;
   return (
-    <OfflineWorkspacePage
-      workspace={offline.workspace}
-      online={offline.online}
-      storageError={offline.error}
-      onNavigate={navigate}
-    />
+    <DeviceContext.Provider value={device}>
+      <DeviceProjects onNavigate={navigate} pathname={path} />
+    </DeviceContext.Provider>
   );
 }
 
 const testApi = {
   key,
   activeKey: activeOfflineKey,
+  /** The device path of an audit this fixture started. */
+  auditPath: (auditId: string) =>
+    `/projects/${project.id}/audits/${encodeURIComponent(auditId)}`,
+  /** Stores a synced project and its form, then starts an audit from it. */
   async seed() {
     await changeOfflineWorkspace(
       key,
       (current) =>
         current ?? {
-          key,
-          scope,
-          user,
-          organizationName: "Test team",
-          templates: [template],
+          ...emptyOfflineWorkspace({
+            scope,
+            user,
+            organizationName: "Test team",
+          }),
+          projects: [project],
+          forms: [template],
           members: [user],
-          audits: [],
-          issues: [],
-          jobs: [],
         },
     );
     activateOfflineWorkspace(key);
-    return startOfflineAudit(key, template);
+    return startOfflineAudit(key, template, project.id);
   },
   read: () => readOfflineWorkspace(key),
   answer: (id: string, value: string) =>
     saveOfflineAnswer(key, id, "check", value),
   queue: (id: string) => queueOfflineAudit(key, id),
-  issue: (auditId?: string) =>
+  /** Raises an issue, with one photo, on the audit's only item. */
+  issue: (auditId: string) =>
     createOfflineIssue(
       key,
       {
@@ -116,7 +127,7 @@ const testApi = {
           type: "image/png",
         }),
       ],
-      auditId ? { auditId, itemId: "check" } : undefined,
+      { auditId, itemId: "check" },
     ),
   photo: (id: string) =>
     offlineImage(key, id).then(async (blob) => ({
@@ -131,10 +142,12 @@ const testApi = {
     readOfflineWorkspace(offlineScopeKey({ ...scope, userId: "other" })),
   abort: () =>
     changeOfflineWorkspace(key, (workspace) => {
-      if (workspace) workspace.templates = [];
+      if (workspace) workspace.forms = [];
       throw new Error("Simulated storage failure");
     }),
-  mount: () => {
+  /** Renders the device's projects at `path` (the seeded project by default). */
+  mount: (path = `/projects/${project.id}`) => {
+    history.replaceState(null, "", path);
     const root = document.getElementById("root");
     if (root)
       createRoot(root).render(

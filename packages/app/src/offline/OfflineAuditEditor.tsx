@@ -15,32 +15,24 @@ import { OfflineIssueCreator, OfflineIssueList } from "./OfflineIssues";
 import type { OfflineAudit, OfflineWorkspace } from "./offlineStore";
 import { queueOfflineAudit, saveOfflineAnswer } from "./offlineWork";
 
+/**
+ * Answers an audit on this device, saving each answer here as it is given.
+ * Completing it queues it to sync; issues raised on its items sync after it.
+ */
 export function OfflineAuditEditor({
   audit,
   workspace,
-  onBack,
   onNavigate,
 }: {
   audit: OfflineAudit;
   workspace: OfflineWorkspace;
-  onBack: () => void;
   onNavigate: (path: string) => void;
 }) {
   const [issueItem, setIssueItem] = useState<string>();
   const { responses, pending, sealing, error, answer, save } =
     useOfflineAnswers(audit, workspace.key);
   return (
-    <PageSection
-      title={`${audit.template.name} · v${audit.template.version}`}
-      actions={
-        <Button
-          disabled={pending > 0}
-          onClick={() => void guardWorkspaceChange(async () => onBack())()}
-        >
-          Back to offline work
-        </Button>
-      }
-    >
+    <PageSection title={`Checklist · v${audit.template.version}`}>
       {error && (
         <Banner
           tone="danger"
@@ -62,7 +54,7 @@ export function OfflineAuditEditor({
           : error
             ? "Some changes have not been saved."
             : audit.queued
-              ? "Completed and queued for sync. Open the synced audit to make further changes."
+              ? "Completed. It syncs when this device is online; open the synced audit to make further changes."
               : "Draft saved on this device"}
       </p>
       {audit.template.definition.sections.map((section) => (
@@ -126,7 +118,7 @@ export function OfflineAuditEditor({
           variant="primary"
           onClick={() => void save(true)}
         >
-          Complete and queue audit
+          Complete audit
         </Button>
       )}
       <OfflineIssueList

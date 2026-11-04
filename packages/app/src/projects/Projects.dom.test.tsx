@@ -1,6 +1,9 @@
 import { beforeAll, describe, expect, it } from "bun:test";
+import { productName } from "@balebase/ui/brand";
 import { DialogHost } from "@balebase/ui/react";
 import type { Project, ProjectForm } from "@balebase/validators/projects";
+import { DeviceContext, type DeviceState } from "../offline/offlineContext";
+import type { OfflineWorkspace } from "../offline/offlineStore";
 import { installDom } from "../testing/dom";
 
 const { click, fill, mount, queryButton, respond, settle } = installDom({
@@ -138,15 +141,59 @@ function stubApi(
   return { editElsewhere, writes };
 }
 
-async function render() {
-  const { container } = await mount(
+async function render(
+  device?: DeviceState,
+  onNavigate: (pathname: string) => void = () => {},
+) {
+  const page = (
     <>
-      <Projects onNavigate={() => {}} pathname="/projects/project-1" />
+      <Projects onNavigate={onNavigate} pathname="/projects/project-1" />
       <DialogHost />
-    </>,
+    </>
+  );
+  const { container } = await mount(
+    device ? (
+      <DeviceContext.Provider value={device}>{page}</DeviceContext.Provider>
+    ) : (
+      page
+    ),
   );
   await settle();
   return container;
+}
+
+/** The panel of the tab named `label`, opened. */
+async function openTab(container: HTMLElement, label: string) {
+  const tab = [...container.querySelectorAll('[role="tab"]')].find(
+    (entry) => entry.textContent === label,
+  );
+  await click(tab as HTMLElement);
+  return document.getElementById(
+    tab?.getAttribute("aria-controls") ?? "",
+  ) as HTMLElement;
+}
+
+/** A device workspace holding `audits`, with the jobs that sync them. */
+function deviceWith(
+  audits: OfflineWorkspace["audits"],
+  jobs: OfflineWorkspace["jobs"] = [],
+): DeviceState {
+  return {
+    error: undefined,
+    online: true,
+    workspace: {
+      audits,
+      forms: [],
+      issues: [],
+      jobs,
+      key: "device",
+      members: [],
+      organizationName: "Org",
+      projects: [],
+      scope: { organizationId: "org", userId: owner.id },
+      user: owner,
+    },
+  };
 }
 
 function toggle(container: HTMLElement, name: string) {
@@ -167,7 +214,7 @@ function collectionOf(container: HTMLElement, name: string) {
 }
 
 describe("project detail", () => {
-  it("shows members, audit forms, and activity on separate tabs", async () => {
+  it("shows members, audit forms, setup, and activity on separate tabs", async () => {
     const { writes } = stubApi(true);
     const container = await render();
     const strip = container.querySelector(
@@ -177,6 +224,7 @@ describe("project detail", () => {
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       "Members",
       "Audit forms",
+      "Project setup",
       "Activity",
     ]);
     const shown = () =>
@@ -198,10 +246,12 @@ describe("project detail", () => {
     await fill(choice(), "sam");
     await click(queryButton("Activity", container));
     expect(shown()).toEqual(["Activity"]);
-    expect(tabs[2]?.getAttribute("aria-selected")).toBe("true");
+    expect(tabs[3]?.getAttribute("aria-selected")).toBe("true");
     expect(tabs[0]?.getAttribute("tabindex")).toBe("-1");
     await click(queryButton("Audit forms", container));
     expect(shown()).toEqual(["Audit forms"]);
+    await click(queryButton("Project setup", container));
+    expect(shown()).toEqual(["Project setup"]);
     await click(queryButton("Members", container));
     expect(shown()).toEqual(["Members"]);
     expect(choice()?.value).toBe("sam");
@@ -258,10 +308,208 @@ describe("project detail", () => {
     for (const label of ["Edit", "Customize", "Start audit"])
       expect(queryButton(label, card as HTMLElement)).toBeFalsy();
 
-    await click(queryButton("List", container));
+    const setup = toggle(container, "Site walk")?.closest('[role="tabpanel"]');
+    await click(queryButton("List", setup as HTMLElement));
     const row = toggle(container, "Site walk")?.closest(".auditTemplateRow");
     expect(row?.textContent).toContain("Site walk checklist");
     expect(collectionOf(container, "NFPA 70E")).toBe("Global forms");
+  });
+
+  it("starts audits from the forms turned on for the project", async () => {
+    const walk = forms.filter((form) => form.id === "walk");
+    stubApi(false, {}, { formCount: 1, forms: walk });
+    const container = await render();
+    const panel = await openTab(container, "Audit forms");
+    expect(collectionOf(panel, "Site walk")).toBe("Organization forms");
+    expect(panel.textContent).not.toContain("NFPA 70E");
+    expect(panel.querySelector('input[role="switch"]')).toBeNull();
+    expect(panel.textContent).toContain("No audits on this device");
+    // Without a device workspace (not yet prepared) nothing starts.
+    await click(queryButton("Start audit", panel));
+    await settle();
+    expect(panel.textContent).toContain(
+      "This device is still getting ready for audits.",
+    );
+  });
+
+  it("lists the audits this device started for the project", async () => {
+    stubApi(false);
+    const [walk] = forms;
+    if (!walk) throw new Error("Missing form.");
+    const started = (id: string, projectId: string, queued: boolean) => ({
+      id,
+      projectId,
+      queued,
+      responses: {},
+      startedAt: `2026-10-0${id.length}T00:00:00.000Z`,
+      template: walk,
+    });
+    const job = (
+      id: string,
+      status: OfflineWorkspace["jobs"][number]["status"],
+      error?: string,
+    ) => ({
+      attempts: 1,
+      dependsOn: [],
+      id,
+      operation: { id, type: "image" as const, filename: "", issueId: "" },
+      retryAt: 0,
+      status,
+      ...(error ? { error } : {}),
+    });
+    const visited: string[] = [];
+    const container = await render(
+      deviceWith(
+        [
+          started("d", "project-1", false),
+          started("ww", "project-1", true),
+          started("sss", "project-1", true),
+          started("other", "project-2", false),
+        ],
+        [job("ww", "blocked", "Form gone"), job("sss", "synced")],
+      ),
+      (pathname) => visited.push(pathname),
+    );
+    const panel = await openTab(container, "Audit forms");
+    const rows = [...panel.querySelectorAll(".rowList .row")].map(
+      (row) => row.textContent,
+    );
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toContain("Synced");
+    expect(rows[1]).toContain("Not synced");
+    expect(rows[1]).toContain("Form gone");
+    expect(rows[2]).toContain("Draft");
+    for (const label of ["Open audit", "View", "Continue"])
+      await click(queryButton(label, panel));
+    await settle();
+    expect(visited).toEqual([
+      "/audits/runs/sss",
+      "/projects/project-1/audits/ww",
+      "/projects/project-1/audits/d",
+    ]);
+  });
+
+  it("counts an audit synced only once its issues and photos are", async () => {
+    stubApi(false);
+    const [walk] = forms;
+    if (!walk) throw new Error("Missing form.");
+    const job = (
+      id: string,
+      status: OfflineWorkspace["jobs"][number]["status"],
+      error?: string,
+    ) => ({
+      attempts: 1,
+      dependsOn: [],
+      id,
+      operation: { id, type: "image" as const, filename: "", issueId: "" },
+      retryAt: 0,
+      status,
+      ...(error ? { error } : {}),
+    });
+    const device = deviceWith(
+      [
+        {
+          id: "audit",
+          projectId: "project-1",
+          queued: true,
+          responses: {},
+          startedAt: "2026-10-01T00:00:00.000Z",
+          template: walk,
+        },
+      ],
+      [
+        job("audit", "synced"),
+        job("issue", "synced"),
+        job("photo", "blocked", "Photo refused"),
+      ],
+    );
+    const workspace = device.workspace;
+    if (!workspace) throw new Error("Missing workspace.");
+    workspace.issues = [
+      {
+        images: [{ filename: "a.png", id: "photo" }],
+        operation: {
+          assignedTo: null,
+          auditId: "audit",
+          description: "",
+          id: "issue",
+          itemId: "item",
+          priority: "medium",
+          title: "Cracked cover",
+          type: "issue",
+        },
+      },
+    ];
+    const visited: string[] = [];
+    const container = await render(device, (pathname) =>
+      visited.push(pathname),
+    );
+    const panel = await openTab(container, "Audit forms");
+    const row = panel.querySelector(".rowList .row")?.textContent;
+    expect(row).toContain("Not synced");
+    expect(row).toContain("Photo refused");
+    await click(queryButton("View", panel));
+    expect(visited).toEqual(["/projects/project-1/audits/audit"]);
+  });
+
+  it("shows the device's copy when the API cannot be reached", async () => {
+    const [walk] = forms;
+    if (!walk) throw new Error("Missing form.");
+    respond(async () =>
+      Response.json({ error: "Unavailable" }, { status: 503 }),
+    );
+    const device = deviceWith([]);
+    const workspace = device.workspace;
+    if (!workspace) throw new Error("Missing workspace.");
+    workspace.projects = [
+      { description: "", formIds: ["walk"], id: "project-1", name: "Site" },
+    ];
+    workspace.forms = [walk];
+    for (const pathname of ["/projects", "/projects/project-1"]) {
+      const { container } = await mount(
+        <DeviceContext.Provider value={device}>
+          <Projects onNavigate={() => {}} pathname={pathname} />
+        </DeviceContext.Provider>,
+      );
+      await settle();
+      expect(container.textContent).toContain(
+        `Could not reach ${productName}.`,
+      );
+      expect(container.textContent).toContain(
+        pathname === "/projects" ? "Your projects" : "Site walk",
+      );
+      if (pathname !== "/projects")
+        expect(queryButton("Start audit", container)).toBeTruthy();
+    }
+  });
+
+  it("keeps audits for projects the device no longer lists within reach", async () => {
+    const [walk] = forms;
+    if (!walk) throw new Error("Missing form.");
+    respond(async () => Response.json({ canManage: false, projects: [] }));
+    const visited: string[] = [];
+    const device = deviceWith([
+      {
+        id: "left-behind",
+        projectId: "deleted-project",
+        queued: false,
+        responses: {},
+        startedAt: "2026-10-01T00:00:00.000Z",
+        template: walk,
+      },
+    ]);
+    const { container } = await mount(
+      <DeviceContext.Provider value={device}>
+        <Projects
+          onNavigate={(pathname) => visited.push(pathname)}
+          pathname="/projects"
+        />
+      </DeviceContext.Provider>,
+    );
+    await settle();
+    expect(container.textContent).toContain("Other audits on this device");
+    await click(queryButton("Continue", container));
+    expect(visited).toEqual(["/projects/deleted-project/audits/left-behind"]);
   });
 
   it("saves only the edited fields from the revision it loaded", async () => {

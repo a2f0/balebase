@@ -37,7 +37,6 @@ export type WorkspacePage =
   | "account"
   | "activity"
   | "issues"
-  | "offline"
   | "audits"
   | "businesses"
   | "contracts"
@@ -262,12 +261,6 @@ function navigationFor(canAccessFinance: boolean, isAdmin: boolean) {
       icon: "layers",
       label: "Projects",
       page: "projects",
-    },
-    {
-      href: "/offline",
-      icon: "download",
-      label: "Offline work",
-      page: "offline",
     },
     { href: "/issues", icon: "issues", label: "Issues", page: "issues" },
     { href: "/activity", icon: "layers", label: "Activity", page: "activity" },

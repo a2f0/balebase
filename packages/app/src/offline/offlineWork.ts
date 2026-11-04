@@ -12,27 +12,29 @@ import {
 } from "./offlineStore";
 
 function required(workspace: OfflineWorkspace | undefined) {
-  if (!workspace) throw new Error("Download a checklist while online first.");
+  if (!workspace)
+    throw new Error(
+      "This device is not ready for audits yet. Connect and sign in first.",
+    );
   return workspace;
 }
 
-// Every edit saves a new form version, so a download is current when the
-// device holds the listed version (or a later one listed by a stale page).
-export function offlineDownloadState(
-  saved: readonly AuditTemplate[] | undefined,
-  available: Pick<AuditTemplate, "id" | "version">,
+/**
+ * Starts an audit on this device for `projectId` from `template`, which it
+ * keeps: the audit is finished and synced against that version whatever
+ * happens to the form meanwhile. Resolves the audit's ID.
+ */
+export function startOfflineAudit(
+  key: string,
+  template: AuditTemplate,
+  projectId: string,
 ) {
-  const download = saved?.find((entry) => entry.id === available.id);
-  if (!download) return "missing";
-  return download.version < available.version ? "outdated" : "current";
-}
-
-export function startOfflineAudit(key: string, template: AuditTemplate) {
   const id = crypto.randomUUID();
   return changeOfflineWorkspace(key, (current) => {
     const workspace = required(current);
     workspace.audits.push({
       id,
+      projectId,
       startedAt: new Date().toISOString(),
       template,
       responses: {},
@@ -74,6 +76,7 @@ export function queueOfflineAudit(key: string, id: string) {
         {
           id,
           type: "audit",
+          projectId: audit.projectId,
           templateId: audit.template.id,
           templateVersion: audit.template.version,
           startedAt: audit.startedAt,
@@ -87,11 +90,12 @@ export function queueOfflineAudit(key: string, id: string) {
   });
 }
 
+/** Saves an issue raised on an audit's item, with its photos, on this device. */
 export async function createOfflineIssue(
   key: string,
   input: IssueInput,
   files: File[],
-  target?: { auditId: string; itemId: string },
+  target: { auditId: string; itemId: string },
 ) {
   if (!input.title.trim()) throw new Error("Enter an issue title.");
   const imageProblem = issueImageProblem(files, maxIssueImages);
@@ -106,10 +110,7 @@ export async function createOfflineIssue(
     key,
     (current) => {
       const workspace = required(current);
-      if (
-        target &&
-        !workspace.audits.some((audit) => audit.id === target.auditId)
-      )
+      if (!workspace.audits.some((audit) => audit.id === target.auditId))
         throw new Error("The local audit is missing.");
       const operation = {
         ...input,
@@ -125,7 +126,7 @@ export async function createOfflineIssue(
           filename,
         })),
       });
-      workspace.jobs.push(job(operation, target ? [target.auditId] : []));
+      workspace.jobs.push(job(operation, [target.auditId]));
       for (const image of images)
         workspace.jobs.push(
           job(

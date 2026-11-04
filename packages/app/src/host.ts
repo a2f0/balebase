@@ -6,6 +6,11 @@
  */
 export interface AppHost {
   native?: NativeHost | undefined;
+  /**
+   * Device connectivity, where the shell knows better than the WebView;
+   * otherwise the browser's (`shared/network.ts`).
+   */
+  network?: NetworkStatusSource | undefined;
   captureError?:
     | ((error: unknown, source?: "boundary" | "uncaught-react") => void)
     | undefined;
@@ -30,6 +35,17 @@ export interface NativeHost {
   savePassword(username: string, password: string): Promise<void>;
 }
 
+/**
+ * A source of connectivity: a synchronous best-known value, and changes. A
+ * source that reads asynchronously starts from a guess and corrects it
+ * through its first change.
+ */
+export interface NetworkStatusSource {
+  getOnline(): boolean;
+  /** Calls `listener` with each change; returns an unsubscribe. */
+  subscribe(listener: (online: boolean) => void): () => void;
+}
+
 let host: AppHost = {};
 
 /** Set once by renderApp before the first render. */
@@ -40,4 +56,9 @@ export function configureHost(next: AppHost) {
 /** The native shell's services, or undefined in a browser. */
 export function nativeHost() {
   return host.native;
+}
+
+/** The shell's connectivity source, or undefined to use the browser's. */
+export function networkSource() {
+  return host.network;
 }

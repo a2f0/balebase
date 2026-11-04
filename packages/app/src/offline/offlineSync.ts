@@ -1,6 +1,7 @@
 import { ApiError } from "@balebase/api-client";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
+import { isOnline } from "../shared/network";
 import {
   activeOfflineKey,
   changeOfflineWorkspace,
@@ -26,14 +27,14 @@ function readyOfflineJob(workspace: OfflineWorkspace, now: number) {
 
 /** Locks span tabs; server receipts are still authoritative after a crash. */
 export async function syncOfflineWorkspace(key: string) {
-  if (!navigator.onLine || activeOfflineKey() !== key) return;
+  if (!isOnline() || activeOfflineKey() !== key) return;
   if (!navigator.locks) return; // Supported shells provide Web Locks; never race an unguarded drain.
   await navigator.locks.request(
     `balebase-sync:${key}`,
     { ifAvailable: true },
     async (lock) => {
       if (!lock) return;
-      while (navigator.onLine && activeOfflineKey() === key) {
+      while (isOnline() && activeOfflineKey() === key) {
         const workspace = await readOfflineWorkspace(key);
         if (!workspace) return;
         const job = readyOfflineJob(workspace, Date.now());

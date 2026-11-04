@@ -40,6 +40,7 @@ describe("Capacitor host", () => {
       expect(host?.savePassword).toBeFunction();
       return host?.origin;
     });
+    expect(capacitorHost("https://app.test").network?.getOnline()).toBe(true);
     expect(origins).toEqual(["capacitor://localhost", "https://localhost"]);
   });
 });

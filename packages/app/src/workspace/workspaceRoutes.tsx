@@ -89,12 +89,6 @@ const routes: WorkspaceRoute[] = [
       />
     ),
   },
-  // The offline slot replaces this whenever this device has offline work.
-  {
-    matches: exactly("/offline"),
-    page: "offline",
-    render: ({ library }) => library,
-  },
   {
     matches: within("/projects"),
     page: "projects",

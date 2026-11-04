@@ -1,25 +1,5 @@
 import { expect, it } from "bun:test";
-import type { AuditTemplate } from "@balebase/validators/audits";
-import { createOfflineIssue, offlineDownloadState } from "./offlineWork";
-
-it("treats a downloaded form as current until a newer version is listed", () => {
-  const saved = [{ id: "form", version: 3 }] as AuditTemplate[];
-  expect(offlineDownloadState(undefined, { id: "form", version: 1 })).toBe(
-    "missing",
-  );
-  expect(offlineDownloadState(saved, { id: "other", version: 3 })).toBe(
-    "missing",
-  );
-  expect(offlineDownloadState(saved, { id: "form", version: 3 })).toBe(
-    "current",
-  );
-  expect(offlineDownloadState(saved, { id: "form", version: 2 })).toBe(
-    "current",
-  );
-  expect(offlineDownloadState(saved, { id: "form", version: 4 })).toBe(
-    "outdated",
-  );
-});
+import { createOfflineIssue } from "./offlineWork";
 
 it("refuses photos the API would refuse before saving an issue on the device", async () => {
   const issue = {
@@ -28,20 +8,22 @@ it("refuses photos the API would refuse before saving an issue on the device", a
     priority: "medium" as const,
     title: "Cracked panel cover",
   };
+  const target = { auditId: "audit", itemId: "item" };
   const photo = (bytes: number, type: string) =>
     new File([new Uint8Array(bytes)], "photo.png", { type });
 
   await expect(
-    createOfflineIssue("workspace", issue, [photo(0, "image/png")]),
+    createOfflineIssue("workspace", issue, [photo(0, "image/png")], target),
   ).rejects.toThrow("Images must not be empty.");
   await expect(
-    createOfflineIssue("workspace", issue, [photo(4, "image/heic")]),
+    createOfflineIssue("workspace", issue, [photo(4, "image/heic")], target),
   ).rejects.toThrow("Images must be JPEG, PNG, GIF, or WebP files.");
   await expect(
     createOfflineIssue(
       "workspace",
       issue,
       Array.from({ length: 11 }, () => photo(4, "image/png")),
+      target,
     ),
   ).rejects.toThrow("You can attach 10 more images.");
 });
