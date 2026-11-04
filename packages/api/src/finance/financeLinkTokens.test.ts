@@ -64,9 +64,9 @@ async function brokenLoginFixture() {
 describe("Plaid Link update mode", () => {
   it("repairs a login on the same Item and resumes from its sync cursor", async () => {
     const fixture = await brokenLoginFixture();
-    expect((await fixture.request("/sync", "POST")).status).toBe(200);
+    expect((await fixture.request("/sync-jobs", "POST")).status).toBe(202);
     fixture.state.loginRequired = true;
-    expect((await fixture.request("/sync", "POST")).status).toBe(502);
+    expect((await fixture.request("/sync-jobs", "POST")).status).toBe(202);
     expect(
       (await fixture.request<ConnectionDetail>("")).body.connection,
     ).toMatchObject({ errorCode: "ITEM_LOGIN_REQUIRED", status: "error" });
@@ -97,7 +97,7 @@ describe("Plaid Link update mode", () => {
     // Link's onSuccess needs no exchange: the next sync uses the same Item.
     fixture.state.loginRequired = false;
     fixture.calls.length = 0;
-    expect((await fixture.request("/sync", "POST")).status).toBe(200);
+    expect((await fixture.request("/sync-jobs", "POST")).status).toBe(202);
     expect(fixture.calls).toMatchObject([
       {
         body: { access_token: "access-sandbox-test-1", cursor: "cursor-test" },

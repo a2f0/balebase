@@ -119,7 +119,7 @@ function issueFilters(context: IssueContext) {
 }
 
 function parseCursor(value: string) {
-  const cursor = decodeCursor(value, "createdAt", 500);
+  const cursor = decodeCursor(value, 500);
   return cursor &&
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(cursor[0])
     ? cursor

@@ -1,4 +1,4 @@
-import { describe, expect, it, spyOn } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { jobRunDetail } from "../jobs/jobHistory";
 import { scheduleJobs } from "../jobs/jobScheduler";
 import { consumeJobs as consumeFinanceSync } from "../jobs/jobWorker";
@@ -408,36 +408,6 @@ describe("durable finance sync", () => {
     fixture.messages.length = 0;
     await scheduleJobs(fixture.bindings);
     expect(fixture.messages).toHaveLength(0);
-  });
-});
-
-it("keeps legacy sync running during backoff and returns a background status when its waiter expires", async () => {
-  const fixture = await queuedFixture();
-  const { body: job } = await fixture.request<{ id: string }>(
-    "/sync-jobs",
-    "POST",
-  );
-  await fixture.deliver(job.id, async () => {
-    throw new PlaidApiError("Temporary outage", "INTERNAL_SERVER_ERROR", 500);
-  });
-  const originalTimer = globalThis.setTimeout;
-  const timer = spyOn(globalThis, "setTimeout").mockImplementation(((
-    callback: () => void,
-  ) => originalTimer(callback, 0)) as typeof setTimeout);
-  try {
-    const result = await fixture.request("/sync", "POST");
-    expect(result.status).toBe(503);
-    expect(result.body).toMatchObject({
-      error: expect.stringContaining("continues in the background"),
-    });
-    expect(timer).toHaveBeenCalledTimes(100);
-  } finally {
-    timer.mockRestore();
-  }
-  fixture.database.run("UPDATE job_runs SET available_at = '2000-01-01'");
-  await fixture.deliver(job.id);
-  expect(fixture.database.query("SELECT status FROM job_runs").get()).toEqual({
-    status: "succeeded",
   });
 });
 

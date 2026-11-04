@@ -50,7 +50,6 @@ import { expenseReport } from "./financeReports";
 import type { PlaidItemRow } from "./financeSync";
 import {
   connectionSyncStatus,
-  legacySyncConnection,
   startConnectionSync,
   updateSyncSettings,
 } from "./financeSyncRoutes";
@@ -126,7 +125,6 @@ export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
     createUpdateLinkToken(context, requestPlaid),
   );
   finance.post("/connections/:id/login-repairs", reportLoginRepair);
-  finance.post("/connections/:id/sync", legacySyncConnection);
   finance.post("/connections/:id/sync-jobs", startConnectionSync);
   finance.get("/connections/:id/sync-status", connectionSyncStatus);
   finance.patch("/connections/:id/sync-settings", updateSyncSettings);

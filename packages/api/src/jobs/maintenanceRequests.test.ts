@@ -119,13 +119,11 @@ it("records nothing for refused requests or a requester who lost admin", async (
   }
   // The session still says admin, but the stored role no longer does.
   f.database.exec("UPDATE user SET role = 'user' WHERE id = 'actor'");
-  for (const path of [
+  const refused = await f.request(
     "/jobs/purgeDeletedOrganizations/runs",
-    "/jobs/purgeDeletedOrganizations/run",
-  ]) {
-    const refused = await f.request(path, post("purgeDeletedOrganizations"));
-    expect(refused.status).toBe(403);
-  }
+    post("purgeDeletedOrganizations"),
+  );
+  expect(refused.status).toBe(403);
   expect(counts(f)).toEqual(before);
   expect(f.messages).toEqual([]);
 

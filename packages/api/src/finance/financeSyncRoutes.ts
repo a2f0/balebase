@@ -1,5 +1,4 @@
 import { financeRoutes } from "@balebase/validators/finance";
-import { delay, waitForRun } from "../jobs/legacyJobRun";
 import {
   activityBatch,
   activityStatement,
@@ -7,12 +6,7 @@ import {
 } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import type { FinanceContext } from "./financeContext";
-import {
-  enqueueSync,
-  latestSyncJob,
-  type SyncJobRow,
-  toSyncJob,
-} from "./financeSyncJobs";
+import { enqueueSync, latestSyncJob, toSyncJob } from "./financeSyncJobs";
 
 async function requestSync(context: FinanceContext) {
   return enqueueSync(
@@ -59,41 +53,6 @@ export async function startConnectionSync(context: FinanceContext) {
       404,
     );
   return respond(context, financeRoutes.startSync, toSyncJob(job), 202);
-}
-
-/** Older installed clients expect completed counts. Their waiter may disconnect;
- * the durable job remains independent and never reports uncompleted work as success. */
-export async function legacySyncConnection(context: FinanceContext) {
-  const requested = await requestSync(context);
-  if (!requested) return context.json({ error: "Connection not found." }, 404);
-  const job = await waitForRun<SyncJobRow>(
-    context.env.DB,
-    requested.id,
-    100,
-    () => delay(250),
-  );
-  if (!job) return context.json({ error: "Connection not found." }, 404);
-  if (job.status === "succeeded")
-    return respond(context, financeRoutes.syncConnection, {
-      added: job.added,
-      modified: job.modified,
-      removed: job.removed,
-    });
-  if (job.status === "failed" || job.status === "cancelled")
-    return context.json(
-      {
-        code: job.error_code ?? "SYNC_CANCELLED",
-        error: job.error_message ?? "Sync cancelled.",
-      },
-      502,
-    );
-  return context.json(
-    {
-      error:
-        "Sync continues in the background. Reopen the connection to check its status.",
-    },
-    503,
-  );
 }
 
 export async function updateSyncSettings(context: FinanceContext) {

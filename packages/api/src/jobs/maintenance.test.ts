@@ -1,7 +1,6 @@
 import { expect, it, spyOn } from "bun:test";
 import { fixture, post } from "../testing/maintenanceFixture";
 import { claimJob, recoverJobs } from "./jobRuns";
-import { waitForLegacyJob } from "./legacyJobRun";
 import { runMaintenanceJob, runScheduledMaintenance } from "./maintenance";
 
 it("requires root admin access, trusted origin, a known job, and explicit confirmation", async () => {
@@ -207,15 +206,6 @@ it("paginates filtered history and logs, rejects invalid filters, and expires on
   ).json()) as { runs: { runId: string }[]; nextCursor: string | null };
   expect(older.runs).toHaveLength(5);
   expect(older.nextCursor).toBeNull();
-  const legacyCursor = btoa(
-    JSON.stringify([created, history.runs.at(-1)?.runId]),
-  );
-  const legacyPage = await (
-    await f.request(
-      `/jobs/runs?jobId=purgeRequestedUsers&status=succeeded&cursor=${encodeURIComponent(legacyCursor)}`,
-    )
-  ).json();
-  expect(legacyPage).toEqual(older);
   expect(
     new Set([...history.runs, ...older.runs].map((run) => run.runId)).size,
   ).toBe(55);
@@ -265,71 +255,15 @@ it("paginates filtered history and logs, rejects invalid filters, and expires on
   ).toEqual({ count: 55 });
 });
 
-it("preserves completed results for older apps and never reports queued work as completed", async () => {
+it("lists every maintenance job and bank sync in one catalog", async () => {
   const f = fixture();
-  f.insertActor();
-  const run = await f.requestRun("purgeRequestedUsers");
-  expect(
-    await waitForLegacyJob(f.bindings.DB, run.id, async () => {}),
-  ).toBeNull();
-  if (!f.bindings.FINANCE_SYNC_QUEUE) throw new Error("Missing queue");
-  const send = spyOn(f.bindings.FINANCE_SYNC_QUEUE, "send").mockImplementation(
-    async (body) => {
-      await f.deliver(body.jobId);
-      return { metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } };
-    },
-  );
-  try {
-    const completed = await f.request(
-      "/jobs/purgeRequestedUsers/run",
-      post("purgeRequestedUsers"),
-    );
-    expect(completed.status).toBe(200);
-    expect(await completed.json()).toMatchObject({
-      run: { status: "succeeded", result: { purged: 0, blocked: 0 } },
-    });
-    f.database.exec("DROP TABLE user_deletion_requests");
-    const failed = await f.request(
-      "/jobs/purgeRequestedUsers/run",
-      post("purgeRequestedUsers"),
-    );
-    expect(failed.status).toBe(500);
-    expect(await failed.json()).toMatchObject({
-      run: { status: "failed", error: expect.any(String) },
-    });
-  } finally {
-    send.mockRestore();
-  }
-  const oldCatalog = (await (await f.request("/jobs")).json()) as {
-    jobs: { id: string }[];
+  const catalog = (await (await f.request("/jobs")).json()) as {
+    jobs: { id: string; manual: boolean }[];
   };
-  expect(oldCatalog.jobs).toHaveLength(11);
-  const catalog = (await (await f.request("/jobs?all=true")).json()) as {
-    jobs: { id: string }[];
-  };
-  expect(catalog.jobs.map((job) => job.id)).toContain("syncFinanceConnection");
-});
-
-it("tells older clients that queued work continues without claiming completion", async () => {
-  const f = fixture();
-  f.insertActor();
-  const legacy = await import("./legacyJobRun");
-  const wait = spyOn(legacy, "waitForLegacyJob").mockResolvedValue(null);
-  try {
-    const response = await f.request(
-      "/jobs/purgeRequestedUsers/run",
-      post("purgeRequestedUsers"),
-    );
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
-      error: expect.stringContaining("continues in the background"),
-    });
-    expect(f.database.query("SELECT status FROM job_runs").get()).toEqual({
-      status: "queued",
-    });
-  } finally {
-    wait.mockRestore();
-  }
+  expect(catalog.jobs).toHaveLength(12);
+  expect(catalog.jobs.filter((job) => !job.manual)).toEqual([
+    expect.objectContaining({ id: "syncFinanceConnection" }),
+  ]);
 });
 
 it("reports caught and interrupted maintenance failures and treats cancellation neutrally", async () => {

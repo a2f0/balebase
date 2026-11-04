@@ -40,8 +40,7 @@ const endpoints = {
 export function adminJobsApi(transport: Transport) {
   return {
     async list() {
-      return (await transport.call(endpoints.list, { query: { all: "true" } }))
-        .jobs;
+      return (await transport.call(endpoints.list, {})).jobs;
     },
     async run(jobId: string) {
       return (

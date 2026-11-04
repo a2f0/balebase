@@ -82,7 +82,6 @@ describe("api", () => {
       ["/api/issues/private", "PATCH"],
       ["/api/issues/private/activity", "GET"],
       ["/api/audits/runs/private/activity", "GET"],
-      ["/api/admin/jobs/purgeRequestedUsers/run", "POST"],
       ["/api/account-settings/deletion", "GET"],
       ["/api/account-settings/deletion", "POST"],
       ["/api/account-settings/deletion", "DELETE"],

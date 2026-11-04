@@ -1,9 +1,8 @@
 import { adminJobsRoutes } from "@balebase/validators/adminJobs";
-import { type Context, Hono } from "hono";
+import { Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
 import { jobRunDetail, listJobRuns } from "../jobs/jobHistory";
 import { toJobRun } from "../jobs/jobRuns";
-import { waitForLegacyJob } from "../jobs/legacyJobRun";
 import {
   enqueueMaintenance,
   isScheduled,
@@ -28,19 +27,15 @@ adminJobs.get("/", (context) =>
           ? "Every hour at 17 minutes past the hour (UTC) in production. Manual only in staging."
           : "Manual only.",
       })),
-      ...(context.req.query("all") === "true"
-        ? [
-            {
-              id: "syncFinanceConnection",
-              name: "Sync bank accounts",
-              manual: false,
-              runSchedule:
-                "Once per UTC day for connections with daily sync enabled; checked every 5 minutes from 00:00 UTC. Manual sync from Finance.",
-              description:
-                "Imports bank transactions. Start a sync from Finance or enable daily sync on a connection.",
-            },
-          ]
-        : []),
+      {
+        id: "syncFinanceConnection",
+        name: "Sync bank accounts",
+        manual: false,
+        runSchedule:
+          "Once per UTC day for connections with daily sync enabled; checked every 5 minutes from 00:00 UTC. Manual sync from Finance.",
+        description:
+          "Imports bank transactions. Start a sync from Finance or enable daily sync on a connection.",
+      },
     ],
   }),
 );
@@ -108,10 +103,7 @@ adminJobs.get("/runs/:runId", async (context) => {
   if (!detail) return context.json({ error: "Job run not found." }, 404);
   return respond(context, adminJobsRoutes.detail, detail);
 });
-adminJobs.post("/:jobId/run", (context) => startMaintenance(context, true));
-adminJobs.post("/:jobId/runs", (context) => startMaintenance(context, false));
-
-async function startMaintenance(context: Context<ApiEnv>, legacy: boolean) {
+adminJobs.post("/:jobId/runs", async (context) => {
   if (context.req.header("Origin") !== context.env.CORS_ORIGIN) {
     return context.json({ error: "Untrusted request origin." }, 403);
   }
@@ -120,11 +112,7 @@ async function startMaintenance(context: Context<ApiEnv>, legacy: boolean) {
   );
   if (!job) return context.json({ error: "Unknown maintenance job." }, 404);
   const confirmation = "Confirm the job ID to run this job.";
-  const input = await readBody(
-    context,
-    legacy ? adminJobsRoutes.run : adminJobsRoutes.start,
-    confirmation,
-  );
+  const input = await readBody(context, adminJobsRoutes.start, confirmation);
   if (input instanceof Response) return input;
   if (input.confirm !== job.id) {
     return context.json({ error: confirmation }, 400);
@@ -137,23 +125,7 @@ async function startMaintenance(context: Context<ApiEnv>, legacy: boolean) {
   });
   if (!run)
     return context.json({ error: "Only root admins can run jobs." }, 403);
-  if (!legacy)
-    return respond(context, adminJobsRoutes.start, { run: toJobRun(run) }, 202);
-  const completed = await waitForLegacyJob(context.env.DB, run.id);
-  if (!completed)
-    return context.json(
-      {
-        error:
-          "Maintenance continues in the background. Update or reopen Jobs to check its status before retrying.",
-      },
-      503,
-    );
-  return respond(
-    context,
-    adminJobsRoutes.run,
-    { run: completed },
-    completed.status === "failed" ? 500 : 200,
-  );
-}
+  return respond(context, adminJobsRoutes.start, { run: toJobRun(run) }, 202);
+});
 
 export { adminJobs };

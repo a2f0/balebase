@@ -7,30 +7,23 @@ export function encodeCursor(value: string, id: string) {
     .replace(/=+$/, "");
 }
 
-/** Accept older JSON objects and base64 cursors while emitting one opaque format. */
+/** Reads a cursor from `encodeCursor`, or null when it is not one. */
 export function decodeCursor(
   value: string,
-  legacyField: "createdAt" | "date",
   maxLength: number,
 ): [string, string] | null {
   if (!value || value.length > maxLength) return null;
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) return null;
   try {
-    let json = value;
-    if (!value.trimStart().startsWith("{")) {
-      if (!/^[A-Za-z0-9_+/-]+={0,2}$/.test(value)) return null;
-      const binary = atob(value.replaceAll("-", "+").replaceAll("_", "/"));
-      json = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(
+    const binary = atob(value.replaceAll("-", "+").replaceAll("_", "/"));
+    const parts: unknown = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(
         Uint8Array.from(binary, (character) => character.charCodeAt(0)),
-      );
-    }
-    const decoded: unknown = JSON.parse(json);
-    const parts = Array.isArray(decoded)
-      ? decoded
-      : decoded && typeof decoded === "object"
-        ? [Reflect.get(decoded, legacyField), Reflect.get(decoded, "id")]
-        : null;
+      ),
+    );
     if (
-      parts?.length !== 2 ||
+      !Array.isArray(parts) ||
+      parts.length !== 2 ||
       !parts.every(
         (part) =>
           typeof part === "string" && part.length > 0 && part.length <= 1000,
