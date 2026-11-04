@@ -25,15 +25,22 @@ import {
   ProjectAuditForms,
 } from "./ProjectAuditForms";
 
+/** Shown over the device's copy when the API cannot be reached. */
+export const unreachableNotice =
+  "Could not reach Balebase. Showing this device's copy; it syncs when the connection returns.";
+
 /**
  * Projects as this device keeps them, for when it is offline or signed out:
  * the person's projects, each with its forms to start audits from and the
  * audits started here. Everything else about a project needs a connection.
  */
 export function DeviceProjects({
+  notice,
   onNavigate,
   pathname,
 }: {
+  /** Why the device's copy is showing, when the API could not be reached. */
+  notice?: string | undefined;
   onNavigate: (pathname: string) => void;
   pathname: string;
 }) {
@@ -41,9 +48,9 @@ export function DeviceProjects({
   if (audit) return <DeviceAuditPage {...audit} onNavigate={onNavigate} />;
   const projectId = projectIdForPath(pathname);
   return projectId ? (
-    <DeviceProjectPage id={projectId} onNavigate={onNavigate} />
+    <DeviceProjectPage id={projectId} notice={notice} onNavigate={onNavigate} />
   ) : (
-    <DeviceProjectList onNavigate={onNavigate} />
+    <DeviceProjectList notice={notice} onNavigate={onNavigate} />
   );
 }
 
@@ -59,8 +66,10 @@ function DeviceHeader({ description }: { description: string }) {
 }
 
 function DeviceProjectList({
+  notice,
   onNavigate,
 }: {
+  notice: string | undefined;
   onNavigate: (pathname: string) => void;
 }) {
   const { workspace } = useDevice();
@@ -69,6 +78,7 @@ function DeviceProjectList({
     <Page>
       <DeviceHeader description="Your projects as this device last synced them. Connect to see everything else." />
       <PageBody>
+        {notice && <Banner tone="warning">{notice}</Banner>}
         <DeviceSyncStatus />
         <PageSection
           actions={
@@ -122,9 +132,11 @@ function DeviceProjectList({
 
 function DeviceProjectPage({
   id,
+  notice,
   onNavigate,
 }: {
   id: string;
+  notice: string | undefined;
   onNavigate: (pathname: string) => void;
 }) {
   const { workspace } = useDevice();
@@ -150,6 +162,7 @@ function DeviceProjectPage({
         title={project?.name ?? "Project unavailable"}
       />
       <PageBody>
+        {notice && <Banner tone="warning">{notice}</Banner>}
         <DeviceSyncStatus />
         {project ? (
           <ProjectAuditForms

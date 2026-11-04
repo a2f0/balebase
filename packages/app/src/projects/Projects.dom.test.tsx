@@ -451,6 +451,35 @@ describe("project detail", () => {
     expect(visited).toEqual(["/projects/project-1/audits/audit"]);
   });
 
+  it("shows the device's copy when the API cannot be reached", async () => {
+    const [walk] = forms;
+    if (!walk) throw new Error("Missing form.");
+    respond(async () =>
+      Response.json({ error: "Unavailable" }, { status: 503 }),
+    );
+    const device = deviceWith([]);
+    const workspace = device.workspace;
+    if (!workspace) throw new Error("Missing workspace.");
+    workspace.projects = [
+      { description: "", formIds: ["walk"], id: "project-1", name: "Site" },
+    ];
+    workspace.forms = [walk];
+    for (const pathname of ["/projects", "/projects/project-1"]) {
+      const { container } = await mount(
+        <DeviceContext.Provider value={device}>
+          <Projects onNavigate={() => {}} pathname={pathname} />
+        </DeviceContext.Provider>,
+      );
+      await settle();
+      expect(container.textContent).toContain("Could not reach Balebase.");
+      expect(container.textContent).toContain(
+        pathname === "/projects" ? "Your projects" : "Site walk",
+      );
+      if (pathname !== "/projects")
+        expect(queryButton("Start audit", container)).toBeTruthy();
+    }
+  });
+
   it("keeps audits for projects the device no longer lists within reach", async () => {
     const [walk] = forms;
     if (!walk) throw new Error("Missing form.");

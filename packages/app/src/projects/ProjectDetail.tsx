@@ -27,11 +27,13 @@ import {
   TemplateCollections,
   TemplateViewSwitcher,
 } from "../audits/TemplateCollections";
+import { useDevice } from "../offline/offlineContext";
 import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
 import { projectPath } from "../workspace/workspacePaths";
+import { DeviceProjects, unreachableNotice } from "./DeviceProjects";
 import { ProjectAuditForms } from "./ProjectAuditForms";
 import { ProjectForm } from "./ProjectForm";
 
@@ -116,6 +118,16 @@ export function ProjectDetailPage({
   const project = detail?.project;
   const canEdit = Boolean(detail?.canManage && project && !editing);
   const sections = useProjectSections();
+  const { workspace } = useDevice();
+  // As on the list: an unreachable API leaves the device's copy to work from.
+  if (!detail && error && workspace?.projects.some((entry) => entry.id === id))
+    return (
+      <DeviceProjects
+        notice={unreachableNotice}
+        onNavigate={onNavigate}
+        pathname={projectPath(id)}
+      />
+    );
   let title = "Loading…";
   if (project) title = project.name;
   else if (error) title = "Project unavailable";
