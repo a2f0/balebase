@@ -307,6 +307,96 @@ describe("projects", () => {
     });
   });
 
+  it("hides a deleted project with its audits, members, and forms until it is restored", async () => {
+    const { as, events, run } = fixture();
+    const owner = as("owner-user", "owner");
+    const member = as("member-user", "member");
+    const id = await createProject(owner);
+    await owner("PUT", `/api/projects/${id}/members/member-user`);
+    await owner("PUT", `/api/projects/${id}/forms/org-form`);
+    run(
+      `INSERT INTO audits
+       (id, organization_id, project_id, template_name, definition, responses,
+        status, started_by, created_at, updated_at)
+       VALUES ('audit', 'org-1', ?, 'Site walk', '{}', '{}', 'completed',
+               'owner-user', ?, ?)`,
+    ).run(id, timestamp, timestamp);
+
+    expect((await member("DELETE", `/api/projects/${id}`)).status).toBe(403);
+    expect((await owner("DELETE", `/api/projects/${id}`)).status).toBe(204);
+    expect((await owner("DELETE", `/api/projects/${id}`)).status).toBe(404);
+    expect((await owner("GET", `/api/projects/${id}`)).status).toBe(404);
+    expect(
+      (await owner<{ projects: ProjectSummary[] }>("GET", "/api/projects")).body
+        .projects,
+    ).toEqual([]);
+    // Nothing about a deleted project can change.
+    for (const [method, path, body] of [
+      ["PATCH", `/api/projects/${id}`, { expectedRevision: 0, name: "New" }],
+      ["PUT", `/api/projects/${id}/members/owner-user`, undefined],
+      ["DELETE", `/api/projects/${id}/forms/org-form`, undefined],
+    ] as const)
+      expect((await owner(method, path, body)).status).toBe(404);
+    expect(run("SELECT id, project_id FROM audits").all()).toEqual([
+      { id: "audit", project_id: id },
+    ]);
+
+    const deleted = await member<{
+      canManage: boolean;
+      projects: Array<{ deletedBy: { id: string } | null; id: string }>;
+    }>("GET", "/api/projects/deleted");
+    expect(deleted.body).toMatchObject({
+      canManage: false,
+      projects: [{ deletedBy: { id: "owner-user" }, id }],
+    });
+    // Other organizations see none of it.
+    expect(
+      (
+        await as(
+          "other-user",
+          "owner",
+          "org-2",
+        )<{ projects: unknown[] }>("GET", "/api/projects/deleted")
+      ).body.projects,
+    ).toEqual([]);
+    expect(
+      (
+        await as(
+          "other-user",
+          "owner",
+          "org-2",
+        )("POST", `/api/projects/${id}/restore`)
+      ).status,
+    ).toBe(404);
+    expect((await member("POST", `/api/projects/${id}/restore`)).status).toBe(
+      403,
+    );
+
+    const restored = await owner<{ project: Project }>(
+      "POST",
+      `/api/projects/${id}/restore`,
+    );
+    expect(restored.status).toBe(200);
+    expect(restored.body.project).toMatchObject({
+      forms: [expect.objectContaining({ id: "org-form" })],
+      members: [expect.objectContaining({ id: "member-user" })],
+    });
+    expect((await owner("POST", `/api/projects/${id}/restore`)).status).toBe(
+      404,
+    );
+    expect(
+      (await owner<{ projects: unknown[] }>("GET", "/api/projects/deleted"))
+        .body.projects,
+    ).toEqual([]);
+    expect(events().map((event) => event.action)).toEqual([
+      "project.created",
+      "project.member_added",
+      "project.form_enabled",
+      "project.deleted",
+      "project.restored",
+    ]);
+  });
+
   it("lets members read projects but only managers change them", async () => {
     const { as, events } = fixture();
     const owner = as("owner-user", "owner");

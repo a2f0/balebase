@@ -3,6 +3,7 @@ import {
   type ActivityResponse,
   auditTarget,
   createActivityAudit,
+  createActivityForm,
   createFixture,
   type IssueImageResponse,
   type IssueResponse,
@@ -11,7 +12,7 @@ import {
   pngBytes,
   type TemplateResponse,
 } from "../testing/auditFixture";
-import { applyMigrations } from "../testing/database";
+import { migrateAuditsIntoProjects } from "../testing/database";
 
 interface ActivityRunResponse {
   audit: {
@@ -565,7 +566,23 @@ describe("audit activity", () => {
 
   it("imports only known historical actors without inventing earlier answer or completion history", async () => {
     const fixture = createFixture({ before: "0049" });
-    const { auditId, templateId } = await createActivityAudit(fixture);
+    const templateId = await createActivityForm(fixture);
+    // Projects came later, so the audit is written as the start route then
+    // wrote it.
+    const auditId = "legacy-audit";
+    fixture.database
+      .query(
+        `INSERT INTO audits
+         (id, organization_id, template_id, template_family_id,
+          template_version_id, template_version, template_name, definition,
+          responses, status, started_by, created_at, updated_at)
+         SELECT ?, 'org_user-1', NULL, template_id, id, version, name,
+                definition, '{}', 'in_progress', 'user-1', created_at,
+                created_at
+         FROM audit_template_versions
+         WHERE template_id = ? ORDER BY version DESC LIMIT 1`,
+      )
+      .run(auditId, templateId);
     fixture.database
       .query(
         `UPDATE audits SET responses = '{"check":"pass"}', status = 'completed', completed_at = '2026-09-01T00:00:00.000Z' WHERE id = ?`,
@@ -575,7 +592,7 @@ describe("audit activity", () => {
       .query(`INSERT INTO audit_issues (id, organization_id, audit_id, item_id, title, description, priority, status, created_by, created_at, updated_at)
       VALUES ('legacy-issue', 'org_user-1', ?, 'check', 'Legacy issue', '', 'high', 'resolved', 'user-2', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z')`)
       .run(auditId);
-    applyMigrations(fixture.database, { from: "0049" });
+    migrateAuditsIntoProjects(fixture.database, "0049");
     const history = await jsonRequest<ActivityResponse>(
       fixture,
       `/runs/${auditId}/activity`,

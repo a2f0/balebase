@@ -236,33 +236,26 @@ it("changes the cursor when global forms, membership, or names change", async ()
   expect(left.members?.map((person) => person.name)).toEqual(["Renamed"]);
 });
 
-it("records an audit against its project, which may be gone by sync time", async () => {
+it("records an audit against its project, even one deleted since, and refuses any other", async () => {
   const f = fixture();
   f.db.exec(`
-    INSERT INTO projects (id, organization_id, name, created_at, updated_at)
-    VALUES ('mine', 'org_user-1', 'Mine', '2026-10-01', '2026-10-01'),
-           ('elsewhere', 'org_user-2', 'Elsewhere', '2026-10-01', '2026-10-01');
+    INSERT INTO projects (id, organization_id, name, created_at, updated_at, deleted_at)
+    VALUES ('deleted', 'org_user-1', 'Deleted', '2026-10-01', '2026-10-01', '2026-10-02'),
+           ('elsewhere', 'org_user-2', 'Elsewhere', '2026-10-01', '2026-10-01', NULL);
   `);
   const onProject = audit();
   const deleted = { ...audit(), projectId: "deleted" };
-  const foreign = { ...audit(), projectId: "elsewhere" };
-  for (const operation of [onProject, deleted, foreign])
+  for (const operation of [onProject, deleted])
     expect((await f.apply(operation)).status).toBe(201);
+  for (const projectId of ["elsewhere", "missing"])
+    expect((await f.apply({ ...audit(), projectId })).status).toBe(409);
   expect(
-    f.db
-      .query("SELECT id, project_id FROM audits ORDER BY created_at, id")
-      .all(),
-  ).toEqual(
-    expect.arrayContaining([
-      { id: onProject.id, project_id: "mine" },
-      { id: deleted.id, project_id: null },
-      { id: foreign.id, project_id: null },
-    ]),
-  );
-  f.db.exec("DELETE FROM projects WHERE id = 'mine'");
-  expect(
-    f.db.query("SELECT project_id FROM audits WHERE id = ?").get(onProject.id),
-  ).toEqual({ project_id: null });
+    f.db.query("SELECT id, project_id FROM audits ORDER BY project_id").all(),
+  ).toEqual([
+    { id: onProject.id, project_id: "audited" },
+    { id: deleted.id, project_id: "deleted" },
+  ]);
+  expect(f.db.query("SELECT id FROM offline_operations").all()).toHaveLength(2);
 });
 
 it("syncs work on a downloaded version after the form is unpublished or discarded", async () => {
@@ -384,7 +377,7 @@ function audit(): Extract<OfflineOperation, { type: "audit" }> {
   return {
     type: "audit",
     id: crypto.randomUUID(),
-    projectId: "mine",
+    projectId: "audited",
     templateId: "form",
     templateVersion: 1,
     responses: { check: "pass" },
@@ -396,6 +389,10 @@ function fixture() {
   databases.push(db);
   for (const id of ["user-1", "user-2"])
     seedAccount(db, { createdAt: "2026-10-01", id });
+  // The project audits are made for; no one is a member, so syncs list none.
+  db.exec(
+    "INSERT INTO projects (id, organization_id, name, created_at, updated_at) VALUES ('audited', 'org_user-1', 'Audited', '2026-10-01', '2026-10-01')",
+  );
   db.exec(
     "INSERT INTO audit_template_families (id, scope, organization_id, current_version, created_by, created_at, updated_at) VALUES ('form', 'organization', 'org_user-1', 2, 'user-1', '2026-10-01', '2026-10-01')",
   );

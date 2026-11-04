@@ -512,6 +512,40 @@ describe("project detail", () => {
     expect(visited).toEqual(["/projects/deleted-project/audits/left-behind"]);
   });
 
+  it("lists deleted projects and lets a manager restore one", async () => {
+    const requests: string[] = [];
+    const deleted = {
+      deletedAt: "2026-10-20T00:00:00.000Z",
+      deletedBy: owner,
+      description: "",
+      id: "old-site",
+      name: "Old site",
+    };
+    respond(async (url, init) => {
+      requests.push(`${init?.method ?? "GET"} ${url.pathname}`);
+      if (url.pathname === "/api/projects/deleted")
+        return Response.json({ canManage: true, projects: [deleted] });
+      if (url.pathname === "/api/projects/old-site/restore")
+        return Response.json({ project: {} });
+      return Response.json({ canManage: true, projects: [] });
+    });
+    const visited: string[] = [];
+    const { container } = await mount(
+      <Projects
+        onNavigate={(pathname) => visited.push(pathname)}
+        pathname="/projects"
+      />,
+    );
+    await settle();
+    expect(container.textContent).toContain("Deleted projects");
+    expect(container.textContent).toContain("Old site");
+    expect(container.textContent).toContain(`by ${owner.name}`);
+    await click(queryButton("Restore", container));
+    await settle();
+    expect(requests).toContain("POST /api/projects/old-site/restore");
+    expect(visited).toEqual(["/projects/old-site"]);
+  });
+
   it("saves only the edited fields from the revision it loaded", async () => {
     stubApi(true);
     const container = await render();

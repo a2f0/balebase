@@ -57,6 +57,7 @@ const endpoints = {
   start: endpoint<typeof auditsRoutes.start>({
     method: "POST",
     path: "/api/audits/templates/:id/runs",
+    body: "json",
     response: "json",
   }),
   listRuns: endpoint<typeof auditsRoutes.listRuns>({
@@ -174,8 +175,10 @@ export function auditsApi(transport: Transport) {
         params: { id: template.id },
       });
     },
-    start(templateId: string) {
+    /** Starts an audit for `projectId` from a form turned on for it. */
+    start(templateId: string, projectId: string) {
       return transport.call(endpoints.start, {
+        body: { projectId },
         params: { id: templateId },
       });
     },

@@ -82,6 +82,7 @@ export interface ContinuitySeed {
   }[];
   audits: {
     id: string;
+    project: string;
     form: string;
     startedBy: string;
     startedOn: Day;

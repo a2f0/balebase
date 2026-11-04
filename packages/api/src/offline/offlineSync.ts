@@ -41,7 +41,7 @@ export async function readOfflineSync(
          FROM projects AS project
          JOIN project_members AS person ON person.project_id = project.id
          WHERE project.organization_id = ? AND person.user_id = ?
-           AND ${currentMember}
+           AND project.deleted_at IS NULL AND ${currentMember}
          ORDER BY project.name COLLATE NOCASE, project.id`,
       )
       .bind(organizationId, userId),
@@ -51,7 +51,9 @@ export async function readOfflineSync(
          JOIN project_audit_forms AS enabled ON enabled.template_id = family.id
          JOIN project_members AS person
            ON person.project_id = enabled.project_id
+         JOIN projects AS project ON project.id = enabled.project_id
          WHERE enabled.organization_id = ? AND person.user_id = ?
+           AND project.deleted_at IS NULL
            AND ${currentMember}
            AND ${projectFormFilter("enabled.organization_id")}
          ORDER BY version.name COLLATE NOCASE, family.id`,

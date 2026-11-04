@@ -19,9 +19,9 @@ describe("audit issue images", () => {
     fixture.database
       .query(
         `INSERT INTO audits
-         (id, organization_id, template_name, definition, responses, status,
+         (id, organization_id, project_id, template_name, definition, responses, status,
           started_by, created_at, updated_at)
-         VALUES ('format-audit', 'org_user-1', 'Format test', '{}', '{}',
+         VALUES ('format-audit', 'org_user-1', 'project_org_user-1', 'Format test', '{}', '{}',
                  'in_progress', 'user-1', ?, ?)`,
       )
       .run(now, now);
@@ -135,9 +135,9 @@ describe("audit issue images", () => {
     fixture.database
       .query(
         `INSERT INTO audits
-         (id, organization_id, template_name, definition, responses, status,
+         (id, organization_id, project_id, template_name, definition, responses, status,
           started_by, created_at, updated_at)
-         VALUES ('declared-audit', 'org_user-1', 'Declared types', '{}', '{}',
+         VALUES ('declared-audit', 'org_user-1', 'project_org_user-1', 'Declared types', '{}', '{}',
                  'in_progress', 'user-1', ?, ?)`,
       )
       .run(now, now);
@@ -182,11 +182,18 @@ describe("audit issue images", () => {
       fixture.database
         .query(
           `INSERT INTO audits
-           (id, organization_id, template_name, definition, responses, status,
-            started_by, created_at, updated_at)
-           VALUES (?, ?, 'Memory test', '{}', '{}', 'in_progress', ?, ?, ?)`,
+           (id, organization_id, project_id, template_name, definition,
+            responses, status, started_by, created_at, updated_at)
+           VALUES (?, ?, ?, 'Memory test', '{}', '{}', 'in_progress', ?, ?, ?)`,
         )
-        .run(`memory-audit-${suffix}`, organizationId, userId, now, now);
+        .run(
+          `memory-audit-${suffix}`,
+          organizationId,
+          `project_${organizationId}`,
+          userId,
+          now,
+          now,
+        );
       fixture.database
         .query(
           `INSERT INTO issues
@@ -257,9 +264,9 @@ describe("audit issue images", () => {
     fixture.database
       .query(
         `INSERT INTO audits
-         (id, organization_id, template_id, template_name, definition,
+         (id, organization_id, project_id, template_id, template_name, definition,
           responses, status, started_by, created_at, updated_at)
-         VALUES ('cascade-audit', 'org_user-1', NULL, 'Cascade audit', ?, '{}',
+         VALUES ('cascade-audit', 'org_user-1', 'project_org_user-1', NULL, 'Cascade audit', ?, '{}',
                  'in_progress', 'user-1', ?, ?)`,
       )
       .run(definition, now, now);
@@ -376,9 +383,9 @@ describe("audit issue images", () => {
     fixture.database
       .query(
         `INSERT INTO audits
-         (id, organization_id, template_name, definition, responses, status,
+         (id, organization_id, project_id, template_name, definition, responses, status,
           started_by, created_at, updated_at)
-         VALUES ('purged-audit', 'org_user-1', 'Purged audit', '{}', '{}',
+         VALUES ('purged-audit', 'org_user-1', 'project_org_user-1', 'Purged audit', '{}', '{}',
                  'in_progress', 'user-1', ?, ?)`,
       )
       .run(now, now);

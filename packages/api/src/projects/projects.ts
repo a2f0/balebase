@@ -18,6 +18,7 @@ import {
   findProject,
   findProjectRow,
   listAvailableForms,
+  listDeletedProjects,
   listProjects,
 } from "./projectRecords";
 
@@ -26,10 +27,11 @@ type ProjectContext = Context<ApiEnv>;
 const invalidProject =
   "Project details are invalid. Enter a name of at most 120 characters and a description of at most 1,000.";
 
-// Every write is guarded by its project still belonging to the organization,
-// in the same statement, so a concurrent deletion cannot slip past it.
+// Every write is guarded by its project still belonging to the organization
+// and not deleted, in the same statement, so a concurrent deletion cannot
+// slip past it.
 const projectExists =
-  "EXISTS (SELECT 1 FROM projects WHERE id = ? AND organization_id = ?)";
+  "EXISTS (SELECT 1 FROM projects WHERE id = ? AND organization_id = ? AND deleted_at IS NULL)";
 
 const projects = new Hono<ApiEnv>();
 
@@ -76,6 +78,16 @@ projects.post("/", requireManager(), async (context) => {
   ]);
   return projectResponse(context, projectsRoutes.create, id, 201);
 });
+
+projects.get("/deleted", async (context) =>
+  respond(context, projectsRoutes.listDeleted, {
+    canManage: canManage(context),
+    projects: await listDeletedProjects(
+      context.env.DB,
+      context.get("organizationId"),
+    ),
+  }),
+);
 
 projects.get("/:id", async (context) => {
   const organizationId = context.get("organizationId");
@@ -145,7 +157,8 @@ projects.patch("/:id", requireManager(), async (context) => {
     return projectResponse(context, projectsRoutes.update, existing.id);
   const name = input.name ?? existing.name;
   const now = new Date().toISOString();
-  const asLoaded = "id = ? AND organization_id = ? AND revision = ?";
+  const asLoaded =
+    "id = ? AND organization_id = ? AND revision = ? AND deleted_at IS NULL";
   const bindings = [existing.id, organizationId, existing.revision];
   // The event commits only with the update it describes.
   const [, update] = await activityBatch(database, context.get("apiKey"), [
@@ -175,6 +188,8 @@ projects.patch("/:id", requireManager(), async (context) => {
   return projectResponse(context, projectsRoutes.update, existing.id);
 });
 
+// Deleting hides the project: its audits keep pointing at it, and members,
+// forms, and history stay for a restore.
 projects.delete("/:id", requireManager(), async (context) => {
   const organizationId = context.get("organizationId");
   const database = context.env.DB;
@@ -185,19 +200,60 @@ projects.delete("/:id", requireManager(), async (context) => {
     userId(context),
   );
   if (!existing) return projectNotFound(context);
-  // History outlives the project; purging the organization removes it. The
-  // event snapshots the row this batch deletes.
+  const now = new Date().toISOString();
+  const live = {
+    bindings: [existing.id, organizationId],
+    sql: projectExists,
+  };
   await activityBatch(database, context.get("apiKey"), [
-    projectEvent(context, existing.id, {
-      action: "project.deleted",
-      details: null,
-      subject: { id: existing.id, type: "project" },
-    }),
+    projectEvent(
+      context,
+      existing.id,
+      {
+        action: "project.deleted",
+        details: null,
+        subject: { id: existing.id, type: "project" },
+      },
+      live,
+    ),
     database
-      .prepare("DELETE FROM projects WHERE id = ? AND organization_id = ?")
-      .bind(existing.id, organizationId),
+      .prepare(
+        `UPDATE projects SET deleted_at = ?, deleted_by_user_id = ?
+         WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`,
+      )
+      .bind(now, userId(context), existing.id, organizationId),
   ]);
   return context.body(null, 204);
+});
+
+projects.post("/:id/restore", requireManager(), async (context) => {
+  const organizationId = context.get("organizationId");
+  const database = context.env.DB;
+  const id = context.req.param("id");
+  const deleted = {
+    bindings: [id, organizationId],
+    sql: "EXISTS (SELECT 1 FROM projects WHERE id = ? AND organization_id = ? AND deleted_at IS NOT NULL)",
+  };
+  const [, restored] = await activityBatch(database, context.get("apiKey"), [
+    projectEvent(
+      context,
+      id,
+      {
+        action: "project.restored",
+        details: null,
+        subject: { id, type: "project" },
+      },
+      deleted,
+    ),
+    database
+      .prepare(
+        `UPDATE projects SET deleted_at = NULL, deleted_by_user_id = NULL
+         WHERE id = ? AND organization_id = ? AND deleted_at IS NOT NULL`,
+      )
+      .bind(id, organizationId),
+  ]);
+  if (!restored?.meta.changes) return projectNotFound(context);
+  return projectResponse(context, projectsRoutes.restore, id);
 });
 
 projects.put("/:id/members/:userId", requireManager(), async (context) => {
@@ -429,7 +485,8 @@ async function projectResponse(
     | typeof projectsRoutes.addMember
     | typeof projectsRoutes.removeMember
     | typeof projectsRoutes.enableForm
-    | typeof projectsRoutes.disableForm,
+    | typeof projectsRoutes.disableForm
+    | typeof projectsRoutes.restore,
   id: string,
   status?: 200 | 201,
 ) {

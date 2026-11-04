@@ -63,6 +63,7 @@ function detailWith(responses: Record<string, string>): AuditDetail {
       deletedBy: null,
       definition: { sections: [], version: 1 },
       id: "audit-1",
+      project: { deleted: false, id: "project-1", name: "Riverside clinic" },
       responses,
       revision: 0,
       status: "in_progress",

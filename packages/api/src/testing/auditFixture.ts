@@ -1,3 +1,4 @@
+import type { Database } from "bun:sqlite";
 import type { AuditDefinition } from "@balebase/validators/audits";
 import { activity } from "../activity/activity";
 import { adminAuditTemplates } from "../admin/adminAuditTemplates";
@@ -7,8 +8,10 @@ import { memoryStorage, testBindings } from "./bindings";
 import { type QueryEvent, queryHooks, toD1 } from "./d1";
 import { createTestDatabase } from "./database";
 import { requester } from "./http";
-import { seedAccount } from "./seed";
+import { seedAccount, seedProject } from "./seed";
 import { testApp } from "./session";
+
+const seededAt = "2026-08-18T12:00:00.000Z";
 
 export interface TemplateResponse {
   template: {
@@ -83,7 +86,48 @@ export interface ActivityResponse {
   nextCursor: string | null;
 }
 
-export async function createActivityAudit(
+/**
+ * Turns the form on for the organization's test project, creating the
+ * project the first time, and returns the project's id.
+ */
+export function enableForProject(
+  database: Database,
+  templateId: string,
+  organizationId = "org_user-1",
+) {
+  const projectId = seedProject(database, organizationId);
+  database
+    .query(
+      `INSERT OR IGNORE INTO project_audit_forms
+       (project_id, organization_id, template_id, added_at)
+       VALUES (?, ?, ?, ?)`,
+    )
+    .run(projectId, organizationId, templateId, seededAt);
+  return projectId;
+}
+
+/** Starts an audit of the form for the identity's test project. */
+export function startAudit<T = RunResponse>(
+  fixture: ReturnType<typeof createFixture>,
+  templateId: string,
+  identity?: TestIdentity,
+) {
+  const projectId = enableForProject(
+    fixture.database,
+    templateId,
+    identity?.organizationId,
+  );
+  return jsonRequest<T>(
+    fixture,
+    `/templates/${templateId}/runs`,
+    "POST",
+    { projectId },
+    identity,
+  );
+}
+
+/** A form with a required check question and an optional written one. */
+export async function createActivityForm(
   fixture: ReturnType<typeof createFixture>,
   checkId = "check",
 ) {
@@ -124,11 +168,15 @@ export async function createActivityAudit(
     { definition, name: "Activity form" },
     { userId: "user-2" },
   );
-  const started = await jsonRequest<RunResponse>(
-    fixture,
-    `/templates/${templateId}/runs`,
-    "POST",
-  );
+  return templateId;
+}
+
+export async function createActivityAudit(
+  fixture: ReturnType<typeof createFixture>,
+  checkId = "check",
+) {
+  const templateId = await createActivityForm(fixture, checkId);
+  const started = await startAudit(fixture, templateId);
   return { auditId: started.body.auditId, templateId };
 }
 
@@ -230,6 +278,8 @@ export function legacyDatabase(before?: string) {
     ["user-2", "Second Person", "second@example.com"],
   ] as const) {
     seedAccount(database, { email, emailVerified: false, id, name });
+    // A database stopped before projects existed has none to seed.
+    if (before === undefined) seedProject(database, `org_${id}`);
   }
   return database;
 }

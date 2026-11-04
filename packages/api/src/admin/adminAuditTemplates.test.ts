@@ -2,13 +2,15 @@ import { describe, expect, it } from "bun:test";
 import {
   type ActivityResponse,
   createFixture,
+  enableForProject,
   jsonRequest,
   type RunResponse,
+  startAudit,
   type TemplateListResponse,
   type TemplateResponse,
   type TemplateVersionsResponse,
 } from "../testing/auditFixture";
-import { applyMigrations } from "../testing/database";
+import { migrateAuditsIntoProjects } from "../testing/database";
 
 describe("global audit templates", () => {
   it("preserves legacy shared global forms when publication controls are introduced", async () => {
@@ -44,7 +46,7 @@ describe("global audit templates", () => {
         definition, '{}', 'in_progress', 'user-1', created_at, created_at
       FROM audit_template_versions WHERE template_id = ? AND version = 1`)
       .run(id);
-    applyMigrations(fixture.database, { from: "0058" });
+    migrateAuditsIntoProjects(fixture.database, "0058");
     const shared = await jsonRequest<TemplateResponse>(
       fixture,
       `/templates/${id}`,
@@ -67,9 +69,7 @@ describe("global audit templates", () => {
     expect(
       (await jsonRequest(fixture, `/templates/${id}/versions/1`, "GET")).status,
     ).toBe(200);
-    expect(
-      (await jsonRequest(fixture, `/templates/${id}/runs`, "POST")).status,
-    ).toBe(201);
+    expect((await startAudit(fixture, id)).status).toBe(201);
     expect(
       (
         await jsonRequest(fixture, `/templates/${id}/copies`, "POST", {
@@ -207,11 +207,7 @@ describe("global audit templates", () => {
       `/templates/${id}`,
       "GET",
     );
-    const run = await jsonRequest<RunResponse>(
-      fixture,
-      `/templates/${id}/runs`,
-      "POST",
-    );
+    const run = await startAudit<RunResponse>(fixture, id);
     const save = (status: string, expectedCurrentVersion: number) =>
       jsonRequest<TemplateResponse>(
         fixture,
@@ -232,7 +228,10 @@ describe("global audit templates", () => {
       [`/templates/${id}/runs`, "POST"],
       [`/templates/${id}/copies`, "POST"],
     ] as const) {
-      expect((await jsonRequest(fixture, path, method)).status).toBe(404);
+      const body = path.endsWith("/runs")
+        ? { projectId: enableForProject(fixture.database, id) }
+        : undefined;
+      expect((await jsonRequest(fixture, path, method, body)).status).toBe(404);
     }
     const listed = await jsonRequest<TemplateListResponse>(
       fixture,
@@ -272,9 +271,7 @@ describe("global audit templates", () => {
       status: "published",
       version: 3,
     });
-    expect(
-      (await jsonRequest(fixture, `/templates/${id}/runs`, "POST")).status,
-    ).toBe(201);
+    expect((await startAudit(fixture, id)).status).toBe(201);
     expect(
       (
         await jsonRequest(
@@ -357,9 +354,7 @@ describe("global audit templates", () => {
     expect((await jsonRequest(fixture, `/templates/${id}`, "GET")).status).toBe(
       404,
     );
-    expect(
-      (await jsonRequest(fixture, `/templates/${id}/runs`, "POST")).status,
-    ).toBe(404);
+    expect((await startAudit(fixture, id)).status).toBe(404);
     const saved = await jsonRequest(
       fixture,
       `/admin/audit-templates/${id}`,
@@ -509,13 +504,10 @@ describe("global audit templates", () => {
       otherOrganization.body.templates.map(({ name }) => name),
     ).not.toContain("Private form");
 
-    const privateRun = await jsonRequest(
-      fixture,
-      `/templates/${local.body.template.id}/runs`,
-      "POST",
-      undefined,
-      { organizationId: "org_user-2", userId: "user-2" },
-    );
+    const privateRun = await startAudit(fixture, local.body.template.id, {
+      organizationId: "org_user-2",
+      userId: "user-2",
+    });
     expect(privateRun.status).toBe(404);
   });
 
@@ -554,11 +546,9 @@ describe("global audit templates", () => {
       version: 2,
     });
 
-    const copiedRun = await jsonRequest(
+    const copiedRun = await startAudit(
       fixture,
-      `/templates/${organizationCopy.body.template.id}/runs`,
-      "POST",
-      undefined,
+      organizationCopy.body.template.id,
       { organizationId: "org_user-2", userId: "user-2" },
     );
     expect(copiedRun.status).toBe(404);
@@ -586,11 +576,9 @@ describe("global audit templates", () => {
       version: 3,
     });
 
-    const globalRun = await jsonRequest<RunResponse>(
+    const globalRun = await startAudit<RunResponse>(
       fixture,
-      `/templates/${global.body.template.id}/runs`,
-      "POST",
-      undefined,
+      global.body.template.id,
       { organizationId: "org_user-2", userId: "user-2" },
     );
     expect(globalRun.status).toBe(201);

@@ -172,6 +172,22 @@ export function seedAccount(
   return { memberId, organizationId, userId: user.id };
 }
 
+/**
+ * The organization's test project, `project_<organizationId>`, created the
+ * first time it is asked for; audits must belong to a project.
+ */
+export function seedProject(database: Database, organizationId: string) {
+  const id = `project_${organizationId}`;
+  database
+    .query(
+      `INSERT OR IGNORE INTO projects
+       (id, organization_id, name, created_at, updated_at)
+       VALUES (?, ?, 'Test project', ?, ?)`,
+    )
+    .run(id, organizationId, seededAt, seededAt);
+  return id;
+}
+
 /** Inserts an `organization_billing` row with only the given columns set. */
 export function insertBilling(
   database: Database,

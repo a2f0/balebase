@@ -6,6 +6,7 @@ import { app } from "../app";
 import { mcpTools } from "../mcp/mcp";
 import { type McpTool, toolAccess } from "../mcp/mcpToolSchema";
 import { activityBatch } from "../shared/activity";
+import { enableForProject } from "../testing/auditFixture";
 import { testBindings } from "../testing/bindings";
 import { toD1 } from "../testing/d1";
 import { createTestDatabase } from "../testing/database";
@@ -361,10 +362,17 @@ describe("organization API keys", () => {
       { name: "Key form" },
     );
     expect(created.status).toBe(201);
+    if (!templateId) throw new Error("Expected a form.");
+    const projectId = enableForProject(
+      fixture.database,
+      templateId,
+      fixture.organizationId,
+    );
     const started = await fixture.withKey<{ auditId: string }>(
       token,
       "POST",
       `/api/audits/templates/${templateId}/runs`,
+      { projectId },
     );
     expect(started.status).toBe(201);
     const discarded = await fixture.callTool<{ isError?: boolean }>(

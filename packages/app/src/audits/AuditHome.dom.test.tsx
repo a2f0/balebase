@@ -131,7 +131,8 @@ describe("audit template layout, mounted", () => {
       expect(text).toContain("2 items");
       expect(text).toContain("1 section");
       expect(text).toContain("v2");
-      expect(text).toContain("Start audit");
+      // Audits start from a project, never from the library.
+      expect(text).not.toContain("Start audit");
     }
     expect(globalRow).toContain("Fire safety");
     expect(globalRow).toContain("Customize");
@@ -181,6 +182,7 @@ describe("deleted audits, mounted", () => {
       deletedBy: null,
       id: "run-active",
       issueCount: 0,
+      project: { deleted: false, id: "p1", name: "Riverside clinic" },
       responseCount: 1,
       status: "in_progress",
       templateName: "Kitchen close",
@@ -200,6 +202,7 @@ describe("deleted audits, mounted", () => {
                 deletedAt: "2026-10-14T12:00:00.000Z",
                 deletedBy: actor,
                 id: "run-discarded",
+                project: { deleted: true, id: "p2", name: "Old site" },
                 templateName: "Fire safety",
               },
             ]
@@ -211,6 +214,8 @@ describe("deleted audits, mounted", () => {
       const view = await mountPage();
       expect(view.text()).toContain("Recent audits");
       expect(view.text()).toContain("Kitchen close");
+      // Each audit names the project it belongs to.
+      expect(view.text()).toContain("Riverside clinic ·");
       await click(view.layoutButton("Deleted"));
       expect(requested).toEqual([
         "/api/audits/runs",
@@ -219,6 +224,7 @@ describe("deleted audits, mounted", () => {
       expect(view.text()).toContain("Deleted audits");
       expect(view.text()).toContain("Discarded");
       expect(view.text()).toContain("by Alex");
+      expect(view.text()).toContain("Old site (deleted project)");
       expect(window.location.search).toBe("");
 
       // Back from a discarded audit opens the deleted list, then the address
@@ -245,6 +251,7 @@ describe("deleted audits, mounted", () => {
       deletedBy: null,
       id,
       issueCount: 0,
+      project: { deleted: false, id: "p1", name: "Riverside clinic" },
       responseCount: 0,
       status: "in_progress",
       templateName: id,

@@ -37,6 +37,15 @@ async function auditStatements(
   );
   if (!template)
     return "The downloaded form version is no longer available. Your local work has been kept.";
+  // A deleted project still takes the work done for it; only one that never
+  // belonged to the organization is refused.
+  const project = await context.env.DB.prepare(
+    "SELECT id FROM projects WHERE id = ? AND organization_id = ?",
+  )
+    .bind(operation.projectId, organizationId)
+    .first<{ id: string }>();
+  if (!project)
+    return "This audit's project is not in this organization. Your local work has been kept.";
   const definition = storedDefinition(template.definition);
   const responses = parseResponses(operation.responses, definition);
   if (!responses || !allRequiredAnswered(definition, responses))
@@ -46,18 +55,14 @@ async function auditStatements(
   // Start and completion are separate statements in one transaction so the
   // existing audit triggers record answers and completion with the sync actor.
   return [
-    // A project deleted while the device was offline leaves the audit
-    // without one rather than refusing the work.
     context.env.DB.prepare(`INSERT INTO audits
       (id, organization_id, project_id, template_id, template_family_id,
        template_version_id, template_version, template_name, definition,
        responses, status, started_by, created_at, updated_at)
-      VALUES (?, ?, (SELECT id FROM projects WHERE id = ? AND organization_id = ?),
-       NULL, ?, ?, ?, ?, ?, '{}', 'in_progress', ?, ?, ?)`).bind(
+      VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, '{}', 'in_progress', ?, ?, ?)`).bind(
       operation.id,
       organizationId,
-      operation.projectId,
-      organizationId,
+      project.id,
       template.id,
       template.version_id,
       template.version,

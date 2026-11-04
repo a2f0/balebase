@@ -1,4 +1,8 @@
-import type { Project, ProjectSummary } from "@balebase/validators/projects";
+import type {
+  DeletedProject,
+  Project,
+  ProjectSummary,
+} from "@balebase/validators/projects";
 import {
   projectFormFilter,
   type TemplateRow,
@@ -55,7 +59,7 @@ export async function listProjects(
   const { results } = await database
     .prepare(
       `${projectSelect}
-       WHERE project.organization_id = ?
+       WHERE project.organization_id = ? AND project.deleted_at IS NULL
        ORDER BY project.name COLLATE NOCASE, project.id`,
     )
     .bind(userId, organizationId)
@@ -71,7 +75,9 @@ export function findProjectRow(
 ) {
   return database
     .prepare(
-      `${projectSelect} WHERE project.id = ? AND project.organization_id = ?`,
+      `${projectSelect}
+       WHERE project.id = ? AND project.organization_id = ?
+         AND project.deleted_at IS NULL`,
     )
     .bind(userId, id, organizationId)
     .first<ProjectRow>();
@@ -112,6 +118,47 @@ export async function findProject(
     forms: forms.results.map(toTemplate),
     members: members.results,
   };
+}
+
+/** The organization's deleted projects, most recently deleted first. */
+export async function listDeletedProjects(
+  database: D1Database,
+  organizationId: string,
+): Promise<DeletedProject[]> {
+  const { results } = await database
+    .prepare(
+      `SELECT project.id, project.name, project.description, project.deleted_at,
+              deleter.id AS deleter_id, deleter.name AS deleter_name,
+              deleter.email AS deleter_email
+       FROM projects AS project
+       LEFT JOIN user AS deleter ON deleter.id = project.deleted_by_user_id
+       WHERE project.organization_id = ? AND project.deleted_at IS NOT NULL
+       ORDER BY project.deleted_at DESC, project.id`,
+    )
+    .bind(organizationId)
+    .all<{
+      deleted_at: string;
+      deleter_email: string | null;
+      deleter_id: string | null;
+      deleter_name: string | null;
+      description: string;
+      id: string;
+      name: string;
+    }>();
+  return results.map((row) => ({
+    deletedAt: row.deleted_at,
+    deletedBy:
+      row.deleter_id && row.deleter_email
+        ? {
+            email: row.deleter_email,
+            id: row.deleter_id,
+            name: row.deleter_name ?? "",
+          }
+        : null,
+    description: row.description,
+    id: row.id,
+    name: row.name,
+  }));
 }
 
 /** Every published audit form the organization can turn on for a project. */

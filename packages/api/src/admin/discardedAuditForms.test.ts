@@ -314,10 +314,10 @@ describe("discarded global forms", () => {
     expect((await restore(fixture, restored.id, 2)).status).toBe(200);
     fixture.database
       .query(`INSERT INTO audits
-        (id, organization_id, template_family_id, template_version_id,
+        (id, organization_id, project_id, template_family_id, template_version_id,
          template_version, template_name, definition, responses, status,
          started_by, created_at, updated_at)
-        SELECT 'kept-audit', 'org_user-1', template_id, id, version, name,
+        SELECT 'kept-audit', 'org_user-1', 'project_org_user-1', template_id, id, version, name,
           definition, '{}', 'completed', 'user-1', created_at, created_at
         FROM audit_template_versions WHERE template_id = ? AND version = 2`)
       .run(old.id);

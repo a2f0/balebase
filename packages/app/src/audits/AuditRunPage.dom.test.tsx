@@ -36,6 +36,7 @@ function detail(revision: number, response: string): AuditDetail {
         version: 1,
       },
       id: "run-1",
+      project: { deleted: false, id: "project-1", name: "Riverside clinic" },
       responses: { check: response },
       revision,
       status: "in_progress",

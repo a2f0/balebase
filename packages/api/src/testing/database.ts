@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { seedProject } from "./seed";
 
 const directory = join(import.meta.dir, "../../migrations");
 const migrations = readdirSync(directory)
@@ -48,6 +49,26 @@ export function createTestDatabase(
  */
 export function applyMigrations(database: Database, range: MigrationRange) {
   migrate(database, range);
+}
+
+/**
+ * Migrates from `from` to the latest schema, first placing the audits made
+ * before 0091 in their organization's test project, since 0091 removes
+ * audits without one.
+ */
+export function migrateAuditsIntoProjects(database: Database, from: string) {
+  migrate(database, { before: "0091", from });
+  const organizations = database
+    .query<{ organization_id: string }, []>(
+      "SELECT DISTINCT organization_id FROM audits WHERE project_id IS NULL",
+    )
+    .all();
+  for (const { organization_id } of organizations) {
+    database
+      .query("UPDATE audits SET project_id = ? WHERE organization_id = ?")
+      .run(seedProject(database, organization_id), organization_id);
+  }
+  migrate(database, { from: "0091" });
 }
 
 function empty(foreignKeys: boolean) {

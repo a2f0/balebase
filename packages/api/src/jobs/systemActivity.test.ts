@@ -11,7 +11,7 @@ import {
 } from "../shared/systemActivity";
 import { applyMigrations, createTestDatabase } from "../testing/database";
 import { fixture, now, post } from "../testing/maintenanceFixture";
-import { seedUser } from "../testing/seed";
+import { seedProject, seedUser } from "../testing/seed";
 import { purgeRequestedUsers } from "../users/userDeletion";
 import { isScheduled, maintenanceJobs } from "./maintenance";
 
@@ -423,12 +423,18 @@ describe("Free-plan retention", () => {
       (organization_id, stripe_status, stripe_price_id, updated_at)
       VALUES ('paid', 'active', 'price_pro', '2026-01-01')`);
     const insert = f.database.query(`INSERT INTO audits
-      (id, organization_id, template_name, definition, responses, status,
-       started_by, created_at, updated_at)
-      VALUES (?, ?, 'Example form', '{"version":1,"sections":[]}', '{}',
+      (id, organization_id, project_id, template_name, definition, responses,
+       status, started_by, created_at, updated_at)
+      VALUES (?, ?, ?, 'Example form', '{"version":1,"sections":[]}', '{}',
               'completed', 'user-1', ?, ?)`);
     const audit = (id: string, organizationId: string, at: string) =>
-      insert.run(id, organizationId, at, at);
+      insert.run(
+        id,
+        organizationId,
+        seedProject(f.database, organizationId),
+        at,
+        at,
+      );
     const bindings = { ...f.bindings, STRIPE_PRO_PRICE_ID: "price_pro" };
     return { audit, bindings, f };
   }

@@ -73,7 +73,7 @@ function useProjectDetail(id: string, onNavigate: (pathname: string) => void) {
     const confirmed = await confirmDialog({
       confirmLabel: "Delete project",
       message:
-        "Members keep the forms already on their devices. The project's history stays in Activity.",
+        "Its audits stay in Audits, and a manager can restore it from Deleted projects. Members keep the forms already on their devices.",
       title: `Delete ${project.name}?`,
       tone: "danger",
     });

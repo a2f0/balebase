@@ -40,6 +40,7 @@ function run(id: string, templateName: string): AuditDetail {
       deletedBy: null,
       definition: { sections: [], version: 1 },
       id,
+      project: { deleted: false, id: "project-1", name: "Riverside clinic" },
       responses: {},
       revision: 1,
       status: "in_progress",
