@@ -72,9 +72,9 @@ linkage or tracking. Keep App Store privacy answers and Google Play Data
 safety disclosures aligned before the next store submission. Release names
 are `balebase-<target>@<git SHA>`; the dist is `staging` or `production`.
 Configured uploads require a clean Git checkout and valid credentials.
-Each upload waits up to ten minutes for Sentry to process the maps and is
-tried three times, since a slow Sentry can take minutes and a retry resumes
-its processing. Uploads that still fail stop deployment or packaging. Source
+Each upload waits for Sentry to process the maps, which sentry-cli abandons
+after five minutes, and is tried three times, since a retry resumes Sentry's
+processing. Uploads that still fail stop deployment or packaging. Source
 maps are removed from web and mobile assets even when uploading fails.
 `DRY_RUN=1` builds and verifies configuration without uploading maps or
 publishing Workers. The
