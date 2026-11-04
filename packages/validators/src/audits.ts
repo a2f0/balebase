@@ -42,7 +42,7 @@ export type AuditDefinition = z.infer<typeof AuditDefinitionSchema>;
 const AuditTemplateScopeSchema = z.enum(["global", "organization"]);
 export type AuditTemplateScope = z.infer<typeof AuditTemplateScopeSchema>;
 
-const AuditTemplateSchema = z.object({
+export const AuditTemplateSchema = z.object({
   createdAt: z.string(),
   currentVersion: z.number(),
   definition: AuditDefinitionSchema,

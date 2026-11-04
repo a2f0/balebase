@@ -17,14 +17,13 @@ import type {
   AuditRunView,
   AuditSummary,
   AuditTemplate,
-  AuditTemplateScope,
   AuditTemplateSummary,
 } from "@balebase/validators/audits";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorToast } from "../billing/ErrorToast";
 import { api } from "../shared/apiClient";
 import { InfiniteScroll } from "../shared/InfiniteScroll";
-import { countLabel, formatDate, formatLabel } from "../shared/labels";
+import { countLabel, formatDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useCursorPages } from "../shared/useCursorPages";
 import { useLoad } from "../shared/useLoad";
@@ -34,6 +33,10 @@ import {
   readAuditTemplateView,
   storeAuditTemplateView,
 } from "./auditTemplateView";
+import {
+  TemplateCollections,
+  TemplateViewSwitcher,
+} from "./TemplateCollections";
 
 export function AuditHome({
   onNavigate,
@@ -170,14 +173,21 @@ interface TemplateActions {
   onEdit: (id: string) => void;
 }
 
-const templateViews: {
-  icon: IconName;
-  label: string;
-  view: AuditTemplateView;
-}[] = [
-  { icon: "grid", label: "Grid", view: "grid" },
-  { icon: "list", label: "List", view: "list" },
-];
+const libraryCopy = {
+  global: {
+    description: "Available in every organization.",
+    emptyMessage: "No global checklists are available yet.",
+    emptyTitle: "No global forms",
+    title: "Global forms",
+  },
+  organization: {
+    description: "Private to the active organization.",
+    emptyMessage:
+      "No forms have been created for this organization yet. Customize a global form or start a new checklist.",
+    emptyTitle: "No organization forms yet",
+    title: "Organization forms",
+  },
+};
 
 function TemplateLibrary({
   onViewChange,
@@ -204,28 +214,14 @@ function TemplateLibrary({
       title="Checklist templates"
     >
       {templates ? (
-        <div className="auditCollections">
-          <TemplateCollection
-            {...actions}
-            description="Available in every organization."
-            emptyMessage="No global checklists are available yet."
-            emptyTitle="No global forms"
-            templates={templates.filter(({ scope }) => scope === "global")}
-            title="Global forms"
-            view={view}
-          />
-          <TemplateCollection
-            {...actions}
-            description="Private to the active organization."
-            emptyMessage="No forms have been created for this organization yet. Customize a global form or start a new checklist."
-            emptyTitle="No organization forms yet"
-            templates={templates.filter(
-              ({ scope }) => scope === "organization",
-            )}
-            title="Organization forms"
-            view={view}
-          />
-        </div>
+        <TemplateCollections
+          actions={(template, layout) => (
+            <TemplateButtons {...actions} layout={layout} template={template} />
+          )}
+          copy={libraryCopy}
+          templates={templates}
+          view={view}
+        />
       ) : (
         <LoadingState label="Loading checklists…" />
       )}
@@ -233,197 +229,22 @@ function TemplateLibrary({
   );
 }
 
-function TemplateViewSwitcher({
-  onChange,
-  view,
-}: {
-  onChange: (view: AuditTemplateView) => void;
-  view: AuditTemplateView;
-}) {
-  return (
-    <fieldset className="segmented">
-      <legend className="srOnly">Checklist layout</legend>
-      {templateViews.map((option) => (
-        <button
-          aria-pressed={view === option.view}
-          key={option.view}
-          onClick={() => onChange(option.view)}
-          type="button"
-        >
-          <Icon name={option.icon} size={16} />
-          {option.label}
-        </button>
-      ))}
-    </fieldset>
-  );
-}
-
-function TemplateCollection({
-  description,
-  emptyMessage,
-  emptyTitle,
-  templates,
-  title,
-  view,
-  ...actions
-}: TemplateActions & {
-  description: string;
-  emptyMessage: string;
-  emptyTitle: string;
-  templates: AuditTemplateSummary[];
-  title: string;
-  view: AuditTemplateView;
-}) {
-  return (
-    <section className="auditCollection">
-      <div className="auditCollectionHeading">
-        <h3 className="auditCollectionTitle">
-          {title}
-          <Badge>{templates.length}</Badge>
-        </h3>
-        <p className="textSm textMuted">{description}</p>
-      </div>
-      {templates.length === 0 ? (
-        <EmptyState compact icon="checklist" title={emptyTitle}>
-          {emptyMessage}
-        </EmptyState>
-      ) : view === "list" ? (
-        <Card className="auditTemplateList" flush>
-          <ul className="rowList">
-            {templates.map((template) => (
-              <TemplateRow {...actions} key={template.id} template={template} />
-            ))}
-          </ul>
-        </Card>
-      ) : (
-        <div className="gridAuto auditTemplateGrid">
-          {templates.map((template) => (
-            <TemplateCard {...actions} key={template.id} template={template} />
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function TemplateCard({
+/** Edit or customize a form, and start an audit from it. */
+function TemplateButtons({
   busy,
+  layout,
   onBegin,
-  template,
-  ...actions
-}: TemplateActions & { template: AuditTemplateSummary }) {
-  return (
-    <article className="card auditTemplateCard">
-      <div className="auditTemplateBody">
-        <div className="cluster">
-          <Badge dot tone={templateStatusTone(template.status)}>
-            {formatLabel(template.status)}
-          </Badge>
-          <Badge tone="info">{scopeLabel(template.scope)}</Badge>
-        </div>
-        <h4 className="auditTemplateName">{template.name}</h4>
-        <p className="auditTemplateDescription">
-          {template.description || "A custom checklist."}
-        </p>
-        <p className="auditTemplateMeta">
-          <TemplateStats auditCount={template.auditCount} template={template} />
-        </p>
-      </div>
-      <div className="cardFooter auditTemplateFooter">
-        <div className="cluster auditTemplateActions">
-          <TemplateEditButtons {...actions} template={template} />
-        </div>
-        <StartAuditButton
-          busy={busy}
-          className="auditTemplateStart"
-          onBegin={onBegin}
-          template={template}
-        />
-      </div>
-    </article>
-  );
-}
-
-function TemplateRow({
-  busy,
-  onBegin,
-  template,
-  ...actions
-}: TemplateActions & { template: AuditTemplateSummary }) {
-  return (
-    <li className="row auditTemplateRow">
-      <span className="rowMain">
-        <span className="rowTitle">{template.name}</span>
-        <span className="rowMeta">
-          {template.description || "A custom checklist."}
-        </span>
-      </span>
-      <span className="auditTemplateRowStats">
-        <Badge dot tone={templateStatusTone(template.status)}>
-          {formatLabel(template.status)}
-        </Badge>
-        <TemplateStats auditCount={template.auditCount} template={template} />
-      </span>
-      <span className="rowActions auditTemplateRowActions">
-        <TemplateEditButtons {...actions} template={template} />
-        <StartAuditButton busy={busy} onBegin={onBegin} template={template} />
-      </span>
-    </li>
-  );
-}
-
-/** A form's size and version, and how many audits it has when given. */
-export function TemplateStats({
-  auditCount,
-  template,
-}: {
-  auditCount?: number;
-  template: AuditTemplate;
-}) {
-  return (
-    <>
-      <span className="cluster auditTemplateStat">
-        <Icon name="checklist" size={16} />
-        {countLabel(itemCount(template), "item")}
-      </span>
-      <span className="cluster auditTemplateStat">
-        <Icon name="layers" size={16} />
-        {countLabel(template.definition.sections.length, "section")}
-      </span>
-      <span className="auditTemplateStat mono">v{template.version}</span>
-      {auditCount !== undefined && (
-        <span className="cluster auditTemplateStat">
-          <Icon name="audits" size={16} />
-          {countLabel(auditCount, "audit")}
-        </span>
-      )}
-    </>
-  );
-}
-
-function TemplateEditButtons({
   onEdit,
   template,
-}: Pick<TemplateActions, "onEdit"> & { template: AuditTemplate }) {
-  return (
+}: TemplateActions & { layout: AuditTemplateView; template: AuditTemplate }) {
+  const edit = (
     <Button icon="edit" onClick={() => onEdit(template.id)} size="sm">
       {template.scope === "global" ? "Customize" : "Edit"}
     </Button>
   );
-}
-
-function StartAuditButton({
-  busy,
-  className,
-  onBegin,
-  template,
-}: Pick<TemplateActions, "busy" | "onBegin"> & {
-  className?: string;
-  template: AuditTemplate;
-}) {
-  return (
+  const start = (
     <Button
-      className={className}
+      className={layout === "grid" ? "auditTemplateStart" : undefined}
       disabled={busy}
       iconEnd="arrowRight"
       onClick={() => void onBegin(template.id)}
@@ -432,6 +253,17 @@ function StartAuditButton({
     >
       Start audit
     </Button>
+  );
+  return layout === "grid" ? (
+    <>
+      <div className="cluster auditTemplateActions">{edit}</div>
+      {start}
+    </>
+  ) : (
+    <>
+      {edit}
+      {start}
+    </>
   );
 }
 
@@ -567,13 +399,6 @@ function AuditRunRow({
   );
 }
 
-function itemCount(template: AuditTemplate) {
-  return template.definition.sections.reduce(
-    (count, section) => count + section.items.length,
-    0,
-  );
-}
-
 function status(run: AuditSummary) {
   if (run.deletedAt) return "Discarded";
   return run.status === "completed" ? "Completed" : "In progress";
@@ -582,13 +407,4 @@ function status(run: AuditSummary) {
 function runTone(run: AuditSummary): BadgeTone {
   if (run.deletedAt) return "danger";
   return run.status === "completed" ? "success" : "warning";
-}
-
-export function templateStatusTone(value: string): BadgeTone {
-  if (value === "published") return "success";
-  return "neutral";
-}
-
-function scopeLabel(scope: AuditTemplateScope) {
-  return scope === "global" ? "Global" : "Organization";
 }

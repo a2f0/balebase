@@ -1,16 +1,15 @@
 import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
+import { AuditTemplateSchema } from "./audits";
 import { PersonSchema, requiredText } from "./fields";
 import { route } from "./route";
 import { projectLimits } from "./rules";
 
-/** An audit form a project can turn on: a global or organization form. */
-const ProjectFormSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  scope: z.enum(["global", "organization"]),
-  version: z.number(),
-});
+/**
+ * An audit form a project can turn on: a published global or organization
+ * form, as its current version reads.
+ */
+const ProjectFormSchema = AuditTemplateSchema;
 export type ProjectForm = z.infer<typeof ProjectFormSchema>;
 
 const ProjectSummarySchema = z.object({
