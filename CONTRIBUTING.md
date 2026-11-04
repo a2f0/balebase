@@ -154,6 +154,10 @@ it.
   ([deploy production](docs/operations.md#deploy-production)), so a migration
   must not drop a trigger, column, or constraint the previous Worker relies
   on; drop it a release later.
+- A migration that converts or backfills existing rows needs a seeded test
+  until production has applied it. Applied migrations never run against old
+  rows again (a new database has none), so delete their backfill tests
+  rather than maintain them; keep tests of the schema they leave behind.
 - Built-in audit templates are JSON in `packages/api/auditLibrary`, published
   by generated migrations; see
   [validation and updates](docs/residential-audit-library.md#validation-and-updates).
