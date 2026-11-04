@@ -78,7 +78,13 @@ async function releaseFixture() {
       `#!${process.execPath}\n${record}
       const args = process.argv.slice(2);
       log({ tool: ${JSON.stringify(binary)}, args });
-      if (${JSON.stringify(binary)} === "sentry-cli") process.exit(process.env.FIXTURE_UPLOAD_FAIL === "1" ? 1 : 0);
+      if (${JSON.stringify(binary)} === "sentry-cli") {
+        // FIXTURE_UPLOAD_FAIL fails every upload; FIXTURE_UPLOAD_FAILURES only
+        // the first n, as a Sentry that is slow and then catches up.
+        const failures = Number(process.env.FIXTURE_UPLOAD_FAILURES ?? "0");
+        const attempts = readFileSync(process.env.FIXTURE_LOG, "utf8").split("\\n").filter((line) => line.includes('"sentry-cli"')).length;
+        process.exit(process.env.FIXTURE_UPLOAD_FAIL === "1" || attempts <= failures ? 1 : 0);
+      }
       if (args.includes("--outdir")) {
         const out = args[args.indexOf("--outdir") + 1];
         mkdirSync(out, { recursive: true });
@@ -157,9 +163,10 @@ for (const fail of [false, true])
         { FIXTURE_UPLOAD_FAIL: fail ? "1" : "0" },
       );
       expect(result.code, result.output).toBe(fail ? 1 : 0);
+      // A failing upload is tried three times before the build gives up.
       expect(result.commands.map((command) => command.tool)).toEqual([
         "build",
-        "sentry-cli",
+        ...Array(fail ? 3 : 1).fill("sentry-cli"),
       ]);
       expect(result.commands[0]?.token).toBeNull();
       // Search indexing follows the release environment, here staging.
@@ -251,7 +258,36 @@ test("failed API map uploads stop before publishing", async () => {
     expect(result.commands.map((command) => command.tool)).toEqual([
       "wrangler",
       "sentry-cli",
+      "sentry-cli",
+      "sentry-cli",
     ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a slow Sentry upload is retried, then the API publishes", async () => {
+  const root = await releaseFixture();
+  try {
+    const result = await runRelease(root, "deploySentryApi.ts", ["staging"], {
+      FIXTURE_UPLOAD_FAILURES: "2",
+    });
+    expect(result.code, result.output).toBe(0);
+    expect(result.output).toContain("attempt 1 of 3 failed; retrying");
+    const uploads = result.commands.filter(
+      (command) => command.tool === "sentry-cli",
+    );
+    expect(uploads).toHaveLength(3);
+    // Each attempt waits longer than sentry-cli's default for processing.
+    for (const upload of uploads) {
+      expect(upload.args).toContain("--wait-for");
+      expect(upload.args?.[upload.args.indexOf("--wait-for") + 1]).toBe("600");
+      expect(upload.args).not.toContain("--wait");
+    }
+    expect(result.commands.at(-1)).toEqual({
+      tool: "published",
+      contents: "exact API bundle",
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }
