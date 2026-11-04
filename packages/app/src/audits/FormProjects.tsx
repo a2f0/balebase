@@ -23,14 +23,21 @@ import { projectPath } from "../workspace/workspacePaths";
 export function FormProjects({
   formName,
   onNavigate,
+  refreshKey,
   templateId,
 }: {
   formName: string;
   onNavigate: (pathname: string) => void;
+  /** Changes when the form is saved, which can publish or unpublish it. */
+  refreshKey: string;
   templateId: string;
 }) {
   const loaded = useLoad(
-    useCallback(() => api.projects.formProjects(templateId), [templateId]),
+    // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey reloads after a save.
+    useCallback(
+      () => api.projects.formProjects(templateId),
+      [templateId, refreshKey],
+    ),
     "Could not load projects.",
   );
   const action = useAction("Could not change the project's forms.");

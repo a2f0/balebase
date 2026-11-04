@@ -341,6 +341,7 @@ function BuilderBody({
         <FormProjects
           formName={template.name}
           onNavigate={onNavigate}
+          refreshKey={`${template.currentVersion}:${template.status}`}
           templateId={template.id}
         />,
       )}

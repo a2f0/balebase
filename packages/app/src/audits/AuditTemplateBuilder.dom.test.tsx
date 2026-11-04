@@ -57,19 +57,22 @@ const template: AuditTemplate = {
 
 const projectWrites: string[] = [];
 let projectForms = new Set(["clinic"]);
+/** Whether the served form can be turned on for projects. */
+let formAvailable = true;
 
 /**
  * Serves the template and its projects; a save echoes back what was sent, and
  * turning the form on or off for a project is recorded.
  */
-function stubApi() {
+function stubApi(available = true) {
   const saves: Array<{ definition: AuditTemplate["definition"] }> = [];
   projectWrites.length = 0;
   projectForms = new Set(["clinic"]);
+  formAvailable = available;
   respond(async (url, init) => {
     if (url.pathname === "/api/projects/forms/t1")
       return Response.json({
-        available: true,
+        available: formAvailable,
         canManage: true,
         projects: [
           { id: "annex", name: "Annex" },
@@ -93,6 +96,8 @@ function stubApi() {
         definition: AuditTemplate["definition"];
       };
       saves.push(body);
+      if ((body as { status?: string }).status === "published")
+        formAvailable = true;
       return Response.json({
         template: { ...template, ...body, currentVersion: 2, version: 2 },
       });
@@ -534,5 +539,30 @@ describe("the form's projects", () => {
     ]);
     expect(toggle("Annex")?.checked).toBe(true);
     expect(toggle("Clinic")?.checked).toBe(false);
+  });
+
+  it("offers the projects once the draft is published", async () => {
+    stubApi(false);
+    await render(true);
+    expect(container.textContent).toContain(
+      "Publish this form to turn it on for projects.",
+    );
+    const publish = [
+      ...container.querySelectorAll<HTMLButtonElement>("button"),
+    ].find((button) => button.textContent === "Publish");
+    await act(async () => publish?.click());
+    await settle(30);
+    expect(container.textContent).not.toContain(
+      "Publish this form to turn it on for projects.",
+    );
+    await act(async () => {
+      container
+        .querySelector<HTMLInputElement>(
+          'input[aria-label="Use Opening checklist in Annex"]',
+        )
+        ?.click();
+    });
+    await settle(30);
+    expect(projectWrites).toEqual(["PUT /api/projects/annex/forms/t1"]);
   });
 });
