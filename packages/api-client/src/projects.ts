@@ -39,6 +39,11 @@ const endpoints = {
     path: "/api/projects/:id",
     response: "empty",
   }),
+  formProjects: endpoint<typeof projectsRoutes.formProjects>({
+    method: "GET",
+    path: "/api/projects/forms/:templateId",
+    response: "json",
+  }),
   listDeleted: endpoint<typeof projectsRoutes.listDeleted>({
     method: "GET",
     path: "/api/projects/deleted",
@@ -101,6 +106,10 @@ export function projectsApi(transport: Transport) {
     },
     delete(id: string) {
       return transport.call(endpoints.delete, { params: { id } });
+    },
+    /** Every project, marked with whether the form is turned on for it. */
+    formProjects(templateId: string) {
+      return transport.call(endpoints.formProjects, { params: { templateId } });
     },
     listDeleted() {
       return transport.call(endpoints.listDeleted);

@@ -120,6 +120,31 @@ export async function findProject(
   };
 }
 
+/** The organization's live projects, by name, marking where the form is on. */
+export async function listFormProjects(
+  database: D1Database,
+  organizationId: string,
+  templateId: string,
+) {
+  const { results } = await database
+    .prepare(
+      `SELECT project.id, project.name,
+              EXISTS (SELECT 1 FROM project_audit_forms AS enabled
+                      WHERE enabled.project_id = project.id
+                        AND enabled.template_id = ?) AS enabled
+       FROM projects AS project
+       WHERE project.organization_id = ? AND project.deleted_at IS NULL
+       ORDER BY project.name COLLATE NOCASE, project.id`,
+    )
+    .bind(templateId, organizationId)
+    .all<{ enabled: number; id: string; name: string }>();
+  return results.map((row) => ({
+    enabled: Boolean(row.enabled),
+    id: row.id,
+    name: row.name,
+  }));
+}
+
 /** The organization's deleted projects, most recently deleted first. */
 export async function listDeletedProjects(
   database: D1Database,

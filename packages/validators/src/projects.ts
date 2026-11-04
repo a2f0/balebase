@@ -107,6 +107,22 @@ export const projectsRoutes = {
     path: "/api/projects/:id",
     response: "empty",
   }),
+  /**
+   * The organization's projects, each marked with whether `templateId` is
+   * turned on for it. `available` says whether the form can be turned on:
+   * it must be a published form the organization can use.
+   */
+  formProjects: route({
+    method: "GET",
+    path: "/api/projects/forms/:templateId",
+    response: z.object({
+      available: z.boolean(),
+      canManage: z.boolean(),
+      projects: z.array(
+        z.object({ enabled: z.boolean(), id: z.string(), name: z.string() }),
+      ),
+    }),
+  }),
   /** Deleted projects, most recently deleted first. */
   listDeleted: route({
     method: "GET",

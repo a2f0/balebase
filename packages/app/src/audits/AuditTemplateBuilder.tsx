@@ -36,6 +36,7 @@ import {
   auditTemplatePath,
   globalAuditsPath,
 } from "../workspace/workspacePaths";
+import { FormProjects } from "./FormProjects";
 import {
   GlobalAuditControls,
   PublicationControls,
@@ -202,6 +203,8 @@ export function AuditTemplateBuilder({
   const back = backLink(manageGlobal, onNavigate);
   const tabs = useSectionTabs([
     { id: "form", label: "Form" },
+    // Global Audits manages the form itself; projects are an organization's.
+    !manageGlobal && { id: "projects", label: "Projects" },
     { id: "activity", label: "Activity" },
   ] as const);
   if (!template) return <BuilderLoading back={back} error={error?.message} />;
@@ -236,7 +239,7 @@ export function AuditTemplateBuilder({
   );
 }
 
-type BuilderSections = SectionTabState<"activity" | "form">;
+type BuilderSections = SectionTabState<"activity" | "form" | "projects">;
 
 /** A global form being managed returns to Global Audits. */
 function backLink(
@@ -332,6 +335,15 @@ function BuilderBody({
             </Button>
           </div>
         </fieldset>,
+      )}
+      {panel(
+        "projects",
+        <FormProjects
+          formName={template.name}
+          onNavigate={onNavigate}
+          refreshKey={`${template.currentVersion}:${template.status}`}
+          templateId={template.id}
+        />,
       )}
       {panel(
         "activity",

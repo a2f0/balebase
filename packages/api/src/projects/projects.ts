@@ -19,6 +19,7 @@ import {
   findProjectRow,
   listAvailableForms,
   listDeletedProjects,
+  listFormProjects,
   listProjects,
 } from "./projectRecords";
 
@@ -77,6 +78,24 @@ projects.post("/", requireManager(), async (context) => {
     }),
   ]);
   return projectResponse(context, projectsRoutes.create, id, 201);
+});
+
+// Answers for any form id, so it reveals nothing about forms the organization
+// cannot use: those are simply unavailable and on for no project.
+projects.get("/forms/:templateId", async (context) => {
+  const organizationId = context.get("organizationId");
+  const templateId = context.req.param("templateId");
+  const [form, list] = await Promise.all([
+    findAvailableForm(context.env.DB, organizationId, templateId),
+    listFormProjects(context.env.DB, organizationId, templateId),
+  ]);
+  return respond(context, projectsRoutes.formProjects, {
+    available: Boolean(form),
+    canManage: canManage(context),
+    // An unavailable form lists as off everywhere: turned-on forms that were
+    // unpublished are not offered, as on a project's own page.
+    projects: form ? list : list.map((entry) => ({ ...entry, enabled: false })),
+  });
 });
 
 projects.get("/deleted", async (context) =>
