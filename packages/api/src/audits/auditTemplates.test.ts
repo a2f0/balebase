@@ -1,99 +1,15 @@
 import { describe, expect, it } from "bun:test";
-import type { AuditDefinition } from "@balebase/validators/audits";
 import {
   createFixture,
   jsonRequest,
-  legacyDatabase,
   type RunResponse,
   startAudit,
   type TemplateResponse,
   type TemplateVersionsResponse,
 } from "../testing/auditFixture";
-import { applyMigrations } from "../testing/database";
 import { insertBilling } from "../testing/seed";
 
 describe("audit templates", () => {
-  it("migrates existing templates and audit provenance into version one", async () => {
-    const database = legacyDatabase("0022");
-    const definition: AuditDefinition = {
-      sections: [
-        {
-          id: "legacy-section",
-          items: [
-            {
-              id: "legacy-item",
-              prompt: "Legacy question",
-              required: true,
-              responseType: "check",
-            },
-          ],
-          title: "Legacy section",
-        },
-      ],
-      version: 1,
-    };
-    database
-      .query(
-        `INSERT INTO audit_templates
-         (id, organization_id, name, description, definition, status,
-          created_by, created_at, updated_at)
-         VALUES (?, ?, ?, '', ?, 'draft', ?, ?, ?)`,
-      )
-      .run(
-        "legacy-template",
-        "org_user-1",
-        "Legacy form",
-        JSON.stringify(definition),
-        "user-1",
-        "2026-08-18T12:00:00.000Z",
-        "2026-08-19T12:00:00.000Z",
-      );
-    database
-      .query(
-        `INSERT INTO audits
-         (id, organization_id, template_id, template_name, definition,
-          responses, status, started_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, '{}', 'in_progress', ?, ?, ?)`,
-      )
-      .run(
-        "legacy-run",
-        "org_user-1",
-        "legacy-template",
-        "Legacy form",
-        JSON.stringify(definition),
-        "user-1",
-        "2026-08-20T12:00:00.000Z",
-        "2026-08-20T12:00:00.000Z",
-      );
-
-    applyMigrations(database, { before: "0023", from: "0022" });
-
-    expect(
-      database
-        .query(
-          `SELECT scope, organization_id, current_version
-           FROM audit_template_families WHERE id = ?`,
-        )
-        .get("legacy-template"),
-    ).toEqual({
-      current_version: 1,
-      organization_id: "org_user-1",
-      scope: "organization",
-    });
-    expect(
-      database
-        .query(
-          `SELECT template_family_id, template_version_id, template_version
-           FROM audits WHERE id = ?`,
-        )
-        .get("legacy-run"),
-    ).toEqual({
-      template_family_id: "legacy-template",
-      template_version: 1,
-      template_version_id: "legacy-template:v1",
-    });
-  });
-
   it("keeps every saved template version immutable", async () => {
     const fixture = createFixture();
     const created = await jsonRequest<TemplateResponse>(

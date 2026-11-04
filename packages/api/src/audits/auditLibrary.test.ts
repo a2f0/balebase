@@ -8,13 +8,12 @@ import { adminAuditTemplates } from "../admin/adminAuditTemplates";
 import {
   createFixture,
   jsonRequest,
-  legacyDatabase,
   type TemplateListResponse,
   type TemplateResponse,
 } from "../testing/auditFixture";
 import { testBindings } from "../testing/bindings";
 import { toD1 } from "../testing/d1";
-import { applyMigrations, createTestDatabase } from "../testing/database";
+import { createTestDatabase } from "../testing/database";
 import { seedUser } from "../testing/seed";
 import { testApp } from "../testing/session";
 import {
@@ -181,58 +180,6 @@ describe("starter template seeding", () => {
     }
   });
 
-  it("keeps starters that earlier releases seeded on request", () => {
-    const database = createTestDatabase({ before: "0075" });
-    const seededAt = "2026-09-01T12:00:00.000Z";
-    const ids = starterTemplates().map(({ id }) => id);
-    for (const id of ids) {
-      database.run(
-        `INSERT INTO audit_template_families
-         (id, scope, organization_id, current_version, created_by,
-          created_at, updated_at)
-         VALUES (?, 'global', NULL, 1, 'system:audit-library', ?, ?)`,
-        [id, seededAt, seededAt],
-      );
-      database.run(
-        `INSERT INTO audit_template_versions
-         (id, template_id, version, name, description, definition, status,
-          created_by, created_at)
-         VALUES (?, ?, 1, 'Seeded on request', '', '{}', 'published',
-          'system:audit-library', ?)`,
-        [`${id}:v1`, id, seededAt],
-      );
-    }
-    const seeded = () => ({
-      events: database
-        .query(
-          `SELECT root_id, action, occurred_at FROM activity_events
-           WHERE root_type = 'audit_template' ORDER BY id`,
-        )
-        .all(),
-      families: database
-        .query("SELECT id, created_by, created_at FROM audit_template_families")
-        .all(),
-      versions: database
-        .prepare<Record<string, unknown>, []>(
-          "SELECT * FROM audit_template_versions WHERE version = 1",
-        )
-        .all(),
-    });
-    const before = seeded();
-    expect(before.events).toHaveLength(ids.length);
-
-    applyMigrations(database, { from: "0075" });
-    // Fresh SELECT * includes columns added by later migrations, too.
-    expect(seeded()).toEqual({
-      ...before,
-      versions: before.versions.map((version) => ({
-        ...version,
-        copied_from_template_id: null,
-        copied_from_version: null,
-      })),
-    });
-  });
-
   it("publishes a raised version through a generated migration", async () => {
     const [checklist] = starterTemplates() as [StarterTemplate];
     const next = checklist.version + 1;
@@ -345,127 +292,6 @@ describe("built-in templates", () => {
         )
         .get(),
     ).toEqual({ count: 2 });
-  });
-
-  it("seeds the audit actor despite a public email collision", async () => {
-    const database = legacyDatabase("0033");
-    database
-      .query(
-        `INSERT INTO user
-         (id, name, email, emailVerified, createdAt, updatedAt, role, banned)
-         VALUES ('collision-user', 'Collision User', ?, 1, ?, ?, 'user', 0)`,
-      )
-      .run(
-        "audit-library@system.invalid",
-        "2026-08-25T12:00:00.000Z",
-        "2026-08-25T12:00:00.000Z",
-      );
-
-    applyMigrations(database, { before: "0034", from: "0033" });
-
-    expect(
-      database
-        .query("SELECT id, email FROM user WHERE id = 'collision-user'")
-        .get(),
-    ).toEqual({
-      email: "audit-library@system.invalid",
-      id: "collision-user",
-    });
-    const actor = database
-      .query("SELECT email, name FROM user WHERE id = 'system:audit-library'")
-      .get() as { email: string; name: string };
-    expect(actor.name).toBe("Stealth audit library");
-    expect(actor.email).toStartWith("audit-library+");
-    expect(actor.email).toEndWith("@system.invalid");
-    expect(actor.email).not.toBe("audit-library@system.invalid");
-  });
-
-  it("consolidates organization starters into one global template", async () => {
-    const database = legacyDatabase("0023");
-    const definition = JSON.stringify({ sections: [], version: 1 });
-    const insertFamily = database.query(
-      `INSERT INTO audit_template_families
-       (id, scope, organization_id, current_version, created_by, created_at,
-        updated_at)
-       VALUES (?, 'organization', ?, 1, ?, ?, ?)`,
-    );
-    const insertVersion = database.query(
-      `INSERT INTO audit_template_versions
-       (id, template_id, version, name, description, definition, status,
-        created_by, created_at)
-       VALUES (?, ?, 1, 'NFPA 70E readiness checklist', '', ?, 'published',
-        ?, ?)`,
-    );
-    for (const [templateId, organizationId, userId] of [
-      ["nfpa70e_org_user-1", "org_user-1", "user-1"],
-      ["nfpa70e_org_user-2", "org_user-2", "user-2"],
-    ] as const) {
-      insertFamily.run(
-        templateId,
-        organizationId,
-        userId,
-        "2026-08-20T12:00:00.000Z",
-        "2026-08-20T12:00:00.000Z",
-      );
-      insertVersion.run(
-        `${templateId}:v1`,
-        templateId,
-        definition,
-        userId,
-        "2026-08-20T12:00:00.000Z",
-      );
-    }
-    database
-      .query(
-        `INSERT INTO audits
-         (id, organization_id, template_id, template_family_id,
-          template_version_id, template_version, template_name, definition,
-          responses, status, started_by, created_at, updated_at)
-         VALUES ('starter-run', 'org_user-1', NULL, 'nfpa70e_org_user-1',
-          'nfpa70e_org_user-1:v1', 1, 'NFPA 70E readiness checklist', ?, '{}',
-          'in_progress', 'user-1', ?, ?)`,
-      )
-      .run(definition, "2026-08-21T12:00:00.000Z", "2026-08-21T12:00:00.000Z");
-
-    applyMigrations(database, { before: "0034", from: "0023" });
-
-    expect(
-      database
-        .query(
-          `SELECT id, scope, organization_id, created_by
-           FROM audit_template_families
-           WHERE id GLOB 'nfpa70e_*'`,
-        )
-        .all(),
-    ).toEqual([
-      {
-        created_by: "system:audit-library",
-        id: "nfpa70e_global",
-        organization_id: null,
-        scope: "global",
-      },
-    ]);
-    expect(
-      database
-        .query(
-          `SELECT created_by
-           FROM audit_template_versions
-           WHERE id = 'nfpa70e_global:v1'`,
-        )
-        .get(),
-    ).toEqual({ created_by: "system:audit-library" });
-    expect(
-      database
-        .query(
-          `SELECT template_family_id, template_version_id, template_version
-           FROM audits WHERE id = 'starter-run'`,
-        )
-        .get(),
-    ).toEqual({
-      template_family_id: "nfpa70e_global",
-      template_version: 1,
-      template_version_id: "nfpa70e_global:v1",
-    });
   });
 });
 

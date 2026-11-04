@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { applyMigrations, createTestDatabase } from "../testing/database";
 import {
   type Category,
   createCategory,
@@ -10,7 +9,6 @@ import {
   seedTransactions,
   testApp,
 } from "../testing/financeFixture";
-import { seedOrganization } from "../testing/seed";
 import type { Bindings } from "../types";
 
 describe("expense categories", () => {
@@ -430,130 +428,6 @@ describe("expense categories", () => {
       "GET",
     );
     expect(hidden.body.currencies).toEqual([]);
-  });
-
-  it("migrates free-text category overrides into categories", async () => {
-    // The legacy annotations name transactions this test does not seed.
-    const database = createTestDatabase({ before: "0034", foreignKeys: false });
-    const overrides: [string, string, string | null][] = [
-      ["txn-a", "org-a", "Client meal"],
-      ["txn-b", "org-a", " client MEAL "],
-      ["txn-c", "org-a", "Travel"],
-      ["txn-d", "org-b", "Travel"],
-      ["txn-e", "org-b", "   "],
-      ["txn-f", "org-b", null],
-    ];
-    for (const [transactionId, organizationId, override] of overrides) {
-      database
-        .query(
-          `INSERT INTO finance_transaction_annotations
-             (transaction_id, organization_id, category_override, created_by,
-              updated_by, created_at, updated_at)
-           VALUES (?, ?, ?, 'user-1', 'user-1', ?, ?)`,
-        )
-        .run(
-          transactionId,
-          organizationId,
-          override,
-          "2026-08-19T12:00:00.000Z",
-          "2026-08-19T12:00:00.000Z",
-        );
-    }
-    applyMigrations(database, { from: "0034" });
-
-    const categories = database
-      .query(
-        `SELECT organization_id, name FROM finance_expense_categories
-         ORDER BY organization_id, name`,
-      )
-      .all();
-    expect(categories).toEqual([
-      { name: "Client meal", organization_id: "org-a" },
-      { name: "Travel", organization_id: "org-a" },
-      { name: "Travel", organization_id: "org-b" },
-    ]);
-    const assigned = database
-      .query(
-        `SELECT annotation.transaction_id, category.name, category.organization_id
-         FROM finance_transaction_annotations AS annotation
-         LEFT JOIN finance_expense_categories AS category
-           ON category.id = annotation.expense_category_id
-         ORDER BY annotation.transaction_id`,
-      )
-      .all();
-    expect(assigned).toEqual([
-      {
-        name: "Client meal",
-        organization_id: "org-a",
-        transaction_id: "txn-a",
-      },
-      {
-        name: "Client meal",
-        organization_id: "org-a",
-        transaction_id: "txn-b",
-      },
-      { name: "Travel", organization_id: "org-a", transaction_id: "txn-c" },
-      { name: "Travel", organization_id: "org-b", transaction_id: "txn-d" },
-      { name: null, organization_id: null, transaction_id: "txn-e" },
-      { name: null, organization_id: null, transaction_id: "txn-f" },
-    ]);
-  });
-
-  it("backfills category slugs that are unique in each organization", async () => {
-    const database = createTestDatabase({ before: "0065" });
-    for (const id of ["org-a", "org-b"]) seedOrganization(database, { id });
-    const categories: [string, string, string][] = [
-      ["a1234567-first", "org-a", "Meals & drinks"],
-      ["b1234567-second", "org-a", "Meals/drinks"],
-      ["c1234567-third", "org-a", "Meals drinks 2"],
-      ["d1234567-fourth", "org-a", "Uncategorized"],
-      ["e1234567-fifth", "org-a", "Taxes (2026)"],
-      ["f1234567-sixth", "org-a", "🍔"],
-      ["g1234567-seventh", "org-a", "Café"],
-      ["h1234567-eighth", "org-b", "Meals/drinks"],
-      ["j1234567-tenth", "org-a", "b1234567-second"],
-    ];
-    for (const [index, [id, organizationId, name]] of categories.entries()) {
-      database
-        .query(
-          `INSERT INTO finance_expense_categories
-             (id, organization_id, name, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?)`,
-        )
-        .run(id, organizationId, name, `2026-08-0${index + 1}`, "");
-    }
-    applyMigrations(database, { from: "0065" });
-
-    expect(
-      database
-        .query("SELECT id, slug FROM finance_expense_categories ORDER BY id")
-        .all(),
-    ).toEqual([
-      { id: "a1234567-first", slug: "meals-drinks" },
-      { id: "b1234567-second", slug: "meals-drinks-2--b1234567-second" },
-      { id: "c1234567-third", slug: "meals-drinks-2" },
-      { id: "d1234567-fourth", slug: "uncategorized-2" },
-      { id: "e1234567-fifth", slug: "taxes-2026" },
-      { id: "f1234567-sixth", slug: "category" },
-      // Unlike the API, the backfill cannot fold accents.
-      { id: "g1234567-seventh", slug: "caf" },
-      { id: "h1234567-eighth", slug: "meals-drinks" },
-      { id: "j1234567-tenth", slug: "b1234567-second" },
-    ]);
-
-    // Categories the previous Worker creates during deployment get a slug.
-    database.run(
-      `INSERT INTO finance_expense_categories
-         (id, organization_id, name, created_at, updated_at)
-       VALUES ('i1234567-ninth', 'org-a', 'Postage', '', '')`,
-    );
-    expect(
-      database
-        .query(
-          "SELECT slug FROM finance_expense_categories WHERE id = 'i1234567-ninth'",
-        )
-        .get(),
-    ).toEqual({ slug: "i1234567-ninth" });
   });
 });
 

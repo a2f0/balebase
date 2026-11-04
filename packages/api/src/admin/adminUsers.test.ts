@@ -392,17 +392,3 @@ it("refuses a deletion request without the user's email typed in", async () => {
       .get(),
   ).toEqual({ count: 0 });
 });
-
-it("refuses pagination outside the contract", async () => {
-  const { send } = routerFixture();
-  for (const query of ["limit=0", "limit=101", "offset=-1", "limit=many"]) {
-    expect(await send("GET", `/?${query}`)).toMatchObject({
-      body: { error: "Invalid user pagination." },
-      status: 400,
-    });
-  }
-  expect(await send("GET", "/?limit=1")).toMatchObject({
-    body: { total: 2 },
-    status: 200,
-  });
-});

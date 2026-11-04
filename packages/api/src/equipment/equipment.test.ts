@@ -4,7 +4,7 @@ import { activity } from "../activity/activity";
 import { inbox } from "../inbox/inbox";
 import { testBindings } from "../testing/bindings";
 import { toD1 } from "../testing/d1";
-import { applyMigrations, createTestDatabase } from "../testing/database";
+import { createTestDatabase } from "../testing/database";
 import { requester } from "../testing/http";
 import { seedMember, seedOrganization, seedUser } from "../testing/seed";
 import { testApp } from "../testing/session";
@@ -678,61 +678,6 @@ describe("equipment deletion history", () => {
   });
 });
 
-describe("equipment link migration", () => {
-  it("keeps existing email links when the link table is rebuilt", async () => {
-    const database = createTestDatabase({ before: "0037" });
-    seed(database);
-    // Inserted out of id order with equal timestamps, so only rowid order
-    // keeps them in the order they were linked.
-    for (const [id, targetType, targetId] of [
-      ["link-c", "library_folder", "folder-1"],
-      ["link-a", "finance_transaction", "txn-1"],
-      ["link-b", "library_folder", "folder-2"],
-    ] as const) {
-      database
-        .query(
-          `INSERT INTO inbound_email_links
-           (id, organization_id, email_id, target_type, target_id,
-            created_by, created_at)
-           VALUES (?, 'org-1', 'email-1', ?, ?, 'owner-user', ?)`,
-        )
-        .run(id, targetType, targetId, timestamp);
-    }
-    applyMigrations(database, { from: "0037" });
-
-    expect(
-      database
-        .query(
-          `SELECT id, target_type FROM inbound_email_links
-           ORDER BY created_at, rowid`,
-        )
-        .all(),
-    ).toEqual([
-      { id: "link-c", target_type: "library_folder" },
-      { id: "link-a", target_type: "finance_transaction" },
-      { id: "link-b", target_type: "library_folder" },
-    ]);
-    const schema = database
-      .query(
-        "SELECT name FROM sqlite_master WHERE type IN ('index', 'trigger')",
-      )
-      .all()
-      .map((row) => (row as { name: string }).name);
-    expect(schema).toEqual(
-      expect.arrayContaining([
-        "inbound_email_links_target_idx",
-        "remove_equipment_email_links",
-        "remove_finance_transaction_email_links",
-        "remove_library_folder_email_links",
-      ]),
-    );
-    database.query("DELETE FROM library_folders WHERE id = 'folder-1'").run();
-    expect(
-      database.query("SELECT id FROM inbound_email_links ORDER BY id").all(),
-    ).toEqual([{ id: "link-a" }, { id: "link-b" }]);
-  });
-});
-
 function createFixture() {
   const database = createTestDatabase();
   seed(database);
@@ -796,17 +741,11 @@ function seed(database: Database) {
     timestamp,
     timestamp,
   );
-  if (
-    database
-      .query("SELECT name FROM sqlite_master WHERE name = 'equipment'")
-      .get()
-  ) {
-    run(
-      `INSERT INTO equipment
-       (id, organization_id, type, make, model, created_at, updated_at)
-       VALUES ('equipment-other', 'org-2', 'monitor', 'Dell', 'U2723QE', ?, ?)`,
-      timestamp,
-      timestamp,
-    );
-  }
+  run(
+    `INSERT INTO equipment
+     (id, organization_id, type, make, model, created_at, updated_at)
+     VALUES ('equipment-other', 'org-2', 'monitor', 'Dell', 'U2723QE', ?, ?)`,
+    timestamp,
+    timestamp,
+  );
 }

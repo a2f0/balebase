@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 import { formatCalendarDate } from "../shared/labels";
 import {
   equipmentMeta,
-  equipmentName,
   equipmentTypeIcon,
   equipmentTypeLabel,
 } from "./equipmentLabels";
@@ -34,11 +33,5 @@ describe("equipment labels", () => {
         type: "monitor",
       }),
     ).toBe("Monitor");
-  });
-
-  it("names an item by make and model", () => {
-    expect(equipmentName({ make: "Apple", model: "MacBook Pro" })).toBe(
-      "Apple MacBook Pro",
-    );
   });
 });

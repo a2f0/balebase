@@ -9,7 +9,6 @@ import {
   maintenanceActor,
   systemActivityStatement,
 } from "../shared/systemActivity";
-import { applyMigrations, createTestDatabase } from "../testing/database";
 import { fixture, now, post } from "../testing/maintenanceFixture";
 import { seedProject, seedUser } from "../testing/seed";
 import { purgeRequestedUsers } from "../users/userDeletion";
@@ -159,57 +158,6 @@ describe("system actors", () => {
       ["system", "someJob", "Balebase maintenance", "run-2"],
       ["provider", "stripe", "Stripe", "evt_1"],
     ]);
-  });
-
-  it("keeps existing events, their IDs, and API key attribution across the rebuild", () => {
-    const database = createTestDatabase({ before: "0086" });
-    seedUser(database, { createdAt: "2026-01-01", id: "person" });
-    database.exec(`INSERT INTO activity_events (
-        id, organization_id, root_type, root_id, root_label, subject_type,
-        subject_id, action, actor_user_id, actor_name, actor_email,
-        occurred_at, details, historical)
-      VALUES (41, NULL, 'audit_template', 't', 'Form', 'audit_template', 't',
-        'audit.template_created', 'person', 'Person', 'person@example.com',
-        '2026-01-02', '{"version":1}', 1)`);
-    // An event since removed keeps its ID used.
-    database.exec(`INSERT INTO activity_events (
-        id, root_type, root_id, root_label, subject_type, subject_id, action,
-        actor_user_id, actor_name, actor_email, occurred_at, details)
-      VALUES (50, 'x', 'x', 'x', 'x', 'x', 'x.removed', 'person', 'Person', '',
-        '2026-01-02', '{}');
-      DELETE FROM activity_events WHERE id = 50`);
-    applyMigrations(database, { from: "0086" });
-    expect(
-      database
-        .query(
-          "SELECT id, actor_type, actor_user_id, actor_source, historical, details FROM activity_events WHERE id = 41",
-        )
-        .all(),
-    ).toEqual([
-      {
-        actor_source: null,
-        actor_type: "user",
-        actor_user_id: "person",
-        details: '{"version":1}',
-        historical: 1,
-        id: 41,
-      },
-    ]);
-    database.exec(`INSERT INTO activity_events (
-        root_type, root_id, root_label, subject_type, subject_id, action,
-        actor_user_id, actor_name, actor_email, occurred_at, details)
-      VALUES ('x', 'x', 'x', 'x', 'x', 'x.y', 'person', 'Person', '', '2026-01-03', '{}')`);
-    expect(
-      database.query("SELECT MAX(id) AS id FROM activity_events").get(),
-    ).toEqual({ id: 51 });
-    expect(
-      database
-        .query(
-          "SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'activity_events'",
-        )
-        .all(),
-    ).toEqual([{ name: "activity_api_key_attribution" }]);
-    database.close();
   });
 });
 

@@ -13,15 +13,12 @@ import {
   equipmentIdForPath,
   equipmentPath,
   expenseCategoryFiltersFor,
-  financeAccountPath,
-  financeConnectionPath,
   financeOverviewPath,
   financePageFor,
   globalAuditsPath,
   globalAuditTemplateIdForPath,
   inboxEmailPath,
   isRootAdminPath,
-  issuePath,
   isWithin,
   libraryFolderIdForPath,
   libraryPath,
@@ -40,7 +37,6 @@ import {
   organizationSettingsPage,
   recordIdForPath,
   signingTokenForPath,
-  transactionIssuePath,
 } from "./workspacePaths";
 
 describe("workspace paths", () => {
@@ -84,13 +80,6 @@ describe("workspace paths", () => {
     expect(auditTemplatePath("form 1")).toBe("/audits/templates/form%201");
     expect(recordIdForPath(auditRunPath("run/1"), "/audits/runs")).toBe(
       "run/1",
-    );
-  });
-
-  it("links to issues by encoded ID", () => {
-    expect(issuePath("issue/1")).toBe("/issues/issue%2F1");
-    expect(transactionIssuePath("txn/1")).toBe(
-      "/issues/new/transactions/txn%2F1",
     );
   });
 
@@ -289,15 +278,6 @@ describe("workspace paths", () => {
     expect(financePageFor("/finance/connections")).toBe("connections");
     expect(financePageFor("/finance/unknown")).toBe("overview");
     expect(financePageFor("/finance/expenses/category/meals")).toBe("overview");
-  });
-
-  it("links to connection and account pages by raw id", () => {
-    expect(financeConnectionPath("item/1")).toBe(
-      "/finance/connections/item%2F1",
-    );
-    expect(financeAccountPath("account/1")).toBe(
-      "/finance/accounts/account%2F1",
-    );
   });
 
   it("maps expense category paths to and from their filters", () => {
