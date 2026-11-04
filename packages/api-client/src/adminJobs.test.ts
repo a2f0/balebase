@@ -73,7 +73,7 @@ it("passes history filters and log cursors through the typed client", async () =
   ]);
 });
 
-it("requests the full job catalog for updated clients", async () => {
+it("requests the job catalog", async () => {
   let requested = "";
   const api = new ApiClient({
     baseUrl: "https://api.test",
@@ -83,5 +83,5 @@ it("requests the full job catalog for updated clients", async () => {
     },
   });
   expect(await api.adminJobs.list()).toEqual([]);
-  expect(requested).toBe("https://api.test/api/admin/jobs?all=true");
+  expect(requested).toBe("https://api.test/api/admin/jobs");
 });

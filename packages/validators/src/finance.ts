@@ -390,15 +390,6 @@ export const financeRoutes = {
     }),
     response: z.object({ connectionId: z.string() }),
   }),
-  syncConnection: route({
-    method: "POST",
-    path: "/api/finance/connections/:id/sync",
-    response: z.object({
-      added: z.number(),
-      modified: z.number(),
-      removed: z.number(),
-    }),
-  }),
   startSync: route({
     method: "POST",
     path: "/api/finance/connections/:id/sync-jobs",

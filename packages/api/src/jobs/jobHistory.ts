@@ -28,7 +28,7 @@ export async function listJobRuns(
     values.push(query.status);
   }
   if (query.cursor !== undefined) {
-    const cursor = decodeCursor(query.cursor, "createdAt", 500);
+    const cursor = decodeCursor(query.cursor, 500);
     if (!cursor) return null;
     conditions.push("(created_at, id) < (?, ?)");
     values.push(...cursor);

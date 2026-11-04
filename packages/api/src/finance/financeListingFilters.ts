@@ -68,7 +68,7 @@ export function financeListingFilters(context: FinanceContext) {
 
 function parseCursor(value: string | undefined) {
   if (value === undefined) return null;
-  const cursor = decodeCursor(value, "date", 512);
+  const cursor = decodeCursor(value, 512);
   return cursor &&
     /^\d{4}-\d{2}-\d{2}$/.test(cursor[0]) &&
     cursor[1].length <= 200

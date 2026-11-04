@@ -42,8 +42,7 @@ export async function listUserHistory(
   userId: string,
   cursor: string | undefined,
 ) {
-  const boundary =
-    cursor === undefined ? null : decodeCursor(cursor, "createdAt", 500);
+  const boundary = cursor === undefined ? null : decodeCursor(cursor, 500);
   if (cursor !== undefined && !boundary) return null;
   const { results } = await database
     .prepare(
@@ -103,7 +102,7 @@ export async function listMaintenanceRequests(
     values.push(query.jobId);
   }
   if (query.cursor !== undefined) {
-    const boundary = decodeCursor(query.cursor, "createdAt", 500);
+    const boundary = decodeCursor(query.cursor, 500);
     if (!boundary) return null;
     conditions.push("(requested_at, id) < (?, ?)");
     values.push(...boundary);

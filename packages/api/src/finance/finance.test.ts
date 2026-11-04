@@ -67,14 +67,6 @@ describe("finance", () => {
     );
     expect(second.body.nextCursor).toBeNull();
     expect(second.body.transactions).toHaveLength(18);
-    const legacyCursor = JSON.stringify({
-      date: "2026-01-01",
-      id: first.body.transactions.at(-1)?.id,
-    });
-    const legacyPage = await list(
-      `?year=2026&cursor=${encodeURIComponent(legacyCursor)}`,
-    );
-    expect(legacyPage.body.transactions).toEqual(second.body.transactions);
     expect(
       new Set(
         [...first.body.transactions, ...second.body.transactions].map(
@@ -312,11 +304,16 @@ describe("finance", () => {
     const sync = await jsonRequest(
       fixture.app,
       fixture.bindings,
-      `/connections/${exchange.body.connectionId}/sync`,
+      `/connections/${exchange.body.connectionId}/sync-jobs`,
       "POST",
     );
-    expect(sync.status).toBe(200);
-    expect(sync.body).toEqual({ added: 1, modified: 0, removed: 0 });
+    expect(sync.status).toBe(202);
+    expect(await syncedCounts(fixture, exchange.body.connectionId)).toEqual({
+      status: "succeeded",
+      added: 1,
+      modified: 0,
+      removed: 0,
+    });
 
     const listing = await jsonRequest<FinanceListing>(
       fixture.app,
@@ -389,7 +386,7 @@ describe("finance", () => {
     const cannotSync = await jsonRequest(
       otherOrganization,
       fixture.bindings,
-      `/connections/${exchange.body.connectionId}/sync`,
+      `/connections/${exchange.body.connectionId}/sync-jobs`,
       "POST",
     );
     expect(cannotSync.status).toBe(404);
@@ -512,7 +509,7 @@ describe("finance", () => {
     await jsonRequest(
       fixture.app,
       fixture.bindings,
-      `/connections/${reconnected.body.connectionId}/sync`,
+      `/connections/${reconnected.body.connectionId}/sync-jobs`,
       "POST",
     );
     const afterReconnect = await jsonRequest<FinanceListing>(
@@ -607,7 +604,12 @@ describe("finance", () => {
     );
     const id = exchange.body.connectionId;
     const sync = () =>
-      jsonRequest(app, fixture.bindings, `/connections/${id}/sync`, "POST");
+      jsonRequest(
+        app,
+        fixture.bindings,
+        `/connections/${id}/sync-jobs`,
+        "POST",
+      );
     const detail = () =>
       jsonRequest<ConnectionDetail>(
         app,
@@ -615,7 +617,7 @@ describe("finance", () => {
         `/connections/${id}`,
         "GET",
       );
-    expect((await sync()).status).toBe(200);
+    expect((await sync()).status).toBe(202);
 
     const synced = await detail();
     expect(synced.status).toBe(200);
@@ -655,7 +657,7 @@ describe("finance", () => {
     expect(JSON.stringify(synced.body)).not.toContain("access-sandbox");
 
     failSync = true;
-    expect((await sync()).status).toBe(502);
+    expect((await sync()).status).toBe(202);
     const failed = (await detail()).body.connection;
     expect(failed).toMatchObject({
       errorCode: "ITEM_LOGIN_REQUIRED",
@@ -667,7 +669,7 @@ describe("finance", () => {
       Date.parse(synced.body.connection.lastSyncedAt ?? ""),
     );
     failSync = false;
-    expect((await sync()).status).toBe(200);
+    expect((await sync()).status).toBe(202);
     const recovered = (await detail()).body.connection;
     expect(recovered).toMatchObject({
       errorCode: null,
@@ -779,7 +781,7 @@ describe("finance", () => {
     await jsonRequest(
       fixture.app,
       fixture.bindings,
-      `/connections/${exchange.body.connectionId}/sync`,
+      `/connections/${exchange.body.connectionId}/sync-jobs`,
       "POST",
     );
     const pending = await jsonRequest<FinanceListing>(
@@ -805,10 +807,16 @@ describe("finance", () => {
     const sync = await jsonRequest(
       fixture.app,
       fixture.bindings,
-      `/connections/${exchange.body.connectionId}/sync`,
+      `/connections/${exchange.body.connectionId}/sync-jobs`,
       "POST",
     );
-    expect(sync.body).toEqual({ added: 1, modified: 0, removed: 1 });
+    expect(sync.status).toBe(202);
+    expect(await syncedCounts(fixture, exchange.body.connectionId)).toEqual({
+      status: "succeeded",
+      added: 1,
+      modified: 0,
+      removed: 1,
+    });
     const posted = await jsonRequest<FinanceListing>(
       fixture.app,
       fixture.bindings,
@@ -862,7 +870,7 @@ async function importedConnection(
   await jsonRequest(
     fixture.app,
     fixture.bindings,
-    `/connections/${exchange.body.connectionId}/sync`,
+    `/connections/${exchange.body.connectionId}/sync-jobs`,
     "POST",
   );
   const listing = await jsonRequest<FinanceListing>(
@@ -876,4 +884,35 @@ async function importedConnection(
     exchange,
     transactionId: listing.body.transactions[0]?.id,
   };
+}
+
+/** The counts of a connection's latest sync, which the test queue runs inline. */
+async function syncedCounts(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  connectionId: string,
+) {
+  const { body } = await jsonRequest<{
+    connection: {
+      syncJob: {
+        status: string;
+        added: number;
+        modified: number;
+        removed: number;
+      } | null;
+    };
+  }>(
+    fixture.app,
+    fixture.bindings,
+    `/connections/${connectionId}/sync-status`,
+    "GET",
+  );
+  const job = body.connection.syncJob;
+  return (
+    job && {
+      status: job.status,
+      added: job.added,
+      modified: job.modified,
+      removed: job.removed,
+    }
+  );
 }

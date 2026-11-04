@@ -71,25 +71,7 @@ export const adminJobsRoutes = {
   list: route({
     method: "GET",
     path: "/api/admin/jobs",
-    query: z.object({ all: z.literal("true").optional() }),
     response: z.object({ jobs: z.array(JobDefinitionSchema) }),
-  }),
-  run: route({
-    method: "POST",
-    path: "/api/admin/jobs/:jobId/run",
-    body: z.object({ confirm: z.string() }),
-    response: z.object({
-      run: z.object({
-        runId: z.string(),
-        jobId: z.string(),
-        status: z.enum(["succeeded", "failed"]),
-        startedAt: z.string(),
-        finishedAt: z.string(),
-        durationMs: z.number(),
-        result: z.unknown().optional(),
-        error: z.string().optional(),
-      }),
-    }),
   }),
   start: route({
     method: "POST",

@@ -340,7 +340,10 @@ function financeSteps(): Step[] {
             publicToken: plaidPublicToken,
           },
         );
-        await send("POST", `/api/finance/connections/${connectionId}/sync`);
+        await send(
+          "POST",
+          `/api/finance/connections/${connectionId}/sync-jobs`,
+        );
       },
     },
     {

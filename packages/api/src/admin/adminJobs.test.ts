@@ -16,16 +16,13 @@ function fixture() {
 
 it("refuses a job run without the job's ID typed in", async () => {
   const send = fixture();
-  for (const path of [
-    "/purgeDeletedOrganizations/runs",
-    "/purgeDeletedOrganizations/run",
-  ]) {
-    for (const body of ["not json", { confirm: 7 }, { confirm: "wrong" }]) {
-      expect(await send("POST", path, body)).toMatchObject({
-        body: { error: "Confirm the job ID to run this job." },
-        status: 400,
-      });
-    }
+  for (const body of ["not json", { confirm: 7 }, { confirm: "wrong" }]) {
+    expect(
+      await send("POST", "/purgeDeletedOrganizations/runs", body),
+    ).toMatchObject({
+      body: { error: "Confirm the job ID to run this job." },
+      status: 400,
+    });
   }
 });
 

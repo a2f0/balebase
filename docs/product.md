@@ -141,10 +141,9 @@ admins read it under **Manual requests** on the Jobs page
 supports manual maintenance and five-minute queue recovery, but does not enqueue
 hourly maintenance. Bank sync is listed here for inspection; it is requested
 from Finance for a specific connection or through daily sync settings.
-Older installed apps retain `/run`, which queues the same durable job and waits
-briefly for a completed result. If it continues, the endpoint returns a background
-status message rather than claiming completion. The legacy catalog lists only
-maintenance; updated clients request `GET /api/admin/jobs?all=true`.
+Runs start only through `POST /api/admin/jobs/:jobId/runs`, which answers 202
+with the queued run; there is no endpoint that waits for a result.
+`GET /api/admin/jobs` lists every job, bank sync included.
 
 Root admins manage organization deletion from the actions menu in each row of
 `/root/organizations`. Marking requires typing the organization name in a

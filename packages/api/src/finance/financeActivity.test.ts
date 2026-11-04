@@ -347,7 +347,12 @@ describe("connection data deletion activity", () => {
   async function disconnectedConnection(fixture: Fixture, app = fixture.app) {
     const { body } = await exchange(fixture, app);
     const id = body.connectionId;
-    await jsonRequest(app, fixture.bindings, `/connections/${id}/sync`, "POST");
+    await jsonRequest(
+      app,
+      fixture.bindings,
+      `/connections/${id}/sync-jobs`,
+      "POST",
+    );
     const [transaction] = fixture.database
       .query<{ id: string }, [string]>(
         "SELECT id FROM plaid_transactions WHERE plaid_item_record_id = ?",
@@ -437,7 +442,7 @@ describe("connection data deletion activity", () => {
     await jsonRequest(
       fixture.app,
       fixture.bindings,
-      `/connections/${other.body.connectionId}/sync`,
+      `/connections/${other.body.connectionId}/sync-jobs`,
       "POST",
     );
     const transactionOf = (connectionId: string) =>

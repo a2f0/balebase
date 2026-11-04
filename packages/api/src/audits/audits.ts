@@ -372,9 +372,7 @@ audits.get("/runs", async (context) => {
   );
   if (query instanceof Response) return query;
   const cursor =
-    query.cursor === undefined
-      ? undefined
-      : decodeCursor(query.cursor, "createdAt", 2048);
+    query.cursor === undefined ? undefined : decodeCursor(query.cursor, 2048);
   if (query.cursor !== undefined && !cursor) {
     return context.json({ error: "Invalid audit cursor." }, 400);
   }

@@ -228,10 +228,8 @@ Disconnecting a bank cancels waiting syncs, including backoff and expired leases
 Only a consumer with a live lease temporarily blocks disconnection. Retrying a
 disconnect also finishes local cleanup when Plaid has already removed the Item.
 
-Older installed clients may still use the synchronous `/sync` endpoint. It
-starts the same durable job and waits briefly for completed counts; if the job
-continues, it returns a message explaining that background sync is still active.
-New clients use `/sync-jobs` and monitor the connection's saved status.
+Clients start a sync with `/sync-jobs` and monitor the connection's saved
+status; there is no endpoint that waits for completed counts.
 
 Wrangler's local API emulates the queue. Apply local migrations, start the API,
 and exercise a scheduled pass with
