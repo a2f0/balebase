@@ -216,6 +216,7 @@ export function DeviceAuditPage({
       />
       <PageBody>
         {error && <Banner tone="danger">{error}</Banner>}
+        <DeviceSyncStatus />
         {audit && workspace ? (
           <OfflineAuditEditor
             audit={audit}

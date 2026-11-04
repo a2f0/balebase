@@ -667,9 +667,11 @@ completion times.
 Device data belongs to the original account, organization, and API
 environment. Sign-out or account and organization switching locks the local view
 without deleting pending work; signing back in to that account and organization
-unlocks it. While the device is offline, or the session cannot be confirmed,
-Projects shows the device's copy: the project list, each project's forms and
-device audits, and open audits; other pages need a connection. Session expiry
+unlocks it. When the session cannot be confirmed (opening the app without a
+connection), or Projects cannot load from the API, Projects shows the device's
+copy: the project list, each project's forms and device audits, and open
+audits; other pages need a connection. A page already open when coverage drops
+stays as it is, so nothing typed into it is lost. Session expiry
 keeps the local editor open, including unsaved issue details and selected
 photos. The API rechecks authentication, organization access, and assignees
 before accepting writes; an expired session or rejected operation keeps local

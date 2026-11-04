@@ -88,11 +88,11 @@ export function useOfflineRoute(
     confirmedOrganizationId,
   );
   const unconfirmed = !session || Boolean(sessionError);
+  // Only without a confirmed session: a signed-in page that loses coverage
+  // stays as it is, so nothing typed into it is lost, and Projects falls
+  // back to this copy itself when it cannot load.
   const fallback = Boolean(
-    !excluded &&
-      local &&
-      (!offline.online || sessionError) &&
-      (unconfirmed || isWithin(pathname, projectPath())),
+    !excluded && local && (!offline.online || sessionError) && unconfirmed,
   );
   useEffect(() => {
     // Give a cold offline reopen the device's projects before account

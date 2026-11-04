@@ -442,6 +442,57 @@ it("opens a device audit in the workspace shell without remounting through cover
   );
 }, 30_000);
 
+it("keeps a signed-in project page and its typing when coverage drops", async () => {
+  await withOfflineBrowser(
+    async (page) => {
+      await page.evaluate(async () => {
+        await window.offlineTest.seed();
+        history.replaceState(null, "", "/projects");
+        window.offlineAppTest.mount();
+      });
+      await page.waitForFunction(
+        () => document.body.textContent?.includes("All projects"),
+        { polling: 100 },
+      );
+      await press(page, "New project");
+      const name = "form input";
+      await page.waitForSelector(name);
+      await page.type(name, "North wing");
+      await page.setOfflineMode(true);
+      await page.waitForFunction(() => !navigator.onLine, { polling: 100 });
+      await Bun.sleep(300);
+      // Still the signed-in page, not the device's copy, with the typing.
+      expect(
+        await page.evaluate(() =>
+          document.body.textContent?.includes("as this device last synced"),
+        ),
+      ).toBe(false);
+      expect(await page.$eval(name, (field) => field.value)).toBe("North wing");
+      await page.setOfflineMode(false);
+    },
+    (request) => {
+      const pathname = new URL(request.url).pathname;
+      if (pathname === "/api/auth/get-session")
+        return Response.json({ user, session: signedIn() });
+      if (pathname === "/api/organization-settings/organizations")
+        return Response.json({
+          organizations: [{ id: "org-1", name: "Test team" }],
+        });
+      if (pathname === "/api/organization-groups/access")
+        return Response.json({
+          capabilities: [],
+          memberRole: "owner",
+          ownerCount: 1,
+        });
+      if (pathname === "/api/projects")
+        return Response.json({ canManage: true, projects: [] });
+      if (pathname.startsWith("/api/offline/"))
+        return Response.json({ error: "Offline fixture" }, { status: 503 });
+      return Response.json([]);
+    },
+  );
+}, 30_000);
+
 it("keeps unsaved issue details and photos when reconnecting with an expired session", async () => {
   const requests: string[] = [];
   await withOfflineBrowser(
