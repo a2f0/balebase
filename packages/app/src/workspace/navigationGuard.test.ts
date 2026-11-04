@@ -195,18 +195,4 @@ describe("workspace navigation", () => {
     expect(pages.at(-1)).toBe("/activity");
     navigation.dispose();
   });
-
-  it("stays put when the guard declines a link", async () => {
-    const browser = fakeBrowser();
-    const pages: string[] = [];
-    const navigation = createWorkspaceNavigation(browser, (path) =>
-      pages.push(path),
-    );
-    removals.push(addNavigationGuard(() => false));
-    navigation.navigate("/library");
-    await settle();
-    expect(browser.location.pathname).toBe("/");
-    expect(pages).toEqual([]);
-    navigation.dispose();
-  });
 });

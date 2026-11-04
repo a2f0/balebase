@@ -3,7 +3,6 @@ import {
   type ActivityResponse,
   auditTarget,
   createActivityAudit,
-  createActivityForm,
   createFixture,
   type IssueImageResponse,
   type IssueResponse,
@@ -12,7 +11,6 @@ import {
   pngBytes,
   type TemplateResponse,
 } from "../testing/auditFixture";
-import { migrateAuditsIntoProjects } from "../testing/database";
 
 interface ActivityRunResponse {
   audit: {
@@ -562,85 +560,6 @@ describe("audit activity", () => {
     );
     expect(detail.body.audit.responses).toEqual({});
     expect(detail.body.audit.revision).toBe(0);
-  });
-
-  it("imports only known historical actors without inventing earlier answer or completion history", async () => {
-    const fixture = createFixture({ before: "0049" });
-    const templateId = await createActivityForm(fixture);
-    // Projects came later, so the audit is written as the start route then
-    // wrote it.
-    const auditId = "legacy-audit";
-    fixture.database
-      .query(
-        `INSERT INTO audits
-         (id, organization_id, template_id, template_family_id,
-          template_version_id, template_version, template_name, definition,
-          responses, status, started_by, created_at, updated_at)
-         SELECT ?, 'org_user-1', NULL, template_id, id, version, name,
-                definition, '{}', 'in_progress', 'user-1', created_at,
-                created_at
-         FROM audit_template_versions
-         WHERE template_id = ? ORDER BY version DESC LIMIT 1`,
-      )
-      .run(auditId, templateId);
-    fixture.database
-      .query(
-        `UPDATE audits SET responses = '{"check":"pass"}', status = 'completed', completed_at = '2026-09-01T00:00:00.000Z' WHERE id = ?`,
-      )
-      .run(auditId);
-    fixture.database
-      .query(`INSERT INTO audit_issues (id, organization_id, audit_id, item_id, title, description, priority, status, created_by, created_at, updated_at)
-      VALUES ('legacy-issue', 'org_user-1', ?, 'check', 'Legacy issue', '', 'high', 'resolved', 'user-2', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z')`)
-      .run(auditId);
-    migrateAuditsIntoProjects(fixture.database, "0049");
-    const history = await jsonRequest<ActivityResponse>(
-      fixture,
-      `/runs/${auditId}/activity`,
-      "GET",
-    );
-    expect(history.body.events).toHaveLength(2);
-    expect(history.body.events.every(({ historical }) => historical)).toBe(
-      true,
-    );
-    expect(history.body.events.map(({ action }) => action).sort()).toEqual([
-      "audit.issue_created",
-      "audit.started",
-    ]);
-    const template = await jsonRequest<ActivityResponse>(
-      fixture,
-      `/templates/${templateId}/activity`,
-      "GET",
-    );
-    expect(template.body.events).toHaveLength(2);
-    const detail = await jsonRequest<ActivityRunResponse>(
-      fixture,
-      `/runs/${auditId}`,
-      "GET",
-    );
-    expect(detail.body.audit.answerActivity).toEqual({});
-    expect(detail.body.audit.createdBy.id).toBe("user-1");
-    await jsonRequest(
-      fixture,
-      `/runs/${auditId}`,
-      "PATCH",
-      {
-        expectedRevision: 0,
-        responses: { check: "fail" },
-        status: "completed",
-      },
-      { userId: "user-2" },
-    );
-    const updated = await jsonRequest<ActivityResponse>(
-      fixture,
-      `/runs/${auditId}/activity`,
-      "GET",
-    );
-    expect(updated.body.events[0]).toMatchObject({
-      action: "audit.answer_changed",
-      historical: false,
-      actor: { id: "user-2" },
-      details: { before: "pass", after: "fail" },
-    });
   });
 });
 

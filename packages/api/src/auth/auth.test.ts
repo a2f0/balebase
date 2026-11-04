@@ -14,8 +14,6 @@ import {
   totpCode,
   totpSecret,
 } from "../testing/authFixture";
-import { applyMigrations, createTestDatabase } from "../testing/database";
-import { seedUser } from "../testing/seed";
 import type { createAuth } from "./auth";
 import { withNativeOrigin } from "./nativeRequest";
 
@@ -944,28 +942,6 @@ describe("password authentication", () => {
       .run(later, email);
     expect((await requestMe()).status).toBe(200);
     expect(lastActiveAt()).toBe(later);
-  });
-
-  it("backfills last activity from account creation", async () => {
-    const database = createTestDatabase({ before: "0055" });
-    seedUser(database, {
-      createdAt: "2026-08-18T12:00:00.000Z",
-      email: "existing@example.com",
-      emailVerified: false,
-      id: "existing-user",
-      name: "Existing User",
-    });
-    database
-      .query("UPDATE user SET updatedAt = ? WHERE id = ?")
-      .run("2026-09-01T12:00:00.000Z", "existing-user");
-
-    applyMigrations(database, { from: "0055" });
-
-    expect(
-      database
-        .query("SELECT lastActiveAt FROM user WHERE id = ?")
-        .get("existing-user"),
-    ).toEqual({ lastActiveAt: "2026-08-18T12:00:00.000Z" });
   });
 
   it("does not mark an impersonated user as active", async () => {

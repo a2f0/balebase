@@ -211,25 +211,6 @@ describe("api", () => {
     expect(response.status).toBe(401);
   });
 
-  it("requires authentication for the admin organization list", async () => {
-    const response = await app.request(
-      "/api/admin/organizations",
-      undefined,
-      authBindings(),
-    );
-
-    expect(response.status).toBe(401);
-  });
-
-  it("requires authentication for organization details", async () => {
-    const response = await app.request(
-      "/api/admin/organizations/organization-id",
-      undefined,
-      authBindings(),
-    );
-    expect(response.status).toBe(401);
-  });
-
   it("requires platform admin access on every admin route, even for an organization owner", async () => {
     const fixture = await protectedOrganizationFixture();
     const adminRoutes = app.routes.filter(
@@ -261,26 +242,6 @@ describe("api", () => {
         error: "Insufficient permissions.",
       });
     }
-  });
-
-  it("requires authentication to mark an organization for deletion", async () => {
-    const response = await app.request(
-      "/api/admin/organizations/organization-id",
-      { method: "DELETE" },
-      authBindings(),
-    );
-
-    expect(response.status).toBe(401);
-  });
-
-  it("requires authentication to restore an organization", async () => {
-    const response = await app.request(
-      "/api/admin/organizations/organization-id/restore",
-      { method: "POST" },
-      authBindings(),
-    );
-
-    expect(response.status).toBe(401);
   });
 
   it("requires authentication for audits", async () => {

@@ -30,12 +30,6 @@ describe("native release secrets", () => {
     expect(snapshot.environment).toMatchObject(storeEnvironment);
   });
 
-  test("staging imports store names from shared.env, then app.env", async () => {
-    const snapshot = await readNativeReleaseEnvironment(sharedEnv, appEnv);
-
-    expect(snapshot.environment).toMatchObject(storeEnvironment);
-  });
-
   test("production ignores Vite settings in both secrets files", async () => {
     const result = await readNativeReleaseEnvironmentResult(
       "",

@@ -214,6 +214,57 @@ it("queues a confirmed organization purge, cascades records, and retains every k
   expect(await purgeDeletedObjects(f.bindings, cutoffs)).toBe(0);
 });
 
+it("removes job history with its bank connection and with a purged organization", async () => {
+  const f = fixture();
+  f.insertActor();
+  const insertItem = f.database.query(`INSERT INTO plaid_items
+    (id, organization_id, plaid_item_id, access_token_ciphertext, access_token_iv, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, 'ciphertext', 'iv', 'actor', '2020-01-01', '2020-01-01')`);
+  const insertRun = f.database.query(`INSERT INTO job_runs
+    (id, job_id, connection_id, organization_id, source, available_at, created_at)
+    VALUES (?, ?, ?, ?, 'manual', '2020-01-01', '2020-01-01')`);
+  const insertLog = f.database.query(`INSERT INTO job_logs
+    (run_id, occurred_at, level, message, details_json)
+    VALUES (?, '2020-01-01', 'info', 'Job queued.', '{}')`);
+  f.database.exec(`INSERT INTO organization (id, name, slug, createdAt, deletedAt)
+    VALUES ('purge', 'Purge', 'purge', '2020-01-01', '2020-02-01'),
+           ('keep', 'Keep', 'keep', '2020-01-01', NULL)`);
+  for (const [item, organization] of [
+    ["purge-bank", "purge"],
+    ["keep-bank", "keep"],
+    ["disconnected-bank", "keep"],
+  ] as const) {
+    insertItem.run(item, organization, item);
+    insertRun.run(`${item}-sync`, "syncFinanceConnection", item, organization);
+    insertLog.run(`${item}-sync`);
+  }
+  insertRun.run("purge-org-run", "purgeRequestedUsers", null, "purge");
+  insertLog.run("purge-org-run");
+  const remaining = () => ({
+    runs: f.database.query("SELECT id FROM job_runs ORDER BY id").all(),
+    logs: f.database
+      .query("SELECT DISTINCT run_id FROM job_logs ORDER BY run_id")
+      .all(),
+  });
+
+  f.database.exec("DELETE FROM plaid_items WHERE id = 'disconnected-bank'");
+  const live = ["keep-bank-sync", "purge-bank-sync", "purge-org-run"];
+  expect(remaining()).toEqual({
+    runs: live.map((id) => ({ id })),
+    logs: live.map((run_id) => ({ run_id })),
+  });
+
+  expect(await purgeDeletedOrganizations(f.bindings, "run-1", now)).toEqual({
+    purged: 1,
+    skipped: 0,
+    failed: 0,
+  });
+  expect(remaining()).toEqual({
+    runs: [{ id: "keep-bank-sync" }],
+    logs: [{ run_id: "keep-bank-sync" }],
+  });
+});
+
 it("rolls back organization deletion and cleanup tombstones together on a cascade failure", async () => {
   const f = fixture();
   f.insertActor();
