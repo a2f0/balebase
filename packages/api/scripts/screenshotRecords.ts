@@ -225,6 +225,7 @@ function auditSteps() {
         const { auditId } = await send<{ auditId: string }>(
           "POST",
           `/api/audits/templates/${audit.form}/runs`,
+          { projectId: idOf(context, `project:${audit.project}`) },
         );
         context.ids.set(`audit:${audit.id}`, auditId);
         if (audit.status === "in_progress") await answer(context, false);

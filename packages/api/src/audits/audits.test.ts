@@ -8,6 +8,7 @@ import {
   jsonRequest,
   type RunListResponse,
   type RunResponse,
+  startAudit,
   type TemplateListResponse,
   type TemplateResponse,
   type TestIdentity,
@@ -18,9 +19,9 @@ describe("audits", () => {
     const fixture = createFixture();
     const insert = fixture.database.query(
       `INSERT INTO audits
-       (id, organization_id, template_name, definition, responses, status,
+       (id, organization_id, project_id, template_name, definition, responses, status,
         started_by, created_at, updated_at)
-       VALUES (?, 'org_user-1', 'History test', ?, '{}', 'completed',
+       VALUES (?, 'org_user-1', 'project_org_user-1', 'History test', ?, '{}', 'completed',
                'user-1', ?, ?)`,
     );
     const definition = JSON.stringify({
@@ -71,9 +72,9 @@ describe("audits", () => {
     fixture.database
       .query(
         `INSERT INTO audits
-         (id, organization_id, template_name, definition, responses, status,
+         (id, organization_id, project_id, template_name, definition, responses, status,
           started_by, created_at, updated_at)
-         VALUES ('update-race', 'org_user-1', 'Race test', ?, '{}',
+         VALUES ('update-race', 'org_user-1', 'project_org_user-1', 'Race test', ?, '{}',
                  'in_progress', 'user-1', ?, ?)`,
       )
       .run(
@@ -170,11 +171,7 @@ describe("audits", () => {
       version: 2,
     });
 
-    const started = await jsonRequest<RunResponse>(
-      fixture,
-      `/templates/${template.id}/runs`,
-      "POST",
-    );
+    const started = await startAudit<RunResponse>(fixture, template.id);
     expect(started.status).toBe(201);
 
     const incomplete = await jsonRequest(

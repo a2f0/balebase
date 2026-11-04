@@ -94,6 +94,8 @@ const apiKeyRoutes: Array<{ prefix: string; writable: boolean }> = [
   { prefix: "/api/objects", writable: true },
   { prefix: "/api/organization-groups", writable: true },
   { prefix: "/api/organization-settings/people", writable: false },
+  // Read-only, so a key can name the project an audit is started for.
+  { prefix: "/api/projects", writable: false },
 ];
 
 const safeMethods = new Set(["GET", "HEAD"]);

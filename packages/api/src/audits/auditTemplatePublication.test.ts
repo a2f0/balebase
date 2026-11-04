@@ -3,6 +3,7 @@ import {
   createFixture,
   jsonRequest,
   type RunResponse,
+  startAudit,
   type TemplateListResponse,
   type TemplateResponse,
 } from "../testing/auditFixture";
@@ -55,10 +56,7 @@ describe("organization form publication", () => {
       { status: "unpublished", version: 4 },
     );
     // Unpublished forms stay usable inside the organization.
-    expect(
-      (await jsonRequest(fixture, `/templates/${template.id}/runs`, "POST"))
-        .status,
-    ).toBe(201);
+    expect((await startAudit(fixture, template.id)).status).toBe(201);
     expect((await save(3, "published")).status).toBe(409);
     const versions = fixture.database
       .query(
@@ -83,15 +81,8 @@ describe("organization form publication", () => {
       { name: "Site walk" },
     );
     const start = async (templateId: string, identity?: typeof other) =>
-      (
-        await jsonRequest<RunResponse>(
-          fixture,
-          `/templates/${templateId}/runs`,
-          "POST",
-          undefined,
-          identity,
-        )
-      ).body.auditId;
+      (await startAudit<RunResponse>(fixture, templateId, identity)).body
+        .auditId;
     const localId = local.body.template.id;
     await start(localId);
     const discarded = await start(localId);

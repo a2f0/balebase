@@ -145,6 +145,12 @@ const AuditRunFields = {
   /** Null once the discarding account has been deleted. */
   deletedBy: PersonSchema.nullable(),
   id: z.string(),
+  /** The project the audit belongs to; it may since have been deleted. */
+  project: z.object({
+    deleted: z.boolean(),
+    id: z.string(),
+    name: z.string(),
+  }),
   status: AuditStatusSchema,
   templateName: z.string(),
   templateVersion: z.number().nullable(),
@@ -295,9 +301,11 @@ export const auditsRoutes = {
     body: AuditTemplateSaveSchema.extend({ status: TemplatePublicationSchema }),
     response: AuditTemplateResponseSchema,
   }),
+  /** Starts an audit for a project from one of the forms turned on for it. */
   start: route({
     method: "POST",
     path: "/api/audits/templates/:id/runs",
+    body: z.object({ projectId: z.string().min(1).max(200) }),
     response: z.object({ auditId: z.string() }),
   }),
   listRuns: route({

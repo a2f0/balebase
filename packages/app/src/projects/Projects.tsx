@@ -24,6 +24,7 @@ import {
   projectIdForPath,
   projectPath,
 } from "../workspace/workspacePaths";
+import { DeletedProjects } from "./DeletedProjects";
 import {
   DeviceAuditPage,
   DeviceProjects,
@@ -137,6 +138,7 @@ function ProjectListPage({
                 projects={listing.projects}
               />
             </PageSection>
+            <DeletedProjects onNavigate={onNavigate} />
             <OtherDeviceAudits onNavigate={onNavigate} />
           </>
         )}

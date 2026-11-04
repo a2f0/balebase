@@ -484,7 +484,7 @@ it("keeps a signed-in project page and its typing when coverage drops", async ()
           memberRole: "owner",
           ownerCount: 1,
         });
-      if (pathname === "/api/projects")
+      if (pathname === "/api/projects" || pathname === "/api/projects/deleted")
         return Response.json({ canManage: true, projects: [] });
       if (pathname.startsWith("/api/offline/"))
         return Response.json({ error: "Offline fixture" }, { status: 503 });

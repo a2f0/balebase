@@ -48,28 +48,16 @@ export function AuditHome({
     "Could not load audits.",
   );
   const creating = useAction("Could not create the checklist.");
-  const starting = useAction("Could not start the audit.");
-  const busy = creating.busy || starting.busy;
-  const error = creating.failure ?? starting.failure;
   const [templateView, setTemplateView] = useState(() =>
     readAuditTemplateView(),
   );
   const runList = useAuditRunList();
 
   async function createTemplate() {
-    starting.setError(undefined);
     await creating.run(async () => {
       const { template } =
         await api.audits.createTemplate("Untitled checklist");
       onNavigate(auditTemplatePath(template.id));
-    });
-  }
-
-  async function beginAudit(templateId: string) {
-    creating.setError(undefined);
-    await starting.run(async () => {
-      const { auditId } = await api.audits.start(templateId);
-      onNavigate(auditRunPath(auditId));
     });
   }
 
@@ -80,13 +68,11 @@ export function AuditHome({
 
   return (
     <Page>
-      <AuditHomeHeader busy={busy} onCreate={createTemplate} />
+      <AuditHomeHeader busy={creating.busy} onCreate={createTemplate} />
       <PageBody>
-        <ErrorToast error={error} onNavigate={onNavigate} />
+        <ErrorToast error={creating.failure} onNavigate={onNavigate} />
         {templates.error && <Toast tone="danger">{templates.error}</Toast>}
         <TemplateLibrary
-          busy={busy}
-          onBegin={beginAudit}
           onEdit={(id) => onNavigate(auditTemplatePath(id))}
           onViewChange={changeTemplateView}
           templates={templates.data}
@@ -157,7 +143,7 @@ function AuditHomeHeader({
           New organization checklist
         </Button>
       }
-      description="Run inspections from shared or organization checklists and keep every finding in one place."
+      description="Curate shared and organization checklists, and review every audit. Audits are started from a project."
       eyebrow="Inspections & compliance"
       title="Audits"
     />
@@ -165,8 +151,6 @@ function AuditHomeHeader({
 }
 
 interface TemplateActions {
-  busy: boolean;
-  onBegin: (id: string) => Promise<void>;
   onEdit: (id: string) => void;
 }
 
@@ -226,11 +210,12 @@ function TemplateLibrary({
   );
 }
 
-/** Edit or customize a form, and start an audit from it. */
+/**
+ * Edit or customize a form. Audits start from a project the form is turned
+ * on for, not here.
+ */
 function TemplateButtons({
-  busy,
   layout,
-  onBegin,
   onEdit,
   template,
 }: TemplateActions & { layout: AuditTemplateView; template: AuditTemplate }) {
@@ -239,28 +224,10 @@ function TemplateButtons({
       {template.scope === "global" ? "Customize" : "Edit"}
     </Button>
   );
-  const start = (
-    <Button
-      className={layout === "grid" ? "auditTemplateStart" : undefined}
-      disabled={busy}
-      iconEnd="arrowRight"
-      onClick={() => void onBegin(template.id)}
-      size="sm"
-      variant="primary"
-    >
-      Start audit
-    </Button>
-  );
   return layout === "grid" ? (
-    <>
-      <div className="cluster auditTemplateActions">{edit}</div>
-      {start}
-    </>
+    <div className="cluster auditTemplateActions">{edit}</div>
   ) : (
-    <>
-      {edit}
-      {start}
-    </>
+    edit
   );
 }
 
@@ -347,7 +314,7 @@ function AuditHistory({
         </EmptyState>
       ) : runs ? (
         <EmptyState compact icon="audits" title="No audits yet">
-          Start one from a checklist above.
+          Start one from a project's Audit forms.
         </EmptyState>
       ) : (
         !error && <LoadingState label="Loading audits…" />
@@ -372,6 +339,8 @@ function AuditRunRow({
       <span className="rowMain">
         <span className="rowTitle">{run.templateName}</span>
         <span className="rowMeta">
+          {run.project.name}
+          {run.project.deleted ? " (deleted project)" : ""} ·{" "}
           {run.templateVersion ? `v${run.templateVersion} · ` : ""}
           {run.deletedAt
             ? `Discarded ${formatDate(run.deletedAt)}${run.deletedBy ? ` by ${run.deletedBy.name}` : ""}`

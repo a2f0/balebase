@@ -7,7 +7,7 @@ import type { Bindings } from "../types";
 import { testBindings } from "./bindings";
 import { toD1 } from "./d1";
 import { createTestDatabase } from "./database";
-import { insertBilling, seedAccount } from "./seed";
+import { insertBilling, seedAccount, seedProject } from "./seed";
 import { testApp } from "./session";
 
 export const organizationId = "org_user-1";
@@ -161,12 +161,12 @@ export function insertAudit(
   database
     .query(
       `INSERT INTO audits
-       (id, organization_id, template_name, definition, responses, status,
-        started_by, created_at, updated_at)
-       VALUES (?, ?, 'Example form', '{"version":1,"sections":[]}', '{}',
+       (id, organization_id, project_id, template_name, definition, responses,
+        status, started_by, created_at, updated_at)
+       VALUES (?, ?, ?, 'Example form', '{"version":1,"sections":[]}', '{}',
                'completed', 'user-1', ?, ?)`,
     )
-    .run(id, target, createdAt, createdAt);
+    .run(id, target, seedProject(database, target), createdAt, createdAt);
 }
 
 export function reserveCheckout(database: Database, sessionId: string) {

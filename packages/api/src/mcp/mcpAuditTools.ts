@@ -1,4 +1,5 @@
 import { auditsRoutes } from "@balebase/validators/audits";
+import { projectsRoutes } from "@balebase/validators/projects";
 import { activityCursor, type McpTool } from "./mcpToolSchema";
 
 const templateSave = {
@@ -101,8 +102,28 @@ export const auditTools: McpTool[] = [
   },
   {
     description:
-      "Starts an audit from a form's current version and returns its auditId.",
-    descriptions: templateId,
+      "Lists the organization's projects with member and audit form counts. Every audit belongs to a project; start_audit needs one.",
+    descriptions: {},
+    name: "list_projects",
+    route: projectsRoutes.list,
+    title: "List projects",
+  },
+  {
+    description:
+      "Gets a project: its members and the audit forms turned on for it, which start_audit can start.",
+    descriptions: { id: "Project id from list_projects." },
+    name: "get_project",
+    route: projectsRoutes.get,
+    title: "Get project",
+  },
+  {
+    description:
+      "Starts an audit for a project from a form's current version and returns its auditId. The form must be turned on for the project.",
+    descriptions: {
+      ...templateId,
+      projectId:
+        "Project id the audit belongs to; the form must be turned on for it.",
+    },
     name: "start_audit",
     route: auditsRoutes.start,
     title: "Start audit",

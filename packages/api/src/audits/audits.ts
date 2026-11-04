@@ -45,6 +45,7 @@ import { auditRunDiscard } from "./auditRunDiscard";
 import {
   type AuditRow,
   type AuditSummaryRow,
+  auditProjectColumns,
   auditStatement,
   discardedAuditError,
   findAudit,
@@ -306,10 +307,19 @@ audits.put("/templates/:id", async (context) => {
       });
 });
 
+// An audit starts for a project, from a form turned on for it that is still
+// usable; both are checked again in the insert itself.
 audits.post("/templates/:id/runs", async (context) => {
+  const body = await readBody(
+    context,
+    auditsRoutes.start,
+    "Name the project to start the audit for.",
+  );
+  if (body instanceof Response) return body;
+  const organizationId = context.get("organizationId");
   const template = await findTemplate(
     context.env.DB,
-    context.get("organizationId"),
+    organizationId,
     context.req.param("id"),
   );
   if (!template) return context.json({ error: "Template not found." }, 404);
@@ -317,13 +327,18 @@ audits.post("/templates/:id/runs", async (context) => {
   const now = new Date().toISOString();
   const insert = context.env.DB.prepare(
     `INSERT INTO audits
-     (id, organization_id, template_id, template_family_id,
+     (id, organization_id, project_id, template_id, template_family_id,
       template_version_id, template_version, template_name, definition,
       responses, status, started_by, created_at, updated_at)
-     VALUES (?, ?, NULL, ?, ?, ?, ?, ?, '{}', 'in_progress', ?, ?, ?)`,
+     SELECT ?, ?, project.id, NULL, ?, ?, ?, ?, ?, '{}', 'in_progress', ?, ?, ?
+     FROM projects AS project
+     JOIN project_audit_forms AS enabled
+       ON enabled.project_id = project.id AND enabled.template_id = ?
+     WHERE project.id = ? AND project.organization_id = ?
+       AND project.deleted_at IS NULL`,
   ).bind(
     id,
-    context.get("organizationId"),
+    organizationId,
     template.id,
     template.version_id,
     template.version,
@@ -332,8 +347,20 @@ audits.post("/templates/:id/runs", async (context) => {
     context.get("authSession").user.id,
     now,
     now,
+    template.id,
+    body.projectId,
+    organizationId,
   );
-  await activityBatch(context.env.DB, context.get("apiKey"), [insert]);
+  const [inserted] = await activityBatch(
+    context.env.DB,
+    context.get("apiKey"),
+    [insert],
+  );
+  if (!inserted?.meta.changes)
+    return context.json(
+      { error: "This form is not turned on for that project." },
+      404,
+    );
   return respond(context, auditsRoutes.start, { auditId: id }, 201);
 });
 
@@ -364,10 +391,11 @@ audits.get("/runs", async (context) => {
             creator.name AS created_by_name, creator.email AS created_by_email,
             audit.deleted_at, deleted_by.id AS deleted_by_id,
             deleted_by.name AS deleted_by_name,
-            deleted_by.email AS deleted_by_email,
+            deleted_by.email AS deleted_by_email, ${auditProjectColumns},
             audit.created_at, audit.updated_at, COUNT(issue.id) AS issue_count
      FROM audits AS audit
      JOIN user AS creator ON creator.id = audit.started_by
+     JOIN projects AS project ON project.id = audit.project_id
      LEFT JOIN user AS deleted_by ON deleted_by.id = audit.deleted_by_user_id
      LEFT JOIN issues AS issue ON issue.organization_id = audit.organization_id AND issue.target_id = audit.id AND issue.target_type = 'audit_run'
      WHERE audit.organization_id = ? AND ${deletedFilter}

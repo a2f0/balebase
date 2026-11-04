@@ -7,9 +7,12 @@ import { createFinanceRouter } from "../finance/finance";
 import { requireCapability } from "../organizations/organizationGroups";
 import { testBindings } from "../testing/bindings";
 import { queryHooks, toD1 } from "../testing/d1";
-import { applyMigrations, createTestDatabase } from "../testing/database";
+import {
+  createTestDatabase,
+  migrateAuditsIntoProjects,
+} from "../testing/database";
 import { requester } from "../testing/http";
-import { seedAccount, seedMember } from "../testing/seed";
+import { seedAccount, seedMember, seedProject } from "../testing/seed";
 import { testApp } from "../testing/session";
 import { issues } from "./issues";
 
@@ -511,7 +514,7 @@ describe("workspace issues", () => {
         )
         .all();
     const events = auditHistory();
-    applyMigrations(f.db, { from: "0062" });
+    migrateAuditsIntoProjects(f.db, "0062");
     expect(f.db.query("PRAGMA foreign_key_check").all()).toEqual([]);
     // Preserve every legacy field and verify the new actor-column defaults.
     expect(auditHistory()).toEqual(
@@ -791,7 +794,7 @@ function seedCheckAudit(db: Database) {
     ],
   });
   db.query(
-    `INSERT INTO audits (id, organization_id, template_name, definition, responses, status, started_by, created_at, updated_at) VALUES ('audit', 'org_user-1', 'Inspection', ?, '{}', 'in_progress', 'user-1', ?, ?)`,
+    `INSERT INTO audits (id, organization_id, project_id, template_name, definition, responses, status, started_by, created_at, updated_at) VALUES ('audit', 'org_user-1', 'project_org_user-1', 'Inspection', ?, '{}', 'in_progress', 'user-1', ?, ?)`,
   ).run(definition, now, now);
 }
 
@@ -802,6 +805,7 @@ function fixture(legacy = false) {
   databases.push(db);
   for (const id of ["user-1", "user-2"])
     seedAccount(db, { createdAt: now, id });
+  if (!legacy) seedProject(db, "org_user-1");
   seedMember(db, {
     createdAt: now,
     id: "second-member",

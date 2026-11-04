@@ -39,6 +39,16 @@ const endpoints = {
     path: "/api/projects/:id",
     response: "empty",
   }),
+  listDeleted: endpoint<typeof projectsRoutes.listDeleted>({
+    method: "GET",
+    path: "/api/projects/deleted",
+    response: "json",
+  }),
+  restore: endpoint<typeof projectsRoutes.restore>({
+    method: "POST",
+    path: "/api/projects/:id/restore",
+    response: "json",
+  }),
   addMember: endpoint<typeof projectsRoutes.addMember>({
     method: "PUT",
     path: "/api/projects/:id/members/:userId",
@@ -91,6 +101,15 @@ export function projectsApi(transport: Transport) {
     },
     delete(id: string) {
       return transport.call(endpoints.delete, { params: { id } });
+    },
+    listDeleted() {
+      return transport.call(endpoints.listDeleted);
+    },
+    async restore(id: string) {
+      const { project } = await transport.call(endpoints.restore, {
+        params: { id },
+      });
+      return project;
     },
     async addMember(id: string, userId: string) {
       const { project } = await transport.call(endpoints.addMember, {

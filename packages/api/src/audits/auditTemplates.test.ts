@@ -5,6 +5,7 @@ import {
   jsonRequest,
   legacyDatabase,
   type RunResponse,
+  startAudit,
   type TemplateResponse,
   type TemplateVersionsResponse,
 } from "../testing/auditFixture";
@@ -193,10 +194,9 @@ describe("audit templates", () => {
     expect(saved.status).toBe(200);
     expect(saved.body.template.definition.sections[0]?.items).toEqual([]);
 
-    const started = await jsonRequest<RunResponse>(
+    const started = await startAudit<RunResponse>(
       fixture,
-      `/templates/${created.body.template.id}/runs`,
-      "POST",
+      created.body.template.id,
     );
     const completed = await jsonRequest(
       fixture,

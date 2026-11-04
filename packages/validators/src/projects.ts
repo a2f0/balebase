@@ -51,6 +51,16 @@ export type ProjectChanges = z.input<typeof ProjectChangesSchema>;
 
 const ProjectResponseSchema = z.object({ project: ProjectSchema });
 
+/** A deleted project, hidden from the list until it is restored. */
+const DeletedProjectSchema = z.object({
+  deletedAt: z.string(),
+  deletedBy: PersonSchema.nullable(),
+  description: z.string(),
+  id: z.string(),
+  name: z.string(),
+});
+export type DeletedProject = z.infer<typeof DeletedProjectSchema>;
+
 export const projectsRoutes = {
   list: route({
     method: "GET",
@@ -88,10 +98,28 @@ export const projectsRoutes = {
     body: ProjectChangesSchema,
     response: ProjectResponseSchema,
   }),
+  /**
+   * Hides the project; its audits, members, forms, and history stay, and
+   * restoring brings it back as it was.
+   */
   delete: route({
     method: "DELETE",
     path: "/api/projects/:id",
     response: "empty",
+  }),
+  /** Deleted projects, most recently deleted first. */
+  listDeleted: route({
+    method: "GET",
+    path: "/api/projects/deleted",
+    response: z.object({
+      canManage: z.boolean(),
+      projects: z.array(DeletedProjectSchema),
+    }),
+  }),
+  restore: route({
+    method: "POST",
+    path: "/api/projects/:id/restore",
+    response: ProjectResponseSchema,
   }),
   addMember: route({
     method: "PUT",

@@ -326,11 +326,11 @@ them, or their leaving revokes their unexpired keys, recorded as
 shows the reason; regaining the role or rejoining does not bring a key back.
 Send it as `Authorization: Bearer <key>`. Keys reach
 the workspace routes: activity, audits, businesses, contracts, employee forms,
-equipment, finance, inbox, library folders and files, groups, `/api/me`, and the
-people list. Read keys may only use `GET`. Account settings, billing,
-organization settings, API key management, root administration, and Better Auth
-endpoints stay session-only, so a leaked key cannot create more keys or change
-sign-in security.
+equipment, finance, inbox, library folders and files, groups, `/api/me`, the
+people list, and (read-only) projects. Read keys may only use `GET`. Account
+settings, billing, organization settings, API key management, root
+administration, and Better Auth endpoints stay session-only, so a leaked key
+cannot create more keys or change sign-in security.
 
 The MCP server is at `https://api.balebase.com/mcp` and uses Streamable HTTP
 with the official TypeScript SDK. It serves the stateless `2026-07-28`
@@ -410,8 +410,12 @@ audit forms they use. Each project has a name, an optional description, members,
 and the audit forms turned on for it: published global forms and the
 organization's own published forms. A form stays turned on as it gets new
 versions, so members always receive its current version. Every member can view
-projects; organization owners and admins create, edit, and delete them, add and
-remove members, and turn forms on and off. A person who leaves or is removed
+projects; organization owners and admins create, edit, delete, and restore them,
+add and remove members, and turn forms on and off. Deleting a project hides it:
+its audits keep belonging to it, it takes no new audits, its members and forms
+stay, and it is listed under **Deleted projects** on the Projects page, where
+owners and admins restore it (`GET /api/projects/deleted`,
+`POST /api/projects/:id/restore`). A person who leaves or is removed
 from the organization drops out of its projects' members without the projects
 being changed, and appears in them again on rejoining. Editing a project's name
 or description requires `expectedRevision` from its latest response; an edit
@@ -422,9 +426,11 @@ form again restores it. Each project page has four tabs: **Members**, **Audit
 forms** (start audits from the forms turned on; see [Audits on this
 device](#audits-on-this-device)), **Project setup** (owners and admins turn
 published forms on and off), and **Activity**. Creating, editing,
-and deleting a project, membership changes, and form changes are recorded in
-Activity, which keeps a deleted project's history. Migration
-`0078_create_projects.sql` adds the project tables.
+deleting, and restoring a project, membership changes, and form changes are
+recorded in Activity, which keeps a deleted project's history. Migration
+`0078_create_projects.sql` adds the project tables, and
+`0091_require_audit_projects.sql` the soft delete, with a trigger that refuses
+deleting a project row except through its organization's purge.
 
 ## Contracts and e-signature
 
@@ -504,8 +510,17 @@ producer and reader requirements, and the coverage review skill.
 
 ## Audits and checklists
 
-Authenticated users can build organization-scoped checklist templates at
-`/audits`, start audits from them, record pass/fail/N/A or text responses, and
+Authenticated users curate organization-scoped checklist templates at
+`/audits` and review the organization's audits there; audits are not started
+from `/audits`. Every audit belongs to a project: `audits.project_id` is a
+required foreign key to `projects`, and an audit starts from a project's
+**Audit forms** tab (see [Audits on this device](#audits-on-this-device)), or
+through `POST /api/audits/templates/:id/runs` with a `projectId` the form is
+turned on for, which is how API keys and the MCP `start_audit` tool start one.
+Audit lists and pages name each audit's project, marking a deleted one.
+Migration `0091_require_audit_projects.sql` makes the column required and
+removes the audits that had no project, with their issues and history. Audits
+record pass/fail/N/A or text responses and
 raise issues with priorities and optional organization-member assignees. Audit
 issues can include a description, be reassigned, and have up to ten JPEG, PNG,
 GIF, or WebP images attached. Image metadata is organization-scoped in D1 and
@@ -655,7 +670,8 @@ queued operations together.
 
 Queued work is sent while the app is open and online: right away, on focus, on
 reconnecting, and on a 30-second timer. It creates the audit first, recorded
-against its project (`audits.project_id`, cleared if the project is deleted),
+against its project (`audits.project_id`; a project deleted since still takes
+it, and one outside the organization is refused),
 then its issues, then each issue's photos. **Retry sync** on the status line
 restarts held-back work; temporary failures back off to five minutes. Repeated
 requests carry the same IDs; the server commits a receipt with each mutation,

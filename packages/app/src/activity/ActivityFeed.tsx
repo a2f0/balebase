@@ -140,6 +140,7 @@ const actionLabels: Record<string, string> = {
     "changed a two-factor requirement",
   "project.created": "created a project",
   "project.deleted": "deleted a project",
+  "project.restored": "restored a project",
   "project.form_disabled": "turned off an audit form",
   "project.form_enabled": "turned on an audit form",
   "project.member_added": "added a project member",

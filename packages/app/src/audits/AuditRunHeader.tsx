@@ -115,7 +115,9 @@ export function RunOverview({
     <>
       <div className="runOverview">
         <p className="runAttribution">
-          Started by {audit.createdBy.name} · {audit.createdBy.email} ·{" "}
+          {audit.project.name}
+          {audit.project.deleted ? " (deleted project)" : ""} · Started by{" "}
+          {audit.createdBy.name} · {audit.createdBy.email} ·{" "}
           {formatDateTime(audit.createdAt)}
         </p>
         {!deletedAt && audit.status === "in_progress" && (

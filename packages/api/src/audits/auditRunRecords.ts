@@ -19,6 +19,9 @@ export interface AuditRow {
   deleted_by_id: string | null;
   deleted_by_name: string | null;
   id: string;
+  project_deleted_at: string | null;
+  project_id: string;
+  project_name: string;
   responses: string;
   revision: number;
   status: AuditStatus;
@@ -34,6 +37,10 @@ export interface AuditSummaryRow extends AuditRow {
 }
 
 export const discardedAuditError = "This audit was discarded.";
+
+/** The audit's project, selected from `audits AS audit` joined to `projects AS project`. */
+export const auditProjectColumns = `project.id AS project_id,
+  project.name AS project_name, project.deleted_at AS project_deleted_at`;
 
 export async function findAudit(
   database: D1Database,
@@ -57,8 +64,9 @@ export function auditStatement(
               creator.email AS created_by_email,
               audit.deleted_at, deleted_by.id AS deleted_by_id,
               deleted_by.name AS deleted_by_name,
-              deleted_by.email AS deleted_by_email
+              deleted_by.email AS deleted_by_email, ${auditProjectColumns}
        FROM audits AS audit JOIN user AS creator ON creator.id = audit.started_by
+       JOIN projects AS project ON project.id = audit.project_id
        LEFT JOIN user AS deleted_by ON deleted_by.id = audit.deleted_by_user_id
        WHERE audit.id = ? AND audit.organization_id = ?`,
     )
@@ -86,6 +94,11 @@ export function toAudit(row: AuditRow): Omit<AuditRun, "answerActivity"> {
     deletedAt: row.deleted_at,
     deletedBy: deletedBy(row),
     id: row.id,
+    project: {
+      deleted: row.project_deleted_at !== null,
+      id: row.project_id,
+      name: row.project_name,
+    },
     responses: JSON.parse(row.responses) as Record<string, string>,
     revision: row.revision,
     status: row.status,
@@ -117,6 +130,7 @@ export function toAuditSummary(row: AuditSummaryRow): AuditSummary {
     deletedBy: audit.deletedBy,
     id: audit.id,
     issueCount: row.issue_count,
+    project: audit.project,
     responseCount: Object.keys(audit.responses).length,
     status: audit.status,
     templateName: audit.templateName,
