@@ -1,6 +1,6 @@
 import type { OfflineOperation } from "@balebase/validators/offline";
 import { allRequiredAnswered, parseResponses } from "../audits/auditDefinition";
-import { findTemplate, storedDefinition } from "../audits/auditTemplates";
+import { storedDefinition } from "../audits/auditTemplates";
 import {
   type IssueContext,
   issueInsert,
@@ -29,7 +29,7 @@ async function auditStatements(
   operation: Extract<OfflineOperation, { type: "audit" }>,
 ) {
   const organizationId = context.get("organizationId");
-  const template = await findTemplate(
+  const template = await findSyncableVersion(
     context.env.DB,
     organizationId,
     operation.templateId,
@@ -46,11 +46,17 @@ async function auditStatements(
   // Start and completion are separate statements in one transaction so the
   // existing audit triggers record answers and completion with the sync actor.
   return [
+    // A project deleted while the device was offline leaves the audit
+    // without one rather than refusing the work.
     context.env.DB.prepare(`INSERT INTO audits
-      (id, organization_id, template_id, template_family_id, template_version_id,
-       template_version, template_name, definition, responses, status, started_by, created_at, updated_at)
-      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, '{}', 'in_progress', ?, ?, ?)`).bind(
+      (id, organization_id, project_id, template_id, template_family_id,
+       template_version_id, template_version, template_name, definition,
+       responses, status, started_by, created_at, updated_at)
+      VALUES (?, ?, (SELECT id FROM projects WHERE id = ? AND organization_id = ?),
+       NULL, ?, ?, ?, ?, ?, '{}', 'in_progress', ?, ?, ?)`).bind(
       operation.id,
+      organizationId,
+      operation.projectId,
       organizationId,
       template.id,
       template.version_id,
@@ -72,6 +78,39 @@ async function auditStatements(
     ),
     ...offlineTiming(context, operation, template.name, now),
   ];
+}
+
+/**
+ * The form version a device downloaded, if it still exists: one published
+ * when downloaded, global or the organization's own. The form may have been
+ * unpublished, edited, turned off for the project, or discarded since; work
+ * done on the downloaded version still syncs until the form is purged.
+ */
+function findSyncableVersion(
+  database: D1Database,
+  organizationId: string,
+  templateId: string,
+  version: number,
+) {
+  return database
+    .prepare(
+      `SELECT family.id, version.id AS version_id, version.version,
+              version.name, version.definition
+       FROM audit_template_families AS family
+       JOIN audit_template_versions AS version
+         ON version.template_id = family.id
+       WHERE family.id = ? AND version.version = ?
+         AND version.status = 'published'
+         AND (family.scope = 'global' OR family.organization_id = ?)`,
+    )
+    .bind(templateId, version, organizationId)
+    .first<{
+      definition: string;
+      id: string;
+      name: string;
+      version: number;
+      version_id: string;
+    }>();
 }
 
 function offlineTiming(

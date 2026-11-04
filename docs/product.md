@@ -418,9 +418,10 @@ or description requires `expectedRevision` from its latest response; an edit
 made from an older revision returns 409. Drafts and unpublished forms are not
 offered, and turned-on forms that are later unpublished or discarded stay turned
 on but are no longer listed, counted, or downloaded; publishing an unpublished
-form again restores it. Signing in downloads the published forms of the
-signed-in member's projects for offline work (see [Offline
-work](#offline-work)); copies already on a device stay there. Creating, editing,
+form again restores it. Each project page has four tabs: **Members**, **Audit
+forms** (start audits from the forms turned on; see [Audits on this
+device](#audits-on-this-device)), **Project setup** (owners and admins turn
+published forms on and off), and **Activity**. Creating, editing,
 and deleting a project, membership changes, and form changes are recorded in
 Activity, which keeps a deleted project's history. Migration
 `0078_create_projects.sql` adds the project tables.
@@ -606,60 +607,81 @@ baseline rather than a code-compliance certification; see the
 [residential audit library](residential-audit-library.md) for its source,
 licensing, validation, and jurisdiction-overlay rules.
 
-## Offline work
+## Audits on this device
 
-Open **Offline work** in the sidebar while connected to prepare the device and
-download checklists. Members of [projects](#projects) do not need to: after each
-sign-in, and whenever the app opens signed in and connected, it downloads the
-forms turned on for their projects, and newer versions of them, without opening
-the page. Forms downloaded by hand stay on the device, and signing in as someone
-whose projects have no forms leaves the device untouched. Signing out or
-switching accounts during that download stops it before it unlocks the device.
-Downloads include the form's exact version and the current assignee directory.
-Each saved edit gives a form a new version; a form whose listed version is
-already on the device shows **Downloaded**, and **Update download** appears only
-once a newer version is listed. Updating a download affects future audits;
-audits already started on the device keep their original form. The web shell
-must finish downloading before the device is ready. Native apps already bundle
-that shell.
+Project audits are device-first. The device keeps the signed-in member's
+projects, the published forms turned on for them, and the organization's people
+(for issue assignees), and audits start on the device whether or not it is
+online. There is no separate offline page: the Projects page shows a status
+line for this device's work, and each project's **Audit forms** tab lists its
+forms with **Start audit** and, under **On this device**, the audits started
+here for that project as drafts, waiting to sync, not synced (with the reason),
+or synced (opening the server audit).
 
-Start an offline audit from a downloaded checklist. Answers save to the device
-as they are entered, and drafts survive reopening the app. **Complete and queue
-audit** validates required answers and seals that audit for upload. Raise
-item-specific issues from an audit or standalone issues from the offline home.
-Each issue supports up to ten JPEG, PNG, GIF, or WebP photos of at most 10 MB,
-the same limits as online. A non-empty photo whose type the device cannot tell
-is kept, and the API checks its format when it syncs. Saving an issue stores
-its details, photos, and queued operations together.
+The device syncs its projects after each sign-in, when the app regains focus or
+the device reconnects, and every minute while online. `GET /api/offline/sync`
+returns the whole set with a cursor, or `changed: false` when the device's
+cursor is current. The cursor is a pair of counters, one for the organization
+and one for global forms, in `offline_sync_revisions` (migration
+`0090_device_first_projects.sql`); triggers advance them in the same transaction
+as any change to a project, its members or forms, a form's versions, the
+organization's membership, or a member's name. Counters rather than timestamps
+mean clock skew or two writes in one millisecond cannot hide a change, and a
+removal (a form unbound or unpublished, the person leaving the project or the
+organization) changes the cursor without leaving a row to read. The set and
+its counters are read in one batch, so the cursor names the state the set came
+from. The device stores the set and its cursor in one IndexedDB transaction,
+and only over the cursor it read from, so a newer sync from another tab wins.
+Signing out or switching accounts during a sync stops it before it unlocks the
+device or stores anything. The web shell must finish downloading before the
+device is ready; native apps already bundle it.
 
-Sync runs when the app is open and connectivity returns, on focus, and on a
-30-second timer. It creates the audit first, its issues next, and each issue's
-photos last. Standalone issues can sync independently. The status card shows
-waiting operations and failures, with **Retry sync** for recovery. Temporary
-failures back off to five minutes. Repeated requests carry the same IDs; the
-server commits a receipt with each mutation, including image activation, so a
-lost response does not duplicate records or activity. Audit history records the
-sync time and separately labels the device-reported start and completion times.
+Connectivity comes from the OS on native apps (`@capacitor/network`, counting
+any active transport as online, because Android reports unvalidated networks as
+disconnected) and from the browser elsewhere. A request that fails while the
+device is online means the API is unreachable, and sync keeps retrying.
 
-Offline data belongs to the original account, organization, and API environment.
-Sign-out or account/organization switching locks the local view without deleting
-pending work. Return to that account's **Offline work** page while connected to
-unlock it. The API rechecks authentication, organization access, form visibility,
-and assignees before accepting writes; an expired session or rejected operation
-keeps local data and stops its dependents. Sign in again or restore access, then
-retry. Opening cached data is local device access and does not grant API access.
-Session expiry keeps the local editor open, including unsaved issue details and
-selected photos. Explicit sign-out and account or organization changes still
-lock the local view.
+An audit started on the device keeps the form version it started from, so a
+form unpublished, edited, discarded, or turned off for the project after
+download does not strand it: the API accepts a completed audit against any
+version that was published until the form is purged. Answers save to the device
+as they are entered, and drafts survive reopening the app. **Complete audit**
+validates required answers and seals the audit for upload; drafts stay on the
+device. Raise issues from an audit's items. Each issue supports up to ten JPEG,
+PNG, GIF, or WebP photos of at most 10 MB, the same limits as online. A
+non-empty photo whose type the device cannot tell is kept, and the API checks
+its format when it syncs. Saving an issue stores its details, photos, and
+queued operations together.
 
-This first release supports new audits from downloaded forms and new audit or
-standalone issues. Existing server audits, template editing, transaction issues,
-and edits to queued work require connectivity. Open a synced record to make
-further changes. Sync does not run while the app is closed. Local copies use the
-browser/WebView's IndexedDB storage, including photo bytes, and remain on the
-device after sync. Browser storage can be evicted; persistent storage is
-requested where available. Clearing site data or uninstalling the app removes
-local copies, including unsynced work.
+Queued work is sent while the app is open and online: right away, on focus, on
+reconnecting, and on a 30-second timer. It creates the audit first, recorded
+against its project (`audits.project_id`, cleared if the project is deleted),
+then its issues, then each issue's photos. **Retry sync** on the status line
+restarts held-back work; temporary failures back off to five minutes. Repeated
+requests carry the same IDs; the server commits a receipt with each mutation,
+including image activation, so a lost response does not duplicate records or
+activity. The server stamps its own times, so audit lists and their cursors stay
+in server order; audit history separately records the device-reported start and
+completion times.
+
+Device data belongs to the original account, organization, and API
+environment. Sign-out or account and organization switching locks the local view
+without deleting pending work; signing back in to that account and organization
+unlocks it. While the device is offline, or the session cannot be confirmed,
+Projects shows the device's copy: the project list, each project's forms and
+device audits, and open audits; other pages need a connection. Session expiry
+keeps the local editor open, including unsaved issue details and selected
+photos. The API rechecks authentication, organization access, and assignees
+before accepting writes; an expired session or rejected operation keeps local
+data and stops its dependents.
+
+Existing server audits, template editing, transaction issues, and edits to
+queued work require connectivity. Open a synced record to make further changes.
+Sync does not run while the app is closed. Local copies use the browser or
+WebView's IndexedDB storage, including photo bytes, and remain on the device
+after sync. Browser storage can be evicted; persistent storage is requested
+where available. Clearing site data or uninstalling the app removes local
+copies, including unsynced work.
 
 ## Issues and transaction activity
 

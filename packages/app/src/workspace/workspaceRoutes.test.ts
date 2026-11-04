@@ -57,7 +57,6 @@ describe("workspace routes", () => {
       "/issues/new": "issues",
       "/library/folder-1": "library",
       "/me/screening/check-1": "myDocuments",
-      "/offline": "offline",
       "/organization/people/member-1": "organization",
       "/projects": "projects",
       "/projects/project-1": "projects",
@@ -129,7 +128,7 @@ describe("workspace routes", () => {
     expect(element("/me").type).toBe(MyDocuments);
   });
 
-  it("shows the library node for the library and offline paths", () => {
+  it("shows the library node for the library and unknown paths", () => {
     for (const pathname of ["/", "/library/folder-1", "/offline", "/unknown"]) {
       expect(rendered(pathname)).toBe(library);
     }

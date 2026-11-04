@@ -69,10 +69,6 @@ export type AuditTemplateVersion = z.infer<typeof AuditTemplateVersionSchema>;
 export const AuditTemplateResponseSchema = z.object({
   template: AuditTemplateSchema,
 });
-export const AuditTemplateListSchema = z.object({
-  templates: z.array(AuditTemplateSchema),
-});
-
 /** A form in a forms list, with how many audits have been started from it. */
 const AuditTemplateSummarySchema = AuditTemplateSchema.extend({
   /** Audits started from any version of the form, not counting discarded ones. */

@@ -3,13 +3,20 @@ import type { Person } from "@balebase/validators/fields";
 
 import type {
   OfflineOperation,
+  OfflineProject,
   OfflineScope,
 } from "@balebase/validators/offline";
 
 import { apiUrl } from "../shared/config";
 
+/**
+ * An audit started on this device. It keeps the form version it was started
+ * from, so it can be finished and synced after the form is unpublished,
+ * edited, or turned off for its project.
+ */
 export interface OfflineAudit {
   id: string;
+  projectId: string;
   startedAt: string;
   template: AuditTemplate;
   responses: Record<string, string>;
@@ -40,9 +47,18 @@ export interface OfflineIdentity {
   organizationName: string;
 }
 
+/**
+ * What this device keeps for one person in one organization: what the last
+ * sync read (`projects`, `forms`, `members`, as of `cursor`), and the work
+ * done here (`audits`, `issues`, and the `jobs` that sync them).
+ */
 export interface OfflineWorkspace extends OfflineIdentity {
   key: string;
-  templates: AuditTemplate[];
+  /** The server cursor the synced data is as of; none before a first sync. */
+  cursor?: string | undefined;
+  projects: OfflineProject[];
+  /** The published forms of `projects`, by template ID. */
+  forms: AuditTemplate[];
   members: Person[];
   audits: OfflineAudit[];
   issues: OfflineIssue[];
@@ -59,8 +75,12 @@ export function offlineScopeKey(scope: OfflineScope) {
 
 function database() {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open("balebase-offline", 1);
+    const request = indexedDB.open("balebase-offline", 2);
     request.onupgradeneeded = () => {
+      // Version 1 kept hand-downloaded forms without projects; its data is
+      // not carried over.
+      for (const name of Array.from(request.result.objectStoreNames))
+        request.result.deleteObjectStore(name);
       request.result.createObjectStore("workspaces", { keyPath: "key" });
       request.result.createObjectStore("images");
     };
@@ -88,6 +108,22 @@ export async function readOfflineWorkspace(key: string) {
   } finally {
     db.close();
   }
+}
+
+/** A new, empty workspace for `identity`. */
+export function emptyOfflineWorkspace(
+  identity: OfflineIdentity,
+): OfflineWorkspace {
+  return {
+    ...identity,
+    key: offlineScopeKey(identity.scope),
+    projects: [],
+    forms: [],
+    members: [],
+    audits: [],
+    issues: [],
+    jobs: [],
+  };
 }
 
 /** Resolve only after commit: a quota error must never look like a saved draft. */
@@ -175,9 +211,7 @@ export function activateOfflineWorkspace(
   epoch = offlineAccessEpoch(),
 ) {
   if (epoch !== offlineAccessEpoch())
-    throw new Error(
-      "The active account changed. Reopen Offline work before downloading.",
-    );
+    throw new Error("The active account changed. Reload before syncing.");
   localStorage.setItem(activeKey, key);
   window.dispatchEvent(new window.Event(offlineChanged));
 }

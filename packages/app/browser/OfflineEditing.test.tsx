@@ -4,20 +4,45 @@ import type { Page } from "puppeteer-core";
 import type {} from "./offlineAppFixture";
 import { press, withOfflineBrowser } from "./offlineBrowser";
 
+const user = {
+  id: "user-1",
+  name: "Inspector",
+  email: "inspector@example.com",
+  emailVerified: true,
+};
+
+function signedIn(id = user.id, organizationId = "org-1") {
+  return {
+    id: `session-${id}`,
+    token: `fixture-${id}`,
+    userId: id,
+    activeOrganizationId: organizationId,
+    expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+  };
+}
+
+/** Opens the seeded draft from its project's "On this device" list. */
 async function openDraft(page: Page) {
   await page.waitForFunction(
-    () =>
-      [...document.querySelectorAll("button")].some((button) =>
-        button.textContent?.endsWith("· Draft"),
-      ),
+    () => document.body.textContent?.includes("Draft"),
     { polling: 100 },
   );
+  await press(page, "Continue");
+  await page.waitForSelector("select");
+}
+
+/** Opens the seeded project from the device's project list. */
+async function openProject(page: Page) {
+  await page.waitForSelector("a.row");
   await page.evaluate(() =>
-    [...document.querySelectorAll("button")]
-      .find((button) => button.textContent?.endsWith("· Draft"))
+    [...document.querySelectorAll<HTMLAnchorElement>("a.row")]
+      .find((link) => link.textContent?.includes("Site"))
       ?.click(),
   );
-  await page.waitForSelector("select");
+  await page.waitForFunction(
+    () => location.pathname === "/projects/project-1",
+    { polling: 100 },
+  );
 }
 
 it("completes the latest saved answers without overwriting another tab's edit", async () => {
@@ -37,7 +62,7 @@ it("completes the latest saved answers without overwriting another tab's edit", 
       id,
     );
     await page.bringToFront();
-    await press(page, "Complete and queue audit");
+    await press(page, "Complete audit");
     await page.waitForFunction(
       async () => (await window.offlineTest.read())?.audits[0]?.queued,
       { polling: 100 },
@@ -52,14 +77,8 @@ it("completes the latest saved answers without overwriting another tab's edit", 
   });
 }, 30_000);
 
-for (const path of ["/offline", "/"]) {
+for (const path of ["/projects/project-1", "/"]) {
   it(`keeps an unsaved issue and photo through App revalidation after reopening ${path} offline`, async () => {
-    const user = {
-      id: "user-1",
-      name: "Inspector",
-      email: "inspector@example.com",
-      emailVerified: true,
-    };
     let releaseAccess: (() => void) | undefined;
     const access = new Promise<void>((resolve) => {
       releaseAccess = resolve;
@@ -72,7 +91,11 @@ for (const path of ["/offline", "/"]) {
           history.replaceState(null, "", pathname);
           window.offlineAppTest.mount();
         }, path);
+        // Offline without a session, the device's projects open in place of
+        // any other page.
+        if (path === "/") await openProject(page);
         await openDraft(page);
+        const auditPath = new URL(page.url()).pathname;
         await press(page, "Raise issue");
         const title = 'form[aria-label="Issue details"] input';
         const description = 'form[aria-label="Issue details"] textarea';
@@ -102,11 +125,14 @@ for (const path of ["/offline", "/"]) {
           ),
         ).toBe("rail.png");
         releaseAccess?.();
+        // Confirmed online, the device audit opens in the workspace shell.
         await page.waitForFunction(
-          () => !document.body.textContent?.includes("Local work only"),
+          () =>
+            document.querySelector('nav a[aria-current="page"]')
+              ?.textContent === "Projects",
           { polling: 100 },
         );
-        expect(new URL(page.url()).pathname).toBe("/offline");
+        expect(new URL(page.url()).pathname).toBe(auditPath);
         expect(await page.$eval(title, (field) => field.value)).toBe(
           "Damaged railing",
         );
@@ -130,16 +156,7 @@ for (const path of ["/offline", "/"]) {
       async (request) => {
         const pathname = new URL(request.url).pathname;
         if (pathname === "/api/auth/get-session")
-          return Response.json({
-            user,
-            session: {
-              id: "session",
-              token: "fixture",
-              userId: user.id,
-              activeOrganizationId: "org-1",
-              expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-            },
-          });
+          return Response.json({ user, session: signedIn() });
         if (pathname === "/api/organization-settings/organizations")
           return Response.json({
             organizations: [{ id: "org-1", name: "Test team" }],
@@ -152,8 +169,9 @@ for (const path of ["/offline", "/"]) {
             ownerCount: 1,
           });
         }
-        if (pathname === "/api/offline/forms")
-          return Response.json({ templates: [], members: [user] });
+        // Nothing changed on the server: the device keeps what it holds.
+        if (pathname === "/api/offline/sync")
+          return Response.json({ changed: false, cursor: "cursor-1" });
         return Response.json([]);
       },
     ).finally(() => releaseAccess?.());
@@ -178,7 +196,8 @@ it("guards unsaved offline issue details and photos when toggling or leaving the
     expect(await page.$eval(title, (field) => field.value)).toBe(
       "Keep this issue",
     );
-    await press(page, "Back to offline work");
+    // The header's back button names the audit's project.
+    await press(page, "Site");
     await press(page, "Keep editing");
     expect(
       await page.$eval(
@@ -186,11 +205,20 @@ it("guards unsaved offline issue details and photos when toggling or leaving the
         (field) => (field as HTMLInputElement).files?.[0]?.name,
       ),
     ).toBe("unsaved.png");
-    await press(page, "Back to offline work");
+    expect(new URL(page.url()).pathname).toMatch(
+      /^\/projects\/project-1\/audits\//,
+    );
+    await press(page, "Site");
     await press(page, "Discard changes");
-    await press(page, "New offline issue");
+    await page.waitForFunction(
+      () => location.pathname === "/projects/project-1",
+      { polling: 100 },
+    );
+    // A photo alone is unsaved work too.
+    await openDraft(page);
+    await press(page, "Raise issue");
     await (await page.$('input[type="file"]'))?.uploadFile(photo);
-    await press(page, "Start offline audit");
+    await press(page, "Site");
     await press(page, "Keep editing");
     expect(
       (await page.evaluate(() => window.offlineTest.read()))?.audits,
@@ -201,12 +229,74 @@ it("guards unsaved offline issue details and photos when toggling or leaving the
         (field) => (field as HTMLInputElement).files?.[0]?.name,
       ),
     ).toBe("unsaved.png");
-    await press(page, "New offline issue");
+    await press(page, "Raise issue");
     await press(page, "Discard changes");
     await page.waitForFunction(
       () => !document.querySelector('input[type="file"]'),
     );
+    expect(
+      (await page.evaluate(() => window.offlineTest.read()))?.issues,
+    ).toHaveLength(0);
   });
+}, 30_000);
+
+it("lists this device's audits by sync state and opens a synced audit", async () => {
+  let available = false;
+  await withOfflineBrowser(
+    async (page) => {
+      const id = await page.evaluate(async () => {
+        const auditId = await window.offlineTest.seed();
+        window.offlineTest.mount();
+        return auditId;
+      });
+      const status = () =>
+        page.$eval('[role="status"]', (element) => element.textContent);
+      const button = (label: string) =>
+        page.waitForFunction(
+          (text) =>
+            [...document.querySelectorAll("button")].some(
+              (entry) => entry.textContent?.trim() === text,
+            ),
+          { polling: 100 },
+          label,
+        );
+      await button("Continue");
+      expect(await status()).toBe(
+        "Online · All completed work synced · 1 draft on this device.",
+      );
+      await page.evaluate(async (auditId) => {
+        await window.offlineTest.answer(auditId, "pass");
+        await window.offlineTest.queue(auditId);
+      }, id);
+      // The server is unavailable, so the completed audit waits.
+      await button("View");
+      await page.waitForFunction(
+        () => document.body.textContent?.includes("Waiting to sync"),
+        { polling: 100 },
+      );
+      expect(await status()).toBe("Online · 1 item waiting to sync.");
+      available = true;
+      await press(page, "Retry sync");
+      await press(page, "Open audit");
+      await page.waitForFunction(
+        (auditId) =>
+          location.pathname === `/audits/runs/${auditId}` &&
+          document.body.textContent === "Synced audit",
+        { polling: 100 },
+        id,
+      );
+    },
+    async (request) => {
+      const path = new URL(request.url).pathname;
+      if (path === "/api/offline/operations" && available) {
+        const { operation } = (await request.json()) as {
+          operation: { id: string };
+        };
+        return Response.json({ resourceId: operation.id });
+      }
+      return Response.json({ error: "Not available" }, { status: 503 });
+    },
+  );
 }, 30_000);
 
 for (const { path, kind } of [
@@ -216,24 +306,19 @@ for (const { path, kind } of [
 ]) {
   it(`locks the original offline workspace when the confirmed ${kind} changes on ${path}`, async () => {
     let organizationId = "org-1";
-    let user = {
-      id: "user-1",
-      name: "Inspector",
-      email: "inspector@example.com",
-      emailVerified: true,
-    };
+    let current = user;
     await withOfflineBrowser(
       async (page) => {
         await page.evaluate(async (pathname) => {
-          await window.offlineTest.seed();
-          await window.offlineTest.issue();
+          const id = await window.offlineTest.seed();
+          await window.offlineTest.issue(id);
           history.replaceState(null, "", pathname);
           window.offlineAppTest.mount();
         }, path);
         await page.waitForSelector('input[type="password"]');
         if (kind === "organization") organizationId = "org-2";
         else
-          user = {
+          current = {
             ...user,
             id: "user-2",
             name: "Other",
@@ -256,7 +341,7 @@ for (const { path, kind } of [
         await page.waitForFunction(() => Boolean(window.offlineAppTest));
         await page.setOfflineMode(true);
         await page.evaluate(() => {
-          history.replaceState(null, "", "/");
+          history.replaceState(null, "", "/projects/project-1");
           window.offlineAppTest.mount();
         });
         await page.waitForFunction(
@@ -264,7 +349,8 @@ for (const { path, kind } of [
           { polling: 100 },
         );
         const body = await page.$eval("body", (element) => element.textContent);
-        expect(body).not.toContain("Offline work");
+        expect(body).not.toContain("On this device");
+        expect(body).not.toContain("Safety inspection");
         expect(body).not.toContain("Broken rail");
         expect(body).not.toContain("inspector@example.com");
       },
@@ -272,14 +358,8 @@ for (const { path, kind } of [
         const pathname = new URL(request.url).pathname;
         if (pathname === "/api/auth/get-session")
           return Response.json({
-            user,
-            session: {
-              id: `session-${user.id}`,
-              token: `fixture-${user.id}`,
-              userId: user.id,
-              activeOrganizationId: organizationId,
-              expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-            },
+            user: current,
+            session: signedIn(current.id, organizationId),
           });
         if (pathname === "/api/organization-settings/organizations")
           return Response.json({
@@ -299,40 +379,31 @@ for (const { path, kind } of [
   }, 30_000);
 }
 
-it("opens offline work in the workspace shell without remounting through coverage and session loss", async () => {
-  let signedIn = true;
-  const user = {
-    id: "user-1",
-    name: "Inspector",
-    email: "inspector@example.com",
-    emailVerified: true,
-  };
+it("opens a device audit in the workspace shell without remounting through coverage and session loss", async () => {
+  let session = true;
   await withOfflineBrowser(
     async (page) => {
       await page.evaluate(async () => {
-        await window.offlineTest.seed();
-        history.replaceState(null, "", "/offline");
+        const id = await window.offlineTest.seed();
+        history.replaceState(null, "", window.offlineTest.auditPath(id));
         window.offlineAppTest.mount();
       });
       const current = 'nav a[aria-current="page"]';
       await page.waitForSelector(current);
       expect(await page.$eval(current, (link) => link.textContent)).toBe(
-        "Offline work",
+        "Projects",
       );
-      await openDraft(page);
       await press(page, "Raise issue");
       const title = 'form[aria-label="Issue details"] input';
       await page.type(title, "Shell draft");
       await page.setOfflineMode(true);
-      await page.waitForFunction(
-        () => document.body.textContent?.includes("Offline ·"),
-        { polling: 100 },
-      );
+      await page.waitForFunction(() => !navigator.onLine, { polling: 100 });
+      await Bun.sleep(300);
       expect(await page.$(current)).not.toBeNull();
       expect(await page.$eval(title, (field) => field.value)).toBe(
         "Shell draft",
       );
-      signedIn = false;
+      session = false;
       await page.setOfflineMode(false);
       await page.evaluate(() => window.offlineAppTest.refreshSession());
       await page.waitForFunction(
@@ -353,20 +424,7 @@ it("opens offline work in the workspace shell without remounting through coverag
     (request) => {
       const pathname = new URL(request.url).pathname;
       if (pathname === "/api/auth/get-session")
-        return Response.json(
-          signedIn
-            ? {
-                user,
-                session: {
-                  id: "session-user-1",
-                  token: "fixture-user-1",
-                  userId: user.id,
-                  activeOrganizationId: "org-1",
-                  expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-                },
-              }
-            : null,
-        );
+        return Response.json(session ? { user, session: signedIn() } : null);
       if (pathname === "/api/organization-settings/organizations")
         return Response.json({
           organizations: [{ id: "org-1", name: "Test team" }],
@@ -391,7 +449,7 @@ it("keeps unsaved issue details and photos when reconnecting with an expired ses
       await page.evaluate(() => window.offlineTest.seed());
       await page.setOfflineMode(true);
       await page.evaluate(() => {
-        history.replaceState(null, "", "/offline");
+        history.replaceState(null, "", "/projects/project-1");
         window.offlineAppTest.mount();
       });
       await openDraft(page);
@@ -429,7 +487,7 @@ it("keeps unsaved issue details and photos when reconnecting with an expired ses
         { polling: 100 },
       );
       await page.select("select", "fail");
-      await press(page, "Complete and queue audit");
+      await press(page, "Complete audit");
       await page.waitForFunction(
         async () =>
           (await window.offlineTest.read())?.jobs.some(
@@ -461,58 +519,50 @@ it("keeps unsaved issue details and photos when reconnecting with an expired ses
   );
 }, 30_000);
 
-it("does not unlock cached work when downloads remount during a pending sign-out", async () => {
-  const user = {
-    id: "user-1",
-    name: "Inspector",
-    email: "inspector@example.com",
-    emailVerified: true,
-  };
+it("does not unlock cached work when a device sync finishes during a pending sign-out", async () => {
+  let releaseSync: (() => void) | undefined;
+  const held = new Promise<void>((resolve) => {
+    releaseSync = resolve;
+  });
   await withOfflineBrowser(
     async (page) => {
+      const sync = page.waitForRequest(
+        (entry) => new URL(entry.url()).pathname === "/api/offline/sync",
+      );
       await page.evaluate(async () => {
-        await window.offlineTest.seed();
-        history.replaceState(null, "", "/offline");
+        const id = await window.offlineTest.seed();
+        history.replaceState(null, "", window.offlineTest.auditPath(id));
         window.offlineAppTest.mount();
       });
       await page.waitForFunction(
         () =>
-          document.getElementById("session-state")?.textContent === "user-1" &&
-          document.body.textContent?.includes("Download forms") &&
-          !document.body.textContent?.includes("Loading available forms"),
+          document.getElementById("session-state")?.textContent === "user-1",
         { polling: 100 },
       );
-      await openDraft(page);
-      const forms = page.waitForResponse(
-        (response) => new URL(response.url()).pathname === "/api/offline/forms",
+      await sync;
+      await page.waitForSelector("select");
+      const synced = page.waitForResponse(
+        (response) => new URL(response.url()).pathname === "/api/offline/sync",
       );
       // The account action locks immediately, while its revocation request is
-      // still pending and the current session can still fetch forms.
+      // still pending and the current session can still sync.
       await page.evaluate(() => window.offlineTest.lock());
-      await forms;
-      await page.waitForFunction(
-        () =>
-          !document.body.textContent?.includes("Loading available forms") ||
-          document.body.textContent?.includes("active account changed"),
-        { polling: 100 },
-      );
+      releaseSync?.();
+      await synced;
+      await Bun.sleep(500);
       expect(
         await page.evaluate(() => window.offlineTest.activeKey()),
       ).toBeNull();
+      const saved = await page.evaluate(() => window.offlineTest.read());
+      // The locked device keeps its work but stores nothing from the sync.
+      expect(saved?.audits).toHaveLength(1);
+      expect(saved?.cursor).toBeUndefined();
+      expect(saved?.forms.map((form) => form.version)).toEqual([1]);
     },
-    (request) => {
+    async (request) => {
       const path = new URL(request.url).pathname;
       if (path === "/api/auth/get-session")
-        return Response.json({
-          user,
-          session: {
-            id: "session",
-            token: "fixture",
-            userId: user.id,
-            activeOrganizationId: "org-1",
-            expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-          },
-        });
+        return Response.json({ user, session: signedIn() });
       if (path === "/api/organization-settings/organizations")
         return Response.json({
           organizations: [{ id: "org-1", name: "Test team" }],
@@ -523,122 +573,16 @@ it("does not unlock cached work when downloads remount during a pending sign-out
           memberRole: "owner",
           ownerCount: 1,
         });
-      if (path === "/api/offline/forms")
-        return Response.json({ templates: [], members: [user] });
-      return Response.json([]);
-    },
-  );
-}, 30_000);
-
-it("offers a download only for forms whose listed version is not on the device", async () => {
-  const user = {
-    id: "user-1",
-    name: "Inspector",
-    email: "inspector@example.com",
-    emailVerified: true,
-  };
-  // The seeded device holds version 1 of "form"; each edit saves a new version.
-  const form = (id: string, name: string, version: number) => ({
-    id,
-    name,
-    description: "Offline checklist",
-    scope: "organization",
-    status: "draft",
-    version,
-    currentVersion: version,
-    createdAt: "2026-10-01T00:00:00.000Z",
-    savedAt: "2026-10-01T00:00:00.000Z",
-    updatedAt: "2026-10-01T00:00:00.000Z",
-    savedBy: user,
-    definition: { version: 1, sections: [] },
-  });
-  let listed = [form("form", "Safety inspection", 1), form("new", "Roof", 1)];
-  const button = (page: Page, label: string) =>
-    page.evaluate(
-      (text) =>
-        [...document.querySelectorAll("button")]
-          .filter((entry) => entry.textContent?.trim() === text)
-          .map((entry) => entry.disabled),
-      label,
-    );
-  await withOfflineBrowser(
-    async (page) => {
-      await page.evaluate(async () => {
-        await window.offlineTest.seed();
-        history.replaceState(null, "", "/offline");
-        window.offlineAppTest.mount();
-      });
-      await page.waitForFunction(
-        () =>
-          document.body.textContent?.includes("Roof · v1") &&
-          !document.body.textContent?.includes("Loading available forms"),
-        { polling: 100 },
-      );
-      expect(await button(page, "Downloaded")).toEqual([true]);
-      expect(await button(page, "Update download")).toEqual([]);
-      await press(page, "Download");
-      await page.waitForFunction(
-        async () => (await window.offlineTest.read())?.templates.length === 2,
-        { polling: 100 },
-      );
-      await page.waitForFunction(
-        () =>
-          ![...document.querySelectorAll("button")].some(
-            (entry) => entry.textContent?.trim() === "Download",
-          ),
-        { polling: 100 },
-      );
-      expect(await button(page, "Downloaded")).toEqual([true, true]);
-
-      listed = [form("form", "Safety inspection", 2), form("new", "Roof", 1)];
-      await page.reload();
-      await page.waitForFunction(() => Boolean(window.offlineAppTest));
-      await page.evaluate(() => {
-        history.replaceState(null, "", "/offline");
-        window.offlineAppTest.mount();
-      });
-      await press(page, "Update download");
-      await page.waitForFunction(
-        async () =>
-          (await window.offlineTest.read())?.templates.find(
-            (entry) => entry.id === "form",
-          )?.version === 2,
-        { polling: 100 },
-      );
-      await page.waitForFunction(
-        () =>
-          ![...document.querySelectorAll("button")].some(
-            (entry) => entry.textContent?.trim() === "Update download",
-          ),
-        { polling: 100 },
-      );
-      expect(await button(page, "Downloaded")).toEqual([true, true]);
-    },
-    (request) => {
-      const path = new URL(request.url).pathname;
-      if (path === "/api/auth/get-session")
+      if (path === "/api/offline/sync") {
+        await held;
         return Response.json({
-          user,
-          session: {
-            id: "session",
-            token: "fixture",
-            userId: user.id,
-            activeOrganizationId: "org-1",
-            expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-          },
+          changed: true,
+          cursor: "cursor-1",
+          forms: [],
+          members: [user],
+          projects: [],
         });
-      if (path === "/api/organization-settings/organizations")
-        return Response.json({
-          organizations: [{ id: "org-1", name: "Test team" }],
-        });
-      if (path === "/api/organization-groups/access")
-        return Response.json({
-          capabilities: [],
-          memberRole: "owner",
-          ownerCount: 1,
-        });
-      if (path === "/api/offline/forms")
-        return Response.json({ templates: listed, members: [user] });
+      }
       return Response.json([]);
     },
   );
@@ -650,13 +594,18 @@ it("guards opening a synced issue without relying on browser beforeunload protec
       // iOS WebViews cannot rely on beforeunload. Do not let Chromium's native
       // dialog mask a missing in-app navigation guard in this regression.
       page.on("dialog", (dialog) => void dialog.accept());
-      await page.evaluate(async () => {
-        await window.offlineTest.seed();
-        await window.offlineTest.issue();
+      const auditPath = await page.evaluate(async () => {
+        const id = await window.offlineTest.seed();
+        // An audit's issues sync after the audit itself.
+        await window.offlineTest.answer(id, "fail");
+        await window.offlineTest.queue(id);
+        await window.offlineTest.issue(id);
         await window.offlineTest.sync();
-        window.offlineTest.mount();
+        const path = window.offlineTest.auditPath(id);
+        window.offlineTest.mount(path);
+        return path;
       });
-      await press(page, "New offline issue");
+      await press(page, "Raise issue");
       const title = 'form[aria-label="Issue details"] input';
       await page.type(title, "Do not lose this issue");
       const photo = join(directory, "keep.png");
@@ -664,14 +613,15 @@ it("guards opening a synced issue without relying on browser beforeunload protec
       await (await page.$('input[type="file"]'))?.uploadFile(photo);
       await press(page, "Open synced issue");
       await page.waitForFunction(
-        () =>
-          location.pathname !== "/" ||
+        (path) =>
+          location.pathname !== path ||
           [...document.querySelectorAll("button")].some(
             (button) => button.textContent === "Keep editing",
           ),
         { polling: 100 },
+        auditPath,
       );
-      expect(new URL(page.url()).pathname).toBe("/");
+      expect(new URL(page.url()).pathname).toBe(auditPath);
       await press(page, "Keep editing");
       expect(await page.$eval(title, (field) => field.value)).toBe(
         "Do not lose this issue",

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { errorMessage } from "../shared/errors";
+import { isOnline, onNetworkChange, useOnline } from "../shared/network";
 import {
   activeOfflineKey,
   type OfflineWorkspace,
@@ -8,9 +9,14 @@ import {
 } from "./offlineStore";
 import { syncOfflineWorkspace } from "./offlineSync";
 
+/**
+ * The active workspace on this device, reloaded whenever it changes here or
+ * in another tab, and its queued work sent whenever the device is online:
+ * now, on reconnecting, on focus, and every 30 seconds.
+ */
 export function useOfflineWorkspace() {
   const [workspace, setWorkspace] = useState<OfflineWorkspace>();
-  const [online, setOnline] = useState(navigator.onLine);
+  const online = useOnline();
   const [error, setError] = useState<string>();
   useEffect(() => {
     let current = true;
@@ -30,9 +36,8 @@ export function useOfflineWorkspace() {
       }
     };
     const sync = () => {
-      setOnline(navigator.onLine);
       const key = activeOfflineKey();
-      if (key)
+      if (key && isOnline())
         void syncOfflineWorkspace(key).catch((cause: unknown) => {
           if (current)
             setError(errorMessage(cause, "Could not sync offline work."));
@@ -45,20 +50,14 @@ export function useOfflineWorkspace() {
     refresh();
     window.addEventListener(offlineChanged, refresh);
     window.addEventListener("storage", refresh);
-    window.addEventListener("online", refresh);
-    window.addEventListener("offline", refresh);
     window.addEventListener("focus", refresh);
+    const stopWatching = onNetworkChange(refresh);
     const timer = window.setInterval(refresh, 30_000);
     return () => {
       current = false;
       window.clearInterval(timer);
-      for (const event of [
-        offlineChanged,
-        "storage",
-        "online",
-        "offline",
-        "focus",
-      ])
+      stopWatching();
+      for (const event of [offlineChanged, "storage", "focus"])
         window.removeEventListener(event, refresh);
     };
   }, []);

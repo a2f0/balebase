@@ -144,7 +144,7 @@ it.
   `issues` table and its activity triggers, so change a field in both route
   families and the offline operation schema, after reading the
   [issue](docs/product.md#issues-and-transaction-activity) and
-  [offline](docs/product.md#offline-work) behavior.
+  [device-first audit](docs/product.md#audits-on-this-device) behavior.
 
 ### Database (`packages/api/migrations`)
 

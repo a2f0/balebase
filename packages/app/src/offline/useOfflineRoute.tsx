@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef } from "react";
-import { signingTokenForPath } from "../workspace/workspacePaths";
-import { OfflineWorkspacePage } from "./OfflineWorkspacePage";
-import { hydrateProjectForms } from "./offlineHydration";
+import { DeviceProjects } from "../projects/DeviceProjects";
+import { isOnline } from "../shared/network";
+import {
+  isWithin,
+  projectAuditForPath,
+  projectPath,
+  signingTokenForPath,
+} from "../workspace/workspacePaths";
+import type { DeviceState } from "./offlineContext";
+import { pullOfflineWorkspace } from "./offlinePull";
 import {
   activeOfflineKey,
   lockOfflineWorkspace,
@@ -23,8 +30,11 @@ interface Workspace {
 }
 
 /**
- * The offline page for this path, if any. It opens in the workspace shell
- * while signed in, and stands alone otherwise.
+ * This device's workspace for the confirmed account and organization, kept
+ * in sync while signed in, and the page that shows it when the path needs
+ * one: an audit started on this device, or the device's projects while it is
+ * offline or the session cannot be confirmed. The page opens in the
+ * workspace shell while signed in, and stands alone otherwise.
  */
 export function useOfflineRoute(
   session: OfflineSession | null | undefined,
@@ -71,51 +81,45 @@ export function useOfflineRoute(
     Boolean(signingTokenForPath(pathname));
   // After the lock effect above, so an identity change locks before this
   // takes its access epoch in the same commit.
-  useProjectFormHydration(excluded ? undefined : identity, offline.online);
+  useDeviceSync(excluded ? undefined : identity, offline.online);
   const local = matchingWorkspace(
     offline.workspace,
     user,
     confirmedOrganizationId,
   );
+  const unconfirmed = !session || Boolean(sessionError);
   const fallback = Boolean(
     !excluded &&
-      (!offline.online || sessionError) &&
       local &&
-      (pathname === "/offline" || !session || sessionError),
+      (!offline.online || sessionError) &&
+      (unconfirmed || isWithin(pathname, projectPath())),
   );
   useEffect(() => {
-    // Give a cold offline reopen its own route before account revalidation
-    // begins, so reconnecting never replaces an in-progress local editor.
-    if (fallback && pathname !== "/offline") navigate("/offline");
+    // Give a cold offline reopen the device's projects before account
+    // revalidation begins, so reconnecting never replaces a local editor.
+    if (fallback && !isWithin(pathname, projectPath())) navigate(projectPath());
   }, [fallback, pathname, navigate]);
-  const page = offlinePage();
-  return (
-    page && {
-      page,
-      standalone: !session || Boolean(sessionError),
-    }
+  const device = useMemo<DeviceState>(
+    () => ({ error: offline.error, online: offline.online, workspace: local }),
+    [offline.error, offline.online, local],
   );
-
-  function offlinePage() {
-    if (excluded) return undefined;
-    const saved = pathname === "/offline" || fallback ? local : undefined;
-    const key =
-      saved?.key ??
-      (pathname === "/offline" && identity
-        ? offlineScopeKey(identity.scope)
-        : undefined);
-    if (!key) return undefined;
-    return (
-      <OfflineWorkspacePage
-        key={key}
-        workspace={saved}
-        identity={identity}
-        online={offline.online}
-        onNavigate={navigate}
-        storageError={offline.error}
-      />
-    );
-  }
+  const shown =
+    !excluded && local && (fallback || projectAuditForPath(pathname));
+  return {
+    device,
+    page: shown
+      ? {
+          page: (
+            <DeviceProjects
+              key={local.key}
+              onNavigate={navigate}
+              pathname={pathname}
+            />
+          ),
+          standalone: unconfirmed,
+        }
+      : undefined,
+  };
 }
 
 function matchingWorkspace(
@@ -134,43 +138,42 @@ function matchingWorkspace(
 }
 
 /**
- * Downloads the forms of the person's projects after sign-in confirms their
- * account and organization, and again after a failure once the device
- * reconnects. Each confirmed identity takes the access epoch once, when it
- * appears: a sign-out or account switch that starts later stops its download
- * before it unlocks the device, and signing in again starts afresh.
+ * Syncs the person's projects and forms to this device once sign-in confirms
+ * their account and organization, then whenever the device reconnects or
+ * the app regains focus, and every minute while online. Each confirmed
+ * identity takes the access epoch once, when it appears: a sign-out or
+ * account switch that starts later stops its sync before it unlocks the
+ * device, and signing in again starts afresh.
  */
-function useProjectFormHydration(
-  identity: OfflineIdentity | undefined,
-  online: boolean,
-) {
-  const attempt = useRef<{
-    epoch: string;
-    key: string;
-    state: "idle" | "running" | "done";
-  }>(undefined);
+function useDeviceSync(identity: OfflineIdentity | undefined, online: boolean) {
+  const attempt = useRef<{ epoch: string; key: string; running: boolean }>(
+    undefined,
+  );
   useEffect(() => {
     const key = identity && offlineScopeKey(identity.scope);
     if (attempt.current?.key !== key)
       attempt.current = key
-        ? { epoch: offlineAccessEpoch(), key, state: "idle" }
+        ? { epoch: offlineAccessEpoch(), key, running: false }
         : undefined;
     const current = attempt.current;
-    if (!identity || !online || current?.state !== "idle") return;
-    current.state = "running";
-    hydrateProjectForms(identity, current.epoch).then(
-      () => {
-        current.state = "done";
-      },
-      (cause: unknown) => {
-        // Retried when the device reconnects; Offline work also offers
-        // these downloads by hand.
-        current.state = "idle";
-        console.warn(
-          "Could not download project forms for offline work.",
-          cause,
-        );
-      },
-    );
+    if (!identity || !online || !current) return;
+    const pull = () => {
+      if (current.running || !isOnline()) return;
+      current.running = true;
+      pullOfflineWorkspace(identity, current.epoch)
+        .catch((cause: unknown) =>
+          console.warn("Could not sync projects to this device.", cause),
+        )
+        .finally(() => {
+          current.running = false;
+        });
+    };
+    pull();
+    window.addEventListener("focus", pull);
+    const timer = window.setInterval(pull, 60_000);
+    return () => {
+      window.removeEventListener("focus", pull);
+      window.clearInterval(timer);
+    };
   }, [identity, online]);
 }

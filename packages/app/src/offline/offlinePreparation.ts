@@ -2,6 +2,7 @@ import { nativeHost } from "../host";
 import {
   activateOfflineWorkspace,
   changeOfflineWorkspace,
+  emptyOfflineWorkspace,
   type OfflineIdentity,
   offlineScopeKey,
 } from "./offlineStore";
@@ -18,16 +19,7 @@ export async function prepareOfflineDevice(
   const key = offlineScopeKey(identity.scope);
   await changeOfflineWorkspace(
     key,
-    (current) =>
-      current ?? {
-        ...identity,
-        key,
-        templates: [],
-        members: [],
-        audits: [],
-        issues: [],
-        jobs: [],
-      },
+    (current) => current ?? emptyOfflineWorkspace(identity),
   );
   activateOfflineWorkspace(key, epoch);
 }

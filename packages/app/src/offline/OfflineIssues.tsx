@@ -13,7 +13,7 @@ export function OfflineIssueCreator({
   onSaved,
 }: {
   workspace: OfflineWorkspace;
-  target?: { auditId: string; itemId: string };
+  target: { auditId: string; itemId: string };
   onSaved: () => void;
 }) {
   const [files, setFiles] = useState<File[]>([]);
@@ -24,7 +24,7 @@ export function OfflineIssueCreator({
     "This issue and its selected photos have not been saved on this device.",
   );
   return (
-    <Card title="New offline issue">
+    <Card title="New issue">
       <Field label="Photos (up to 10, 10 MB each)">
         <input
           type="file"
@@ -59,13 +59,13 @@ export function OfflineIssueList({
   onNavigate,
 }: {
   workspace: OfflineWorkspace;
-  auditId?: string;
+  auditId: string;
   onNavigate: (path: string) => void;
 }) {
   return (
     <div className="stack">
       {workspace.issues
-        .filter((issue) => !auditId || issue.operation.auditId === auditId)
+        .filter((issue) => issue.operation.auditId === auditId)
         .map((issue) => (
           <Card key={issue.operation.id} title={issue.operation.title}>
             <p>{issue.operation.description}</p>

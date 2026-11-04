@@ -32,6 +32,7 @@ import { countLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
 import { projectPath } from "../workspace/workspacePaths";
+import { ProjectAuditForms } from "./ProjectAuditForms";
 import { ProjectForm } from "./ProjectForm";
 
 function useProjectDetail(id: string, onNavigate: (pathname: string) => void) {
@@ -179,6 +180,7 @@ export function ProjectDetailPage({
               change={change}
               detail={detail}
               id={id}
+              onNavigate={onNavigate}
               panel={sections.panel}
             />
           </>
@@ -188,11 +190,15 @@ export function ProjectDetailPage({
   );
 }
 
-/** A project's members, audit forms, and history, each on its own tab. */
+/**
+ * A project's members, the forms to start audits from, which forms it uses,
+ * and its history, each on its own tab.
+ */
 function useProjectSections() {
   return useSectionTabs([
     { id: "members", label: "Members" },
-    { id: "forms", label: "Audit forms" },
+    { id: "audits", label: "Audit forms" },
+    { id: "setup", label: "Project setup" },
     { id: "activity", label: "Activity" },
   ] as const);
 }
@@ -202,12 +208,14 @@ function ProjectSections({
   change,
   detail,
   id,
+  onNavigate,
   panel,
 }: {
   busy: boolean;
   change: ReturnType<typeof useProjectDetail>["change"];
   detail: NonNullable<ReturnType<typeof useProjectDetail>["detail"]>;
   id: string;
+  onNavigate: (pathname: string) => void;
   panel: ReturnType<typeof useProjectSections>["panel"];
 }) {
   return (
@@ -228,7 +236,15 @@ function ProjectSections({
         />,
       )}
       {panel(
-        "forms",
+        "audits",
+        <ProjectAuditForms
+          forms={detail.project.forms}
+          onNavigate={onNavigate}
+          projectId={id}
+        />,
+      )}
+      {panel(
+        "setup",
         <ProjectForms
           available={detail.availableForms}
           busy={busy}
@@ -276,7 +292,7 @@ function ProjectMembers({
           {countLabel(members.length, "member")}
         </span>
       }
-      description="Signing in downloads the project's audit forms to each member's device for offline work."
+      description="Members' devices sync the project's audit forms, so they can start audits offline."
       title="Members"
     >
       {canManage && candidates.length > 0 && (
@@ -405,8 +421,8 @@ function ProjectForms({
           />
         </div>
       }
-      description="Turn on the audit forms this project uses. Only published forms are listed and downloaded."
-      title="Audit forms"
+      description="Turn on the audit forms this project uses. Only published forms are listed; members' devices sync the ones turned on."
+      title="Project setup"
     >
       <TemplateCollections
         actions={

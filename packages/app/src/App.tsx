@@ -20,6 +20,7 @@ import type { AuthenticationAction } from "./auth/authActions";
 import { useSessionRefetch } from "./auth/useSessionRefetch";
 import { SigningPage } from "./contracts/SigningPage";
 import { Library } from "./library/Library";
+import { DeviceContext } from "./offline/offlineContext";
 import { useOfflineSlot } from "./offline/offlineSlot";
 import { useOfflineRoute } from "./offline/useOfflineRoute";
 import { useLinkedOrganization } from "./organizations/linkedOrganization";
@@ -63,7 +64,7 @@ export function App() {
   const accounts = useAccountSessions(session, () => refetch());
 
   const navigate = useWorkspaceNavigation(setPathname);
-  const offlineRoute = useOfflineRoute(
+  const device = useOfflineRoute(
     session,
     workspace,
     access,
@@ -83,12 +84,13 @@ export function App() {
     }
   }, [verification.shouldClear]);
 
+  const offlineRoute = device.page;
   const offline = useOfflineSlot(offlineRoute?.page);
   return (
-    <>
+    <DeviceContext.Provider value={device.device}>
       {routeContent()}
       {offline.portal}
-    </>
+    </DeviceContext.Provider>
   );
 
   function routeContent() {
@@ -282,7 +284,7 @@ function AuthenticatedWorkspace({
     session,
     workspace,
   );
-  // Keep in-progress offline work visible while access loads.
+  // Keep device work visible while access loads.
   if (blocked && !offlinePage) return blocked;
   const library = (
     <Library
@@ -325,7 +327,7 @@ function AuthenticatedWorkspace({
       organizations={workspace.organizations}
       user={session.user}
     >
-      {/* Offline work checks its own access. */}
+      {/* Device pages check their own access. */}
       {offlinePage ?? (
         <OrganizationGate
           access={access}

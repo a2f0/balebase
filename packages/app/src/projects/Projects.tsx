@@ -18,7 +18,13 @@ import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
-import { projectIdForPath, projectPath } from "../workspace/workspacePaths";
+import {
+  projectAuditForPath,
+  projectIdForPath,
+  projectPath,
+} from "../workspace/workspacePaths";
+import { DeviceAuditPage } from "./DeviceProjects";
+import { DeviceSyncStatus } from "./DeviceSyncStatus";
 import { ProjectDetailPage } from "./ProjectDetail";
 import { ProjectForm } from "./ProjectForm";
 
@@ -29,6 +35,10 @@ export function Projects({
   onNavigate: (pathname: string) => void;
   pathname: string;
 }) {
+  // The App shows a device audit itself while this device holds it; this
+  // shows one it does not.
+  const audit = projectAuditForPath(pathname);
+  if (audit) return <DeviceAuditPage {...audit} onNavigate={onNavigate} />;
   const projectId = projectIdForPath(pathname);
   // Keyed so each page starts from its own state and ignores the other's
   // responses after navigation.
@@ -74,11 +84,12 @@ function ProjectListPage({
             </Button>
           )
         }
-        description="Group people around the audit forms they use. Signing in downloads the forms of your projects for offline work."
+        description="Group people around the audit forms they use. Your projects and their forms sync to this device, so audits can start without a connection."
         eyebrow="Workspace"
         title="Projects"
       />
       <PageBody>
+        <DeviceSyncStatus />
         {error && <Toast tone="danger">{error}</Toast>}
         {!listing ? (
           !error && <LoadingState label="Loading projects…" />

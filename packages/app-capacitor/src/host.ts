@@ -1,17 +1,19 @@
 import type { AppHost } from "@balebase/app/host";
 import { Capacitor } from "@capacitor/core";
+import { capacitorNetwork } from "./network";
 import { saveNativeFile } from "./saveFile";
 import { nativePasswordSaver } from "./savePassword";
 
 /**
  * On a device, the WebView's origin marks API requests, emailed links open the
- * hosted app, downloads go to the share sheet, and sign-ins offer to save the
- * password. Served in a desktop browser during development, the shell behaves
- * like the web app.
+ * hosted app, downloads go to the share sheet, sign-ins offer to save the
+ * password, and connectivity comes from the OS. Served in a desktop browser
+ * during development, the shell behaves like the web app.
  */
 export function capacitorHost(appUrl: string): AppHost {
   if (!Capacitor.isNativePlatform()) return {};
   return {
+    network: capacitorNetwork(),
     native: {
       appUrl,
       origin:

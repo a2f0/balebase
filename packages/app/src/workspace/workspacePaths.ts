@@ -59,6 +59,25 @@ export function projectIdForPath(pathname: string) {
   return recordIdForPath(pathname, "/projects");
 }
 
+/** An audit this device started for a project, and keeps until it syncs. */
+export function projectAuditPath(projectId: string, auditId: string) {
+  return `${projectPath(projectId)}/audits/${encodeURIComponent(auditId)}`;
+}
+
+/** The project and device audit in a `projectAuditPath`, if it is one. */
+export function projectAuditForPath(pathname: string) {
+  const match = /^\/projects\/([^/]+)\/audits\/([^/]+)\/?$/.exec(pathname);
+  if (!match?.[1] || !match[2]) return undefined;
+  const decode = (segment: string) => {
+    try {
+      return decodeURIComponent(segment);
+    } catch {
+      return segment;
+    }
+  };
+  return { auditId: decode(match[2]), projectId: decode(match[1]) };
+}
+
 /** The business list, or one business. */
 export function businessPath(businessId?: string) {
   return businessId

@@ -12,9 +12,9 @@ const apply = endpoint<typeof offlineRoutes.apply>({
   body: "json",
   response: "json",
 });
-const forms = endpoint<typeof offlineRoutes.forms>({
+const sync = endpoint<typeof offlineRoutes.sync>({
   method: "GET",
-  path: "/api/offline/forms",
+  path: "/api/offline/sync",
   response: "json",
 });
 const images = endpoint<typeof offlineRoutes.images>({
@@ -34,8 +34,10 @@ export function offlineApi(transport: Transport) {
     images(issueId: string) {
       return transport.call(images, { params: { issueId } });
     },
-    forms(scope: OfflineScope) {
-      return transport.call(forms, { query: scope });
+    sync(scope: OfflineScope, after?: string) {
+      return transport.call(sync, {
+        query: after === undefined ? scope : { ...scope, after },
+      });
     },
     apply(scope: OfflineScope, operation: OfflineOperation) {
       return transport.call(apply, { body: { ...scope, operation } });

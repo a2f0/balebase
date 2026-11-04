@@ -100,7 +100,7 @@ it("persists audits and photos across reload, retries in dependency order, and i
       window.offlineTest.abort().catch(() => undefined),
     );
     expect(
-      (await page.evaluate(() => window.offlineTest.read()))?.templates,
+      (await page.evaluate(() => window.offlineTest.read()))?.forms,
     ).toHaveLength(1);
     // The audit has not been submitted; its children must stay waiting.
     await page.evaluate(() => window.offlineTest.sync());
@@ -130,7 +130,7 @@ it("persists audits and photos across reload, retries in dependency order, and i
     ).toBe(true);
     // A different authenticated account cannot drain the saved account's work.
     deny = true;
-    await page.evaluate(() => window.offlineTest.issue());
+    await page.evaluate((id) => window.offlineTest.issue(id), auditId);
     await page.evaluate(() => window.offlineTest.sync());
     expect(
       (await page.evaluate(() => window.offlineTest.read()))?.jobs.filter(
@@ -145,10 +145,10 @@ it("persists audits and photos across reload, retries in dependency order, and i
     await page.evaluate(() => window.offlineTest.sync());
     expect(requests).toHaveLength(count);
     await page.bringToFront();
-    await page.evaluate(() => {
+    await page.evaluate((id) => {
       window.offlineTest.activate();
-      window.offlineTest.mount();
-    });
+      window.offlineTest.mount(window.offlineTest.auditPath(id));
+    }, auditId);
     await page.waitForFunction(() =>
       document.body.textContent?.includes("Broken rail"),
     );

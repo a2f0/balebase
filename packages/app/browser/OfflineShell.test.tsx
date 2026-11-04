@@ -38,7 +38,7 @@ it.each(["direct", "redirected"])(
         // Cloudflare's default HTML handling redirects /index.html to /.
         if (redirectHtml && path === "/index.html")
           return Response.redirect(new URL("/", request.url).href, 307);
-        if (unavailableStatus && path === "/offline")
+        if (unavailableStatus && path === "/projects")
           return new Response("Hosting unavailable", {
             status: unavailableStatus,
           });
@@ -48,7 +48,7 @@ it.each(["direct", "redirected"])(
           join(
             directory,
             "dist",
-            ["/", "/offline", "/root/users"].includes(path)
+            ["/", "/projects", "/root/users"].includes(path)
               ? "index.html"
               : path,
           ),
@@ -97,7 +97,7 @@ it.each(["direct", "redirected"])(
       ).toBe("Offline shell ready");
       for (const status of [502, 503]) {
         unavailableStatus = status;
-        const response = await page.goto(new URL("/offline", server.url).href);
+        const response = await page.goto(new URL("/projects", server.url).href);
         expect(response?.status()).toBe(200);
         expect(
           await page.$eval("#status", (element) => element.textContent),

@@ -1,22 +1,17 @@
 import {
   OfflineScopeSchema,
+  OfflineSyncQuerySchema,
   offlineRoutes,
 } from "@balebase/validators/offline";
 import { Hono } from "hono";
 import { findIssueImages } from "../audits/auditIssueImageRecords";
 import { uploadAuditIssueImage } from "../audits/auditIssueImageUploads";
-import {
-  type TemplateRow,
-  templateSelect,
-  toTemplate,
-  visibleTemplateFilter,
-} from "../audits/auditTemplates";
 import type { ApiEnv } from "../auth/apiEnv";
 import type { IssueContext } from "../issues/issueRecords";
-import { listMemberDirectory } from "../organizations/organizationMembers";
 import { activityBatch } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import { formerAssigneeError, offlineStatements } from "./offlineRecords";
+import { readOfflineSync } from "./offlineSync";
 
 export const offline = new Hono<ApiEnv>();
 
@@ -30,45 +25,26 @@ offline.get("/issues/:issueId/images", async (context) =>
   }),
 );
 
-offline.get("/forms", async (context) => {
-  const scope = OfflineScopeSchema.safeParse(context.req.query());
-  if (!scope.success || !matchesScope(context, scope.data))
+offline.get("/sync", async (context) => {
+  const query = OfflineSyncQuerySchema.safeParse(context.req.query());
+  if (!query.success || !matchesScope(context, query.data))
     return context.json(
       {
         error:
-          "The active account or organization changed. Reload before downloading.",
+          "The active account or organization changed. Reload before syncing.",
       },
       403,
     );
-  const templates = await context.env.DB.prepare(`${templateSelect}
-    WHERE ${visibleTemplateFilter()}
-    ORDER BY family.updated_at DESC`)
-    .bind(scope.data.organizationId)
-    .all<TemplateRow>();
-  const projectForms = await context.env.DB.prepare(
-    `SELECT DISTINCT enabled.template_id
-     FROM project_audit_forms AS enabled
-     JOIN project_members AS person ON person.project_id = enabled.project_id
-     WHERE enabled.organization_id = ? AND person.user_id = ?`,
-  )
-    .bind(scope.data.organizationId, scope.data.userId)
-    .all<{ template_id: string }>();
-  const onProjects = new Set(
-    projectForms.results.map(({ template_id }) => template_id),
-  );
-  return respond(context, offlineRoutes.forms, {
-    templates: templates.results.map(toTemplate),
-    members: await listMemberDirectory(
+  return respond(
+    context,
+    offlineRoutes.sync,
+    await readOfflineSync(
       context.env.DB,
-      scope.data.organizationId,
+      query.data.organizationId,
+      query.data.userId,
+      query.data.after,
     ),
-    // Only published forms listed here: a form the organization can no
-    // longer use, or one that is a draft or unpublished, stays turned on for
-    // its projects but is not downloaded.
-    projectFormIds: templates.results
-      .filter((row) => row.status === "published" && onProjects.has(row.id))
-      .map((row) => row.id),
-  });
+  );
 });
 
 offline.post("/operations", async (context) => {
