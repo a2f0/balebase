@@ -206,6 +206,36 @@ describe("organization API keys", () => {
     );
     expect(people.status).toBe(403);
     expect(people.body.error).toBe("This endpoint is read-only for API keys.");
+
+    // Keys read projects to name an audit's project, but never change them.
+    expect(
+      (await fixture.withKey(writeToken, "GET", "/api/projects")).status,
+    ).toBe(200);
+    for (const [method, path, body] of [
+      ["POST", "/api/projects", { name: "Key project" }],
+      ["PATCH", "/api/projects/project-id", { expectedRevision: 0, name: "X" }],
+      ["DELETE", "/api/projects/project-id", undefined],
+      ["POST", "/api/projects/project-id/restore", undefined],
+      ["PUT", "/api/projects/project-id/members/user-id", undefined],
+      ["PUT", "/api/projects/project-id/forms/form-id", undefined],
+    ] as const) {
+      const response = await fixture.withKey<{ error: string }>(
+        writeToken,
+        method,
+        path,
+        body,
+      );
+      expect({
+        error: response.body.error,
+        path,
+        status: response.status,
+      }).toEqual({
+        error: "This endpoint is read-only for API keys.",
+        path,
+        status: 403,
+      });
+    }
+    expect(fixture.database.query("SELECT id FROM projects").all()).toEqual([]);
   });
 
   it("rejects unknown, revoked, expired, and orphaned keys", async () => {
