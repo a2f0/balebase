@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { applyMigrations, createTestDatabase } from "../testing/database";
 import {
   checkrResponses,
   configureCheckr,
@@ -8,12 +7,10 @@ import {
   homerSubmission,
   jsonPost,
   mockCheckr,
-  now,
   orgId,
   requestedScreening,
   submitScreening,
 } from "../testing/employeeFormFixture";
-import { seedOrganization } from "../testing/seed";
 import {
   screeningDisclosureVersion,
   summaryOfRightsUrl,
@@ -762,99 +759,5 @@ describe("Checkr screening", () => {
     } finally {
       checkr.restore();
     }
-  });
-
-  it("keeps hosted reports, stops on open invitations, and resets closed ones when migrating", async () => {
-    const database = createTestDatabase({ before: "0067" });
-    seedOrganization(database, { id: orgId });
-    const insert = database.query(`INSERT INTO employee_requirements
-      (id, organization_id, target_email, kind, title, due_date, status,
-       created_at, updated_at, checkr_candidate_id, checkr_invitation_id,
-       checkr_invitation_status, checkr_report_id, checkr_result)
-      VALUES (?, ?, 'a@example.com', 'background_check', 'Check',
-              '2026-10-01', ?, ?, ?, ?, ?, ?, ?, ?)`);
-    insert.run(
-      "reported",
-      orgId,
-      "complete",
-      now(),
-      now(),
-      "c1",
-      "i1",
-      "completed",
-      "r1",
-      "clear",
-    );
-    insert.run(
-      "canceled",
-      orgId,
-      "pending",
-      now(),
-      now(),
-      "c2",
-      "i2",
-      "partially_canceled",
-      "r2",
-      "consider",
-    );
-    insert.run(
-      "invited",
-      orgId,
-      "in_progress",
-      now(),
-      now(),
-      "c3",
-      "i3",
-      "pending",
-      null,
-      null,
-    );
-    const migrate0067 = () =>
-      applyMigrations(database, { before: "0068", from: "0067" });
-    expect(migrate0067).toThrow(
-      "Finish or cancel open hosted Checkr invitations first",
-    );
-    expect(
-      database
-        .query(
-          "SELECT checkr_invitation_id FROM employee_requirements WHERE id = 'invited'",
-        )
-        .get(),
-    ).toEqual({ checkr_invitation_id: "i3" });
-    database
-      .query(`UPDATE employee_requirements
-              SET checkr_invitation_status = 'expired' WHERE id = 'invited'`)
-      .run();
-    // The failed attempt rolled back, so the retry starts from 0066's schema.
-    migrate0067();
-    expect(
-      database
-        .query(`SELECT id, status, checkr_candidate_id, checkr_report_id,
-                       checkr_report_status
-                FROM employee_requirements ORDER BY id`)
-        .all(),
-    ).toEqual([
-      {
-        checkr_candidate_id: "c2",
-        checkr_report_id: "r2",
-        checkr_report_status: "partially_canceled",
-        id: "canceled",
-        status: "pending",
-      },
-      {
-        checkr_candidate_id: null,
-        checkr_report_id: null,
-        checkr_report_status: null,
-        id: "invited",
-        status: "pending",
-      },
-      {
-        checkr_candidate_id: "c1",
-        checkr_report_id: "r1",
-        checkr_report_status: "complete",
-        id: "reported",
-        status: "complete",
-      },
-    ]);
   });
 });

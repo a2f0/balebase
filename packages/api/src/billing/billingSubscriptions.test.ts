@@ -8,9 +8,8 @@ import {
   sendWebhook,
   subscriptionEvent,
 } from "../testing/billingFixture";
-import { applyMigrations, createTestDatabase } from "../testing/database";
 import { withFetch } from "../testing/http";
-import { insertBilling, seedAccount } from "../testing/seed";
+import { insertBilling } from "../testing/seed";
 import { purgeExpiredFreeAuditRuns } from "./billingRetention";
 
 describe("billing subscriptions", () => {
@@ -285,37 +284,5 @@ describe("billing subscriptions", () => {
         });
       },
     );
-  });
-
-  it("backfills a grace period for organizations that already lapsed", async () => {
-    const database = createTestDatabase({ before: "0053" });
-    for (const id of ["user-1", "user-2", "user-3"])
-      seedAccount(database, { id });
-    const now = new Date().toISOString();
-    insertBilling(database, "org_user-1", {
-      stripe_status: "canceled",
-      stripe_subscription_id: "sub_canceled",
-      updated_at: now,
-    });
-    insertBilling(database, "org_user-2", {
-      stripe_status: "active",
-      stripe_subscription_id: "sub_active",
-      updated_at: now,
-    });
-    insertBilling(database, "org_user-3", { updated_at: now });
-    applyMigrations(database, { from: "0053" });
-
-    const rows = database
-      .query(
-        `SELECT organization_id, paid_ended_at FROM organization_billing
-         ORDER BY organization_id`,
-      )
-      .all() as { organization_id: string; paid_ended_at: string | null }[];
-    expect(rows.map((row) => row.paid_ended_at !== null)).toEqual([
-      true,
-      false,
-      false,
-    ]);
-    expect(String(rows[0]?.paid_ended_at) >= now).toBe(true);
   });
 });

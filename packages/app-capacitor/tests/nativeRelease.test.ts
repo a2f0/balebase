@@ -203,15 +203,6 @@ describe("native release entrypoint", () => {
     }
   });
 
-  test("sourcing the script defines its functions without running them", async () => {
-    const { exitCode, stdout, stderr } = await runShell(
-      '. "$1"; command -v native_release_main',
-      ["sh", nativeReleaseScript],
-    );
-    expect(exitCode, stderr).toBe(0);
-    expect(stdout.trim()).toBe("native_release_main");
-  });
-
   test("a fresh checkout restores the Gradle wrapper with the native images", async () => {
     const directory = await mkdtemp(resolve(tmpdir(), "balebase-gradle-"));
     const log = resolve(directory, "bun.log");

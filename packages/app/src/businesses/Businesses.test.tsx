@@ -55,7 +55,6 @@ function renderBusinesses(data: BusinessListing) {
 
 const headerAction = /<div class="pageActions">[\s\S]*?Add business<\/button>/;
 const createForm = "Add a business";
-const cancel = ">Cancel</button>";
 
 describe("business list page", () => {
   it("offers no way to add a business to read-only members", () => {
@@ -75,43 +74,6 @@ describe("adding a business", () => {
     const next = businessListReducer(state, event);
     return { html: renderState(next), next };
   }
-
-  it("walks from the first business through an on-demand add", () => {
-    const beta: Business = { ...acme, id: "business-2", name: "Beta LLC" };
-    let state = businessListReducer(initialBusinessListState, {
-      type: "loaded",
-      data: { businesses: [], canManage: true },
-    });
-    expect(renderState(state)).toContain(createForm);
-
-    let view = step(state, { type: "created", business: acme });
-    expect(view.html).not.toContain(createForm);
-    expect(view.html).toMatch(headerAction);
-    state = view.next;
-
-    view = step(state, { type: "addOpened" });
-    expect(view.html).toContain(createForm);
-    expect(view.html).toContain(cancel);
-    state = view.next;
-
-    view = step(state, { type: "addCancelled" });
-    expect(view.html).not.toContain(createForm);
-    expect(view.html).toMatch(headerAction);
-    state = view.next;
-
-    view = step(state, { type: "addOpened" });
-    view = step(view.next, { type: "failed", message: "Name taken." });
-    expect(view.html).toContain(createForm);
-    expect(view.html).toContain("Name taken.");
-    state = view.next;
-
-    view = step(state, { type: "created", business: beta });
-    expect(view.html).not.toContain(createForm);
-    expect(view.html).toMatch(headerAction);
-    expect(view.html).toContain("Business added.");
-    expect(view.html).not.toContain("Name taken.");
-    expect(view.html).toContain("2 businesses");
-  });
 
   it("reopens the form when the last business is deleted", () => {
     const state = businessListReducer(

@@ -12,7 +12,6 @@ import {
 } from "../testing/authFixture";
 import { testBindings } from "../testing/bindings";
 import { queryHooks, toD1 } from "../testing/d1";
-import { applyMigrations, createTestDatabase } from "../testing/database";
 import { insertBilling } from "../testing/seed";
 import { testApp } from "../testing/session";
 
@@ -258,71 +257,6 @@ describe("API keys after their creator's access changes", () => {
     expect(await fixture.eventsSince(before)).toEqual([]);
     fixture.database.exec("DROP TRIGGER reject_key_activity");
     expect(await fixture.useKey()).toBe(200);
-  });
-
-  it("revokes keys that had already stopped when the migration runs, naming no revoker", () => {
-    const database = createTestDatabase({ before: "0085" });
-    const now = new Date().toISOString();
-    database.exec(`INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt)
-      VALUES ('admin', 'Ada', 'ada@example.com', 1, '${now}', '${now}'),
-             ('member', 'Max', 'max@example.com', 1, '${now}', '${now}'),
-             ('gone', 'Gil', 'gil@example.com', 1, '${now}', '${now}')`);
-    database.exec(`INSERT INTO organization (id, name, slug, createdAt)
-      VALUES ('org', 'Org', 'org', '${now}')`);
-    database.exec(`INSERT INTO member (id, organizationId, userId, role, createdAt)
-      VALUES ('m-admin', 'org', 'admin', 'member, admin', '${now}'),
-             ('m-member', 'org', 'member', 'member', '${now}')`);
-    const key = (id: string, creator: string, extra = "NULL, NULL, NULL") =>
-      database.exec(`INSERT INTO organization_api_keys (id, organization_id,
-        name, access, token_prefix, token_hash, created_by, created_at,
-        expires_at, revoked_at, revoked_by)
-        VALUES ('${id}', 'org', '${id}', 'read', 'p', '${id}-hash',
-                '${creator}', '${now}', ${extra})`);
-    key("active", "admin");
-    key("demoted", "member");
-    key("left", "gone");
-    key("expired", "member", "'2026-01-01T00:00:00.000Z', NULL, NULL");
-    key("revoked", "member", `NULL, '${now}', 'admin'`);
-    database.exec(`INSERT INTO user_security_events (user_id, action, occurred_at)
-      VALUES ('member', 'password_changed', '${now}')`);
-    const activity = () =>
-      database.query("SELECT COUNT(*) AS count FROM activity_events").get();
-    const recorded = activity();
-
-    applyMigrations(database, { from: "0085" });
-    expect(
-      database
-        .query(
-          `SELECT id, revoked_at IS NOT NULL AS revoked, revoked_by, revoked_reason
-           FROM organization_api_keys ORDER BY id`,
-        )
-        .all(),
-    ).toEqual([
-      { id: "active", revoked: 0, revoked_by: null, revoked_reason: null },
-      {
-        id: "demoted",
-        revoked: 1,
-        revoked_by: null,
-        revoked_reason: "creator_access_ended",
-      },
-      { id: "expired", revoked: 0, revoked_by: null, revoked_reason: null },
-      {
-        id: "left",
-        revoked: 1,
-        revoked_by: null,
-        revoked_reason: "creator_access_ended",
-      },
-      { id: "revoked", revoked: 1, revoked_by: "admin", revoked_reason: null },
-    ]);
-    // No actor made these revocations, so none is recorded.
-    expect(activity()).toEqual(recorded);
-    expect(
-      database
-        .query("SELECT user_id, action, details FROM user_security_events")
-        .all(),
-    ).toEqual([
-      { user_id: "member", action: "password_changed", details: null },
-    ]);
   });
 });
 

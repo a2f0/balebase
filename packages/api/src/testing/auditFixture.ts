@@ -271,7 +271,7 @@ export function createFixture(migrations: { before?: string } = {}) {
 }
 
 /** A database migrated up to `before`, with the people audits name. */
-export function legacyDatabase(before?: string) {
+function legacyDatabase(before?: string) {
   const database = createTestDatabase(before === undefined ? {} : { before });
   for (const [id, name, email] of [
     ["user-1", "Example Person", "person@example.com"],

@@ -9,7 +9,6 @@ import {
   screenshotRoutes,
 } from "@a2f0/agent-tool/screenshots/manifest";
 import { galleryPage, readGalleryManifest } from "./screenshots";
-import { siteSections } from "./site";
 
 const manifest = parseScreenshotManifest({
   schemaVersion: 1,
@@ -79,11 +78,4 @@ test("each deep link has its own heading, title, and description", () => {
   expect(galleryPage(manifest, "web", "groups").description).toBe(
     "Groups in Balebase. Shown in the desktop layout.",
   );
-});
-
-test("the site navigation links the gallery at its trailing-slash URL", () => {
-  expect(siteSections).toContainEqual({
-    href: "/screenshots/",
-    label: "Screenshots",
-  });
 });

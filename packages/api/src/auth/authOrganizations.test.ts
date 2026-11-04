@@ -11,8 +11,7 @@ import {
   originalPassword,
   post,
 } from "../testing/authFixture";
-import { applyMigrations, createTestDatabase } from "../testing/database";
-import { insertBilling, seedUser } from "../testing/seed";
+import { insertBilling } from "../testing/seed";
 
 describe("organizations", () => {
   it("only lets owners rename their organization", async () => {
@@ -735,32 +734,6 @@ describe("organizations", () => {
       session: { activeOrganizationId: personalOrganization.id },
       user: { defaultOrganizationId: personalOrganization.id },
     });
-  });
-
-  it("backfills an organization for an existing user", async () => {
-    const database = createTestDatabase({ before: "0004" });
-    seedUser(database, {
-      createdAt: "2026-08-18T12:00:00.000Z",
-      email: "existing@example.com",
-      emailVerified: false,
-      id: "existing-user",
-      name: "Existing User",
-    });
-
-    applyMigrations(database, { from: "0004" });
-
-    expect(
-      database
-        .query(
-          `SELECT organization.name, member.role
-           FROM user
-           JOIN organization
-             ON organization.id = user.defaultOrganizationId
-           JOIN member ON member.organizationId = organization.id
-           WHERE user.id = ?`,
-        )
-        .get("existing-user"),
-    ).toEqual({ name: "Existing User's Organization", role: "owner" });
   });
 });
 

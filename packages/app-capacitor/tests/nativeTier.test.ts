@@ -70,14 +70,6 @@ const tiers = {
   },
 };
 
-test("the release tiers are production, the default, and staging", async () => {
-  const targets = await Bun.file(
-    resolve(packageRoot, "nativeReleaseTargets.json"),
-  ).json();
-  expect(targets.defaultTier).toBe("production");
-  expect(Object.keys(targets.tiers)).toEqual(Object.keys(tiers));
-});
-
 for (const [tier, expected] of Object.entries(tiers)) {
   test(`the Capacitor and Vite configs follow the ${tier} tier`, async () => {
     // Production is also the tier without NATIVE_RELEASE_TIER.

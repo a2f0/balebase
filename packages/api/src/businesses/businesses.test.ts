@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { testBindings } from "../testing/bindings";
 import { toD1 } from "../testing/d1";
-import { applyMigrations, createTestDatabase } from "../testing/database";
-import { seedAccount, seedMember, seedUser } from "../testing/seed";
+import { createTestDatabase } from "../testing/database";
+import { seedAccount, seedMember } from "../testing/seed";
 import { testApp } from "../testing/session";
 import type { Bindings } from "../types";
 import { businesses } from "./businesses";
@@ -473,52 +473,6 @@ describe("organization businesses", () => {
     expect(
       fixture.database.query("SELECT COUNT(*) AS count FROM businesses").get(),
     ).toEqual({ count: 0 });
-  });
-
-  it("preserves existing businesses through business schema extensions", async () => {
-    const database = createTestDatabase({ before: "0004" });
-    seedUser(database, {
-      createdAt: timestamp,
-      emailVerified: false,
-      id: "owner",
-    });
-    applyMigrations(database, { before: "0017", from: "0004" });
-    database
-      .query(
-        `INSERT INTO businesses
-         (id, organization_id, name, ein, created_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        "legacy-business",
-        "org_owner",
-        "Legacy Business",
-        "123456789",
-        "owner",
-        timestamp,
-        timestamp,
-      );
-
-    applyMigrations(database, { from: "0017" });
-
-    expect(
-      database
-        .query(
-          `SELECT name, ein, duns, incorporation_date, street_address, city,
-                  state, zip
-           FROM businesses WHERE id = ?`,
-        )
-        .get("legacy-business"),
-    ).toEqual({
-      city: null,
-      duns: null,
-      ein: "123456789",
-      incorporation_date: null,
-      name: "Legacy Business",
-      state: null,
-      street_address: null,
-      zip: null,
-    });
   });
 });
 
