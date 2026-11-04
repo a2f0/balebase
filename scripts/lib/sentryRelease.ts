@@ -72,11 +72,42 @@ export function runBun(
   execFileSync(process.execPath, args, { cwd, env, stdio: "inherit" });
 }
 
+/** Upload attempts before a deploy gives up on its source maps. */
+export const sourceMapUploadAttempts = 3;
+/**
+ * Seconds each attempt waits for Sentry to process the bundle. Processing has
+ * taken over 200 seconds on slow days, past sentry-cli's own 300 second wait.
+ */
+export const sourceMapProcessingSeconds = 600;
+
+/**
+ * Uploads the release's maps and waits until Sentry has processed them, so
+ * the release is symbolicated before it serves traffic. A failed attempt is
+ * retried: re-uploading the same bundle skips the chunks Sentry already has
+ * and resumes waiting on its processing, which is how a slow Sentry clears.
+ */
 export function uploadSourceMaps(
   directory: string,
   config: NonNullable<ReturnType<typeof releaseConfiguration>>,
 ) {
   const artifacts = sourceMapArtifacts(directory, config.build);
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      uploadOnce(artifacts, config);
+      return;
+    } catch (error) {
+      if (attempt >= sourceMapUploadAttempts) throw error;
+      console.warn(
+        `Sentry source map upload attempt ${attempt} of ${sourceMapUploadAttempts} failed; retrying.`,
+      );
+    }
+  }
+}
+
+function uploadOnce(
+  artifacts: ReturnType<typeof sourceMapArtifacts>,
+  config: NonNullable<ReturnType<typeof releaseConfiguration>>,
+) {
   const { SENTRY_ORG } = process.env;
   runBun([
     "x",
@@ -101,7 +132,8 @@ export function uploadSourceMaps(
     "map",
     "--validate",
     "--strict",
-    "--wait",
+    "--wait-for",
+    String(sourceMapProcessingSeconds),
     artifacts.directory,
   ]);
 }
