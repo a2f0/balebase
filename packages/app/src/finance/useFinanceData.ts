@@ -10,6 +10,7 @@ type CategoryRoute = Pick<FinanceFilters, "categorySlug" | "uncategorized">;
 export const initialFilters: FinanceFilters = {
   accountIds: [],
   categorySlug: null,
+  name: null,
   year: null,
   uncategorized: false,
 };

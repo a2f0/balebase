@@ -155,6 +155,8 @@ export interface FinanceFilters {
   accountIds: string[];
   /** One expense category's transactions, from its bookmarkable path. */
   categorySlug: string | null;
+  /** Transactions shown under one name, such as a merchant. */
+  name: string | null;
   year: number | null;
   uncategorized: boolean;
 }
@@ -170,6 +172,7 @@ export function financeApi(transport: Transport) {
           year: filters?.year ? String(filters.year) : undefined,
           uncategorized: filters?.uncategorized ? "true" : undefined,
           category: filters?.categorySlug || undefined,
+          name: filters?.name || undefined,
           cursor: cursor || undefined,
         },
       });

@@ -805,7 +805,12 @@ balances, its connection's status, its imported history, its ten newest
 transactions (each opening the transaction's page), and its Plaid account and
 Item IDs. Users can add
 organization-scoped notes, labels, and a reviewed flag to imported
-transactions. Select an account tile to focus on it; Shift-click adds
+transactions. Each transaction row's menu (its menu button, a right-click, or
+the menu key) offers **Annotate** (or **Edit note**), **Raise issue**, and
+**Show only** with its name, such as **Show only “Shell”**, which lists every
+transaction shown under that name (the merchant's name, else the bank's
+description); the name filter combines with the others. Select an account tile
+to focus on it; Shift-click adds
 or removes individual accounts from the selection. No selection shows all
 accounts. The transaction toolbar combines account selection with the current
 calendar year, previous calendar year, or all time, and an uncategorized-expense

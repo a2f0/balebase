@@ -179,6 +179,47 @@ describe("finance", () => {
     expect(hidden.body.transactions).toEqual([]);
   });
 
+  it("lists transactions shown under one name across the full history", async () => {
+    const fixture = await createFixture();
+    seedTransactions(fixture.database);
+    const db = fixture.database;
+    for (const [id, name, merchant, date] of [
+      ["report-txn-0", "SHELL OIL 123", "Shell", "2026-03-01"],
+      ["report-txn-1", "Shell", null, "2024-06-01"],
+      ["report-txn-2", "Shell", "Olive Garden", "2026-02-01"],
+      ["report-txn-3", "SHELL STATION", "Shell Station", "2026-01-01"],
+      ["report-txn-4", "shell", null, "2026-01-01"],
+    ] as const) {
+      db.query(
+        "UPDATE plaid_transactions SET name = ?, merchant_name = ?, transaction_date = ? WHERE id = ?",
+      ).run(name, merchant, date, id);
+    }
+    const list = (query: string) =>
+      jsonRequest<FinanceListing>(fixture.app, fixture.bindings, query, "GET");
+
+    // A merchant's name wins over the bank's description, as in the list.
+    const shell = await list("?name=Shell");
+    expect(shell.body.transactions.map((txn) => txn.id)).toEqual([
+      "report-txn-0",
+      "report-txn-1",
+    ]);
+    const year = await list("?name=Shell&year=2024");
+    expect(year.body.transactions.map((txn) => txn.id)).toEqual([
+      "report-txn-1",
+    ]);
+    const olive = await list(`?name=${encodeURIComponent("Olive Garden")}`);
+    expect(olive.body.transactions.map((txn) => txn.id)).toEqual([
+      "report-txn-2",
+    ]);
+    const hidden = await jsonRequest<FinanceListing>(
+      testApp("organization-2", fixture.requestPlaid),
+      fixture.bindings,
+      "?name=Shell",
+      "GET",
+    );
+    expect(hidden.body.transactions).toEqual([]);
+  });
+
   it("rejects malformed transaction filters", async () => {
     const fixture = await createFixture();
     for (const query of [
@@ -188,6 +229,8 @@ describe("finance", () => {
       "uncategorized=false",
       "category=",
       "categoryId=",
+      "name=",
+      `name=${"x".repeat(201)}`,
       "cursor=broken",
       "cursor=null",
     ]) {

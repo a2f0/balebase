@@ -18,6 +18,7 @@ export const financeTools: McpTool[] = [
       accountId: "Account id, or a list of them; omit for every account.",
       category: "Expense category slug from list_expense_categories.",
       cursor: "The nextCursor from the previous page; omit for the newest.",
+      name: "Exact transaction name (merchant, else description), such as Shell.",
       uncategorized: '"true" for uncategorized spending only.',
       year: "Four-digit year of the transaction date, such as 2026.",
     },

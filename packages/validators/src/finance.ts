@@ -282,6 +282,8 @@ const FinanceListingQuerySchema = z.object({
   /** Clients before 0.1.52, including installed mobile apps, filter by id. */
   categoryId: z.string().optional(),
   cursor: z.string().optional(),
+  /** The shown name: the merchant's name, else the bank's description. */
+  name: z.string().optional(),
   uncategorized: z.literal("true").optional(),
   year: z.string().optional(),
 });
