@@ -26,7 +26,7 @@
     },
     "packages/api": {
       "name": "@balebase/api",
-      "version": "0.1.101",
+      "version": "0.1.102",
       "dependencies": {
         "@balebase/diagnostics": "workspace:*",
         "@balebase/ui": "workspace:*",
@@ -59,7 +59,7 @@
     },
     "packages/app": {
       "name": "@balebase/app",
-      "version": "0.1.122",
+      "version": "0.1.123",
       "dependencies": {
         "@balebase/api-client": "workspace:*",
         "@balebase/ui": "workspace:*",
@@ -82,7 +82,7 @@
     },
     "packages/app-capacitor": {
       "name": "@balebase/app-capacitor",
-      "version": "0.1.79",
+      "version": "0.1.80",
       "dependencies": {
         "@balebase/app": "workspace:*",
         "@balebase/diagnostics": "workspace:*",
