@@ -6,6 +6,7 @@ import type {
 import { act } from "react";
 import { holdTimers, installDom } from "../testing/dom";
 import { IntersectionObserverFixture } from "../testing/intersectionObserver";
+import { transactionIssuePath } from "../workspace/workspacePaths";
 import { Finance } from "./Finance";
 import { syncPollMs } from "./financeConnectionActions";
 
@@ -116,6 +117,26 @@ function rowNames() {
   return [...container.querySelectorAll(".financeTransactionName")].map(
     (row) => row.textContent,
   );
+}
+/** Opens a transaction row's menu from its menu button. */
+async function openRowMenu(name: string) {
+  const trigger = container.querySelector<HTMLButtonElement>(
+    `[aria-label="Actions for ${name}"]`,
+  );
+  if (!trigger) throw new Error(`No menu for ${name}`);
+  await act(async () => trigger.click());
+}
+function menuItems() {
+  return [...document.querySelectorAll('[role="menuitem"]')].map(
+    (item) => item.textContent,
+  );
+}
+async function choose(label: string) {
+  const item = [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+  ].find((element) => element.textContent === label);
+  if (!item) throw new Error(`Missing menu item: ${label}`);
+  await act(async () => item.click());
 }
 function selectedAccounts() {
   return [
@@ -264,6 +285,71 @@ describe("Finance filters", () => {
     expect(rowNames()).toEqual(["Coffee"]);
   });
 
+  it("annotates, raises an issue, or filters by name from a row's menu", async () => {
+    const queries: URLSearchParams[] = [];
+    respond((url) => {
+      queries.push(url.searchParams);
+      const name = url.searchParams.get("name");
+      return Response.json({
+        ...data,
+        transactions: [
+          transaction("shell-1", { merchantName: "Shell", name: "SHELL 1" }),
+          transaction("Olive Garden"),
+          transaction("shell-2", { merchantName: "Shell", name: "SHELL 2" }),
+        ].filter((row) => !name || (row.merchantName ?? row.name) === name),
+      });
+    });
+    await mountFinance();
+    // The row's actions are in its menu, not buttons of their own.
+    expect(container.textContent).not.toContain("Raise issue");
+    expect(container.textContent).not.toContain("Annotate");
+    const row = container.querySelector(".financeTransaction");
+    if (!row) throw new Error("No transaction row");
+    await act(async () =>
+      row.dispatchEvent(
+        new dom.MouseEvent("contextmenu", {
+          bubbles: true,
+          button: 2,
+          cancelable: true,
+          clientX: 10,
+          clientY: 10,
+        }) as unknown as Event,
+      ),
+    );
+    expect(menuItems()).toEqual([
+      "Annotate",
+      "Raise issue",
+      "Show only “Shell”",
+    ]);
+    await act(async () =>
+      document.dispatchEvent(
+        new dom.KeyboardEvent("keydown", {
+          bubbles: true,
+          key: "Escape",
+        }) as unknown as Event,
+      ),
+    );
+    await openRowMenu("Olive Garden");
+    await choose("Annotate");
+    expect(
+      container.querySelector('[aria-label="Annotation for Olive Garden"]'),
+    ).not.toBeNull();
+    await openRowMenu("Shell");
+    await choose("Show only “Shell”");
+    expect(queries.at(-1)?.get("name")).toBe("Shell");
+    expect(rowNames()).toEqual(["Shell", "Shell"]);
+    expect(button("Name: Shell").getAttribute("aria-pressed")).toBe("true");
+    await click("Previous year");
+    expect(queries.at(-1)?.get("name")).toBe("Shell");
+    expect(queries.at(-1)?.get("year")).toBe(String(year - 1));
+    await click("Name: Shell");
+    expect(queries.at(-1)?.has("name")).toBe(false);
+    expect(rowNames()).toEqual(["Shell", "Olive Garden", "Shell"]);
+    await openRowMenu("Olive Garden");
+    await choose("Raise issue");
+    expect(currentPath).toBe(transactionIssuePath("Olive Garden"));
+  });
+
   it("keeps all loaded rows and the annotation form while refreshing a saved note", async () => {
     const cursor = JSON.stringify({ date: `${year}-01-01`, id: "Coffee" });
     const refreshed = Promise.withResolvers<Response>();
@@ -297,10 +383,8 @@ describe("Finance filters", () => {
     });
     await mountFinance();
     await click("Load more transactions");
-    const annotate = container.querySelectorAll<HTMLButtonElement>(
-      ".financeTransactionAction",
-    )[1];
-    await act(async () => annotate?.click());
+    await openRowMenu("Older expense");
+    await choose("Annotate");
     const form = container.querySelector<HTMLFormElement>(
       '[aria-label="Annotation for Older expense"]',
     );

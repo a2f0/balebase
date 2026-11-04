@@ -179,10 +179,9 @@
   color: var(--color-green-strong);
 }
 
-/* Pull the ghost button's padding out so its label aligns with the amounts. */
+/* The row's menu button sits after the amount. */
 .financeTransactionActions {
   justify-self: end;
-  margin-inline-end: calc(var(--space-3) * -1);
 }
 
 /* The annotation form opens inline beneath its transaction. */
@@ -263,8 +262,7 @@
       "meta meta meta"
       "emails emails emails"
       "category category category"
-      "date status status"
-      "action action action";
+      "date status action";
     grid-template-columns: auto minmax(0, 1fr) auto;
     gap: var(--space-0-5) var(--space-3);
   }

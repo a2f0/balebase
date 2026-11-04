@@ -4,11 +4,13 @@ import {
   Banner,
   Button,
   Card,
+  ContextMenu,
   cx,
   EmptyState,
   Field,
   Icon,
   LoadingState,
+  MenuButton,
   PageSection,
   Select,
 } from "@balebase/ui/react";
@@ -19,7 +21,12 @@ import type {
 } from "@balebase/validators/finance";
 import type { LinkedEmail } from "@balebase/validators/inbox";
 import { financeLimits } from "@balebase/validators/rules";
-import { type FormEvent, useState } from "react";
+import {
+  type ComponentProps,
+  type FormEvent,
+  type ReactNode,
+  useState,
+} from "react";
 import { AppLink } from "../shared/AppLink";
 import { InfiniteScroll } from "../shared/InfiniteScroll";
 import { formatCalendarDate, formatLabel } from "../shared/labels";
@@ -28,7 +35,10 @@ import {
   inboxEmailPath,
   transactionIssuePath,
 } from "../workspace/workspacePaths";
-import { FinanceTransactionFilters } from "./FinanceTransactionFilters";
+import {
+  FinanceTransactionFilters,
+  hasTransactionFilters,
+} from "./FinanceTransactionFilters";
 import { formatMoney } from "./financeFormat";
 
 interface AnnotationHandlers {
@@ -44,6 +54,8 @@ interface AnnotationHandlers {
     categoryId: string | null,
   ) => Promise<void>;
   onSelectAnnotation: (transactionId: string) => void;
+  /** Lists only transactions shown under a name; absent outside the list. */
+  onFilterByName?: ((name: string) => void) | undefined;
   selectedTransactionId: string | undefined;
 }
 
@@ -60,7 +72,7 @@ export function FinanceTransactionHistory({
   onReload,
   transactions,
   ...handlers
-}: AnnotationHandlers & {
+}: Omit<AnnotationHandlers, "onFilterByName"> & {
   accountName: string | undefined;
   onClearFilter: () => void;
   filters: FinanceFilters;
@@ -126,12 +138,8 @@ export function FinanceTransactionHistory({
       )}
       {(!loadError || transactions) && (
         <TransactionContent
-          filtered={
-            filters.accountIds.length > 0 ||
-            filters.categorySlug !== null ||
-            filters.year !== null ||
-            filters.uncategorized
-          }
+          filtered={hasTransactionFilters(filters)}
+          onFilterByName={(name) => onFiltersChange({ ...filters, name })}
           transactions={transactions}
           {...handlers}
         />
@@ -256,21 +264,86 @@ function TransactionContent({
   );
 }
 
-export function FinanceTransactionRow({
-  busy,
-  categories,
-  onAnnotate,
-  onCategorize,
+/**
+ * A transaction row. Its menu, from the menu button or a right-click anywhere
+ * on the row, annotates it, raises an issue, or lists its name's transactions.
+ */
+export function FinanceTransactionRow(
+  props: AnnotationHandlers & { transaction: FinanceTransaction },
+) {
+  const title = transactionTitle(props.transaction);
+  const label = `Actions for ${title}`;
+  return (
+    <ContextMenu items={transactionMenuItems(props)} label={label}>
+      {(target, menuButton) => (
+        <TransactionRowContent
+          {...props}
+          menuButton={<MenuButton {...menuButton} label={label} />}
+          target={target}
+        />
+      )}
+    </ContextMenu>
+  );
+}
+
+function transactionMenuItems({
+  onFilterByName,
   onNavigate,
   onSelectAnnotation,
   selectedTransactionId,
   transaction,
 }: AnnotationHandlers & { transaction: FinanceTransaction }) {
+  const title = transactionTitle(transaction);
+  const items: ComponentProps<typeof ContextMenu>["items"][number][] = [
+    {
+      icon: "edit",
+      id: "annotate",
+      label: hasAnnotation(transaction) ? "Edit note" : "Annotate",
+      onSelect: () => {
+        // Selecting it again keeps an open form open; Close closes it.
+        if (selectedTransactionId !== transaction.id) {
+          onSelectAnnotation(transaction.id);
+        }
+      },
+    },
+    {
+      icon: "issues",
+      id: "raise-issue",
+      label: "Raise issue",
+      onSelect: () => onNavigate(transactionIssuePath(transaction.id)),
+    },
+  ];
+  if (onFilterByName) {
+    items.push({
+      icon: "search",
+      id: "same-name",
+      label: `Show only “${title}”`,
+      onSelect: () => onFilterByName(title),
+    });
+  }
+  return items;
+}
+
+function TransactionRowContent({
+  busy,
+  categories,
+  menuButton,
+  onAnnotate,
+  onCategorize,
+  onNavigate,
+  onSelectAnnotation,
+  selectedTransactionId,
+  target,
+  transaction,
+}: AnnotationHandlers & {
+  menuButton: ReactNode;
+  target: Parameters<ComponentProps<typeof ContextMenu>["children"]>[0];
+  transaction: FinanceTransaction;
+}) {
   const expanded = selectedTransactionId === transaction.id;
-  const formId = `annotation-${transaction.id}`;
-  const title = transaction.merchantName ?? transaction.name;
+  const title = transactionTitle(transaction);
   return (
-    <li className="row financeTransaction">
+    <li className="row financeTransaction" {...target}>
       <time
         className="financeTransactionDate"
         dateTime={transaction.transactionDate}
@@ -333,31 +406,11 @@ export function FinanceTransactionRow({
       >
         {formatMoney(-transaction.amount, transaction.currencyCode)}
       </span>
-      <div className="financeTransactionActions">
-        <Button
-          aria-controls={expanded ? formId : undefined}
-          aria-expanded={expanded}
-          className="financeTransactionAction"
-          icon="edit"
-          onClick={() => onSelectAnnotation(transaction.id)}
-          size="sm"
-          variant="ghost"
-        >
-          {hasAnnotation(transaction) ? "Edit note" : "Annotate"}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          icon="issues"
-          onClick={() => onNavigate(transactionIssuePath(transaction.id))}
-        >
-          Raise issue
-        </Button>
-      </div>
+      <div className="financeTransactionActions">{menuButton}</div>
       {expanded && (
         <TransactionAnnotationForm
           busy={busy}
-          id={formId}
+          id={`annotation-${transaction.id}`}
           key={transaction.id}
           onClose={() => onSelectAnnotation(transaction.id)}
           onSave={(input) => onAnnotate(transaction, input)}
@@ -489,6 +542,11 @@ function transactionMeta(transaction: FinanceTransaction) {
   return transaction.categoryPrimary
     ? `${transaction.accountName} · ${formatLabel(transaction.categoryPrimary)}`
     : transaction.accountName;
+}
+
+/** The name a row shows, and the one the same-name filter matches. */
+function transactionTitle(transaction: FinanceTransaction) {
+  return transaction.merchantName ?? transaction.name;
 }
 
 function hasAnnotation(transaction: FinanceTransaction) {

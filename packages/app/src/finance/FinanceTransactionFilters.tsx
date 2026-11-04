@@ -3,6 +3,17 @@ import { Button } from "@balebase/ui/react";
 import type { ExpenseCategory } from "@balebase/validators/finance";
 import { initialFilters } from "./useFinanceData";
 
+/** Whether any filter narrows the transaction list. */
+export function hasTransactionFilters(filters: FinanceFilters) {
+  return (
+    filters.accountIds.length > 0 ||
+    filters.categorySlug !== null ||
+    filters.name !== null ||
+    filters.year !== null ||
+    filters.uncategorized
+  );
+}
+
 export function FinanceTransactionFilters({
   categories,
   filters,
@@ -47,6 +58,17 @@ export function FinanceTransactionFilters({
           Category: {categoryName}
         </Button>
       )}
+      {filters.name !== null && (
+        <Button
+          aria-pressed
+          iconEnd="close"
+          onClick={() => onChange({ ...filters, name: null })}
+          size="sm"
+          variant="primary"
+        >
+          Name: {filters.name}
+        </Button>
+      )}
       <Button
         aria-pressed={filters.uncategorized}
         onClick={() =>
@@ -61,10 +83,7 @@ export function FinanceTransactionFilters({
       >
         Uncategorized expenses
       </Button>
-      {(filters.accountIds.length > 0 ||
-        filters.categorySlug !== null ||
-        filters.year !== null ||
-        filters.uncategorized) && (
+      {hasTransactionFilters(filters) && (
         <Button
           icon="close"
           onClick={() => onChange(initialFilters)}

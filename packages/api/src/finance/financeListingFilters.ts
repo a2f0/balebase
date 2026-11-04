@@ -7,6 +7,8 @@ export function financeListingFilters(context: FinanceContext) {
   const year = context.req.query("year");
   const uncategorized = context.req.query("uncategorized");
   const category = context.req.query("category");
+  // Transactions shown under the same name: the merchant, else Plaid's name.
+  const name = context.req.query("name");
   // Clients before 0.1.52, including installed mobile apps, filter by id.
   const categoryId = context.req.query("categoryId");
   const cursor = parseCursor(context.req.query("cursor"));
@@ -16,6 +18,7 @@ export function financeListingFilters(context: FinanceContext) {
     (year !== undefined && !/^[1-9]\d{3}$/.test(year)) ||
     (uncategorized !== undefined && uncategorized !== "true") ||
     (category !== undefined && (!category || category.length > 200)) ||
+    (name !== undefined && (!name || name.length > 200)) ||
     (categoryId !== undefined && (!categoryId || categoryId.length > 200)) ||
     cursor === false
   ) {
@@ -54,6 +57,10 @@ export function financeListingFilters(context: FinanceContext) {
        )`,
     );
     bindings.push(category);
+  }
+  if (name) {
+    conditions.push("COALESCE(txn.merchant_name, txn.name) = ?");
+    bindings.push(name);
   }
   if (categoryId) {
     conditions.push("annotation.expense_category_id = ?");
