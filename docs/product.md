@@ -518,6 +518,10 @@ required foreign key to `projects`, and an audit starts from a project's
 through `POST /api/audits/templates/:id/runs` with a `projectId` the form is
 turned on for, which is how API keys and the MCP `start_audit` tool start one.
 Audit lists and pages name each audit's project, marking a deleted one.
+Each form's page on `/audits` has a **Projects** tab listing the organization's
+projects with whether the form is on for each; owners and admins turn a
+published form on or off per project there, as each project's **Project
+setup** does (`GET /api/projects/forms/:templateId`).
 Migration `0091_require_audit_projects.sql` makes the column required and
 removes the audits that had no project, with their issues and history. Audits
 record pass/fail/N/A or text responses and

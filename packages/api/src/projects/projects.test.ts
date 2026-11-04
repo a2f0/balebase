@@ -429,6 +429,64 @@ describe("projects", () => {
     ]);
   });
 
+  it("lists every live project with whether a form is turned on for it", async () => {
+    const { as } = fixture();
+    const owner = as("owner-user", "owner");
+    const clinic = await createProject(owner);
+    const annex = (
+      await owner<{ project: Project }>("POST", "/api/projects", {
+        name: "Annex",
+      })
+    ).body.project.id;
+    const gone = (
+      await owner<{ project: Project }>("POST", "/api/projects", {
+        name: "Gone",
+      })
+    ).body.project.id;
+    await owner("PUT", `/api/projects/${clinic}/forms/org-form`);
+    await owner("DELETE", `/api/projects/${gone}`);
+    type FormProjects = {
+      available: boolean;
+      canManage: boolean;
+      projects: Array<{ enabled: boolean; id: string; name: string }>;
+    };
+    const listed = await as("member-user", "member")<FormProjects>(
+      "GET",
+      "/api/projects/forms/org-form",
+    );
+    expect(listed.body).toEqual({
+      available: true,
+      canManage: false,
+      projects: [
+        { enabled: false, id: annex, name: "Annex" },
+        { enabled: true, id: clinic, name: "Hospital renovation" },
+      ],
+    });
+    // Drafts, unpublished forms, and other organizations' forms cannot be
+    // turned on, and list as off everywhere.
+    for (const form of ["org-draft", "org-unpublished", "other-org-form"]) {
+      const response = await owner<FormProjects>(
+        "GET",
+        `/api/projects/forms/${form}`,
+      );
+      expect(response.body.available).toBe(false);
+      expect(response.body.canManage).toBe(true);
+      expect(response.body.projects.every(({ enabled }) => !enabled)).toBe(
+        true,
+      );
+    }
+    // Another organization sees only its own projects.
+    expect(
+      (
+        await as(
+          "other-user",
+          "owner",
+          "org-2",
+        )<FormProjects>("GET", "/api/projects/forms/global-published")
+      ).body,
+    ).toEqual({ available: true, canManage: true, projects: [] });
+  });
+
   it("lets members read projects but only managers change them", async () => {
     const { as, events } = fixture();
     const owner = as("owner-user", "owner");

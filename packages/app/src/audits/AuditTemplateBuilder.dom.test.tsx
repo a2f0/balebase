@@ -55,10 +55,39 @@ const template: AuditTemplate = {
   version: 1,
 };
 
-/** Serves the template; a save echoes back what was sent. */
+const projectWrites: string[] = [];
+let projectForms = new Set(["clinic"]);
+
+/**
+ * Serves the template and its projects; a save echoes back what was sent, and
+ * turning the form on or off for a project is recorded.
+ */
 function stubApi() {
   const saves: Array<{ definition: AuditTemplate["definition"] }> = [];
+  projectWrites.length = 0;
+  projectForms = new Set(["clinic"]);
   respond(async (url, init) => {
+    if (url.pathname === "/api/projects/forms/t1")
+      return Response.json({
+        available: true,
+        canManage: true,
+        projects: [
+          { id: "annex", name: "Annex" },
+          { id: "clinic", name: "Clinic" },
+        ].map((project) => ({
+          ...project,
+          enabled: projectForms.has(project.id),
+        })),
+      });
+    const projectForm = url.pathname.match(
+      /^\/api\/projects\/([^/]+)\/forms\/t1$/,
+    );
+    if (projectForm?.[1]) {
+      projectWrites.push(`${init?.method} ${url.pathname}`);
+      if (init?.method === "PUT") projectForms.add(projectForm[1]);
+      else projectForms.delete(projectForm[1]);
+      return Response.json({ project: {} });
+    }
     if (init?.method === "PUT") {
       const body = JSON.parse(String(init.body)) as {
         definition: AuditTemplate["definition"];
@@ -477,5 +506,33 @@ describe("reordering the audit form", () => {
       }
       Reflect.deleteProperty(page, "scrollHeight");
     }
+  });
+});
+
+describe("the form's projects", () => {
+  it("turns the form on or off for each project from the form's page", async () => {
+    stubApi();
+    await render();
+    const toggle = (name: string) =>
+      container.querySelector<HTMLInputElement>(
+        `input[aria-label="Use Opening checklist in ${name}"]`,
+      );
+    expect(container.textContent).toContain("On for 1 project");
+    expect(toggle("Clinic")?.checked).toBe(true);
+    expect(toggle("Annex")?.checked).toBe(false);
+    await act(async () => {
+      toggle("Annex")?.click();
+    });
+    await settle(30);
+    await act(async () => {
+      toggle("Clinic")?.click();
+    });
+    await settle(30);
+    expect(projectWrites).toEqual([
+      "PUT /api/projects/annex/forms/t1",
+      "DELETE /api/projects/clinic/forms/t1",
+    ]);
+    expect(toggle("Annex")?.checked).toBe(true);
+    expect(toggle("Clinic")?.checked).toBe(false);
   });
 });
