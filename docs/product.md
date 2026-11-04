@@ -517,7 +517,9 @@ required foreign key to `projects`, and an audit starts from a project's
 through `POST /api/audits/templates/:id/runs` with a `projectId` the form is
 turned on for, which is how API keys and the MCP `start_audit` tool start one.
 Audit lists and pages name each audit's project, marking a deleted one.
-Each form's page on `/audits` has a **Projects** tab listing the organization's
+Each form on `/audits` has a menu (its menu button, or right-click) with
+**Assign projects** and **Customize** (**Edit** for the organization's own
+forms). Each form's page on `/audits` has a **Projects** tab listing the organization's
 projects with whether the form is on for each; owners and admins turn a
 published form on or off per project there, as each project's **Project
 setup** does (`GET /api/projects/forms/:templateId`).

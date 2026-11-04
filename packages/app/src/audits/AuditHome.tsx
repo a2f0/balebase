@@ -16,7 +16,6 @@ import {
 import type {
   AuditRunView,
   AuditSummary,
-  AuditTemplate,
   AuditTemplateSummary,
 } from "@balebase/validators/audits";
 import { useCallback, useEffect, useState } from "react";
@@ -73,6 +72,7 @@ export function AuditHome({
         <ErrorToast error={creating.failure} onNavigate={onNavigate} />
         {templates.error && <Toast tone="danger">{templates.error}</Toast>}
         <TemplateLibrary
+          onAssign={(id) => onNavigate(auditTemplatePath(id, "projects"))}
           onEdit={(id) => onNavigate(auditTemplatePath(id))}
           onViewChange={changeTemplateView}
           templates={templates.data}
@@ -151,6 +151,7 @@ function AuditHomeHeader({
 }
 
 interface TemplateActions {
+  onAssign: (id: string) => void;
   onEdit: (id: string) => void;
 }
 
@@ -171,10 +172,11 @@ const libraryCopy = {
 };
 
 function TemplateLibrary({
+  onAssign,
+  onEdit,
   onViewChange,
   templates,
   view,
-  ...actions
 }: TemplateActions & {
   onViewChange: (view: AuditTemplateView) => void;
   templates: AuditTemplateSummary[] | undefined;
@@ -196,10 +198,24 @@ function TemplateLibrary({
     >
       {templates ? (
         <TemplateCollections
-          actions={(template, layout) => (
-            <TemplateButtons {...actions} layout={layout} template={template} />
-          )}
           copy={libraryCopy}
+          menu={(template) => ({
+            items: [
+              {
+                icon: "layers",
+                id: "assign-projects",
+                label: "Assign projects",
+                onSelect: () => onAssign(template.id),
+              },
+              {
+                icon: "edit",
+                id: "customize",
+                label: template.scope === "global" ? "Customize" : "Edit",
+                onSelect: () => onEdit(template.id),
+              },
+            ],
+            label: `Actions for ${template.name}`,
+          })}
           templates={templates}
           view={view}
         />
@@ -207,27 +223,6 @@ function TemplateLibrary({
         <LoadingState label="Loading checklists…" />
       )}
     </PageSection>
-  );
-}
-
-/**
- * Edit or customize a form. Audits start from a project the form is turned
- * on for, not here.
- */
-function TemplateButtons({
-  layout,
-  onEdit,
-  template,
-}: TemplateActions & { layout: AuditTemplateView; template: AuditTemplate }) {
-  const edit = (
-    <Button icon="edit" onClick={() => onEdit(template.id)} size="sm">
-      {template.scope === "global" ? "Customize" : "Edit"}
-    </Button>
-  );
-  return layout === "grid" ? (
-    <div className="cluster auditTemplateActions">{edit}</div>
-  ) : (
-    edit
   );
 }
 

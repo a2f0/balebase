@@ -135,8 +135,10 @@ export function auditRunPath(id: string) {
   return `/audits/runs/${encodeURIComponent(id)}`;
 }
 
-export function auditTemplatePath(id: string) {
-  return `/audits/templates/${encodeURIComponent(id)}`;
+/** A form's page, opened on its Projects tab when `tab` says so. */
+export function auditTemplatePath(id: string, tab?: "projects") {
+  const path = `/audits/templates/${encodeURIComponent(id)}`;
+  return tab ? `${path}?tab=${tab}` : path;
 }
 
 export function issuePath(id: string) {
