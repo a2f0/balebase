@@ -25,6 +25,7 @@ import {
 } from "../workspace/workspacePaths";
 import { DeviceAuditPage } from "./DeviceProjects";
 import { DeviceSyncStatus } from "./DeviceSyncStatus";
+import { OtherDeviceAudits } from "./ProjectAuditForms";
 import { ProjectDetailPage } from "./ProjectDetail";
 import { ProjectForm } from "./ProjectForm";
 
@@ -119,6 +120,7 @@ function ProjectListPage({
                 projects={listing.projects}
               />
             </PageSection>
+            <OtherDeviceAudits onNavigate={onNavigate} />
           </>
         )}
       </PageBody>

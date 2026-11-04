@@ -675,6 +675,16 @@ photos. The API rechecks authentication, organization access, and assignees
 before accepting writes; an expired session or rejected operation keeps local
 data and stops its dependents.
 
+Audits started for a project the device no longer lists (deleted, or one the
+person left) stay under **Other audits on this device** on the Projects page,
+where they can still be finished and synced.
+
+Device-first projects are a deliberate clean break, made while the product is
+pre-release: the device store moved to IndexedDB version 2 without carrying
+version 1 data over, `/api/offline/forms` is gone, and the API accepts only
+audits that name their project. There are no compatibility paths for older
+clients.
+
 Existing server audits, template editing, transaction issues, and edits to
 queued work require connectivity. Open a synced record to make further changes.
 Sync does not run while the app is closed. Local copies use the browser or

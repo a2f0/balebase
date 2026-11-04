@@ -112,7 +112,7 @@ export function ProjectAuditForms({
 }
 
 /** The audits this device started for the project, newest first. */
-function DeviceAudits({
+export function DeviceAudits({
   onNavigate,
   projectId,
   workspace,
@@ -213,4 +213,51 @@ function deviceAuditState(
     synced: false,
     tone: "warning",
   };
+}
+
+/**
+ * Audits this device started for projects it no longer lists: one deleted,
+ * or that the person left, since. Their work still finishes and syncs from
+ * here. Nothing when there are none.
+ */
+export function OtherDeviceAudits({
+  onNavigate,
+}: {
+  onNavigate: (pathname: string) => void;
+}) {
+  const { workspace } = useDevice();
+  if (!workspace) return null;
+  const listed = new Set(workspace.projects.map((project) => project.id));
+  const audits = workspace.audits
+    .filter(
+      (audit) =>
+        !listed.has(audit.projectId) &&
+        !deviceAuditState(audit, workspace).synced,
+    )
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  if (!audits.length) return null;
+  return (
+    <PageSection
+      actions={
+        <span className="sectionCount">
+          {countLabel(audits.length, "audit")}
+        </span>
+      }
+      description="Started on this device for projects you are no longer on, or that were deleted. Finish them here; completed audits still sync."
+      title="Other audits on this device"
+    >
+      <Card flush>
+        <ul className="rowList">
+          {audits.map((audit) => (
+            <DeviceAuditRow
+              audit={audit}
+              key={audit.id}
+              onNavigate={onNavigate}
+              workspace={workspace}
+            />
+          ))}
+        </ul>
+      </Card>
+    </PageSection>
+  );
 }

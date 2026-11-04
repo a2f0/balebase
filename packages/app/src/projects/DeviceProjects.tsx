@@ -19,7 +19,11 @@ import {
   projectPath,
 } from "../workspace/workspacePaths";
 import { DeviceSyncStatus } from "./DeviceSyncStatus";
-import { ProjectAuditForms } from "./ProjectAuditForms";
+import {
+  DeviceAudits,
+  OtherDeviceAudits,
+  ProjectAuditForms,
+} from "./ProjectAuditForms";
 
 /**
  * Projects as this device keeps them, for when it is offline or signed out:
@@ -110,6 +114,7 @@ function DeviceProjectList({
             </EmptyState>
           )}
         </PageSection>
+        <OtherDeviceAudits onNavigate={onNavigate} />
       </PageBody>
     </Page>
   );
@@ -153,9 +158,17 @@ function DeviceProjectPage({
             projectId={id}
           />
         ) : (
-          <Banner tone="neutral">
-            This project is not on this device. Connect to open it.
-          </Banner>
+          <>
+            <Banner tone="neutral">
+              This project is not on this device's list. Connect to open it.
+            </Banner>
+            {/* Audits started for it before it left the list still finish. */}
+            <DeviceAudits
+              onNavigate={onNavigate}
+              projectId={id}
+              workspace={workspace}
+            />
+          </>
         )}
       </PageBody>
     </Page>

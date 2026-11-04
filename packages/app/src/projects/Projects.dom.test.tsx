@@ -388,6 +388,35 @@ describe("project detail", () => {
     ]);
   });
 
+  it("keeps audits for projects the device no longer lists within reach", async () => {
+    const [walk] = forms;
+    if (!walk) throw new Error("Missing form.");
+    respond(async () => Response.json({ canManage: false, projects: [] }));
+    const visited: string[] = [];
+    const device = deviceWith([
+      {
+        id: "left-behind",
+        projectId: "deleted-project",
+        queued: false,
+        responses: {},
+        startedAt: "2026-10-01T00:00:00.000Z",
+        template: walk,
+      },
+    ]);
+    const { container } = await mount(
+      <DeviceContext.Provider value={device}>
+        <Projects
+          onNavigate={(pathname) => visited.push(pathname)}
+          pathname="/projects"
+        />
+      </DeviceContext.Provider>,
+    );
+    await settle();
+    expect(container.textContent).toContain("Other audits on this device");
+    await click(queryButton("Continue", container));
+    expect(visited).toEqual(["/projects/deleted-project/audits/left-behind"]);
+  });
+
   it("saves only the edited fields from the revision it loaded", async () => {
     stubApi(true);
     const container = await render();
