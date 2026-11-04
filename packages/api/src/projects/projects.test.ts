@@ -397,6 +397,38 @@ describe("projects", () => {
     ]);
   });
 
+  it("keeps members and forms of a project deleted after a removal's read", async () => {
+    const { as, events, hooks, run } = fixture();
+    const owner = as("owner-user", "owner");
+    const id = await createProject(owner);
+    await owner("PUT", `/api/projects/${id}/members/member-user`);
+    await owner("PUT", `/api/projects/${id}/forms/org-form`);
+    for (const path of ["members/member-user", "forms/org-form"]) {
+      // Another manager deletes the project once this request has read it.
+      hooks.after("FROM projects AS project", () => {
+        run("UPDATE projects SET deleted_at = ? WHERE id = ?").run(
+          timestamp,
+          id,
+        );
+      });
+      expect(
+        (await owner("DELETE", `/api/projects/${id}/${path}`)).status,
+      ).toBe(404);
+      run("UPDATE projects SET deleted_at = NULL WHERE id = ?").run(id);
+    }
+    expect(
+      run(
+        `SELECT (SELECT COUNT(*) FROM project_members) AS members,
+                (SELECT COUNT(*) FROM project_audit_forms) AS forms`,
+      ).get(),
+    ).toEqual({ forms: 1, members: 1 });
+    expect(events().map((event) => event.action)).toEqual([
+      "project.created",
+      "project.member_added",
+      "project.form_enabled",
+    ]);
+  });
+
   it("lets members read projects but only managers change them", async () => {
     const { as, events } = fixture();
     const owner = as("owner-user", "owner");

@@ -26,6 +26,11 @@ END;
 -- cleanup as with any other deleted issue.
 DELETE FROM audits WHERE project_id IS NULL;
 
+-- Accepted deploy window: until the new Worker is live, the previous one's
+-- online starts (which name no project) fail this constraint. Nothing stored
+-- is lost, that start path is the one this release removes, and the owner
+-- chose to enforce the key now rather than stage it over two releases.
+--
 -- SQLite cannot add NOT NULL to an existing column, so the table is rebuilt.
 -- Other tables' triggers name `audits`; the legacy rename keeps them as they
 -- are rather than failing on them (supported by D1:

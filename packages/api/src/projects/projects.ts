@@ -332,9 +332,11 @@ projects.delete("/:id/members/:userId", requireManager(), async (context) => {
     .bind(memberId)
     .first<{ email: string; id: string; name: string }>();
   if (person) {
+    // A project deleted after the read keeps its members.
     const membership = {
-      bindings: [project.id, memberId],
-      sql: "EXISTS (SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?)",
+      bindings: [project.id, organizationId, project.id, memberId],
+      sql: `${projectExists} AND EXISTS (
+        SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?)`,
     };
     await activityBatch(database, context.get("apiKey"), [
       projectEvent(
@@ -349,9 +351,10 @@ projects.delete("/:id/members/:userId", requireManager(), async (context) => {
       ),
       database
         .prepare(
-          "DELETE FROM project_members WHERE project_id = ? AND user_id = ?",
+          `DELETE FROM project_members
+           WHERE project_id = ? AND user_id = ? AND ${projectExists}`,
         )
-        .bind(project.id, memberId),
+        .bind(project.id, memberId, project.id, organizationId),
     ]);
   }
   return projectResponse(context, projectsRoutes.removeMember, project.id);
@@ -451,9 +454,10 @@ projects.delete("/:id/forms/:templateId", requireManager(), async (context) => {
     .bind(organizationId, templateId, organizationId)
     .first<{ id: string; name: string | null }>();
   if (form) {
+    // A project deleted after the read keeps its forms.
     const enabled = {
-      bindings: [project.id, templateId],
-      sql: `EXISTS (SELECT 1 FROM project_audit_forms
+      bindings: [project.id, organizationId, project.id, templateId],
+      sql: `${projectExists} AND EXISTS (SELECT 1 FROM project_audit_forms
                     WHERE project_id = ? AND template_id = ?)`,
     };
     await activityBatch(database, context.get("apiKey"), [
@@ -469,9 +473,10 @@ projects.delete("/:id/forms/:templateId", requireManager(), async (context) => {
       ),
       database
         .prepare(
-          "DELETE FROM project_audit_forms WHERE project_id = ? AND template_id = ?",
+          `DELETE FROM project_audit_forms
+           WHERE project_id = ? AND template_id = ? AND ${projectExists}`,
         )
-        .bind(project.id, templateId),
+        .bind(project.id, templateId, project.id, organizationId),
     ]);
   }
   return projectResponse(context, projectsRoutes.disableForm, project.id);
