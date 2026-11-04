@@ -565,4 +565,17 @@ describe("the form's projects", () => {
     await settle(30);
     expect(projectWrites).toEqual(["PUT /api/projects/annex/forms/t1"]);
   });
+
+  it("opens on the Projects tab from Assign projects, then leaves the address", async () => {
+    stubApi();
+    window.history.replaceState(null, "", "/audits/templates/t1?tab=projects");
+    await render();
+    const selected = container.querySelector(
+      '[role="tab"][aria-selected="true"]',
+    );
+    expect(selected?.textContent).toBe("Projects");
+    expect(window.location.pathname + window.location.search).toBe(
+      "/audits/templates/t1",
+    );
+  });
 });

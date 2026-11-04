@@ -2,15 +2,17 @@ import {
   Badge,
   type BadgeTone,
   Card,
+  ContextMenu,
   EmptyState,
   Icon,
   type IconName,
+  MenuButton,
 } from "@balebase/ui/react";
 import type {
   AuditTemplate,
   AuditTemplateScope,
 } from "@balebase/validators/audits";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { countLabel, formatLabel } from "../shared/labels";
 import type { AuditTemplateView } from "./auditTemplateView";
 
@@ -26,6 +28,15 @@ export type TemplateActionsRender = (
   layout: AuditTemplateView,
 ) => ReactNode;
 
+/**
+ * A form's menu, opened from its menu button or by right-clicking (or the
+ * menu key) anywhere on its card or row.
+ */
+export type TemplateMenuRender = (template: ListedTemplate) => {
+  items: ComponentProps<typeof ContextMenu>["items"];
+  label: string;
+};
+
 interface CollectionCopy {
   description: string;
   emptyMessage?: string | undefined;
@@ -40,11 +51,13 @@ interface CollectionCopy {
 export function TemplateCollections({
   actions,
   copy,
+  menu,
   templates,
   view,
 }: {
   actions?: TemplateActionsRender | undefined;
   copy: Record<AuditTemplateScope, CollectionCopy>;
+  menu?: TemplateMenuRender | undefined;
   templates: ListedTemplate[];
   view: AuditTemplateView;
 }) {
@@ -55,6 +68,7 @@ export function TemplateCollections({
           {...copy[scope]}
           actions={actions}
           key={scope}
+          menu={menu}
           templates={templates.filter((template) => template.scope === scope)}
           view={view}
         />
@@ -102,11 +116,13 @@ function TemplateCollection({
   description,
   emptyMessage,
   emptyTitle,
+  menu,
   templates,
   title,
   view,
 }: CollectionCopy & {
   actions?: TemplateActionsRender | undefined;
+  menu?: TemplateMenuRender | undefined;
   templates: ListedTemplate[];
   view: AuditTemplateView;
 }) {
@@ -127,22 +143,30 @@ function TemplateCollection({
         <Card className="auditTemplateList" flush>
           <ul className="rowList">
             {templates.map((template) => (
-              <TemplateRow
-                actions={actions?.(template, "list")}
-                key={template.id}
-                template={template}
-              />
+              <TemplateMenu key={template.id} menu={menu} template={template}>
+                {(target, menuButton) => (
+                  <TemplateRow
+                    actions={withMenu(actions?.(template, "list"), menuButton)}
+                    target={target}
+                    template={template}
+                  />
+                )}
+              </TemplateMenu>
             ))}
           </ul>
         </Card>
       ) : (
         <div className="gridAuto auditTemplateGrid">
           {templates.map((template) => (
-            <TemplateCard
-              actions={actions?.(template, "grid")}
-              key={template.id}
-              template={template}
-            />
+            <TemplateMenu key={template.id} menu={menu} template={template}>
+              {(target, menuButton) => (
+                <TemplateCard
+                  actions={withMenu(actions?.(template, "grid"), menuButton)}
+                  target={target}
+                  template={template}
+                />
+              )}
+            </TemplateMenu>
           ))}
         </div>
       )}
@@ -150,15 +174,57 @@ function TemplateCollection({
   );
 }
 
+/** A card's or row's own actions followed by its menu button, if any. */
+function withMenu(actions: ReactNode, menuButton: ReactNode) {
+  if (!menuButton) return actions;
+  return (
+    <>
+      {actions}
+      {menuButton}
+    </>
+  );
+}
+
+type MenuTarget = Parameters<ComponentProps<typeof ContextMenu>["children"]>[0];
+
+/**
+ * Wraps a card or row in its form's menu, passing the target handlers and the
+ * menu button; without a menu it passes neither.
+ */
+function TemplateMenu({
+  children,
+  menu,
+  template,
+}: {
+  children: (
+    target: MenuTarget | undefined,
+    menuButton: ReactNode,
+  ) => ReactNode;
+  menu: TemplateMenuRender | undefined;
+  template: ListedTemplate;
+}) {
+  if (!menu) return children(undefined, null);
+  const { items, label } = menu(template);
+  return (
+    <ContextMenu items={items} label={label}>
+      {(target, menuButton) =>
+        children(target, <MenuButton {...menuButton} label={label} />)
+      }
+    </ContextMenu>
+  );
+}
+
 function TemplateCard({
   actions,
+  target,
   template,
 }: {
   actions: ReactNode;
+  target: MenuTarget | undefined;
   template: ListedTemplate;
 }) {
   return (
-    <article className="card auditTemplateCard">
+    <article className="card auditTemplateCard" {...target}>
       <div className="auditTemplateBody">
         <div className="cluster">
           <Badge dot tone={templateStatusTone(template.status)}>
@@ -183,13 +249,15 @@ function TemplateCard({
 
 function TemplateRow({
   actions,
+  target,
   template,
 }: {
   actions: ReactNode;
+  target: MenuTarget | undefined;
   template: ListedTemplate;
 }) {
   return (
-    <li className="row auditTemplateRow">
+    <li className="row auditTemplateRow" {...target}>
       <span className="rowMain">
         <span className="rowTitle">{template.name}</span>
         <span className="rowMeta">

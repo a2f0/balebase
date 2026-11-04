@@ -89,6 +89,10 @@ function page(container: HTMLElement) {
     ) as HTMLButtonElement | undefined;
   return {
     cards: () => container.querySelectorAll(".auditTemplateCard").length,
+    menuButtons: () =>
+      [...container.querySelectorAll('[aria-haspopup="menu"]')].map((element) =>
+        element.getAttribute("aria-label"),
+      ),
     layoutButton,
     pressed: () =>
       [
@@ -135,12 +139,15 @@ describe("audit template layout, mounted", () => {
       expect(text).not.toContain("Start audit");
     }
     expect(globalRow).toContain("Fire safety");
-    expect(globalRow).toContain("Customize");
     expect(globalRow).toContain("4 audits");
     expect(organizationRow).toContain("Kitchen close");
     expect(organizationRow).toContain("1 audit");
     expect(organizationRow).not.toContain("1 audits");
-    expect(organizationRow).toContain("Edit");
+    // Each row's actions are in its menu, not buttons of their own.
+    expect(view.menuButtons()).toEqual([
+      "Actions for Fire safety",
+      "Actions for Kitchen close",
+    ]);
     for (const text of [globalRow, organizationRow]) {
       expect(text).not.toContain("Manage");
     }
@@ -168,6 +175,60 @@ describe("audit template layout, mounted", () => {
     await click(second.layoutButton("Grid"));
     expect(second.cards()).toBe(2);
   });
+});
+
+const menuItems = () =>
+  [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].map(
+    (item) => item.textContent,
+  );
+
+describe("a form's menu, mounted", () => {
+  for (const [opening, open] of [
+    [
+      "its menu button",
+      async (card: Element) =>
+        click(card.querySelector<HTMLElement>('[aria-haspopup="menu"]')),
+    ],
+    [
+      "a right-click on its card",
+      async (card: Element) => {
+        const event = new dom.MouseEvent("contextmenu", {
+          bubbles: true,
+          button: 2,
+          cancelable: true,
+          clientX: 100,
+          clientY: 100,
+        });
+        await act(async () => card.dispatchEvent(event as never));
+      },
+    ],
+  ] as const) {
+    it(`assigns projects or customizes a form from ${opening}`, async () => {
+      stubApi(templates);
+      const visited: string[] = [];
+      const { container } = await mount(
+        <AuditHome onNavigate={(pathname) => visited.push(pathname)} />,
+      );
+      await settle();
+      const [global, organization] =
+        container.querySelectorAll(".auditTemplateCard");
+      if (!global || !organization) throw new Error("Missing cards.");
+      await open(global);
+      expect(menuItems()).toEqual(["Assign projects", "Customize"]);
+      await click(
+        document.querySelector<HTMLButtonElement>('[role="menuitem"]'),
+      );
+      await open(organization);
+      expect(menuItems()).toEqual(["Assign projects", "Edit"]);
+      await click(
+        document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')[1],
+      );
+      expect(visited).toEqual([
+        "/audits/templates/g1?tab=projects",
+        "/audits/templates/o1",
+      ]);
+    });
+  }
 });
 
 describe("deleted audits, mounted", () => {

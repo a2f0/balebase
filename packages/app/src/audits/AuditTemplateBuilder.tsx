@@ -201,12 +201,16 @@ export function AuditTemplateBuilder({
     setNotice,
   } = useTemplateBuilder({ id, manageGlobal, onNavigate });
   const back = backLink(manageGlobal, onNavigate);
-  const tabs = useSectionTabs([
-    { id: "form", label: "Form" },
-    // Global Audits manages the form itself; projects are an organization's.
-    !manageGlobal && { id: "projects", label: "Projects" },
-    { id: "activity", label: "Activity" },
-  ] as const);
+  const [initialTab] = useState(() => openedTab(manageGlobal));
+  const tabs = useSectionTabs(
+    [
+      { id: "form", label: "Form" },
+      // Global Audits manages the form itself; projects are an organization's.
+      !manageGlobal && { id: "projects", label: "Projects" },
+      { id: "activity", label: "Activity" },
+    ] as const,
+    initialTab ? { initial: initialTab } : {},
+  );
   if (!template) return <BuilderLoading back={back} error={error?.message} />;
 
   return (
@@ -240,6 +244,22 @@ export function AuditTemplateBuilder({
 }
 
 type BuilderSections = SectionTabState<"activity" | "form" | "projects">;
+
+/**
+ * `?tab=projects` (Assign projects on Audits) opens the Projects tab once,
+ * then leaves the address, so reloading or sharing it opens the form.
+ */
+function openedTab(manageGlobal: boolean) {
+  if (typeof window === "undefined") return undefined;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("tab") !== "projects") return undefined;
+  window.history.replaceState(
+    window.history.state,
+    "",
+    window.location.pathname,
+  );
+  return manageGlobal ? undefined : ("projects" as const);
+}
 
 /** A global form being managed returns to Global Audits. */
 function backLink(
