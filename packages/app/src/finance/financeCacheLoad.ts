@@ -130,6 +130,8 @@ async function loadOnce(
     // A saved copy that could not catch up is not this page's concern.
     if (summary.status === "rejected") throw summary.reason;
     if (!latest) throw failure;
+    // A saved copy keeps the categories and accounts this page changed.
+    if (pull) await store.saveSummary(cacheScope, latest, epoch);
     return { data: { ...latest, nextCursor: null, transactions: [] } };
   }
   if (latest) await store.saveSummary(cacheScope, latest, epoch);

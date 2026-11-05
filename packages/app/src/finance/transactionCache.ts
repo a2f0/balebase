@@ -293,11 +293,15 @@ export function indexedDbTransactionStore(): TransactionStore {
       });
     },
     position(scope) {
-      return inTransaction("readonly", async (stores) => {
+      return inTransaction("readwrite", async (stores) => {
         const [state, epoch] = await Promise.all([
           readState(stores.state, scopeKey(scope)),
           readEpoch(stores.state, scope),
         ]);
+        // Registers the scope before anything is requested for it, so
+        // clearing a former organization finds (and ends) a pull still
+        // waiting on its first page.
+        stores.state.put(state);
         return { cursor: state.cursor, epoch };
       });
     },

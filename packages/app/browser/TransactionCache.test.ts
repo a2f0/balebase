@@ -330,6 +330,31 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
         memberships.map(async (which) => (await kept(target, which)).rows),
       ),
     ).toEqual([["member:1"], [], ["member:1"]]);
+    // Including one whose download still waits on its first page.
+    const waiting = { organizationId: "leaving-org", userId: "person" };
+    const leftLate = await target.evaluate(
+      async (who, data) => {
+        const cache = window.transactionCacheTest;
+        if (!cache) throw new Error("No fixture");
+        const answer = Promise.withResolvers<FinanceTransactionChanges>();
+        const asked = Promise.withResolvers<void>();
+        const pull = cache.pullTransactions(who, cache.store, () => {
+          asked.resolve();
+          return answer.promise;
+        });
+        await asked.promise;
+        await cache.clearFormerOrganizations("person", ["kept-org"]);
+        answer.resolve(data);
+        return pull.then(
+          () => "kept",
+          (cause: Error) => cause.message,
+        );
+      },
+      waiting,
+      { ...page("8", false, [row("late")]), organizationId: "leaving-org" },
+    );
+    expect(leftLate).toBe("Saved transactions were cleared. Reload Finance.");
+    expect((await kept(target, waiting)).rows).toEqual([]);
     const summaryKept = await target.evaluate(
       async (who) =>
         (await window.transactionCacheTest?.store.read(who))?.summary ?? null,

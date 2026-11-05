@@ -166,6 +166,24 @@ describe("loading cached finances", () => {
     expect((await store.read(scope)).transactions.map(({ id }) => id)).toEqual([
       "b",
     ]);
+    // Nor does it save a summary for a scope without a saved copy.
+    const fresh = memoryTransactionStore();
+    await loadFinance(fresh, scope, false, counted);
+    expect((await fresh.read(scope)).summary).toBeNull();
+    // Their changes to categories reach the saved copy's summary.
+    const renamed = {
+      ...summary,
+      categories: [
+        { id: "meals", name: "Dining", slug: "dining", transactionCount: 0 },
+      ],
+    };
+    await loadFinance(store, scope, false, {
+      ...counted,
+      summary: async () => renamed,
+    });
+    expect((await store.read(scope)).summary?.categories).toEqual(
+      renamed.categories,
+    );
     // An outage of the feed alone does not fail those pages.
     const offline = await loadFinance(store, scope, false, {
       ...counted,
