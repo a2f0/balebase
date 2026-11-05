@@ -448,6 +448,20 @@ describe("Finance filters", () => {
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
   });
 
+  it("shows the first download as loading when arriving from another Finance page", async () => {
+    const download = Promise.withResolvers<void>();
+    respond(async (url) => {
+      if (isFeed(url)) await download.promise;
+      return Response.json(data);
+    });
+    const navigate = await mountFinance("/finance/categories");
+    await navigate("/finance");
+    expect(container.textContent).toContain("Loading finances");
+    expect(container.textContent).not.toContain("No transactions imported yet");
+    await act(async () => download.resolve());
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+  });
+
   it("keeps a row's new category in the saved copy", async () => {
     let category: string | null = null;
     let down = false;

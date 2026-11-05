@@ -121,6 +121,28 @@ describe("pulling transactions", () => {
     ).toEqual([7]);
   });
 
+  it("ends a queued pull whose saved copy was cleared before it started", async () => {
+    const store = memoryTransactionStore();
+    const held = Promise.withResolvers<FinanceTransactionChanges>();
+    const first = pullTransactions(scope, store, () => held.promise);
+    const queued = pullTransactions(scope, store, async () =>
+      page("1", false, [row("queued")]),
+    );
+    // Access ends (or the person signs out) while both wait.
+    await store.clear(scope);
+    held.resolve(page("1", false, [row("first")]));
+    const outcome = (work: Promise<void>) =>
+      work.then(
+        () => "kept",
+        (cause: Error) => cause.message,
+      );
+    expect(await Promise.all([outcome(first), outcome(queued)])).toEqual([
+      "Saved transactions were cleared. Reload Finance.",
+      "Saved transactions were cleared. Reload Finance.",
+    ]);
+    expect((await store.read(scope)).transactions).toEqual([]);
+  });
+
   it("re-reads the cursor after another writer moves it", async () => {
     const store = memoryTransactionStore();
     const pages = feed({

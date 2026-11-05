@@ -45,6 +45,9 @@ export function useFinanceData(
   const currentFilters = useRef(filters);
   const requestId = useRef(0);
   const loaded = useRef(false);
+  // Whether transactions were ever shown: Categories and Connections load
+  // without them, so the overview's first visit after them still loads.
+  const loadedTransactions = useRef(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string>();
@@ -53,8 +56,10 @@ export function useFinanceData(
   const load = useCallback(async () => {
     const id = ++requestId.current;
     const current = () => id === requestId.current;
-    setLoading(!loaded.current);
-    setRefreshing(loaded.current);
+    const first =
+      !loaded.current || (keepTransactions && !loadedTransactions.current);
+    setLoading(first);
+    setRefreshing(!first);
     setLoadError(undefined);
     try {
       const next = await loadFinance(
@@ -71,6 +76,7 @@ export function useFinanceData(
       );
       if (!current()) return;
       loaded.current = true;
+      if (keepTransactions) loadedTransactions.current = true;
       setData(next.data);
       setSavedCopy(next.savedAt);
     } catch (cause) {
@@ -78,6 +84,7 @@ export function useFinanceData(
       if (refused(cause)) {
         // Nothing read before stays on screen after access ends.
         loaded.current = false;
+        loadedTransactions.current = false;
         setData(undefined);
         setSavedCopy(undefined);
       }

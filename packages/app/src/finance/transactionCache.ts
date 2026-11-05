@@ -459,6 +459,21 @@ export function pullTransactions(
   /** Keep pages of whichever organization answers (no known scope). */
   anyOrganization = false,
 ): Promise<void> {
+  // Pinned when asked for: a sign-out or refusal after this ends the pull,
+  // even one still queued behind another or waiting on another tab's lock.
+  const epoch = store.position(scope).then((position) => position.epoch);
+  // A caller joining a queued pull leaves its own epoch unread.
+  epoch.catch(() => undefined);
+  return schedule(scope, store, () =>
+    pullPages(scope, store, fetchPage, onProgress, anyOrganization, epoch),
+  );
+}
+
+function schedule(
+  scope: CacheScope,
+  store: TransactionStore,
+  run: () => Promise<void>,
+): Promise<void> {
   const key = scopeKey(scope);
   let lanes = pulls.get(store);
   if (!lanes) {
@@ -472,15 +487,13 @@ export function pullTransactions(
   if (lane) {
     lane.next ??= lane.current
       .catch(() => undefined)
-      .then(() =>
-        pullTransactions(scope, store, fetchPage, onProgress, anyOrganization),
-      );
+      .then(() => schedule(scope, store, run));
     return lane.next;
   }
   const running = lanes;
-  const work = withLock(`${databaseName}:${key}`, () =>
-    pullPages(scope, store, fetchPage, onProgress, anyOrganization),
-  ).finally(() => running.delete(key));
+  const work = withLock(`${databaseName}:${key}`, run).finally(() =>
+    running.delete(key),
+  );
   running.set(key, { current: work });
   return work;
 }
@@ -491,11 +504,11 @@ async function pullPages(
   fetchPage: (cursor: string | null) => Promise<FinanceTransactionChanges>,
   onProgress: ((saved: number) => void) | undefined,
   anyOrganization: boolean,
+  pinned: Promise<string>,
 ) {
   let saved = 0;
   let reset = false;
-  // Pinned: a sign-out during the pull ends it rather than restarting it.
-  const { epoch } = await store.position(scope);
+  const epoch = await pinned;
   for (;;) {
     const from = { cursor: (await store.position(scope)).cursor, epoch };
     const page = await fetchPage(from.cursor);
