@@ -3,12 +3,13 @@ import type { FinanceData } from "@balebase/validators/finance";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
-import { fallBack, loadFinance, refused } from "./financeCacheLoad";
+import { fallBack, loadFinance } from "./financeCacheLoad";
 import { syncPending, syncPollMs } from "./financeConnectionActions";
 import {
   type CacheScope,
   indexedDbTransactionStore,
   memoryTransactionStore,
+  refused,
 } from "./transactionCache";
 
 type CategoryRoute = Pick<FinanceFilters, "categorySlug" | "uncategorized">;

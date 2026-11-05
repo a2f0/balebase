@@ -295,7 +295,13 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
       },
       scope,
       page("6", false, [row("refused")]),
-      { accounts: [], categories: [], configured: true, connections: [] },
+      {
+        accounts: [],
+        categories: [],
+        configured: true,
+        connections: [],
+        organizationId: "org",
+      },
     );
     expect(refused).toEqual([
       "Saved transactions were cleared. Reload Finance.",

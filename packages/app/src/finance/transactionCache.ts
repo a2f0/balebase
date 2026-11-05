@@ -1,3 +1,4 @@
+import { ApiError } from "@balebase/api-client";
 import type {
   FinanceData,
   FinanceTransaction,
@@ -46,6 +47,18 @@ export class OrganizationChanged extends Error {
   constructor() {
     super("The active organization changed. Reload Finance.");
   }
+}
+
+/**
+ * A refusal (signed out, no Finance access, a sign-out overtaking a pull)
+ * rather than an unreachable server: nothing saved or shown may outlast it.
+ */
+export function refused(cause: unknown) {
+  return (
+    cause instanceof SignedOut ||
+    (cause instanceof ApiError &&
+      (cause.status === 401 || cause.status === 403))
+  );
 }
 
 /** Raised for a write that arrives after its saved copy was cleared. */
@@ -411,8 +424,15 @@ export async function clearUserTransactions(userId: string) {
   });
 }
 
-/** Pulls running, per store and scope: a store abandoned mid-pull is not shared. */
-const pulls = new WeakMap<TransactionStore, Map<string, Promise<void>>>();
+/**
+ * Pulls per store and scope: the one running, and one queued behind it for
+ * callers who arrive meanwhile. A store abandoned mid-pull is not shared.
+ */
+interface Lane {
+  current: Promise<void>;
+  next?: Promise<void>;
+}
+const pulls = new WeakMap<TransactionStore, Map<string, Lane>>();
 
 /**
  * Brings the kept transactions up to date, a page at a time. Each page and
@@ -428,19 +448,30 @@ export function pullTransactions(
   onProgress?: (saved: number) => void,
   /** Keep pages of whichever organization answers (no known scope). */
   anyOrganization = false,
-) {
+): Promise<void> {
   const key = scopeKey(scope);
-  let running = pulls.get(store);
-  if (!running) {
-    running = new Map();
-    pulls.set(store, running);
+  let lanes = pulls.get(store);
+  if (!lanes) {
+    lanes = new Map();
+    pulls.set(store, lanes);
   }
-  const shared = running.get(key);
-  if (shared) return shared;
+  const lane = lanes.get(key);
+  // A pull already running may have read pages from before the caller's
+  // change (a save): wait for it, then read again, once for every caller
+  // arriving meanwhile.
+  if (lane) {
+    lane.next ??= lane.current
+      .catch(() => undefined)
+      .then(() =>
+        pullTransactions(scope, store, fetchPage, onProgress, anyOrganization),
+      );
+    return lane.next;
+  }
+  const running = lanes;
   const work = withLock(`${databaseName}:${key}`, () =>
     pullPages(scope, store, fetchPage, onProgress, anyOrganization),
   ).finally(() => running.delete(key));
-  running.set(key, work);
+  running.set(key, { current: work });
   return work;
 }
 
@@ -491,8 +522,9 @@ export async function catchUpSavedTransactions(
   try {
     if ((await store.position(scope)).cursor === null) return;
     await pullTransactions(scope, store, fetchPage);
-  } catch {
-    // The next load catches up instead.
+  } catch (cause) {
+    // Access ended: keep nothing. Otherwise the next load catches up.
+    if (refused(cause)) await store.clear(scope).catch(() => undefined);
   }
 }
 

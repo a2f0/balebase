@@ -1,10 +1,12 @@
 import { describe, expect, it } from "bun:test";
+import { ApiError } from "@balebase/api-client";
 import type {
   FinanceTransaction,
   FinanceTransactionChanges,
 } from "@balebase/validators/finance";
 import {
   type CacheScope,
+  catchUpSavedTransactions,
   memoryTransactionStore,
   pullTransactions,
 } from "./transactionCache";
@@ -98,19 +100,35 @@ describe("pulling transactions", () => {
     ]);
   });
 
-  it("shares one pull per scope and re-reads the cursor after another writer moves it", async () => {
+  it("reads again after a running pull for callers who arrive during it", async () => {
+    const store = memoryTransactionStore();
+    const pages = feed({
+      start: page("1", false, [row("a")]),
+      "1": page("2", false, [row("a", 7)]),
+    });
+    const first = pullTransactions(scope, store, pages.fetchPage);
+    // A save committed while the first pull runs: its callers must see it.
+    const [second, third] = [
+      pullTransactions(scope, store, pages.fetchPage),
+      pullTransactions(scope, store, pages.fetchPage),
+    ];
+    expect(second).toBe(third);
+    expect(second).not.toBe(first);
+    await second;
+    expect(pages.requested).toEqual([null, "1"]);
+    expect(
+      (await store.read(scope)).transactions.map(({ amount }) => amount),
+    ).toEqual([7]);
+  });
+
+  it("re-reads the cursor after another writer moves it", async () => {
     const store = memoryTransactionStore();
     const pages = feed({
       start: page("1", false, [row("a")]),
       "1": page("2", false, [row("b")]),
       "2": page("3", false, [row("c")]),
     });
-    const [first, second] = [
-      pullTransactions(scope, store, pages.fetchPage),
-      pullTransactions(scope, store, pages.fetchPage),
-    ];
-    expect(first).toBe(second);
-    await first;
+    await pullTransactions(scope, store, pages.fetchPage);
     expect(pages.requested).toEqual([null]);
 
     // Another tab applies the next page while this pull's request is out.
@@ -136,6 +154,29 @@ describe("pulling transactions", () => {
       "b",
       "c",
     ]);
+  });
+
+  it("catches a saved copy up, keeping it through outages and nothing after a refusal", async () => {
+    const store = memoryTransactionStore();
+    await pullTransactions(scope, store, async () =>
+      page("1", false, [row("a")]),
+    );
+    await catchUpSavedTransactions(
+      scope,
+      async () => {
+        throw new TypeError("Failed to fetch");
+      },
+      store,
+    );
+    expect((await store.read(scope)).transactions).toHaveLength(1);
+    await catchUpSavedTransactions(
+      scope,
+      async () => {
+        throw new ApiError(new Response(null, { status: 403 }), null);
+      },
+      store,
+    );
+    expect((await store.read(scope)).transactions).toEqual([]);
   });
 
   it("shares a pull only with the same store", async () => {

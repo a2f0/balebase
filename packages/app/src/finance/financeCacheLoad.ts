@@ -1,4 +1,3 @@
-import { ApiError } from "@balebase/api-client";
 import type {
   FinanceData,
   FinanceTransactionChanges,
@@ -9,6 +8,7 @@ import {
   type FinanceSummary,
   OrganizationChanged,
   pullTransactions,
+  refused,
   SignedOut,
   type TransactionStore,
 } from "./transactionCache";
@@ -58,18 +58,6 @@ export function fallBack(
     restart: (...args) => attempt((store) => store.restart(...args)),
     saveSummary: (...args) => attempt((store) => store.saveSummary(...args)),
   };
-}
-
-/**
- * A refusal (signed out, no Finance access) rather than an unreachable
- * server: nothing saved or shown may outlast it.
- */
-export function refused(cause: unknown) {
-  return (
-    cause instanceof SignedOut ||
-    (cause instanceof ApiError &&
-      (cause.status === 401 || cause.status === 403))
-  );
 }
 
 const anyOrganization: CacheScope = { organizationId: "", userId: "" };
