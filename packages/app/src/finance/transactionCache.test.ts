@@ -237,6 +237,8 @@ describe("pulling transactions", () => {
     await clearScopeTransactions(scope);
     await clearFormerOrganizations("person", ["org"]);
     await clearUserTransactions("person");
+    // A tab clearing because another told it does not tell the rest again.
+    await clearScopeTransactions(scope, false);
     await Bun.sleep(5);
     listener.close();
     expect(heard).toEqual([

@@ -92,8 +92,11 @@ export interface TransactionStore {
   ): Promise<void>;
   /** Starts the copy over for a server that is behind it. */
   restart(scope: CacheScope, from: Position): Promise<void>;
-  /** Drops the copy after a refusal, ending pulls still running. */
-  clear(scope: CacheScope): Promise<void>;
+  /**
+   * Drops the copy after a refusal, ending pulls still running, and tells
+   * other tabs unless `announce` is false (they told this one).
+   */
+  clear(scope: CacheScope, announce?: boolean): Promise<void>;
 }
 
 const databaseName = "balebase-finance";
@@ -369,11 +372,15 @@ export function indexedDbTransactionStore(): TransactionStore {
  * Drops what this device keeps for a scope, as after a refusal, and advances
  * its epoch so pulls still running (in any tab) keep nothing they receive.
  */
-export async function clearScopeTransactions(scope: CacheScope) {
-  announceCleared({
-    organizationId: scope.organizationId,
-    userId: scope.userId,
-  });
+export async function clearScopeTransactions(
+  scope: CacheScope,
+  announce = true,
+) {
+  if (announce)
+    announceCleared({
+      organizationId: scope.organizationId,
+      userId: scope.userId,
+    });
   if (typeof indexedDB === "undefined") return;
   const key = scopeKey(scope);
   await inTransaction("readwrite", async (stores) => {

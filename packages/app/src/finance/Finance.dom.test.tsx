@@ -523,7 +523,12 @@ describe("Finance filters", () => {
   });
 
   it("stops showing transactions another tab cleared", async () => {
-    respond(() => Response.json(data));
+    let down = false;
+    respond(() =>
+      down
+        ? Response.json({ error: "Unavailable." }, { status: 503 })
+        : Response.json(data),
+    );
     const scope = { organizationId: "organization", userId: "person" };
     ({ container } = await mount(
       <Finance
@@ -550,6 +555,13 @@ describe("Finance filters", () => {
     expect(rowNames()).toEqual([]);
     expect(container.textContent).toContain(
       "Saved transactions were cleared. Reload Finance.",
+    );
+    // Nor does this tab's own copy come back while Balebase is down.
+    down = true;
+    await click("Retry");
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).not.toContain(
+      "Showing transactions saved on this device",
     );
   });
 

@@ -66,8 +66,9 @@ const anyOrganization: CacheScope = { organizationId: "", userId: "" };
 export function forgetFinance(
   store: TransactionStore,
   scope: CacheScope | undefined,
+  announce = true,
 ) {
-  return store.clear(scope ?? anyOrganization).catch(() => {
+  return store.clear(scope ?? anyOrganization, announce).catch(() => {
     // Unavailable storage keeps nothing to clear.
   });
 }

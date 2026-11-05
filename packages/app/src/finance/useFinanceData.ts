@@ -158,6 +158,9 @@ function useCachedLoad(
     ++requestId.current;
     forget();
     settle(new SignedOut().message);
+    // This tab's copy too (IndexedDB, or memory after a fallback), ending
+    // its pulls, without telling the tab that told it.
+    void forgetFinance(store.value, store.scope, false);
   });
   return {
     data,
