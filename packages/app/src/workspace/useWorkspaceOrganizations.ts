@@ -23,16 +23,23 @@ export function useWorkspaceOrganizations(
   const [organizations, setOrganizations] = useState<
     WorkspaceOrganization[] | undefined
   >();
+  // Whose list `organizations` is as read, not the empty stand-in after a
+  // failure.
+  const [listedFor, setListedFor] = useState<string>();
   const loadOrganizations = useCallback(async () => {
     setOrganizations(await api.organizationSettings.organizations());
   }, []);
   const signedInUserId = session?.user.id;
   useEffect(() => {
+    setListedFor(undefined);
     if (!signedInUserId) {
       setOrganizations(undefined);
       return;
     }
-    void loadOrganizations().catch(() => setOrganizations([]));
+    void loadOrganizations().then(
+      () => setListedFor(signedInUserId),
+      () => setOrganizations([]),
+    );
   }, [loadOrganizations, signedInUserId]);
   const activeOrganizationId = organizations
     ? resolveActiveOrganizationId(
@@ -75,6 +82,8 @@ export function useWorkspaceOrganizations(
     activeOrganizationId,
     createOrganization,
     isPending: organizations === undefined,
+    /** Whether `organizations` is the signed-in person's list as read. */
+    listed: Boolean(signedInUserId) && listedFor === signedInUserId,
     organizations: organizations ?? [],
     refresh,
     switchOrganization,

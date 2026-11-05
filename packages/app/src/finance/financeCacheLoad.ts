@@ -102,12 +102,13 @@ async function loadOnce(
   const cacheScope = scope ?? anyOrganization;
   // A refusal elsewhere (another tab) after this point keeps this load's
   // summary from being saved.
-  const { epoch } = keepTransactions
-    ? await store.position(cacheScope)
-    : { epoch: "" };
-  const [summary, pulled] = await Promise.allSettled([
+  const { cursor, epoch } = await store.position(cacheScope);
+  // Other pages keep a saved copy current too, so what they change (such
+  // as deleting a bank's data) reaches it.
+  const pull = keepTransactions || cursor !== null;
+  const requests = [
     fetchSummary(),
-    keepTransactions
+    pull
       ? pullTransactions(
           cacheScope,
           store,
@@ -117,35 +118,17 @@ async function loadOnce(
           scope === undefined,
         )
       : Promise.resolve(),
-  ]);
-  const failures = [summary, pulled].flatMap((result) =>
-    result.status === "rejected" ? [result.reason as unknown] : [],
+  ] as const;
+  const { failures, latest, summary } = await settle(
+    store,
+    cacheScope,
+    scope,
+    requests,
   );
-  // Either request may be the one refused; an outage of the other must not
-  // hide it.
-  const refusal = failures.find(refused);
-  if (refusal !== undefined) {
-    // Someone who lost access keeps nothing on the device, whichever Finance
-    // page found out.
-    await store.clear(cacheScope).catch(() => {
-      // The refusal is what to report; storage errors matter less.
-    });
-    throw refusal;
-  }
-  const fellBack = failures.find((cause) => cause instanceof StoreFellBack);
-  if (fellBack) throw fellBack;
-  const latest =
-    summary.status === "fulfilled" ? summaryOf(summary.value) : undefined;
-  // The session moved to another organization under this load: nothing
-  // read may be saved or shown under this one.
-  if (latest && scope && latest.organizationId !== scope.organizationId)
-    throw new OrganizationChanged();
-  const changed = failures.find(
-    (cause) => cause instanceof OrganizationChanged,
-  );
-  if (changed) throw changed;
   const failure = failures[0];
   if (!keepTransactions) {
+    // A saved copy that could not catch up is not this page's concern.
+    if (summary.status === "rejected") throw summary.reason;
     if (!latest) throw failure;
     return { data: { ...latest, nextCursor: null, transactions: [] } };
   }
@@ -164,6 +147,69 @@ async function loadOnce(
     savedAt:
       failure === undefined ? undefined : (saved.completedAt ?? undefined),
   };
+}
+
+/**
+ * Waits for both requests, raising what ends the load outright: a refusal
+ * (at once, even while the other request still waits), a store falling back
+ * to memory, or another organization's response.
+ */
+async function settle(
+  store: TransactionStore,
+  cacheScope: CacheScope,
+  scope: CacheScope | undefined,
+  requests: readonly [Promise<FinanceData>, Promise<unknown>],
+) {
+  const [summary, pulled] = await Promise.race([
+    Promise.allSettled(requests),
+    firstRefusal(requests),
+  ]).catch(async (refusal: unknown) => {
+    throw await clearedFor(store, cacheScope, refusal);
+  });
+  const failures = [summary, pulled].flatMap((result) =>
+    result.status === "rejected" ? [result.reason as unknown] : [],
+  );
+  const refusal = failures.find(refused);
+  if (refusal !== undefined) throw await clearedFor(store, cacheScope, refusal);
+  const fellBack = failures.find((cause) => cause instanceof StoreFellBack);
+  if (fellBack) throw fellBack;
+  const latest =
+    summary.status === "fulfilled" ? summaryOf(summary.value) : undefined;
+  // The session moved to another organization under this load: nothing
+  // read may be saved or shown under this one.
+  if (latest && scope && latest.organizationId !== scope.organizationId)
+    throw new OrganizationChanged();
+  const changed = failures.find(
+    (cause) => cause instanceof OrganizationChanged,
+  );
+  if (changed) throw changed;
+  return { failures, latest, summary };
+}
+
+/**
+ * Someone who lost access keeps nothing on the device, whichever Finance
+ * page found out; pulls still running keep nothing either. Returns `refusal`
+ * to report.
+ */
+async function clearedFor(
+  store: TransactionStore,
+  scope: CacheScope,
+  refusal: unknown,
+) {
+  await store.clear(scope).catch(() => {
+    // The refusal is what to report; storage errors matter less.
+  });
+  return refusal;
+}
+
+/** Rejects with the first refusal among `requests`; otherwise never settles. */
+function firstRefusal(requests: readonly Promise<unknown>[]) {
+  return new Promise<never>((_resolve, reject) => {
+    for (const request of requests)
+      request.catch((cause: unknown) => {
+        if (refused(cause)) reject(cause);
+      });
+  });
 }
 
 function summaryOf(data: FinanceData): FinanceSummary {

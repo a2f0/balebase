@@ -1,4 +1,5 @@
 import {
+  clearFormerOrganizations,
   clearUserTransactions,
   indexedDbTransactionStore,
   pullTransactions,
@@ -7,6 +8,7 @@ import {
 declare global {
   interface Window {
     transactionCacheTest?: {
+      clearFormerOrganizations: typeof clearFormerOrganizations;
       clearUserTransactions: typeof clearUserTransactions;
       pullTransactions: typeof pullTransactions;
       store: ReturnType<typeof indexedDbTransactionStore>;
@@ -15,6 +17,7 @@ declare global {
 }
 
 window.transactionCacheTest = {
+  clearFormerOrganizations,
   clearUserTransactions,
   pullTransactions,
   store: indexedDbTransactionStore(),

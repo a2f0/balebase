@@ -306,6 +306,30 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
       cursor: null,
       rows: [],
     });
+    // Leaving an organization drops what was saved for it, and only that.
+    const memberships = [
+      { organizationId: "kept-org", userId: "person" },
+      { organizationId: "left-org", userId: "person" },
+      { organizationId: "left-org", userId: "someone-else" },
+    ];
+    await target.evaluate(
+      async (scopes, data) => {
+        const cache = window.transactionCacheTest;
+        if (!cache) throw new Error("No fixture");
+        for (const which of scopes) {
+          const from = await cache.store.position(which);
+          await cache.store.apply(which, from, data, "t5");
+        }
+        await cache.clearFormerOrganizations("person", ["kept-org"]);
+      },
+      memberships,
+      page("7", false, [row("member")]),
+    );
+    expect(
+      await Promise.all(
+        memberships.map(async (which) => (await kept(target, which)).rows),
+      ),
+    ).toEqual([["member:1"], [], ["member:1"]]);
     const summaryKept = await target.evaluate(
       async (who) =>
         (await window.transactionCacheTest?.store.read(who))?.summary ?? null,

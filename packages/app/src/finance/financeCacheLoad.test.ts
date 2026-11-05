@@ -117,6 +117,65 @@ describe("loading cached finances", () => {
     expect((await store.read(scope)).transactions).toEqual([]);
   });
 
+  it("clears at once on a refusal while the other request still waits", async () => {
+    const store = memoryTransactionStore();
+    await loadFinance(store, scope, true, sources);
+    const stalled = Promise.withResolvers<FinanceTransactionChanges>();
+    const waited = Bun.sleep(1000).then(() => "still waiting");
+    const outcome = await Promise.race([
+      loadFinance(store, scope, true, {
+        ...sources,
+        changes: () => stalled.promise,
+        summary: async () => {
+          throw failure(403);
+        },
+      }).then(
+        () => "loaded",
+        (cause: Error) => cause.message,
+      ),
+      waited,
+    ]);
+    expect(outcome).toBe("Status 403.");
+    expect((await store.read(scope)).transactions).toEqual([]);
+    // The stalled page, arriving later, is not kept.
+    stalled.resolve({ ...feed("late"), cursor: "2" });
+    await Bun.sleep(0);
+    expect((await store.read(scope)).transactions).toEqual([]);
+  });
+
+  it("brings a saved copy up to date from pages without transactions", async () => {
+    const store = memoryTransactionStore();
+    let feeds = 0;
+    const counted = {
+      ...sources,
+      changes: async () => {
+        feeds++;
+        return feeds === 1
+          ? feed("a", "b")
+          : { ...feed(), cursor: "2", removedIds: ["a"] };
+      },
+    };
+    // Without a saved copy, Categories and Connections read no transactions.
+    await loadFinance(store, scope, false, counted);
+    expect(feeds).toBe(0);
+    await loadFinance(store, scope, true, counted);
+    // Deleting a bank's data from Connections reaches the saved copy.
+    const connections = await loadFinance(store, scope, false, counted);
+    expect(connections.data.transactions).toEqual([]);
+    expect(feeds).toBe(2);
+    expect((await store.read(scope)).transactions.map(({ id }) => id)).toEqual([
+      "b",
+    ]);
+    // An outage of the feed alone does not fail those pages.
+    const offline = await loadFinance(store, scope, false, {
+      ...counted,
+      changes: async () => {
+        throw new TypeError("Failed to fetch");
+      },
+    });
+    expect(offline.data.organizationId).toBe("org");
+  });
+
   it("keeps the saved copy for errors that are not refusals", async () => {
     const store = memoryTransactionStore();
     await loadFinance(store, scope, true, sources);

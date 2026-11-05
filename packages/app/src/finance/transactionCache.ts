@@ -356,6 +356,38 @@ export async function clearScopeTransactions(scope: CacheScope) {
 }
 
 /**
+ * Drops what this device keeps for a person in organizations they are no
+ * longer in, as after leaving or being removed from one.
+ */
+export async function clearFormerOrganizations(
+  userId: string,
+  organizationIds: string[],
+) {
+  if (typeof indexedDB === "undefined") return;
+  const current = new Set(organizationIds);
+  await inTransaction("readwrite", async (stores) => {
+    const keys = (await request(stores.state.getAllKeys())) as string[];
+    for (const key of keys) {
+      const [api, owner, organizationId, kind] = JSON.parse(key) as unknown[];
+      if (
+        api !== apiUrl ||
+        owner !== userId ||
+        typeof organizationId !== "string" ||
+        kind !== undefined ||
+        current.has(organizationId)
+      )
+        continue;
+      stores.state.delete(key);
+      await deleteScope(stores.transactions, key);
+      stores.state.put({
+        epoch: crypto.randomUUID(),
+        scope: scopeEpochKey({ organizationId, userId }),
+      });
+    }
+  });
+}
+
+/**
  * Drops everything this device keeps for a person, in every organization, as
  * on signing out, and advances their epoch so pulls still running (in any
  * tab) keep none of the pages they receive. Other accounts keep theirs.

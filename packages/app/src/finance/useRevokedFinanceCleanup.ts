@@ -1,5 +1,9 @@
 import { useEffect } from "react";
-import { type CacheScope, clearScopeTransactions } from "./transactionCache";
+import {
+  type CacheScope,
+  clearFormerOrganizations,
+  clearScopeTransactions,
+} from "./transactionCache";
 
 interface FinanceAccess {
   can: (capability: "finance") => boolean;
@@ -19,15 +23,34 @@ export function revokedFinanceScope(
   return access.can("finance") ? undefined : { organizationId, userId };
 }
 
+interface Workspace {
+  activeOrganizationId: string | undefined;
+  listed: boolean;
+  organizations: { id: string }[];
+}
+
 /**
- * Clears saved transactions once access lacks Finance. Finance itself never
- * mounts then, so its own refusal handling cannot run.
+ * Clears saved transactions once access lacks Finance, and those of
+ * organizations the person has left. Finance itself never mounts for either,
+ * so its own refusal handling cannot run.
  */
 export function useRevokedFinanceCleanup(
   userId: string | undefined,
-  workspace: { activeOrganizationId: string | undefined },
+  workspace: Workspace,
   access: FinanceAccess,
 ) {
+  const memberships = workspace.listed
+    ? workspace.organizations.map(({ id }) => id).sort()
+    : undefined;
+  const membershipKey = memberships && JSON.stringify(memberships);
+  useEffect(() => {
+    if (!userId || !membershipKey) return;
+    void clearFormerOrganizations(userId, JSON.parse(membershipKey)).catch(
+      () => {
+        // Retried on the next load; nothing to show for it here.
+      },
+    );
+  }, [membershipKey, userId]);
   const scope = revokedFinanceScope(
     userId,
     workspace.activeOrganizationId,

@@ -29,7 +29,8 @@ const transactionPageSize = 250;
  * category filters) keeps every transaction on this device and catches up
  * from the server's change feed on each load, so filters and paging are
  * local and the saved copy stays readable when the server cannot be reached.
- * Other pages read only connections, accounts, and categories.
+ * Other pages show only connections, accounts, and categories, and bring a
+ * saved copy up to date so what they change reaches it.
  */
 export function useFinanceData(
   route: CategoryRoute | null,
