@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { clearUserTransactions } from "../finance/transactionCache";
 import { lockOfflineWorkspace } from "../offline/offlineStore";
 import { authClient } from "../shared/authClient";
 import { throwIfRefused } from "../shared/errors";
@@ -94,6 +95,8 @@ export function useAccountSessions(
     }
     // Invalidate preparations started while revocation was still in flight.
     lockOfflineWorkspace();
+    // Saved bank transactions can be read again online; drop them.
+    if (userId) await clearUserTransactions(userId).catch(() => undefined);
     await refetchSession();
   }
 

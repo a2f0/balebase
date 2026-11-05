@@ -256,6 +256,21 @@ export async function deleteEmailLink(context: LinkContext) {
  * Emails outside Trash that are linked to records of one type, newest first.
  * Pass a target id to limit the result to a single record.
  */
+/** Binds (organization, target type), then whatever `where` binds. */
+function linkedEmailsSql(where = "") {
+  return `SELECT link.id AS link_id, link.target_id, email.id, email.subject,
+            email.envelope_from, email.received_at, email.archived_at,
+            (SELECT COUNT(*) FROM inbound_email_attachments AS attachment
+             WHERE attachment.email_id = email.id) AS attachment_count
+     FROM inbound_email_links AS link
+     JOIN inbound_emails AS email
+       ON email.id = link.email_id
+      AND email.organization_id = link.organization_id
+     WHERE link.organization_id = ? AND link.target_type = ? ${where}
+       AND email.deleted_at IS NULL
+     ORDER BY email.received_at DESC, email.id DESC`;
+}
+
 export async function listLinkedEmails(
   database: D1Database,
   organizationId: string,
@@ -266,24 +281,27 @@ export async function listLinkedEmails(
     ? [organizationId, targetType, targetId]
     : [organizationId, targetType];
   const result = await database
-    .prepare(
-      `SELECT link.id AS link_id, link.target_id, email.id, email.subject,
-              email.envelope_from, email.received_at, email.archived_at,
-              (SELECT COUNT(*) FROM inbound_email_attachments AS attachment
-               WHERE attachment.email_id = email.id) AS attachment_count
-       FROM inbound_email_links AS link
-       JOIN inbound_emails AS email
-         ON email.id = link.email_id
-        AND email.organization_id = link.organization_id
-       WHERE link.organization_id = ? AND link.target_type = ?
-         ${targetId ? "AND link.target_id = ?" : ""}
-         AND email.deleted_at IS NULL
-       ORDER BY email.received_at DESC, email.id DESC`,
-    )
+    .prepare(linkedEmailsSql(targetId ? "AND link.target_id = ?" : ""))
     .bind(...values)
     .all<LinkedEmailRow>();
   return result.results;
 }
+
+/**
+ * The linked emails of the transactions `transactions` selects (a subquery
+ * of IDs and its bindings), as a statement for a batch.
+ */
+export function linkedTransactionEmailsStatement(
+  database: D1Database,
+  organizationId: string,
+  transactions: { bindings: (string | number)[]; sql: string },
+) {
+  return database
+    .prepare(linkedEmailsSql(`AND link.target_id IN (${transactions.sql})`))
+    .bind(organizationId, "finance_transaction", ...transactions.bindings);
+}
+
+export type { LinkedEmailRow };
 
 export function toLinkedEmail(row: LinkedEmailRow): LinkedEmail {
   return {

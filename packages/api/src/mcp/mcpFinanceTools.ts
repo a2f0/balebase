@@ -19,6 +19,8 @@ export const financeTools: McpTool[] = [
       category: "Expense category slug from list_expense_categories.",
       cursor: "The nextCursor from the previous page; omit for the newest.",
       name: "Exact transaction name (merchant, else description), such as Shell.",
+      transactions:
+        '"none" for connections, accounts, and categories without transactions.',
       uncategorized: '"true" for uncategorized spending only.',
       year: "Four-digit year of the transaction date, such as 2026.",
     },

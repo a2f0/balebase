@@ -48,6 +48,8 @@ export const financeLimits = {
   bulkCategorize: 250,
   categoryName: 60,
   search: 100,
+  /** Transaction changes per device sync page. */
+  syncPage: 500,
 } as const;
 
 /** What membership in a group can grant. */

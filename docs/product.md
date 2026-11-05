@@ -817,9 +817,31 @@ calendar year, previous calendar year, or all time, and an uncategorized-expense
 filter. That filter follows the Reports rules: posted outflows without an
 expense category, excluding transfers and loan or card payments, and it has the
 bookmarkable path `/finance/expenses/category/uncategorized`. Filters search
-all imported history. Scrolling near the end retrieves the next 250 matches,
+all imported history. Scrolling near the end shows the next 250 matches,
 keeping earlier rows and annotation forms visible. **Load more transactions**
-also supports manual loading and retries; changing filters starts a fresh list.
+also shows them by hand; changing filters starts a fresh list.
+
+The overview keeps every one of the organization's transactions on the
+device (IndexedDB, per person and organization) and catches up on each visit,
+after a bank sync finishes, and after categorizing. It downloads only what
+changed since its last visit, from `GET /api/finance/transactions/changes`,
+so filters and paging run on the device. The first visit downloads
+everything and shows how many transactions it has saved so far. When Balebase
+cannot be reached, the overview shows the saved copy with when it was last
+updated; edits still need the server. Signing out removes the person's saved
+transactions, and a refusal (lost Finance access) removes that organization's.
+
+The change feed has one cursor per organization: a counter that every change
+to what a transaction shows advances in the same database write (Plaid's
+added, modified, and removed transactions; notes, labels, review state, and
+expense categories; account renames; linked emails being linked, archived, or
+deleted; and data deletion). It is never a timestamp, so a slow write cannot
+commit behind a device's cursor. Interrupted work needs no special handling.
+A Plaid sync that fails partway, resumes from its saved Plaid cursor, or
+restarts after a mutation during pagination writes its rows again, and each
+write takes a new revision that devices read again. A device that loses its
+connection mid-download keeps every page it saved, each with its cursor, and
+continues from the last one.
 
 Each organization keeps its own list of expense categories at
 `/finance/categories` (with a one-click common set), and each transaction can

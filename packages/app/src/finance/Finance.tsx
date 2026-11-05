@@ -26,6 +26,7 @@ import { AppLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
 import { websiteUrl } from "../shared/config";
 import { errorMessage } from "../shared/errors";
+import { formatDateTime } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import {
   expenseCategoryFiltersFor,
@@ -47,7 +48,10 @@ import {
   confirmDisconnect,
   syncNotice,
 } from "./financeConnectionActions";
-import { selectFinanceAccount } from "./financeTransactions";
+import {
+  filterTransactions,
+  selectFinanceAccount,
+} from "./financeTransactions";
 import {
   reportLoginRepair,
   retryPendingLoginRepairs,
@@ -57,6 +61,7 @@ import {
   linkErrorMessage,
   type PlaidLinkSession,
 } from "./plaidLinkDiagnostics";
+import type { CacheScope } from "./transactionCache";
 import {
   type FinanceListingState,
   initialFilters,
@@ -72,13 +77,17 @@ const updateConnectionStorageKey = "balebase.plaid.updateConnection";
 export function Finance({
   onNavigate,
   pathname,
+  scope,
 }: {
   onNavigate: (pathname: string) => void;
   pathname: string;
+  /** Whose saved transactions this device reads; memory only without it. */
+  scope?: CacheScope | undefined;
 }) {
   const page = financePageFor(pathname);
   const { load, setData, onFiltersChange, ...listing } = useFinanceData(
     page === "overview" ? expenseCategoryFiltersFor(pathname) : null,
+    scope,
   );
   const { error, notice, run, setError, setNotice, ...action } = useAction(
     "Could not update finances.",
@@ -402,10 +411,11 @@ function FinanceOverview({
   data,
   filters,
   loading,
-  loadingMore,
   refreshing,
   loadError,
-  loadMoreError,
+  savedCopy,
+  saving,
+  visible,
   onFiltersChange,
   onLoadMore,
   onReload,
@@ -422,19 +432,27 @@ function FinanceOverview({
       : filters.accountIds.length > 1
         ? `${filters.accountIds.length} accounts`
         : undefined;
-  const categoryId = data?.categories.find(
-    ({ slug }) => slug === filters.categorySlug,
-  )?.id;
-  const transactions = loading
-    ? undefined
-    : data?.transactions.filter(
-        (transaction) =>
-          (!filters.uncategorized || !transaction.expenseCategoryId) &&
-          (!filters.categorySlug ||
-            transaction.expenseCategoryId === categoryId),
-      );
+  // Every saved transaction is on the device: filter and page locally.
+  const matching =
+    loading || !data
+      ? undefined
+      : filterTransactions(data.transactions, filters, data.categories);
   return (
     <>
+      {savedCopy && (
+        <Banner
+          actions={
+            <Button onClick={() => void onReload()} size="sm">
+              Retry
+            </Button>
+          }
+          title="Showing transactions saved on this device"
+          tone="warning"
+        >
+          Balebase can’t be reached right now. These were last updated{" "}
+          {formatDateTime(savedCopy)}; changes made here may not save.
+        </Banner>
+      )}
       <FinanceConnectionAlert
         connections={data?.connections}
         onNavigate={handlers.onNavigate}
@@ -457,13 +475,18 @@ function FinanceOverview({
         accountName={accountName}
         filters={filters}
         onFiltersChange={onFiltersChange}
-        nextCursor={data?.nextCursor}
-        loadingMore={loadingMore}
+        nextCursor={
+          matching && matching.length > visible ? String(visible) : null
+        }
         loadError={loadError}
-        loadMoreError={loadMoreError}
+        loadingLabel={
+          saving === undefined
+            ? undefined
+            : `Saving transactions to this device (${saving.toLocaleString()})…`
+        }
         onLoadMore={onLoadMore}
         onReload={onReload}
-        busy={handlers.busy || refreshing || loadingMore}
+        busy={handlers.busy || refreshing}
         categories={data?.categories ?? []}
         onAnnotate={handlers.onAnnotate}
         onCategorize={handlers.onCategorize}
@@ -476,7 +499,8 @@ function FinanceOverview({
           )
         }
         selectedTransactionId={selectedTransactionId}
-        transactions={transactions}
+        total={matching?.length}
+        transactions={matching?.slice(0, visible)}
       />
     </>
   );

@@ -12,6 +12,11 @@ const endpoints = {
     path: "/api/finance",
     response: "json",
   }),
+  transactionChanges: endpoint<typeof financeRoutes.transactionChanges>({
+    method: "GET",
+    path: "/api/finance/transactions/changes",
+    response: "json",
+  }),
   createLinkToken: endpoint<typeof financeRoutes.createLinkToken>({
     method: "POST",
     path: "/api/finance/link-token",
@@ -184,6 +189,18 @@ export function financeApi(transport: Transport) {
           name: filters?.name || undefined,
           cursor: cursor || undefined,
         },
+      });
+    },
+    /** Connections, accounts, and categories, for clients keeping transactions. */
+    summary() {
+      return transport.call(endpoints.listing, {
+        query: { transactions: "none" },
+      });
+    },
+    /** The organization's transaction changes after `cursor`, oldest first. */
+    transactionChanges(cursor?: string | null) {
+      return transport.call(endpoints.transactionChanges, {
+        query: { cursor: cursor || undefined },
       });
     },
     createPlaidLinkToken() {
