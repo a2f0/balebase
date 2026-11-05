@@ -196,13 +196,16 @@ describe("pulling transactions", () => {
       store,
     );
     expect((await store.read(scope)).transactions).toHaveLength(1);
-    await catchUpSavedTransactions(
-      scope,
-      async () => {
-        throw new ApiError(new Response(null, { status: 403 }), null);
-      },
-      store,
-    );
+    // A refusal clears it and is reported, so the page clears too.
+    await expect(
+      catchUpSavedTransactions(
+        scope,
+        async () => {
+          throw new ApiError(new Response(null, { status: 403 }), null);
+        },
+        store,
+      ),
+    ).rejects.toThrow("Request failed with status 403.");
     expect((await store.read(scope)).transactions).toEqual([]);
   });
 

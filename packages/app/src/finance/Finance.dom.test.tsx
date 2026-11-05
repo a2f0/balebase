@@ -465,7 +465,7 @@ describe("Finance filters", () => {
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
   });
 
-  it("shows loading, not an empty history, when returning from another Finance page", async () => {
+  it("shows the saved copy at once, not an empty history, while a stalled refresh waits", async () => {
     let held: Promise<void> | undefined;
     respond(async (url) => {
       if (isFeed(url)) await held;
@@ -476,9 +476,10 @@ describe("Finance filters", () => {
     await navigate("/finance/categories");
     const download = Promise.withResolvers<void>();
     held = download.promise;
+    // Coming back, the refresh stalls: the saved copy shows meanwhile.
     await navigate("/finance");
     expect(container.textContent).not.toContain("No transactions imported yet");
-    expect(container.textContent).toContain("Loading finances");
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
     await act(async () => download.resolve());
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
   });

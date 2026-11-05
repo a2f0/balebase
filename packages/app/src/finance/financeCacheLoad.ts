@@ -229,6 +229,28 @@ function firstRefusal(requests: readonly Promise<unknown>[]) {
   });
 }
 
+/**
+ * The saved copy, if a download into it ever finished: shown while a load
+ * refreshes it, so a request that stalls cannot hide it.
+ */
+export async function savedFinance(
+  store: TransactionStore,
+  scope: CacheScope | undefined,
+): Promise<FinanceData | undefined> {
+  try {
+    const saved = await store.read(scope ?? anyOrganization);
+    if (!saved.completedAt || !saved.summary) return undefined;
+    return {
+      ...saved.summary,
+      nextCursor: null,
+      transactions: saved.transactions.sort(newestFirst),
+    };
+  } catch {
+    // The load reports storage failures.
+    return undefined;
+  }
+}
+
 function summaryOf(data: FinanceData): FinanceSummary {
   const { nextCursor: _cursor, transactions: _transactions, ...summary } = data;
   return summary;

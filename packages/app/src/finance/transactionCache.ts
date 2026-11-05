@@ -628,8 +628,12 @@ export async function catchUpSavedTransactions(
     if (!(await store.position(scope)).saved) return;
     await pullTransactions(scope, store, fetchPage);
   } catch (cause) {
-    // Access ended: keep nothing. Otherwise the next load catches up.
-    if (refused(cause)) await store.clear(scope).catch(() => undefined);
+    // Access ended: keep nothing, and tell the page so it shows nothing.
+    // Otherwise the next load catches up.
+    if (refused(cause)) {
+      await store.clear(scope).catch(() => undefined);
+      throw cause;
+    }
   }
 }
 

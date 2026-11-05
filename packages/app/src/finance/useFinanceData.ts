@@ -3,7 +3,12 @@ import type { FinanceData } from "@balebase/validators/finance";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
-import { fallBack, forgetFinance, loadFinance } from "./financeCacheLoad";
+import {
+  fallBack,
+  forgetFinance,
+  loadFinance,
+  savedFinance,
+} from "./financeCacheLoad";
 import { syncPending, syncPollMs } from "./financeConnectionActions";
 import {
   type CacheScope,
@@ -43,6 +48,11 @@ export function useFinanceData(
   const keepTransactions = route !== null;
   const store = useTransactionStore(scope);
   const loaded = useCachedLoad(keepTransactions, store);
+  // Another tab found access gone (or signed out): this one's view and copy
+  // (IndexedDB, or memory after a fallback) go too.
+  useClearedElsewhere(store.scope, () => {
+    void loaded.onRefused(new SignedOut(), false);
+  });
   const [filters, setFilters] = useState({ ...initialFilters, ...route });
   const [visible, setVisible] = useState(transactionPageSize);
   const currentFilters = useRef(filters);
@@ -107,6 +117,15 @@ function useCachedLoad(
     setLoading(first);
     setRefreshing(!first);
     setLoadError(undefined);
+    if (first && keepTransactions) {
+      // Shown at once and refreshed, so a stalled request cannot hide it.
+      const saved = await savedFinance(store.value, store.scope);
+      if (saved && current()) {
+        setData(saved);
+        setLoading(false);
+        setRefreshing(true);
+      }
+    }
     try {
       const next = await loadFinance(
         store.value,
@@ -135,16 +154,17 @@ function useCachedLoad(
     }
   }, [forget, keepTransactions, settle, store]);
   /**
-   * A save was refused: access ended, so nothing shown or saved stays,
-   * without waiting on a reload that an outage could keep from finishing.
+   * A save was refused (or another tab, which `announce: false` does not
+   * tell again, found access gone): nothing shown or saved stays, without
+   * waiting on a reload that an outage could keep from finishing.
    */
   const onRefused = useCallback(
-    async (cause: unknown) => {
+    async (cause: unknown, announce = true) => {
       // Loads still running would show what they read.
       ++requestId.current;
       forget();
       settle(errorMessage(cause, "Could not load finances."));
-      await forgetFinance(store.value, store.scope);
+      await forgetFinance(store.value, store.scope, announce);
     },
     [forget, settle, store],
   );
@@ -154,14 +174,6 @@ function useCachedLoad(
       ++requestId.current;
     };
   }, [load]);
-  useClearedElsewhere(store.scope, () => {
-    ++requestId.current;
-    forget();
-    settle(new SignedOut().message);
-    // This tab's copy too (IndexedDB, or memory after a fallback), ending
-    // its pulls, without telling the tab that told it.
-    void forgetFinance(store.value, store.scope, false);
-  });
   return {
     data,
     loading,

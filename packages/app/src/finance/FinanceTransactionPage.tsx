@@ -151,9 +151,13 @@ function useTransaction(id: string, givenScope: CacheScope | undefined) {
     void catchUp();
   }
   function catchUp() {
-    return catchUpSavedTransactions(scope, (cursor) =>
-      api.finance.transactionChanges(cursor),
-    );
+    return guard(
+      catchUpSavedTransactions(scope, (cursor) =>
+        api.finance.transactionChanges(cursor),
+      ),
+    ).catch(() => {
+      // A refusal has cleared the page; anything else waits for a load.
+    });
   }
   async function categorize(_: FinanceTransaction, categoryId: string | null) {
     await action.run(async () => {
