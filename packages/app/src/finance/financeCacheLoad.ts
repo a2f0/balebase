@@ -62,6 +62,16 @@ export function fallBack(
 
 const anyOrganization: CacheScope = { organizationId: "", userId: "" };
 
+/** Drops what `store` keeps for `scope` (or for no known scope). */
+export function forgetFinance(
+  store: TransactionStore,
+  scope: CacheScope | undefined,
+) {
+  return store.clear(scope ?? anyOrganization).catch(() => {
+    // Unavailable storage keeps nothing to clear.
+  });
+}
+
 interface LoadSources {
   summary: () => Promise<FinanceData>;
   changes: (cursor: string | null) => Promise<FinanceTransactionChanges>;

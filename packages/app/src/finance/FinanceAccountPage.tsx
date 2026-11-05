@@ -31,6 +31,7 @@ import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
 import { FinanceSyncSettings } from "./FinanceSyncSettings";
 import { formatImportedHistory, formatMoney } from "./financeFormat";
 import { type CacheScope, clearedOnRefusal } from "./transactionCache";
+import { useCacheScope } from "./useCacheScope";
 
 export function FinanceAccountPage({
   id,
@@ -208,7 +209,8 @@ function RecentTransactions({
   );
 }
 
-function useAccount(id: string, scope: CacheScope | undefined) {
+function useAccount(id: string, givenScope: CacheScope | undefined) {
+  const scope = useCacheScope(givenScope);
   return useLoad(
     useCallback(
       () => clearedOnRefusal(scope, api.finance.account(id)),

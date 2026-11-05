@@ -85,15 +85,16 @@ export function Finance({
   scope?: CacheScope | undefined;
 }) {
   const page = financePageFor(pathname);
-  const { load, setData, onFiltersChange, ...listing } = useFinanceData(
-    page === "overview" ? expenseCategoryFiltersFor(pathname) : null,
-    scope,
-  );
+  const { load, onRefused, setData, onFiltersChange, ...listing } =
+    useFinanceData(
+      page === "overview" ? expenseCategoryFiltersFor(pathname) : null,
+      scope,
+    );
   const { error, notice, run, setError, setNotice, ...action } = useAction(
     "Could not update finances.",
   );
-  const plaid = usePlaidConnect(load, setError, setNotice);
-  const actions = financeActions(load, run);
+  const plaid = usePlaidConnect(load, onRefused, setError, setNotice);
+  const actions = financeActions(load, onRefused, run);
   // A category save, a row's or a bulk one, holds every category control
   // until it finishes, so two saves never land out of order.
   const [categorizing, setCategorizing] = useState(false);
@@ -114,12 +115,14 @@ export function Finance({
         setError,
         setCategorizing,
         () => latestLoad.current(),
+        onRefused,
       )}
       onCategorizeMany={categorizeTransactions(
         setData,
         setError,
         setCategorizing,
         () => latestLoad.current(),
+        onRefused,
       )}
       onConnect={plaid.connect}
       onDeleteData={actions.deleteData}
@@ -148,6 +151,7 @@ function categorizeTransaction(
   setError: (message: string | undefined) => void,
   setSaving: (saving: boolean) => void,
   refresh: () => Promise<void>,
+  onRefused: (cause: unknown) => Promise<void>,
 ) {
   return async (transaction: FinanceTransaction, categoryId: string | null) => {
     const previous = transaction.expenseCategoryId;
@@ -163,8 +167,7 @@ function categorizeTransaction(
     } catch (cause) {
       setData((current) => withCategories(current, reversed(change)));
       setError(errorMessage(cause, "Could not update finances."));
-      // Access ended: the reload clears what is shown and saved.
-      if (refused(cause)) await refresh();
+      if (refused(cause)) await onRefused(cause);
     } finally {
       setSaving(false);
     }
@@ -181,6 +184,7 @@ function categorizeTransactions(
   setError: (message: string | undefined) => void,
   setSaving: (saving: boolean) => void,
   refresh: () => Promise<void>,
+  onRefused: (cause: unknown) => Promise<void>,
 ) {
   return async (
     transactions: FinanceTransaction[],
@@ -188,7 +192,13 @@ function categorizeTransactions(
   ) => {
     setSaving(true);
     try {
-      return await saveCategories(setData, setError, transactions, categoryId);
+      return await saveCategories(
+        setData,
+        setError,
+        transactions,
+        categoryId,
+        onRefused,
+      );
     } finally {
       // A load during the save (a filter change, sync polling) replaced the
       // optimistic rows, and a rollback may have landed on it; the server's
@@ -204,6 +214,7 @@ async function saveCategories(
   setError: (message: string | undefined) => void,
   transactions: FinanceTransaction[],
   categoryId: string | null,
+  onRefused: (cause: unknown) => Promise<void>,
 ) {
   const changes = transactions
     .filter(({ expenseCategoryId }) => expenseCategoryId !== categoryId)
@@ -229,6 +240,7 @@ async function saveCategories(
       const unsaved = reversed(changes.slice(start));
       setData((current) => withCategories(current, unsaved));
       setError(errorMessage(cause, "Could not update finances."));
+      if (refused(cause)) await onRefused(cause);
       return false;
     }
   }
@@ -275,6 +287,7 @@ function withCategories(
 
 function financeActions(
   load: () => Promise<void>,
+  onRefused: (cause: unknown) => Promise<void>,
   runAction: ReturnType<typeof useAction>["run"],
 ) {
   async function run(action: () => Promise<string>) {
@@ -285,9 +298,8 @@ function financeActions(
           await load();
           return notice;
         } catch (cause) {
-          // A refusal means access ended: the reload clears what is shown
-          // and saved.
-          if (refused(cause)) await load();
+          // Access ended: nothing shown or saved stays.
+          if (refused(cause)) await onRefused(cause);
           throw cause;
         }
       },
@@ -644,6 +656,7 @@ function FinanceSetupNotice() {
 
 function usePlaidConnect(
   load: () => Promise<void>,
+  onRefused: (cause: unknown) => Promise<void>,
   setError: (message: string | undefined) => void,
   setNotice: (message: string | undefined) => void,
 ) {
@@ -686,12 +699,12 @@ function usePlaidConnect(
           );
       } catch (cause) {
         setError(errorMessage(cause, "Could not update finances."));
-        await load();
+        await (refused(cause) ? onRefused(cause) : load());
       } finally {
         setBusy(false);
       }
     },
-    [load, setError, setNotice],
+    [load, onRefused, setError, setNotice],
   );
   useOAuthResume(complete, resumedOAuth, setBusy, setError);
   useEffect(() => {
@@ -729,8 +742,7 @@ function usePlaidConnect(
     } catch (cause) {
       setError(errorMessage(cause, "Could not update finances."));
       setBusy(false);
-      // Access ended: the reload clears what is shown and saved.
-      if (refused(cause)) await load();
+      if (refused(cause)) await onRefused(cause);
     }
   };
   return {

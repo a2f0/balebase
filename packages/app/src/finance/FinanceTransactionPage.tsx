@@ -28,6 +28,7 @@ import {
   catchUpSavedTransactions,
   clearedOnRefusal,
 } from "./transactionCache";
+import { useCacheScope } from "./useCacheScope";
 
 export function FinanceTransactionPage({
   id,
@@ -124,7 +125,8 @@ export function FinanceTransactionPage({
     </Page>
   );
 }
-function useTransaction(id: string, scope: CacheScope | undefined) {
+function useTransaction(id: string, givenScope: CacheScope | undefined) {
+  const scope = useCacheScope(givenScope);
   const loaded = useLoad(
     useCallback(
       () => clearedOnRefusal(scope, api.finance.transaction(id)),

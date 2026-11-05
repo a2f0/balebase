@@ -3,7 +3,7 @@ import type { FinanceData } from "@balebase/validators/finance";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
-import { fallBack, loadFinance } from "./financeCacheLoad";
+import { fallBack, forgetFinance, loadFinance } from "./financeCacheLoad";
 import { syncPending, syncPollMs } from "./financeConnectionActions";
 import {
   type CacheScope,
@@ -39,10 +39,36 @@ export function useFinanceData(
 ) {
   const keepTransactions = route !== null;
   const store = useTransactionStore(scope);
-  const [data, setData] = useState<FinanceData>();
+  const loaded = useCachedLoad(keepTransactions, store);
   const [filters, setFilters] = useState({ ...initialFilters, ...route });
   const [visible, setVisible] = useState(transactionPageSize);
   const currentFilters = useRef(filters);
+  useSyncPolling(loaded.data, loaded.load, loaded.loading || loaded.refreshing);
+  const onFiltersChange = useCallback((next: FinanceFilters) => {
+    currentFilters.current = next;
+    setFilters(next);
+    setVisible(transactionPageSize);
+  }, []);
+  useCategoryRoute(route, currentFilters, onFiltersChange);
+  const onLoadMore = useCallback(async () => {
+    setVisible((count) => count + transactionPageSize);
+    return true;
+  }, []);
+  return {
+    ...loaded,
+    filters,
+    visible,
+    onFiltersChange,
+    onLoadMore,
+  };
+}
+
+/** Loads Finance's data from `store` and the server, and forgets it on refusal. */
+function useCachedLoad(
+  keepTransactions: boolean,
+  store: ReturnType<typeof useTransactionStore>,
+) {
+  const [data, setData] = useState<FinanceData>();
   const requestId = useRef(0);
   const loaded = useRef(false);
   // Whether transactions were ever shown: Categories and Connections load
@@ -53,6 +79,18 @@ export function useFinanceData(
   const [loadError, setLoadError] = useState<string>();
   const [savedCopy, setSavedCopy] = useState<string>();
   const [saving, setSaving] = useState<number>();
+  const settle = useCallback((error?: string) => {
+    setLoading(false);
+    setRefreshing(false);
+    setSaving(undefined);
+    if (error !== undefined) setLoadError(error);
+  }, []);
+  const forget = useCallback(() => {
+    loaded.current = false;
+    loadedTransactions.current = false;
+    setData(undefined);
+    setSavedCopy(undefined);
+  }, []);
   const load = useCallback(async () => {
     const id = ++requestId.current;
     const current = () => id === requestId.current;
@@ -79,44 +117,36 @@ export function useFinanceData(
       if (keepTransactions) loadedTransactions.current = true;
       setData(next.data);
       setSavedCopy(next.savedAt);
+      settle();
     } catch (cause) {
       if (!current()) return;
-      if (refused(cause)) {
-        // Nothing read before stays on screen after access ends.
-        loaded.current = false;
-        loadedTransactions.current = false;
-        setData(undefined);
-        setSavedCopy(undefined);
-      }
-      setLoadError(errorMessage(cause, "Could not load finances."));
-    } finally {
-      if (current()) {
-        setLoading(false);
-        setRefreshing(false);
-        setSaving(undefined);
-      }
+      // Nothing read before stays on screen after access ends.
+      if (refused(cause)) forget();
+      settle(errorMessage(cause, "Could not load finances."));
     }
-  }, [keepTransactions, store]);
+  }, [forget, keepTransactions, settle, store]);
+  /**
+   * A save was refused: access ended, so nothing shown or saved stays,
+   * without waiting on a reload that an outage could keep from finishing.
+   */
+  const onRefused = useCallback(
+    async (cause: unknown) => {
+      // Loads still running would show what they read.
+      ++requestId.current;
+      forget();
+      settle(errorMessage(cause, "Could not load finances."));
+      await forgetFinance(store.value, store.scope);
+    },
+    [forget, settle, store],
+  );
   useEffect(() => {
     void load();
     return () => {
       ++requestId.current;
     };
   }, [load]);
-  useSyncPolling(data, load, loading || refreshing);
-  const onFiltersChange = useCallback((next: FinanceFilters) => {
-    currentFilters.current = next;
-    setFilters(next);
-    setVisible(transactionPageSize);
-  }, []);
-  useCategoryRoute(route, currentFilters, onFiltersChange);
-  const onLoadMore = useCallback(async () => {
-    setVisible((count) => count + transactionPageSize);
-    return true;
-  }, []);
   return {
     data,
-    filters,
     loading,
     refreshing,
     loadError,
@@ -124,17 +154,15 @@ export function useFinanceData(
     savedCopy,
     /** Transactions saved so far by a first download. */
     saving,
-    visible,
     load,
-    onFiltersChange,
-    onLoadMore,
+    onRefused,
     setData,
   };
 }
 
 export type FinanceListingState = Omit<
   ReturnType<typeof useFinanceData>,
-  "load" | "setData"
+  "load" | "onRefused" | "setData"
 >;
 
 /** Sign-in scopes keep IndexedDB; without one, or without IndexedDB, memory. */

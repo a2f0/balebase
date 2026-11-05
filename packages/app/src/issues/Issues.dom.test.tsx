@@ -275,6 +275,28 @@ describe("workspace issues, mounted", () => {
     await click("Raise issue");
     expect(paths).toEqual(["/issues/new/transactions/old-txn"]);
   });
+
+  it("loads a transaction once while the shell re-renders its scope", async () => {
+    let loads = 0;
+    respond((url) => {
+      if (url.pathname === "/api/finance/transactions/old-txn") loads++;
+      if (url.pathname === "/api/issues")
+        return Response.json({ issues: [], nextCursor: null });
+      return baseResponse(url);
+    });
+    // Routes build the scope anew on every render, equal by value.
+    const page = () => (
+      <FinanceTransactionPage
+        id="old-txn"
+        onNavigate={() => undefined}
+        scope={{ organizationId: "org", userId: "person" }}
+      />
+    );
+    const view = await mount(page());
+    await view.render(page());
+    await view.render(page());
+    expect(loads).toBe(1);
+  });
 });
 
 it("gives a workspace issue a Photos tab that says when it has none", async () => {

@@ -510,12 +510,19 @@ describe("Finance filters", () => {
     ).toBe("meals");
   });
 
-  it("clears what is shown when a save finds access gone", async () => {
+  it("clears what is shown when a save finds access gone, even if Balebase then goes down", async () => {
     let refused = false;
     respond((_url, init) => {
-      if (init?.method === "PUT") refused = true;
+      if (init?.method === "PUT") {
+        refused = true;
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      }
+      // The reload after the refusal cannot reach Balebase.
       return refused
-        ? Response.json({ error: "Finance access required." }, { status: 403 })
+        ? Response.json({ error: "Service unavailable." }, { status: 503 })
         : Response.json(data);
     });
     await mountFinance();
@@ -536,9 +543,15 @@ describe("Finance filters", () => {
   it("clears what is shown when an annotation save finds access gone", async () => {
     let refused = false;
     respond((_url, init) => {
-      if (init?.method === "PATCH") refused = true;
+      if (init?.method === "PATCH") {
+        refused = true;
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      }
       return refused
-        ? Response.json({ error: "Finance access required." }, { status: 403 })
+        ? Response.json({ error: "Service unavailable." }, { status: 503 })
         : Response.json(data);
     });
     await mountFinance();
@@ -1058,6 +1071,27 @@ describe("Bulk categorization", () => {
     ]);
     expect(categoryOf("Row 251")).toBe("meals");
     expect(container.textContent).not.toContain("252 selected");
+  });
+
+  it("clears what is shown when a bulk save finds access gone", async () => {
+    let refused = false;
+    respond((_url, init) => {
+      if (init?.method === "PUT") {
+        refused = true;
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      }
+      return refused
+        ? Response.json({ error: "Service unavailable." }, { status: 503 })
+        : Response.json(listing);
+    });
+    await mountFinance();
+    await check("Select Coffee");
+    await setBulkCategory("meals");
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).toContain("Finance access required.");
   });
 
   it("holds bulk changes until a row's own category save finishes", async () => {

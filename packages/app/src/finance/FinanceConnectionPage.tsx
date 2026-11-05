@@ -44,6 +44,7 @@ import {
 } from "./financeConnectionActions";
 import { formatImportedHistory, formatMoney } from "./financeFormat";
 import { type CacheScope, clearedOnRefusal } from "./transactionCache";
+import { useCacheScope } from "./useCacheScope";
 
 type Connection = FinanceConnectionDetail["connection"];
 
@@ -343,8 +344,9 @@ function ConnectionAccounts({
 function useConnection(
   id: string,
   onNavigate: (path: string) => void,
-  scope: CacheScope | undefined,
+  givenScope: CacheScope | undefined,
 ) {
+  const scope = useCacheScope(givenScope);
   const loaded = useLoad(
     useCallback(
       () => clearedOnRefusal(scope, api.finance.connection(id)),
