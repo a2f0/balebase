@@ -101,6 +101,16 @@ export interface TransactionStore {
 
 const databaseName = "balebase-finance";
 
+/**
+ * A random ID. `crypto.randomUUID` exists only in secure contexts (not plain
+ * HTTP on a local network), and this module loads with the app.
+ */
+function randomId() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 function scopeKey(scope: CacheScope) {
   return JSON.stringify([apiUrl, scope.userId, scope.organizationId]);
 }
@@ -387,7 +397,7 @@ export async function clearScopeTransactions(
     stores.state.delete(key);
     await deleteScope(stores.transactions, key);
     stores.state.put({
-      epoch: crypto.randomUUID(),
+      epoch: randomId(),
       scope: scopeEpochKey(scope),
     });
   });
@@ -419,7 +429,7 @@ export async function clearFormerOrganizations(
       stores.state.delete(key);
       await deleteScope(stores.transactions, key);
       stores.state.put({
-        epoch: crypto.randomUUID(),
+        epoch: randomId(),
         scope: scopeEpochKey({ organizationId, userId }),
       });
     }
@@ -443,7 +453,7 @@ export async function clearUserTransactions(userId: string) {
       stores.state.delete(key);
       await deleteScope(stores.transactions, key);
     }
-    stores.state.put({ epoch: crypto.randomUUID(), scope: epochKey(userId) });
+    stores.state.put({ epoch: randomId(), scope: epochKey(userId) });
   });
 }
 
@@ -456,7 +466,7 @@ export interface Cleared {
 
 const clearedChannel = "balebase-finance-cleared";
 // Tabs ignore their own announcements: they handle those where they happen.
-const thisTab = crypto.randomUUID();
+const thisTab = randomId();
 
 /**
  * Tells other tabs a saved copy was cleared (access ended, a sign-out), so

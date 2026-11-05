@@ -5,6 +5,7 @@ import {
   chromeLaunchOptions,
   closeChrome,
 } from "../../../scripts/testing/chrome";
+import { financeRows } from "./historyScrollFixture";
 import { stylesheets } from "./stylesheets";
 
 it("appends job and transaction pages on desktop/mobile scroll and fills a short viewport", async () => {
@@ -54,8 +55,12 @@ it("appends job and transaction pages on desktop/mobile scroll and fills a short
         );
         const selector =
           mode === "jobs" ? ".adminJobHistoryItem" : ".financeTransaction";
+        // Jobs page from the server; Finance shows its saved transactions
+        // 250 at a time.
+        const counts = mode === "finance" ? [250, 500] : [20, 40];
+        const last = mode === "finance" ? financeRows(pageSize) : pageSize * 3;
         if (pageSize > 1) {
-          for (const count of [20, 40]) {
+          for (const count of counts) {
             await page.waitForFunction(
               (selector, count) =>
                 document.querySelectorAll(selector).length === count,
@@ -73,7 +78,7 @@ it("appends job and transaction pages on desktop/mobile scroll and fills a short
             document.querySelectorAll(selector).length === count,
           {},
           selector,
-          pageSize * 3,
+          last,
         );
         expect(
           await page.evaluate(() =>
