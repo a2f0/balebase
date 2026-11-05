@@ -93,6 +93,8 @@ export function useOrganizationAccess(
     // Pending only until this user and organization first resolve; later
     // refreshes keep the current screen instead of blanking the workspace.
     isPending: Boolean(userId && organizationId && !current),
+    /** Whether `can` reflects access as read, not a failure to read it. */
+    confirmed: Boolean(current) && loadError === undefined,
     loadError,
     memberRole: current?.memberRole || undefined,
     ownerCount: current?.ownerCount ?? 0,

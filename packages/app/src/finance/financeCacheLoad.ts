@@ -46,6 +46,7 @@ export function fallBack(
     clear: (...args) => attempt((store) => store.clear(...args)),
     position: (...args) => attempt((store) => store.position(...args)),
     read: (...args) => attempt((store) => store.read(...args)),
+    restart: (...args) => attempt((store) => store.restart(...args)),
     saveSummary: (...args) => attempt((store) => store.saveSummary(...args)),
   };
 }
@@ -98,6 +99,11 @@ async function loadOnce(
   { changes, onProgress, summary: fetchSummary }: LoadSources,
 ): Promise<{ data: FinanceData; savedAt?: string | undefined }> {
   const cacheScope = scope ?? anyOrganization;
+  // A refusal elsewhere (another tab) after this point keeps this load's
+  // summary from being saved.
+  const { epoch } = keepTransactions
+    ? await store.position(cacheScope)
+    : { epoch: "" };
   const [summary, pulled] = await Promise.allSettled([
     fetchSummary(),
     keepTransactions
@@ -134,7 +140,7 @@ async function loadOnce(
     if (!latest) throw failure;
     return { data: { ...latest, nextCursor: null, transactions: [] } };
   }
-  if (latest) await store.saveSummary(cacheScope, latest);
+  if (latest) await store.saveSummary(cacheScope, latest, epoch);
   const saved = await store.read(cacheScope);
   const base = latest ?? saved.summary;
   // Offline, show the saved copy if a download ever finished.

@@ -19,6 +19,7 @@ import { AuthPage } from "./auth/AuthPage";
 import type { AuthenticationAction } from "./auth/authActions";
 import { useSessionRefetch } from "./auth/useSessionRefetch";
 import { SigningPage } from "./contracts/SigningPage";
+import { useRevokedFinanceCleanup } from "./finance/useRevokedFinanceCleanup";
 import { Library } from "./library/Library";
 import { DeviceContext } from "./offline/offlineContext";
 import { useOfflineSlot } from "./offline/offlineSlot";
@@ -61,6 +62,7 @@ export function App() {
     session?.user.id,
     workspace.activeOrganizationId,
   );
+  useRevokedFinanceCleanup(session?.user.id, workspace, access);
   const accounts = useAccountSessions(session, () => refetch());
 
   const navigate = useWorkspaceNavigation(setPathname);

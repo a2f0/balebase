@@ -119,7 +119,7 @@ describe("pulling transactions", () => {
       if (cursor === "1" && pages.requested.length === 2) {
         await store.apply(
           scope,
-          { cursor: "1", epoch: "" },
+          { cursor: "1", epoch: "0" },
           page("2", false, [row("b")]),
           "now",
         );
@@ -142,7 +142,7 @@ describe("pulling transactions", () => {
     const store = memoryTransactionStore();
     await store.apply(
       scope,
-      { cursor: null, epoch: "" },
+      { cursor: null, epoch: "0" },
       page("9", false, [row("stale")]),
       "then",
     );

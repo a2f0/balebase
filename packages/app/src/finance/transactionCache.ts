@@ -32,18 +32,19 @@ interface CacheState {
 }
 
 /**
- * Where a pull stands: the kept cursor, and the person's epoch, which
- * signing out advances so pages requested before it are not kept after.
+ * Where a pull stands: the kept cursor, and the epoch, which signing out
+ * (for the person) or a refusal (for the scope) advances so nothing
+ * requested before it is kept after.
  */
 interface Position {
   cursor: string | null;
   epoch: string;
 }
 
-/** Raised for a page that arrives after its person signed out. */
+/** Raised for a write that arrives after its saved copy was cleared. */
 export class SignedOut extends Error {
   constructor() {
-    super("Signed out.");
+    super("Saved transactions were cleared. Reload Finance.");
   }
 }
 
@@ -62,7 +63,15 @@ export interface TransactionStore {
     page: FinanceTransactionChanges,
     now: string,
   ): Promise<boolean>;
-  saveSummary(scope: CacheScope, summary: FinanceSummary): Promise<void>;
+  /** Keeps the summary, unless the copy was cleared since `epoch`. */
+  saveSummary(
+    scope: CacheScope,
+    summary: FinanceSummary,
+    epoch: string,
+  ): Promise<void>;
+  /** Starts the copy over for a server that is behind it. */
+  restart(scope: CacheScope, from: Position): Promise<void>;
+  /** Drops the copy after a refusal, ending pulls still running. */
   clear(scope: CacheScope): Promise<void>;
 }
 
@@ -75,6 +84,11 @@ function scopeKey(scope: CacheScope) {
 /** The state key holding a person's epoch, beside their scopes' keys. */
 function epochKey(userId: string) {
   return JSON.stringify([apiUrl, userId]);
+}
+
+/** The state key holding a scope's epoch. */
+function scopeEpochKey(scope: CacheScope) {
+  return JSON.stringify([apiUrl, scope.userId, scope.organizationId, "epoch"]);
 }
 
 function emptyState(scope: string): CacheState {
@@ -99,6 +113,12 @@ export function memoryTransactionStore(): TransactionStore {
     string,
     { rows: Map<string, FinanceTransaction>; state: CacheState }
   >();
+  const epochs = new Map<string, number>();
+  const epochOf = (scope: CacheScope) =>
+    String(epochs.get(scopeKey(scope)) ?? 0);
+  const check = (scope: CacheScope, epoch: string) => {
+    if (epoch !== epochOf(scope)) throw new SignedOut();
+  };
   const entry = (scope: CacheScope) => {
     const key = scopeKey(scope);
     let found = scopes.get(key);
@@ -114,9 +134,10 @@ export function memoryTransactionStore(): TransactionStore {
       return { ...state, transactions: [...rows.values()] };
     },
     async position(scope) {
-      return { cursor: entry(scope).state.cursor, epoch: "" };
+      return { cursor: entry(scope).state.cursor, epoch: epochOf(scope) };
     },
     async apply(scope, from, page, now) {
+      check(scope, from.epoch);
       const found = entry(scope);
       if (found.state.cursor !== from.cursor) return false;
       for (const transaction of page.transactions)
@@ -125,12 +146,18 @@ export function memoryTransactionStore(): TransactionStore {
       found.state = nextState(found.state, page, now);
       return true;
     },
-    async saveSummary(scope, summary) {
+    async saveSummary(scope, summary, epoch) {
+      check(scope, epoch);
       const found = entry(scope);
       found.state = { ...found.state, summary };
     },
+    async restart(scope, from) {
+      check(scope, from.epoch);
+      scopes.delete(scopeKey(scope));
+    },
     async clear(scope) {
       scopes.delete(scopeKey(scope));
+      epochs.set(scopeKey(scope), Number(epochOf(scope)) + 1);
     },
   };
 }
@@ -206,10 +233,27 @@ function readState(store: IDBObjectStore, key: string) {
   );
 }
 
-function readEpoch(store: IDBObjectStore, userId: string) {
-  return request(store.get(epochKey(userId))).then(
+function readEpochRecord(store: IDBObjectStore, key: string) {
+  return request(store.get(key)).then(
     (found) => (found as { epoch: string } | undefined)?.epoch ?? "",
   );
+}
+
+/** The person's epoch with the scope's: either one advancing ends a pull. */
+async function readEpoch(store: IDBObjectStore, scope: CacheScope) {
+  const [person, own] = await Promise.all([
+    readEpochRecord(store, epochKey(scope.userId)),
+    readEpochRecord(store, scopeEpochKey(scope)),
+  ]);
+  return `${person}:${own}`;
+}
+
+async function checkEpoch(
+  store: IDBObjectStore,
+  scope: CacheScope,
+  epoch: string,
+) {
+  if ((await readEpoch(store, scope)) !== epoch) throw new SignedOut();
 }
 
 function deleteScope(store: IDBObjectStore, key: string) {
@@ -245,7 +289,7 @@ export function indexedDbTransactionStore(): TransactionStore {
       return inTransaction("readonly", async (stores) => {
         const [state, epoch] = await Promise.all([
           readState(stores.state, scopeKey(scope)),
-          readEpoch(stores.state, scope.userId),
+          readEpoch(stores.state, scope),
         ]);
         return { cursor: state.cursor, epoch };
       });
@@ -253,11 +297,8 @@ export function indexedDbTransactionStore(): TransactionStore {
     apply(scope, from, page, now) {
       const key = scopeKey(scope);
       return inTransaction("readwrite", async (stores) => {
-        const [state, epoch] = await Promise.all([
-          readState(stores.state, key),
-          readEpoch(stores.state, scope.userId),
-        ]);
-        if (epoch !== from.epoch) throw new SignedOut();
+        await checkEpoch(stores.state, scope, from.epoch);
+        const state = await readState(stores.state, key);
         if (state.cursor !== from.cursor) return false;
         for (const transaction of page.transactions)
           stores.transactions.put({
@@ -270,21 +311,41 @@ export function indexedDbTransactionStore(): TransactionStore {
         return true;
       });
     },
-    saveSummary(scope, summary) {
+    saveSummary(scope, summary, epoch) {
       const key = scopeKey(scope);
       return inTransaction("readwrite", async (stores) => {
+        await checkEpoch(stores.state, scope, epoch);
         const state = await readState(stores.state, key);
         stores.state.put({ ...state, summary });
       });
     },
-    clear(scope) {
+    restart(scope, from) {
       const key = scopeKey(scope);
       return inTransaction("readwrite", async (stores) => {
+        await checkEpoch(stores.state, scope, from.epoch);
         stores.state.delete(key);
         await deleteScope(stores.transactions, key);
       });
     },
+    clear: clearScopeTransactions,
   };
+}
+
+/**
+ * Drops what this device keeps for a scope, as after a refusal, and advances
+ * its epoch so pulls still running (in any tab) keep nothing they receive.
+ */
+export async function clearScopeTransactions(scope: CacheScope) {
+  if (typeof indexedDB === "undefined") return;
+  const key = scopeKey(scope);
+  await inTransaction("readwrite", async (stores) => {
+    stores.state.delete(key);
+    await deleteScope(stores.transactions, key);
+    stores.state.put({
+      epoch: crypto.randomUUID(),
+      scope: scopeEpochKey(scope),
+    });
+  });
 }
 
 /**
@@ -354,7 +415,7 @@ async function pullPages(
     if (page.reset) {
       if (reset) throw new Error("Could not read transactions. Try again.");
       reset = true;
-      await store.clear(scope);
+      await store.restart(scope, from);
       continue;
     }
     if (await store.apply(scope, from, page, new Date().toISOString())) {

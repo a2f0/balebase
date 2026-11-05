@@ -99,8 +99,8 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
       async (who, first, stale) => {
         const store = window.transactionCacheTest?.store;
         return [
-          await store?.apply(who, { cursor: null, epoch: "" }, first, "t1"),
-          await store?.apply(who, { cursor: null, epoch: "" }, stale, "t2"),
+          await store?.apply(who, { cursor: null, epoch: ":" }, first, "t1"),
+          await store?.apply(who, { cursor: null, epoch: ":" }, stale, "t2"),
         ];
       },
       scope,
@@ -127,7 +127,7 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
       try {
         await window.transactionCacheTest?.store.apply(
           who,
-          { cursor: "1", epoch: "" },
+          { cursor: "1", epoch: ":" },
           broken,
           "t3",
         );
@@ -181,7 +181,7 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
         for (const which of scopes)
           await window.transactionCacheTest?.store.apply(
             which,
-            { cursor: null, epoch: "" },
+            { cursor: null, epoch: ":" },
             data,
             "t4",
           );
@@ -221,7 +221,7 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
       scope,
       page("3", false, [row("late")]),
     );
-    expect(late).toBe("Signed out.");
+    expect(late).toBe("Saved transactions were cleared. Reload Finance.");
 
     // Nor does a pull that saved pages before the sign-out carry on with
     // the epoch the sign-out set.
@@ -257,13 +257,61 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
       page("4", true, [row("early")]),
       page("5", false, [row("after")]),
     );
-    expect(resumed.reply).toBe("Signed out.");
+    expect(resumed.reply).toBe(
+      "Saved transactions were cleared. Reload Finance.",
+    );
     expect((await kept(target)).rows).toEqual([]);
     expect(await kept(target)).toEqual({
       completed: false,
       cursor: null,
       rows: [],
     });
+
+    // A refusal (here, in another tab) ends a pull still waiting on its first
+    // page, and keeps a summary read before it from being saved.
+    const refused = await target.evaluate(
+      async (who, data, summary) => {
+        const cache = window.transactionCacheTest;
+        if (!cache) throw new Error("No fixture");
+        const { epoch } = await cache.store.position(who);
+        const answer = Promise.withResolvers<FinanceTransactionChanges>();
+        const asked = Promise.withResolvers<void>();
+        const pull = cache.pullTransactions(who, cache.store, () => {
+          asked.resolve();
+          return answer.promise;
+        });
+        await asked.promise;
+        await cache.store.clear(who);
+        answer.resolve(data);
+        const outcome = (work: Promise<unknown>) =>
+          work.then(
+            () => "kept",
+            (cause: Error) => cause.message,
+          );
+        return [
+          await outcome(pull),
+          await outcome(cache.store.saveSummary(who, summary, epoch)),
+        ];
+      },
+      scope,
+      page("6", false, [row("refused")]),
+      { accounts: [], categories: [], configured: true, connections: [] },
+    );
+    expect(refused).toEqual([
+      "Saved transactions were cleared. Reload Finance.",
+      "Saved transactions were cleared. Reload Finance.",
+    ]);
+    expect(await kept(target)).toEqual({
+      completed: false,
+      cursor: null,
+      rows: [],
+    });
+    const summaryKept = await target.evaluate(
+      async (who) =>
+        (await window.transactionCacheTest?.store.read(who))?.summary ?? null,
+      scope,
+    );
+    expect(summaryKept).toBeNull();
   } finally {
     await closeChrome(browser);
     await server.stop(true);

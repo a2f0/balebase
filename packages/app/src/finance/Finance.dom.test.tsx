@@ -447,6 +447,54 @@ describe("Finance filters", () => {
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
   });
 
+  it("keeps a row's new category in the saved copy", async () => {
+    let category: string | null = null;
+    let down = false;
+    let feeds = 0;
+    respond((url, init) => {
+      if (init?.method === "PUT") {
+        category = JSON.parse(String(init.body)).categoryId;
+        return Response.json({ expenseCategoryId: category });
+      }
+      if (down)
+        return Response.json(
+          { error: "Service unavailable." },
+          { status: 503 },
+        );
+      if (isFeed(url)) feeds++;
+      return Response.json({
+        ...data,
+        transactions: data.transactions.map((row) =>
+          row.id === "Coffee" ? { ...row, expenseCategoryId: category } : row,
+        ),
+      });
+    });
+    const navigate = await mountFinance();
+    const select = container.querySelector<HTMLSelectElement>(
+      '[aria-label="Expense category for Coffee"]',
+    );
+    if (!select) throw new Error("Missing category picker");
+    await act(async () => {
+      select.value = "meals";
+      select.dispatchEvent(
+        new dom.Event("change", { bubbles: true }) as unknown as Event,
+      );
+    });
+    // The save is followed by catching up with the change feed.
+    expect(feeds).toBe(2);
+    down = true;
+    await navigate("/finance/categories");
+    await navigate("/finance");
+    expect(container.textContent).toContain(
+      "Showing transactions saved on this device",
+    );
+    expect(
+      container.querySelector<HTMLSelectElement>(
+        '[aria-label="Expense category for Coffee"]',
+      )?.value,
+    ).toBe("meals");
+  });
+
   it("keeps nothing for someone who loses access", async () => {
     let refused = false;
     respond(() =>
@@ -511,16 +559,21 @@ describe("Finance filters", () => {
       { id: "category-1", name: "Meals", slug: "meals", transactionCount: 2 },
       { id: "category-2", name: "Travel", slug: "travel", transactionCount: 0 },
     ];
-    respond((_url, init) => {
-      if (init?.method === "PUT")
+    const moved = new Set<string>();
+    respond((url, init) => {
+      if (init?.method === "PUT") {
+        moved.add(decodeURIComponent(url.pathname.split("/").at(-2) ?? ""));
         return Response.json({ expenseCategoryId: "category-2" });
+      }
       return Response.json({
         ...data,
         categories,
         transactions: [
           ...data.transactions,
           ...dated(["Lunch", "Dinner"], { expenseCategoryId: "category-1" }),
-        ],
+        ].map((row) =>
+          moved.has(row.id) ? { ...row, expenseCategoryId: "category-2" } : row,
+        ),
       });
     });
     await mountFinance("/finance/categories");
@@ -943,10 +996,23 @@ describe("Bulk categorization", () => {
   });
 
   it("holds bulk changes until a row's own category save finishes", async () => {
-    const save = Promise.withResolvers<Response>();
-    respond((_url, init) =>
-      init?.method === "PUT" ? save.promise : Response.json(listing),
-    );
+    const save = Promise.withResolvers<void>();
+    let saved = false;
+    respond(async (_url, init) => {
+      if (init?.method === "PUT") {
+        await save.promise;
+        saved = true;
+        return Response.json({ expenseCategoryId: "meals" });
+      }
+      return Response.json({
+        ...listing,
+        transactions: listing.transactions.map((row) =>
+          saved && row.id === "Coffee"
+            ? { ...row, expenseCategoryId: "meals" }
+            : row,
+        ),
+      });
+    });
     await mountFinance();
     const select = container.querySelector<HTMLSelectElement>(
       '[aria-label="Expense category for Coffee"]',
@@ -960,9 +1026,7 @@ describe("Bulk categorization", () => {
     });
     expect(checkbox("Select all shown transactions").disabled).toBe(true);
     expect(checkbox("Select Lunch").disabled).toBe(true);
-    await act(async () =>
-      save.resolve(Response.json({ expenseCategoryId: "meals" })),
-    );
+    await act(async () => save.resolve());
     expect(checkbox("Select all shown transactions").disabled).toBe(false);
     expect(categoryOf("Coffee")).toBe("meals");
   });

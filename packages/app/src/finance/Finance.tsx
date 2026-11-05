@@ -109,7 +109,12 @@ export function Finance({
       error={error}
       notice={notice}
       onAnnotate={actions.annotate}
-      onCategorize={categorizeTransaction(setData, setError, setCategorizing)}
+      onCategorize={categorizeTransaction(
+        setData,
+        setError,
+        setCategorizing,
+        () => latestLoad.current(),
+      )}
       onCategorizeMany={categorizeTransactions(
         setData,
         setError,
@@ -142,6 +147,7 @@ function categorizeTransaction(
   setData: Dispatch<SetStateAction<FinanceData | undefined>>,
   setError: (message: string | undefined) => void,
   setSaving: (saving: boolean) => void,
+  refresh: () => Promise<void>,
 ) {
   return async (transaction: FinanceTransaction, categoryId: string | null) => {
     const previous = transaction.expenseCategoryId;
@@ -152,6 +158,8 @@ function categorizeTransaction(
     setSaving(true);
     try {
       await api.finance.setTransactionCategory(transaction.id, categoryId);
+      // Saved transactions catch up, so the change outlasts going offline.
+      await refresh();
     } catch (cause) {
       setData((current) => withCategories(current, reversed(change)));
       setError(errorMessage(cause, "Could not update finances."));
