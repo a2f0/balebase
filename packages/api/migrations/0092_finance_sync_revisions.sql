@@ -12,10 +12,16 @@
 -- resumed from its saved Plaid cursor, or restarted after
 -- TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION rewrites its rows, and each
 -- rewrite takes a new revision, so devices read them again.
+--
+-- Cursors also carry `epoch`. Restoring D1 to an earlier point moves the
+-- counter back, and it can then climb past a device's cursor along another
+-- history; rotating every epoch after a restore (docs/operations.md) makes
+-- those devices start over instead of keeping what the restore undid.
 CREATE TABLE finance_sync_revisions (
   organization_id TEXT NOT NULL PRIMARY KEY
     REFERENCES organization (id) ON DELETE CASCADE,
-  revision INTEGER NOT NULL
+  revision INTEGER NOT NULL,
+  epoch TEXT NOT NULL DEFAULT (lower(hex(randomblob(8))))
 );
 
 -- Transactions deleted outright (a disconnected bank's data deletion), so

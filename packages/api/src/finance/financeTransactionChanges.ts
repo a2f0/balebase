@@ -38,7 +38,10 @@ interface Change {
 export async function transactionChanges(context: FinanceContext) {
   const organizationId = context.get("organizationId");
   const raw = context.req.query("cursor");
-  const after = raw === undefined ? { id: "", revision: 0 } : parseCursor(raw);
+  const after =
+    raw === undefined
+      ? { epoch: undefined, id: "", revision: 0 }
+      : parseCursor(raw);
   if (!after) return context.json({ error: "Invalid sync cursor." }, 400);
   const limit = financeLimits.syncPage;
   const database = context.env.DB;
@@ -51,7 +54,7 @@ export async function transactionChanges(context: FinanceContext) {
   const [head, rows, deleted, emails] = await database.batch([
     database
       .prepare(
-        "SELECT revision FROM finance_sync_revisions WHERE organization_id = ?",
+        "SELECT revision, epoch FROM finance_sync_revisions WHERE organization_id = ?",
       )
       .bind(organizationId),
     database
@@ -71,18 +74,17 @@ export async function transactionChanges(context: FinanceContext) {
       .bind(...page.bindings),
     linkedTransactionEmailsStatement(database, organizationId, page),
   ]);
-  const headRevision =
-    (head?.results[0] as { revision: number } | undefined)?.revision ?? 0;
-  if (after.revision > headRevision) {
-    return respond(context, financeRoutes.transactionChanges, {
-      cursor: null,
-      more: false,
-      organizationId,
-      removedIds: [],
-      reset: true,
-      transactions: [],
-    });
-  }
+  const current = head?.results[0] as
+    | { epoch: string; revision: number }
+    | undefined;
+  // A cursor from another epoch (a restore since) or ahead of the counter
+  // describes history this database does not have: start over.
+  if (
+    raw !== undefined &&
+    (after.epoch !== current?.epoch ||
+      after.revision > (current?.revision ?? 0))
+  )
+    return startOver(context, organizationId);
   const changes = [
     ...((rows?.results ?? []) as ChangedRow[]).map((row) => ({
       id: row.id,
@@ -103,7 +105,10 @@ export async function transactionChanges(context: FinanceContext) {
     row?.source_status === "active" ? [row] : [],
   );
   return respond(context, financeRoutes.transactionChanges, {
-    cursor: last ? encodeCursor(String(last.revision), last.id) : (raw ?? null),
+    cursor:
+      last && current
+        ? encodeCursor(`${current.epoch}.${last.revision}`, last.id)
+        : (raw ?? null),
     more: changes.length > limit,
     organizationId,
     removedIds: [...latest.values()]
@@ -119,14 +124,26 @@ export async function transactionChanges(context: FinanceContext) {
   });
 }
 
+/** Tells a device its cursor is for history this database does not have. */
+function startOver(context: FinanceContext, organizationId: string) {
+  return respond(context, financeRoutes.transactionChanges, {
+    cursor: null,
+    more: false,
+    organizationId,
+    removedIds: [],
+    reset: true,
+    transactions: [],
+  });
+}
+
 function byRevision(a: Change, b: Change) {
   return a.revision - b.revision || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
 function parseCursor(value: string) {
   const cursor = decodeCursor(value, 512);
-  if (!cursor || !/^\d{1,15}$/.test(cursor[0]) || cursor[1].length > 200) {
+  const place = cursor && /^([0-9a-f]{1,64})\.(\d{1,15})$/.exec(cursor[0]);
+  if (!cursor || !place?.[1] || !place[2] || cursor[1].length > 200)
     return null;
-  }
-  return { id: cursor[1], revision: Number(cursor[0]) };
+  return { epoch: place[1], id: cursor[1], revision: Number(place[2]) };
 }

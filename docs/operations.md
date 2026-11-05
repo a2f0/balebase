@@ -234,6 +234,16 @@ disconnect also finishes local cleanup when Plaid has already removed the Item.
 Clients start a sync with `/sync-jobs` and monitor the connection's saved
 status; there is no endpoint that waits for completed counts.
 
+Devices keep every transaction and catch up from a per-organization change
+cursor (migration 0092). After restoring D1 to an earlier point (Time Travel or
+an import), rotate every organization's sync epoch so devices download again
+instead of keeping changes the restore undid:
+
+```sh
+bunx wrangler d1 execute <database> --remote --command \
+  "UPDATE finance_sync_revisions SET epoch = lower(hex(randomblob(8)))"
+```
+
 Wrangler's local API emulates the queue. Apply local migrations, start the API,
 and exercise a scheduled pass with
 `curl 'http://localhost:8787/__scheduled?cron=*/5%20*%20*%20*%20*'`.

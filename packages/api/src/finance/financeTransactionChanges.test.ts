@@ -249,6 +249,38 @@ describe("transaction changes", () => {
     });
   });
 
+  it("starts devices over once a restore's epoch is rotated, even after the counter climbs back", async () => {
+    const fixture = await createFixture();
+    seedTransactions(fixture.database);
+    const device = await pull(fixture, newDevice());
+    const { revision } = fixture.database
+      .query(
+        "SELECT revision FROM finance_sync_revisions WHERE organization_id = 'org_user-1'",
+      )
+      .get() as { revision: number };
+    // Restored to an earlier point, then written to past the device's place
+    // along a different history.
+    fixture.database.exec(
+      "UPDATE finance_sync_revisions SET revision = 3 WHERE organization_id = 'org_user-1'",
+    );
+    fixture.database.exec(
+      `UPDATE finance_sync_revisions SET revision = ${revision + 5} WHERE organization_id = 'org_user-1'`,
+    );
+    // The restore runbook (docs/operations.md) rotates every epoch.
+    fixture.database.exec(
+      "UPDATE finance_sync_revisions SET epoch = lower(hex(randomblob(8)))",
+    );
+    expect((await changes(fixture, device.cursor)).body).toMatchObject({
+      cursor: null,
+      reset: true,
+      transactions: [],
+    });
+    // A cursor without an epoch is not one this feed issues.
+    expect(
+      (await changes(fixture, btoa(JSON.stringify(["3", "txn"])))).status,
+    ).toBe(400);
+  });
+
   it("returns the summary without transactions when asked", async () => {
     const fixture = await createFixture();
     seedTransactions(fixture.database);
