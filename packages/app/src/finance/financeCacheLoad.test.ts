@@ -251,6 +251,30 @@ describe("loading cached finances", () => {
     expect((await secondary.read(scope)).transactions).toEqual([]);
   });
 
+  it("ends at once when the feed finds another account while the summary stalls", async () => {
+    const store = memoryTransactionStore();
+    await loadFinance(store, scope, true, sources);
+    const stalled = new Promise<FinanceData>(() => {});
+    const waited = Bun.sleep(1000).then(() => "still waiting");
+    const outcome = await Promise.race([
+      loadFinance(store, scope, true, {
+        ...sources,
+        changes: async () => ({ ...feed("theirs"), userId: "someone-else" }),
+        summary: () => stalled,
+      }).then(
+        () => "loaded",
+        (cause: Error) => cause.message,
+      ),
+      waited,
+    ]);
+    expect(outcome).toContain("The signed-in account or organization changed");
+    // The copy is this person's still; another session's answer clears nothing.
+    expect((await store.read(scope)).transactions.map(({ id }) => id)).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
   it("saves nothing read in another account's session", async () => {
     const store = memoryTransactionStore();
     await loadFinance(store, scope, true, sources);

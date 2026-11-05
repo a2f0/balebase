@@ -114,7 +114,16 @@ async function loadOnce(
   // as deleting a bank's data) reaches it.
   const pull = keepTransactions || hasCopy;
   const requests = [
-    fetchSummary(),
+    // Checked on arrival, so a stalled feed cannot delay the mismatch.
+    fetchSummary().then((data) => {
+      if (
+        scope &&
+        (data.organizationId !== scope.organizationId ||
+          data.userId !== scope.userId)
+      )
+        throw new OrganizationChanged();
+      return data;
+    }),
     pull
       ? pullTransactions(
           cacheScope,
@@ -129,7 +138,6 @@ async function loadOnce(
   const { failures, latest, summary } = await settle(
     store,
     cacheScope,
-    scope,
     requests,
   );
   const failure = failures[0];
@@ -166,14 +174,16 @@ async function loadOnce(
 async function settle(
   store: TransactionStore,
   cacheScope: CacheScope,
-  scope: CacheScope | undefined,
   requests: readonly [Promise<FinanceData>, Promise<unknown>],
 ) {
   const [summary, pulled] = await Promise.race([
     Promise.allSettled(requests),
-    firstRefusal(requests),
-  ]).catch(async (refusal: unknown) => {
-    throw await clearedFor(store, cacheScope, refusal);
+    firstEnding(requests),
+  ]).catch(async (ending: unknown) => {
+    // Another session's answer is not a refusal of this one's copy.
+    throw refused(ending)
+      ? await clearedFor(store, cacheScope, ending)
+      : ending;
   });
   const failures = [summary, pulled].flatMap((result) =>
     result.status === "rejected" ? [result.reason as unknown] : [],
@@ -184,15 +194,8 @@ async function settle(
   if (fellBack) throw fellBack;
   const latest =
     summary.status === "fulfilled" ? summaryOf(summary.value) : undefined;
-  // The session moved to another organization under this load: nothing
-  // read may be saved or shown under this one.
-  if (
-    latest &&
-    scope &&
-    (latest.organizationId !== scope.organizationId ||
-      latest.userId !== scope.userId)
-  )
-    throw new OrganizationChanged();
+  // The session moved to another account or organization under this load:
+  // nothing read may be saved or shown under this one.
   const changed = failures.find(
     (cause) => cause instanceof OrganizationChanged,
   );
@@ -219,12 +222,16 @@ async function clearedFor(
   return refusal;
 }
 
-/** Rejects with the first refusal among `requests`; otherwise never settles. */
-function firstRefusal(requests: readonly Promise<unknown>[]) {
+/**
+ * Rejects with the first refusal or identity mismatch among `requests`:
+ * either ends the load at once. Otherwise never settles.
+ */
+function firstEnding(requests: readonly Promise<unknown>[]) {
   return new Promise<never>((_resolve, reject) => {
     for (const request of requests)
       request.catch((cause: unknown) => {
-        if (refused(cause)) reject(cause);
+        if (refused(cause) || cause instanceof OrganizationChanged)
+          reject(cause);
       });
   });
 }
