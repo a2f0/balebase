@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { act, useCallback } from "react";
+import { act, StrictMode, useCallback } from "react";
 import { installDom } from "../testing/dom";
 import { useAction } from "./useAction";
 import { useCursorPages } from "./useCursorPages";
@@ -266,6 +266,73 @@ describe("useCursorPages", () => {
     expect(hook.current().items).toBeUndefined();
     await act(async () => first.resolve({ items: ["d"], nextCursor: null }));
     expect(hook.current().items).toEqual(["d"]);
+  });
+
+  it("lets only the newest first page finish when a reload replaces one", async () => {
+    const pages = [
+      deferred<{ items: string[]; nextCursor: string | null }>(),
+      deferred<{ items: string[]; nextCursor: string | null }>(),
+    ];
+    let calls = 0;
+    const fetchPage = async () => {
+      const next = pages[calls++];
+      if (!next) throw new Error("Unexpected request");
+      return next.promise;
+    };
+    const hook = await renderHook(
+      ({ fetch }: { fetch: typeof fetchPage }) =>
+        useCursorPages(fetch, "Could not load."),
+      { fetch: fetchPage },
+    );
+    await act(async () => hook.current().reload());
+    expect(calls).toBe(2);
+    await act(async () =>
+      pages[0]?.resolve({ items: ["replaced"], nextCursor: "old" }),
+    );
+    expect(hook.current().items).toBeUndefined();
+    expect(hook.current().refreshing).toBe(true);
+    await act(async () =>
+      pages[1]?.resolve({ items: ["b"], nextCursor: null }),
+    );
+    expect(hook.current().items).toEqual(["b"]);
+    expect(hook.current().refreshing).toBe(false);
+  });
+
+  it("loads once Strict Mode has mounted, unmounted, and mounted it", async () => {
+    const pages: PromiseWithResolvers<{
+      items: string[];
+      nextCursor: string | null;
+    }>[] = [];
+    const fetchPage = () => {
+      const page = deferred<{ items: string[]; nextCursor: string | null }>();
+      pages.push(page);
+      return page.promise;
+    };
+    let result: ReturnType<typeof useCursorPages<string>> | undefined;
+    await mount(
+      <StrictMode>
+        <HookProbe
+          hook={() => useCursorPages(fetchPage, "Could not load.")}
+          props={undefined}
+          onResult={(next) => {
+            result = next;
+          }}
+        />
+      </StrictMode>,
+    );
+    expect(pages).toHaveLength(2);
+    // The first mount's request ends with its own cleanup's abort.
+    await act(async () =>
+      pages[0]?.reject(new DOMException("Aborted", "AbortError")),
+    );
+    await act(async () =>
+      pages[1]?.resolve({ items: ["a"], nextCursor: null }),
+    );
+    expect(result).toMatchObject({
+      error: undefined,
+      items: ["a"],
+      refreshing: false,
+    });
   });
 
   it("keeps loaded items and shows the error when a later page fails", async () => {

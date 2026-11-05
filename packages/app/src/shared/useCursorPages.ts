@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import {
+  type CursorPage,
+  type CursorPagesEvent,
+  type CursorPagesState,
+  cursorPagesTransition,
+  initialCursorPages,
+} from "./cursorPagesState";
 import { errorMessage } from "./errors";
-
-interface CursorPage<T> {
-  items: T[];
-  nextCursor: string | null;
-}
 
 /**
  * A cursor-paginated list for `InfiniteScroll`. The first page reloads when
@@ -15,79 +17,76 @@ interface CursorPage<T> {
  * collapse and lose its scroll position. A page requested before the newest
  * first page is dropped when it arrives, and no page loads during a refresh.
  * `generation` changes with each first page; key `InfiniteScroll` on it so a
- * refreshed list forgets which cursor it already loaded.
+ * refreshed list forgets which cursor it already loaded. The states and
+ * their transitions are in `cursorPagesState.ts`.
  */
 export function useCursorPages<T>(
   fetchPage: (cursor?: string) => Promise<CursorPage<T>>,
   fallback: string,
   refreshKey?: unknown,
 ) {
-  const [items, setItems] = useState<T[]>();
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [error, setError] = useState<string>();
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [generation, setGeneration] = useState(0);
+  const [state, dispatch] = useReducer<
+    CursorPagesState<T>,
+    [CursorPagesEvent<T>]
+  >(cursorPagesTransition, initialCursorPages);
   const [reloads, setReloads] = useState(0);
-  const latest = useRef(0);
+  // Tags every request: only the one in flight can finish the list, so a
+  // response for a replaced list or an unmounted page changes nothing.
+  const requests = useRef(0);
   const shown = useRef<typeof fetchPage>(undefined);
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey and reloads restart the list without changing how a page is fetched.
   useEffect(() => {
-    const request = ++latest.current;
-    if (shown.current !== fetchPage) {
-      shown.current = fetchPage;
-      setItems(undefined);
-      setNextCursor(null);
-    }
-    setError(undefined);
-    setLoadingMore(false);
-    setRefreshing(true);
+    const request = ++requests.current;
+    const clear = shown.current !== fetchPage;
+    shown.current = fetchPage;
+    dispatch({ type: "refresh", request, clear });
+    // A cleaned-up effect (unmount, Strict Mode's remount) reports nothing.
+    let active = true;
     fetchPage().then(
       (page) => {
-        if (request !== latest.current) return;
-        setItems(page.items);
-        setNextCursor(page.nextCursor);
-        setGeneration(request);
-        setRefreshing(false);
+        if (active) dispatch({ type: "firstPage", request, page });
       },
       (cause: unknown) => {
-        if (request !== latest.current) return;
-        setError(errorMessage(cause, fallback));
-        setRefreshing(false);
+        if (!active) return;
+        dispatch({
+          type: "failed",
+          request,
+          error: errorMessage(cause, fallback),
+        });
       },
     );
     return () => {
-      latest.current += 1;
+      active = false;
     };
   }, [fallback, fetchPage, refreshKey, reloads]);
 
   const loadMore = useCallback(async () => {
-    if (!nextCursor || refreshing) return false;
-    const request = latest.current;
-    setLoadingMore(true);
-    setError(undefined);
+    const cursor = state.status === "idle" ? state.list?.nextCursor : null;
+    if (!cursor) return false;
+    const request = ++requests.current;
+    dispatch({ type: "loadMore", request });
     try {
-      const page = await fetchPage(nextCursor);
-      if (request !== latest.current) return true;
-      setItems((current) => [...(current ?? []), ...page.items]);
-      setNextCursor(page.nextCursor);
+      const page = await fetchPage(cursor);
+      dispatch({ type: "nextPage", request, page });
     } catch (cause) {
-      if (request === latest.current) setError(errorMessage(cause, fallback));
-    } finally {
-      if (request === latest.current) setLoadingMore(false);
+      dispatch({
+        type: "failed",
+        request,
+        error: errorMessage(cause, fallback),
+      });
     }
     return true;
-  }, [fallback, fetchPage, nextCursor, refreshing]);
+  }, [fallback, fetchPage, state]);
 
   const reload = useCallback(() => setReloads((count) => count + 1), []);
   return {
-    error,
-    generation,
-    items,
+    error: state.status === "idle" ? state.error : undefined,
+    generation: state.list?.generation ?? 0,
+    items: state.list?.items,
     loadMore,
-    loadingMore,
-    nextCursor,
-    refreshing,
+    loadingMore: state.status === "loadingMore",
+    nextCursor: state.list?.nextCursor ?? null,
+    refreshing: state.status === "refreshing",
     reload,
   };
 }
