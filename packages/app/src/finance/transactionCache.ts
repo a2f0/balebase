@@ -14,7 +14,7 @@ export interface CacheScope {
 export type FinanceSummary = Omit<FinanceData, "nextCursor" | "transactions">;
 
 /** What this device keeps for a scope. */
-export interface CachedFinance {
+interface CachedFinance {
   /** The feed cursor the transactions are as of; null before any page. */
   cursor: string | null;
   /** When a pull last caught up with the server; none before the first. */
