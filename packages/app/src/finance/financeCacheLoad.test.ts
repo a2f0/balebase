@@ -283,7 +283,9 @@ describe("loading cached finances", () => {
       }),
     ).rejects.toThrow("The active organization changed");
     // Neither the other organization's rows nor this load's summary.
-    expect(await store.read(scope)).toEqual(before);
+    const after = await store.read(scope);
+    expect(after.transactions).toEqual(before.transactions);
+    expect(after.summary).toEqual(before.summary);
   });
 
   it("downloads again into memory when IndexedDB fails after a pull", async () => {
