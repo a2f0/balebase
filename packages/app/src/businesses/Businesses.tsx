@@ -38,6 +38,7 @@ import {
   changedBusinessInput,
   emptyBusinessForm,
 } from "./BusinessForm";
+import { businessRowTransition, initialBusinessRow } from "./businessRowState";
 import {
   type BusinessListState,
   businessIdentifiers,
@@ -356,30 +357,30 @@ function BusinessRow({
   onError: (message: string) => void;
   onUpdated: (business: Business) => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [row, dispatch] = useReducer(businessRowTransition, initialBusinessRow);
+  const busy = row.status === "deleting";
 
   async function remove() {
     if (!(await confirmBusinessDeletion(business))) return;
-    setBusy(true);
+    dispatch({ type: "deleteStarted" });
     try {
       await api.businesses.delete(business.id);
       onDeleted(business.id);
     } catch (cause) {
       onError(errorMessage(cause, "Could not delete the business."));
-      setBusy(false);
+      dispatch({ type: "deleteFailed" });
     }
   }
 
-  if (editing) {
+  if (row.status === "editing") {
     return (
       <BusinessEditRow
         business={business}
-        onCancel={() => setEditing(false)}
+        onCancel={() => dispatch({ type: "editClosed" })}
         onError={onError}
         onUpdated={(updatedBusiness) => {
           onUpdated(updatedBusiness);
-          setEditing(false);
+          dispatch({ type: "editClosed" });
         }}
       />
     );
@@ -395,7 +396,7 @@ function BusinessRow({
               <Button
                 disabled={busy}
                 icon="edit"
-                onClick={() => setEditing(true)}
+                onClick={() => dispatch({ type: "editOpened" })}
                 size="sm"
               >
                 Edit

@@ -534,4 +534,46 @@ describe("deleting a business", () => {
     expect(view.rows()).toBe(0);
     expect(view.text()).toContain("Business deleted.");
   });
+
+  it("locks the row while deleting, and reopens it after a failure", async () => {
+    let fail: () => void = () => {};
+    respond(async (_url, init) => {
+      if (init?.method === "DELETE") {
+        return new Promise<Response>((resolve) => {
+          fail = () =>
+            resolve(Response.json({ error: "Nope." }, { status: 500 }));
+        });
+      }
+      return Response.json({
+        businesses: [business("b1", "Acme, Inc.")],
+        canManage: true,
+      });
+    });
+    const view = await mountPage();
+    const named = (label: string) =>
+      [...(view.row()?.querySelectorAll("button") ?? [])].find(
+        (element) => element.textContent?.trim() === label,
+      );
+
+    await click(named("Delete"));
+    await answer("Delete business");
+    expect(named("Deleting…")).toBeDefined();
+    expect(named("Edit")?.disabled).toBe(true);
+    await click(named("Edit"));
+    expect(view.row()?.querySelector("form")).toBeNull();
+
+    await act(async () => fail());
+    await settle();
+    expect(view.rows()).toBe(1);
+    expect(named("Delete")).toBeDefined();
+    expect(named("Edit")?.disabled).toBe(false);
+
+    await click(named("Edit"));
+    expect(view.row()?.querySelector("form")?.getAttribute("aria-label")).toBe(
+      "Edit Acme, Inc.",
+    );
+    await click(named("Cancel"));
+    expect(view.row()?.querySelector("form")).toBeNull();
+    expect(named("Delete")).toBeDefined();
+  });
 });
