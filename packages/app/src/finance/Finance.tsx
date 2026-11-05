@@ -13,6 +13,7 @@ import type {
   FinanceTransaction,
   FinanceTransactionAnnotation,
 } from "@balebase/validators/finance";
+import { financeLimits } from "@balebase/validators/rules";
 import {
   type Dispatch,
   type SetStateAction,
@@ -84,7 +85,13 @@ export function Finance({
   );
   const plaid = usePlaidConnect(load, setError, setNotice);
   const actions = financeActions(load, run);
-  const busy = action.busy || plaid.busy;
+  // A category save, a row's or a bulk one, holds every category control
+  // until it finishes, so two saves never land out of order.
+  const [categorizing, setCategorizing] = useState(false);
+  // The bulk save's closing refresh must use the filters current by then.
+  const latestLoad = useRef(load);
+  latestLoad.current = load;
+  const busy = action.busy || plaid.busy || categorizing;
 
   return (
     <FinanceView
@@ -93,7 +100,13 @@ export function Finance({
       error={error}
       notice={notice}
       onAnnotate={actions.annotate}
-      onCategorize={categorizeTransaction(setData, setError)}
+      onCategorize={categorizeTransaction(setData, setError, setCategorizing)}
+      onCategorizeMany={categorizeTransactions(
+        setData,
+        setError,
+        setCategorizing,
+        () => latestLoad.current(),
+      )}
       onConnect={plaid.connect}
       onDeleteData={actions.deleteData}
       onDisconnect={actions.disconnect}
@@ -119,46 +132,125 @@ export function Finance({
 function categorizeTransaction(
   setData: Dispatch<SetStateAction<FinanceData | undefined>>,
   setError: (message: string | undefined) => void,
+  setSaving: (saving: boolean) => void,
 ) {
   return async (transaction: FinanceTransaction, categoryId: string | null) => {
     const previous = transaction.expenseCategoryId;
     if (previous === categoryId) return;
+    const change = [{ from: previous, id: transaction.id, to: categoryId }];
     setError(undefined);
-    setData((current) =>
-      withCategory(current, transaction.id, previous, categoryId),
-    );
+    setData((current) => withCategories(current, change));
+    setSaving(true);
     try {
       await api.finance.setTransactionCategory(transaction.id, categoryId);
     } catch (cause) {
-      setData((current) =>
-        withCategory(current, transaction.id, categoryId, previous),
-      );
+      setData((current) => withCategories(current, reversed(change)));
       setError(errorMessage(cause, "Could not update finances."));
+    } finally {
+      setSaving(false);
     }
   };
 }
 
-function withCategory(
+/**
+ * Gives the selected transactions one category, optimistically, saving them
+ * a request's worth at a time. A failed request restores its rows and the
+ * ones not yet sent; rows already saved keep their new category.
+ */
+function categorizeTransactions(
+  setData: Dispatch<SetStateAction<FinanceData | undefined>>,
+  setError: (message: string | undefined) => void,
+  setSaving: (saving: boolean) => void,
+  refresh: () => Promise<void>,
+) {
+  return async (
+    transactions: FinanceTransaction[],
+    categoryId: string | null,
+  ) => {
+    setSaving(true);
+    try {
+      return await saveCategories(setData, setError, transactions, categoryId);
+    } finally {
+      // A load during the save (a filter change, sync polling) replaced the
+      // optimistic rows, and a rollback may have landed on it; the server's
+      // rows and counts settle both.
+      await refresh();
+      setSaving(false);
+    }
+  };
+}
+
+async function saveCategories(
+  setData: Dispatch<SetStateAction<FinanceData | undefined>>,
+  setError: (message: string | undefined) => void,
+  transactions: FinanceTransaction[],
+  categoryId: string | null,
+) {
+  const changes = transactions
+    .filter(({ expenseCategoryId }) => expenseCategoryId !== categoryId)
+    .map(({ expenseCategoryId, id }) => ({
+      from: expenseCategoryId,
+      id,
+      to: categoryId,
+    }));
+  setError(undefined);
+  setData((current) => withCategories(current, changes));
+  for (
+    let start = 0;
+    start < changes.length;
+    start += financeLimits.bulkCategorize
+  ) {
+    const batch = changes.slice(start, start + financeLimits.bulkCategorize);
+    try {
+      await api.finance.setTransactionsCategory(
+        batch.map(({ id }) => id),
+        categoryId,
+      );
+    } catch (cause) {
+      const unsaved = reversed(changes.slice(start));
+      setData((current) => withCategories(current, unsaved));
+      setError(errorMessage(cause, "Could not update finances."));
+      return false;
+    }
+  }
+  return true;
+}
+
+interface CategoryChange {
+  from: string | null;
+  id: string;
+  to: string | null;
+}
+
+function reversed(changes: CategoryChange[]): CategoryChange[] {
+  return changes.map(({ from, id, to }) => ({ from: to, id, to: from }));
+}
+
+function withCategories(
   data: FinanceData | undefined,
-  transactionId: string,
-  from: string | null,
-  to: string | null,
+  changes: CategoryChange[],
 ): FinanceData | undefined {
-  if (!data) return data;
+  if (!data || !changes.length) return data;
+  const byId = new Map(changes.map((change) => [change.id, change]));
+  const counts = new Map<string | null, number>();
+  for (const { from, to } of changes) {
+    counts.set(to, (counts.get(to) ?? 0) + 1);
+    counts.set(from, (counts.get(from) ?? 0) - 1);
+  }
   return {
     ...data,
     categories: data.categories.map((category) => {
-      const change =
-        (category.id === to ? 1 : 0) - (category.id === from ? 1 : 0);
+      const change = counts.get(category.id) ?? 0;
       return change
         ? { ...category, transactionCount: category.transactionCount + change }
         : category;
     }),
-    transactions: data.transactions.map((transaction) =>
-      transaction.id === transactionId
-        ? { ...transaction, expenseCategoryId: to }
-        : transaction,
-    ),
+    transactions: data.transactions.map((transaction) => {
+      const change = byId.get(transaction.id);
+      return change
+        ? { ...transaction, expenseCategoryId: change.to }
+        : transaction;
+    }),
   };
 }
 
@@ -218,6 +310,10 @@ interface OverviewHandlers {
     transaction: FinanceTransaction,
     categoryId: string | null,
   ) => Promise<void>;
+  onCategorizeMany: (
+    transactions: FinanceTransaction[],
+    categoryId: string | null,
+  ) => Promise<boolean>;
   onConnect: () => Promise<void>;
   onDeleteData: (connection: FinanceConnection) => Promise<void>;
   onDisconnect: (connection: FinanceConnection) => Promise<void>;
@@ -371,6 +467,7 @@ function FinanceOverview({
         categories={data?.categories ?? []}
         onAnnotate={handlers.onAnnotate}
         onCategorize={handlers.onCategorize}
+        onCategorizeMany={handlers.onCategorizeMany}
         onClearFilter={() => onFiltersChange({ ...filters, accountIds: [] })}
         onNavigate={handlers.onNavigate}
         onSelectAnnotation={(transactionId) =>

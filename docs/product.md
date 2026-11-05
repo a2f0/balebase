@@ -823,7 +823,13 @@ also supports manual loading and retries; changing filters starts a fresh list.
 
 Each organization keeps its own list of expense categories at
 `/finance/categories` (with a one-click common set), and each transaction can
-have at most one category, chosen inline in the transaction list. Each category
+have at most one category, chosen inline in the transaction list. Once the
+organization has categories, a toolbar above the list categorizes several
+transactions at once: check rows (Shift-click checks a range), or the toolbar's
+checkbox for every shown row, then pick a category or **Uncategorized**. The
+toolbar's checkbox clears a partial selection, and changing filters starts a
+new one. Each changed transaction records its own category event; rows already
+in the category are left alone. Each category
 has a slug derived from its name and unique within the organization; renaming a
 category changes its slug, and `uncategorized` is reserved. Selecting a
 category's row, or **Show transactions** in its context menu, opens

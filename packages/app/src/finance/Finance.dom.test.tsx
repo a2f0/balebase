@@ -669,6 +669,302 @@ describe("Finance filters", () => {
   });
 });
 
+describe("Bulk categorization", () => {
+  const rows = ["Coffee", "Lunch", "Supplies", "Taxi"].map((id) =>
+    transaction(id),
+  );
+  const listing: FinanceData = {
+    ...data,
+    categories: [
+      { id: "meals", name: "Meals", slug: "meals", transactionCount: 0 },
+      { id: "travel", name: "Travel", slug: "travel", transactionCount: 0 },
+    ],
+    transactions: rows,
+  };
+  function checkbox(label: string) {
+    const input = container.querySelector<HTMLInputElement>(
+      `input[type="checkbox"][aria-label="${label}"]`,
+    );
+    if (!input) throw new Error(`Missing checkbox: ${label}`);
+    return input;
+  }
+  async function check(label: string, shiftKey = false) {
+    await act(async () => {
+      checkbox(label).dispatchEvent(
+        new dom.MouseEvent("click", {
+          bubbles: true,
+          shiftKey,
+        }) as unknown as MouseEvent,
+      );
+    });
+  }
+  function checkedRows() {
+    return rows
+      .map(({ id }) => id)
+      .filter((id) => checkbox(`Select ${id}`).checked);
+  }
+  async function setBulkCategory(value: string) {
+    const select = container.querySelector<HTMLSelectElement>(
+      '[aria-label="Category for selected transactions"]',
+    );
+    if (!select) throw new Error("Missing bulk category picker");
+    await act(async () => {
+      select.value = value;
+      select.dispatchEvent(
+        new dom.Event("change", { bubbles: true }) as unknown as Event,
+      );
+    });
+  }
+  function categoryOf(name: string) {
+    return container.querySelector<HTMLSelectElement>(
+      `[aria-label="Expense category for ${name}"]`,
+    )?.value;
+  }
+
+  /**
+   * A server that keeps the categories it saves, so the refresh after a bulk
+   * save lists them; `hold` delays each save, and `fail` refuses the saves
+   * it picks by their order (0 for the first).
+   */
+  function serveCategories(options: {
+    fail?: (attempt: number) => boolean;
+    hold?: Promise<void>;
+    transactions?: FinanceTransaction[];
+  }) {
+    const listed = options.transactions ?? rows;
+    const stored = new Map<string, string | null>();
+    const saves: { categoryId: string | null; transactionIds: string[] }[] = [];
+    let attempts = 0;
+    const server = { loads: 0, saves };
+    respond(async (_url, init) => {
+      if (init?.method !== "PUT") {
+        server.loads++;
+        return Response.json({
+          ...listing,
+          transactions: listed.map((row) => ({
+            ...row,
+            expenseCategoryId: stored.get(row.id) ?? null,
+          })),
+        });
+      }
+      await options.hold;
+      if (options.fail?.(attempts++)) {
+        return Response.json({ error: "Could not save." }, { status: 500 });
+      }
+      const body = JSON.parse(String(init.body));
+      saves.push(body);
+      for (const id of body.transactionIds) stored.set(id, body.categoryId);
+      return Response.json(body);
+    });
+    return server;
+  }
+
+  it("selects all, a range with Shift, or none, then categorizes the selection in one save", async () => {
+    const { saves } = serveCategories({});
+    await mountFinance();
+    const all = () => checkbox("Select all shown transactions");
+    expect(container.textContent).toContain(
+      "Select transactions to categorize them together",
+    );
+
+    await check("Select Lunch");
+    await check("Select Taxi", true);
+    expect(checkedRows()).toEqual(["Lunch", "Supplies", "Taxi"]);
+    expect(container.textContent).toContain("3 selected");
+    const partial = checkbox("Clear selection");
+    expect(partial.indeterminate).toBe(true);
+    expect(partial.checked).toBe(false);
+    // A partial selection clears first, as in Gmail; the next click selects all.
+    await check("Clear selection");
+    expect(checkedRows()).toEqual([]);
+    await act(async () => {
+      all().dispatchEvent(
+        new dom.MouseEvent("click", { bubbles: true }) as unknown as MouseEvent,
+      );
+    });
+    expect(checkedRows()).toEqual(["Coffee", "Lunch", "Supplies", "Taxi"]);
+    expect(checkbox("Clear selection").checked).toBe(true);
+    await check("Select Coffee");
+
+    await setBulkCategory("travel");
+    expect(saves).toEqual([
+      { categoryId: "travel", transactionIds: ["Lunch", "Supplies", "Taxi"] },
+    ]);
+    expect(rows.map(({ id }) => categoryOf(id))).toEqual([
+      "",
+      "travel",
+      "travel",
+      "travel",
+    ]);
+    expect(checkedRows()).toEqual([]);
+    expect(container.textContent).not.toContain("3 selected");
+
+    // Rows already in the category are not sent again; others move from theirs.
+    await check("Select Coffee");
+    await check("Select Lunch");
+    await setBulkCategory("uncategorized");
+    expect(saves.at(-1)).toEqual({
+      categoryId: null,
+      transactionIds: ["Lunch"],
+    });
+    expect(categoryOf("Lunch")).toBe("");
+  });
+
+  it("restores the rows and keeps the selection when saving fails", async () => {
+    respond((_url, init) =>
+      init?.method === "PUT"
+        ? Response.json(
+            { error: "Could not save categories." },
+            { status: 500 },
+          )
+        : Response.json(listing),
+    );
+    await mountFinance();
+    await check("Select Coffee");
+    await check("Select Supplies");
+    await setBulkCategory("meals");
+    expect(container.textContent).toContain("Could not save categories.");
+    expect(rows.map(({ id }) => categoryOf(id))).toEqual(["", "", "", ""]);
+    expect(checkedRows()).toEqual(["Coffee", "Supplies"]);
+  });
+
+  it("starts a new selection whichever control changes the filters", async () => {
+    respond(() => Response.json(listing));
+    await mountFinance();
+    await check("Select Coffee");
+    await click("Uncategorized expenses");
+    expect(checkedRows()).toEqual([]);
+    expect(container.textContent).not.toContain("1 selected");
+    // An account card changes the filters outside the filter toolbar.
+    await check("Select Lunch");
+    await click("Savings");
+    expect(checkedRows()).toEqual([]);
+    await check("Select Taxi");
+    await click("All accounts");
+    expect(checkedRows()).toEqual([]);
+    // Returning to the earlier filters does not bring their selection back.
+    await check("Select Coffee");
+    await click("Savings");
+    await click("All accounts");
+    expect(checkedRows()).toEqual([]);
+  });
+
+  for (const outcome of ["saved", "failed"] as const) {
+    it(`settles on the server's rows when a load lands during a bulk save that ${outcome}`, async () => {
+      const save = Promise.withResolvers<void>();
+      const server = serveCategories({
+        fail: () => outcome === "failed",
+        hold: save.promise,
+      });
+      await mountFinance();
+      await check("Select Coffee");
+      await setBulkCategory("meals");
+      expect(categoryOf("Coffee")).toBe("meals");
+      // A filter change mid-save loads the rows as the server has them now.
+      await click("Savings");
+      expect(categoryOf("Coffee")).toBe("");
+      const before = server.loads;
+      await act(async () => save.resolve());
+      expect(server.loads).toBe(before + 1);
+      expect(categoryOf("Coffee")).toBe(outcome === "saved" ? "meals" : "");
+    });
+  }
+
+  it("keeps the batches that saved when a later one fails, and retries only the rest", async () => {
+    const many = Array.from({ length: 252 }, (_, index) =>
+      transaction(`Row ${index}`),
+    );
+    const server = serveCategories({
+      fail: (attempt) => attempt === 1,
+      transactions: many,
+    });
+    await mountFinance();
+    await check("Select all shown transactions");
+    await setBulkCategory("meals");
+    expect(container.textContent).toContain("Could not save.");
+    expect(
+      server.saves.map(({ transactionIds }) => transactionIds.length),
+    ).toEqual([250]);
+    // The first batch stays categorized; the refused rows go back.
+    expect(categoryOf("Row 0")).toBe("meals");
+    expect(categoryOf("Row 249")).toBe("meals");
+    expect(categoryOf("Row 250")).toBe("");
+    expect(categoryOf("Row 251")).toBe("");
+    expect(container.textContent).toContain("252 selected");
+
+    await setBulkCategory("meals");
+    // The retry sends one request, for the refused rows only.
+    expect(server.saves.slice(1)).toEqual([
+      { categoryId: "meals", transactionIds: ["Row 250", "Row 251"] },
+    ]);
+    expect(categoryOf("Row 251")).toBe("meals");
+    expect(container.textContent).not.toContain("252 selected");
+  });
+
+  it("holds bulk changes until a row's own category save finishes", async () => {
+    const save = Promise.withResolvers<Response>();
+    respond((_url, init) =>
+      init?.method === "PUT" ? save.promise : Response.json(listing),
+    );
+    await mountFinance();
+    const select = container.querySelector<HTMLSelectElement>(
+      '[aria-label="Expense category for Coffee"]',
+    );
+    if (!select) throw new Error("Missing category picker");
+    await act(async () => {
+      select.value = "meals";
+      select.dispatchEvent(
+        new dom.Event("change", { bubbles: true }) as unknown as Event,
+      );
+    });
+    expect(checkbox("Select all shown transactions").disabled).toBe(true);
+    expect(checkbox("Select Lunch").disabled).toBe(true);
+    await act(async () =>
+      save.resolve(Response.json({ expenseCategoryId: "meals" })),
+    );
+    expect(checkbox("Select all shown transactions").disabled).toBe(false);
+    expect(categoryOf("Coffee")).toBe("meals");
+  });
+
+  it("holds every row's category picker until a bulk save finishes", async () => {
+    const save = Promise.withResolvers<void>();
+    serveCategories({ hold: save.promise });
+    await mountFinance();
+    await check("Select Coffee");
+    await setBulkCategory("meals");
+    const picker = (name: string) =>
+      container.querySelector<HTMLSelectElement>(
+        `[aria-label="Expense category for ${name}"]`,
+      );
+    expect(picker("Lunch")?.disabled).toBe(true);
+    expect(checkbox("Select Lunch").disabled).toBe(true);
+    await act(async () => save.resolve());
+    expect(picker("Lunch")?.disabled).toBe(false);
+    expect(categoryOf("Coffee")).toBe("meals");
+  });
+
+  it("saves more than one request's worth of rows in batches", async () => {
+    const many = Array.from({ length: 251 }, (_, index) =>
+      transaction(`Row ${index}`),
+    );
+    const saves: string[][] = [];
+    respond(async (_url, init) => {
+      if (init?.method !== "PUT") {
+        return Response.json({ ...listing, transactions: many });
+      }
+      const body = JSON.parse(String(init.body));
+      saves.push(body.transactionIds);
+      return Response.json(body);
+    });
+    await mountFinance();
+    await check("Select all shown transactions");
+    expect(container.textContent).toContain("251 selected");
+    await setBulkCategory("meals");
+    expect(saves.map((ids) => ids.length)).toEqual([250, 1]);
+    expect(saves.flat()).toEqual(many.map(({ id }) => id));
+  });
+});
+
 it("polls status without loading history until completion or discarding an in-flight page", async () => {
   using polls = holdTimers(syncPollMs);
   const older = Promise.withResolvers<Response>();

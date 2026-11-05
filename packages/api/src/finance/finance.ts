@@ -23,6 +23,7 @@ import { accountDetail } from "./financeAccountDetail";
 import {
   addDefaultCategories,
   assignTransactionCategory,
+  assignTransactionsCategory,
   createCategory,
   deleteCategory,
   listCategories,
@@ -143,6 +144,7 @@ export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
   finance.get("/transactions/:id", transactionDetail);
   finance.get("/transactions/:id/activity", transactionActivity);
   finance.patch("/transactions/:id/annotation", updateTransactionAnnotation);
+  finance.put("/transactions/category", assignTransactionsCategory);
   finance.put("/transactions/:id/category", assignTransactionCategory);
   finance.get("/categories", listCategories);
   finance.post("/categories", createCategory);

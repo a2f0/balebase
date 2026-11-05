@@ -39,6 +39,12 @@ import {
   FinanceTransactionFilters,
   hasTransactionFilters,
 } from "./FinanceTransactionFilters";
+import {
+  TransactionSelectCheckbox,
+  type TransactionSelection,
+  TransactionSelectionBar,
+  useTransactionSelection,
+} from "./FinanceTransactionSelection";
 import { formatMoney } from "./financeFormat";
 
 interface AnnotationHandlers {
@@ -59,6 +65,12 @@ interface AnnotationHandlers {
   selectedTransactionId: string | undefined;
 }
 
+/** Gives several transactions one category; true once it is saved. */
+type CategorizeMany = (
+  transactions: FinanceTransaction[],
+  categoryId: string | null,
+) => Promise<boolean>;
+
 export function FinanceTransactionHistory({
   accountName,
   onClearFilter,
@@ -68,12 +80,14 @@ export function FinanceTransactionHistory({
   loadingMore,
   loadError,
   loadMoreError,
+  onCategorizeMany,
   onLoadMore,
   onReload,
   transactions,
   ...handlers
 }: Omit<AnnotationHandlers, "onFilterByName"> & {
   accountName: string | undefined;
+  onCategorizeMany: CategorizeMany;
   onClearFilter: () => void;
   filters: FinanceFilters;
   onFiltersChange: (filters: FinanceFilters) => void;
@@ -85,6 +99,11 @@ export function FinanceTransactionHistory({
   onReload: () => Promise<void>;
   transactions: FinanceTransaction[] | undefined;
 }) {
+  // Any change to the filters (toolbar, account cards, Back) starts afresh.
+  const selection = useTransactionSelection(
+    transactions,
+    JSON.stringify(filters),
+  );
   return (
     <PageSection
       actions={
@@ -139,7 +158,9 @@ export function FinanceTransactionHistory({
       {(!loadError || transactions) && (
         <TransactionContent
           filtered={hasTransactionFilters(filters)}
+          onCategorizeMany={onCategorizeMany}
           onFilterByName={(name) => onFiltersChange({ ...filters, name })}
+          selection={selection}
           transactions={transactions}
           {...handlers}
         />
@@ -226,10 +247,14 @@ function CategoryFilterNotice({
 
 function TransactionContent({
   filtered,
+  onCategorizeMany,
+  selection,
   transactions,
   ...handlers
 }: AnnotationHandlers & {
   filtered: boolean;
+  onCategorizeMany: CategorizeMany;
+  selection: TransactionSelection;
   transactions: FinanceTransaction[] | undefined;
 }) {
   if (!transactions) return <LoadingState label="Loading finances…" />;
@@ -249,12 +274,36 @@ function TransactionContent({
       </EmptyState>
     );
   }
+  // Selection only categorizes, so it waits for categories to exist.
+  const selectable = handlers.categories.length > 0;
   return (
     <Card className="financeListCard" flush>
-      <ul className="rowList financeTransactions">
+      {selectable && (
+        <TransactionSelectionBar
+          busy={handlers.busy}
+          categories={handlers.categories}
+          onCategorize={onCategorizeMany}
+          selection={selection}
+        />
+      )}
+      <ul
+        className={cx(
+          "rowList financeTransactions",
+          selectable && "financeSelectable",
+        )}
+      >
         {transactions.map((transaction) => (
           <FinanceTransactionRow
             key={transaction.id}
+            select={
+              selectable
+                ? {
+                    checked: selection.isSelected(transaction.id),
+                    onToggle: (range) =>
+                      selection.toggle(transaction.id, range),
+                  }
+                : undefined
+            }
             transaction={transaction}
             {...handlers}
           />
@@ -269,7 +318,11 @@ function TransactionContent({
  * on the row, annotates it, raises an issue, or lists its name's transactions.
  */
 export function FinanceTransactionRow(
-  props: AnnotationHandlers & { transaction: FinanceTransaction },
+  props: AnnotationHandlers & {
+    /** The row's checkbox, in lists that select rows for bulk changes. */
+    select?: RowSelect | undefined;
+    transaction: FinanceTransaction;
+  },
 ) {
   const title = transactionTitle(props.transaction);
   const label = `Actions for ${title}`;
@@ -324,6 +377,11 @@ function transactionMenuItems({
   return items;
 }
 
+interface RowSelect {
+  checked: boolean;
+  onToggle: (range: boolean) => void;
+}
+
 function TransactionRowContent({
   busy,
   categories,
@@ -332,11 +390,13 @@ function TransactionRowContent({
   onCategorize,
   onNavigate,
   onSelectAnnotation,
+  select,
   selectedTransactionId,
   target,
   transaction,
 }: AnnotationHandlers & {
   menuButton: ReactNode;
+  select?: RowSelect | undefined;
   target: Parameters<ComponentProps<typeof ContextMenu>["children"]>[0];
   transaction: FinanceTransaction;
 }) {
@@ -344,6 +404,14 @@ function TransactionRowContent({
   const title = transactionTitle(transaction);
   return (
     <li className="row financeTransaction" {...target}>
+      {select && (
+        <TransactionSelectCheckbox
+          checked={select.checked}
+          disabled={busy}
+          label={`Select ${title}`}
+          onToggle={select.onToggle}
+        />
+      )}
       <time
         className="financeTransactionDate"
         dateTime={transaction.transactionDate}

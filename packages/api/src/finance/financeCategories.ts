@@ -411,6 +411,85 @@ export async function assignTransactionCategory(context: FinanceContext) {
   });
 }
 
+/**
+ * Sets or clears one expense category on several transactions in one
+ * transaction. Each changed transaction records its own categorization event
+ * (by trigger); transactions already in the category are left untouched.
+ */
+export async function assignTransactionsCategory(context: FinanceContext) {
+  const input = await readBody(
+    context,
+    financeRoutes.setTransactionsCategory,
+    `A category or null and 1 to ${financeLimits.bulkCategorize} transactions are required.`,
+  );
+  if (input instanceof Response) return input;
+  const { categoryId, transactionIds } = input;
+  const organizationId = context.get("organizationId");
+  const database = context.env.DB;
+  const ids = JSON.stringify(transactionIds);
+  const found = await database
+    .prepare(
+      `SELECT COUNT(*) AS count FROM plaid_transactions
+       WHERE organization_id = ? AND id IN (SELECT value FROM json_each(?))`,
+    )
+    .bind(organizationId, ids)
+    .first<{ count: number }>();
+  if ((found?.count ?? 0) < transactionIds.length) {
+    return context.json({ error: "Transaction not found." }, 404);
+  }
+  if (
+    categoryId &&
+    !(await findCategory(database, organizationId, categoryId))
+  ) {
+    return categoryNotFound(context);
+  }
+  const now = new Date().toISOString();
+  const userId = context.get("authSession").user.id;
+  // The category and every transaction are rechecked in the write, so a
+  // concurrent delete of either rejects the whole request.
+  const categoryLive = `(?1 IS NULL OR EXISTS (
+       SELECT 1 FROM finance_expense_categories
+       WHERE id = ?1 AND organization_id = ?2))`;
+  const stillValid = `${categoryLive}
+     AND (SELECT COUNT(*) FROM plaid_transactions
+          WHERE organization_id = ?2
+            AND id IN (SELECT value FROM json_each(?3)))
+       = json_array_length(?3)`;
+  const results = await activityBatch(database, context.get("apiKey"), [
+    database
+      .prepare(
+        `INSERT INTO finance_transaction_annotations
+           (transaction_id, organization_id, note, labels, reviewed,
+            expense_category_id, created_by, updated_by, created_at, updated_at)
+         SELECT txn.id, txn.organization_id, '', '[]', 0, ?1, ?4, ?4, ?5, ?5
+         FROM plaid_transactions AS txn
+         WHERE txn.organization_id = ?2
+           AND txn.id IN (SELECT value FROM json_each(?3))
+           AND ${stillValid}
+         ON CONFLICT(transaction_id) DO UPDATE SET
+           expense_category_id = excluded.expense_category_id,
+           updated_by = excluded.updated_by,
+           updated_at = excluded.updated_at
+         WHERE expense_category_id IS NOT excluded.expense_category_id`,
+      )
+      .bind(categoryId, organizationId, ids, userId, now),
+    database
+      .prepare(`SELECT ${categoryLive} AS category, ${stillValid} AS valid`)
+      .bind(categoryId, organizationId, ids),
+  ]);
+  const check = results.at(-1)?.results[0] as
+    | { category: number; valid: number }
+    | undefined;
+  if (!check?.category) return categoryNotFound(context);
+  if (!check.valid) {
+    return context.json({ error: "Transaction not found." }, 404);
+  }
+  return respond(context, financeRoutes.setTransactionsCategory, {
+    expenseCategoryId: categoryId,
+    transactionIds,
+  });
+}
+
 async function findCategory(
   database: D1Database,
   organizationId: string,
