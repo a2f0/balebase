@@ -255,7 +255,12 @@ function financeContent(
   const accountId = recordIdForPath(pathname, "/finance/accounts");
   if (accountId)
     return (
-      <FinanceAccountPage key={pathname} id={accountId} onNavigate={navigate} />
+      <FinanceAccountPage
+        key={pathname}
+        id={accountId}
+        onNavigate={navigate}
+        scope={scope}
+      />
     );
   const connectionId = recordIdForPath(pathname, "/finance/connections");
   if (connectionId)
@@ -264,6 +269,7 @@ function financeContent(
         key={pathname}
         id={connectionId}
         onNavigate={navigate}
+        scope={scope}
       />
     );
   const transactionId = recordIdForPath(pathname, "/finance/transactions");

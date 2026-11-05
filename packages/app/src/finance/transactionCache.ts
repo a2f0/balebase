@@ -530,6 +530,23 @@ async function pullPages(
 }
 
 /**
+ * `work`, clearing the scope's saved transactions when the server refuses it
+ * (as a record page finding access gone), before reporting the refusal.
+ */
+export async function clearedOnRefusal<T>(
+  scope: CacheScope | undefined,
+  work: Promise<T>,
+  clear: (scope: CacheScope) => Promise<void> = clearScopeTransactions,
+): Promise<T> {
+  try {
+    return await work;
+  } catch (cause) {
+    if (scope && refused(cause)) await clear(scope).catch(() => undefined);
+    throw cause;
+  }
+}
+
+/**
  * Brings a saved copy up to date after a change made away from the overview
  * (a transaction's page), so the change outlasts going offline. Nothing
  * happens without a saved copy; failures wait for the next load.

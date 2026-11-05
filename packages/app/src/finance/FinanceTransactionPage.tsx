@@ -23,7 +23,11 @@ import { useLoad } from "../shared/useLoad";
 import { transactionIssuePath } from "../workspace/workspacePaths";
 import { FinanceTransactionRow } from "./FinanceTransactionHistory";
 import { FinanceTransactionSourceData } from "./FinanceTransactionSourceData";
-import { type CacheScope, catchUpSavedTransactions } from "./transactionCache";
+import {
+  type CacheScope,
+  catchUpSavedTransactions,
+  clearedOnRefusal,
+} from "./transactionCache";
 
 export function FinanceTransactionPage({
   id,
@@ -122,7 +126,10 @@ export function FinanceTransactionPage({
 }
 function useTransaction(id: string, scope: CacheScope | undefined) {
   const loaded = useLoad(
-    useCallback(() => api.finance.transaction(id), [id]),
+    useCallback(
+      () => clearedOnRefusal(scope, api.finance.transaction(id)),
+      [id, scope],
+    ),
     "Could not load transaction.",
   );
   const { setData } = loaded;

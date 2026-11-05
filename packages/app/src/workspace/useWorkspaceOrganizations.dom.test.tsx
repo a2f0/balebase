@@ -42,6 +42,21 @@ describe("workspace organizations", () => {
     expect(workspace?.listed).toBe(true);
   });
 
+  it("confirms the list once a refresh succeeds after a failed first load", async () => {
+    respond(() => Response.json({ error: "Unavailable." }, { status: 503 }));
+    await mount(<Probe userId="person" />);
+    await act(async () => undefined);
+    expect(workspace?.listed).toBe(false);
+    respond(() =>
+      Response.json({
+        organizations: [{ id: "org-1", name: "One", slug: "one" }],
+      }),
+    );
+    await act(async () => workspace?.refresh());
+    expect(workspace?.listed).toBe(true);
+    expect(workspace?.organizations.map(({ id }) => id)).toEqual(["org-1"]);
+  });
+
   it("ignores a previous account's request that settles late", async () => {
     const stale = Promise.withResolvers<Response>();
     respond(() => stale.promise);

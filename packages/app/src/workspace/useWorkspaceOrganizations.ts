@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { lockOfflineWorkspace } from "../offline/offlineStore";
 import {
   createOrganizationSlug,
@@ -26,33 +26,28 @@ export function useWorkspaceOrganizations(
   // Whose list `organizations` is as read, not the empty stand-in after a
   // failure.
   const [listedFor, setListedFor] = useState<string>();
-  const loadOrganizations = useCallback(async () => {
-    setOrganizations(await api.organizationSettings.organizations());
-  }, []);
   const signedInUserId = session?.user.id;
+  const currentUser = useRef(signedInUserId);
+  currentUser.current = signedInUserId;
+  // Every successful read (first load, refresh, creating an organization)
+  // confirms the list; one for an account no longer signed in is ignored.
+  const loadOrganizations = useCallback(async () => {
+    const forUser = currentUser.current;
+    const listed = await api.organizationSettings.organizations();
+    if (currentUser.current !== forUser) return;
+    setOrganizations(listed);
+    setListedFor(forUser);
+  }, []);
   useEffect(() => {
     setListedFor(undefined);
     if (!signedInUserId) {
       setOrganizations(undefined);
       return;
     }
-    // A previous account's request, settling late, must not replace this
-    // one's list.
-    let current = true;
-    api.organizationSettings.organizations().then(
-      (listed) => {
-        if (!current) return;
-        setOrganizations(listed);
-        setListedFor(signedInUserId);
-      },
-      () => {
-        if (current) setOrganizations([]);
-      },
-    );
-    return () => {
-      current = false;
-    };
-  }, [signedInUserId]);
+    void loadOrganizations().catch(() => {
+      if (currentUser.current === signedInUserId) setOrganizations([]);
+    });
+  }, [loadOrganizations, signedInUserId]);
   const activeOrganizationId = organizations
     ? resolveActiveOrganizationId(
         session?.session.activeOrganizationId,

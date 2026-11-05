@@ -43,19 +43,24 @@ import {
   syncPollMs,
 } from "./financeConnectionActions";
 import { formatImportedHistory, formatMoney } from "./financeFormat";
+import { type CacheScope, clearedOnRefusal } from "./transactionCache";
 
 type Connection = FinanceConnectionDetail["connection"];
 
 export function FinanceConnectionPage({
   id,
   onNavigate,
+  scope,
 }: {
   id: string;
   onNavigate: (path: string) => void;
+  /** Whose saved transactions a refusal here clears. */
+  scope?: CacheScope | undefined;
 }) {
   const { actions, busy, data, error, notice, setData } = useConnection(
     id,
     onNavigate,
+    scope,
   );
   const sections = useConnectionSections();
   return (
@@ -335,9 +340,16 @@ function ConnectionAccounts({
   );
 }
 
-function useConnection(id: string, onNavigate: (path: string) => void) {
+function useConnection(
+  id: string,
+  onNavigate: (path: string) => void,
+  scope: CacheScope | undefined,
+) {
   const loaded = useLoad(
-    useCallback(() => api.finance.connection(id), [id]),
+    useCallback(
+      () => clearedOnRefusal(scope, api.finance.connection(id)),
+      [id, scope],
+    ),
     "Could not load connection.",
   );
   const { data, reload, setData } = loaded;

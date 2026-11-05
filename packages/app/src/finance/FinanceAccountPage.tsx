@@ -30,15 +30,19 @@ import { connectionTone } from "./FinanceAccounts";
 import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
 import { FinanceSyncSettings } from "./FinanceSyncSettings";
 import { formatImportedHistory, formatMoney } from "./financeFormat";
+import { type CacheScope, clearedOnRefusal } from "./transactionCache";
 
 export function FinanceAccountPage({
   id,
   onNavigate,
+  scope,
 }: {
   id: string;
   onNavigate: (path: string) => void;
+  /** Whose saved transactions a refusal here clears. */
+  scope?: CacheScope | undefined;
 }) {
-  const { data, error, setData } = useAccount(id);
+  const { data, error, setData } = useAccount(id, scope);
   const sections = useSectionTabs([
     { id: "overview", label: "Overview" },
     { id: "transactions", label: "Recent transactions" },
@@ -204,9 +208,12 @@ function RecentTransactions({
   );
 }
 
-function useAccount(id: string) {
+function useAccount(id: string, scope: CacheScope | undefined) {
   return useLoad(
-    useCallback(() => api.finance.account(id), [id]),
+    useCallback(
+      () => clearedOnRefusal(scope, api.finance.account(id)),
+      [id, scope],
+    ),
     "Could not load account.",
   );
 }

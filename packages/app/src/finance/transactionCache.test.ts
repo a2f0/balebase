@@ -7,6 +7,7 @@ import type {
 import {
   type CacheScope,
   catchUpSavedTransactions,
+  clearedOnRefusal,
   memoryTransactionStore,
   pullTransactions,
 } from "./transactionCache";
@@ -199,6 +200,27 @@ describe("pulling transactions", () => {
       store,
     );
     expect((await store.read(scope)).transactions).toEqual([]);
+  });
+
+  it("clears the saved copy when a record page is refused, and only then", async () => {
+    const cleared: CacheScope[] = [];
+    const clear = async (which: CacheScope) => {
+      cleared.push(which);
+    };
+    const status = (code: number) =>
+      Promise.reject(new ApiError(new Response(null, { status: code }), null));
+    await expect(clearedOnRefusal(scope, status(503), clear)).rejects.toThrow();
+    expect(
+      await clearedOnRefusal(scope, Promise.resolve("record"), clear),
+    ).toBe("record");
+    await expect(
+      clearedOnRefusal(undefined, status(403), clear),
+    ).rejects.toThrow();
+    expect(cleared).toEqual([]);
+    await expect(clearedOnRefusal(scope, status(403), clear)).rejects.toThrow(
+      "Request failed with status 403.",
+    );
+    expect(cleared).toEqual([scope]);
   });
 
   it("shares a pull only with the same store", async () => {
