@@ -1,3 +1,4 @@
+import { productName } from "@balebase/ui/brand";
 import {
   Banner,
   Button,
@@ -485,7 +486,7 @@ function FinanceOverview({
           title="Showing transactions saved on this device"
           tone="warning"
         >
-          Balebase can’t be reached right now. These were last updated{" "}
+          {productName} can’t be reached right now. These were last updated{" "}
           {formatDateTime(savedCopy)}; changes made here may not save.
         </Banner>
       )}

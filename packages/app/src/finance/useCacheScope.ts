@@ -1,6 +1,11 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useLoad } from "../shared/useLoad";
-import { type CacheScope, clearedOnRefusal, refused } from "./transactionCache";
+import {
+  type CacheScope,
+  clearedOnRefusal,
+  refused,
+  SignedOut,
+} from "./transactionCache";
 
 /**
  * The scope by value: routes build a new scope object on every render, and
@@ -17,29 +22,11 @@ function useCacheScope(scope: CacheScope | undefined): CacheScope | undefined {
 }
 
 /**
- * Wraps a record page's requests: a refusal (access ended) clears the saved
- * transactions and what the page shows at once, before it is reported, so
- * neither outlasts a reload that an outage could keep from finishing.
- */
-function useRefusalGuard(
-  scope: CacheScope | undefined,
-  setData: (data: undefined) => void,
-) {
-  return useCallback(
-    <T>(work: Promise<T>) =>
-      clearedOnRefusal(scope, work).catch((cause: unknown) => {
-        if (refused(cause)) setData(undefined);
-        throw cause;
-      }),
-    [scope, setData],
-  );
-}
-
-/**
- * A record page's load, guarded: a refusal (even of a reload after an
- * action) clears the saved transactions and what the page shows. `load`
- * must keep its identity (a `useCallback`). Returns `guard` for the page's
- * other requests.
+ * A record page's load, guarded: a refusal (of the load, a reload after an
+ * action, or any request passed through the returned `guard`) clears the
+ * saved transactions and what the page shows at once, and drops loads still
+ * running, so nothing outlasts a reload an outage could keep from
+ * finishing. `load` must keep its identity (a `useCallback`).
  */
 export function useGuardedLoad<T>(
   givenScope: CacheScope | undefined,
@@ -47,20 +34,37 @@ export function useGuardedLoad<T>(
   fallback: string,
 ) {
   const scope = useCacheScope(givenScope);
+  // Advanced by each refusal; a load started before one shows nothing.
+  const refusals = useRef(0);
   // `useLoad` keeps data on a failed reload; a refusal must not.
   const clearShown = useRef<(data: undefined) => void>(() => undefined);
+  const onRefusal = useCallback((cause: unknown) => {
+    if (!refused(cause)) return;
+    refusals.current += 1;
+    clearShown.current(undefined);
+  }, []);
   const loaded = useLoad(
-    useCallback(
-      () =>
-        clearedOnRefusal(scope, load()).catch((cause: unknown) => {
-          if (refused(cause)) clearShown.current(undefined);
+    useCallback(async () => {
+      const started = refusals.current;
+      const value = await clearedOnRefusal(scope, load()).catch(
+        (cause: unknown) => {
+          onRefusal(cause);
           throw cause;
-        }),
-      [load, scope],
-    ),
+        },
+      );
+      if (refusals.current !== started) throw new SignedOut();
+      return value;
+    }, [load, onRefusal, scope]),
     fallback,
   );
   clearShown.current = loaded.setData;
-  const guard = useRefusalGuard(scope, loaded.setData);
+  const guard = useCallback(
+    <R>(work: Promise<R>) =>
+      clearedOnRefusal(scope, work).catch((cause: unknown) => {
+        onRefusal(cause);
+        throw cause;
+      }),
+    [onRefusal, scope],
+  );
   return { ...loaded, guard, scope };
 }

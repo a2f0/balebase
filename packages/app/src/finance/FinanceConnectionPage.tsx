@@ -140,6 +140,7 @@ function ConnectionSections({
             // A new connection starts with no answer from the last one.
             key={data.connection.id}
             connection={data.connection}
+            guard={guard}
             onNavigate={onNavigate}
           />
           <FinanceSyncSettings

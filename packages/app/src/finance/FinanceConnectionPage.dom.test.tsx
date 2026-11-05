@@ -200,6 +200,72 @@ describe("Finance connection page", () => {
     expect(container.textContent).not.toContain("Daily sync");
   });
 
+  it("keeps a page cleared by a refusal when an earlier reload lands later", async () => {
+    const reload = Promise.withResolvers<void>();
+    let synced = false;
+    respond(async (url, init) => {
+      if (init?.method === "POST") {
+        synced = true;
+        return Response.json({
+          connection: detail().connection,
+          sync: { added: 0, modified: 0, removed: 0 },
+        });
+      }
+      if (init?.method === "PATCH")
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      if (url.href.endsWith("/institution-health"))
+        return Response.json(health());
+      // The reload after the sync is slow.
+      if (synced) await reload.promise;
+      return Response.json(detail());
+    });
+    const view = await mount(
+      <FinanceConnectionPage
+        id="item-1"
+        onNavigate={() => undefined}
+        scope={{ organizationId: "org", userId: "person" }}
+      />,
+    );
+    container = view.container;
+    await settle();
+    // The sync's reload stays pending while the next save is refused.
+    await act(async () => button("Sync now").click());
+    await settle();
+    const checkbox = container.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    );
+    if (!checkbox) throw new Error("Daily sync checkbox missing");
+    await act(async () => checkbox.click());
+    await settle();
+    expect(container.textContent).not.toContain("Daily sync");
+    await act(async () => reload.resolve());
+    await settle();
+    expect(container.textContent).not.toContain("Daily sync");
+  });
+
+  it("clears the page when the bank status check finds access gone", async () => {
+    respond(async (url) =>
+      url.href.endsWith("/institution-health")
+        ? Response.json({ error: "Finance access required." }, { status: 403 })
+        : Response.json(detail()),
+    );
+    const view = await mount(
+      <FinanceConnectionPage
+        id="item-1"
+        onNavigate={() => undefined}
+        scope={{ organizationId: "org", userId: "person" }}
+      />,
+    );
+    container = view.container;
+    await settle();
+    expect(container.textContent).toContain("Daily sync");
+    await click("Check for outages");
+    expect(container.textContent).not.toContain("Daily sync");
+  });
+
   it("reloads after a failed sync to show Plaid's error", async () => {
     let failed = false;
     respond(async (url, init) => {
