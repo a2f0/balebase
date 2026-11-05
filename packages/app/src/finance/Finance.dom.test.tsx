@@ -482,6 +482,45 @@ describe("Finance filters", () => {
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
   });
 
+  it("keeps the overview's rows when a Connections action finishes after leaving", async () => {
+    const sync = Promise.withResolvers<void>();
+    const listing = {
+      ...data,
+      connections: [
+        {
+          id: "connection-1",
+          institutionId: null,
+          institutionName: "Bank",
+          accountCount: 1,
+          createdAt: "2026-01-01",
+          errorCode: null,
+          lastSyncedAt: null,
+          status: "active",
+          dailySync: true,
+          syncStatus: null,
+        },
+      ],
+    };
+    respond(async (_url, init) => {
+      if (init?.method === "POST") {
+        await sync.promise;
+        return Response.json({
+          connection: { id: "connection-1", syncJob: { status: "succeeded" } },
+          sync: { added: 0, modified: 0, removed: 0 },
+        });
+      }
+      return Response.json(listing);
+    });
+    const navigate = await mountFinance("/finance/connections");
+    await act(async () => button("Sync now").click());
+    await navigate("/finance");
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    // The action's closing reload uses the overview's loader, not the
+    // summary-only one it started with.
+    await act(async () => sync.resolve());
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+  });
+
   it("keeps a row's new category in the saved copy", async () => {
     let category: string | null = null;
     let down = false;

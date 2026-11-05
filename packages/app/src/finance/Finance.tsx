@@ -94,14 +94,16 @@ export function Finance({
   const { error, notice, run, setError, setNotice, ...action } = useAction(
     "Could not update finances.",
   );
-  const plaid = usePlaidConnect(load, onRefused, setError, setNotice);
-  const actions = financeActions(load, onRefused, run);
+  // Saves and actions that finish after navigation reload with the loader
+  // for the page shown by then (the overview's keeps transactions).
+  const latestLoad = useRef(load);
+  latestLoad.current = load;
+  const reloadLatest = useCallback(() => latestLoad.current(), []);
+  const plaid = usePlaidConnect(reloadLatest, onRefused, setError, setNotice);
+  const actions = financeActions(reloadLatest, onRefused, run);
   // A category save, a row's or a bulk one, holds every category control
   // until it finishes, so two saves never land out of order.
   const [categorizing, setCategorizing] = useState(false);
-  // The bulk save's closing refresh must use the filters current by then.
-  const latestLoad = useRef(load);
-  latestLoad.current = load;
   const busy = action.busy || plaid.busy || categorizing;
 
   return (
@@ -115,14 +117,14 @@ export function Finance({
         setData,
         setError,
         setCategorizing,
-        () => latestLoad.current(),
+        reloadLatest,
         onRefused,
       )}
       onCategorizeMany={categorizeTransactions(
         setData,
         setError,
         setCategorizing,
-        () => latestLoad.current(),
+        reloadLatest,
         onRefused,
       )}
       onConnect={plaid.connect}
