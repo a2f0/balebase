@@ -20,14 +20,24 @@ export interface TransactionSelection {
   total: number;
 }
 
+const nothingChosen: ReadonlySet<string> = new Set();
+
 /**
  * Checkbox selection over the shown transactions. Rows that leave the list
- * (a filter, or a category view they no longer match) drop out of it.
+ * (a category view they no longer match) drop out of it, and a new
+ * `resetKey` (the effective filters, however they changed) starts afresh.
  */
 export function useTransactionSelection(
   transactions: FinanceTransaction[] | undefined,
+  resetKey: string,
 ): TransactionSelection {
-  const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set());
+  const [state, setState] = useState<{
+    ids: ReadonlySet<string>;
+    key: string;
+  }>(() => ({ ids: nothingChosen, key: resetKey }));
+  const chosen = state.key === resetKey ? state.ids : nothingChosen;
+  const setChosen = (ids: ReadonlySet<string>) =>
+    setState({ ids, key: resetKey });
   const anchor = useRef<string | undefined>(undefined);
   const shown = transactions ?? [];
   const selected = shown.filter(({ id }) => chosen.has(id));

@@ -799,13 +799,46 @@ describe("Bulk categorization", () => {
     expect(checkedRows()).toEqual(["Coffee", "Supplies"]);
   });
 
-  it("starts a new selection when the filters change", async () => {
+  it("starts a new selection whichever control changes the filters", async () => {
     respond(() => Response.json(listing));
     await mountFinance();
     await check("Select Coffee");
     await click("Uncategorized expenses");
     expect(checkedRows()).toEqual([]);
     expect(container.textContent).not.toContain("1 selected");
+    // An account card changes the filters outside the filter toolbar.
+    await check("Select Lunch");
+    await click("Savings");
+    expect(checkedRows()).toEqual([]);
+    await check("Select Taxi");
+    await click("All accounts");
+    expect(checkedRows()).toEqual([]);
+  });
+
+  it("holds every row's category picker until a bulk save finishes", async () => {
+    const save = Promise.withResolvers<Response>();
+    respond((_url, init) =>
+      init?.method === "PUT" ? save.promise : Response.json(listing),
+    );
+    await mountFinance();
+    await check("Select Coffee");
+    await setBulkCategory("meals");
+    const picker = (name: string) =>
+      container.querySelector<HTMLSelectElement>(
+        `[aria-label="Expense category for ${name}"]`,
+      );
+    expect(picker("Lunch")?.disabled).toBe(true);
+    expect(checkbox("Select Lunch").disabled).toBe(true);
+    await act(async () =>
+      save.resolve(
+        Response.json({
+          expenseCategoryId: "meals",
+          transactionIds: ["Coffee"],
+        }),
+      ),
+    );
+    expect(picker("Lunch")?.disabled).toBe(false);
+    expect(categoryOf("Coffee")).toBe("meals");
   });
 
   it("saves more than one request's worth of rows in batches", async () => {

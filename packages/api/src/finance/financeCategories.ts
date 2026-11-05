@@ -445,10 +445,16 @@ export async function assignTransactionsCategory(context: FinanceContext) {
   }
   const now = new Date().toISOString();
   const userId = context.get("authSession").user.id;
-  // The category is rechecked in the write, so a concurrent delete wins.
+  // The category and every transaction are rechecked in the write, so a
+  // concurrent delete of either rejects the whole request.
   const categoryLive = `(?1 IS NULL OR EXISTS (
        SELECT 1 FROM finance_expense_categories
        WHERE id = ?1 AND organization_id = ?2))`;
+  const stillValid = `${categoryLive}
+     AND (SELECT COUNT(*) FROM plaid_transactions
+          WHERE organization_id = ?2
+            AND id IN (SELECT value FROM json_each(?3)))
+       = json_array_length(?3)`;
   const results = await activityBatch(database, context.get("apiKey"), [
     database
       .prepare(
@@ -459,7 +465,7 @@ export async function assignTransactionsCategory(context: FinanceContext) {
          FROM plaid_transactions AS txn
          WHERE txn.organization_id = ?2
            AND txn.id IN (SELECT value FROM json_each(?3))
-           AND ${categoryLive}
+           AND ${stillValid}
          ON CONFLICT(transaction_id) DO UPDATE SET
            expense_category_id = excluded.expense_category_id,
            updated_by = excluded.updated_by,
@@ -468,12 +474,16 @@ export async function assignTransactionsCategory(context: FinanceContext) {
       )
       .bind(categoryId, organizationId, ids, userId, now),
     database
-      .prepare(`SELECT ${categoryLive} AS live`)
-      .bind(categoryId, organizationId),
+      .prepare(`SELECT ${categoryLive} AS category, ${stillValid} AS valid`)
+      .bind(categoryId, organizationId, ids),
   ]);
-  const live = (results.at(-1)?.results[0] as { live?: number } | undefined)
-    ?.live;
-  if (!live) return categoryNotFound(context);
+  const check = results.at(-1)?.results[0] as
+    | { category: number; valid: number }
+    | undefined;
+  if (!check?.category) return categoryNotFound(context);
+  if (!check.valid) {
+    return context.json({ error: "Transaction not found." }, 404);
+  }
   return respond(context, financeRoutes.setTransactionsCategory, {
     expenseCategoryId: categoryId,
     transactionIds,

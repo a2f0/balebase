@@ -325,10 +325,10 @@ describe("expense categories", () => {
 
   it("categorizes many transactions at once, recording only real changes", async () => {
     const fixture = await createFixture();
-    const [first, second, third, untouched] = seedTransactions(
+    const [first, second, third, untouched, doomed] = seedTransactions(
       fixture.database,
     );
-    if (!first || !second || !third || !untouched) {
+    if (!first || !second || !third || !untouched || !doomed) {
       throw new Error("Missing seeded transactions.");
     }
     const meals = await createCategory(fixture, "Meals");
@@ -430,6 +430,17 @@ describe("expense categories", () => {
       });
     }
     expect((await categoryOf())[first]).toBe(meals);
+
+    // A transaction deleted while the request runs rejects the whole batch.
+    fixture.hooks.before("FROM plaid_transactions AS txn", () => {
+      fixture.database
+        .query("DELETE FROM plaid_transactions WHERE id = ?")
+        .run(doomed);
+    });
+    expect(
+      await bulk({ categoryId: travel, transactionIds: [untouched, doomed] }),
+    ).toMatchObject({ body: { error: "Transaction not found." }, status: 404 });
+    expect((await categoryOf())[untouched]).toBeNull();
 
     // A category deleted while the request runs leaves every row alone.
     fixture.hooks.before("FROM plaid_transactions AS txn", () => {

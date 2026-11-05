@@ -99,12 +99,11 @@ export function FinanceTransactionHistory({
   onReload: () => Promise<void>;
   transactions: FinanceTransaction[] | undefined;
 }) {
-  const selection = useTransactionSelection(transactions);
-  // A new set of filters starts a new selection.
-  const changeFilters = (next: FinanceFilters) => {
-    selection.clear();
-    onFiltersChange(next);
-  };
+  // Any change to the filters (toolbar, account cards, Back) starts afresh.
+  const selection = useTransactionSelection(
+    transactions,
+    JSON.stringify(filters),
+  );
   return (
     <PageSection
       actions={
@@ -119,7 +118,7 @@ export function FinanceTransactionHistory({
       <FinanceTransactionFilters
         categories={handlers.categories}
         filters={filters}
-        onChange={changeFilters}
+        onChange={onFiltersChange}
       />
       <CategoryFilterNotice
         categories={handlers.categories}
@@ -160,7 +159,7 @@ export function FinanceTransactionHistory({
         <TransactionContent
           filtered={hasTransactionFilters(filters)}
           onCategorizeMany={onCategorizeMany}
-          onFilterByName={(name) => changeFilters({ ...filters, name })}
+          onFilterByName={(name) => onFiltersChange({ ...filters, name })}
           selection={selection}
           transactions={transactions}
           {...handlers}
