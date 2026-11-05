@@ -901,6 +901,31 @@ describe("Bulk categorization", () => {
     expect(container.textContent).not.toContain("252 selected");
   });
 
+  it("holds bulk changes until a row's own category save finishes", async () => {
+    const save = Promise.withResolvers<Response>();
+    respond((_url, init) =>
+      init?.method === "PUT" ? save.promise : Response.json(listing),
+    );
+    await mountFinance();
+    const select = container.querySelector<HTMLSelectElement>(
+      '[aria-label="Expense category for Coffee"]',
+    );
+    if (!select) throw new Error("Missing category picker");
+    await act(async () => {
+      select.value = "meals";
+      select.dispatchEvent(
+        new dom.Event("change", { bubbles: true }) as unknown as Event,
+      );
+    });
+    expect(checkbox("Select all shown transactions").disabled).toBe(true);
+    expect(checkbox("Select Lunch").disabled).toBe(true);
+    await act(async () =>
+      save.resolve(Response.json({ expenseCategoryId: "meals" })),
+    );
+    expect(checkbox("Select all shown transactions").disabled).toBe(false);
+    expect(categoryOf("Coffee")).toBe("meals");
+  });
+
   it("holds every row's category picker until a bulk save finishes", async () => {
     const save = Promise.withResolvers<void>();
     serveCategories({ hold: save.promise });

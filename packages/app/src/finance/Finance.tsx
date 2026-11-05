@@ -85,7 +85,8 @@ export function Finance({
   );
   const plaid = usePlaidConnect(load, setError, setNotice);
   const actions = financeActions(load, run);
-  // A bulk save holds every row's category control until it finishes.
+  // A category save, a row's or a bulk one, holds every category control
+  // until it finishes, so two saves never land out of order.
   const [categorizing, setCategorizing] = useState(false);
   // The bulk save's closing refresh must use the filters current by then.
   const latestLoad = useRef(load);
@@ -99,7 +100,7 @@ export function Finance({
       error={error}
       notice={notice}
       onAnnotate={actions.annotate}
-      onCategorize={categorizeTransaction(setData, setError)}
+      onCategorize={categorizeTransaction(setData, setError, setCategorizing)}
       onCategorizeMany={categorizeTransactions(
         setData,
         setError,
@@ -131,6 +132,7 @@ export function Finance({
 function categorizeTransaction(
   setData: Dispatch<SetStateAction<FinanceData | undefined>>,
   setError: (message: string | undefined) => void,
+  setSaving: (saving: boolean) => void,
 ) {
   return async (transaction: FinanceTransaction, categoryId: string | null) => {
     const previous = transaction.expenseCategoryId;
@@ -138,11 +140,14 @@ function categorizeTransaction(
     const change = [{ from: previous, id: transaction.id, to: categoryId }];
     setError(undefined);
     setData((current) => withCategories(current, change));
+    setSaving(true);
     try {
       await api.finance.setTransactionCategory(transaction.id, categoryId);
     } catch (cause) {
       setData((current) => withCategories(current, reversed(change)));
       setError(errorMessage(cause, "Could not update finances."));
+    } finally {
+      setSaving(false);
     }
   };
 }
