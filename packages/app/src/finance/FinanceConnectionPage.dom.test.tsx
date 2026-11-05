@@ -264,6 +264,8 @@ describe("Finance connection page", () => {
     expect(container.textContent).toContain("Daily sync");
     await click("Check for outages");
     expect(container.textContent).not.toContain("Daily sync");
+    // Not left loading: the page says why it shows nothing.
+    expect(container.textContent).toContain("Finance access required.");
   });
 
   it("reloads after a failed sync to show Plaid's error", async () => {

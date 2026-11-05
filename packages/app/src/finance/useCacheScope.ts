@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef } from "react";
+import { errorMessage } from "../shared/errors";
 import { useLoad } from "../shared/useLoad";
 import {
   type CacheScope,
@@ -36,12 +37,13 @@ export function useGuardedLoad<T>(
   const scope = useCacheScope(givenScope);
   // Advanced by each refusal; a load started before one shows nothing.
   const refusals = useRef(0);
-  // `useLoad` keeps data on a failed reload; a refusal must not.
-  const clearShown = useRef<(data: undefined) => void>(() => undefined);
+  // `useLoad` keeps data on a failed reload; a refusal must not, and the
+  // page says why it shows nothing.
+  const clearShown = useRef<(cause: unknown) => void>(() => undefined);
   const onRefusal = useCallback((cause: unknown) => {
     if (!refused(cause)) return;
     refusals.current += 1;
-    clearShown.current(undefined);
+    clearShown.current(cause);
   }, []);
   const loaded = useLoad(
     useCallback(async () => {
@@ -57,7 +59,10 @@ export function useGuardedLoad<T>(
     }, [load, onRefusal, scope]),
     fallback,
   );
-  clearShown.current = loaded.setData;
+  clearShown.current = (cause) => {
+    loaded.setData(undefined);
+    loaded.setError(errorMessage(cause, fallback));
+  };
   const guard = useCallback(
     <R>(work: Promise<R>) =>
       clearedOnRefusal(scope, work).catch((cause: unknown) => {

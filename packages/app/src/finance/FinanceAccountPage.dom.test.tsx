@@ -101,6 +101,7 @@ describe("Finance account page", () => {
     if (!checkbox) throw new Error("Missing daily sync setting");
     await click(checkbox);
     expect(container.textContent).not.toContain("Daily sync");
+    expect(container.textContent).toContain("Finance access required.");
   });
 
   it("updates daily sync on the account's bank connection", async () => {
