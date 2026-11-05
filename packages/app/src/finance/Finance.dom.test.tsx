@@ -310,6 +310,22 @@ describe("Finance filters", () => {
     expect(requests).toBe(2);
   });
 
+  it("keeps scrolling after filters change past a place already reached", async () => {
+    const rows = dated(
+      Array.from({ length: 600 }, (_, index) => `Row ${index}`),
+    );
+    respond(() => Response.json({ ...data, transactions: rows }));
+    await mountFinance();
+    await act(async () => IntersectionObserverFixture.intersect());
+    expect(rowNames()).toHaveLength(500);
+    // Another filter starts again at 250 shown; reaching the end shows more.
+    await click("Previous year");
+    expect(rowNames()).toHaveLength(250);
+    await act(async () => IntersectionObserverFixture.intersect());
+    // Every one of the previous year's 365 days.
+    expect(rowNames()).toHaveLength(365);
+  });
+
   it("annotates, raises an issue, or filters by name from a row's menu", async () => {
     respond(() =>
       Response.json({
