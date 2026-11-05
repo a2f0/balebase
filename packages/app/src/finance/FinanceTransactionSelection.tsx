@@ -22,6 +22,14 @@ export interface TransactionSelection {
 
 const nothingChosen: ReadonlySet<string> = new Set();
 
+interface SelectionState {
+  /** The row a Shift-click range starts from. */
+  anchor: string | undefined;
+  ids: ReadonlySet<string>;
+  /** The filters the selection was made under. */
+  key: string;
+}
+
 /**
  * Checkbox selection over the shown transactions. Rows that leave the list
  * (a category view they no longer match) drop out of it, and a new
@@ -31,21 +39,28 @@ export function useTransactionSelection(
   transactions: FinanceTransaction[] | undefined,
   resetKey: string,
 ): TransactionSelection {
-  const [state, setState] = useState<{
-    ids: ReadonlySet<string>;
-    key: string;
-  }>(() => ({ ids: nothingChosen, key: resetKey }));
-  const chosen = state.key === resetKey ? state.ids : nothingChosen;
-  const setChosen = (ids: ReadonlySet<string>) =>
-    setState({ ids, key: resetKey });
-  const anchor = useRef<string | undefined>(undefined);
+  const [state, setState] = useState<SelectionState>(() => ({
+    anchor: undefined,
+    ids: nothingChosen,
+    key: resetKey,
+  }));
+  // New filters drop the selection itself, so returning to the old ones
+  // does not bring it back.
+  const current: SelectionState =
+    state.key === resetKey
+      ? state
+      : { anchor: undefined, ids: nothingChosen, key: resetKey };
+  if (current !== state) setState(current);
+  const chosen = current.ids;
+  const setChosen = (ids: ReadonlySet<string>, anchor = current.anchor) =>
+    setState({ anchor, ids, key: resetKey });
   const shown = transactions ?? [];
   const selected = shown.filter(({ id }) => chosen.has(id));
 
   function toggle(transactionId: string, range: boolean) {
     const index = shown.findIndex(({ id }) => id === transactionId);
     const from = range
-      ? shown.findIndex(({ id }) => id === anchor.current)
+      ? shown.findIndex(({ id }) => id === current.anchor)
       : -1;
     const ids =
       from < 0
@@ -59,8 +74,7 @@ export function useTransactionSelection(
       if (on) next.add(id);
       else next.delete(id);
     }
-    anchor.current = transactionId;
-    setChosen(next);
+    setChosen(next, transactionId);
   }
 
   return {

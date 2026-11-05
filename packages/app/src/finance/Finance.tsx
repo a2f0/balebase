@@ -87,6 +87,9 @@ export function Finance({
   const actions = financeActions(load, run);
   // A bulk save holds every row's category control until it finishes.
   const [categorizing, setCategorizing] = useState(false);
+  // The bulk save's closing refresh must use the filters current by then.
+  const latestLoad = useRef(load);
+  latestLoad.current = load;
   const busy = action.busy || plaid.busy || categorizing;
 
   return (
@@ -101,6 +104,7 @@ export function Finance({
         setData,
         setError,
         setCategorizing,
+        () => latestLoad.current(),
       )}
       onConnect={plaid.connect}
       onDeleteData={actions.deleteData}
@@ -152,6 +156,7 @@ function categorizeTransactions(
   setData: Dispatch<SetStateAction<FinanceData | undefined>>,
   setError: (message: string | undefined) => void,
   setSaving: (saving: boolean) => void,
+  refresh: () => Promise<void>,
 ) {
   return async (
     transactions: FinanceTransaction[],
@@ -161,6 +166,10 @@ function categorizeTransactions(
     try {
       return await saveCategories(setData, setError, transactions, categoryId);
     } finally {
+      // A load during the save (a filter change, sync polling) replaced the
+      // optimistic rows, and a rollback may have landed on it; the server's
+      // rows and counts settle both.
+      await refresh();
       setSaving(false);
     }
   };

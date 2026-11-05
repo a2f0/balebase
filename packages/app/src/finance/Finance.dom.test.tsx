@@ -721,17 +721,39 @@ describe("Bulk categorization", () => {
     )?.value;
   }
 
-  it("selects all, a range with Shift, or none, then categorizes the selection in one save", async () => {
+  /**
+   * A server that keeps the categories it saves, so the refresh after a bulk
+   * save lists them; `hold` delays each save, `fail` refuses it.
+   */
+  function serveCategories(options: { fail?: boolean; hold?: Promise<void> }) {
+    const stored = new Map<string, string | null>();
     const saves: unknown[] = [];
+    const server = { loads: 0, saves };
     respond(async (_url, init) => {
-      if (init?.method !== "PUT") return Response.json(listing);
+      if (init?.method !== "PUT") {
+        server.loads++;
+        return Response.json({
+          ...listing,
+          transactions: rows.map((row) => ({
+            ...row,
+            expenseCategoryId: stored.get(row.id) ?? null,
+          })),
+        });
+      }
+      await options.hold;
+      if (options.fail) {
+        return Response.json({ error: "Could not save." }, { status: 500 });
+      }
       const body = JSON.parse(String(init.body));
       saves.push(body);
-      return Response.json({
-        expenseCategoryId: body.categoryId,
-        transactionIds: body.transactionIds,
-      });
+      for (const id of body.transactionIds) stored.set(id, body.categoryId);
+      return Response.json(body);
     });
+    return server;
+  }
+
+  it("selects all, a range with Shift, or none, then categorizes the selection in one save", async () => {
+    const { saves } = serveCategories({});
     await mountFinance();
     const all = () => checkbox("Select all shown transactions");
     expect(container.textContent).toContain(
@@ -813,13 +835,37 @@ describe("Bulk categorization", () => {
     await check("Select Taxi");
     await click("All accounts");
     expect(checkedRows()).toEqual([]);
+    // Returning to the earlier filters does not bring their selection back.
+    await check("Select Coffee");
+    await click("Savings");
+    await click("All accounts");
+    expect(checkedRows()).toEqual([]);
   });
 
+  for (const outcome of ["saved", "failed"] as const) {
+    it(`settles on the server's rows when a load lands during a bulk save that ${outcome}`, async () => {
+      const save = Promise.withResolvers<void>();
+      const server = serveCategories({
+        fail: outcome === "failed",
+        hold: save.promise,
+      });
+      await mountFinance();
+      await check("Select Coffee");
+      await setBulkCategory("meals");
+      expect(categoryOf("Coffee")).toBe("meals");
+      // A filter change mid-save loads the rows as the server has them now.
+      await click("Savings");
+      expect(categoryOf("Coffee")).toBe("");
+      const before = server.loads;
+      await act(async () => save.resolve());
+      expect(server.loads).toBe(before + 1);
+      expect(categoryOf("Coffee")).toBe(outcome === "saved" ? "meals" : "");
+    });
+  }
+
   it("holds every row's category picker until a bulk save finishes", async () => {
-    const save = Promise.withResolvers<Response>();
-    respond((_url, init) =>
-      init?.method === "PUT" ? save.promise : Response.json(listing),
-    );
+    const save = Promise.withResolvers<void>();
+    serveCategories({ hold: save.promise });
     await mountFinance();
     await check("Select Coffee");
     await setBulkCategory("meals");
@@ -829,14 +875,7 @@ describe("Bulk categorization", () => {
       );
     expect(picker("Lunch")?.disabled).toBe(true);
     expect(checkbox("Select Lunch").disabled).toBe(true);
-    await act(async () =>
-      save.resolve(
-        Response.json({
-          expenseCategoryId: "meals",
-          transactionIds: ["Coffee"],
-        }),
-      ),
-    );
+    await act(async () => save.resolve());
     expect(picker("Lunch")?.disabled).toBe(false);
     expect(categoryOf("Coffee")).toBe("meals");
   });
