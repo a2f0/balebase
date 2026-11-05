@@ -1,10 +1,9 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { ApiError } from "@balebase/api-client";
 import type {
   FinanceTransaction,
   FinanceTransactionChanges,
 } from "@balebase/validators/finance";
-import { holdTimers } from "../testing/dom";
 import {
   type CacheScope,
   catchUpSavedTransactions,
@@ -253,7 +252,17 @@ describe("pulling transactions", () => {
   });
 
   it("gives up on a stalled page so pulls waiting behind it can run", async () => {
-    using timers = holdTimers(60_000);
+    // Holds the page timeout (only) until fired below.
+    const timeouts: (() => void)[] = [];
+    const realSetTimeout = globalThis.setTimeout;
+    const spy = spyOn(globalThis, "setTimeout").mockImplementation(((
+      handler: () => void,
+      delay?: number,
+    ) => {
+      if (delay !== 60_000) return realSetTimeout(handler, delay);
+      timeouts.push(handler);
+      return 0;
+    }) as unknown as typeof setTimeout);
     const store = memoryTransactionStore();
     const stalled = pullTransactions(scope, store, () => new Promise(() => {}));
     // A later load queues behind the stalled pull.
@@ -261,7 +270,8 @@ describe("pulling transactions", () => {
       page("1", false, [row("a")]),
     );
     await Bun.sleep(0);
-    await timers.fire();
+    spy.mockRestore();
+    for (const fire of timeouts.splice(0)) fire();
     await expect(stalled).rejects.toThrow("timed out");
     await later;
     expect((await store.read(scope)).transactions.map(({ id }) => id)).toEqual([
