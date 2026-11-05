@@ -41,7 +41,7 @@ interface Position {
 }
 
 /** Raised for a page that arrives after its person signed out. */
-class SignedOut extends Error {
+export class SignedOut extends Error {
   constructor() {
     super("Signed out.");
   }
@@ -343,8 +343,10 @@ async function pullPages(
 ) {
   let saved = 0;
   let reset = false;
+  // Pinned: a sign-out during the pull ends it rather than restarting it.
+  const { epoch } = await store.position(scope);
   for (;;) {
-    const from = await store.position(scope);
+    const from = { cursor: (await store.position(scope)).cursor, epoch };
     const page = await fetchPage(from.cursor);
     // The session's organization changed under this pull.
     if (!anyOrganization && page.organizationId !== scope.organizationId)

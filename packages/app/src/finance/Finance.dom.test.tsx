@@ -460,6 +460,7 @@ describe("Finance filters", () => {
     await navigate("/finance/categories");
     await navigate("/finance");
     expect(container.textContent).toContain("Finance access required.");
+    expect(rowNames()).toEqual([]);
     expect(container.textContent).not.toContain(
       "Showing transactions saved on this device",
     );

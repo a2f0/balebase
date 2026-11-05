@@ -222,6 +222,43 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
       page("3", false, [row("late")]),
     );
     expect(late).toBe("Signed out.");
+
+    // Nor does a pull that saved pages before the sign-out carry on with
+    // the epoch the sign-out set.
+    const resumed = await target.evaluate(
+      async (who, first, second) => {
+        const cache = window.transactionCacheTest;
+        if (!cache) throw new Error("No fixture");
+        let clearing: Promise<void> | undefined;
+        const asked: (string | null)[] = [];
+        const reply = await cache
+          .pullTransactions(
+            who,
+            cache.store,
+            async (cursor) => {
+              asked.push(cursor);
+              if (asked.length === 1) return first;
+              await clearing;
+              return second;
+            },
+            // Signs out once the first page is saved, before the next is
+            // asked for.
+            () => {
+              clearing ??= cache.clearUserTransactions("person");
+            },
+          )
+          .then(
+            () => "kept",
+            (cause: Error) => cause.message,
+          );
+        return { asked, reply };
+      },
+      scope,
+      page("4", true, [row("early")]),
+      page("5", false, [row("after")]),
+    );
+    expect(resumed.reply).toBe("Signed out.");
+    expect((await kept(target)).rows).toEqual([]);
     expect(await kept(target)).toEqual({
       completed: false,
       cursor: null,

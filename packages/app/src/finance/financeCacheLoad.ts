@@ -8,6 +8,7 @@ import {
   type CacheScope,
   type FinanceSummary,
   pullTransactions,
+  SignedOut,
   type TransactionStore,
 } from "./transactionCache";
 
@@ -34,6 +35,8 @@ export function fallBack(
     try {
       return await run(primary);
     } catch (cause) {
+      // Signing out is not a storage failure.
+      if (cause instanceof SignedOut) throw cause;
       active = secondary;
       throw new StoreFellBack(cause);
     }
@@ -47,9 +50,16 @@ export function fallBack(
   };
 }
 
-/** A refusal (signed out, no Finance access) rather than an unreachable server. */
-function refused(cause: unknown) {
-  return cause instanceof ApiError && cause.status < 500;
+/**
+ * A refusal (signed out, no Finance access) rather than an unreachable
+ * server: nothing saved or shown may outlast it.
+ */
+export function refused(cause: unknown) {
+  return (
+    cause instanceof SignedOut ||
+    (cause instanceof ApiError &&
+      (cause.status === 401 || cause.status === 403))
+  );
 }
 
 const anyOrganization: CacheScope = { organizationId: "", userId: "" };
@@ -108,11 +118,11 @@ async function loadOnce(
   // hide it.
   const refusal = failures.find(refused);
   if (refusal !== undefined) {
-    // Someone who lost access keeps nothing on the device.
-    if (keepTransactions)
-      await store.clear(cacheScope).catch(() => {
-        // The refusal is what to report; storage errors matter less.
-      });
+    // Someone who lost access keeps nothing on the device, whichever Finance
+    // page found out.
+    await store.clear(cacheScope).catch(() => {
+      // The refusal is what to report; storage errors matter less.
+    });
     throw refusal;
   }
   const fellBack = failures.find((cause) => cause instanceof StoreFellBack);

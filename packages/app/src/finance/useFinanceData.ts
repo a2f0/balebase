@@ -3,7 +3,7 @@ import type { FinanceData } from "@balebase/validators/finance";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
-import { fallBack, loadFinance } from "./financeCacheLoad";
+import { fallBack, loadFinance, refused } from "./financeCacheLoad";
 import { syncPending, syncPollMs } from "./financeConnectionActions";
 import {
   type CacheScope,
@@ -72,8 +72,14 @@ export function useFinanceData(
       setData(next.data);
       setSavedCopy(next.savedAt);
     } catch (cause) {
-      if (current())
-        setLoadError(errorMessage(cause, "Could not load finances."));
+      if (!current()) return;
+      if (refused(cause)) {
+        // Nothing read before stays on screen after access ends.
+        loaded.current = false;
+        setData(undefined);
+        setSavedCopy(undefined);
+      }
+      setLoadError(errorMessage(cause, "Could not load finances."));
     } finally {
       if (current()) {
         setLoading(false);

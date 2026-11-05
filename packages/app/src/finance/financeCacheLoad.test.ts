@@ -9,6 +9,7 @@ import { fallBack, loadFinance } from "./financeCacheLoad";
 import {
   type CacheScope,
   memoryTransactionStore,
+  SignedOut,
   type TransactionStore,
 } from "./transactionCache";
 
@@ -98,6 +99,57 @@ describe("loading cached finances", () => {
       }),
     ).rejects.toThrow("Status 403.");
     expect((await store.read(scope)).transactions).toEqual([]);
+  });
+
+  it("clears the saved copy when a page without transactions is refused", async () => {
+    const store = memoryTransactionStore();
+    await loadFinance(store, scope, true, sources);
+    // The Categories page reads only the summary.
+    await expect(
+      loadFinance(store, scope, false, {
+        ...sources,
+        summary: async () => {
+          throw failure(401);
+        },
+      }),
+    ).rejects.toThrow("Status 401.");
+    expect((await store.read(scope)).transactions).toEqual([]);
+  });
+
+  it("keeps the saved copy for errors that are not refusals", async () => {
+    const store = memoryTransactionStore();
+    await loadFinance(store, scope, true, sources);
+    const limited = await loadFinance(store, scope, true, {
+      ...sources,
+      changes: async () => {
+        throw failure(429);
+      },
+    });
+    expect(ids(limited.data)).toEqual(["a", "b"]);
+    expect(limited.savedAt).toBeString();
+  });
+
+  it("ends a pull that a sign-out overtakes instead of falling back to memory", async () => {
+    const primary = memoryTransactionStore();
+    const signingOut: TransactionStore = {
+      ...primary,
+      apply: async () => {
+        throw new SignedOut();
+      },
+    };
+    const secondary = memoryTransactionStore();
+    let pulls = 0;
+    await expect(
+      loadFinance(fallBack(signingOut, secondary), scope, true, {
+        ...sources,
+        changes: async () => {
+          pulls++;
+          return feed("a");
+        },
+      }),
+    ).rejects.toBeInstanceOf(SignedOut);
+    expect(pulls).toBe(1);
+    expect((await secondary.read(scope)).transactions).toEqual([]);
   });
 
   it("downloads again into memory when IndexedDB fails after a pull", async () => {
