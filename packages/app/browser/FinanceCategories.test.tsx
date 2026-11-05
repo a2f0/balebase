@@ -16,6 +16,7 @@ it("opens a category from anywhere on its row except its own buttons", async () 
         { id: "travel", name: "Travel", slug: "travel", transactionCount: 0 },
       ]}
       onChanged={async () => undefined}
+      onRefused={async () => undefined}
       onShowTransactions={() => undefined}
     />,
   );

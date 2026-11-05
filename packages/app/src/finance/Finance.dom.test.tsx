@@ -573,6 +573,45 @@ describe("Finance filters", () => {
     expect(container.textContent).toContain("Finance access required.");
   });
 
+  async function refusedOn(page: "categories" | "reports") {
+    let state: "open" | "refused" | "down" = "open";
+    respond((url, init) => {
+      if (state === "down")
+        return Response.json({ error: "Unavailable." }, { status: 503 });
+      const refusedRequest =
+        url.pathname.endsWith("/reports/expenses") ||
+        (url.pathname.includes("/categories") && init?.method !== "GET");
+      if (state === "refused" && refusedRequest)
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      return Response.json(data);
+    });
+    const navigate = await mountFinance();
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    if (page === "categories") {
+      await navigate("/finance/categories");
+      state = "refused";
+      await click("Add common categories");
+    } else {
+      state = "refused";
+      await navigate("/finance/reports");
+    }
+    // Balebase then goes down: nothing saved comes back.
+    state = "down";
+    await navigate("/finance");
+    expect(container.textContent).not.toContain(
+      "Showing transactions saved on this device",
+    );
+    expect(rowNames()).toEqual([]);
+  }
+
+  it("keeps nothing when a Categories save finds access gone", () =>
+    refusedOn("categories"));
+
+  it("keeps nothing when Reports find access gone", () => refusedOn("reports"));
+
   it("keeps nothing for someone who loses access", async () => {
     let refused = false;
     respond(() =>

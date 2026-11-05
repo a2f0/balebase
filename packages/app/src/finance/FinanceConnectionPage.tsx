@@ -29,7 +29,6 @@ import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import { countLabel, formatDateTime, formatLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
-import { useLoad } from "../shared/useLoad";
 import { financeAccountPath } from "../workspace/workspacePaths";
 import { connectionTone } from "./FinanceAccounts";
 import { FinanceInstitutionHealth } from "./FinanceInstitutionHealth";
@@ -43,8 +42,8 @@ import {
   syncPollMs,
 } from "./financeConnectionActions";
 import { formatImportedHistory, formatMoney } from "./financeFormat";
-import { type CacheScope, clearedOnRefusal } from "./transactionCache";
-import { useCacheScope, useRefusalGuard } from "./useCacheScope";
+import type { CacheScope } from "./transactionCache";
+import { useGuardedLoad } from "./useCacheScope";
 
 type Connection = FinanceConnectionDetail["connection"];
 
@@ -350,16 +349,12 @@ function useConnection(
   onNavigate: (path: string) => void,
   givenScope: CacheScope | undefined,
 ) {
-  const scope = useCacheScope(givenScope);
-  const loaded = useLoad(
-    useCallback(
-      () => clearedOnRefusal(scope, api.finance.connection(id)),
-      [id, scope],
-    ),
+  const loaded = useGuardedLoad(
+    givenScope,
+    useCallback(() => api.finance.connection(id), [id]),
     "Could not load connection.",
   );
-  const { data, reload, setData } = loaded;
-  const guard = useRefusalGuard(scope, setData);
+  const { data, guard, reload, setData } = loaded;
   const pollError = useSyncStatusPolling(
     id,
     syncPending(data?.connection.syncJob?.status),

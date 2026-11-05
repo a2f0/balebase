@@ -134,6 +134,7 @@ export function Finance({
         if (path !== pathname) onNavigate(path);
       }}
       onNavigate={onNavigate}
+      onRefused={onRefused}
       onReload={load}
       onRepair={plaid.repair}
       onSync={actions.sync}
@@ -356,6 +357,8 @@ interface OverviewHandlers {
   onDeleteData: (connection: FinanceConnection) => Promise<void>;
   onDisconnect: (connection: FinanceConnection) => Promise<void>;
   onNavigate: (pathname: string) => void;
+  /** A request was refused: access ended, so nothing shown or saved stays. */
+  onRefused: (cause: unknown) => Promise<void>;
   onRepair: (connection: FinanceConnection) => Promise<void>;
   onSync: (id: string) => Promise<void>;
 }
@@ -400,12 +403,16 @@ export function FinanceView({
           unconfigured={unconfigured}
         />
         {page === "reports" && (
-          <FinanceReports onNavigate={handlers.onNavigate} />
+          <FinanceReports
+            onNavigate={handlers.onNavigate}
+            onRefused={handlers.onRefused}
+          />
         )}
         {page === "categories" && (
           <FinanceCategories
             categories={data?.categories}
             onChanged={onReload}
+            onRefused={handlers.onRefused}
             onShowTransactions={(category) =>
               handlers.onFiltersChange({
                 ...initialFilters,

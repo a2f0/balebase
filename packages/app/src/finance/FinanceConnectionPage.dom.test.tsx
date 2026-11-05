@@ -170,6 +170,36 @@ describe("Finance connection page", () => {
     expect(() => button("Copy Institution")).toThrow();
   });
 
+  it("clears the page when the reload after an action is refused", async () => {
+    let refused = false;
+    respond(async (url, init) => {
+      if (init?.method === "POST") {
+        refused = true;
+        return Response.json({
+          connection: detail().connection,
+          sync: { added: 0, modified: 0, removed: 0 },
+        });
+      }
+      if (url.href.endsWith("/institution-health"))
+        return Response.json(health());
+      return refused
+        ? Response.json({ error: "Finance access required." }, { status: 403 })
+        : Response.json(detail());
+    });
+    const view = await mount(
+      <FinanceConnectionPage
+        id="item-1"
+        onNavigate={() => undefined}
+        scope={{ organizationId: "org", userId: "person" }}
+      />,
+    );
+    container = view.container;
+    await settle();
+    expect(container.textContent).toContain("Daily sync");
+    await click("Sync now");
+    expect(container.textContent).not.toContain("Daily sync");
+  });
+
   it("reloads after a failed sync to show Plaid's error", async () => {
     let failed = false;
     respond(async (url, init) => {

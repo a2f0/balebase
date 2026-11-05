@@ -19,16 +19,11 @@ import { ActivityFeed } from "../activity/ActivityFeed";
 import { IssueList } from "../issues/IssueList";
 import { api } from "../shared/apiClient";
 import { useAction } from "../shared/useAction";
-import { useLoad } from "../shared/useLoad";
 import { transactionIssuePath } from "../workspace/workspacePaths";
 import { FinanceTransactionRow } from "./FinanceTransactionHistory";
 import { FinanceTransactionSourceData } from "./FinanceTransactionSourceData";
-import {
-  type CacheScope,
-  catchUpSavedTransactions,
-  clearedOnRefusal,
-} from "./transactionCache";
-import { useCacheScope, useRefusalGuard } from "./useCacheScope";
+import { type CacheScope, catchUpSavedTransactions } from "./transactionCache";
+import { useGuardedLoad } from "./useCacheScope";
 
 export function FinanceTransactionPage({
   id,
@@ -126,16 +121,12 @@ export function FinanceTransactionPage({
   );
 }
 function useTransaction(id: string, givenScope: CacheScope | undefined) {
-  const scope = useCacheScope(givenScope);
-  const loaded = useLoad(
-    useCallback(
-      () => clearedOnRefusal(scope, api.finance.transaction(id)),
-      [id, scope],
-    ),
+  const loaded = useGuardedLoad(
+    givenScope,
+    useCallback(() => api.finance.transaction(id), [id]),
     "Could not load transaction.",
   );
-  const { setData } = loaded;
-  const guard = useRefusalGuard(scope, setData);
+  const { guard, scope, setData } = loaded;
   const action = useAction("Could not update the transaction.");
   const [expanded, setExpanded] = useState<string>();
   const updateTransaction = (change: Partial<FinanceTransaction>) =>

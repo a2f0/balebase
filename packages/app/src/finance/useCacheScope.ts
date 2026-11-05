@@ -1,4 +1,5 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
+import { useLoad } from "../shared/useLoad";
 import { type CacheScope, clearedOnRefusal, refused } from "./transactionCache";
 
 /**
@@ -34,4 +35,34 @@ export function useRefusalGuard(
       }),
     [scope, setData],
   );
+}
+
+/**
+ * A record page's load, guarded: a refusal (even of a reload after an
+ * action) clears the saved transactions and what the page shows. `load`
+ * must keep its identity (a `useCallback`). Returns `guard` for the page's
+ * other requests.
+ */
+export function useGuardedLoad<T>(
+  givenScope: CacheScope | undefined,
+  load: () => Promise<T>,
+  fallback: string,
+) {
+  const scope = useCacheScope(givenScope);
+  // `useLoad` keeps data on a failed reload; a refusal must not.
+  const clearShown = useRef<(data: undefined) => void>(() => undefined);
+  const loaded = useLoad(
+    useCallback(
+      () =>
+        clearedOnRefusal(scope, load()).catch((cause: unknown) => {
+          if (refused(cause)) clearShown.current(undefined);
+          throw cause;
+        }),
+      [load, scope],
+    ),
+    fallback,
+  );
+  clearShown.current = loaded.setData;
+  const guard = useRefusalGuard(scope, loaded.setData);
+  return { ...loaded, guard, scope };
 }
