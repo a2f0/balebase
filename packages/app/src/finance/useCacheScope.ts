@@ -7,9 +7,7 @@ import { type CacheScope, clearedOnRefusal, refused } from "./transactionCache";
  * loads that depend on it must not repeat (and discard unsaved input) when
  * nothing changed.
  */
-export function useCacheScope(
-  scope: CacheScope | undefined,
-): CacheScope | undefined {
+function useCacheScope(scope: CacheScope | undefined): CacheScope | undefined {
   const organizationId = scope?.organizationId;
   const userId = scope?.userId;
   return useMemo(
@@ -23,7 +21,7 @@ export function useCacheScope(
  * transactions and what the page shows at once, before it is reported, so
  * neither outlasts a reload that an outage could keep from finishing.
  */
-export function useRefusalGuard(
+function useRefusalGuard(
   scope: CacheScope | undefined,
   setData: (data: undefined) => void,
 ) {
