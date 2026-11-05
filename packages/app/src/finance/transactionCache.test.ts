@@ -138,6 +138,22 @@ describe("pulling transactions", () => {
     ]);
   });
 
+  it("shares a pull only with the same store", async () => {
+    const pages = feed({ start: page("1", false, [row("a")]) });
+    const [first, second] = [
+      memoryTransactionStore(),
+      memoryTransactionStore(),
+    ];
+    await Promise.all([
+      pullTransactions(scope, first, pages.fetchPage),
+      pullTransactions(scope, second, pages.fetchPage),
+    ]);
+    expect(pages.requested).toEqual([null, null]);
+    expect((await second.read(scope)).transactions.map(({ id }) => id)).toEqual(
+      ["a"],
+    );
+  });
+
   it("starts over once when the server is behind the device, and refuses other organizations", async () => {
     const store = memoryTransactionStore();
     await store.apply(

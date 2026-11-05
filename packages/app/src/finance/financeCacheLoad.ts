@@ -7,6 +7,7 @@ import { newestFirst } from "./financeTransactions";
 import {
   type CacheScope,
   type FinanceSummary,
+  OrganizationChanged,
   pullTransactions,
   SignedOut,
   type TransactionStore,
@@ -133,9 +134,17 @@ async function loadOnce(
   }
   const fellBack = failures.find((cause) => cause instanceof StoreFellBack);
   if (fellBack) throw fellBack;
-  const failure = failures[0];
   const latest =
     summary.status === "fulfilled" ? summaryOf(summary.value) : undefined;
+  // The session moved to another organization under this load: nothing
+  // read may be saved or shown under this one.
+  if (latest && scope && latest.organizationId !== scope.organizationId)
+    throw new OrganizationChanged();
+  const changed = failures.find(
+    (cause) => cause instanceof OrganizationChanged,
+  );
+  if (changed) throw changed;
+  const failure = failures[0];
   if (!keepTransactions) {
     if (!latest) throw failure;
     return { data: { ...latest, nextCursor: null, transactions: [] } };

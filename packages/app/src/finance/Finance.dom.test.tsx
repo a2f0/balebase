@@ -112,6 +112,7 @@ const data: FinanceData = {
   configured: true,
   connections: [],
   nextCursor: null,
+  organizationId: "organization",
   transactions: [
     transaction("Coffee", { transactionDate: `${year}-01-02` }),
     transaction("Supplies", { accountId: "savings" }),

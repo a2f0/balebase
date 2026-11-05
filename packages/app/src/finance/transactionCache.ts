@@ -41,6 +41,13 @@ interface Position {
   epoch: string;
 }
 
+/** Raised for a response from another organization than the scope's. */
+export class OrganizationChanged extends Error {
+  constructor() {
+    super("The active organization changed. Reload Finance.");
+  }
+}
+
 /** Raised for a write that arrives after its saved copy was cleared. */
 export class SignedOut extends Error {
   constructor() {
@@ -368,7 +375,8 @@ export async function clearUserTransactions(userId: string) {
   });
 }
 
-const pulls = new Map<string, Promise<void>>();
+/** Pulls running, per store and scope: a store abandoned mid-pull is not shared. */
+const pulls = new WeakMap<TransactionStore, Map<string, Promise<void>>>();
 
 /**
  * Brings the kept transactions up to date, a page at a time. Each page and
@@ -386,12 +394,17 @@ export function pullTransactions(
   anyOrganization = false,
 ) {
   const key = scopeKey(scope);
-  const running = pulls.get(key);
-  if (running) return running;
+  let running = pulls.get(store);
+  if (!running) {
+    running = new Map();
+    pulls.set(store, running);
+  }
+  const shared = running.get(key);
+  if (shared) return shared;
   const work = withLock(`${databaseName}:${key}`, () =>
     pullPages(scope, store, fetchPage, onProgress, anyOrganization),
-  ).finally(() => pulls.delete(key));
-  pulls.set(key, work);
+  ).finally(() => running.delete(key));
+  running.set(key, work);
   return work;
 }
 
@@ -411,7 +424,7 @@ async function pullPages(
     const page = await fetchPage(from.cursor);
     // The session's organization changed under this pull.
     if (!anyOrganization && page.organizationId !== scope.organizationId)
-      throw new Error("The active organization changed. Reload Finance.");
+      throw new OrganizationChanged();
     if (page.reset) {
       if (reset) throw new Error("Could not read transactions. Try again.");
       reset = true;

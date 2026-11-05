@@ -270,6 +270,8 @@ const FinanceDataSchema = z.object({
   configured: z.boolean(),
   connections: z.array(FinanceConnectionSchema),
   nextCursor: z.string().nullable(),
+  /** Whose finances these are, so a device can tell them from another's. */
+  organizationId: z.string(),
   transactions: z.array(FinanceTransactionSchema),
 });
 export type FinanceData = z.infer<typeof FinanceDataSchema>;

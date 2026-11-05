@@ -255,9 +255,12 @@ describe("transaction changes", () => {
     const summary = await jsonRequest<{
       accounts: unknown[];
       nextCursor: string | null;
+      organizationId: string;
       transactions: unknown[];
     }>(fixture.app, fixture.bindings, "?transactions=none", "GET");
     expect(summary.status).toBe(200);
+    // Devices tell one organization's finances from another's by it.
+    expect(summary.body.organizationId).toBe("org_user-1");
     expect(summary.body.transactions).toEqual([]);
     expect(summary.body.nextCursor).toBeNull();
     expect(summary.body.accounts).toHaveLength(1);

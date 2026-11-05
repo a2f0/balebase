@@ -183,6 +183,7 @@ async function financeListing(context: FinanceContext) {
     configured: isConfigured(context.env),
     connections: connections.map(toConnection),
     nextCursor: page.nextCursor,
+    organizationId: context.get("organizationId"),
     transactions: page.items.map((row) =>
       toTransaction(
         row,

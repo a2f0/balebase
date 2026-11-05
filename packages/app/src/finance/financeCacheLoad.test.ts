@@ -42,6 +42,7 @@ const summary: FinanceData = {
   configured: true,
   connections: [],
   nextCursor: null,
+  organizationId: "org",
   transactions: [],
 };
 
@@ -150,6 +151,43 @@ describe("loading cached finances", () => {
     ).rejects.toBeInstanceOf(SignedOut);
     expect(pulls).toBe(1);
     expect((await secondary.read(scope)).transactions).toEqual([]);
+  });
+
+  it("saves nothing when either response is another organization's", async () => {
+    const store = memoryTransactionStore();
+    await loadFinance(store, scope, true, sources);
+    const before = await store.read(scope);
+    await expect(
+      loadFinance(store, scope, true, {
+        ...sources,
+        summary: async () => ({ ...summary, organizationId: "other" }),
+      }),
+    ).rejects.toThrow("The active organization changed");
+    await expect(
+      loadFinance(store, scope, true, {
+        ...sources,
+        changes: async () => ({ ...feed("c"), organizationId: "other" }),
+        summary: async () => ({
+          ...summary,
+          accounts: [
+            {
+              availableBalance: null,
+              currencyCode: "USD",
+              currentBalance: 1,
+              id: "theirs",
+              institutionName: null,
+              mask: null,
+              name: "Theirs",
+              officialName: null,
+              subtype: null,
+              type: "depository",
+            },
+          ],
+        }),
+      }),
+    ).rejects.toThrow("The active organization changed");
+    // Neither the other organization's rows nor this load's summary.
+    expect(await store.read(scope)).toEqual(before);
   });
 
   it("downloads again into memory when IndexedDB fails after a pull", async () => {

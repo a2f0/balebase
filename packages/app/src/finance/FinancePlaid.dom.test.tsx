@@ -34,6 +34,7 @@ const data: FinanceData = {
   configured: true,
   connections: [broken],
   nextCursor: null,
+  organizationId: "organization",
   transactions: [],
 };
 
