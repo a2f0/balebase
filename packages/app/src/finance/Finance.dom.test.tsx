@@ -510,6 +510,56 @@ describe("Finance filters", () => {
     ).toBe("meals");
   });
 
+  it("clears what is shown when a save finds access gone", async () => {
+    let refused = false;
+    respond((_url, init) => {
+      if (init?.method === "PUT") refused = true;
+      return refused
+        ? Response.json({ error: "Finance access required." }, { status: 403 })
+        : Response.json(data);
+    });
+    await mountFinance();
+    const select = container.querySelector<HTMLSelectElement>(
+      '[aria-label="Expense category for Coffee"]',
+    );
+    if (!select) throw new Error("Missing category picker");
+    await act(async () => {
+      select.value = "meals";
+      select.dispatchEvent(
+        new dom.Event("change", { bubbles: true }) as unknown as Event,
+      );
+    });
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).toContain("Finance access required.");
+  });
+
+  it("clears what is shown when an annotation save finds access gone", async () => {
+    let refused = false;
+    respond((_url, init) => {
+      if (init?.method === "PATCH") refused = true;
+      return refused
+        ? Response.json({ error: "Finance access required." }, { status: 403 })
+        : Response.json(data);
+    });
+    await mountFinance();
+    await openRowMenu("Coffee");
+    await choose("Annotate");
+    const form = container.querySelector<HTMLFormElement>(
+      '[aria-label="Annotation for Coffee"]',
+    );
+    if (!form) throw new Error("No annotation form");
+    await act(async () =>
+      form.dispatchEvent(
+        new dom.Event("submit", {
+          bubbles: true,
+          cancelable: true,
+        }) as unknown as Event,
+      ),
+    );
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).toContain("Finance access required.");
+  });
+
   it("keeps nothing for someone who loses access", async () => {
     let refused = false;
     respond(() =>

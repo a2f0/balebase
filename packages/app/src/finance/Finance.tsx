@@ -61,7 +61,7 @@ import {
   linkErrorMessage,
   type PlaidLinkSession,
 } from "./plaidLinkDiagnostics";
-import type { CacheScope } from "./transactionCache";
+import { type CacheScope, refused } from "./transactionCache";
 import {
   type FinanceListingState,
   initialFilters,
@@ -163,6 +163,8 @@ function categorizeTransaction(
     } catch (cause) {
       setData((current) => withCategories(current, reversed(change)));
       setError(errorMessage(cause, "Could not update finances."));
+      // Access ended: the reload clears what is shown and saved.
+      if (refused(cause)) await refresh();
     } finally {
       setSaving(false);
     }
@@ -278,9 +280,16 @@ function financeActions(
   async function run(action: () => Promise<string>) {
     await runAction(
       async () => {
-        const notice = await action();
-        await load();
-        return notice;
+        try {
+          const notice = await action();
+          await load();
+          return notice;
+        } catch (cause) {
+          // A refusal means access ended: the reload clears what is shown
+          // and saved.
+          if (refused(cause)) await load();
+          throw cause;
+        }
       },
       (notice) => notice,
     );
@@ -720,6 +729,8 @@ function usePlaidConnect(
     } catch (cause) {
       setError(errorMessage(cause, "Could not update finances."));
       setBusy(false);
+      // Access ended: the reload clears what is shown and saved.
+      if (refused(cause)) await load();
     }
   };
   return {
