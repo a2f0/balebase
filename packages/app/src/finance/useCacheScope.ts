@@ -1,9 +1,11 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { errorMessage } from "../shared/errors";
 import { useLoad } from "../shared/useLoad";
 import {
   type CacheScope,
   clearedOnRefusal,
+  clears,
+  onClearedElsewhere,
   refused,
   SignedOut,
 } from "./transactionCache";
@@ -63,6 +65,13 @@ export function useGuardedLoad<T>(
     loaded.setData(undefined);
     loaded.setError(errorMessage(cause, fallback));
   };
+  // Another tab found access gone (or signed out): drop what was read too.
+  useEffect(() => {
+    if (!scope) return;
+    return onClearedElsewhere((cleared) => {
+      if (clears(cleared, scope)) onRefusal(new SignedOut());
+    });
+  }, [onRefusal, scope]);
   const guard = useCallback(
     <R>(work: Promise<R>) =>
       clearedOnRefusal(scope, work).catch((cause: unknown) => {

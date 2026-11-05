@@ -8,6 +8,9 @@ import {
   type CacheScope,
   catchUpSavedTransactions,
   clearedOnRefusal,
+  clearFormerOrganizations,
+  clearScopeTransactions,
+  clearUserTransactions,
   memoryTransactionStore,
   pullTransactions,
 } from "./transactionCache";
@@ -222,6 +225,25 @@ describe("pulling transactions", () => {
       "Request failed with status 403.",
     );
     expect(cleared).toEqual([scope]);
+  });
+
+  it("tells other tabs about every clearing", async () => {
+    const heard: unknown[] = [];
+    const listener = new BroadcastChannel("balebase-finance-cleared");
+    listener.onmessage = (event) => {
+      const { except, organizationId, userId } = event.data;
+      heard.push({ except, organizationId, userId });
+    };
+    await clearScopeTransactions(scope);
+    await clearFormerOrganizations("person", ["org"]);
+    await clearUserTransactions("person");
+    await Bun.sleep(5);
+    listener.close();
+    expect(heard).toEqual([
+      { except: undefined, organizationId: "org", userId: "person" },
+      { except: ["org"], organizationId: undefined, userId: "person" },
+      { except: undefined, organizationId: undefined, userId: "person" },
+    ]);
   });
 
   it("shares a pull only with the same store", async () => {

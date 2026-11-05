@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Issue } from "@balebase/validators/issues";
 import { act, type ReactNode } from "react";
 import { FinanceTransactionPage } from "../finance/FinanceTransactionPage";
+import { apiUrl } from "../shared/config";
 import { installDom } from "../testing/dom";
 import { Issues } from "./Issues";
 
@@ -315,6 +316,29 @@ describe("workspace issues, mounted", () => {
     });
     expect(container.textContent).not.toContain("FOOD_AND_DRINK_COFFEE");
     expect(container.textContent).toContain("Finance access required.");
+  });
+
+  it("clears a transaction's page when another tab signs out", async () => {
+    respond((url) =>
+      url.pathname === "/api/issues"
+        ? Response.json({ issues: [], nextCursor: null })
+        : baseResponse(url),
+    );
+    await show(
+      <FinanceTransactionPage
+        id="old-txn"
+        onNavigate={() => undefined}
+        scope={{ organizationId: "org", userId: "person" }}
+      />,
+    );
+    expect(container.textContent).toContain("FOOD_AND_DRINK_COFFEE");
+    const otherTab = new BroadcastChannel("balebase-finance-cleared");
+    await act(async () => {
+      otherTab.postMessage({ apiUrl, source: "other-tab", userId: "person" });
+      await Bun.sleep(5);
+    });
+    otherTab.close();
+    expect(container.textContent).not.toContain("FOOD_AND_DRINK_COFFEE");
   });
 
   it("loads a transaction once while the shell re-renders its scope", async () => {

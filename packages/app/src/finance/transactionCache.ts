@@ -370,6 +370,10 @@ export function indexedDbTransactionStore(): TransactionStore {
  * its epoch so pulls still running (in any tab) keep nothing they receive.
  */
 export async function clearScopeTransactions(scope: CacheScope) {
+  announceCleared({
+    organizationId: scope.organizationId,
+    userId: scope.userId,
+  });
   if (typeof indexedDB === "undefined") return;
   const key = scopeKey(scope);
   await inTransaction("readwrite", async (stores) => {
@@ -390,6 +394,7 @@ export async function clearFormerOrganizations(
   userId: string,
   organizationIds: string[],
 ) {
+  announceCleared({ except: organizationIds, userId });
   if (typeof indexedDB === "undefined") return;
   const current = new Set(organizationIds);
   await inTransaction("readwrite", async (stores) => {
@@ -420,6 +425,7 @@ export async function clearFormerOrganizations(
  * tab) keep none of the pages they receive. Other accounts keep theirs.
  */
 export async function clearUserTransactions(userId: string) {
+  announceCleared({ userId });
   if (typeof indexedDB === "undefined") return;
   await inTransaction("readwrite", async (stores) => {
     const keys = (await request(stores.state.getAllKeys())) as string[];
@@ -432,6 +438,53 @@ export async function clearUserTransactions(userId: string) {
     }
     stores.state.put({ epoch: crypto.randomUUID(), scope: epochKey(userId) });
   });
+}
+
+/** A clearing other tabs hear of: one scope, or a person's, but `except`. */
+export interface Cleared {
+  except?: string[] | undefined;
+  organizationId?: string | undefined;
+  userId: string;
+}
+
+const clearedChannel = "balebase-finance-cleared";
+// Tabs ignore their own announcements: they handle those where they happen.
+const thisTab = crypto.randomUUID();
+
+/**
+ * Tells other tabs a saved copy was cleared (access ended, a sign-out), so
+ * they stop showing the transactions they read before.
+ */
+function announceCleared(cleared: Cleared) {
+  if (typeof BroadcastChannel === "undefined") return;
+  const channel = new BroadcastChannel(clearedChannel);
+  channel.postMessage({ ...cleared, apiUrl, source: thisTab });
+  channel.close();
+}
+
+/** Whether a clearing announced elsewhere covers `scope`. */
+export function clears(cleared: Cleared, scope: CacheScope) {
+  if (cleared.userId !== scope.userId) return false;
+  if (cleared.organizationId !== undefined)
+    return cleared.organizationId === scope.organizationId;
+  return !cleared.except?.includes(scope.organizationId);
+}
+
+/**
+ * Calls `listener` when another tab clears saved transactions; returns how
+ * to stop listening.
+ */
+export function onClearedElsewhere(listener: (cleared: Cleared) => void) {
+  if (typeof BroadcastChannel === "undefined") return () => undefined;
+  const channel = new BroadcastChannel(clearedChannel);
+  channel.onmessage = (event: MessageEvent) => {
+    const message = event.data as
+      | (Cleared & { apiUrl?: string; source?: string })
+      | null;
+    if (message?.apiUrl === apiUrl && message.source !== thisTab)
+      listener(message);
+  };
+  return () => channel.close();
 }
 
 /**

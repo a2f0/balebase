@@ -4,6 +4,7 @@ import type {
   FinanceTransaction,
 } from "@balebase/validators/finance";
 import { act } from "react";
+import { apiUrl } from "../shared/config";
 import { holdTimers, installDom } from "../testing/dom";
 import { IntersectionObserverFixture } from "../testing/intersectionObserver";
 import { transactionIssuePath } from "../workspace/workspacePaths";
@@ -519,6 +520,37 @@ describe("Finance filters", () => {
     // summary-only one it started with.
     await act(async () => sync.resolve());
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+  });
+
+  it("stops showing transactions another tab cleared", async () => {
+    respond(() => Response.json(data));
+    const scope = { organizationId: "organization", userId: "person" };
+    ({ container } = await mount(
+      <Finance
+        onNavigate={() => undefined}
+        pathname="/finance"
+        scope={scope}
+      />,
+    ));
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    const otherTab = new BroadcastChannel("balebase-finance-cleared");
+    const announce = (cleared: object) =>
+      act(async () => {
+        otherTab.postMessage({ apiUrl, source: "other-tab", ...cleared });
+        await Bun.sleep(5);
+      });
+    // Another person's, or this person's in another organization: kept.
+    await announce({ organizationId: "organization", userId: "someone-else" });
+    await announce({ organizationId: "elsewhere", userId: "person" });
+    await announce({ except: ["organization"], userId: "person" });
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    // This person's here (access ended in the other tab): gone.
+    await announce({ organizationId: "organization", userId: "person" });
+    otherTab.close();
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).toContain(
+      "Saved transactions were cleared. Reload Finance.",
+    );
   });
 
   it("keeps a row's new category in the saved copy", async () => {

@@ -7,9 +7,12 @@ import { fallBack, forgetFinance, loadFinance } from "./financeCacheLoad";
 import { syncPending, syncPollMs } from "./financeConnectionActions";
 import {
   type CacheScope,
+  clears,
   indexedDbTransactionStore,
   memoryTransactionStore,
+  onClearedElsewhere,
   refused,
+  SignedOut,
 } from "./transactionCache";
 
 type CategoryRoute = Pick<FinanceFilters, "categorySlug" | "uncategorized">;
@@ -151,6 +154,11 @@ function useCachedLoad(
       ++requestId.current;
     };
   }, [load]);
+  useClearedElsewhere(store.scope, () => {
+    ++requestId.current;
+    forget();
+    settle(new SignedOut().message);
+  });
   return {
     data,
     loading,
@@ -164,6 +172,24 @@ function useCachedLoad(
     onRefused,
     setData,
   };
+}
+
+/**
+ * Calls `onCleared` when another tab clears the saved transactions `scope`
+ * shows (access ended there, or a sign-out), so this one drops them too.
+ */
+function useClearedElsewhere(
+  scope: CacheScope | undefined,
+  onCleared: () => void,
+) {
+  const latest = useRef(onCleared);
+  latest.current = onCleared;
+  useEffect(() => {
+    if (!scope) return;
+    return onClearedElsewhere((cleared) => {
+      if (clears(cleared, scope)) latest.current();
+    });
+  }, [scope]);
 }
 
 export type FinanceListingState = Omit<
