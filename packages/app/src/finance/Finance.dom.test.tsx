@@ -464,6 +464,24 @@ describe("Finance filters", () => {
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
   });
 
+  it("shows loading, not an empty history, when returning from another Finance page", async () => {
+    let held: Promise<void> | undefined;
+    respond(async (url) => {
+      if (isFeed(url)) await held;
+      return Response.json(data);
+    });
+    const navigate = await mountFinance();
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    await navigate("/finance/categories");
+    const download = Promise.withResolvers<void>();
+    held = download.promise;
+    await navigate("/finance");
+    expect(container.textContent).not.toContain("No transactions imported yet");
+    expect(container.textContent).toContain("Loading finances");
+    await act(async () => download.resolve());
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+  });
+
   it("keeps a row's new category in the saved copy", async () => {
     let category: string | null = null;
     let down = false;

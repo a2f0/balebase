@@ -119,7 +119,8 @@ function useCachedLoad(
       );
       if (!current()) return;
       loaded.current = true;
-      if (keepTransactions) loadedTransactions.current = true;
+      // A load for another page leaves no transactions to show.
+      loadedTransactions.current = keepTransactions;
       setData(next.data);
       setSavedCopy(next.savedAt);
       settle();
