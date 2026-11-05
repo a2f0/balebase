@@ -571,7 +571,7 @@ async function pullPages(
   const epoch = await pinned;
   for (;;) {
     const from = { cursor: (await store.position(scope)).cursor, epoch };
-    const page = await fetchPage(from.cursor);
+    const page = await withTimeout(fetchPage(from.cursor));
     // The session's account or organization changed under this pull (as
     // another tab switching accounts).
     if (
@@ -635,6 +635,32 @@ export async function catchUpSavedTransactions(
       throw cause;
     }
   }
+}
+
+/**
+ * How long a feed page may take: a request that stalls must not hold the
+ * pull (and the lock other tabs wait on) after its page is no longer
+ * wanted. The next load resumes from the last saved page.
+ */
+const pageTimeoutMs = 60_000;
+
+function withTimeout<T>(work: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("Downloading transactions timed out. Try again.")),
+      pageTimeoutMs,
+    );
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (cause: unknown) => {
+        clearTimeout(timer);
+        reject(cause);
+      },
+    );
+  });
 }
 
 function withLock<T>(name: string, work: () => Promise<T>): Promise<T> {

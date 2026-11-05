@@ -4,6 +4,7 @@ import type {
   FinanceTransaction,
   FinanceTransactionChanges,
 } from "@balebase/validators/finance";
+import { holdTimers } from "../testing/dom";
 import {
   type CacheScope,
   catchUpSavedTransactions,
@@ -248,6 +249,23 @@ describe("pulling transactions", () => {
       { except: undefined, organizationId: "org", userId: "person" },
       { except: ["org"], organizationId: undefined, userId: "person" },
       { except: undefined, organizationId: undefined, userId: "person" },
+    ]);
+  });
+
+  it("gives up on a stalled page so pulls waiting behind it can run", async () => {
+    using timers = holdTimers(60_000);
+    const store = memoryTransactionStore();
+    const stalled = pullTransactions(scope, store, () => new Promise(() => {}));
+    // A later load queues behind the stalled pull.
+    const later = pullTransactions(scope, store, async () =>
+      page("1", false, [row("a")]),
+    );
+    await Bun.sleep(0);
+    await timers.fire();
+    await expect(stalled).rejects.toThrow("timed out");
+    await later;
+    expect((await store.read(scope)).transactions.map(({ id }) => id)).toEqual([
+      "a",
     ]);
   });
 
