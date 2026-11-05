@@ -48,6 +48,7 @@ function respond(handler: Handler) {
       cursor: String(sent.length - 1),
       more: false,
       organizationId: "organization",
+      userId: "person",
       removedIds: [...previous.keys()].filter((id) => !current.has(id)),
       reset: false,
       transactions: [...current.values()],
@@ -113,6 +114,7 @@ const data: FinanceData = {
   connections: [],
   nextCursor: null,
   organizationId: "organization",
+  userId: "person",
   transactions: [
     transaction("Coffee", { transactionDate: `${year}-01-02` }),
     transaction("Supplies", { accountId: "savings" }),
@@ -640,6 +642,7 @@ describe("Finance filters", () => {
             cursor: "0",
             more: false,
             organizationId: "organization",
+            userId: "person",
             removedIds: [],
             reset: false,
             transactions: data.transactions,

@@ -45,6 +45,7 @@ function page(
     cursor,
     more,
     organizationId: "org",
+    userId: "person",
     removedIds,
     reset: false,
     transactions,
@@ -261,9 +262,15 @@ describe("pulling transactions", () => {
       ...page("5", false, [row("other")]),
       organizationId: "another-org",
     });
-    await expect(pullTransactions(scope, store, elsewhere)).rejects.toThrow(
-      "The active organization changed",
-    );
+    // Another tab signed in as someone else in the same organization.
+    const someoneElse = async () => ({
+      ...page("5", false, [row("theirs")]),
+      userId: "someone-else",
+    });
+    for (const answer of [elsewhere, someoneElse])
+      await expect(pullTransactions(scope, store, answer)).rejects.toThrow(
+        "The signed-in account or organization changed",
+      );
     expect((await store.read(scope)).transactions.map(({ id }) => id)).toEqual([
       "fresh",
     ]);

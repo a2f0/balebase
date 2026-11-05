@@ -45,7 +45,7 @@ interface Position {
 /** Raised for a response from another organization than the scope's. */
 export class OrganizationChanged extends Error {
   constructor() {
-    super("The active organization changed. Reload Finance.");
+    super("The signed-in account or organization changed. Reload Finance.");
   }
 }
 
@@ -512,8 +512,13 @@ async function pullPages(
   for (;;) {
     const from = { cursor: (await store.position(scope)).cursor, epoch };
     const page = await fetchPage(from.cursor);
-    // The session's organization changed under this pull.
-    if (!anyOrganization && page.organizationId !== scope.organizationId)
+    // The session's account or organization changed under this pull (as
+    // another tab switching accounts).
+    if (
+      !anyOrganization &&
+      (page.organizationId !== scope.organizationId ||
+        page.userId !== scope.userId)
+    )
       throw new OrganizationChanged();
     if (page.reset) {
       if (reset) throw new Error("Could not read transactions. Try again.");

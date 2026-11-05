@@ -233,6 +233,7 @@ describe("transaction changes", () => {
       cursor: null,
       more: false,
       organizationId: "organization-2",
+      userId: "user-1",
       transactions: [],
     });
     for (const cursor of ["nope", btoa('["x","y"]')]) {
@@ -289,10 +290,13 @@ describe("transaction changes", () => {
       nextCursor: string | null;
       organizationId: string;
       transactions: unknown[];
+      userId: string;
     }>(fixture.app, fixture.bindings, "?transactions=none", "GET");
     expect(summary.status).toBe(200);
-    // Devices tell one organization's finances from another's by it.
+    // Devices tell one organization's finances, and one session's, from
+    // another's by these.
     expect(summary.body.organizationId).toBe("org_user-1");
+    expect(summary.body.userId).toBe("user-1");
     expect(summary.body.transactions).toEqual([]);
     expect(summary.body.nextCursor).toBeNull();
     expect(summary.body.accounts).toHaveLength(1);

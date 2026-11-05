@@ -42,6 +42,7 @@ function page(
     cursor,
     more,
     organizationId: "org",
+    userId: "person",
     removedIds,
     reset: false,
     transactions,
@@ -120,6 +121,7 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
         cursor: "2",
         more: false,
         organizationId: "org",
+        userId: "person",
         removedIds: ["a"],
         reset: false,
         transactions: [{ id: "c", amount: 1, bad: () => undefined }],
@@ -301,6 +303,7 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
         configured: true,
         connections: [],
         organizationId: "org",
+        userId: "person",
       },
     );
     expect(refused).toEqual([

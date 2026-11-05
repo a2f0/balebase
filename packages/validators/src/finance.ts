@@ -272,6 +272,8 @@ const FinanceDataSchema = z.object({
   nextCursor: z.string().nullable(),
   /** Whose finances these are, so a device can tell them from another's. */
   organizationId: z.string(),
+  /** Whose session read them. */
+  userId: z.string(),
   transactions: z.array(FinanceTransactionSchema),
 });
 export type FinanceData = z.infer<typeof FinanceDataSchema>;
@@ -302,6 +304,8 @@ const FinanceListingQuerySchema = z.object({
 const FinanceTransactionChangesSchema = z.object({
   /** The organization these changes belong to. */
   organizationId: z.string(),
+  /** Whose session read them, so a device files them under that person. */
+  userId: z.string(),
   /** Where the next page starts; null before the organization's first change. */
   cursor: z.string().nullable(),
   /** Whether more changes wait past `cursor`. */

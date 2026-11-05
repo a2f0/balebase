@@ -43,6 +43,7 @@ const summary: FinanceData = {
   connections: [],
   nextCursor: null,
   organizationId: "org",
+  userId: "person",
   transactions: [],
 };
 
@@ -51,6 +52,7 @@ function feed(...ids: string[]): FinanceTransactionChanges {
     cursor: "1",
     more: false,
     organizationId: "org",
+    userId: "person",
     removedIds: [],
     reset: false,
     transactions: ids.map(row),
@@ -249,6 +251,19 @@ describe("loading cached finances", () => {
     expect((await secondary.read(scope)).transactions).toEqual([]);
   });
 
+  it("saves nothing read in another account's session", async () => {
+    const store = memoryTransactionStore();
+    await loadFinance(store, scope, true, sources);
+    const before = await store.read(scope);
+    await expect(
+      loadFinance(store, scope, true, {
+        ...sources,
+        summary: async () => ({ ...summary, userId: "someone-else" }),
+      }),
+    ).rejects.toThrow("The signed-in account or organization changed");
+    expect((await store.read(scope)).summary).toEqual(before.summary);
+  });
+
   it("saves nothing when either response is another organization's", async () => {
     const store = memoryTransactionStore();
     await loadFinance(store, scope, true, sources);
@@ -258,7 +273,7 @@ describe("loading cached finances", () => {
         ...sources,
         summary: async () => ({ ...summary, organizationId: "other" }),
       }),
-    ).rejects.toThrow("The active organization changed");
+    ).rejects.toThrow("The signed-in account or organization changed");
     await expect(
       loadFinance(store, scope, true, {
         ...sources,
@@ -281,7 +296,7 @@ describe("loading cached finances", () => {
           ],
         }),
       }),
-    ).rejects.toThrow("The active organization changed");
+    ).rejects.toThrow("The signed-in account or organization changed");
     // Neither the other organization's rows nor this load's summary.
     const after = await store.read(scope);
     expect(after.transactions).toEqual(before.transactions);

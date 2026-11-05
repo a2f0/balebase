@@ -185,7 +185,12 @@ async function settle(
     summary.status === "fulfilled" ? summaryOf(summary.value) : undefined;
   // The session moved to another organization under this load: nothing
   // read may be saved or shown under this one.
-  if (latest && scope && latest.organizationId !== scope.organizationId)
+  if (
+    latest &&
+    scope &&
+    (latest.organizationId !== scope.organizationId ||
+      latest.userId !== scope.userId)
+  )
     throw new OrganizationChanged();
   const changed = failures.find(
     (cause) => cause instanceof OrganizationChanged,

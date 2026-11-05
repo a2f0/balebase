@@ -184,6 +184,7 @@ async function financeListing(context: FinanceContext) {
     connections: connections.map(toConnection),
     nextCursor: page.nextCursor,
     organizationId: context.get("organizationId"),
+    userId: context.get("authSession").user.id,
     transactions: page.items.map((row) =>
       toTransaction(
         row,

@@ -111,6 +111,7 @@ export async function transactionChanges(context: FinanceContext) {
         : (raw ?? null),
     more: changes.length > limit,
     organizationId,
+    userId: context.get("authSession").user.id,
     removedIds: [...latest.values()]
       .filter(({ row }) => row?.source_status !== "active")
       .map(({ id }) => id),
@@ -133,6 +134,7 @@ function startOver(context: FinanceContext, organizationId: string) {
     removedIds: [],
     reset: true,
     transactions: [],
+    userId: context.get("authSession").user.id,
   });
 }
 

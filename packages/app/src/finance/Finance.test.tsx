@@ -15,6 +15,7 @@ const emptyData: FinanceData = {
   connections: [],
   nextCursor: null,
   organizationId: "organization",
+  userId: "person",
   transactions: [],
 };
 
