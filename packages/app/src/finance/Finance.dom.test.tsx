@@ -1172,6 +1172,36 @@ describe("Bulk categorization", () => {
   });
 });
 
+it("clears what is shown when sync polling finds access gone", async () => {
+  using polls = holdTimers(syncPollMs);
+  respond((url) =>
+    url.pathname.endsWith("/sync-status")
+      ? Response.json({ error: "Finance access required." }, { status: 403 })
+      : Response.json({
+          ...data,
+          connections: [
+            {
+              id: "connection-1",
+              institutionId: null,
+              institutionName: "Bank",
+              accountCount: 1,
+              createdAt: "2026-01-01",
+              errorCode: null,
+              lastSyncedAt: null,
+              status: "active",
+              dailySync: true,
+              syncStatus: "running",
+            },
+          ],
+        }),
+  );
+  await mountFinance();
+  expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+  await polls.fire();
+  expect(rowNames()).toEqual([]);
+  expect(container.textContent).toContain("Finance access required.");
+});
+
 it("polls a running bank sync and catches up once it finishes", async () => {
   using polls = holdTimers(syncPollMs);
   let feedRequests = 0;

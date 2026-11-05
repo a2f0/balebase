@@ -28,7 +28,7 @@ import {
   catchUpSavedTransactions,
   clearedOnRefusal,
 } from "./transactionCache";
-import { useCacheScope } from "./useCacheScope";
+import { useCacheScope, useRefusalGuard } from "./useCacheScope";
 
 export function FinanceTransactionPage({
   id,
@@ -135,6 +135,7 @@ function useTransaction(id: string, givenScope: CacheScope | undefined) {
     "Could not load transaction.",
   );
   const { setData } = loaded;
+  const guard = useRefusalGuard(scope, setData);
   const action = useAction("Could not update the transaction.");
   const [expanded, setExpanded] = useState<string>();
   const updateTransaction = (change: Partial<FinanceTransaction>) =>
@@ -150,9 +151,8 @@ function useTransaction(id: string, givenScope: CacheScope | undefined) {
     input: FinanceTransactionAnnotation,
   ) {
     await action.run(async () => {
-      const { annotation } = await api.finance.updateTransactionAnnotation(
-        id,
-        input,
+      const { annotation } = await guard(
+        api.finance.updateTransactionAnnotation(id, input),
       );
       updateTransaction({ annotation });
       setExpanded(undefined);
@@ -166,7 +166,7 @@ function useTransaction(id: string, givenScope: CacheScope | undefined) {
   }
   async function categorize(_: FinanceTransaction, categoryId: string | null) {
     await action.run(async () => {
-      await api.finance.setTransactionCategory(id, categoryId);
+      await guard(api.finance.setTransactionCategory(id, categoryId));
       updateTransaction({ expenseCategoryId: categoryId });
     });
     void catchUp();

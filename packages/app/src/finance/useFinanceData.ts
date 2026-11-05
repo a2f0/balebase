@@ -43,7 +43,12 @@ export function useFinanceData(
   const [filters, setFilters] = useState({ ...initialFilters, ...route });
   const [visible, setVisible] = useState(transactionPageSize);
   const currentFilters = useRef(filters);
-  useSyncPolling(loaded.data, loaded.load, loaded.loading || loaded.refreshing);
+  useSyncPolling(
+    loaded.data,
+    loaded.load,
+    loaded.onRefused,
+    loaded.loading || loaded.refreshing,
+  );
   const onFiltersChange = useCallback((next: FinanceFilters) => {
     currentFilters.current = next;
     setFilters(next);
@@ -205,6 +210,7 @@ function useCategoryRoute(
 function useSyncPolling(
   data: FinanceData | undefined,
   load: () => Promise<void>,
+  onRefused: (cause: unknown) => Promise<void>,
   busy: boolean,
 ) {
   const connections = data?.connections;
@@ -234,7 +240,12 @@ function useSyncPolling(
           )
         )
           await load();
-      } catch {
+      } catch (cause) {
+        // Access ended: stop, keeping nothing shown or saved.
+        if (refused(cause)) {
+          if (active) await onRefused(cause);
+          return;
+        }
         // Keep the saved pending state and retry after temporary request failures.
       }
       if (active) timer = setTimeout(() => void poll(), syncPollMs);
@@ -244,5 +255,5 @@ function useSyncPolling(
       active = false;
       clearTimeout(timer);
     };
-  }, [ids, load, busy]);
+  }, [ids, load, onRefused, busy]);
 }

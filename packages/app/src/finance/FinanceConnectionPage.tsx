@@ -44,7 +44,7 @@ import {
 } from "./financeConnectionActions";
 import { formatImportedHistory, formatMoney } from "./financeFormat";
 import { type CacheScope, clearedOnRefusal } from "./transactionCache";
-import { useCacheScope } from "./useCacheScope";
+import { useCacheScope, useRefusalGuard } from "./useCacheScope";
 
 type Connection = FinanceConnectionDetail["connection"];
 
@@ -355,11 +355,13 @@ function useConnection(
     "Could not load connection.",
   );
   const { data, reload, setData } = loaded;
+  const guard = useRefusalGuard(scope, setData);
   const pollError = useSyncStatusPolling(
     id,
     syncPending(data?.connection.syncJob?.status),
     setData,
     reload,
+    guard,
   );
   const action = useAction("Could not update the connection.");
   async function run(work: () => Promise<string>) {
@@ -371,18 +373,19 @@ function useConnection(
     deleteData: async () => {
       if (!data || !(await confirmDataDeletion(data.connection))) return;
       await action.run(async () => {
-        await api.finance.deleteConnectionData(id);
+        await guard(api.finance.deleteConnectionData(id));
         onNavigate("/finance/connections");
       });
     },
     disconnect: async () => {
       if (!data || !(await confirmDisconnect(data.connection))) return;
       await run(async () => {
-        await api.finance.disconnectConnection(id);
+        await guard(api.finance.disconnectConnection(id));
         return "Bank disconnected. Imported history was retained.";
       });
     },
-    sync: () => run(async () => syncNotice(await api.finance.startSync(id))),
+    sync: () =>
+      run(async () => syncNotice(await guard(api.finance.startSync(id)))),
   };
   return {
     actions,
@@ -400,6 +403,7 @@ function useSyncStatusPolling(
   pending: boolean,
   setData: Dispatch<SetStateAction<FinanceConnectionDetail | undefined>>,
   reload: () => Promise<unknown>,
+  guard: <T>(work: Promise<T>) => Promise<T>,
 ) {
   const [error, setError] = useState<string>();
   useEffect(() => {
@@ -408,7 +412,7 @@ function useSyncStatusPolling(
     let timer: ReturnType<typeof setTimeout> | undefined;
     async function poll() {
       try {
-        const next = await api.finance.syncStatus(id);
+        const next = await guard(api.finance.syncStatus(id));
         if (!active) return;
         setError(undefined);
         if (syncPending(next.connection.syncJob?.status)) {
@@ -432,7 +436,7 @@ function useSyncStatusPolling(
       active = false;
       clearTimeout(timer);
     };
-  }, [id, pending, reload, setData]);
+  }, [guard, id, pending, reload, setData]);
   return error;
 }
 

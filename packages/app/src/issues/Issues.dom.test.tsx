@@ -276,6 +276,47 @@ describe("workspace issues, mounted", () => {
     expect(paths).toEqual(["/issues/new/transactions/old-txn"]);
   });
 
+  it("clears a transaction's page when a save finds access gone", async () => {
+    respond((url, init) => {
+      if (init?.method === "PUT")
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      if (url.pathname === "/api/finance/transactions/old-txn")
+        return Response.json({
+          categories: [
+            { id: "meals", name: "Meals", slug: "meals", transactionCount: 0 },
+          ],
+          source,
+          transaction,
+        });
+      if (url.pathname === "/api/issues")
+        return Response.json({ issues: [], nextCursor: null });
+      return baseResponse(url);
+    });
+    await show(
+      <FinanceTransactionPage
+        id="old-txn"
+        onNavigate={() => undefined}
+        scope={{ organizationId: "org", userId: "person" }}
+      />,
+    );
+    expect(container.textContent).toContain("FOOD_AND_DRINK_COFFEE");
+    const select = container.querySelector<HTMLSelectElement>(
+      '[aria-label="Expense category for Coffee"]',
+    );
+    if (!select) throw new Error("Missing category picker");
+    await act(async () => {
+      select.value = "meals";
+      select.dispatchEvent(
+        new dom.Event("change", { bubbles: true }) as unknown as Event,
+      );
+    });
+    expect(container.textContent).not.toContain("FOOD_AND_DRINK_COFFEE");
+    expect(container.textContent).toContain("Finance access required.");
+  });
+
   it("loads a transaction once while the shell re-renders its scope", async () => {
     let loads = 0;
     respond((url) => {
