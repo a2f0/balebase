@@ -20,6 +20,7 @@ function rendered(pathname: string) {
     library,
     navigate,
     pathname,
+    user: { id: "user-1" },
     workspace: {
       activeOrganizationId: "org-2",
       organizations: [{ id: "org-1" }, { id: "org-2" }],
@@ -36,6 +37,7 @@ function element(pathname: string) {
     onNavigate?: unknown;
     organization?: unknown;
     pathname?: string;
+    scope?: unknown;
   }>;
 }
 
@@ -97,6 +99,10 @@ describe("workspace routes", () => {
       expect(node.type).toBe(page);
       expect(node.props.id).toBe(id);
       expect(node.props.onNavigate).toBe(navigate);
+      expect(node.props.scope).toEqual({
+        organizationId: "org-2",
+        userId: "user-1",
+      });
       // Keyed so each record starts from its own state.
       expect(node.key).toBe(pathname);
     }
@@ -112,6 +118,11 @@ describe("workspace routes", () => {
       const node = element(pathname);
       expect(node.type).toBe(Finance);
       expect(node.props.pathname).toBe(pathname);
+      // Saved transactions belong to this person in the active organization.
+      expect(node.props.scope).toEqual({
+        organizationId: "org-2",
+        userId: "user-1",
+      });
     }
   });
 

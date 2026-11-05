@@ -14,6 +14,8 @@ const emptyData: FinanceData = {
   configured: true,
   connections: [],
   nextCursor: null,
+  organizationId: "organization",
+  userId: "person",
   transactions: [],
 };
 
@@ -64,10 +66,11 @@ function renderFinance(
     <FinanceView
       filters={initialFilters}
       loading={false}
-      loadingMore={false}
       refreshing={false}
       loadError={options.loadError}
-      loadMoreError={undefined}
+      savedCopy={undefined}
+      saving={undefined}
+      visible={250}
       onFiltersChange={() => undefined}
       onLoadMore={async () => false}
       busy={false}
@@ -82,6 +85,7 @@ function renderFinance(
       onDisconnect={async () => undefined}
       onNavigate={() => undefined}
       onReload={async () => undefined}
+      onRefused={async () => undefined}
       onRepair={async () => undefined}
       onSync={async () => undefined}
       page={options.page ?? "overview"}

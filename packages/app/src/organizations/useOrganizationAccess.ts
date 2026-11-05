@@ -1,3 +1,4 @@
+import { ApiError } from "@balebase/api-client";
 import type { OrganizationCapability } from "@balebase/validators/organizationGroups";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
@@ -11,6 +12,11 @@ import {
 
 interface AccessState {
   capabilities: OrganizationCapability[];
+  /**
+   * Whether the capabilities are the server's answer: read, or refused
+   * (signed out, no longer a member), rather than unknown after a failure.
+   */
+  confirmed: boolean;
   memberRole: string;
   organizationId: string;
   ownerCount: number;
@@ -47,6 +53,7 @@ export function useOrganizationAccess(
       setRequirementState(undefined);
       setState({
         capabilities: result.capabilities,
+        confirmed: true,
         memberRole: result.memberRole,
         organizationId,
         ownerCount: result.ownerCount,
@@ -64,6 +71,9 @@ export function useOrganizationAccess(
       setLoadError(errorMessage(cause, "Could not load organization access."));
       setState({
         capabilities: [],
+        confirmed:
+          cause instanceof ApiError &&
+          (cause.status === 401 || cause.status === 403),
         memberRole: "",
         organizationId,
         ownerCount: 0,
@@ -93,6 +103,8 @@ export function useOrganizationAccess(
     // Pending only until this user and organization first resolve; later
     // refreshes keep the current screen instead of blanking the workspace.
     isPending: Boolean(userId && organizationId && !current),
+    /** Whether `can` reflects the server's answer, not a failure to read it. */
+    confirmed: current?.confirmed ?? false,
     loadError,
     memberRole: current?.memberRole || undefined,
     ownerCount: current?.ownerCount ?? 0,

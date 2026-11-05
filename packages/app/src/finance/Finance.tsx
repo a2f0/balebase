@@ -1,3 +1,4 @@
+import { productName } from "@balebase/ui/brand";
 import {
   Banner,
   Button,
@@ -26,6 +27,7 @@ import { AppLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
 import { websiteUrl } from "../shared/config";
 import { errorMessage } from "../shared/errors";
+import { formatDateTime } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import {
   expenseCategoryFiltersFor,
@@ -47,7 +49,10 @@ import {
   confirmDisconnect,
   syncNotice,
 } from "./financeConnectionActions";
-import { selectFinanceAccount } from "./financeTransactions";
+import {
+  filterTransactions,
+  selectFinanceAccount,
+} from "./financeTransactions";
 import {
   reportLoginRepair,
   retryPendingLoginRepairs,
@@ -57,6 +62,7 @@ import {
   linkErrorMessage,
   type PlaidLinkSession,
 } from "./plaidLinkDiagnostics";
+import { type CacheScope, refused } from "./transactionCache";
 import {
   type FinanceListingState,
   initialFilters,
@@ -72,25 +78,32 @@ const updateConnectionStorageKey = "balebase.plaid.updateConnection";
 export function Finance({
   onNavigate,
   pathname,
+  scope,
 }: {
   onNavigate: (pathname: string) => void;
   pathname: string;
+  /** Whose saved transactions this device reads; memory only without it. */
+  scope?: CacheScope | undefined;
 }) {
   const page = financePageFor(pathname);
-  const { load, setData, onFiltersChange, ...listing } = useFinanceData(
-    page === "overview" ? expenseCategoryFiltersFor(pathname) : null,
-  );
+  const { load, onRefused, setData, onFiltersChange, ...listing } =
+    useFinanceData(
+      page === "overview" ? expenseCategoryFiltersFor(pathname) : null,
+      scope,
+    );
   const { error, notice, run, setError, setNotice, ...action } = useAction(
     "Could not update finances.",
   );
-  const plaid = usePlaidConnect(load, setError, setNotice);
-  const actions = financeActions(load, run);
+  // Saves and actions that finish after navigation reload with the loader
+  // for the page shown by then (the overview's keeps transactions).
+  const latestLoad = useRef(load);
+  latestLoad.current = load;
+  const reloadLatest = useCallback(() => latestLoad.current(), []);
+  const plaid = usePlaidConnect(reloadLatest, onRefused, setError, setNotice);
+  const actions = financeActions(reloadLatest, onRefused, run);
   // A category save, a row's or a bulk one, holds every category control
   // until it finishes, so two saves never land out of order.
   const [categorizing, setCategorizing] = useState(false);
-  // The bulk save's closing refresh must use the filters current by then.
-  const latestLoad = useRef(load);
-  latestLoad.current = load;
   const busy = action.busy || plaid.busy || categorizing;
 
   return (
@@ -100,12 +113,19 @@ export function Finance({
       error={error}
       notice={notice}
       onAnnotate={actions.annotate}
-      onCategorize={categorizeTransaction(setData, setError, setCategorizing)}
+      onCategorize={categorizeTransaction(
+        setData,
+        setError,
+        setCategorizing,
+        reloadLatest,
+        onRefused,
+      )}
       onCategorizeMany={categorizeTransactions(
         setData,
         setError,
         setCategorizing,
-        () => latestLoad.current(),
+        reloadLatest,
+        onRefused,
       )}
       onConnect={plaid.connect}
       onDeleteData={actions.deleteData}
@@ -117,6 +137,7 @@ export function Finance({
         if (path !== pathname) onNavigate(path);
       }}
       onNavigate={onNavigate}
+      onRefused={onRefused}
       onReload={load}
       onRepair={plaid.repair}
       onSync={actions.sync}
@@ -133,6 +154,8 @@ function categorizeTransaction(
   setData: Dispatch<SetStateAction<FinanceData | undefined>>,
   setError: (message: string | undefined) => void,
   setSaving: (saving: boolean) => void,
+  refresh: () => Promise<void>,
+  onRefused: (cause: unknown) => Promise<void>,
 ) {
   return async (transaction: FinanceTransaction, categoryId: string | null) => {
     const previous = transaction.expenseCategoryId;
@@ -143,9 +166,12 @@ function categorizeTransaction(
     setSaving(true);
     try {
       await api.finance.setTransactionCategory(transaction.id, categoryId);
+      // Saved transactions catch up, so the change outlasts going offline.
+      await refresh();
     } catch (cause) {
       setData((current) => withCategories(current, reversed(change)));
       setError(errorMessage(cause, "Could not update finances."));
+      if (refused(cause)) await onRefused(cause);
     } finally {
       setSaving(false);
     }
@@ -162,6 +188,7 @@ function categorizeTransactions(
   setError: (message: string | undefined) => void,
   setSaving: (saving: boolean) => void,
   refresh: () => Promise<void>,
+  onRefused: (cause: unknown) => Promise<void>,
 ) {
   return async (
     transactions: FinanceTransaction[],
@@ -169,7 +196,13 @@ function categorizeTransactions(
   ) => {
     setSaving(true);
     try {
-      return await saveCategories(setData, setError, transactions, categoryId);
+      return await saveCategories(
+        setData,
+        setError,
+        transactions,
+        categoryId,
+        onRefused,
+      );
     } finally {
       // A load during the save (a filter change, sync polling) replaced the
       // optimistic rows, and a rollback may have landed on it; the server's
@@ -185,6 +218,7 @@ async function saveCategories(
   setError: (message: string | undefined) => void,
   transactions: FinanceTransaction[],
   categoryId: string | null,
+  onRefused: (cause: unknown) => Promise<void>,
 ) {
   const changes = transactions
     .filter(({ expenseCategoryId }) => expenseCategoryId !== categoryId)
@@ -210,6 +244,7 @@ async function saveCategories(
       const unsaved = reversed(changes.slice(start));
       setData((current) => withCategories(current, unsaved));
       setError(errorMessage(cause, "Could not update finances."));
+      if (refused(cause)) await onRefused(cause);
       return false;
     }
   }
@@ -256,14 +291,21 @@ function withCategories(
 
 function financeActions(
   load: () => Promise<void>,
+  onRefused: (cause: unknown) => Promise<void>,
   runAction: ReturnType<typeof useAction>["run"],
 ) {
   async function run(action: () => Promise<string>) {
     await runAction(
       async () => {
-        const notice = await action();
-        await load();
-        return notice;
+        try {
+          const notice = await action();
+          await load();
+          return notice;
+        } catch (cause) {
+          // Access ended: nothing shown or saved stays.
+          if (refused(cause)) await onRefused(cause);
+          throw cause;
+        }
       },
       (notice) => notice,
     );
@@ -318,6 +360,8 @@ interface OverviewHandlers {
   onDeleteData: (connection: FinanceConnection) => Promise<void>;
   onDisconnect: (connection: FinanceConnection) => Promise<void>;
   onNavigate: (pathname: string) => void;
+  /** A request was refused: access ended, so nothing shown or saved stays. */
+  onRefused: (cause: unknown) => Promise<void>;
   onRepair: (connection: FinanceConnection) => Promise<void>;
   onSync: (id: string) => Promise<void>;
 }
@@ -361,13 +405,19 @@ export function FinanceView({
           showDataNotice={data?.accounts.length === 0}
           unconfigured={unconfigured}
         />
-        {page === "reports" && (
-          <FinanceReports onNavigate={handlers.onNavigate} />
+        {/* Reports read their own totals: they go when what Finance shows
+            does (access ended here or in another tab). */}
+        {page === "reports" && data && (
+          <FinanceReports
+            onNavigate={handlers.onNavigate}
+            onRefused={handlers.onRefused}
+          />
         )}
         {page === "categories" && (
           <FinanceCategories
             categories={data?.categories}
             onChanged={onReload}
+            onRefused={handlers.onRefused}
             onShowTransactions={(category) =>
               handlers.onFiltersChange({
                 ...initialFilters,
@@ -402,10 +452,11 @@ function FinanceOverview({
   data,
   filters,
   loading,
-  loadingMore,
   refreshing,
   loadError,
-  loadMoreError,
+  savedCopy,
+  saving,
+  visible,
   onFiltersChange,
   onLoadMore,
   onReload,
@@ -422,19 +473,27 @@ function FinanceOverview({
       : filters.accountIds.length > 1
         ? `${filters.accountIds.length} accounts`
         : undefined;
-  const categoryId = data?.categories.find(
-    ({ slug }) => slug === filters.categorySlug,
-  )?.id;
-  const transactions = loading
-    ? undefined
-    : data?.transactions.filter(
-        (transaction) =>
-          (!filters.uncategorized || !transaction.expenseCategoryId) &&
-          (!filters.categorySlug ||
-            transaction.expenseCategoryId === categoryId),
-      );
+  // Every saved transaction is on the device: filter and page locally.
+  const matching =
+    loading || !data
+      ? undefined
+      : filterTransactions(data.transactions, filters, data.categories);
   return (
     <>
+      {savedCopy && (
+        <Banner
+          actions={
+            <Button onClick={() => void onReload()} size="sm">
+              Retry
+            </Button>
+          }
+          title="Showing transactions saved on this device"
+          tone="warning"
+        >
+          {productName} can’t be reached right now. These were last updated{" "}
+          {formatDateTime(savedCopy)}; changes made here may not save.
+        </Banner>
+      )}
       <FinanceConnectionAlert
         connections={data?.connections}
         onNavigate={handlers.onNavigate}
@@ -457,13 +516,22 @@ function FinanceOverview({
         accountName={accountName}
         filters={filters}
         onFiltersChange={onFiltersChange}
-        nextCursor={data?.nextCursor}
-        loadingMore={loadingMore}
+        // Names the filters too: InfiniteScroll asks once per cursor, and
+        // the same count under other filters is a new place.
+        nextCursor={
+          matching && matching.length > visible
+            ? `${JSON.stringify(filters)}#${visible}`
+            : null
+        }
         loadError={loadError}
-        loadMoreError={loadMoreError}
+        loadingLabel={
+          saving === undefined
+            ? undefined
+            : `Saving transactions to this device (${saving.toLocaleString()})…`
+        }
         onLoadMore={onLoadMore}
         onReload={onReload}
-        busy={handlers.busy || refreshing || loadingMore}
+        busy={handlers.busy || refreshing}
         categories={data?.categories ?? []}
         onAnnotate={handlers.onAnnotate}
         onCategorize={handlers.onCategorize}
@@ -476,7 +544,8 @@ function FinanceOverview({
           )
         }
         selectedTransactionId={selectedTransactionId}
-        transactions={transactions}
+        total={matching?.length}
+        transactions={matching?.slice(0, visible)}
       />
     </>
   );
@@ -603,6 +672,7 @@ function FinanceSetupNotice() {
 
 function usePlaidConnect(
   load: () => Promise<void>,
+  onRefused: (cause: unknown) => Promise<void>,
   setError: (message: string | undefined) => void,
   setNotice: (message: string | undefined) => void,
 ) {
@@ -645,12 +715,12 @@ function usePlaidConnect(
           );
       } catch (cause) {
         setError(errorMessage(cause, "Could not update finances."));
-        await load();
+        await (refused(cause) ? onRefused(cause) : load());
       } finally {
         setBusy(false);
       }
     },
-    [load, setError, setNotice],
+    [load, onRefused, setError, setNotice],
   );
   useOAuthResume(complete, resumedOAuth, setBusy, setError);
   useEffect(() => {
@@ -688,6 +758,7 @@ function usePlaidConnect(
     } catch (cause) {
       setError(errorMessage(cause, "Could not update finances."));
       setBusy(false);
+      if (refused(cause)) await onRefused(cause);
     }
   };
   return {

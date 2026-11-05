@@ -48,6 +48,43 @@ function transaction(index: number): FinanceTransaction {
   };
 }
 
+/** Transactions the Finance fixture holds: three of the overview's pages. */
+export function financeRows(pageSize: number) {
+  return pageSize > 1 ? 750 : 3;
+}
+
+/**
+ * Finance keeps every transaction on the device and shows 250 at a time, so
+ * its fixture serves the summary and a change feed (in pages of 100, to
+ * download in parts), and the page grows as it scrolls.
+ */
+function financeResponse(url: URL, total: number) {
+  if (!url.pathname.endsWith("/transactions/changes"))
+    return Response.json({
+      accounts: [],
+      categories: [],
+      connections: [],
+      configured: true,
+      nextCursor: null,
+      organizationId: "organization",
+      transactions: [],
+      userId: "person",
+    });
+  const offset = Number(url.searchParams.get("cursor") ?? 0);
+  const end = Math.min(offset + 100, total);
+  return Response.json({
+    cursor: String(end),
+    more: end < total,
+    organizationId: "organization",
+    removedIds: [],
+    reset: false,
+    transactions: Array.from({ length: end - offset }, (_, i) =>
+      transaction(offset + i),
+    ),
+    userId: "person",
+  });
+}
+
 export function mount(
   element: HTMLElement,
   mode: "jobs" | "finance",
@@ -56,25 +93,12 @@ export function mount(
   const total = pageSize * 3;
   const fetchPage = async (input: RequestInfo | URL) => {
     const url = new URL(String(input));
+    if (mode === "finance") return financeResponse(url, financeRows(pageSize));
     const offset = Number(url.searchParams.get("cursor") ?? 0);
     const nextCursor =
       offset + pageSize < total ? String(offset + pageSize) : null;
     const indexes = Array.from({ length: pageSize }, (_, i) => offset + i);
-    return Response.json(
-      mode === "jobs"
-        ? {
-            runs: indexes.map(run),
-            nextCursor,
-          }
-        : {
-            accounts: [],
-            categories: [],
-            connections: [],
-            configured: true,
-            transactions: indexes.map(transaction),
-            nextCursor,
-          },
-    );
+    return Response.json({ runs: indexes.map(run), nextCursor });
   };
   window.fetch = Object.assign(fetchPage, { preconnect: () => {} });
   createRoot(element).render(

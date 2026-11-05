@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { lockOfflineWorkspace } from "../offline/offlineStore";
 import {
   createOrganizationSlug,
@@ -23,16 +23,30 @@ export function useWorkspaceOrganizations(
   const [organizations, setOrganizations] = useState<
     WorkspaceOrganization[] | undefined
   >();
-  const loadOrganizations = useCallback(async () => {
-    setOrganizations(await api.organizationSettings.organizations());
-  }, []);
+  // Whose list `organizations` is as read, not the empty stand-in after a
+  // failure.
+  const [listedFor, setListedFor] = useState<string>();
   const signedInUserId = session?.user.id;
+  const currentUser = useRef(signedInUserId);
+  currentUser.current = signedInUserId;
+  // Every successful read (first load, refresh, creating an organization)
+  // confirms the list; one for an account no longer signed in is ignored.
+  const loadOrganizations = useCallback(async () => {
+    const forUser = currentUser.current;
+    const listed = await api.organizationSettings.organizations();
+    if (currentUser.current !== forUser) return;
+    setOrganizations(listed);
+    setListedFor(forUser);
+  }, []);
   useEffect(() => {
+    setListedFor(undefined);
     if (!signedInUserId) {
       setOrganizations(undefined);
       return;
     }
-    void loadOrganizations().catch(() => setOrganizations([]));
+    void loadOrganizations().catch(() => {
+      if (currentUser.current === signedInUserId) setOrganizations([]);
+    });
   }, [loadOrganizations, signedInUserId]);
   const activeOrganizationId = organizations
     ? resolveActiveOrganizationId(
@@ -75,6 +89,8 @@ export function useWorkspaceOrganizations(
     activeOrganizationId,
     createOrganization,
     isPending: organizations === undefined,
+    /** Whether `organizations` is the signed-in person's list as read. */
+    listed: Boolean(signedInUserId) && listedFor === signedInUserId,
     organizations: organizations ?? [],
     refresh,
     switchOrganization,

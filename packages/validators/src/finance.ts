@@ -270,6 +270,10 @@ const FinanceDataSchema = z.object({
   configured: z.boolean(),
   connections: z.array(FinanceConnectionSchema),
   nextCursor: z.string().nullable(),
+  /** Whose finances these are, so a device can tell them from another's. */
+  organizationId: z.string(),
+  /** Whose session read them. */
+  userId: z.string(),
   transactions: z.array(FinanceTransactionSchema),
 });
 export type FinanceData = z.infer<typeof FinanceDataSchema>;
@@ -286,7 +290,39 @@ const FinanceListingQuerySchema = z.object({
   name: z.string().optional(),
   uncategorized: z.literal("true").optional(),
   year: z.string().optional(),
+  /**
+   * `none` returns connections, accounts, and categories without
+   * transactions, for clients that keep transactions themselves.
+   */
+  transactions: z.literal("none").optional(),
 });
+
+/**
+ * A page of the organization's transaction changes since a cursor, oldest
+ * change first. Devices keep the transactions and apply pages in order.
+ */
+const FinanceTransactionChangesSchema = z.object({
+  /** The organization these changes belong to. */
+  organizationId: z.string(),
+  /** Whose session read them, so a device files them under that person. */
+  userId: z.string(),
+  /** Where the next page starts; null before the organization's first change. */
+  cursor: z.string().nullable(),
+  /** Whether more changes wait past `cursor`. */
+  more: z.boolean(),
+  /**
+   * The cursor is ahead of the server (its data was restored to an earlier
+   * point): drop what is kept and read again from the start.
+   */
+  reset: z.boolean(),
+  /** Transactions to keep, as they are now. */
+  transactions: z.array(FinanceTransactionSchema),
+  /** Transactions to drop: removed by the bank or deleted. */
+  removedIds: z.array(z.string()),
+});
+export type FinanceTransactionChanges = z.infer<
+  typeof FinanceTransactionChangesSchema
+>;
 
 const categoryNameRule = `Category names need 1 to ${financeLimits.categoryName} characters.`;
 
@@ -354,6 +390,12 @@ export const financeRoutes = {
     path: "/api/finance",
     query: FinanceListingQuerySchema,
     response: FinanceDataSchema,
+  }),
+  transactionChanges: route({
+    method: "GET",
+    path: "/api/finance/transactions/changes",
+    query: z.object({ cursor: z.string().optional() }),
+    response: FinanceTransactionChangesSchema,
   }),
   createLinkToken: route({
     method: "POST",

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Issue } from "@balebase/validators/issues";
 import { act, type ReactNode } from "react";
 import { FinanceTransactionPage } from "../finance/FinanceTransactionPage";
+import { apiUrl } from "../shared/config";
 import { installDom } from "../testing/dom";
 import { Issues } from "./Issues";
 
@@ -274,6 +275,115 @@ describe("workspace issues, mounted", () => {
     expect(requests.some((url) => url.includes("targetId=old-txn"))).toBe(true);
     await click("Raise issue");
     expect(paths).toEqual(["/issues/new/transactions/old-txn"]);
+  });
+
+  it("clears a transaction's page when a save finds access gone", async () => {
+    respond((url, init) => {
+      if (init?.method === "PUT")
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      if (url.pathname === "/api/finance/transactions/old-txn")
+        return Response.json({
+          categories: [
+            { id: "meals", name: "Meals", slug: "meals", transactionCount: 0 },
+          ],
+          source,
+          transaction,
+        });
+      if (url.pathname === "/api/issues")
+        return Response.json({ issues: [], nextCursor: null });
+      return baseResponse(url);
+    });
+    await show(
+      <FinanceTransactionPage
+        id="old-txn"
+        onNavigate={() => undefined}
+        scope={{ organizationId: "org", userId: "person" }}
+      />,
+    );
+    expect(container.textContent).toContain("FOOD_AND_DRINK_COFFEE");
+    const select = container.querySelector<HTMLSelectElement>(
+      '[aria-label="Expense category for Coffee"]',
+    );
+    if (!select) throw new Error("Missing category picker");
+    await act(async () => {
+      select.value = "meals";
+      select.dispatchEvent(
+        new dom.Event("change", { bubbles: true }) as unknown as Event,
+      );
+    });
+    expect(container.textContent).not.toContain("FOOD_AND_DRINK_COFFEE");
+    expect(container.textContent).toContain("Finance access required.");
+  });
+
+  it("clears a transaction's page when its activity finds access gone", async () => {
+    respond((url) => {
+      if (url.pathname === "/api/finance/transactions/old-txn/activity")
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      if (url.pathname === "/api/issues")
+        return Response.json({ issues: [], nextCursor: null });
+      return baseResponse(url);
+    });
+    await show(
+      <FinanceTransactionPage
+        id="old-txn"
+        onNavigate={() => undefined}
+        scope={{ organizationId: "org", userId: "person" }}
+      />,
+    );
+    await act(async () => undefined);
+    expect(container.textContent).not.toContain("FOOD_AND_DRINK_COFFEE");
+    expect(container.textContent).toContain("Finance access required.");
+  });
+
+  it("clears a transaction's page when another tab signs out", async () => {
+    respond((url) =>
+      url.pathname === "/api/issues"
+        ? Response.json({ issues: [], nextCursor: null })
+        : baseResponse(url),
+    );
+    await show(
+      <FinanceTransactionPage
+        id="old-txn"
+        onNavigate={() => undefined}
+        scope={{ organizationId: "org", userId: "person" }}
+      />,
+    );
+    expect(container.textContent).toContain("FOOD_AND_DRINK_COFFEE");
+    const otherTab = new BroadcastChannel("balebase-finance-cleared");
+    await act(async () => {
+      otherTab.postMessage({ apiUrl, source: "other-tab", userId: "person" });
+      await Bun.sleep(5);
+    });
+    otherTab.close();
+    expect(container.textContent).not.toContain("FOOD_AND_DRINK_COFFEE");
+  });
+
+  it("loads a transaction once while the shell re-renders its scope", async () => {
+    let loads = 0;
+    respond((url) => {
+      if (url.pathname === "/api/finance/transactions/old-txn") loads++;
+      if (url.pathname === "/api/issues")
+        return Response.json({ issues: [], nextCursor: null });
+      return baseResponse(url);
+    });
+    // Routes build the scope anew on every render, equal by value.
+    const page = () => (
+      <FinanceTransactionPage
+        id="old-txn"
+        onNavigate={() => undefined}
+        scope={{ organizationId: "org", userId: "person" }}
+      />
+    );
+    const view = await mount(page());
+    await view.render(page());
+    await view.render(page());
+    expect(loads).toBe(1);
   });
 });
 

@@ -4,6 +4,7 @@ import type {
   FinanceTransaction,
 } from "@balebase/validators/finance";
 import { act } from "react";
+import { apiUrl } from "../shared/config";
 import { holdTimers, installDom } from "../testing/dom";
 import { IntersectionObserverFixture } from "../testing/intersectionObserver";
 import { transactionIssuePath } from "../workspace/workspacePaths";
@@ -12,7 +13,7 @@ import { syncPollMs } from "./financeConnectionActions";
 
 const {
   mount,
-  respond,
+  respond: respondFetch,
   window: dom,
 } = installDom({
   url: "http://localhost:5173/finance",
@@ -22,6 +23,50 @@ const {
 });
 let container: HTMLElement;
 let currentPath = "";
+
+type Handler = (url: URL, init?: RequestInit) => Response | Promise<Response>;
+
+/**
+ * Answers Finance's requests from `handler`, which answers the plain
+ * listing (`GET /api/finance`) with everything, as tests did before devices
+ * kept transactions: the summary request gets that listing, and the change
+ * feed is worked out from it against what the device was last sent.
+ */
+function respond(handler: Handler) {
+  const sent: Map<string, FinanceTransaction>[] = [];
+  respondFetch(async (url, init) => {
+    if (!url.pathname.endsWith("/api/finance/transactions/changes"))
+      return handler(url, init);
+    const response = await handler(new URL("/api/finance", url), init);
+    if (!response.ok) return response;
+    const listing = (await response.json()) as FinanceData;
+    const current = new Map(listing.transactions.map((row) => [row.id, row]));
+    const cursor = url.searchParams.get("cursor");
+    const previous =
+      cursor === null ? new Map() : (sent[Number(cursor)] ?? new Map());
+    sent.push(current);
+    return Response.json({
+      cursor: String(sent.length - 1),
+      more: false,
+      organizationId: "organization",
+      userId: "person",
+      removedIds: [...previous.keys()].filter((id) => !current.has(id)),
+      reset: false,
+      transactions: [...current.values()],
+    });
+  });
+}
+
+/**
+ * Whether a request reached `handler` for the change feed (each load reads
+ * it once) rather than for the summary.
+ */
+function isFeed(url: URL) {
+  return (
+    url.pathname.endsWith("/api/finance") &&
+    !url.searchParams.has("transactions")
+  );
+}
 const year = new Date().getFullYear();
 const account = (id: string, name: string) => ({
   availableBalance: null,
@@ -69,8 +114,10 @@ const data: FinanceData = {
   configured: true,
   connections: [],
   nextCursor: null,
+  organizationId: "organization",
+  userId: "person",
   transactions: [
-    transaction("Coffee"),
+    transaction("Coffee", { transactionDate: `${year}-01-02` }),
     transaction("Supplies", { accountId: "savings" }),
   ],
 };
@@ -147,79 +194,88 @@ function selectedAccounts() {
 }
 
 describe("Finance filters", () => {
-  it("ignores an older page and stale observer when account filters change during infinite loading", async () => {
-    const older = Promise.withResolvers<Response>();
-    let pageRequests = 0;
-    respond((url) => {
-      if (url.searchParams.has("cursor")) {
-        pageRequests++;
-        return older.promise;
-      }
+  /** Transactions dated newest first in the order given. */
+  function dated(names: string[], overrides: Partial<FinanceTransaction> = {}) {
+    return names.map((name, index) =>
+      transaction(name, {
+        ...overrides,
+        transactionDate: new Date(Date.UTC(year, 0, 1) - index * 86400000)
+          .toISOString()
+          .slice(0, 10),
+      }),
+    );
+  }
+
+  it("filters saved transactions on the device without asking the server again", async () => {
+    let requests = 0;
+    respond(() => {
+      requests++;
       return Response.json({
         ...data,
         transactions: [
-          transaction(
-            url.searchParams.has("accountId") ? "Filtered" : "Coffee",
-          ),
+          transaction("Fuel", {
+            accountId: "checking",
+            transactionDate: `${year}-03-01`,
+          }),
+          transaction("Rent", {
+            accountId: "savings",
+            transactionDate: `${year}-02-01`,
+          }),
+          transaction("Paid", {
+            accountId: "savings",
+            expenseCategoryId: "meals",
+            transactionDate: `${year}-01-15`,
+          }),
+          transaction("Transfer", {
+            accountId: "savings",
+            categoryPrimary: "TRANSFER_OUT",
+            transactionDate: `${year}-01-10`,
+          }),
+          transaction("Refund", {
+            accountId: "savings",
+            amount: -5,
+            transactionDate: `${year}-01-05`,
+          }),
+          transaction("Old", {
+            accountId: "card",
+            transactionDate: `${year - 1}-06-01`,
+          }),
         ],
-        nextCursor: url.searchParams.has("accountId") ? null : "older",
       });
     });
     await mountFinance();
-    const oldObserver = IntersectionObserverFixture.instances.at(-1);
-    await act(async () => {
-      IntersectionObserverFixture.intersect();
-      IntersectionObserverFixture.intersect();
-    });
-    expect(pageRequests).toBe(1);
-    await click("Savings");
-    await act(async () =>
-      older.resolve(
-        Response.json({
-          ...data,
-          transactions: [transaction("Stale")],
-          nextCursor: "stale-cursor",
-        }),
-      ),
-    );
-    await act(async () => oldObserver?.notify());
-    expect(pageRequests).toBe(1);
-    expect(rowNames()).toEqual(["Filtered"]);
-  });
-  it("combines Shift account toggles, year shortcuts, and uncategorized expenses, then clears them", async () => {
-    const queries: URLSearchParams[] = [];
-    respond((url) => {
-      queries.push(url.searchParams);
-      return Response.json(data);
-    });
-    await mountFinance();
+    // One load reads the summary and the change feed.
+    expect(requests).toBe(2);
+    expect(rowNames()).toEqual([
+      "Fuel",
+      "Rent",
+      "Paid",
+      "Transfer",
+      "Refund",
+      "Old",
+    ]);
     await click("Checking");
     expect(selectedAccounts()).toEqual(["Checking"]);
+    expect(rowNames()).toEqual(["Fuel"]);
     await click("Savings", true);
     expect(selectedAccounts()).toEqual(["Checking", "Savings"]);
     await click("Current year");
     await click("Uncategorized expenses");
     expect(currentPath).toBe("/finance/expenses/category/uncategorized");
-    expect(queries.at(-1)?.getAll("accountId")).toEqual([
-      "checking",
-      "savings",
-    ]);
-    expect(queries.at(-1)?.get("year")).toBe(String(year));
-    expect(queries.at(-1)?.get("uncategorized")).toBe("true");
+    // Uncategorized expenses leave out categorized rows, transfers, and refunds.
+    expect(rowNames()).toEqual(["Fuel", "Rent"]);
     await click("Checking", true);
-    expect(selectedAccounts()).toEqual(["Savings"]);
+    expect(rowNames()).toEqual(["Rent"]);
     await click("Previous year");
-    expect(queries.at(-1)?.get("year")).toBe(String(year - 1));
     expect(button("Current year").getAttribute("aria-pressed")).toBe("false");
     expect(button("Previous year").getAttribute("aria-pressed")).toBe("true");
+    expect(rowNames()).toEqual([]);
     await click("All accounts");
-    expect(queries.at(-1)?.getAll("accountId")).toEqual([]);
-    expect(queries.at(-1)?.get("year")).toBe(String(year - 1));
-    expect(queries.at(-1)?.get("uncategorized")).toBe("true");
+    expect(selectedAccounts()).toEqual([]);
+    expect(rowNames()).toEqual(["Old"]);
     await click("Clear filters");
     expect(currentPath).toBe("/finance");
-    expect(queries.at(-1)?.size).toBe(0);
-    expect(selectedAccounts()).toEqual([]);
+    expect(rowNames()).toHaveLength(6);
     expect(button("All time").getAttribute("aria-pressed")).toBe("true");
     expect(button("Uncategorized expenses").getAttribute("aria-pressed")).toBe(
       "false",
@@ -227,78 +283,66 @@ describe("Finance filters", () => {
     await click("Card", true);
     await click("Card", true);
     expect(selectedAccounts()).toEqual([]);
+    expect(requests).toBe(2);
   });
 
-  it("discards late responses and keeps the latest period selected", async () => {
-    const older = Promise.withResolvers<Response>();
-    respond((url) => {
-      if (url.searchParams.get("year") === String(year - 1))
-        return older.promise;
-      return Response.json({
-        ...data,
-        transactions: [transaction("Current expense")],
-      });
-    });
-    await mountFinance();
-    await click("Previous year");
-    expect(rowNames()).toEqual([]);
-    expect(container.textContent).toContain("Loading finances");
-    await click("Current year");
-    expect(rowNames()).toEqual(["Current expense"]);
-    await act(async () =>
-      older.resolve(
-        Response.json({
-          ...data,
-          transactions: [transaction("Older expense")],
-        }),
-      ),
+  it("shows saved transactions a page at a time and starts over when filters change", async () => {
+    const rows = dated(
+      Array.from({ length: 300 }, (_, index) => `Row ${index}`),
     );
-    expect(rowNames()).toEqual(["Current expense"]);
-    expect(button("Current year").getAttribute("aria-pressed")).toBe("true");
-  });
-
-  it("loads another page with the active filters and resets pagination when filters change", async () => {
-    const cursor = JSON.stringify({ date: `${year}-01-01`, id: "Coffee" });
-    const queries: URLSearchParams[] = [];
-    respond((url) => {
-      queries.push(url.searchParams);
-      return Response.json({
-        ...data,
-        nextCursor: url.searchParams.has("cursor") ? null : cursor,
-        transactions: url.searchParams.has("cursor")
-          ? [transaction("Coffee"), transaction("Older expense")]
-          : [transaction("Coffee")],
-      });
+    let requests = 0;
+    respond(() => {
+      requests++;
+      return Response.json({ ...data, transactions: rows });
     });
     await mountFinance();
-    await click("Savings");
-    await click("Current year");
-    await click("Uncategorized expenses");
+    expect(rowNames()).toHaveLength(250);
+    expect(container.textContent).toContain("250 of 300 shown");
     await act(async () => IntersectionObserverFixture.intersect());
-    expect(queries.at(-1)?.get("cursor")).toBe(cursor);
-    expect(queries.at(-1)?.get("accountId")).toBe("savings");
-    expect(queries.at(-1)?.get("year")).toBe(String(year));
-    expect(queries.at(-1)?.get("uncategorized")).toBe("true");
-    expect(rowNames()).toEqual(["Coffee", "Older expense"]);
+    expect(rowNames()).toHaveLength(300);
+    expect(container.textContent).toContain("300 shown");
+    expect(container.textContent).not.toContain("Load more transactions");
     await click("Previous year");
-    expect(queries.at(-1)?.has("cursor")).toBe(false);
-    expect(rowNames()).toEqual(["Coffee"]);
+    expect(rowNames()).toHaveLength(250);
+    expect(container.textContent).toContain("250 of 299 shown");
+    await click("All time");
+    expect(rowNames()).toHaveLength(250);
+    expect(requests).toBe(2);
+  });
+
+  it("keeps scrolling after filters change past a place already reached", async () => {
+    const rows = dated(
+      Array.from({ length: 600 }, (_, index) => `Row ${index}`),
+    );
+    respond(() => Response.json({ ...data, transactions: rows }));
+    await mountFinance();
+    await act(async () => IntersectionObserverFixture.intersect());
+    expect(rowNames()).toHaveLength(500);
+    // Another filter starts again at 250 shown; reaching the end shows more.
+    await click("Previous year");
+    expect(rowNames()).toHaveLength(250);
+    await act(async () => IntersectionObserverFixture.intersect());
+    // Every one of the previous year's 365 days.
+    expect(rowNames()).toHaveLength(365);
   });
 
   it("annotates, raises an issue, or filters by name from a row's menu", async () => {
-    const queries: URLSearchParams[] = [];
-    respond((url) => {
-      queries.push(url.searchParams);
-      const name = url.searchParams.get("name");
-      return Response.json({
+    respond(() =>
+      Response.json({
         ...data,
         transactions: [
-          transaction("shell-1", { merchantName: "Shell", name: "SHELL 1" }),
-          transaction("Olive Garden"),
-          transaction("shell-2", { merchantName: "Shell", name: "SHELL 2" }),
-        ].filter((row) => !name || (row.merchantName ?? row.name) === name),
-      });
-    });
+          ...dated(["shell-1", "Olive Garden", "shell-2"]).map((row) =>
+            row.id.startsWith("shell")
+              ? { ...row, merchantName: "Shell", name: row.id.toUpperCase() }
+              : row,
+          ),
+          transaction("shell-old", {
+            merchantName: "Shell",
+            transactionDate: `${year - 1}-05-01`,
+          }),
+        ],
+      }),
+    );
     await mountFinance();
     // The row's actions are in its menu, not buttons of their own.
     expect(container.textContent).not.toContain("Raise issue");
@@ -336,57 +380,48 @@ describe("Finance filters", () => {
     ).not.toBeNull();
     await openRowMenu("Shell");
     await choose("Show only “Shell”");
-    expect(queries.at(-1)?.get("name")).toBe("Shell");
-    expect(rowNames()).toEqual(["Shell", "Shell"]);
+    expect(rowNames()).toEqual(["Shell", "Shell", "Shell"]);
     expect(button("Name: Shell").getAttribute("aria-pressed")).toBe("true");
     await click("Previous year");
-    expect(queries.at(-1)?.get("name")).toBe("Shell");
-    expect(queries.at(-1)?.get("year")).toBe(String(year - 1));
+    expect(rowNames()).toEqual(["Shell", "Shell"]);
     await click("Name: Shell");
-    expect(queries.at(-1)?.has("name")).toBe(false);
-    expect(rowNames()).toEqual(["Shell", "Olive Garden", "Shell"]);
+    expect(rowNames()).toEqual(["Olive Garden", "Shell", "Shell"]);
+    await click("All time");
+    expect(rowNames()).toEqual(["Shell", "Olive Garden", "Shell", "Shell"]);
     await openRowMenu("Olive Garden");
     await choose("Raise issue");
     expect(currentPath).toBe(transactionIssuePath("Olive Garden"));
   });
 
-  it("keeps all loaded rows and the annotation form while refreshing a saved note", async () => {
-    const cursor = JSON.stringify({ date: `${year}-01-01`, id: "Coffee" });
-    const refreshed = Promise.withResolvers<Response>();
+  it("keeps every shown row and the annotation form while a saved note refreshes", async () => {
+    const rows = dated(
+      Array.from({ length: 260 }, (_, index) => `Row ${index}`),
+    );
+    const refreshed = Promise.withResolvers<void>();
     let saved = false;
-    let cursorRequests = 0;
-    respond((url, init) => {
+    respond(async (url, init) => {
       if (init?.method === "PATCH") {
         saved = true;
         return Response.json({
           annotation: { labels: [], note: "", reviewed: true },
         });
       }
-      if (url.searchParams.has("cursor")) {
-        cursorRequests++;
-        return Response.json({
-          ...data,
-          nextCursor: "older-cursor",
-          transactions: [
-            transaction("Older expense", {
-              annotation: { labels: [], note: "", reviewed: saved },
-            }),
-          ],
-        });
-      }
-      if (saved) return refreshed.promise;
+      if (saved && isFeed(url)) await refreshed.promise;
       return Response.json({
         ...data,
-        nextCursor: cursor,
-        transactions: [transaction("Coffee")],
+        transactions: rows.map((row) =>
+          row.id === "Row 255"
+            ? { ...row, annotation: { labels: [], note: "", reviewed: saved } }
+            : row,
+        ),
       });
     });
     await mountFinance();
     await click("Load more transactions");
-    await openRowMenu("Older expense");
+    await openRowMenu("Row 255");
     await choose("Annotate");
     const form = container.querySelector<HTMLFormElement>(
-      '[aria-label="Annotation for Older expense"]',
+      '[aria-label="Annotation for Row 255"]',
     );
     if (!form) throw new Error("No annotation form for the older transaction");
     await act(async () =>
@@ -397,87 +432,405 @@ describe("Finance filters", () => {
         }) as unknown as Event,
       ),
     );
-    expect(rowNames()).toEqual(["Coffee", "Older expense"]);
+    expect(rowNames()).toHaveLength(260);
     expect(container.contains(form)).toBe(true);
     expect(container.textContent).not.toContain("Loading finances");
-    expect(button("Load more transactions").disabled).toBe(true);
-    await click("Load more transactions");
-    expect(cursorRequests).toBe(1);
-    await act(async () =>
-      refreshed.resolve(
-        Response.json({
-          ...data,
-          nextCursor: cursor,
-          transactions: [transaction("Coffee")],
-        }),
-      ),
-    );
-    expect(rowNames()).toEqual(["Coffee", "Older expense"]);
+    await act(async () => refreshed.resolve());
+    expect(rowNames()).toHaveLength(260);
     expect(container.contains(form)).toBe(true);
-    expect(cursorRequests).toBe(2);
-    expect(button("Load more transactions").disabled).toBe(false);
     expect(
-      container.querySelectorAll(".financeTransactionStatus")[1]?.textContent,
+      container.querySelectorAll(".financeTransactionStatus")[255]?.textContent,
     ).toBe("Reviewed");
   });
 
-  it("keeps earlier pages visible after a load-more failure and retries the same cursor", async () => {
-    const cursor = JSON.stringify({ date: `${year}-01-01`, id: "Coffee" });
-    const cursors: string[] = [];
-    respond((url) => {
-      const requestedCursor = url.searchParams.get("cursor");
-      if (!requestedCursor)
-        return Response.json({
-          ...data,
-          nextCursor: cursor,
-          transactions: [transaction("Coffee")],
-        });
-      cursors.push(requestedCursor);
-      return cursors.length === 1
-        ? Response.json(
-            { error: "Older transactions are temporarily unavailable." },
-            { status: 503 },
-          )
-        : Response.json({
-            ...data,
-            transactions: [transaction("Older expense")],
-          });
-    });
-    await mountFinance();
-    await act(async () => IntersectionObserverFixture.intersect());
-    expect(rowNames()).toEqual(["Coffee"]);
-    expect(container.textContent).toContain(
-      "Older transactions are temporarily unavailable.",
+  it("shows the saved copy when the server cannot be reached, and recovers", async () => {
+    let down = false;
+    respond(() =>
+      down
+        ? Response.json({ error: "Service unavailable." }, { status: 503 })
+        : Response.json(data),
     );
-    await act(async () => IntersectionObserverFixture.intersect());
-    expect(cursors).toEqual([cursor]);
-    await click("Retry loading more");
-    expect(cursors).toEqual([cursor, cursor]);
-    expect(rowNames()).toEqual(["Coffee", "Older expense"]);
+    const navigate = await mountFinance();
+    down = true;
+    // Leaving and returning to the overview reloads it.
+    await navigate("/finance/categories");
+    await navigate("/finance");
+    expect(container.textContent).toContain(
+      "Showing transactions saved on this device",
+    );
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    down = false;
+    await click("Retry");
     expect(container.textContent).not.toContain(
-      "Older transactions are temporarily unavailable.",
+      "Showing transactions saved on this device",
+    );
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+  });
+
+  it("shows the first download as loading when arriving from another Finance page", async () => {
+    const download = Promise.withResolvers<void>();
+    respond(async (url) => {
+      if (isFeed(url)) await download.promise;
+      return Response.json(data);
+    });
+    const navigate = await mountFinance("/finance/categories");
+    await navigate("/finance");
+    expect(container.textContent).toContain("Loading finances");
+    expect(container.textContent).not.toContain("No transactions imported yet");
+    await act(async () => download.resolve());
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+  });
+
+  it("shows the saved copy at once, not an empty history, while a stalled refresh waits", async () => {
+    let held: Promise<void> | undefined;
+    respond(async (url) => {
+      if (isFeed(url)) await held;
+      return Response.json(data);
+    });
+    const navigate = await mountFinance();
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    await navigate("/finance/categories");
+    const download = Promise.withResolvers<void>();
+    held = download.promise;
+    // Coming back, the refresh stalls: the saved copy shows meanwhile.
+    await navigate("/finance");
+    expect(container.textContent).not.toContain("No transactions imported yet");
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    await act(async () => download.resolve());
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+  });
+
+  it("keeps the overview's rows when a Connections action finishes after leaving", async () => {
+    const sync = Promise.withResolvers<void>();
+    const listing = {
+      ...data,
+      connections: [
+        {
+          id: "connection-1",
+          institutionId: null,
+          institutionName: "Bank",
+          accountCount: 1,
+          createdAt: "2026-01-01",
+          errorCode: null,
+          lastSyncedAt: null,
+          status: "active",
+          dailySync: true,
+          syncStatus: null,
+        },
+      ],
+    };
+    respond(async (_url, init) => {
+      if (init?.method === "POST") {
+        await sync.promise;
+        return Response.json({
+          connection: { id: "connection-1", syncJob: { status: "succeeded" } },
+          sync: { added: 0, modified: 0, removed: 0 },
+        });
+      }
+      return Response.json(listing);
+    });
+    const navigate = await mountFinance("/finance/connections");
+    await act(async () => button("Sync now").click());
+    await navigate("/finance");
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    // The action's closing reload uses the overview's loader, not the
+    // summary-only one it started with.
+    await act(async () => sync.resolve());
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+  });
+
+  it("stops showing transactions another tab cleared", async () => {
+    let down = false;
+    respond(() =>
+      down
+        ? Response.json({ error: "Unavailable." }, { status: 503 })
+        : Response.json(data),
+    );
+    const scope = { organizationId: "organization", userId: "person" };
+    ({ container } = await mount(
+      <Finance
+        onNavigate={() => undefined}
+        pathname="/finance"
+        scope={scope}
+      />,
+    ));
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    const otherTab = new BroadcastChannel("balebase-finance-cleared");
+    const announce = (cleared: object) =>
+      act(async () => {
+        otherTab.postMessage({ apiUrl, source: "other-tab", ...cleared });
+        await Bun.sleep(5);
+      });
+    // Another person's, or this person's in another organization: kept.
+    await announce({ organizationId: "organization", userId: "someone-else" });
+    await announce({ organizationId: "elsewhere", userId: "person" });
+    await announce({ except: ["organization"], userId: "person" });
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    // This person's here (access ended in the other tab): gone.
+    await announce({ organizationId: "organization", userId: "person" });
+    otherTab.close();
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).toContain(
+      "Saved transactions were cleared. Reload Finance.",
+    );
+    // Nor does this tab's own copy come back while Balebase is down.
+    down = true;
+    await click("Retry");
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).not.toContain(
+      "Showing transactions saved on this device",
     );
   });
 
-  it("shows retry on a filter failure and a useful empty state on success", async () => {
-    let failed = true;
+  it("stops showing transactions once the session belongs to another organization", async () => {
+    let switched = false;
+    respond(() =>
+      Response.json(switched ? { ...data, organizationId: "elsewhere" } : data),
+    );
+    const scope = { organizationId: "organization", userId: "person" };
+    const page = (pathname: string) => (
+      <Finance onNavigate={() => undefined} pathname={pathname} scope={scope} />
+    );
+    const view = await mount(page("/finance"));
+    container = view.container;
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    // Another tab switched organizations; this one loads again.
+    switched = true;
+    await view.render(page("/finance/categories"));
+    await view.render(page("/finance"));
+    await act(async () => undefined);
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).toContain(
+      "The signed-in account or organization changed",
+    );
+  });
+
+  it("closes Reports when another tab clears this person's finances", async () => {
     respond((url) =>
-      url.searchParams.has("year") && failed
-        ? Response.json(
-            { error: "Could not fetch this period." },
-            { status: 503 },
-          )
-        : Response.json({
-            ...data,
-            transactions: url.searchParams.has("year") ? [] : data.transactions,
-          }),
+      url.pathname.endsWith("/reports/expenses")
+        ? Response.json({ currencies: [], from: null, to: null })
+        : Response.json(data),
+    );
+    ({ container } = await mount(
+      <Finance
+        onNavigate={() => undefined}
+        pathname="/finance/reports"
+        scope={{ organizationId: "organization", userId: "person" }}
+      />,
+    ));
+    expect(container.textContent).toContain("Spending by expense category");
+    const otherTab = new BroadcastChannel("balebase-finance-cleared");
+    await act(async () => {
+      otherTab.postMessage({ apiUrl, source: "other-tab", userId: "person" });
+      await Bun.sleep(5);
+    });
+    otherTab.close();
+    expect(container.textContent).not.toContain("Spending by expense category");
+  });
+
+  it("keeps a row's new category in the saved copy", async () => {
+    let category: string | null = null;
+    let down = false;
+    let feeds = 0;
+    respond((url, init) => {
+      if (init?.method === "PUT") {
+        category = JSON.parse(String(init.body)).categoryId;
+        return Response.json({ expenseCategoryId: category });
+      }
+      if (down)
+        return Response.json(
+          { error: "Service unavailable." },
+          { status: 503 },
+        );
+      if (isFeed(url)) feeds++;
+      return Response.json({
+        ...data,
+        transactions: data.transactions.map((row) =>
+          row.id === "Coffee" ? { ...row, expenseCategoryId: category } : row,
+        ),
+      });
+    });
+    const navigate = await mountFinance();
+    const select = container.querySelector<HTMLSelectElement>(
+      '[aria-label="Expense category for Coffee"]',
+    );
+    if (!select) throw new Error("Missing category picker");
+    await act(async () => {
+      select.value = "meals";
+      select.dispatchEvent(
+        new dom.Event("change", { bubbles: true }) as unknown as Event,
+      );
+    });
+    // The save is followed by catching up with the change feed.
+    expect(feeds).toBe(2);
+    down = true;
+    await navigate("/finance/categories");
+    await navigate("/finance");
+    expect(container.textContent).toContain(
+      "Showing transactions saved on this device",
+    );
+    expect(
+      container.querySelector<HTMLSelectElement>(
+        '[aria-label="Expense category for Coffee"]',
+      )?.value,
+    ).toBe("meals");
+  });
+
+  it("clears what is shown when a save finds access gone, even if Balebase then goes down", async () => {
+    let refused = false;
+    respond((_url, init) => {
+      if (init?.method === "PUT") {
+        refused = true;
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      }
+      // The reload after the refusal cannot reach Balebase.
+      return refused
+        ? Response.json({ error: "Service unavailable." }, { status: 503 })
+        : Response.json(data);
+    });
+    await mountFinance();
+    const select = container.querySelector<HTMLSelectElement>(
+      '[aria-label="Expense category for Coffee"]',
+    );
+    if (!select) throw new Error("Missing category picker");
+    await act(async () => {
+      select.value = "meals";
+      select.dispatchEvent(
+        new dom.Event("change", { bubbles: true }) as unknown as Event,
+      );
+    });
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).toContain("Finance access required.");
+  });
+
+  it("clears what is shown when an annotation save finds access gone", async () => {
+    let refused = false;
+    respond((_url, init) => {
+      if (init?.method === "PATCH") {
+        refused = true;
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      }
+      return refused
+        ? Response.json({ error: "Service unavailable." }, { status: 503 })
+        : Response.json(data);
+    });
+    await mountFinance();
+    await openRowMenu("Coffee");
+    await choose("Annotate");
+    const form = container.querySelector<HTMLFormElement>(
+      '[aria-label="Annotation for Coffee"]',
+    );
+    if (!form) throw new Error("No annotation form");
+    await act(async () =>
+      form.dispatchEvent(
+        new dom.Event("submit", {
+          bubbles: true,
+          cancelable: true,
+        }) as unknown as Event,
+      ),
+    );
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).toContain("Finance access required.");
+  });
+
+  async function refusedOn(page: "categories" | "reports") {
+    let state: "open" | "refused" | "down" = "open";
+    respond((url, init) => {
+      if (state === "down")
+        return Response.json({ error: "Unavailable." }, { status: 503 });
+      const refusedRequest =
+        url.pathname.endsWith("/reports/expenses") ||
+        (url.pathname.includes("/categories") && init?.method !== "GET");
+      if (state === "refused" && refusedRequest)
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      return Response.json(data);
+    });
+    const navigate = await mountFinance();
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    if (page === "categories") {
+      await navigate("/finance/categories");
+      state = "refused";
+      await click("Add common categories");
+    } else {
+      state = "refused";
+      await navigate("/finance/reports");
+    }
+    // Balebase then goes down: nothing saved comes back.
+    state = "down";
+    await navigate("/finance");
+    expect(container.textContent).not.toContain(
+      "Showing transactions saved on this device",
+    );
+    expect(rowNames()).toEqual([]);
+  }
+
+  it("keeps nothing when a Categories save finds access gone", () =>
+    refusedOn("categories"));
+
+  it("keeps nothing when Reports find access gone", () => refusedOn("reports"));
+
+  it("keeps nothing for someone who loses access", async () => {
+    let refused = false;
+    respond(() =>
+      refused
+        ? Response.json({ error: "Finance access required." }, { status: 403 })
+        : Response.json(data),
+    );
+    const navigate = await mountFinance();
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    refused = true;
+    await navigate("/finance/categories");
+    await navigate("/finance");
+    expect(container.textContent).toContain("Finance access required.");
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).not.toContain(
+      "Showing transactions saved on this device",
+    );
+    refused = false;
+    // What was kept is gone: the next load starts from the beginning.
+    let fromStart = false;
+    respondFetch((url) => {
+      if (url.pathname.endsWith("/transactions/changes"))
+        fromStart = !url.searchParams.has("cursor");
+      return url.pathname.endsWith("/transactions/changes")
+        ? Response.json({
+            cursor: "0",
+            more: false,
+            organizationId: "organization",
+            userId: "person",
+            removedIds: [],
+            reset: false,
+            transactions: data.transactions,
+          })
+        : Response.json(data);
+    });
+    await click("Retry");
+    expect(fromStart).toBe(true);
+  });
+
+  it("shows retry when the first load fails and a useful empty state on success", async () => {
+    let failed = true;
+    respond(() =>
+      failed
+        ? Response.json({ error: "Could not load finances." }, { status: 503 })
+        : Response.json(data),
     );
     await mountFinance();
-    await click("Previous year");
-    expect(container.textContent).toContain("Could not fetch this period.");
+    expect(container.textContent).toContain("Could not load finances.");
     expect(rowNames()).toEqual([]);
     failed = false;
     await click("Retry");
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    await click("Previous year");
     expect(container.textContent).toContain(
       "No transactions match these filters",
     );
@@ -486,33 +839,30 @@ describe("Finance filters", () => {
   });
 
   it("drills into one category from Categories, drops recategorized rows, and clears back to all", async () => {
-    const queries: URLSearchParams[] = [];
     const categories = [
       { id: "category-1", name: "Meals", slug: "meals", transactionCount: 2 },
       { id: "category-2", name: "Travel", slug: "travel", transactionCount: 0 },
     ];
+    const moved = new Set<string>();
     respond((url, init) => {
-      if (init?.method === "PUT")
+      if (init?.method === "PUT") {
+        moved.add(decodeURIComponent(url.pathname.split("/").at(-2) ?? ""));
         return Response.json({ expenseCategoryId: "category-2" });
-      queries.push(url.searchParams);
-      const slug = url.searchParams.get("category");
-      const expenseCategoryId =
-        categories.find((category) => category.slug === slug)?.id ?? null;
+      }
       return Response.json({
         ...data,
         categories,
-        transactions: slug
-          ? [
-              transaction("Lunch", { expenseCategoryId }),
-              transaction("Dinner", { expenseCategoryId }),
-            ]
-          : data.transactions,
+        transactions: [
+          ...data.transactions,
+          ...dated(["Lunch", "Dinner"], { expenseCategoryId: "category-1" }),
+        ].map((row) =>
+          moved.has(row.id) ? { ...row, expenseCategoryId: "category-2" } : row,
+        ),
       });
     });
     await mountFinance("/finance/categories");
     await click("Meals");
     expect(currentPath).toBe("/finance/expenses/category/meals");
-    expect(queries.at(-1)?.get("category")).toBe("meals");
     expect(rowNames()).toEqual(["Lunch", "Dinner"]);
     expect(button("Category: Meals").getAttribute("aria-pressed")).toBe("true");
     const select = container.querySelector<HTMLSelectElement>(
@@ -528,15 +878,13 @@ describe("Finance filters", () => {
     expect(rowNames()).toEqual(["Dinner"]);
     await click("Category: Meals");
     expect(currentPath).toBe("/finance");
-    expect(queries.at(-1)?.has("category")).toBe(false);
-    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    // Supplies and Lunch share a date; the later ID comes first.
+    expect(rowNames()).toEqual(["Coffee", "Supplies", "Lunch", "Dinner"]);
   });
 
   it("opens a category from its row's context menu, including an empty one", async () => {
-    const queries: URLSearchParams[] = [];
-    respond((url) => {
-      queries.push(url.searchParams);
-      return Response.json({
+    respond(() =>
+      Response.json({
         ...data,
         categories: [
           {
@@ -546,9 +894,8 @@ describe("Finance filters", () => {
             transactionCount: 0,
           },
         ],
-        transactions: url.searchParams.has("category") ? [] : data.transactions,
-      });
-    });
+      }),
+    );
     await mountFinance("/finance/categories");
     const row = button("Travel").closest("li");
     if (!row) throw new Error("Missing category row");
@@ -569,7 +916,6 @@ describe("Finance filters", () => {
     ].find((item) => item.textContent === "Show transactions");
     if (!show) throw new Error("Missing Show transactions");
     await act(async () => show.click());
-    expect(queries.at(-1)?.get("category")).toBe("travel");
     expect(document.querySelector('[role="menu"]')).toBeNull();
     expect(button("Category: Travel").getAttribute("aria-pressed")).toBe(
       "true",
@@ -579,14 +925,21 @@ describe("Finance filters", () => {
     );
   });
 
-  it("opens a bookmarked category path with one filtered request", async () => {
-    const queries: URLSearchParams[] = [];
-    respond((url) => {
-      queries.push(url.searchParams);
-      return Response.json(data);
+  it("opens a bookmarked category path with one load", async () => {
+    let requests = 0;
+    respond(() => {
+      requests++;
+      return Response.json({
+        ...data,
+        transactions: [
+          ...data.transactions,
+          transaction("Lunch", { expenseCategoryId: "meals" }),
+        ],
+      });
     });
     await mountFinance("/finance/expenses/category/meals");
-    expect(queries.map((query) => query.get("category"))).toEqual(["meals"]);
+    expect(requests).toBe(2);
+    expect(rowNames()).toEqual(["Lunch"]);
     expect(button("Category: Meals").getAttribute("aria-pressed")).toBe("true");
     expect(container.querySelector('[aria-current="page"]')?.textContent).toBe(
       "Overview",
@@ -594,40 +947,49 @@ describe("Finance filters", () => {
   });
 
   it("opens and leaves the bookmarked uncategorized path", async () => {
-    const queries: URLSearchParams[] = [];
-    respond((url) => {
-      queries.push(url.searchParams);
-      return Response.json(data);
-    });
+    respond(() =>
+      Response.json({
+        ...data,
+        transactions: [
+          ...data.transactions,
+          transaction("Lunch", { expenseCategoryId: "meals" }),
+        ],
+      }),
+    );
     await mountFinance("/finance/expenses/category/uncategorized");
-    expect(queries).toHaveLength(1);
-    expect(queries[0]?.get("uncategorized")).toBe("true");
-    expect(queries[0]?.has("category")).toBe(false);
     expect(button("Uncategorized expenses").getAttribute("aria-pressed")).toBe(
       "true",
     );
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
     await click("Uncategorized expenses");
     expect(currentPath).toBe("/finance");
-    expect(queries.at(-1)?.has("uncategorized")).toBe(false);
+    expect(rowNames()).toEqual(["Coffee", "Supplies", "Lunch"]);
   });
 
   it("follows Back to a category path and keeps the other filters", async () => {
-    const queries: URLSearchParams[] = [];
-    respond((url) => {
-      queries.push(url.searchParams);
-      return Response.json(data);
-    });
+    respond(() =>
+      Response.json({
+        ...data,
+        transactions: [
+          ...data.transactions,
+          transaction("Lunch", {
+            expenseCategoryId: "meals",
+            transactionDate: `${year - 1}-03-01`,
+          }),
+          transaction("Brunch", { expenseCategoryId: "meals" }),
+        ],
+      }),
+    );
     const navigate = await mountFinance();
     await click("Previous year");
     await navigate("/finance/expenses/category/meals");
-    expect(queries.at(-1)?.get("category")).toBe("meals");
-    expect(queries.at(-1)?.get("year")).toBe(String(year - 1));
-    const count = queries.length;
+    expect(button("Category: Meals").getAttribute("aria-pressed")).toBe("true");
+    expect(button("Previous year").getAttribute("aria-pressed")).toBe("true");
+    expect(rowNames()).toEqual(["Lunch"]);
     await navigate("/finance/categories");
-    expect(queries).toHaveLength(count);
     await navigate("/finance");
-    expect(queries.at(-1)?.has("category")).toBe(false);
-    expect(queries.at(-1)?.get("year")).toBe(String(year - 1));
+    expect(button("Previous year").getAttribute("aria-pressed")).toBe("true");
+    expect(rowNames()).toEqual(["Lunch"]);
   });
 
   it("explains a category path that matches no category", async () => {
@@ -670,9 +1032,19 @@ describe("Finance filters", () => {
 });
 
 describe("Bulk categorization", () => {
-  const rows = ["Coffee", "Lunch", "Supplies", "Taxi"].map((id) =>
-    transaction(id),
+  // Newest first in this order, as the list shows them.
+  const rows = ["Coffee", "Lunch", "Supplies", "Taxi"].map((id, index) =>
+    transaction(id, { transactionDate: `${year}-01-0${4 - index}` }),
   );
+  /** Many rows, dated so the list shows them in order. */
+  const manyRows = (count: number) =>
+    Array.from({ length: count }, (_, index) =>
+      transaction(`Row ${index}`, {
+        transactionDate: new Date(Date.UTC(year, 0, 1) - index * 86400000)
+          .toISOString()
+          .slice(0, 10),
+      }),
+    );
   const listing: FinanceData = {
     ...data,
     categories: [
@@ -698,10 +1070,16 @@ describe("Bulk categorization", () => {
       );
     });
   }
+  /** Checked rows among those shown. */
   function checkedRows() {
     return rows
       .map(({ id }) => id)
-      .filter((id) => checkbox(`Select ${id}`).checked);
+      .filter(
+        (id) =>
+          container.querySelector<HTMLInputElement>(
+            `input[type="checkbox"][aria-label="Select ${id}"]`,
+          )?.checked,
+      );
   }
   async function setBulkCategory(value: string) {
     const select = container.querySelector<HTMLSelectElement>(
@@ -736,9 +1114,9 @@ describe("Bulk categorization", () => {
     const saves: { categoryId: string | null; transactionIds: string[] }[] = [];
     let attempts = 0;
     const server = { loads: 0, saves };
-    respond(async (_url, init) => {
+    respond(async (url, init) => {
       if (init?.method !== "PUT") {
-        server.loads++;
+        if (isFeed(url)) server.loads++;
         return Response.json({
           ...listing,
           transactions: listed.map((row) => ({
@@ -837,14 +1215,14 @@ describe("Bulk categorization", () => {
     expect(container.textContent).not.toContain("1 selected");
     // An account card changes the filters outside the filter toolbar.
     await check("Select Lunch");
-    await click("Savings");
+    await click("Checking");
     expect(checkedRows()).toEqual([]);
     await check("Select Taxi");
     await click("All accounts");
     expect(checkedRows()).toEqual([]);
     // Returning to the earlier filters does not bring their selection back.
     await check("Select Coffee");
-    await click("Savings");
+    await click("Checking");
     await click("All accounts");
     expect(checkedRows()).toEqual([]);
   });
@@ -856,12 +1234,14 @@ describe("Bulk categorization", () => {
         fail: () => outcome === "failed",
         hold: save.promise,
       });
-      await mountFinance();
+      const navigate = await mountFinance();
       await check("Select Coffee");
       await setBulkCategory("meals");
       expect(categoryOf("Coffee")).toBe("meals");
-      // A filter change mid-save loads the rows as the server has them now.
-      await click("Savings");
+      // A load mid-save (here, leaving and coming back) reads the rows as the
+      // server has them now.
+      await navigate("/finance/categories");
+      await navigate("/finance");
       expect(categoryOf("Coffee")).toBe("");
       const before = server.loads;
       await act(async () => save.resolve());
@@ -871,14 +1251,12 @@ describe("Bulk categorization", () => {
   }
 
   it("keeps the batches that saved when a later one fails, and retries only the rest", async () => {
-    const many = Array.from({ length: 252 }, (_, index) =>
-      transaction(`Row ${index}`),
-    );
     const server = serveCategories({
       fail: (attempt) => attempt === 1,
-      transactions: many,
+      transactions: manyRows(252),
     });
     await mountFinance();
+    await click("Load more transactions");
     await check("Select all shown transactions");
     await setBulkCategory("meals");
     expect(container.textContent).toContain("Could not save.");
@@ -901,11 +1279,45 @@ describe("Bulk categorization", () => {
     expect(container.textContent).not.toContain("252 selected");
   });
 
+  it("clears what is shown when a bulk save finds access gone", async () => {
+    let refused = false;
+    respond((_url, init) => {
+      if (init?.method === "PUT") {
+        refused = true;
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      }
+      return refused
+        ? Response.json({ error: "Service unavailable." }, { status: 503 })
+        : Response.json(listing);
+    });
+    await mountFinance();
+    await check("Select Coffee");
+    await setBulkCategory("meals");
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).toContain("Finance access required.");
+  });
+
   it("holds bulk changes until a row's own category save finishes", async () => {
-    const save = Promise.withResolvers<Response>();
-    respond((_url, init) =>
-      init?.method === "PUT" ? save.promise : Response.json(listing),
-    );
+    const save = Promise.withResolvers<void>();
+    let saved = false;
+    respond(async (_url, init) => {
+      if (init?.method === "PUT") {
+        await save.promise;
+        saved = true;
+        return Response.json({ expenseCategoryId: "meals" });
+      }
+      return Response.json({
+        ...listing,
+        transactions: listing.transactions.map((row) =>
+          saved && row.id === "Coffee"
+            ? { ...row, expenseCategoryId: "meals" }
+            : row,
+        ),
+      });
+    });
     await mountFinance();
     const select = container.querySelector<HTMLSelectElement>(
       '[aria-label="Expense category for Coffee"]',
@@ -919,9 +1331,7 @@ describe("Bulk categorization", () => {
     });
     expect(checkbox("Select all shown transactions").disabled).toBe(true);
     expect(checkbox("Select Lunch").disabled).toBe(true);
-    await act(async () =>
-      save.resolve(Response.json({ expenseCategoryId: "meals" })),
-    );
+    await act(async () => save.resolve());
     expect(checkbox("Select all shown transactions").disabled).toBe(false);
     expect(categoryOf("Coffee")).toBe("meals");
   });
@@ -944,9 +1354,7 @@ describe("Bulk categorization", () => {
   });
 
   it("saves more than one request's worth of rows in batches", async () => {
-    const many = Array.from({ length: 251 }, (_, index) =>
-      transaction(`Row ${index}`),
-    );
+    const many = manyRows(251);
     const saves: string[][] = [];
     respond(async (_url, init) => {
       if (init?.method !== "PUT") {
@@ -957,6 +1365,11 @@ describe("Bulk categorization", () => {
       return Response.json(body);
     });
     await mountFinance();
+    // Select all takes the rows shown: show the rest first.
+    await check("Select all shown transactions");
+    expect(container.textContent).toContain("250 selected");
+    await check("Clear selection");
+    await click("Load more transactions");
     await check("Select all shown transactions");
     expect(container.textContent).toContain("251 selected");
     await setBulkCategory("meals");
@@ -965,15 +1378,43 @@ describe("Bulk categorization", () => {
   });
 });
 
-it("polls status without loading history until completion or discarding an in-flight page", async () => {
+it("clears what is shown when sync polling finds access gone", async () => {
   using polls = holdTimers(syncPollMs);
-  const older = Promise.withResolvers<Response>();
-  let firstPageRequests = 0;
+  respond((url) =>
+    url.pathname.endsWith("/sync-status")
+      ? Response.json({ error: "Finance access required." }, { status: 403 })
+      : Response.json({
+          ...data,
+          connections: [
+            {
+              id: "connection-1",
+              institutionId: null,
+              institutionName: "Bank",
+              accountCount: 1,
+              createdAt: "2026-01-01",
+              errorCode: null,
+              lastSyncedAt: null,
+              status: "active",
+              dailySync: true,
+              syncStatus: "running",
+            },
+          ],
+        }),
+  );
+  await mountFinance();
+  expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+  await polls.fire();
+  expect(rowNames()).toEqual([]);
+  expect(container.textContent).toContain("Finance access required.");
+});
+
+it("polls a running bank sync and catches up once it finishes", async () => {
+  using polls = holdTimers(syncPollMs);
+  let feedRequests = 0;
   let statusRequests = 0;
   let finished = false;
   const listing: FinanceData = {
     ...data,
-    nextCursor: "older",
     connections: [
       {
         id: "connection-1",
@@ -998,29 +1439,25 @@ it("polls status without loading history until completion or discarding an in-fl
         },
       });
     }
-    if (url.searchParams.has("cursor")) return older.promise;
-    firstPageRequests++;
-    return Response.json(finished ? { ...listing, connections: [] } : listing);
+    if (isFeed(url)) feedRequests++;
+    return Response.json(
+      finished
+        ? {
+            ...listing,
+            connections: [],
+            transactions: [...data.transactions, transaction("New expense")],
+          }
+        : listing,
+    );
   });
   await mountFinance();
-  await click("Load more transactions");
-  await polls.fire();
-  expect(firstPageRequests).toBe(1);
-  await act(async () =>
-    older.resolve(
-      Response.json({
-        ...listing,
-        nextCursor: null,
-        transactions: [transaction("Older expense")],
-      }),
-    ),
-  );
-  expect(rowNames()).toEqual(["Coffee", "Supplies", "Older expense"]);
+  expect(feedRequests).toBe(1);
   await polls.fire();
   expect(statusRequests).toBe(1);
-  expect(firstPageRequests).toBe(1);
+  expect(feedRequests).toBe(1);
+  expect(rowNames()).toEqual(["Coffee", "Supplies"]);
   finished = true;
   await polls.fire();
-  expect(firstPageRequests).toBe(2);
-  expect(rowNames()).toEqual(["Coffee", "Supplies", "Older expense"]);
+  expect(feedRequests).toBe(2);
+  expect(rowNames()).toEqual(["Coffee", "Supplies", "New expense"]);
 });

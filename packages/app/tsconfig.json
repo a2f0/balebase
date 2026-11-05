@@ -7,5 +7,11 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": ["@types/bun", "vite/client"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "browser/**/*.tsx", "vite.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "browser/**/*.ts",
+    "browser/**/*.tsx",
+    "vite.ts"
+  ]
 }

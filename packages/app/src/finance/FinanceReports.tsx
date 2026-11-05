@@ -26,11 +26,15 @@ import {
   reportPresets,
 } from "./expenseReport";
 import { formatMoney } from "./financeFormat";
+import { refused } from "./transactionCache";
 
 export function FinanceReports({
   onNavigate,
+  onRefused,
 }: {
   onNavigate: (pathname: string) => void;
+  /** The report was refused: access ended. */
+  onRefused: (cause: unknown) => Promise<void>;
 }) {
   const [preset, setPreset] = useState<ReportPreset>("this-month");
   const [custom, setCustom] = useState<ReportRange>(() =>
@@ -38,7 +42,7 @@ export function FinanceReports({
   );
   const range = preset === "custom" ? custom : presetRange(preset, new Date());
   const invalid = Boolean(range.from && range.to && range.from > range.to);
-  const report = useExpenseReport(range, invalid);
+  const report = useExpenseReport(range, invalid, onRefused);
 
   return (
     <PageSection
@@ -63,7 +67,11 @@ export function FinanceReports({
   );
 }
 
-function useExpenseReport(range: ReportRange, invalid: boolean) {
+function useExpenseReport(
+  range: ReportRange,
+  invalid: boolean,
+  onRefused: (cause: unknown) => Promise<void>,
+) {
   const [report, setReport] = useState<ExpenseReport>();
   const [error, setError] = useState<string>();
   const { from, to } = range;
@@ -80,12 +88,13 @@ function useExpenseReport(range: ReportRange, invalid: boolean) {
       .catch((cause: unknown) => {
         if (current) {
           setError(errorMessage(cause, "Could not load report."));
+          if (refused(cause)) void onRefused(cause);
         }
       });
     return () => {
       current = false;
     };
-  }, [from, invalid, to]);
+  }, [from, invalid, onRefused, to]);
   return { error, report };
 }
 

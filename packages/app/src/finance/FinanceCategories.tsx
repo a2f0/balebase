@@ -15,14 +15,18 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
+import { refused } from "./transactionCache";
 
 export function FinanceCategories({
   categories,
   onChanged,
+  onRefused,
   onShowTransactions,
 }: {
   categories: ExpenseCategory[] | undefined;
   onChanged: () => Promise<void>;
+  /** A save was refused: access ended. */
+  onRefused: (cause: unknown) => Promise<void>;
   onShowTransactions: (category: ExpenseCategory) => void;
 }) {
   const action = useAction("Could not save the category.");
@@ -41,9 +45,14 @@ export function FinanceCategories({
   const run = (change: () => Promise<string>) =>
     action.run(
       async () => {
-        const message = await change();
-        await onChanged();
-        return message;
+        try {
+          const message = await change();
+          await onChanged();
+          return message;
+        } catch (cause) {
+          if (refused(cause)) await onRefused(cause);
+          throw cause;
+        }
       },
       (message) => message,
     );

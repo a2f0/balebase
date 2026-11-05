@@ -3,7 +3,23 @@ import type { FinanceData } from "@balebase/validators/finance";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
+import {
+  fallBack,
+  forgetFinance,
+  loadFinance,
+  savedFinance,
+} from "./financeCacheLoad";
 import { syncPending, syncPollMs } from "./financeConnectionActions";
+import {
+  type CacheScope,
+  clears,
+  indexedDbTransactionStore,
+  memoryTransactionStore,
+  OrganizationChanged,
+  onClearedElsewhere,
+  refused,
+  SignedOut,
+} from "./transactionCache";
 
 type CategoryRoute = Pick<FinanceFilters, "categorySlug" | "uncategorized">;
 
@@ -15,104 +31,204 @@ export const initialFilters: FinanceFilters = {
   uncategorized: false,
 };
 
+/** Rows the overview shows at first, and adds each time it reaches the end. */
+const transactionPageSize = 250;
+
 /**
- * Keep account cards visible while loading, but never show a stale result set.
- * The overview's path selects the category filters; other pages pass null.
+ * Finance's data. The overview (a non-null `route`, whose path selects the
+ * category filters) keeps every transaction on this device and catches up
+ * from the server's change feed on each load, so filters and paging are
+ * local and the saved copy stays readable when the server cannot be reached.
+ * Other pages show only connections, accounts, and categories, and bring a
+ * saved copy up to date so what they change reaches it.
  */
-export function useFinanceData(route: CategoryRoute | null) {
-  const [data, setData] = useState<FinanceData>();
+export function useFinanceData(
+  route: CategoryRoute | null,
+  scope: CacheScope | undefined,
+) {
+  const keepTransactions = route !== null;
+  const store = useTransactionStore(scope);
+  const loaded = useCachedLoad(keepTransactions, store);
+  // Another tab found access gone (or signed out): this one's view and copy
+  // (IndexedDB, or memory after a fallback) go too.
+  useClearedElsewhere(store.scope, () => {
+    void loaded.onRefused(new SignedOut(), false);
+  });
   const [filters, setFilters] = useState({ ...initialFilters, ...route });
+  const [visible, setVisible] = useState(transactionPageSize);
   const currentFilters = useRef(filters);
-  const loadedFilters = useRef(filters);
-  const loadedData = useRef(data);
-  useEffect(() => {
-    loadedData.current = data;
-  }, [data]);
+  useSyncPolling(
+    loaded.data,
+    loaded.load,
+    loaded.onRefused,
+    loaded.loading || loaded.refreshing,
+  );
+  const onFiltersChange = useCallback((next: FinanceFilters) => {
+    currentFilters.current = next;
+    setFilters(next);
+    setVisible(transactionPageSize);
+  }, []);
+  useCategoryRoute(route, currentFilters, onFiltersChange);
+  const onLoadMore = useCallback(async () => {
+    setVisible((count) => count + transactionPageSize);
+    return true;
+  }, []);
+  return {
+    ...loaded,
+    filters,
+    visible,
+    onFiltersChange,
+    onLoadMore,
+  };
+}
+
+/** Loads Finance's data from `store` and the server, and forgets it on refusal. */
+function useCachedLoad(
+  keepTransactions: boolean,
+  store: ReturnType<typeof useTransactionStore>,
+) {
+  const [data, setData] = useState<FinanceData>();
   const requestId = useRef(0);
+  const loaded = useRef(false);
+  // Whether transactions were ever shown: Categories and Connections load
+  // without them, so the overview's first visit after them still loads.
+  const loadedTransactions = useRef(false);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string>();
-  const [loadMoreError, setLoadMoreError] = useState<string>();
-  const load = useCallback(async (cursor?: string, reset = false) => {
+  const [savedCopy, setSavedCopy] = useState<string>();
+  const [saving, setSaving] = useState<number>();
+  const settle = useCallback((error?: string) => {
+    setLoading(false);
+    setRefreshing(false);
+    setSaving(undefined);
+    if (error !== undefined) setLoadError(error);
+  }, []);
+  const forget = useCallback(() => {
+    loaded.current = false;
+    loadedTransactions.current = false;
+    setData(undefined);
+    setSavedCopy(undefined);
+  }, []);
+  const load = useCallback(async () => {
     const id = ++requestId.current;
-    const filters = currentFilters.current;
-    const refresh = !reset && loadedFilters.current === filters;
-    setLoading(!cursor && !refresh);
-    setLoadingMore(Boolean(cursor));
-    setRefreshing(!cursor && refresh);
+    const current = () => id === requestId.current;
+    const first =
+      !loaded.current || (keepTransactions && !loadedTransactions.current);
+    setLoading(first);
+    setRefreshing(!first);
     setLoadError(undefined);
-    setLoadMoreError(undefined);
-    const setRequestError = cursor ? setLoadMoreError : setLoadError;
-    const minimum = refresh
-      ? (loadedData.current?.transactions.length ?? 0)
-      : 0;
-    try {
-      const next = await loadFinancePages(
-        filters,
-        cursor,
-        minimum,
-        () => id === requestId.current,
-      );
-      if (id !== requestId.current) return;
-      loadedFilters.current = filters;
-      setData((current) => mergeFinancePage(current, next, cursor));
-    } catch (cause) {
-      if (id === requestId.current) {
-        setRequestError(errorMessage(cause, "Could not load finances."));
-      }
-    } finally {
-      if (id === requestId.current) {
+    if (first && keepTransactions) {
+      // Shown at once and refreshed, so a stalled request cannot hide it.
+      const saved = await savedFinance(store.value, store.scope);
+      if (saved && current()) {
+        setData(saved);
         setLoading(false);
-        setLoadingMore(false);
-        setRefreshing(false);
+        setRefreshing(true);
       }
     }
-  }, []);
+    try {
+      const next = await loadFinance(
+        store.value,
+        store.scope,
+        keepTransactions,
+        {
+          changes: (cursor) => api.finance.transactionChanges(cursor),
+          onProgress: (saved) => {
+            if (current()) setSaving(saved);
+          },
+          summary: () => api.finance.summary(),
+        },
+      );
+      if (!current()) return;
+      loaded.current = true;
+      // A load for another page leaves no transactions to show.
+      loadedTransactions.current = keepTransactions;
+      setData(next.data);
+      setSavedCopy(next.savedAt);
+      settle();
+    } catch (cause) {
+      if (!current()) return;
+      // Nothing read before stays on screen after access ends, or once the
+      // session belongs to another account or organization.
+      if (refused(cause) || cause instanceof OrganizationChanged) forget();
+      settle(errorMessage(cause, "Could not load finances."));
+    }
+  }, [forget, keepTransactions, settle, store]);
+  /**
+   * A save was refused (or another tab, which `announce: false` does not
+   * tell again, found access gone): nothing shown or saved stays, without
+   * waiting on a reload that an outage could keep from finishing.
+   */
+  const onRefused = useCallback(
+    async (cause: unknown, announce = true) => {
+      // Loads still running would show what they read.
+      ++requestId.current;
+      forget();
+      settle(errorMessage(cause, "Could not load finances."));
+      await forgetFinance(store.value, store.scope, announce);
+    },
+    [forget, settle, store],
+  );
   useEffect(() => {
     void load();
     return () => {
       ++requestId.current;
     };
   }, [load]);
-  useSyncPolling(data, load, loading || loadingMore || refreshing);
-  const onFiltersChange = useCallback(
-    (next: FinanceFilters) => {
-      currentFilters.current = next;
-      setFilters(next);
-      void load(undefined, true);
-    },
-    [load],
-  );
-  useCategoryRoute(route, currentFilters, onFiltersChange);
-  const cursor = data?.nextCursor;
-  const canLoadMore =
-    !(loading || loadingMore || refreshing) &&
-    filters === loadedFilters.current;
-  const onLoadMore = useCallback(async () => {
-    if (!cursor || !canLoadMore) return false;
-    await load(cursor);
-    return true;
-  }, [canLoadMore, cursor, load]);
   return {
     data,
-    filters,
-    loading: loading || filters !== loadedFilters.current,
-    loadingMore,
+    loading,
     refreshing,
     loadError,
-    loadMoreError,
+    /** When the saved copy shown was last current; set only while offline. */
+    savedCopy,
+    /** Transactions saved so far by a first download. */
+    saving,
     load,
-    onFiltersChange,
-    onLoadMore,
+    onRefused,
     setData,
   };
 }
 
+/**
+ * Calls `onCleared` when another tab clears the saved transactions `scope`
+ * shows (access ended there, or a sign-out), so this one drops them too.
+ */
+function useClearedElsewhere(
+  scope: CacheScope | undefined,
+  onCleared: () => void,
+) {
+  const latest = useRef(onCleared);
+  latest.current = onCleared;
+  useEffect(() => {
+    if (!scope) return;
+    return onClearedElsewhere((cleared) => {
+      if (clears(cleared, scope)) latest.current();
+    });
+  }, [scope]);
+}
+
 export type FinanceListingState = Omit<
   ReturnType<typeof useFinanceData>,
-  "load" | "setData"
+  "load" | "onRefused" | "setData"
 >;
+
+/** Sign-in scopes keep IndexedDB; without one, or without IndexedDB, memory. */
+function useTransactionStore(scope: CacheScope | undefined) {
+  const userId = scope?.userId;
+  const organizationId = scope?.organizationId;
+  return useMemo(() => {
+    const persistent =
+      userId && organizationId && typeof indexedDB !== "undefined";
+    return {
+      scope: userId && organizationId ? { organizationId, userId } : undefined,
+      value: persistent
+        ? fallBack(indexedDbTransactionStore(), memoryTransactionStore())
+        : memoryTransactionStore(),
+    };
+  }, [organizationId, userId]);
+}
 
 /** Back, Forward, and links to a category path keep the other filters. */
 function useCategoryRoute(
@@ -135,56 +251,10 @@ function useCategoryRoute(
   }, [currentFilters, onFiltersChange, slug, uncategorized]);
 }
 
-/** Refresh every loaded page so saving a note does not lose the user's place. */
-async function loadFinancePages(
-  filters: FinanceFilters,
-  cursor: string | undefined,
-  minimum: number,
-  current: () => boolean,
-) {
-  const result = await api.finance.data(filters, cursor);
-  if (cursor) return result;
-  while (
-    current() &&
-    result.nextCursor &&
-    result.transactions.length < minimum
-  ) {
-    const next = await api.finance.data(filters, result.nextCursor);
-    result.transactions = mergeTransactions(
-      result.transactions,
-      next.transactions,
-    );
-    result.nextCursor = next.nextCursor;
-  }
-  return result;
-}
-
-function mergeFinancePage(
-  current: FinanceData | undefined,
-  next: FinanceData,
-  cursor: string | undefined,
-) {
-  if (!cursor || !current) return next;
-  return {
-    ...next,
-    transactions: mergeTransactions(current.transactions, next.transactions),
-  };
-}
-
-function mergeTransactions(
-  current: FinanceData["transactions"],
-  next: FinanceData["transactions"],
-) {
-  return [
-    ...new Map(
-      [...current, ...next].map((transaction) => [transaction.id, transaction]),
-    ).values(),
-  ];
-}
-
 function useSyncPolling(
   data: FinanceData | undefined,
   load: () => Promise<void>,
+  onRefused: (cause: unknown) => Promise<void>,
   busy: boolean,
 ) {
   const connections = data?.connections;
@@ -214,7 +284,12 @@ function useSyncPolling(
           )
         )
           await load();
-      } catch {
+      } catch (cause) {
+        // Access ended: stop, keeping nothing shown or saved.
+        if (refused(cause)) {
+          if (active) await onRefused(cause);
+          return;
+        }
         // Keep the saved pending state and retry after temporary request failures.
       }
       if (active) timer = setTimeout(() => void poll(), syncPollMs);
@@ -224,5 +299,5 @@ function useSyncPolling(
       active = false;
       clearTimeout(timer);
     };
-  }, [ids, load, busy]);
+  }, [ids, load, onRefused, busy]);
 }

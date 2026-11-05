@@ -21,7 +21,6 @@ import {
   formatDateTime,
   formatLabel,
 } from "../shared/labels";
-import { useLoad } from "../shared/useLoad";
 import {
   financeConnectionPath,
   financeTransactionPath,
@@ -30,15 +29,20 @@ import { connectionTone } from "./FinanceAccounts";
 import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
 import { FinanceSyncSettings } from "./FinanceSyncSettings";
 import { formatImportedHistory, formatMoney } from "./financeFormat";
+import type { CacheScope } from "./transactionCache";
+import { useGuardedLoad } from "./useCacheScope";
 
 export function FinanceAccountPage({
   id,
   onNavigate,
+  scope,
 }: {
   id: string;
   onNavigate: (path: string) => void;
+  /** Whose saved transactions a refusal here clears. */
+  scope?: CacheScope | undefined;
 }) {
-  const { data, error, setData } = useAccount(id);
+  const { data, error, guard, setData } = useAccount(id, scope);
   const sections = useSectionTabs([
     { id: "overview", label: "Overview" },
     { id: "transactions", label: "Recent transactions" },
@@ -76,6 +80,7 @@ export function FinanceAccountPage({
                 <FinanceSyncSettings
                   id={data.connection.id}
                   dailySync={data.connection.dailySync}
+                  guard={guard}
                   onSaved={(dailySync) =>
                     setData(
                       (current) =>
@@ -204,8 +209,9 @@ function RecentTransactions({
   );
 }
 
-function useAccount(id: string) {
-  return useLoad(
+function useAccount(id: string, givenScope: CacheScope | undefined) {
+  return useGuardedLoad(
+    givenScope,
     useCallback(() => api.finance.account(id), [id]),
     "Could not load account.",
   );

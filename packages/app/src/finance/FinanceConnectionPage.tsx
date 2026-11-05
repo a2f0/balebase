@@ -29,7 +29,6 @@ import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import { countLabel, formatDateTime, formatLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
-import { useLoad } from "../shared/useLoad";
 import { financeAccountPath } from "../workspace/workspacePaths";
 import { connectionTone } from "./FinanceAccounts";
 import { FinanceInstitutionHealth } from "./FinanceInstitutionHealth";
@@ -43,19 +42,25 @@ import {
   syncPollMs,
 } from "./financeConnectionActions";
 import { formatImportedHistory, formatMoney } from "./financeFormat";
+import type { CacheScope } from "./transactionCache";
+import { useGuardedLoad } from "./useCacheScope";
 
 type Connection = FinanceConnectionDetail["connection"];
 
 export function FinanceConnectionPage({
   id,
   onNavigate,
+  scope,
 }: {
   id: string;
   onNavigate: (path: string) => void;
+  /** Whose saved transactions a refusal here clears. */
+  scope?: CacheScope | undefined;
 }) {
-  const { actions, busy, data, error, notice, setData } = useConnection(
+  const { actions, busy, data, error, guard, notice, setData } = useConnection(
     id,
     onNavigate,
+    scope,
   );
   const sections = useConnectionSections();
   return (
@@ -88,6 +93,7 @@ export function FinanceConnectionPage({
         {data && (
           <ConnectionSections
             data={data}
+            guard={guard}
             id={id}
             onNavigate={onNavigate}
             panel={sections.panel}
@@ -111,12 +117,14 @@ function useConnectionSections() {
 
 function ConnectionSections({
   data,
+  guard,
   id,
   onNavigate,
   panel,
   setData,
 }: {
   data: FinanceConnectionDetail;
+  guard: <T>(work: Promise<T>) => Promise<T>;
   id: string;
   onNavigate: (path: string) => void;
   panel: ReturnType<typeof useConnectionSections>["panel"];
@@ -132,11 +140,13 @@ function ConnectionSections({
             // A new connection starts with no answer from the last one.
             key={data.connection.id}
             connection={data.connection}
+            guard={guard}
             onNavigate={onNavigate}
           />
           <FinanceSyncSettings
             id={id}
             dailySync={data.connection.dailySync}
+            guard={guard}
             onSaved={(dailySync) =>
               setData(
                 (current) =>
@@ -166,6 +176,7 @@ function ConnectionSections({
       {panel(
         "activity",
         <ActivityFeed
+          guard={guard}
           // Changes that record activity, not every sync status poll.
           refreshKey={`${data.connection.status}:${data.connection.dailySync}:${data.connection.syncJob?.id}`}
           source={{ id, type: "finance_connection" }}
@@ -335,17 +346,23 @@ function ConnectionAccounts({
   );
 }
 
-function useConnection(id: string, onNavigate: (path: string) => void) {
-  const loaded = useLoad(
+function useConnection(
+  id: string,
+  onNavigate: (path: string) => void,
+  givenScope: CacheScope | undefined,
+) {
+  const loaded = useGuardedLoad(
+    givenScope,
     useCallback(() => api.finance.connection(id), [id]),
     "Could not load connection.",
   );
-  const { data, reload, setData } = loaded;
+  const { data, guard, reload, setData } = loaded;
   const pollError = useSyncStatusPolling(
     id,
     syncPending(data?.connection.syncJob?.status),
     setData,
     reload,
+    guard,
   );
   const action = useAction("Could not update the connection.");
   async function run(work: () => Promise<string>) {
@@ -357,24 +374,26 @@ function useConnection(id: string, onNavigate: (path: string) => void) {
     deleteData: async () => {
       if (!data || !(await confirmDataDeletion(data.connection))) return;
       await action.run(async () => {
-        await api.finance.deleteConnectionData(id);
+        await guard(api.finance.deleteConnectionData(id));
         onNavigate("/finance/connections");
       });
     },
     disconnect: async () => {
       if (!data || !(await confirmDisconnect(data.connection))) return;
       await run(async () => {
-        await api.finance.disconnectConnection(id);
+        await guard(api.finance.disconnectConnection(id));
         return "Bank disconnected. Imported history was retained.";
       });
     },
-    sync: () => run(async () => syncNotice(await api.finance.startSync(id))),
+    sync: () =>
+      run(async () => syncNotice(await guard(api.finance.startSync(id)))),
   };
   return {
     actions,
     busy: action.busy || loaded.loading,
     data,
     error: action.error ?? pollError ?? loaded.error,
+    guard,
     notice: action.notice,
     setData,
   };
@@ -386,6 +405,7 @@ function useSyncStatusPolling(
   pending: boolean,
   setData: Dispatch<SetStateAction<FinanceConnectionDetail | undefined>>,
   reload: () => Promise<unknown>,
+  guard: <T>(work: Promise<T>) => Promise<T>,
 ) {
   const [error, setError] = useState<string>();
   useEffect(() => {
@@ -394,7 +414,7 @@ function useSyncStatusPolling(
     let timer: ReturnType<typeof setTimeout> | undefined;
     async function poll() {
       try {
-        const next = await api.finance.syncStatus(id);
+        const next = await guard(api.finance.syncStatus(id));
         if (!active) return;
         setError(undefined);
         if (syncPending(next.connection.syncJob?.status)) {
@@ -418,7 +438,7 @@ function useSyncStatusPolling(
       active = false;
       clearTimeout(timer);
     };
-  }, [id, pending, reload, setData]);
+  }, [guard, id, pending, reload, setData]);
   return error;
 }
 

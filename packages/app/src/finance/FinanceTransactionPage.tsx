@@ -19,20 +19,32 @@ import { ActivityFeed } from "../activity/ActivityFeed";
 import { IssueList } from "../issues/IssueList";
 import { api } from "../shared/apiClient";
 import { useAction } from "../shared/useAction";
-import { useLoad } from "../shared/useLoad";
 import { transactionIssuePath } from "../workspace/workspacePaths";
 import { FinanceTransactionRow } from "./FinanceTransactionHistory";
 import { FinanceTransactionSourceData } from "./FinanceTransactionSourceData";
+import { type CacheScope, catchUpSavedTransactions } from "./transactionCache";
+import { useGuardedLoad } from "./useCacheScope";
 
 export function FinanceTransactionPage({
   id,
   onNavigate,
+  scope,
 }: {
   id: string;
   onNavigate: (path: string) => void;
+  /** Whose saved transactions this page's changes reach. */
+  scope?: CacheScope | undefined;
 }) {
-  const { data, error, busy, expanded, setExpanded, annotate, categorize } =
-    useTransaction(id);
+  const {
+    data,
+    error,
+    busy,
+    expanded,
+    setExpanded,
+    annotate,
+    categorize,
+    guard,
+  } = useTransaction(id, scope);
   const filters = useMemo<IssueFilters>(
     () => ({ status: "all", type: "finance_transaction", targetId: id, q: "" }),
     [id],
@@ -106,6 +118,7 @@ export function FinanceTransactionPage({
             {sections.panel(
               "activity",
               <ActivityFeed
+                guard={guard}
                 source={{ type: "finance_transaction", id }}
                 refreshKey={data.transaction}
               />,
@@ -116,12 +129,13 @@ export function FinanceTransactionPage({
     </Page>
   );
 }
-function useTransaction(id: string) {
-  const loaded = useLoad(
+function useTransaction(id: string, givenScope: CacheScope | undefined) {
+  const loaded = useGuardedLoad(
+    givenScope,
     useCallback(() => api.finance.transaction(id), [id]),
     "Could not load transaction.",
   );
-  const { setData } = loaded;
+  const { guard, scope, setData } = loaded;
   const action = useAction("Could not update the transaction.");
   const [expanded, setExpanded] = useState<string>();
   const updateTransaction = (change: Partial<FinanceTransaction>) =>
@@ -137,19 +151,29 @@ function useTransaction(id: string) {
     input: FinanceTransactionAnnotation,
   ) {
     await action.run(async () => {
-      const { annotation } = await api.finance.updateTransactionAnnotation(
-        id,
-        input,
+      const { annotation } = await guard(
+        api.finance.updateTransactionAnnotation(id, input),
       );
       updateTransaction({ annotation });
       setExpanded(undefined);
     });
+    void catchUp();
+  }
+  function catchUp() {
+    return guard(
+      catchUpSavedTransactions(scope, (cursor) =>
+        api.finance.transactionChanges(cursor),
+      ),
+    ).catch(() => {
+      // A refusal has cleared the page; anything else waits for a load.
+    });
   }
   async function categorize(_: FinanceTransaction, categoryId: string | null) {
     await action.run(async () => {
-      await api.finance.setTransactionCategory(id, categoryId);
+      await guard(api.finance.setTransactionCategory(id, categoryId));
       updateTransaction({ expenseCategoryId: categoryId });
     });
+    void catchUp();
   }
 
   return {
@@ -160,5 +184,6 @@ function useTransaction(id: string) {
     setExpanded,
     annotate,
     categorize,
+    guard,
   };
 }

@@ -77,24 +77,26 @@ export function FinanceTransactionHistory({
   filters,
   onFiltersChange,
   nextCursor,
-  loadingMore,
   loadError,
-  loadMoreError,
+  loadingLabel,
   onCategorizeMany,
   onLoadMore,
   onReload,
+  total,
   transactions,
   ...handlers
 }: Omit<AnnotationHandlers, "onFilterByName"> & {
   accountName: string | undefined;
+  /** Shown while the list loads, such as a first download's progress. */
+  loadingLabel?: string | undefined;
+  /** How many transactions match the filters; more than shown when paged. */
+  total?: number | undefined;
   onCategorizeMany: CategorizeMany;
   onClearFilter: () => void;
   filters: FinanceFilters;
   onFiltersChange: (filters: FinanceFilters) => void;
   nextCursor: string | null | undefined;
-  loadingMore: boolean;
   loadError: string | undefined;
-  loadMoreError: string | undefined;
   onLoadMore: () => Promise<boolean>;
   onReload: () => Promise<void>;
   transactions: FinanceTransaction[] | undefined;
@@ -110,6 +112,7 @@ export function FinanceTransactionHistory({
         <TransactionSummary
           accountName={accountName}
           onClearFilter={onClearFilter}
+          total={total}
           transactions={transactions}
         />
       }
@@ -158,6 +161,7 @@ export function FinanceTransactionHistory({
       {(!loadError || transactions) && (
         <TransactionContent
           filtered={hasTransactionFilters(filters)}
+          loadingLabel={loadingLabel}
           onCategorizeMany={onCategorizeMany}
           onFilterByName={(name) => onFiltersChange({ ...filters, name })}
           selection={selection}
@@ -165,16 +169,15 @@ export function FinanceTransactionHistory({
           {...handlers}
         />
       )}
-      {loadMoreError && <Banner tone="danger">{loadMoreError}</Banner>}
       {nextCursor && transactions && (
         <InfiniteScroll
-          autoLoad={!loadError && !loadMoreError}
+          autoLoad={!loadError}
           cursor={nextCursor}
-          busy={loadingMore}
+          busy={false}
           disabled={handlers.busy}
           onLoadMore={onLoadMore}
         >
-          {loadMoreError ? "Retry loading more" : "Load more transactions"}
+          Load more transactions
         </InfiniteScroll>
       )}
     </PageSection>
@@ -184,16 +187,23 @@ export function FinanceTransactionHistory({
 function TransactionSummary({
   accountName,
   onClearFilter,
+  total,
   transactions,
 }: {
   accountName: string | undefined;
   onClearFilter: () => void;
+  total: number | undefined;
   transactions: FinanceTransaction[] | undefined;
 }) {
+  const shown = transactions?.length;
   return (
     <div className="cluster">
       <span className="sectionCount" aria-live="polite">
-        {transactions ? `${transactions.length} shown` : ""}
+        {shown === undefined
+          ? ""
+          : total !== undefined && total > shown
+            ? `${shown.toLocaleString()} of ${total.toLocaleString()} shown`
+            : `${shown.toLocaleString()} shown`}
         {accountName ? ` for ${accountName}` : ""}
       </span>
       {accountName && (
@@ -247,17 +257,20 @@ function CategoryFilterNotice({
 
 function TransactionContent({
   filtered,
+  loadingLabel,
   onCategorizeMany,
   selection,
   transactions,
   ...handlers
 }: AnnotationHandlers & {
   filtered: boolean;
+  loadingLabel: string | undefined;
   onCategorizeMany: CategorizeMany;
   selection: TransactionSelection;
   transactions: FinanceTransaction[] | undefined;
 }) {
-  if (!transactions) return <LoadingState label="Loading finances…" />;
+  if (!transactions)
+    return <LoadingState label={loadingLabel ?? "Loading finances…"} />;
   if (!transactions.length) {
     return (
       <EmptyState

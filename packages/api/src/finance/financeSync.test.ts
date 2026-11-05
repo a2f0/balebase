@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { FinanceTransactionChanges } from "@balebase/validators/finance";
 import { jobRunDetail } from "../jobs/jobHistory";
 import { scheduleJobs } from "../jobs/jobScheduler";
 import { consumeJobs as consumeFinanceSync } from "../jobs/jobWorker";
@@ -344,6 +345,116 @@ describe("durable finance sync", () => {
     expect(
       fixture.database.query("SELECT cursor FROM plaid_items").get(),
     ).toEqual({ cursor: "finished" });
+  });
+
+  it("keeps device copies whole across an interrupted, resumed, and restarted Plaid sync", async () => {
+    const fixture = await queuedFixture();
+    const plaidTransaction = (id: string, amount: number) => {
+      const transaction = transactionPage().added[0];
+      if (!transaction) throw new Error("Missing transaction fixture.");
+      return { ...transaction, amount, transaction_id: id };
+    };
+    const device = new Map<string, number>();
+    let cursor: string | null = null;
+    const pullDevice = async () => {
+      for (;;) {
+        const { body }: { body: FinanceTransactionChanges } = await jsonRequest(
+          fixture.app,
+          fixture.bindings,
+          `/transactions/changes${cursor ? `?cursor=${cursor}` : ""}`,
+          "GET",
+        );
+        for (const transaction of body.transactions)
+          device.set(transaction.id, transaction.amount);
+        for (const id of body.removedIds) device.delete(id);
+        cursor = body.cursor;
+        if (!body.more) return;
+      }
+    };
+    const server = () =>
+      new Map(
+        (
+          fixture.database
+            .query(
+              "SELECT id, amount FROM plaid_transactions WHERE source_status = 'active'",
+            )
+            .all() as { amount: number; id: string }[]
+        ).map(({ amount, id }) => [id, amount]),
+      );
+    let failSecondPage = true;
+    let mutateOnce = true;
+    const plaid: PlaidRequest = async <T>(
+      _env: Bindings,
+      _path: string,
+      body: PlaidRequestBody,
+    ) => {
+      const page = transactionPage();
+      if (!body.cursor) {
+        page.added = [plaidTransaction("a", 1), plaidTransaction("b", 2)];
+        page.has_more = true;
+        page.next_cursor = "page-1";
+        return page as T;
+      }
+      if (failSecondPage) {
+        failSecondPage = false;
+        throw new PlaidApiError("Try later", "INTERNAL_SERVER_ERROR", 500);
+      }
+      if (mutateOnce) {
+        mutateOnce = false;
+        throw new PlaidApiError(
+          "Restart pagination",
+          "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION",
+          400,
+        );
+      }
+      page.added = [plaidTransaction("c", 3)];
+      page.modified = [plaidTransaction("a", 10)];
+      page.removed = [{ transaction_id: "b" }];
+      page.next_cursor = "finished";
+      return page as T;
+    };
+    const { body: job } = await fixture.request<{ id: string }>(
+      "/sync-jobs",
+      "POST",
+    );
+    // The first page lands; the second fails and the job waits to retry.
+    await fixture.deliver(job.id, plaid);
+    await pullDevice();
+    expect(device.size).toBe(2);
+    expect(device).toEqual(server());
+    // The retry resumes at the saved Plaid cursor, then Plaid asks for a
+    // restart from it; the replayed first page rewrites its rows.
+    const status = () =>
+      (
+        fixture.database.query("SELECT status FROM job_runs").get() as {
+          status: string;
+        }
+      ).status;
+    for (let attempt = 0; attempt < 10 && status() !== "succeeded"; attempt++) {
+      fixture.database.run("UPDATE job_runs SET available_at = '2000-01-01'");
+      await fixture.deliver(job.id, plaid);
+      // A device may pull between any two attempts.
+      await pullDevice();
+    }
+    expect(fixture.database.query("SELECT status FROM job_runs").get()).toEqual(
+      { status: "succeeded" },
+    );
+    // Both interruptions happened.
+    expect([failSecondPage, mutateOnce]).toEqual([false, false]);
+    await pullDevice();
+    expect(device).toEqual(server());
+    expect(device.size).toBe(2);
+    expect(
+      device.get(
+        (
+          fixture.database
+            .query(
+              "SELECT id FROM plaid_transactions WHERE plaid_transaction_id = 'a'",
+            )
+            .get() as { id: string }
+        ).id,
+      ),
+    ).toBe(10);
   });
 
   it("backs off transient failures, stops after five attempts, and allows a fresh manual retry", async () => {

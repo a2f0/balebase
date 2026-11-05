@@ -14,6 +14,7 @@ import { Finance } from "../finance/Finance";
 import { FinanceAccountPage } from "../finance/FinanceAccountPage";
 import { FinanceConnectionPage } from "../finance/FinanceConnectionPage";
 import { FinanceTransactionPage } from "../finance/FinanceTransactionPage";
+import type { CacheScope } from "../finance/transactionCache";
 import { Inbox } from "../inbox/Inbox";
 import { Issues } from "../issues/Issues";
 import { OrganizationInvitation } from "../organizations/OrganizationInvitation";
@@ -123,7 +124,14 @@ const routes: WorkspaceRoute[] = [
   {
     matches: within("/finance"),
     page: "finance",
-    render: ({ navigate, pathname }) => financeContent(pathname, navigate),
+    render: ({ navigate, pathname, user, workspace }) =>
+      financeContent(
+        pathname,
+        navigate,
+        workspace.activeOrganizationId
+          ? { organizationId: workspace.activeOrganizationId, userId: user.id }
+          : undefined,
+      ),
   },
   {
     matches: within("/businesses"),
@@ -239,11 +247,20 @@ export function workspaceRoute(pathname: string) {
   return routes.find((route) => route.matches(pathname)) ?? libraryRoute;
 }
 
-function financeContent(pathname: string, navigate: (path: string) => void) {
+function financeContent(
+  pathname: string,
+  navigate: (path: string) => void,
+  scope: CacheScope | undefined,
+) {
   const accountId = recordIdForPath(pathname, "/finance/accounts");
   if (accountId)
     return (
-      <FinanceAccountPage key={pathname} id={accountId} onNavigate={navigate} />
+      <FinanceAccountPage
+        key={pathname}
+        id={accountId}
+        onNavigate={navigate}
+        scope={scope}
+      />
     );
   const connectionId = recordIdForPath(pathname, "/finance/connections");
   if (connectionId)
@@ -252,6 +269,7 @@ function financeContent(pathname: string, navigate: (path: string) => void) {
         key={pathname}
         id={connectionId}
         onNavigate={navigate}
+        scope={scope}
       />
     );
   const transactionId = recordIdForPath(pathname, "/finance/transactions");
@@ -261,7 +279,8 @@ function financeContent(pathname: string, navigate: (path: string) => void) {
         key={pathname}
         id={transactionId}
         onNavigate={navigate}
+        scope={scope}
       />
     );
-  return <Finance onNavigate={navigate} pathname={pathname} />;
+  return <Finance onNavigate={navigate} pathname={pathname} scope={scope} />;
 }

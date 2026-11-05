@@ -27,15 +27,19 @@ type Connection = FinanceConnectionDetail["connection"];
  */
 export function FinanceInstitutionHealth({
   connection,
+  guard,
   onNavigate,
 }: {
   connection: Connection;
+  /** The page's refusal handling: access ending clears what it shows. */
+  guard: <T>(work: Promise<T>) => Promise<T>;
   onNavigate: (path: string) => void;
 }) {
   const bank = connection.institutionName ?? "this bank";
   const { busy, check, error, health } = useInstitutionHealth(
     connection.id,
     connection.status === "error",
+    guard,
   );
   if (connection.status === "disconnected") return null;
   return (
@@ -95,7 +99,11 @@ export function FinanceInstitutionHealth({
   );
 }
 
-function useInstitutionHealth(id: string, checkNow: boolean) {
+function useInstitutionHealth(
+  id: string,
+  checkNow: boolean,
+  guard: <T>(work: Promise<T>) => Promise<T>,
+) {
   const [health, setHealth] = useState<Health>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -105,7 +113,7 @@ function useInstitutionHealth(id: string, checkNow: boolean) {
     setBusy(true);
     setError(undefined);
     try {
-      const next = await api.finance.institutionHealth(id);
+      const next = await guard(api.finance.institutionHealth(id));
       if (request === latest.current) setHealth(next);
     } catch (cause) {
       if (request === latest.current)
@@ -113,7 +121,7 @@ function useInstitutionHealth(id: string, checkNow: boolean) {
     } finally {
       if (request === latest.current) setBusy(false);
     }
-  }, [id]);
+  }, [guard, id]);
   // A check still running when the page closes must not update it.
   useEffect(
     () => () => {

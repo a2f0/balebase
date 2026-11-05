@@ -154,6 +154,7 @@ const actionLabels: Record<string, string> = {
 
 export function ActivityFeed({
   compact = false,
+  guard,
   onNavigate,
   refreshKey,
   resourceType,
@@ -161,6 +162,8 @@ export function ActivityFeed({
   title,
 }: {
   compact?: boolean;
+  /** Wraps each request, as a page's handling of refusals. */
+  guard?: (<T>(work: Promise<T>) => Promise<T>) | undefined;
   onNavigate?: (pathname: string) => void;
   refreshKey?: unknown;
   resourceType?: ActivityResourceType | undefined;
@@ -176,7 +179,7 @@ export function ActivityFeed({
     nextCursor,
     refreshing,
     reload,
-  } = useActivityPage(source, refreshKey, resourceType);
+  } = useActivityPage(source, refreshKey, resourceType, guard);
   return (
     <PageSection
       className={compact ? "activityFeedCompact" : undefined}
@@ -217,19 +220,21 @@ function useActivityPage(
   source: ActivitySource,
   refreshKey: unknown,
   resourceType: ActivityResourceType | undefined,
+  guard: (<T>(work: Promise<T>) => Promise<T>) | undefined,
 ) {
   const sourceId = source?.id;
   const sourceType = source?.type;
   const fetchPage = useCallback(
     async (cursor?: string) => {
-      const page = await listActivity(
+      const request = listActivity(
         sourceId && sourceType ? { id: sourceId, type: sourceType } : undefined,
         cursor,
         resourceType,
       );
+      const page = await (guard ? guard(request) : request);
       return { items: page.events, nextCursor: page.nextCursor };
     },
-    [sourceId, sourceType, resourceType],
+    [guard, sourceId, sourceType, resourceType],
   );
   return useCursorPages(fetchPage, "Could not load activity.", refreshKey);
 }
