@@ -41,4 +41,23 @@ describe("workspace organizations", () => {
     await act(async () => held.resolve(Response.json({ organizations: [] })));
     expect(workspace?.listed).toBe(true);
   });
+
+  it("ignores a previous account's request that settles late", async () => {
+    const stale = Promise.withResolvers<Response>();
+    respond(() => stale.promise);
+    const view = await mount(<Probe userId="person" />);
+    respond(() =>
+      Response.json({
+        organizations: [{ id: "org-2", name: "Two", slug: "two" }],
+      }),
+    );
+    await view.render(<Probe userId="someone-else" />);
+    await act(async () => undefined);
+    expect(workspace?.organizations.map(({ id }) => id)).toEqual(["org-2"]);
+    await act(async () =>
+      stale.resolve(Response.json({ error: "Gone." }, { status: 503 })),
+    );
+    expect(workspace?.organizations.map(({ id }) => id)).toEqual(["org-2"]);
+    expect(workspace?.listed).toBe(true);
+  });
 });

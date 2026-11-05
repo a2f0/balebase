@@ -194,6 +194,25 @@ describe("loading cached finances", () => {
     expect(offline.data.organizationId).toBe("org");
   });
 
+  it("catches up a saved copy that finished empty from other pages", async () => {
+    const store = memoryTransactionStore();
+    let feeds = 0;
+    const counted = {
+      ...sources,
+      changes: async () => {
+        feeds++;
+        // Before any bank import the feed ends with no cursor.
+        return feeds === 1 ? { ...feed(), cursor: null } : feed("a");
+      },
+    };
+    await loadFinance(store, scope, true, counted);
+    await loadFinance(store, scope, false, counted);
+    expect(feeds).toBe(2);
+    expect((await store.read(scope)).transactions.map(({ id }) => id)).toEqual([
+      "a",
+    ]);
+  });
+
   it("keeps the saved copy for errors that are not refusals", async () => {
     const store = memoryTransactionStore();
     await loadFinance(store, scope, true, sources);

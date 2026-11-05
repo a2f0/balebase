@@ -71,7 +71,8 @@ export class SignedOut extends Error {
 /** Where a device keeps transactions: IndexedDB, or memory without it. */
 export interface TransactionStore {
   read(scope: CacheScope): Promise<CachedFinance>;
-  position(scope: CacheScope): Promise<Position>;
+  /** Where a pull starts; `saved` once any page (even an empty one) was. */
+  position(scope: CacheScope): Promise<Position & { saved: boolean }>;
   /**
    * Applies one feed page, with its cursor, in one write, if the kept cursor
    * is still `from`'s. False when another pull (another tab) moved it first;
@@ -154,7 +155,12 @@ export function memoryTransactionStore(): TransactionStore {
       return { ...state, transactions: [...rows.values()] };
     },
     async position(scope) {
-      return { cursor: entry(scope).state.cursor, epoch: epochOf(scope) };
+      const { state } = entry(scope);
+      return {
+        cursor: state.cursor,
+        epoch: epochOf(scope),
+        saved: state.cursor !== null || state.completedAt !== null,
+      };
     },
     async apply(scope, from, page, now) {
       check(scope, from.epoch);
@@ -315,7 +321,11 @@ export function indexedDbTransactionStore(): TransactionStore {
         // clearing a former organization finds (and ends) a pull still
         // waiting on its first page.
         stores.state.put(state);
-        return { cursor: state.cursor, epoch };
+        return {
+          cursor: state.cursor,
+          epoch,
+          saved: state.cursor !== null || state.completedAt !== null,
+        };
       });
     },
     apply(scope, from, page, now) {
@@ -520,7 +530,7 @@ export async function catchUpSavedTransactions(
 ) {
   if (!scope || !store) return;
   try {
-    if ((await store.position(scope)).cursor === null) return;
+    if (!(await store.position(scope)).saved) return;
     await pullTransactions(scope, store, fetchPage);
   } catch (cause) {
     // Access ended: keep nothing. Otherwise the next load catches up.

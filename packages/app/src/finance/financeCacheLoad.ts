@@ -98,10 +98,10 @@ async function loadOnce(
   const cacheScope = scope ?? anyOrganization;
   // A refusal elsewhere (another tab) after this point keeps this load's
   // summary from being saved.
-  const { cursor, epoch } = await store.position(cacheScope);
+  const { epoch, saved: hasCopy } = await store.position(cacheScope);
   // Other pages keep a saved copy current too, so what they change (such
   // as deleting a bank's data) reaches it.
-  const pull = keepTransactions || cursor !== null;
+  const pull = keepTransactions || hasCopy;
   const requests = [
     fetchSummary(),
     pull

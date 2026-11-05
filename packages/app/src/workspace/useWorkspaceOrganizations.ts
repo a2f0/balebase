@@ -36,11 +36,23 @@ export function useWorkspaceOrganizations(
       setOrganizations(undefined);
       return;
     }
-    void loadOrganizations().then(
-      () => setListedFor(signedInUserId),
-      () => setOrganizations([]),
+    // A previous account's request, settling late, must not replace this
+    // one's list.
+    let current = true;
+    api.organizationSettings.organizations().then(
+      (listed) => {
+        if (!current) return;
+        setOrganizations(listed);
+        setListedFor(signedInUserId);
+      },
+      () => {
+        if (current) setOrganizations([]);
+      },
     );
-  }, [loadOrganizations, signedInUserId]);
+    return () => {
+      current = false;
+    };
+  }, [signedInUserId]);
   const activeOrganizationId = organizations
     ? resolveActiveOrganizationId(
         session?.session.activeOrganizationId,
