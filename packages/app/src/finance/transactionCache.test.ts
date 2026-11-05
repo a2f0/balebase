@@ -117,7 +117,12 @@ describe("pulling transactions", () => {
     const racing = async (cursor: string | null) => {
       const answer = await pages.fetchPage(cursor);
       if (cursor === "1" && pages.requested.length === 2) {
-        await store.apply(scope, "1", page("2", false, [row("b")]), "now");
+        await store.apply(
+          scope,
+          { cursor: "1", epoch: "" },
+          page("2", false, [row("b")]),
+          "now",
+        );
       }
       return answer;
     };
@@ -135,7 +140,12 @@ describe("pulling transactions", () => {
 
   it("starts over once when the server is behind the device, and refuses other organizations", async () => {
     const store = memoryTransactionStore();
-    await store.apply(scope, null, page("9", false, [row("stale")]), "then");
+    await store.apply(
+      scope,
+      { cursor: null, epoch: "" },
+      page("9", false, [row("stale")]),
+      "then",
+    );
     const pages = feed({
       "9": { ...page("", false, []), cursor: null, reset: true },
       start: page("1", false, [row("fresh")]),

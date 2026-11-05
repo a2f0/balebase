@@ -31,17 +31,34 @@ interface CacheState {
   summary: FinanceSummary | null;
 }
 
+/**
+ * Where a pull stands: the kept cursor, and the person's epoch, which
+ * signing out advances so pages requested before it are not kept after.
+ */
+interface Position {
+  cursor: string | null;
+  epoch: string;
+}
+
+/** Raised for a page that arrives after its person signed out. */
+class SignedOut extends Error {
+  constructor() {
+    super("Signed out.");
+  }
+}
+
 /** Where a device keeps transactions: IndexedDB, or memory without it. */
 export interface TransactionStore {
   read(scope: CacheScope): Promise<CachedFinance>;
-  cursor(scope: CacheScope): Promise<string | null>;
+  position(scope: CacheScope): Promise<Position>;
   /**
    * Applies one feed page, with its cursor, in one write, if the kept cursor
-   * is still `from`. False when another pull (another tab) moved it first.
+   * is still `from`'s. False when another pull (another tab) moved it first;
+   * `SignedOut` when the person signed out since `from` was read.
    */
   apply(
     scope: CacheScope,
-    from: string | null,
+    from: Position,
     page: FinanceTransactionChanges,
     now: string,
   ): Promise<boolean>;
@@ -53,6 +70,11 @@ const databaseName = "balebase-finance";
 
 function scopeKey(scope: CacheScope) {
   return JSON.stringify([apiUrl, scope.userId, scope.organizationId]);
+}
+
+/** The state key holding a person's epoch, beside their scopes' keys. */
+function epochKey(userId: string) {
+  return JSON.stringify([apiUrl, userId]);
 }
 
 function emptyState(scope: string): CacheState {
@@ -91,12 +113,12 @@ export function memoryTransactionStore(): TransactionStore {
       const { rows, state } = entry(scope);
       return { ...state, transactions: [...rows.values()] };
     },
-    async cursor(scope) {
-      return entry(scope).state.cursor;
+    async position(scope) {
+      return { cursor: entry(scope).state.cursor, epoch: "" };
     },
     async apply(scope, from, page, now) {
       const found = entry(scope);
-      if (found.state.cursor !== from) return false;
+      if (found.state.cursor !== from.cursor) return false;
       for (const transaction of page.transactions)
         found.rows.set(transaction.id, transaction);
       for (const id of page.removedIds) found.rows.delete(id);
@@ -184,6 +206,12 @@ function readState(store: IDBObjectStore, key: string) {
   );
 }
 
+function readEpoch(store: IDBObjectStore, userId: string) {
+  return request(store.get(epochKey(userId))).then(
+    (found) => (found as { epoch: string } | undefined)?.epoch ?? "",
+  );
+}
+
 function deleteScope(store: IDBObjectStore, key: string) {
   return request(store.index("scope").getAllKeys(IDBKeyRange.only(key))).then(
     (keys) => {
@@ -213,16 +241,24 @@ export function indexedDbTransactionStore(): TransactionStore {
         };
       });
     },
-    cursor(scope) {
+    position(scope) {
       return inTransaction("readonly", async (stores) => {
-        return (await readState(stores.state, scopeKey(scope))).cursor;
+        const [state, epoch] = await Promise.all([
+          readState(stores.state, scopeKey(scope)),
+          readEpoch(stores.state, scope.userId),
+        ]);
+        return { cursor: state.cursor, epoch };
       });
     },
     apply(scope, from, page, now) {
       const key = scopeKey(scope);
       return inTransaction("readwrite", async (stores) => {
-        const state = await readState(stores.state, key);
-        if (state.cursor !== from) return false;
+        const [state, epoch] = await Promise.all([
+          readState(stores.state, key),
+          readEpoch(stores.state, scope.userId),
+        ]);
+        if (epoch !== from.epoch) throw new SignedOut();
+        if (state.cursor !== from.cursor) return false;
         for (const transaction of page.transactions)
           stores.transactions.put({
             id: transaction.id,
@@ -253,18 +289,21 @@ export function indexedDbTransactionStore(): TransactionStore {
 
 /**
  * Drops everything this device keeps for a person, in every organization, as
- * on signing out. Other signed-in accounts keep theirs.
+ * on signing out, and advances their epoch so pulls still running (in any
+ * tab) keep none of the pages they receive. Other accounts keep theirs.
  */
 export async function clearUserTransactions(userId: string) {
   if (typeof indexedDB === "undefined") return;
   await inTransaction("readwrite", async (stores) => {
     const keys = (await request(stores.state.getAllKeys())) as string[];
     for (const key of keys) {
-      const [api, owner] = JSON.parse(key) as unknown[];
-      if (api !== apiUrl || owner !== userId) continue;
+      const [api, owner, organizationId] = JSON.parse(key) as unknown[];
+      if (api !== apiUrl || owner !== userId || organizationId === undefined)
+        continue;
       stores.state.delete(key);
       await deleteScope(stores.transactions, key);
     }
+    stores.state.put({ epoch: crypto.randomUUID(), scope: epochKey(userId) });
   });
 }
 
@@ -305,8 +344,8 @@ async function pullPages(
   let saved = 0;
   let reset = false;
   for (;;) {
-    const from = await store.cursor(scope);
-    const page = await fetchPage(from);
+    const from = await store.position(scope);
+    const page = await fetchPage(from.cursor);
     // The session's organization changed under this pull.
     if (!anyOrganization && page.organizationId !== scope.organizationId)
       throw new Error("The active organization changed. Reload Finance.");

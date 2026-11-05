@@ -1,17 +1,14 @@
-import { ApiError, type FinanceFilters } from "@balebase/api-client";
+import type { FinanceFilters } from "@balebase/api-client";
 import type { FinanceData } from "@balebase/validators/finance";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
+import { fallBack, loadFinance } from "./financeCacheLoad";
 import { syncPending, syncPollMs } from "./financeConnectionActions";
-import { newestFirst } from "./financeTransactions";
 import {
   type CacheScope,
-  type FinanceSummary,
   indexedDbTransactionStore,
   memoryTransactionStore,
-  pullTransactions,
-  type TransactionStore,
 } from "./transactionCache";
 
 type CategoryRoute = Pick<FinanceFilters, "categorySlug" | "uncategorized">;
@@ -62,8 +59,12 @@ export function useFinanceData(
         store.value,
         store.scope,
         keepTransactions,
-        (saved) => {
-          if (current()) setSaving(saved);
+        {
+          changes: (cursor) => api.finance.transactionChanges(cursor),
+          onProgress: (saved) => {
+            if (current()) setSaving(saved);
+          },
+          summary: () => api.finance.summary(),
         },
       );
       if (!current()) return;
@@ -135,96 +136,6 @@ function useTransactionStore(scope: CacheScope | undefined) {
         : memoryTransactionStore(),
     };
   }, [organizationId, userId]);
-}
-
-/**
- * IndexedDB can be missing in practice (private windows, full storage);
- * after its first failure the page keeps transactions in memory instead.
- */
-function fallBack(
-  primary: TransactionStore,
-  secondary: TransactionStore,
-): TransactionStore {
-  let active = primary;
-  async function attempt<T>(run: (store: TransactionStore) => Promise<T>) {
-    if (active === secondary) return run(secondary);
-    try {
-      return await run(primary);
-    } catch {
-      active = secondary;
-      return run(secondary);
-    }
-  }
-  return {
-    apply: (...args) => attempt((store) => store.apply(...args)),
-    clear: (...args) => attempt((store) => store.clear(...args)),
-    cursor: (...args) => attempt((store) => store.cursor(...args)),
-    read: (...args) => attempt((store) => store.read(...args)),
-    saveSummary: (...args) => attempt((store) => store.saveSummary(...args)),
-  };
-}
-
-/** A refusal (signed out, no Finance access) rather than an unreachable server. */
-function refused(cause: unknown) {
-  return cause instanceof ApiError && cause.status < 500;
-}
-
-const anyOrganization: CacheScope = { organizationId: "", userId: "" };
-
-async function loadFinance(
-  store: TransactionStore,
-  scope: CacheScope | undefined,
-  keepTransactions: boolean,
-  onProgress: (saved: number) => void,
-) {
-  const cacheScope = scope ?? anyOrganization;
-  const [summary, pulled] = await Promise.allSettled([
-    api.finance.summary(),
-    keepTransactions
-      ? pullTransactions(
-          cacheScope,
-          store,
-          (cursor) => api.finance.transactionChanges(cursor),
-          onProgress,
-          // Without a known organization there is nothing to check against.
-          scope === undefined,
-        )
-      : Promise.resolve(),
-  ]);
-  const failure = [summary, pulled].find(
-    (result): result is PromiseRejectedResult => result.status === "rejected",
-  )?.reason;
-  if (failure !== undefined && refused(failure)) {
-    // Someone who lost access keeps nothing on the device.
-    if (keepTransactions) await store.clear(cacheScope);
-    throw failure;
-  }
-  const latest =
-    summary.status === "fulfilled" ? summaryOf(summary.value) : undefined;
-  if (!keepTransactions) {
-    if (!latest) throw failure;
-    return { data: { ...latest, nextCursor: null, transactions: [] } };
-  }
-  if (latest) await store.saveSummary(cacheScope, latest);
-  const saved = await store.read(cacheScope);
-  const base = latest ?? saved.summary;
-  // Offline, show the saved copy if a download ever finished.
-  if (failure !== undefined && (!base || !saved.completedAt)) throw failure;
-  if (!base) throw new Error("Could not load finances.");
-  return {
-    data: {
-      ...base,
-      nextCursor: null,
-      transactions: saved.transactions.sort(newestFirst),
-    },
-    savedAt:
-      failure === undefined ? undefined : (saved.completedAt ?? undefined),
-  };
-}
-
-function summaryOf(data: FinanceData): FinanceSummary {
-  const { nextCursor: _cursor, transactions: _transactions, ...summary } = data;
-  return summary;
 }
 
 /** Back, Forward, and links to a category path keep the other filters. */

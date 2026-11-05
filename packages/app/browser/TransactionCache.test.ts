@@ -99,8 +99,8 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
       async (who, first, stale) => {
         const store = window.transactionCacheTest?.store;
         return [
-          await store?.apply(who, null, first, "t1"),
-          await store?.apply(who, null, stale, "t2"),
+          await store?.apply(who, { cursor: null, epoch: "" }, first, "t1"),
+          await store?.apply(who, { cursor: null, epoch: "" }, stale, "t2"),
         ];
       },
       scope,
@@ -125,7 +125,12 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
         transactions: [{ id: "c", amount: 1, bad: () => undefined }],
       } as unknown as FinanceTransactionChanges;
       try {
-        await window.transactionCacheTest?.store.apply(who, "1", broken, "t3");
+        await window.transactionCacheTest?.store.apply(
+          who,
+          { cursor: "1", epoch: "" },
+          broken,
+          "t3",
+        );
         return "stored";
       } catch (cause) {
         return (cause as Error).name;
@@ -176,7 +181,7 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
         for (const which of scopes)
           await window.transactionCacheTest?.store.apply(
             which,
-            null,
+            { cursor: null, epoch: "" },
             data,
             "t4",
           );
@@ -192,6 +197,36 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
     });
     expect((await kept(target, others[0])).rows).toEqual([]);
     expect((await kept(target, others[1])).rows).toEqual(["z:1"]);
+
+    // A page that arrives after signing out (here, a slow first page) is
+    // not kept, even from a pull that started before.
+    const late = await target.evaluate(
+      async (who, data) => {
+        const cache = window.transactionCacheTest;
+        if (!cache) throw new Error("No fixture");
+        const answer = Promise.withResolvers<FinanceTransactionChanges>();
+        const asked = Promise.withResolvers<void>();
+        const pull = cache.pullTransactions(who, cache.store, () => {
+          asked.resolve();
+          return answer.promise;
+        });
+        await asked.promise;
+        await cache.clearUserTransactions("person");
+        answer.resolve(data);
+        return pull.then(
+          () => "kept",
+          (cause: Error) => cause.message,
+        );
+      },
+      scope,
+      page("3", false, [row("late")]),
+    );
+    expect(late).toBe("Signed out.");
+    expect(await kept(target)).toEqual({
+      completed: false,
+      cursor: null,
+      rows: [],
+    });
   } finally {
     await closeChrome(browser);
     await server.stop(true);
