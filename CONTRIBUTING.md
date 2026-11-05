@@ -177,6 +177,9 @@ it.
   [API client onboarding](docs/api-client.md) covers other hosts.
 - Load with `useLoad`, mutate with `useAction`, and page cursor lists with
   `useCursorPages` and `InfiniteScroll`, all in `shared/`.
+- Give state whose fields change together one union and one reducer, as
+  `shared/cursorPagesState.ts` does: tag each request in its events so only
+  the request in flight can finish it, and test the transitions directly.
 - Show errors with `errorMessage` from `shared/errors.ts` or with
   `ErrorToast` from `billing/ErrorToast.tsx`, which links to Billing when an
   upgrade resolves the error.
