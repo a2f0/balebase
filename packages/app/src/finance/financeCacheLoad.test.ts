@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { ApiError } from "@balebase/api-client";
 import type {
   FinanceData,
@@ -273,6 +273,31 @@ describe("loading cached finances", () => {
       "a",
       "b",
     ]);
+  });
+
+  it("shows the saved copy once a stalled summary times out", async () => {
+    const store = memoryTransactionStore();
+    await loadFinance(store, scope, true, sources);
+    const timeouts: (() => void)[] = [];
+    const realSetTimeout = globalThis.setTimeout;
+    const spy = spyOn(globalThis, "setTimeout").mockImplementation(((
+      handler: () => void,
+      delay?: number,
+    ) => {
+      if (delay !== 60_000) return realSetTimeout(handler, delay);
+      timeouts.push(handler);
+      return 0;
+    }) as unknown as typeof setTimeout);
+    const load = loadFinance(store, scope, true, {
+      ...sources,
+      summary: () => new Promise<FinanceData>(() => {}),
+    });
+    await Bun.sleep(0);
+    spy.mockRestore();
+    for (const fire of timeouts.splice(0)) fire();
+    const loaded = await load;
+    expect(ids(loaded.data)).toEqual(["a", "b"]);
+    expect(loaded.savedAt).toBeString();
   });
 
   it("saves nothing read in another account's session", async () => {

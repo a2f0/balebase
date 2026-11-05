@@ -11,6 +11,7 @@ import {
   refused,
   SignedOut,
   type TransactionStore,
+  withTimeout,
 } from "./transactionCache";
 
 /** Raised once when a store gives up on IndexedDB for memory. */
@@ -114,8 +115,9 @@ async function loadOnce(
   // as deleting a bank's data) reaches it.
   const pull = keepTransactions || hasCopy;
   const requests = [
-    // Checked on arrival, so a stalled feed cannot delay the mismatch.
-    fetchSummary().then((data) => {
+    // Checked on arrival, so a stalled feed cannot delay the mismatch; and
+    // bounded, so a stalled summary cannot keep the load from ending.
+    withTimeout(fetchSummary()).then((data) => {
       if (
         scope &&
         (data.organizationId !== scope.organizationId ||

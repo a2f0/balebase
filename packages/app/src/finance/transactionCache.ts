@@ -650,7 +650,8 @@ export async function catchUpSavedTransactions(
  */
 const pageTimeoutMs = 60_000;
 
-function withTimeout<T>(work: Promise<T>): Promise<T> {
+/** `work`, or a timeout error once it takes longer than a feed page may. */
+export function withTimeout<T>(work: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error("Downloading transactions timed out. Try again.")),
