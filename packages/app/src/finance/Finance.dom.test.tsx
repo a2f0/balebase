@@ -723,25 +723,32 @@ describe("Bulk categorization", () => {
 
   /**
    * A server that keeps the categories it saves, so the refresh after a bulk
-   * save lists them; `hold` delays each save, `fail` refuses it.
+   * save lists them; `hold` delays each save, and `fail` refuses the saves
+   * it picks by their order (0 for the first).
    */
-  function serveCategories(options: { fail?: boolean; hold?: Promise<void> }) {
+  function serveCategories(options: {
+    fail?: (attempt: number) => boolean;
+    hold?: Promise<void>;
+    transactions?: FinanceTransaction[];
+  }) {
+    const listed = options.transactions ?? rows;
     const stored = new Map<string, string | null>();
-    const saves: unknown[] = [];
+    const saves: { categoryId: string | null; transactionIds: string[] }[] = [];
+    let attempts = 0;
     const server = { loads: 0, saves };
     respond(async (_url, init) => {
       if (init?.method !== "PUT") {
         server.loads++;
         return Response.json({
           ...listing,
-          transactions: rows.map((row) => ({
+          transactions: listed.map((row) => ({
             ...row,
             expenseCategoryId: stored.get(row.id) ?? null,
           })),
         });
       }
       await options.hold;
-      if (options.fail) {
+      if (options.fail?.(attempts++)) {
         return Response.json({ error: "Could not save." }, { status: 500 });
       }
       const body = JSON.parse(String(init.body));
@@ -846,7 +853,7 @@ describe("Bulk categorization", () => {
     it(`settles on the server's rows when a load lands during a bulk save that ${outcome}`, async () => {
       const save = Promise.withResolvers<void>();
       const server = serveCategories({
-        fail: outcome === "failed",
+        fail: () => outcome === "failed",
         hold: save.promise,
       });
       await mountFinance();
@@ -862,6 +869,37 @@ describe("Bulk categorization", () => {
       expect(categoryOf("Coffee")).toBe(outcome === "saved" ? "meals" : "");
     });
   }
+
+  it("keeps the batches that saved when a later one fails, and retries only the rest", async () => {
+    const many = Array.from({ length: 252 }, (_, index) =>
+      transaction(`Row ${index}`),
+    );
+    const server = serveCategories({
+      fail: (attempt) => attempt === 1,
+      transactions: many,
+    });
+    await mountFinance();
+    await check("Select all shown transactions");
+    await setBulkCategory("meals");
+    expect(container.textContent).toContain("Could not save.");
+    expect(
+      server.saves.map(({ transactionIds }) => transactionIds.length),
+    ).toEqual([250]);
+    // The first batch stays categorized; the refused rows go back.
+    expect(categoryOf("Row 0")).toBe("meals");
+    expect(categoryOf("Row 249")).toBe("meals");
+    expect(categoryOf("Row 250")).toBe("");
+    expect(categoryOf("Row 251")).toBe("");
+    expect(container.textContent).toContain("252 selected");
+
+    await setBulkCategory("meals");
+    // The retry sends one request, for the refused rows only.
+    expect(server.saves.slice(1)).toEqual([
+      { categoryId: "meals", transactionIds: ["Row 250", "Row 251"] },
+    ]);
+    expect(categoryOf("Row 251")).toBe("meals");
+    expect(container.textContent).not.toContain("252 selected");
+  });
 
   it("holds every row's category picker until a bulk save finishes", async () => {
     const save = Promise.withResolvers<void>();
