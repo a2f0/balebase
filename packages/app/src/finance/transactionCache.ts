@@ -606,7 +606,10 @@ export async function clearedOnRefusal<T>(
   try {
     return await work;
   } catch (cause) {
-    if (scope && refused(cause)) await clear(scope).catch(() => undefined);
+    // A `SignedOut` request was ended by a clearing already; clearing again
+    // would end a newer pull too.
+    if (scope && refused(cause) && !(cause instanceof SignedOut))
+      await clear(scope).catch(() => undefined);
     throw cause;
   }
 }
@@ -631,7 +634,10 @@ export async function catchUpSavedTransactions(
     // Access ended: keep nothing, and tell the page so it shows nothing.
     // Otherwise the next load catches up.
     if (refused(cause)) {
-      await store.clear(scope).catch(() => undefined);
+      // A `SignedOut` pull was ended by a clearing already; clearing again
+      // would end a newer one too.
+      if (!(cause instanceof SignedOut))
+        await store.clear(scope).catch(() => undefined);
       throw cause;
     }
   }

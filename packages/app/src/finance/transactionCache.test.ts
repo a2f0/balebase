@@ -13,6 +13,7 @@ import {
   clearUserTransactions,
   memoryTransactionStore,
   pullTransactions,
+  SignedOut,
 } from "./transactionCache";
 
 const scope: CacheScope = { organizationId: "org", userId: "person" };
@@ -223,6 +224,10 @@ describe("pulling transactions", () => {
     await expect(
       clearedOnRefusal(undefined, status(403), clear),
     ).rejects.toThrow();
+    // Ended by a clearing already: not cleared again.
+    await expect(
+      clearedOnRefusal(scope, Promise.reject(new SignedOut()), clear),
+    ).rejects.toBeInstanceOf(SignedOut);
     expect(cleared).toEqual([]);
     await expect(clearedOnRefusal(scope, status(403), clear)).rejects.toThrow(
       "Request failed with status 403.",
