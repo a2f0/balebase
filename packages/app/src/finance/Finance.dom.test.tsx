@@ -669,6 +669,167 @@ describe("Finance filters", () => {
   });
 });
 
+describe("Bulk categorization", () => {
+  const rows = ["Coffee", "Lunch", "Supplies", "Taxi"].map((id) =>
+    transaction(id),
+  );
+  const listing: FinanceData = {
+    ...data,
+    categories: [
+      { id: "meals", name: "Meals", slug: "meals", transactionCount: 0 },
+      { id: "travel", name: "Travel", slug: "travel", transactionCount: 0 },
+    ],
+    transactions: rows,
+  };
+  function checkbox(label: string) {
+    const input = container.querySelector<HTMLInputElement>(
+      `input[type="checkbox"][aria-label="${label}"]`,
+    );
+    if (!input) throw new Error(`Missing checkbox: ${label}`);
+    return input;
+  }
+  async function check(label: string, shiftKey = false) {
+    await act(async () => {
+      checkbox(label).dispatchEvent(
+        new dom.MouseEvent("click", {
+          bubbles: true,
+          shiftKey,
+        }) as unknown as MouseEvent,
+      );
+    });
+  }
+  function checkedRows() {
+    return rows
+      .map(({ id }) => id)
+      .filter((id) => checkbox(`Select ${id}`).checked);
+  }
+  async function setBulkCategory(value: string) {
+    const select = container.querySelector<HTMLSelectElement>(
+      '[aria-label="Category for selected transactions"]',
+    );
+    if (!select) throw new Error("Missing bulk category picker");
+    await act(async () => {
+      select.value = value;
+      select.dispatchEvent(
+        new dom.Event("change", { bubbles: true }) as unknown as Event,
+      );
+    });
+  }
+  function categoryOf(name: string) {
+    return container.querySelector<HTMLSelectElement>(
+      `[aria-label="Expense category for ${name}"]`,
+    )?.value;
+  }
+
+  it("selects all, a range with Shift, or none, then categorizes the selection in one save", async () => {
+    const saves: unknown[] = [];
+    respond(async (_url, init) => {
+      if (init?.method !== "PUT") return Response.json(listing);
+      const body = JSON.parse(String(init.body));
+      saves.push(body);
+      return Response.json({
+        expenseCategoryId: body.categoryId,
+        transactionIds: body.transactionIds,
+      });
+    });
+    await mountFinance();
+    const all = () => checkbox("Select all shown transactions");
+    expect(container.textContent).toContain(
+      "Select transactions to categorize them together",
+    );
+
+    await check("Select Lunch");
+    await check("Select Taxi", true);
+    expect(checkedRows()).toEqual(["Lunch", "Supplies", "Taxi"]);
+    expect(container.textContent).toContain("3 selected");
+    const partial = checkbox("Clear selection");
+    expect(partial.indeterminate).toBe(true);
+    expect(partial.checked).toBe(false);
+    // A partial selection clears first, as in Gmail; the next click selects all.
+    await check("Clear selection");
+    expect(checkedRows()).toEqual([]);
+    await act(async () => {
+      all().dispatchEvent(
+        new dom.MouseEvent("click", { bubbles: true }) as unknown as MouseEvent,
+      );
+    });
+    expect(checkedRows()).toEqual(["Coffee", "Lunch", "Supplies", "Taxi"]);
+    expect(checkbox("Clear selection").checked).toBe(true);
+    await check("Select Coffee");
+
+    await setBulkCategory("travel");
+    expect(saves).toEqual([
+      { categoryId: "travel", transactionIds: ["Lunch", "Supplies", "Taxi"] },
+    ]);
+    expect(rows.map(({ id }) => categoryOf(id))).toEqual([
+      "",
+      "travel",
+      "travel",
+      "travel",
+    ]);
+    expect(checkedRows()).toEqual([]);
+    expect(container.textContent).not.toContain("3 selected");
+
+    // Rows already in the category are not sent again; others move from theirs.
+    await check("Select Coffee");
+    await check("Select Lunch");
+    await setBulkCategory("uncategorized");
+    expect(saves.at(-1)).toEqual({
+      categoryId: null,
+      transactionIds: ["Lunch"],
+    });
+    expect(categoryOf("Lunch")).toBe("");
+  });
+
+  it("restores the rows and keeps the selection when saving fails", async () => {
+    respond((_url, init) =>
+      init?.method === "PUT"
+        ? Response.json(
+            { error: "Could not save categories." },
+            { status: 500 },
+          )
+        : Response.json(listing),
+    );
+    await mountFinance();
+    await check("Select Coffee");
+    await check("Select Supplies");
+    await setBulkCategory("meals");
+    expect(container.textContent).toContain("Could not save categories.");
+    expect(rows.map(({ id }) => categoryOf(id))).toEqual(["", "", "", ""]);
+    expect(checkedRows()).toEqual(["Coffee", "Supplies"]);
+  });
+
+  it("starts a new selection when the filters change", async () => {
+    respond(() => Response.json(listing));
+    await mountFinance();
+    await check("Select Coffee");
+    await click("Uncategorized expenses");
+    expect(checkedRows()).toEqual([]);
+    expect(container.textContent).not.toContain("1 selected");
+  });
+
+  it("saves more than one request's worth of rows in batches", async () => {
+    const many = Array.from({ length: 251 }, (_, index) =>
+      transaction(`Row ${index}`),
+    );
+    const saves: string[][] = [];
+    respond(async (_url, init) => {
+      if (init?.method !== "PUT") {
+        return Response.json({ ...listing, transactions: many });
+      }
+      const body = JSON.parse(String(init.body));
+      saves.push(body.transactionIds);
+      return Response.json(body);
+    });
+    await mountFinance();
+    await check("Select all shown transactions");
+    expect(container.textContent).toContain("251 selected");
+    await setBulkCategory("meals");
+    expect(saves.map((ids) => ids.length)).toEqual([250, 1]);
+    expect(saves.flat()).toEqual(many.map(({ id }) => id));
+  });
+});
+
 it("polls status without loading history until completion or discarding an in-flight page", async () => {
   using polls = holdTimers(syncPollMs);
   const older = Promise.withResolvers<Response>();

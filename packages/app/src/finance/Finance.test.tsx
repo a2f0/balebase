@@ -76,6 +76,7 @@ function renderFinance(
       notice={options.notice}
       onAnnotate={async () => undefined}
       onCategorize={async () => undefined}
+      onCategorizeMany={async () => true}
       onConnect={async () => undefined}
       onDeleteData={async () => undefined}
       onDisconnect={async () => undefined}

@@ -44,6 +44,8 @@ export const financeLimits = {
   annotationLabel: 50,
   annotationLabels: 12,
   annotationNote: 2000,
+  /** Transactions one bulk categorize request may change; a full page. */
+  bulkCategorize: 250,
   categoryName: 60,
   search: 100,
 } as const;

@@ -112,6 +112,18 @@ export const financeTools: McpTool[] = [
     title: "Categorize finance transaction",
   },
   {
+    description:
+      "Assigns up to 250 transactions to one expense category in one change; any unknown transaction id rejects the whole request.",
+    descriptions: {
+      categoryId: "Category id, or null to uncategorize.",
+      transactionIds:
+        "Transaction ids from get_finance_overview or search_finance_transactions.",
+    },
+    name: "categorize_finance_transactions",
+    route: financeRoutes.setTransactionsCategory,
+    title: "Categorize finance transactions",
+  },
+  {
     description: "Creates an expense category.",
     descriptions: categoryName,
     name: "create_expense_category",

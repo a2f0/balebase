@@ -494,6 +494,23 @@ export const financeRoutes = {
     body: z.object({ categoryId: RecordIdSchema.nullable() }),
     response: z.object({ expenseCategoryId: z.string().nullable() }),
   }),
+  /** Sets or clears one expense category on several transactions at once. */
+  setTransactionsCategory: route({
+    method: "PUT",
+    path: "/api/finance/transactions/category",
+    body: z.object({
+      categoryId: RecordIdSchema.nullable(),
+      transactionIds: z
+        .array(RecordIdSchema)
+        .min(1)
+        .max(financeLimits.bulkCategorize)
+        .transform((ids) => [...new Set(ids)]),
+    }),
+    response: z.object({
+      expenseCategoryId: z.string().nullable(),
+      transactionIds: z.array(z.string()),
+    }),
+  }),
   listCategories: route({
     method: "GET",
     path: "/api/finance/categories",

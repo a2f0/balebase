@@ -95,6 +95,13 @@
     max-content;
 }
 
+/* Lists that select rows for bulk changes lead with a checkbox column. */
+.financeTransactions.financeSelectable {
+  grid-template-columns:
+    max-content max-content minmax(0, 1fr) minmax(9rem, 13rem) max-content
+    max-content max-content;
+}
+
 .financeTransaction {
   display: grid;
   grid-column: 1 / -1;
@@ -145,6 +152,46 @@
 
 .financeEmailChip > .icon {
   flex: none;
+}
+
+/* Gmail-style toolbar: select rows, then give them one category. */
+.financeSelectionBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  min-height: calc(var(--control-height-sm) + 2 * var(--space-2));
+  padding: var(--space-2) var(--space-6);
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-sunken);
+}
+
+.financeSelectionCount {
+  color: var(--color-text-subtle);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.financeSelectionActions {
+  --cluster-gap: var(--space-2);
+
+  flex: 1 1 18rem;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+}
+
+.financeSelectionActions > .select {
+  flex: 0 1 13rem;
+}
+
+/* Checkboxes sit centered in their cell, without the label's text gap. */
+.financeSelectCheck {
+  align-items: center;
+  padding-block: 0;
+}
+
+.financeSelectCheck input {
+  margin: 0;
 }
 
 /* Each transaction's single expense category, chosen inline. */
@@ -251,7 +298,8 @@
     margin-top: var(--space-3);
   }
 
-  .financeTransactions {
+  .financeTransactions,
+  .financeTransactions.financeSelectable {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -307,6 +355,25 @@
   .financeTransactionActions {
     grid-area: action;
     margin-top: var(--space-2);
+  }
+
+  /* The checkbox keeps a gutter beside the name, as on a phone's inbox. */
+  .financeSelectable .financeTransaction {
+    grid-template-areas:
+      "select name name amount"
+      ". meta meta meta"
+      ". emails emails emails"
+      ". category category category"
+      ". date status action";
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+  }
+
+  .financeTransactionSelect {
+    grid-area: select;
+  }
+
+  .financeSelectionBar {
+    padding-inline: var(--space-4);
   }
 
   .financeAnnotation {

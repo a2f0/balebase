@@ -117,6 +117,14 @@ const endpoints = {
       response: "json",
     },
   ),
+  setTransactionsCategory: endpoint<
+    typeof financeRoutes.setTransactionsCategory
+  >({
+    method: "PUT",
+    path: "/api/finance/transactions/category",
+    body: "json",
+    response: "json",
+  }),
   listCategories: endpoint<typeof financeRoutes.listCategories>({
     method: "GET",
     path: "/api/finance/categories",
@@ -164,6 +172,7 @@ export interface FinanceFilters {
 export function financeApi(transport: Transport) {
   return {
     ...financeSyncApi(transport),
+    ...financeCategoryApi(transport),
     /** Connections, accounts, categories, and a page of transactions. */
     data(filters?: FinanceFilters, cursor?: string) {
       return transport.call(endpoints.listing, {
@@ -243,10 +252,31 @@ export function financeApi(transport: Transport) {
       });
       return body.transactions;
     },
+    /** Totals for an inclusive range; null bounds are open. */
+    expenseReport(range: { from: string | null; to: string | null }) {
+      return transport.call(endpoints.expenseReport, {
+        query: { from: range.from || undefined, to: range.to || undefined },
+      });
+    },
+  };
+}
+
+/** Expense categories and the transactions assigned to them. */
+function financeCategoryApi(transport: Transport) {
+  return {
     setTransactionCategory(id: string, categoryId: string | null) {
       return transport.call(endpoints.setTransactionCategory, {
         body: { categoryId },
         params: { id },
+      });
+    },
+    /** Gives every listed transaction one category, or none, in one change. */
+    setTransactionsCategory(
+      transactionIds: string[],
+      categoryId: string | null,
+    ) {
+      return transport.call(endpoints.setTransactionsCategory, {
+        body: { categoryId, transactionIds },
       });
     },
     expenseCategories() {
@@ -266,12 +296,6 @@ export function financeApi(transport: Transport) {
     },
     addDefaultExpenseCategories() {
       return transport.call(endpoints.addDefaultCategories);
-    },
-    /** Totals for an inclusive range; null bounds are open. */
-    expenseReport(range: { from: string | null; to: string | null }) {
-      return transport.call(endpoints.expenseReport, {
-        query: { from: range.from || undefined, to: range.to || undefined },
-      });
     },
   };
 }

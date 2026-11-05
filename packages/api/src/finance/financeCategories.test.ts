@@ -323,6 +323,145 @@ describe("expense categories", () => {
     expect(cleared.status).toBe(200);
   });
 
+  it("categorizes many transactions at once, recording only real changes", async () => {
+    const fixture = await createFixture();
+    const [first, second, third, untouched] = seedTransactions(
+      fixture.database,
+    );
+    if (!first || !second || !third || !untouched) {
+      throw new Error("Missing seeded transactions.");
+    }
+    const meals = await createCategory(fixture, "Meals");
+    const travel = await createCategory(fixture, "Travel");
+    // An annotated transaction already in Meals keeps its note, unrecorded.
+    fixture.database
+      .query(
+        `INSERT INTO finance_transaction_annotations
+           (transaction_id, organization_id, note, labels, reviewed,
+            expense_category_id, created_by, updated_by, created_at, updated_at)
+         VALUES (?, 'org_user-1', 'keep me', '[]', 0, ?, 'user-1', 'user-1',
+                 '2026-08-31T12:00:00.000Z', '2026-08-31T12:00:00.000Z')`,
+      )
+      .run(third, meals);
+    const events = () =>
+      fixture.database
+        .query(
+          `SELECT root_id, json_extract(details, '$.afterName') AS name
+           FROM activity_events
+           WHERE action = 'finance.transaction_categorized'
+           ORDER BY root_id`,
+        )
+        .all() as { name: string | null; root_id: string }[];
+    const seeded = events();
+    const bulk = (body: unknown, app = fixture.app) =>
+      jsonRequest<{
+        expenseCategoryId: string | null;
+        transactionIds: string[];
+      }>(app, fixture.bindings, "/transactions/category", "PUT", body);
+    const categoryOf = async () => {
+      const listing = await jsonRequest<FinanceListing>(
+        fixture.app,
+        fixture.bindings,
+        "/",
+        "GET",
+      );
+      return Object.fromEntries(
+        listing.body.transactions.map(({ expenseCategoryId, id }) => [
+          id,
+          expenseCategoryId,
+        ]),
+      );
+    };
+
+    const assigned = await bulk({
+      categoryId: meals,
+      transactionIds: [first, second, third, first],
+    });
+    expect(assigned).toMatchObject({
+      body: {
+        expenseCategoryId: meals,
+        transactionIds: [first, second, third],
+      },
+      status: 200,
+    });
+    expect(await categoryOf()).toMatchObject({
+      [first]: meals,
+      [second]: meals,
+      [third]: meals,
+      [untouched]: null,
+    });
+    expect(events().filter(({ root_id }) => root_id !== third)).toEqual([
+      { name: "Meals", root_id: first },
+      { name: "Meals", root_id: second },
+    ]);
+    expect(events()).toHaveLength(seeded.length + 2);
+    const kept = fixture.database
+      .query(
+        "SELECT note FROM finance_transaction_annotations WHERE transaction_id = ?",
+      )
+      .get(third) as { note: string };
+    expect(kept.note).toBe("keep me");
+
+    // An unknown or foreign transaction rejects the whole request.
+    for (const [app, ids] of [
+      [fixture.app, [first, "missing"]],
+      [testApp("organization-2", fixture.requestPlaid), [first]],
+    ] as const) {
+      const rejected = await bulk(
+        { categoryId: travel, transactionIds: ids },
+        app,
+      );
+      expect(rejected.status).toBe(404);
+    }
+    expect(
+      await bulk({ categoryId: "missing", transactionIds: [first] }),
+    ).toMatchObject({ body: { error: "Category not found." }, status: 404 });
+    for (const body of [
+      { categoryId: travel, transactionIds: [] },
+      { categoryId: travel },
+      { transactionIds: [first] },
+      { categoryId: travel, transactionIds: Array(251).fill(first) },
+    ]) {
+      expect(await bulk(body)).toMatchObject({
+        body: {
+          error: "A category or null and 1 to 250 transactions are required.",
+        },
+        status: 400,
+      });
+    }
+    expect((await categoryOf())[first]).toBe(meals);
+
+    // A category deleted while the request runs leaves every row alone.
+    fixture.hooks.before("FROM plaid_transactions AS txn", () => {
+      fixture.database
+        .query("DELETE FROM finance_expense_categories WHERE id = ?")
+        .run(travel);
+    });
+    expect(
+      await bulk({ categoryId: travel, transactionIds: [first, untouched] }),
+    ).toMatchObject({ body: { error: "Category not found." }, status: 404 });
+    expect(await categoryOf()).toMatchObject({
+      [first]: meals,
+      [untouched]: null,
+    });
+
+    const cleared = await bulk({
+      categoryId: null,
+      transactionIds: [first, second],
+    });
+    expect(cleared.status).toBe(200);
+    expect(await categoryOf()).toMatchObject({
+      [first]: null,
+      [second]: null,
+      [third]: meals,
+    });
+    expect(events()).toHaveLength(seeded.length + 4);
+    expect(events().filter(({ name }) => name === null)).toEqual([
+      { name: null, root_id: first },
+      { name: null, root_id: second },
+    ]);
+  });
+
   it("reports expense totals by category with transfers and income excluded", async () => {
     const fixture = await createFixture();
     const ids = seedTransactions(fixture.database);
