@@ -821,18 +821,19 @@ all imported history. Scrolling near the end shows the next 250 matches,
 keeping earlier rows and annotation forms visible. **Load more transactions**
 also shows them by hand; changing filters starts a fresh list.
 
-The overview keeps every one of the organization's transactions on the
-device (IndexedDB, per person and organization) and catches up on each visit,
-after a bank sync finishes, and after categorizing. It downloads only what
-changed since its last visit, from `GET /api/finance/transactions/changes`,
-so filters and paging run on the device. The first visit downloads
-everything and shows how many transactions it has saved so far. When Balebase
-cannot be reached, the overview shows the saved copy with when it was last
-updated; edits still need the server. Signing out removes the person's saved
-transactions, and losing Finance access to an organization, or leaving it,
-removes that organization's, ending any download still running in another
-tab. Other Finance pages catch a saved copy up too, so deleting a bank's data
-from Connections removes its transactions from the device.
+The overview keeps every one of the organization's transactions on the device
+(IndexedDB, per person and organization) and catches up on each visit, after a
+bank sync finishes, and after categorizing. It downloads only what changed since
+its last visit, from `GET /api/finance/transactions/changes`, so filters and
+paging run on the device. The first visit downloads everything and shows how
+many transactions it has saved so far. When Balebase stops responding while
+someone is signed in, the overview shows the saved copy with when it was last
+updated; edits still need the server. Opening the app without a connection does
+not reach it: sign-in and access checks come first. Signing out removes the
+person's saved transactions, and losing Finance access to an organization, or
+leaving it, removes that organization's, ending any download still running in
+another tab. Other Finance pages catch a saved copy up too, so deleting a bank's
+data from Connections removes its transactions from the device.
 
 The change feed has one cursor per organization: a counter that every change
 to what a transaction shows advances in the same database write (Plaid's

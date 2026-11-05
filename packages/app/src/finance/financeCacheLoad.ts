@@ -44,7 +44,15 @@ export function fallBack(
   }
   return {
     apply: (...args) => attempt((store) => store.apply(...args)),
-    clear: (...args) => attempt((store) => store.clear(...args)),
+    // Clearing reaches IndexedDB even after falling back, where what was
+    // saved before the fallback (and other tabs' pulls) still is.
+    clear: async (...args) => {
+      if (active === primary) return attempt((store) => store.clear(...args));
+      await primary.clear(...args).catch(() => {
+        // Unavailable storage keeps nothing to clear.
+      });
+      return secondary.clear(...args);
+    },
     position: (...args) => attempt((store) => store.position(...args)),
     read: (...args) => attempt((store) => store.read(...args)),
     restart: (...args) => attempt((store) => store.restart(...args)),

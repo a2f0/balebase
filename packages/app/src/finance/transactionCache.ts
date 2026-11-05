@@ -475,6 +475,27 @@ async function pullPages(
   }
 }
 
+/**
+ * Brings a saved copy up to date after a change made away from the overview
+ * (a transaction's page), so the change outlasts going offline. Nothing
+ * happens without a saved copy; failures wait for the next load.
+ */
+export async function catchUpSavedTransactions(
+  scope: CacheScope | undefined,
+  fetchPage: (cursor: string | null) => Promise<FinanceTransactionChanges>,
+  store: TransactionStore | undefined = typeof indexedDB === "undefined"
+    ? undefined
+    : indexedDbTransactionStore(),
+) {
+  if (!scope || !store) return;
+  try {
+    if ((await store.position(scope)).cursor === null) return;
+    await pullTransactions(scope, store, fetchPage);
+  } catch {
+    // The next load catches up instead.
+  }
+}
+
 function withLock<T>(name: string, work: () => Promise<T>): Promise<T> {
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
   return locks ? locks.request(name, work) : work();

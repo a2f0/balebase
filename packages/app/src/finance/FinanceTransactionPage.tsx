@@ -23,16 +23,20 @@ import { useLoad } from "../shared/useLoad";
 import { transactionIssuePath } from "../workspace/workspacePaths";
 import { FinanceTransactionRow } from "./FinanceTransactionHistory";
 import { FinanceTransactionSourceData } from "./FinanceTransactionSourceData";
+import { type CacheScope, catchUpSavedTransactions } from "./transactionCache";
 
 export function FinanceTransactionPage({
   id,
   onNavigate,
+  scope,
 }: {
   id: string;
   onNavigate: (path: string) => void;
+  /** Whose saved transactions this page's changes reach. */
+  scope?: CacheScope | undefined;
 }) {
   const { data, error, busy, expanded, setExpanded, annotate, categorize } =
-    useTransaction(id);
+    useTransaction(id, scope);
   const filters = useMemo<IssueFilters>(
     () => ({ status: "all", type: "finance_transaction", targetId: id, q: "" }),
     [id],
@@ -116,7 +120,7 @@ export function FinanceTransactionPage({
     </Page>
   );
 }
-function useTransaction(id: string) {
+function useTransaction(id: string, scope: CacheScope | undefined) {
   const loaded = useLoad(
     useCallback(() => api.finance.transaction(id), [id]),
     "Could not load transaction.",
@@ -144,12 +148,19 @@ function useTransaction(id: string) {
       updateTransaction({ annotation });
       setExpanded(undefined);
     });
+    void catchUp();
+  }
+  function catchUp() {
+    return catchUpSavedTransactions(scope, (cursor) =>
+      api.finance.transactionChanges(cursor),
+    );
   }
   async function categorize(_: FinanceTransaction, categoryId: string | null) {
     await action.run(async () => {
       await api.finance.setTransactionCategory(id, categoryId);
       updateTransaction({ expenseCategoryId: categoryId });
     });
+    void catchUp();
   }
 
   return {

@@ -99,6 +99,11 @@ describe("workspace routes", () => {
       expect(node.type).toBe(page);
       expect(node.props.id).toBe(id);
       expect(node.props.onNavigate).toBe(navigate);
+      if (page === FinanceTransactionPage)
+        expect(node.props.scope).toEqual({
+          organizationId: "org-2",
+          userId: "user-1",
+        });
       // Keyed so each record starts from its own state.
       expect(node.key).toBe(pathname);
     }

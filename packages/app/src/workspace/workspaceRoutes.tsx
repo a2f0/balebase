@@ -273,6 +273,7 @@ function financeContent(
         key={pathname}
         id={transactionId}
         onNavigate={navigate}
+        scope={scope}
       />
     );
   return <Finance onNavigate={navigate} pathname={pathname} scope={scope} />;

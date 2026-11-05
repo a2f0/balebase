@@ -276,19 +276,15 @@ describe("loading cached finances", () => {
       },
     };
     const secondary = memoryTransactionStore();
+    const store = fallBack(failing, secondary);
     let pulls = 0;
-    const loaded = await loadFinance(
-      fallBack(failing, secondary),
-      scope,
-      true,
-      {
-        ...sources,
-        changes: async () => {
-          pulls++;
-          return feed("a", "b");
-        },
+    const loaded = await loadFinance(store, scope, true, {
+      ...sources,
+      changes: async () => {
+        pulls++;
+        return feed("a", "b");
       },
-    );
+    });
     // Not an empty list read from the fresh memory store as if current.
     expect(ids(loaded.data)).toEqual(["a", "b"]);
     expect(loaded.savedAt).toBeUndefined();
@@ -296,5 +292,17 @@ describe("loading cached finances", () => {
     expect(
       (await secondary.read(scope)).transactions.map(({ id }) => id),
     ).toEqual(["a", "b"]);
+    // A refusal after the fallback clears what IndexedDB still keeps too.
+    expect((await primary.read(scope)).transactions).toHaveLength(2);
+    await expect(
+      loadFinance(store, scope, true, {
+        ...sources,
+        changes: async () => {
+          throw failure(403);
+        },
+      }),
+    ).rejects.toThrow("Status 403.");
+    expect((await primary.read(scope)).transactions).toEqual([]);
+    expect((await secondary.read(scope)).transactions).toEqual([]);
   });
 });

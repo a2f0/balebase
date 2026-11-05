@@ -355,6 +355,35 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
     );
     expect(leftLate).toBe("Saved transactions were cleared. Reload Finance.");
     expect((await kept(target, waiting)).rows).toEqual([]);
+    // A change on a transaction's page catches a saved copy up; without
+    // one, nothing is downloaded.
+    const caughtUp = await target.evaluate(
+      async (scopes, next) => {
+        const cache = window.transactionCacheTest;
+        if (!cache) throw new Error("No fixture");
+        const asked: (string | null)[] = [];
+        for (const which of scopes)
+          await cache.catchUpSavedTransactions(
+            which,
+            async (cursor) => {
+              asked.push(cursor);
+              return { ...next, organizationId: which.organizationId };
+            },
+            cache.store,
+          );
+        return asked;
+      },
+      [
+        { organizationId: "kept-org", userId: "person" },
+        { organizationId: "never-opened", userId: "person" },
+      ],
+      page("9", false, [row("member", 2)]),
+    );
+    expect(caughtUp).toEqual(["7"]);
+    expect(
+      (await kept(target, { organizationId: "kept-org", userId: "person" }))
+        .rows,
+    ).toEqual(["member:2"]);
     const summaryKept = await target.evaluate(
       async (who) =>
         (await window.transactionCacheTest?.store.read(who))?.summary ?? null,
