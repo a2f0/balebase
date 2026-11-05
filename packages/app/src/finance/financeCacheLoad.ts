@@ -210,6 +210,9 @@ async function clearedFor(
   scope: CacheScope,
   refusal: unknown,
 ) {
+  // Whoever ended this pull cleared the copy already; clearing again would
+  // end a newer pull too.
+  if (refusal instanceof SignedOut) return refusal;
   await store.clear(scope).catch(() => {
     // The refusal is what to report; storage errors matter less.
   });

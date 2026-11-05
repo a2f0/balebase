@@ -565,6 +565,29 @@ describe("Finance filters", () => {
     );
   });
 
+  it("closes Reports when another tab clears this person's finances", async () => {
+    respond((url) =>
+      url.pathname.endsWith("/reports/expenses")
+        ? Response.json({ currencies: [], from: null, to: null })
+        : Response.json(data),
+    );
+    ({ container } = await mount(
+      <Finance
+        onNavigate={() => undefined}
+        pathname="/finance/reports"
+        scope={{ organizationId: "organization", userId: "person" }}
+      />,
+    ));
+    expect(container.textContent).toContain("Spending by expense category");
+    const otherTab = new BroadcastChannel("balebase-finance-cleared");
+    await act(async () => {
+      otherTab.postMessage({ apiUrl, source: "other-tab", userId: "person" });
+      await Bun.sleep(5);
+    });
+    otherTab.close();
+    expect(container.textContent).not.toContain("Spending by expense category");
+  });
+
   it("keeps a row's new category in the saved copy", async () => {
     let category: string | null = null;
     let down = false;

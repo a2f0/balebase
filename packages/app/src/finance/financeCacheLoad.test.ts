@@ -303,6 +303,27 @@ describe("loading cached finances", () => {
     expect(after.summary).toEqual(before.summary);
   });
 
+  it("lets a retry after a clearing finish while the pull it overtook ends", async () => {
+    const store = memoryTransactionStore();
+    const stalled = Promise.withResolvers<FinanceTransactionChanges>();
+    const asked = Promise.withResolvers<void>();
+    let calls = 0;
+    const changes = () => {
+      calls++;
+      if (calls > 1) return Promise.resolve(feed("fresh"));
+      asked.resolve();
+      return stalled.promise;
+    };
+    const first = loadFinance(store, scope, true, { ...sources, changes });
+    await asked.promise;
+    // Access ended elsewhere; then a retry starts, behind the first pull.
+    await store.clear(scope);
+    const retry = loadFinance(store, scope, true, { ...sources, changes });
+    stalled.resolve(feed("stale"));
+    await expect(first).rejects.toBeInstanceOf(SignedOut);
+    expect(ids((await retry).data)).toEqual(["fresh"]);
+  });
+
   it("downloads again into memory when IndexedDB fails after a pull", async () => {
     const primary = memoryTransactionStore();
     const failing: TransactionStore = {

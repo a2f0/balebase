@@ -405,7 +405,9 @@ export function FinanceView({
           showDataNotice={data?.accounts.length === 0}
           unconfigured={unconfigured}
         />
-        {page === "reports" && (
+        {/* Reports read their own totals: they go when what Finance shows
+            does (access ended here or in another tab). */}
+        {page === "reports" && data && (
           <FinanceReports
             onNavigate={handlers.onNavigate}
             onRefused={handlers.onRefused}
