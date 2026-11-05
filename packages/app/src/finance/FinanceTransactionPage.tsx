@@ -35,8 +35,16 @@ export function FinanceTransactionPage({
   /** Whose saved transactions this page's changes reach. */
   scope?: CacheScope | undefined;
 }) {
-  const { data, error, busy, expanded, setExpanded, annotate, categorize } =
-    useTransaction(id, scope);
+  const {
+    data,
+    error,
+    busy,
+    expanded,
+    setExpanded,
+    annotate,
+    categorize,
+    guard,
+  } = useTransaction(id, scope);
   const filters = useMemo<IssueFilters>(
     () => ({ status: "all", type: "finance_transaction", targetId: id, q: "" }),
     [id],
@@ -110,6 +118,7 @@ export function FinanceTransactionPage({
             {sections.panel(
               "activity",
               <ActivityFeed
+                guard={guard}
                 source={{ type: "finance_transaction", id }}
                 refreshKey={data.transaction}
               />,
@@ -175,5 +184,6 @@ function useTransaction(id: string, givenScope: CacheScope | undefined) {
     setExpanded,
     annotate,
     categorize,
+    guard,
   };
 }

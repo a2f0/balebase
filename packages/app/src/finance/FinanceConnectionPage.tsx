@@ -176,6 +176,7 @@ function ConnectionSections({
       {panel(
         "activity",
         <ActivityFeed
+          guard={guard}
           // Changes that record activity, not every sync status poll.
           refreshKey={`${data.connection.status}:${data.connection.dailySync}:${data.connection.syncJob?.id}`}
           source={{ id, type: "finance_connection" }}

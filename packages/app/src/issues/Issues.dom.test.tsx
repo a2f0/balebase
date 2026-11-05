@@ -318,6 +318,29 @@ describe("workspace issues, mounted", () => {
     expect(container.textContent).toContain("Finance access required.");
   });
 
+  it("clears a transaction's page when its activity finds access gone", async () => {
+    respond((url) => {
+      if (url.pathname === "/api/finance/transactions/old-txn/activity")
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      if (url.pathname === "/api/issues")
+        return Response.json({ issues: [], nextCursor: null });
+      return baseResponse(url);
+    });
+    await show(
+      <FinanceTransactionPage
+        id="old-txn"
+        onNavigate={() => undefined}
+        scope={{ organizationId: "org", userId: "person" }}
+      />,
+    );
+    await act(async () => undefined);
+    expect(container.textContent).not.toContain("FOOD_AND_DRINK_COFFEE");
+    expect(container.textContent).toContain("Finance access required.");
+  });
+
   it("clears a transaction's page when another tab signs out", async () => {
     respond((url) =>
       url.pathname === "/api/issues"

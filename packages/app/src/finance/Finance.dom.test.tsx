@@ -566,6 +566,29 @@ describe("Finance filters", () => {
     );
   });
 
+  it("stops showing transactions once the session belongs to another organization", async () => {
+    let switched = false;
+    respond(() =>
+      Response.json(switched ? { ...data, organizationId: "elsewhere" } : data),
+    );
+    const scope = { organizationId: "organization", userId: "person" };
+    const page = (pathname: string) => (
+      <Finance onNavigate={() => undefined} pathname={pathname} scope={scope} />
+    );
+    const view = await mount(page("/finance"));
+    container = view.container;
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    // Another tab switched organizations; this one loads again.
+    switched = true;
+    await view.render(page("/finance/categories"));
+    await view.render(page("/finance"));
+    await act(async () => undefined);
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).toContain(
+      "The signed-in account or organization changed",
+    );
+  });
+
   it("closes Reports when another tab clears this person's finances", async () => {
     respond((url) =>
       url.pathname.endsWith("/reports/expenses")

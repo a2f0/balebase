@@ -15,6 +15,7 @@ import {
   clears,
   indexedDbTransactionStore,
   memoryTransactionStore,
+  OrganizationChanged,
   onClearedElsewhere,
   refused,
   SignedOut,
@@ -148,8 +149,9 @@ function useCachedLoad(
       settle();
     } catch (cause) {
       if (!current()) return;
-      // Nothing read before stays on screen after access ends.
-      if (refused(cause)) forget();
+      // Nothing read before stays on screen after access ends, or once the
+      // session belongs to another account or organization.
+      if (refused(cause) || cause instanceof OrganizationChanged) forget();
       settle(errorMessage(cause, "Could not load finances."));
     }
   }, [forget, keepTransactions, settle, store]);
