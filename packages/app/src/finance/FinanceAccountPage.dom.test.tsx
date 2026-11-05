@@ -81,6 +81,28 @@ async function click(element: HTMLElement) {
 }
 
 describe("Finance account page", () => {
+  it("clears the page when saving daily sync finds access gone", async () => {
+    respond(async (_url, init) =>
+      init?.method === "PATCH"
+        ? Response.json({ error: "Finance access required." }, { status: 403 })
+        : Response.json(detail),
+    );
+    ({ container } = await mount(
+      <FinanceAccountPage
+        id="account-1"
+        onNavigate={() => undefined}
+        scope={{ organizationId: "org", userId: "person" }}
+      />,
+    ));
+    await settle();
+    const checkbox = container.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    );
+    if (!checkbox) throw new Error("Missing daily sync setting");
+    await click(checkbox);
+    expect(container.textContent).not.toContain("Daily sync");
+  });
+
   it("updates daily sync on the account's bank connection", async () => {
     let enabled = false;
     respond(async (url, init) => {

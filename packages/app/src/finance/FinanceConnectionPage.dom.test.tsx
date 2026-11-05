@@ -332,6 +332,30 @@ it("saves daily sync for the bank connection and preserves the setting on a fail
   expect(container.textContent).toContain("Could not save sync settings.");
 });
 
+it("clears the page when saving daily sync finds access gone", async () => {
+  respond(async (_url, init) =>
+    init?.method === "PATCH"
+      ? Response.json({ error: "Finance access required." }, { status: 403 })
+      : Response.json(detail({ dailySync: false })),
+  );
+  const view = await mount(
+    <FinanceConnectionPage
+      id="item-1"
+      onNavigate={() => undefined}
+      scope={{ organizationId: "org", userId: "person" }}
+    />,
+  );
+  container = view.container;
+  await settle();
+  const checkbox = container.querySelector<HTMLInputElement>(
+    'input[type="checkbox"]',
+  );
+  if (!checkbox) throw new Error("Daily sync checkbox missing");
+  await act(async () => checkbox.click());
+  await settle();
+  expect(container.textContent).not.toContain("Daily sync");
+});
+
 describe("Bank status", () => {
   it("checks for an outage only when asked while the connection works", async () => {
     const requests: string[] = [];

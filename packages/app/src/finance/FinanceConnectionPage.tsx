@@ -58,7 +58,7 @@ export function FinanceConnectionPage({
   /** Whose saved transactions a refusal here clears. */
   scope?: CacheScope | undefined;
 }) {
-  const { actions, busy, data, error, notice, setData } = useConnection(
+  const { actions, busy, data, error, guard, notice, setData } = useConnection(
     id,
     onNavigate,
     scope,
@@ -94,6 +94,7 @@ export function FinanceConnectionPage({
         {data && (
           <ConnectionSections
             data={data}
+            guard={guard}
             id={id}
             onNavigate={onNavigate}
             panel={sections.panel}
@@ -117,12 +118,14 @@ function useConnectionSections() {
 
 function ConnectionSections({
   data,
+  guard,
   id,
   onNavigate,
   panel,
   setData,
 }: {
   data: FinanceConnectionDetail;
+  guard: <T>(work: Promise<T>) => Promise<T>;
   id: string;
   onNavigate: (path: string) => void;
   panel: ReturnType<typeof useConnectionSections>["panel"];
@@ -143,6 +146,7 @@ function ConnectionSections({
           <FinanceSyncSettings
             id={id}
             dailySync={data.connection.dailySync}
+            guard={guard}
             onSaved={(dailySync) =>
               setData(
                 (current) =>
@@ -392,6 +396,7 @@ function useConnection(
     busy: action.busy || loaded.loading,
     data,
     error: action.error ?? pollError ?? loaded.error,
+    guard,
     notice: action.notice,
     setData,
   };

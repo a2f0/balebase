@@ -6,18 +6,23 @@ import { useAction } from "../shared/useAction";
 export function FinanceSyncSettings({
   id,
   dailySync,
+  guard,
   onSaved,
   status,
 }: {
   id: string;
   dailySync: boolean;
+  /** The page's refusal handling: access ending clears what it shows. */
+  guard: <T>(work: Promise<T>) => Promise<T>;
   onSaved: (dailySync: boolean) => void;
   status: string;
 }) {
   const { busy, error, run } = useAction("Could not save sync settings.");
   const save = (next: boolean) =>
     run(async () =>
-      onSaved((await api.finance.updateSyncSettings(id, next)).dailySync),
+      onSaved(
+        (await guard(api.finance.updateSyncSettings(id, next))).dailySync,
+      ),
     );
   return (
     <PageSection

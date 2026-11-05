@@ -31,7 +31,7 @@ import { FinanceSourceFields, type SourceField } from "./FinanceSourceFields";
 import { FinanceSyncSettings } from "./FinanceSyncSettings";
 import { formatImportedHistory, formatMoney } from "./financeFormat";
 import { type CacheScope, clearedOnRefusal } from "./transactionCache";
-import { useCacheScope } from "./useCacheScope";
+import { useCacheScope, useRefusalGuard } from "./useCacheScope";
 
 export function FinanceAccountPage({
   id,
@@ -43,7 +43,7 @@ export function FinanceAccountPage({
   /** Whose saved transactions a refusal here clears. */
   scope?: CacheScope | undefined;
 }) {
-  const { data, error, setData } = useAccount(id, scope);
+  const { data, error, guard, setData } = useAccount(id, scope);
   const sections = useSectionTabs([
     { id: "overview", label: "Overview" },
     { id: "transactions", label: "Recent transactions" },
@@ -81,6 +81,7 @@ export function FinanceAccountPage({
                 <FinanceSyncSettings
                   id={data.connection.id}
                   dailySync={data.connection.dailySync}
+                  guard={guard}
                   onSaved={(dailySync) =>
                     setData(
                       (current) =>
@@ -211,13 +212,14 @@ function RecentTransactions({
 
 function useAccount(id: string, givenScope: CacheScope | undefined) {
   const scope = useCacheScope(givenScope);
-  return useLoad(
+  const loaded = useLoad(
     useCallback(
       () => clearedOnRefusal(scope, api.finance.account(id)),
       [id, scope],
     ),
     "Could not load account.",
   );
+  return { ...loaded, guard: useRefusalGuard(scope, loaded.setData) };
 }
 
 function sourceFields({
