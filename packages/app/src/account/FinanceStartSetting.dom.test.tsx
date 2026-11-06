@@ -51,6 +51,29 @@ describe("Finance start setting", () => {
     expect(toggle(view.container).getAttribute("aria-checked")).toBe("true");
   });
 
+  it("leaves the session alone when the account changes before the save lands", async () => {
+    const save = Promise.withResolvers<void>();
+    respond(async () => {
+      await save.promise;
+      return Response.json({ uncategorized: true });
+    });
+    let refreshed = 0;
+    const view = await mount(
+      <FinanceStartSetting
+        on={false}
+        onSessionChanged={async () => {
+          refreshed++;
+        }}
+      />,
+    );
+    await click(toggle(view.container));
+    // Opening another account replaces the page.
+    await view.unmount();
+    save.resolve();
+    await settle();
+    expect(refreshed).toBe(0);
+  });
+
   it("shows the saved choice again when saving fails", async () => {
     respond(async () =>
       Response.json({ error: "Could not save." }, { status: 500 }),
