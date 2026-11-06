@@ -1500,7 +1500,9 @@ describe("Finance filters", () => {
         (row) =>
           `${row.querySelector(".rowTitle")?.textContent}: ${row.querySelector(".rowMeta")?.textContent}${
             row.querySelector(".financeAmount")
-              ? ` = ${row.querySelector(".financeAmount")?.textContent}`
+              ? ` = ${[...row.querySelectorAll(".financeAmount > span")]
+                  .map((amount) => amount.textContent)
+                  .join(" · ")}`
               : ""
           }`,
       );

@@ -261,6 +261,16 @@
   white-space: nowrap;
 }
 
+/* Several currencies wrap, one per line, rather than push the menu out. */
+.financeCategory .financeAmount {
+  display: flex;
+  flex: 0 1 auto;
+  max-width: 50%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0 var(--space-3);
+}
+
 /* The row's menu button sits after the amount. */
 .financeTransactionActions {
   justify-self: end;

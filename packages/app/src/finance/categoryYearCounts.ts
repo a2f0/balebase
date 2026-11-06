@@ -87,12 +87,20 @@ function count(
   });
 }
 
+/**
+ * Sums of decimal amounts carry float error (0.1 + 0.2). Amounts have at most
+ * a currency's minor units (three for KWD), so six places keep every digit;
+ * the API rounds the same way. Adding zero turns -0 into 0.
+ */
+function roundSum(value: number) {
+  return Math.round(value * 1e6) / 1e6 + 0;
+}
+
 function sortedTotals(sums: Map<string | null, number>): CategoryTotals {
   return [...sums]
     .map(([currencyCode, total]) => ({
       currencyCode,
-      // Sums of cents carry float error; adding zero turns -0 into 0.
-      total: Math.round(total * 100) / 100 + 0,
+      total: roundSum(total),
     }))
     .sort((a, b) => (a.currencyCode ?? "").localeCompare(b.currencyCode ?? ""));
 }

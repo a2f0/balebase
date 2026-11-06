@@ -19,7 +19,12 @@ it("opens a category from anywhere on its row, total included, except its menu b
           transactionCount: 2,
           transactionCountsByYear: [
             {
-              totals: [{ currencyCode: "USD", total: -42.5 }],
+              // Several currencies, which must not push the menu out.
+              totals: [
+                { currencyCode: "EUR", total: -1234567.89 },
+                { currencyCode: "KWD", total: -1.235 },
+                { currencyCode: "USD", total: -42.5 },
+              ],
               transactionCount: 2,
               year: 2026,
             },
@@ -49,7 +54,7 @@ it("opens a category from anywhere on its row, total included, except its menu b
     browser = await launch(chromeLaunchOptions());
     const page = await browser.newPage();
     for (const width of [1200, 375]) {
-      await page.setViewport({ width, height: 800 });
+      await page.setViewport({ width, height: 1200 });
       await page.setContent(
         `<!doctype html><html><head><style>${css}</style></head><body>${markup}</body></html>`,
       );
@@ -83,13 +88,21 @@ it("opens a category from anywhere on its row, total included, except its menu b
           return {
             // The total sits on the name's line, clear of the name and menu.
             amount: amount ? center(".financeAmount") : null,
+            // ...and leaves the name room to be read.
             amountInLine:
-              !amountBounds ||
-              (title !== undefined &&
-                amountBounds.left >= title.right &&
-                amountBounds.right <= actions.left &&
-                amountBounds.top < bounds.top + bounds.height / 2 &&
-                amountBounds.bottom > bounds.top + bounds.height / 2),
+              row.scrollWidth <= row.clientWidth &&
+              (title?.width ?? 0) >=
+                Math.min(
+                  96,
+                  row.querySelector(".rowTitle")?.scrollWidth ?? 0,
+                ) &&
+              actions.right <= bounds.right &&
+              (!amountBounds ||
+                (title !== undefined &&
+                  amountBounds.left >= title.right &&
+                  amountBounds.right <= actions.left &&
+                  amountBounds.top < bounds.top + bounds.height / 2 &&
+                  amountBounds.bottom > bounds.top + bounds.height / 2)),
             beforeActions: hit(
               actions.left - 4,
               actions.top + actions.height / 2,

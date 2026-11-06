@@ -360,8 +360,8 @@ function CategoryRow({
 
 /**
  * A category's transactions summed as rows show amounts (spending negative),
- * one amount per currency; a currency that sums to zero shows only when
- * every one does.
+ * one amount per currency (which wrap onto their own lines when the row is
+ * narrow); a currency that sums to zero shows only when every one does.
  */
 function CategoryTotal({ totals }: { totals: CategoryTotals }) {
   const shown = totals.filter(({ total }) => total !== 0);
@@ -375,9 +375,9 @@ function CategoryTotal({ totals }: { totals: CategoryTotals }) {
           "financeAmountCredit",
       )}
     >
-      {amounts
-        .map(({ currencyCode, total }) => formatMoney(total, currencyCode))
-        .join(" · ")}
+      {amounts.map(({ currencyCode, total }) => (
+        <span key={currencyCode ?? ""}>{formatMoney(total, currencyCode)}</span>
+      ))}
     </span>
   );
 }

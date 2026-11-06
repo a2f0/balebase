@@ -94,6 +94,16 @@ describe("category year counts", () => {
       usd(-0.25),
     ]);
     expect(periodTotals(years, 2025)).toEqual([usd(-0.1)]);
+    // Three-place currencies keep every digit.
+    expect(
+      periodTotals(
+        yearCountsOf([
+          { amount: 1.005, currencyCode: "KWD", transactionDate: "2026-01-01" },
+          { amount: 0.001, currencyCode: "KWD", transactionDate: "2026-01-02" },
+        ]),
+        null,
+      ),
+    ).toEqual([{ currencyCode: "KWD", total: -1.006 }]);
     expect(periodTotals(years, 2024)).toEqual([]);
   });
 });

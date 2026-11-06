@@ -228,14 +228,19 @@ describe("expense categories", () => {
     const ids = seedTransactions(fixture.database);
     const meals = await createCategory(fixture, "Meals");
     await createCategory(fixture, "Travel");
-    // Rows 0, 2 (a refund), and 10 (EUR) stay in 2026, row 3 moves to 2025,
-    // and row 8 was removed.
+    // Rows 0, 2 (a refund), 10 (EUR), and 11 (KWD, three places) stay in
+    // 2026, row 3 moves to 2025, and row 8 was removed.
     fixture.database
       .query(
         "UPDATE plaid_transactions SET transaction_date = '2025-12-31' WHERE id = ?",
       )
       .run(ids[3] ?? "");
-    for (const index of [0, 2, 3, 8, 10]) {
+    fixture.database
+      .query(
+        "UPDATE plaid_transactions SET amount = 1.235, currency_code = 'KWD' WHERE id = ?",
+      )
+      .run(ids[11] ?? "");
+    for (const index of [0, 2, 3, 8, 10, 11]) {
       fixture.database
         .query(
           `INSERT INTO finance_transaction_annotations
@@ -264,7 +269,7 @@ describe("expense categories", () => {
     ).toEqual([
       {
         name: "Meals",
-        transactionCount: 4,
+        transactionCount: 5,
         transactionCountsByYear: [
           {
             totals: [{ currencyCode: "USD", total: -300 }],
@@ -274,9 +279,10 @@ describe("expense categories", () => {
           {
             totals: [
               { currencyCode: "EUR", total: -45 },
+              { currencyCode: "KWD", total: -1.235 },
               { currencyCode: "USD", total: -80 },
             ],
-            transactionCount: 3,
+            transactionCount: 4,
             year: 2026,
           },
         ],

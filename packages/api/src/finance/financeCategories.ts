@@ -84,8 +84,10 @@ export async function listExpenseCategories(
     entry.transactionCount += row.transaction_count;
     entry.totals.push({
       currencyCode: row.currency_code,
-      // Sums of cents carry float error; adding zero turns -0 into 0.
-      total: Math.round(-(row.amount ?? 0) * 100) / 100 + 0,
+      // Sums of decimal amounts carry float error (0.1 + 0.2); amounts have
+      // at most a currency's minor units (three for KWD), so six places keep
+      // every digit, as the app rounds. Adding zero turns -0 into 0.
+      total: Math.round(-(row.amount ?? 0) * 1e6) / 1e6 + 0,
     });
   }
   return [...categories.values()];
