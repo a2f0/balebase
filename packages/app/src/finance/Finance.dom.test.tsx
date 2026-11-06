@@ -930,8 +930,9 @@ describe("Finance filters", () => {
 
   it("keeps nothing when Reports find access gone", () => refusedOn("reports"));
 
-  it("ignores a Categories refusal that lands after leaving the tab", async () => {
+  it("forgets Finance when a Categories refusal lands after leaving the tab", async () => {
     const refusal = Promise.withResolvers<void>();
+    let stalled = false;
     respond(async (url) => {
       if (url.pathname.endsWith("/categories/defaults")) {
         await refusal.promise;
@@ -940,18 +941,22 @@ describe("Finance filters", () => {
           { status: 403 },
         );
       }
+      // The overview's own load never finishes.
+      if (stalled) return new Promise<Response>(() => undefined);
       return Response.json(data);
     });
-    const navigate = await mountFinance("/finance/categories");
-    await click("Add common categories");
-    await navigate("/finance");
+    const navigate = await mountFinance();
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
-    // The overview's own load decides what it shows, not a stale save.
+    await navigate("/finance/categories");
+    await click("Add common categories");
+    stalled = true;
+    await navigate("/finance");
     await act(async () => {
       refusal.resolve();
       await Bun.sleep(5);
     });
-    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).toContain("Finance access required.");
   });
 
   it("keeps another organization's Finance when an earlier one's save is refused", async () => {

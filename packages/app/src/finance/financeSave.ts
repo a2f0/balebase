@@ -1,4 +1,3 @@
-import { useEffect, useRef } from "react";
 import { useAction } from "../shared/useAction";
 import { refused } from "./transactionCache";
 
@@ -15,17 +14,9 @@ export function useFinanceSave(
   onRefused: (cause: unknown) => Promise<void>,
 ) {
   const action = useAction(fallback);
-  // A refusal that lands after its page closed is stale: Finance may already
-  // show another organization's data, which it must not clear. (The closing
-  // reload is safe either way: Finance's reloads use the current page's
-  // loader.)
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+  // A refusal that lands after leaving this page still means access ended,
+  // so it is reported; Finance's `onRefused` is bound to the organization
+  // the save began in and leaves another organization's view alone.
   const run: RunChange = (change) =>
     action.run(
       async () => {
@@ -34,7 +25,7 @@ export function useFinanceSave(
           await onChanged();
           return message;
         } catch (cause) {
-          if (refused(cause) && mounted.current) await onRefused(cause);
+          if (refused(cause)) await onRefused(cause);
           throw cause;
         }
       },
