@@ -32,9 +32,9 @@ const deviceStorage: OfflineWorkspaceStorage = {
  * now, on reconnecting, on focus, and every 30 seconds.
  *
  * Reads and syncs overlap, so their results go through one machine
- * (`offlineWorkspaceState.ts`) keyed by the active workspace: only the
- * newest read lands, each kind keeps its own error, and changing workspace
- * drops the last one's errors.
+ * (`offlineWorkspaceState.ts`) tied to each activation of a workspace: only
+ * the newest read lands, each kind keeps its own error, and changing
+ * workspace drops the last one's errors and late results.
  */
 export function useOfflineWorkspace(storage = deviceStorage) {
   const [state, dispatch] = useReducer(
@@ -45,12 +45,16 @@ export function useOfflineWorkspace(storage = deviceStorage) {
   useEffect(() => {
     let current = true;
     let loads = 0;
+    // Each change of the active workspace, even back to an earlier one, is a
+    // new activation; results from an earlier one are dropped.
+    let activation = 0;
+    let activeKey: string | null | undefined;
     const send: typeof dispatch = (event) => {
       if (current) dispatch(event);
     };
-    const load = async (key: string | null) => {
+    const load = async (key: string | null, activated: number) => {
       const request = ++loads;
-      send({ key, request, type: "loadStarted" });
+      send({ activation: activated, key, request, type: "loadStarted" });
       try {
         const workspace = key ? await storage.read(key) : undefined;
         send({ request, type: "loadLanded", workspace });
@@ -62,13 +66,14 @@ export function useOfflineWorkspace(storage = deviceStorage) {
         });
       }
     };
-    const sync = async (key: string | null) => {
+    const sync = async (key: string | null, activated: number) => {
       if (!key || !isOnline()) return;
       try {
-        if (await storage.sync(key)) send({ key, type: "syncSucceeded" });
+        if (await storage.sync(key))
+          send({ activation: activated, type: "syncSucceeded" });
       } catch (cause) {
         send({
-          key,
+          activation: activated,
           message: errorMessage(cause, "Could not sync offline work."),
           type: "syncFailed",
         });
@@ -76,8 +81,12 @@ export function useOfflineWorkspace(storage = deviceStorage) {
     };
     const refresh = () => {
       const key = activeOfflineKey();
-      void load(key);
-      void sync(key);
+      if (key !== activeKey) {
+        activeKey = key;
+        activation += 1;
+      }
+      void load(key, activation);
+      void sync(key, activation);
     };
     refresh();
     window.addEventListener(offlineChanged, refresh);

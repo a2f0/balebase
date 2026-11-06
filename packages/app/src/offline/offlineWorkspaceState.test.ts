@@ -3,7 +3,6 @@ import type { OfflineWorkspace } from "./offlineStore";
 import {
   initialOfflineWorkspace,
   type OfflineWorkspaceEvent,
-  type OfflineWorkspaceState,
   offlineWorkspaceError,
   offlineWorkspaceTransition,
 } from "./offlineWorkspaceState";
@@ -13,18 +12,25 @@ const run = (...events: OfflineWorkspaceEvent[]) =>
   events.reduce(offlineWorkspaceTransition, initialOfflineWorkspace);
 const started = (
   key: string | null,
+  activation: number,
   request: number,
 ): OfflineWorkspaceEvent => ({
+  activation,
   key,
   request,
   type: "loadStarted",
+});
+const syncFailed = (activation: number): OfflineWorkspaceEvent => ({
+  activation,
+  message: "Stuck.",
+  type: "syncFailed",
 });
 
 describe("offline workspace state", () => {
   it("lands only the newest read", () => {
     const state = run(
-      started("a", 1),
-      started("a", 2),
+      started("a", 1, 1),
+      started("a", 1, 2),
       { request: 2, type: "loadLanded", workspace },
       { message: "Busy.", request: 1, type: "loadFailed" },
     );
@@ -34,49 +40,56 @@ describe("offline workspace state", () => {
 
   it("clears a read's error when a newer read lands", () => {
     const state = run(
-      started("a", 1),
+      started("a", 1, 1),
       { message: "Busy.", request: 1, type: "loadFailed" },
-      started("a", 2),
+      started("a", 1, 2),
       { request: 2, type: "loadLanded", workspace },
     );
     expect(offlineWorkspaceError(state)).toBeUndefined();
   });
 
-  it("keeps a sync error through reads of the same workspace", () => {
-    const state = run(
-      started("a", 1),
-      { key: "a", message: "Stuck.", type: "syncFailed" },
-      started("a", 2),
-      { request: 2, type: "loadLanded", workspace },
-    );
+  it("keeps a sync error through reads of the same activation", () => {
+    const state = run(started("a", 1, 1), syncFailed(1), started("a", 1, 2), {
+      request: 2,
+      type: "loadLanded",
+      workspace,
+    });
     expect(offlineWorkspaceError(state)).toBe("Stuck.");
-    expect(
-      offlineWorkspaceError(
-        offlineWorkspaceTransition(state, { key: "a", type: "syncSucceeded" }),
-      ),
-    ).toBeUndefined();
+    const synced = offlineWorkspaceTransition(state, {
+      activation: 1,
+      type: "syncSucceeded",
+    });
+    expect(offlineWorkspaceError(synced)).toBeUndefined();
   });
 
-  it("drops errors and ignores the old workspace's syncs after switching", () => {
-    const failed: OfflineWorkspaceState = run(
-      started("a", 1),
-      { key: "a", message: "Stuck.", type: "syncFailed" },
-      { message: "Busy.", request: 1, type: "loadFailed" },
-    );
+  it("drops errors and ignores earlier syncs after switching", () => {
     const switched = run(
-      ...[
-        started("a", 1),
-        { key: "a", message: "Stuck.", type: "syncFailed" } as const,
-        { message: "Busy.", request: 1, type: "loadFailed" } as const,
-        started("b", 2),
-        { key: "a", message: "Late.", type: "syncFailed" } as const,
-      ],
+      started("a", 1, 1),
+      syncFailed(1),
+      { message: "Busy.", request: 1, type: "loadFailed" },
+      started("b", 2, 2),
+      syncFailed(1),
     );
-    expect(offlineWorkspaceError(failed)).toBe("Busy.");
     expect(switched.key).toBe("b");
     expect(offlineWorkspaceError(switched)).toBeUndefined();
-    expect(
-      offlineWorkspaceTransition(switched, { key: "a", type: "syncSucceeded" }),
-    ).toBe(switched);
+    const late = offlineWorkspaceTransition(switched, {
+      activation: 1,
+      type: "syncSucceeded",
+    });
+    expect(late).toBe(switched);
+  });
+
+  it("ignores a sync from before switching away and back", () => {
+    // A, then B, then A again: the first activation's late failure is not
+    // the third's.
+    const back = run(
+      started("a", 1, 1),
+      started("b", 2, 2),
+      started("a", 3, 3),
+    );
+    const stale = offlineWorkspaceTransition(back, syncFailed(1));
+    expect(offlineWorkspaceError(stale)).toBeUndefined();
+    const current = offlineWorkspaceTransition(back, syncFailed(3));
+    expect(offlineWorkspaceError(current)).toBe("Stuck.");
   });
 });

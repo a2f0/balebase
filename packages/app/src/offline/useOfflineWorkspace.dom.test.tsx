@@ -134,4 +134,18 @@ describe("offline workspace", () => {
     });
     expect(view().error).toBeUndefined();
   });
+
+  it("drops a sync's late failure after switching away and back", async () => {
+    const held = heldStorage();
+    const view = await mountWorkspace(held.storage);
+    await act(async () => {
+      activateOfflineWorkspace("user-1:org-2");
+    });
+    await act(async () => {
+      activateOfflineWorkspace("user-1:org-1");
+    });
+    // The first drain, from before switching away, fails only now.
+    await settleWith(held.syncs[0], { error: new Error("Queue stuck.") });
+    expect(view().error).toBeUndefined();
+  });
 });

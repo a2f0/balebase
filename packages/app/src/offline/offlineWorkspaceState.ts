@@ -2,11 +2,13 @@ import type { OfflineWorkspace } from "./offlineStore";
 
 /**
  * The device workspace view: the workspace last read and the errors from
- * reading and syncing it, all for one active workspace key. A different key
- * resets the errors, and results for another key, or from a read newer
- * reads replaced, never land.
+ * reading and syncing it, all for one activation of a workspace. Each time
+ * the active key changes (even back to an earlier one) is a new activation:
+ * it resets the errors, and results from another activation, or from a read
+ * newer reads replaced, never land.
  */
 export interface OfflineWorkspaceState {
+  activation: number;
   key: string | null;
   /** The newest read started; only it may land. */
   load: number;
@@ -16,18 +18,24 @@ export interface OfflineWorkspaceState {
 }
 
 export type OfflineWorkspaceEvent =
-  | { key: string | null; request: number; type: "loadStarted" }
+  | {
+      activation: number;
+      key: string | null;
+      request: number;
+      type: "loadStarted";
+    }
   | {
       request: number;
       type: "loadLanded";
       workspace: OfflineWorkspace | undefined;
     }
   | { message: string; request: number; type: "loadFailed" }
-  /** A drain that ran for `key`; skipped drains report nothing. */
-  | { key: string; type: "syncSucceeded" }
-  | { key: string; message: string; type: "syncFailed" };
+  /** A drain that ran, in `activation`; skipped drains report nothing. */
+  | { activation: number; type: "syncSucceeded" }
+  | { activation: number; message: string; type: "syncFailed" };
 
 export const initialOfflineWorkspace: OfflineWorkspaceState = {
+  activation: 0,
   key: null,
   load: 0,
   loadError: undefined,
@@ -41,10 +49,11 @@ export function offlineWorkspaceTransition(
 ): OfflineWorkspaceState {
   switch (event.type) {
     case "loadStarted":
-      return event.key === state.key
+      return event.activation === state.activation
         ? { ...state, load: event.request }
         : {
             ...state,
+            activation: event.activation,
             key: event.key,
             load: event.request,
             loadError: undefined,
@@ -59,11 +68,11 @@ export function offlineWorkspaceTransition(
         ? { ...state, loadError: event.message }
         : state;
     case "syncSucceeded":
-      return event.key === state.key
+      return event.activation === state.activation
         ? { ...state, syncError: undefined }
         : state;
     case "syncFailed":
-      return event.key === state.key
+      return event.activation === state.activation
         ? { ...state, syncError: event.message }
         : state;
     default:
