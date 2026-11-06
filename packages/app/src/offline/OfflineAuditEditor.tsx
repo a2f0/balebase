@@ -7,13 +7,11 @@ import {
   Select,
 } from "@balebase/ui/react";
 import { auditLimits } from "@balebase/validators/rules";
-import { useEffect, useRef, useState } from "react";
-import { errorMessage } from "../shared/errors";
+import { useState } from "react";
 import { guardWorkspaceChange } from "../workspace/navigationGuard";
-import { useUnsavedChanges } from "../workspace/unsavedChanges";
 import { OfflineIssueCreator, OfflineIssueList } from "./OfflineIssues";
 import type { OfflineAudit, OfflineWorkspace } from "./offlineStore";
-import { queueOfflineAudit, saveOfflineAnswer } from "./offlineWork";
+import { useOfflineAnswers } from "./useOfflineAnswers";
 
 /**
  * Answers an audit on this device, saving each answer here as it is given.
@@ -128,70 +126,4 @@ export function OfflineAuditEditor({
       />
     </PageSection>
   );
-}
-
-function useOfflineAnswers(audit: OfflineAudit, key: string) {
-  const [responses, setResponses] = useState(audit.responses);
-  const dirty = useRef<Record<string, { value: string }>>({});
-  const writes = useRef(Promise.resolve());
-  const [pending, setPending] = useState(0);
-  const [error, setError] = useState<string>();
-  const [sealing, setSealing] = useState(false);
-  useUnsavedChanges(
-    pending > 0 || Boolean(error),
-    "Some audit answers have not been saved on this device.",
-  );
-  useEffect(() => {
-    setResponses({
-      ...audit.responses,
-      ...Object.fromEntries(
-        Object.entries(dirty.current).map(([id, edit]) => [id, edit.value]),
-      ),
-    });
-  }, [audit.responses]);
-  function write(itemId: string, edit: { value: string }) {
-    const result = writes.current.then(async () => {
-      await saveOfflineAnswer(key, audit.id, itemId, edit.value);
-      if (dirty.current[itemId] === edit) delete dirty.current[itemId];
-    });
-    // Preserve typing order within this tab, including after a failed write.
-    writes.current = result.catch(() => undefined);
-    return result;
-  }
-  async function answer(itemId: string, value: string) {
-    const edit = { value };
-    dirty.current[itemId] = edit;
-    setResponses((current) => ({ ...current, [itemId]: value }));
-    setPending((count) => count + 1);
-    try {
-      await write(itemId, edit);
-    } catch (cause) {
-      setError(
-        errorMessage(
-          cause,
-          "Answer not saved. Check device storage and retry.",
-        ),
-      );
-    } finally {
-      setPending((count) => count - 1);
-    }
-  }
-  async function save(complete: boolean) {
-    setSealing(true);
-    setPending((count) => count + 1);
-    try {
-      // Retry only unsaved edits. Already-saved answers may have been updated
-      // by another tab; completion seals the latest durable snapshot.
-      for (const [id, edit] of Object.entries(dirty.current))
-        await write(id, edit);
-      if (complete) await queueOfflineAudit(key, audit.id);
-      setError(undefined);
-    } catch (cause) {
-      setError(errorMessage(cause, "Could not queue audit."));
-    } finally {
-      setSealing(false);
-      setPending((count) => count - 1);
-    }
-  }
-  return { responses, pending, sealing, error, answer, save };
 }

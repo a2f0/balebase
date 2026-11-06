@@ -202,6 +202,48 @@ describe("organization form publication", () => {
     expect(header()?.textContent).toContain("Unpublish");
   });
 
+  it("holds the form still while a save is in flight", async () => {
+    stubApi();
+    await render(true);
+    const save = Promise.withResolvers<void>();
+    const inner = globalThis.fetch;
+    globalThis.fetch = (async (input, init) => {
+      if (init?.method === "PUT") await save.promise;
+      return inner(input, init);
+    }) as typeof fetch;
+    try {
+      const fields = () =>
+        container.querySelector<HTMLFieldSetElement>(".auditBuilderFields");
+      expect(fields()?.disabled).toBe(false);
+      const publish = [
+        ...container.querySelectorAll<HTMLButtonElement>("button"),
+      ].find((button) => button.textContent === "Publish");
+      await act(async () => publish?.click());
+      // The saved form replaces this one when it lands; no edits meanwhile.
+      expect(fields()?.disabled).toBe(true);
+      // Reorder handles sit outside what a fieldset disables.
+      const before = prompts();
+      await press(
+        questions()[0]?.querySelector(".auditDragHandle"),
+        "ArrowDown",
+      );
+      for (const [index, row] of questions().entries()) {
+        row.getBoundingClientRect = () =>
+          ({ height: 100, top: index * 100 }) as DOMRect;
+      }
+      const first = questions()[0]?.querySelector(".auditDragHandle");
+      await pointer(first, "pointerdown", 50);
+      await pointer(first, "pointermove", 260);
+      await pointer(first, "pointerup", 260);
+      expect(prompts()).toEqual(before);
+      await act(async () => save.resolve());
+      await settle(30);
+      expect(fields()?.disabled).toBe(false);
+    } finally {
+      globalThis.fetch = inner;
+    }
+  });
+
   it("shows other members the status without publication controls", async () => {
     stubApi();
     await render();

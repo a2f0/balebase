@@ -193,7 +193,10 @@ function useInboxActions(messages: ReturnType<typeof useInboxMessages>) {
     setWorkingId(id);
     await action.run(async () => {
       await change(id);
-      messages.setSelectedId(undefined);
+      // The list stays usable meanwhile; a message chosen since is kept.
+      messages.setSelectedId((current) =>
+        current === id ? undefined : current,
+      );
       await messages.refresh();
     }, successNotice);
     setWorkingId(undefined);
