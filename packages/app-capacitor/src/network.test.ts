@@ -51,3 +51,22 @@ it("stays online when the native plugin is missing", async () => {
   expect(network.getOnline()).toBe(true);
   expect(plugin.getStatus).not.toHaveBeenCalled();
 });
+
+it("keeps a change event over a startup reading that lands after it", async () => {
+  const reading = Promise.withResolvers<ConnectionStatus>();
+  const { emit, plugin } = nativePlugin({
+    connected: true,
+    connectionType: "wifi",
+  });
+  plugin.getStatus.mockImplementation(() => reading.promise);
+  const network = capacitorNetwork(plugin, true);
+  const seen: boolean[] = [];
+  network.subscribe((online) => seen.push(online));
+  await Bun.sleep(0);
+  // The connection drops while the startup reading is still on its way.
+  emit({ connected: false, connectionType: "none" });
+  reading.resolve({ connected: true, connectionType: "wifi" });
+  await Bun.sleep(0);
+  expect(network.getOnline()).toBe(false);
+  expect(seen).toEqual([false]);
+});

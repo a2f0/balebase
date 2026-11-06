@@ -38,13 +38,19 @@ export function capacitorNetwork(
   function bind() {
     if (bound || !native) return;
     bound = true;
+    // A change event is newer than the startup reading, which may land after
+    // it; once one arrives, that reading no longer applies.
+    let changed = false;
     void plugin
       .getStatus()
-      .then((status) => update(isConnected(status)))
+      .then((status) => {
+        if (!changed) update(isConnected(status));
+      })
       .catch(() => undefined);
-    void plugin.addListener("networkStatusChange", (status) =>
-      update(isConnected(status)),
-    );
+    void plugin.addListener("networkStatusChange", (status) => {
+      changed = true;
+      update(isConnected(status));
+    });
   }
 
   return {

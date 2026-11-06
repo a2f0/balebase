@@ -9,43 +9,64 @@ import {
 } from "./offlineStore";
 import { syncOfflineWorkspace } from "./offlineSync";
 
+/** Storage the hook reads and syncs; tests pass their own. */
+export interface OfflineWorkspaceStorage {
+  read: (key: string) => Promise<OfflineWorkspace | undefined>;
+  sync: (key: string) => Promise<unknown>;
+}
+
+const deviceStorage: OfflineWorkspaceStorage = {
+  read: readOfflineWorkspace,
+  sync: syncOfflineWorkspace,
+};
+
 /**
  * The active workspace on this device, reloaded whenever it changes here or
  * in another tab, and its queued work sent whenever the device is online:
  * now, on reconnecting, on focus, and every 30 seconds.
+ *
+ * Reads and syncs overlap, so only the newest of each kind reports, and each
+ * kind keeps its own error: a read landing does not hide a sync that still
+ * fails, and an older read's failure never covers newer data.
  */
-export function useOfflineWorkspace() {
+export function useOfflineWorkspace(storage = deviceStorage) {
   const [workspace, setWorkspace] = useState<OfflineWorkspace>();
   const online = useOnline();
-  const [error, setError] = useState<string>();
+  const [loadError, setLoadError] = useState<string>();
+  const [syncError, setSyncError] = useState<string>();
   useEffect(() => {
     let current = true;
-    let generation = 0;
+    let loads = 0;
+    let syncs = 0;
     const load = async () => {
-      const request = ++generation;
+      const request = ++loads;
       const key = activeOfflineKey();
       try {
-        const saved = key ? await readOfflineWorkspace(key) : undefined;
-        if (current && request === generation) {
+        const saved = key ? await storage.read(key) : undefined;
+        if (current && request === loads) {
           setWorkspace(saved);
-          setError(undefined);
+          setLoadError(undefined);
         }
       } catch (cause) {
-        if (current)
-          setError(errorMessage(cause, "Offline storage is unavailable."));
+        if (current && request === loads)
+          setLoadError(errorMessage(cause, "Offline storage is unavailable."));
       }
     };
-    const sync = () => {
+    const sync = async () => {
       const key = activeOfflineKey();
-      if (key && isOnline())
-        void syncOfflineWorkspace(key).catch((cause: unknown) => {
-          if (current)
-            setError(errorMessage(cause, "Could not sync offline work."));
-        });
+      if (!key || !isOnline()) return;
+      const request = ++syncs;
+      try {
+        await storage.sync(key);
+        if (current && request === syncs) setSyncError(undefined);
+      } catch (cause) {
+        if (current && request === syncs)
+          setSyncError(errorMessage(cause, "Could not sync offline work."));
+      }
     };
     const refresh = () => {
       void load();
-      sync();
+      void sync();
     };
     refresh();
     window.addEventListener(offlineChanged, refresh);
@@ -60,6 +81,6 @@ export function useOfflineWorkspace() {
       for (const event of [offlineChanged, "storage", "focus"])
         window.removeEventListener(event, refresh);
     };
-  }, []);
-  return { workspace, online, error };
+  }, [storage]);
+  return { workspace, online, error: loadError ?? syncError };
 }
