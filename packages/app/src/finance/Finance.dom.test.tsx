@@ -930,6 +930,76 @@ describe("Finance filters", () => {
 
   it("keeps nothing when Reports find access gone", () => refusedOn("reports"));
 
+  it("ignores a Categories refusal that lands after leaving the tab", async () => {
+    const refusal = Promise.withResolvers<void>();
+    respond(async (url) => {
+      if (url.pathname.endsWith("/categories/defaults")) {
+        await refusal.promise;
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      }
+      return Response.json(data);
+    });
+    const navigate = await mountFinance("/finance/categories");
+    await click("Add common categories");
+    await navigate("/finance");
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    // The overview's own load decides what it shows, not a stale save.
+    await act(async () => {
+      refusal.resolve();
+      await Bun.sleep(5);
+    });
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+  });
+
+  it("keeps another organization's Finance when an earlier one's save is refused", async () => {
+    const refusal = Promise.withResolvers<void>();
+    let organizationId = "organization";
+    respond(async (url) => {
+      if (url.pathname.endsWith("/categories/defaults")) {
+        await refusal.promise;
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      }
+      return Response.json({
+        ...data,
+        categories: [
+          {
+            id: organizationId,
+            name: `${organizationId} meals`,
+            slug: "meals",
+            transactionCount: 0,
+          },
+        ],
+        organizationId,
+      });
+    });
+    const page = (organization: string) => (
+      <Finance
+        onNavigate={() => undefined}
+        pathname="/finance/categories"
+        scope={{ organizationId: organization, userId: "person" }}
+      />
+    );
+    const view = await mount(page("organization"));
+    container = view.container;
+    await click("Add common categories");
+    // The session moves to another organization while the save waits.
+    organizationId = "other";
+    await view.render(page("other"));
+    await act(async () => Bun.sleep(5));
+    expect(container.textContent).toContain("other meals");
+    await act(async () => {
+      refusal.resolve();
+      await Bun.sleep(5);
+    });
+    expect(container.textContent).toContain("other meals");
+  });
+
   it("keeps nothing for someone who loses access", async () => {
     let refused = false;
     respond(() =>
