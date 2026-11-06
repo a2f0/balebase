@@ -209,7 +209,7 @@ export function expenseCategoryFiltersFor(
 }
 
 export const financeCategoriesPath = "/finance/categories";
-export const financeRulesPath = "/finance/rules";
+const financeRulesPath = "/finance/rules";
 
 /** Rules, with a new categorization rule for `payee` filled in. */
 export function financeRulePath(payee: string) {
