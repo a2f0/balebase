@@ -503,6 +503,19 @@
   flex: 1 1 16rem;
 }
 
+/* Rule editor within a row: payee and category side by side, wrapping. */
+.financeRuleEdit {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.financeRuleEdit > .field {
+  flex: 1 1 12rem;
+}
+
 /* Compact filters wrap alongside the period selector on narrow screens. */
 .financeTransactionFilters {
   display: flex;

@@ -44,6 +44,17 @@ function stubApi(initial: CategorizationRule[], status?: number) {
       rules = [];
       return new Response(null, { status: 204 });
     }
+    if (method === "PATCH") {
+      const edit = body as { categoryId: string; payeeName: string };
+      const category = categories.find(({ id }) => id === edit.categoryId);
+      rules = rules.map((item) => ({
+        ...item,
+        category: { id: edit.categoryId, name: category?.name ?? "" },
+        payeeName: edit.payeeName,
+        uncategorizedCount: 2,
+      }));
+      return Response.json({ rule: rules[0] });
+    }
     if (url.pathname.endsWith("/apply")) {
       rules = rules.map((item) => ({ ...item, uncategorizedCount: 0 }));
       return Response.json({ applied: 3 });
@@ -99,7 +110,88 @@ function ruleRows(container: HTMLElement) {
   ].map((row) => row.textContent);
 }
 
+async function openMenu(container: HTMLElement, payee: string) {
+  await click(queryButton(`Actions for the rule for ${payee}`, container));
+}
+
+function menuItems() {
+  return [...document.querySelectorAll('[role="menuitem"]')].map(
+    (item) => item.textContent,
+  );
+}
+
+/** Opens a rule's menu from its menu button and chooses `label`. */
+async function chooseFromMenu(
+  container: HTMLElement,
+  payee: string,
+  label: string,
+) {
+  await openMenu(container, payee);
+  const item = [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+  ].find((element) => element.textContent === label);
+  if (!item) throw new Error(`Missing menu item: ${label}`);
+  await click(item);
+}
+
 describe("categorization rules", () => {
+  it("edits a rule's payee and category from its menu", async () => {
+    const writes = stubApi([rule({ uncategorizedCount: 0 })]);
+    const { calls, container } = await render();
+    await openMenu(container, "Shell");
+    expect(menuItems()).toEqual(["Edit", "Delete"]);
+    await chooseFromMenu(container, "Shell", "Edit");
+    const form = container.querySelector<HTMLFormElement>(
+      '[aria-label="Edit the rule for Shell"]',
+    );
+    if (!form) throw new Error("No edit form");
+    const payee = form.querySelector("input");
+    expect(document.activeElement).toBe(payee);
+    // Unchanged, there is nothing to save.
+    expect(queryButton("Save", form)?.disabled).toBe(true);
+    await fill(payee, "Chevron");
+    await fill(form.querySelector("select"), "meals");
+    await click(queryButton("Save", form));
+    expect(writes).toEqual([
+      {
+        body: { categoryId: "meals", payeeName: "Chevron" },
+        method: "PATCH",
+        path: "/api/finance/categorization-rules/rule-1",
+      },
+    ]);
+    expect(container.textContent).toContain("Saved the rule for “Chevron”.");
+    expect(
+      container.querySelector('[aria-label="Edit the rule for Shell"]'),
+    ).toBeNull();
+    expect(ruleRows(container)).toEqual([expect.stringContaining("Chevron")]);
+    expect(ruleRows(container)[0]).toContain("Meals · 2 uncategorized");
+    expect(calls.changed).toBe(1);
+  });
+
+  it("keeps the edit open with its values when saving fails, and cancels", async () => {
+    stubApi([rule()]);
+    respond(async (_url, init) =>
+      init?.method === "PATCH"
+        ? Response.json(
+            { error: "That payee already has a rule." },
+            { status: 409 },
+          )
+        : Response.json({ rules: [rule()] }),
+    );
+    const { container } = await render();
+    await chooseFromMenu(container, "Shell", "Edit");
+    const form = container.querySelector<HTMLFormElement>(
+      '[aria-label="Edit the rule for Shell"]',
+    );
+    if (!form) throw new Error("No edit form");
+    await fill(form.querySelector("input"), "Chevron");
+    await click(queryButton("Save", form));
+    expect(container.textContent).toContain("That payee already has a rule.");
+    expect(form.querySelector("input")?.value).toBe("Chevron");
+    await click(queryButton("Cancel", form));
+    expect(ruleRows(container)).toEqual([expect.stringContaining("Shell")]);
+  });
+
   it("adds a rule that also fills the payee's uncategorized transactions", async () => {
     const writes = stubApi([rule({ uncategorizedCount: 0 })]);
     const { calls, container } = await render();
@@ -206,7 +298,7 @@ describe("categorization rules", () => {
     const writes = stubApi([rule({ uncategorizedCount: 3 })]);
     const { calls, container } = await render();
     expect(ruleRows(container)[0]).toContain("3 uncategorized transactions");
-    await click(queryButton("Categorize 3", container));
+    await chooseFromMenu(container, "Shell", "Categorize 3 transactions");
     expect(writes.at(-1)).toEqual({
       body: null,
       method: "POST",
@@ -215,8 +307,9 @@ describe("categorization rules", () => {
     expect(container.textContent).toContain(
       "Categorized 3 transactions from “Shell”.",
     );
-    expect(queryButton("Categorize 3", container)).toBeNull();
-    await click(queryButton("Delete the rule for Shell", container));
+    await openMenu(container, "Shell");
+    expect(menuItems()).toEqual(["Edit", "Delete"]);
+    await chooseFromMenu(container, "Shell", "Delete");
     await click(queryButton("Delete rule", document));
     expect(writes.at(-1)).toEqual({
       body: null,

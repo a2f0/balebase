@@ -365,6 +365,18 @@ const CreateCategorizationRuleSchema = z.object(
   { error: "A payee name, a category, and applyToExisting are required." },
 );
 
+/** A rule's new payee and category; editing categorizes nothing by itself. */
+const UpdateCategorizationRuleSchema = z.object(
+  {
+    categoryId: RecordIdSchema,
+    payeeName: z
+      .string({ error: payeeNameRule })
+      .min(1, payeeNameRule)
+      .max(financeLimits.payeeName, payeeNameRule),
+  },
+  { error: "A payee name and a category are required." },
+);
+
 /** How many existing transactions a rule categorized. */
 const RuleAppliedSchema = z.object({ applied: z.number() });
 
@@ -631,6 +643,12 @@ export const financeRoutes = {
     method: "POST",
     path: "/api/finance/categorization-rules/:id/apply",
     response: RuleAppliedSchema,
+  }),
+  updateCategorizationRule: route({
+    method: "PATCH",
+    path: "/api/finance/categorization-rules/:id",
+    body: UpdateCategorizationRuleSchema,
+    response: z.object({ rule: CategorizationRuleSchema }),
   }),
   deleteCategorizationRule: route({
     method: "DELETE",
