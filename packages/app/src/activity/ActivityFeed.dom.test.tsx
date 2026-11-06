@@ -1030,6 +1030,71 @@ it("summarizes bank, category, and billing changes and links what still exists",
   ).toHaveLength(4);
 });
 
+it("names the rule behind a categorization and summarizes rule changes", async () => {
+  const system = {
+    email: "",
+    id: null,
+    name: "Balebase rules",
+    source: "categorizationRule",
+    type: "system",
+  } as const;
+  const rule = (
+    id: number,
+    action: string,
+    details: ActivityEvent["details"],
+  ): ActivityEvent => ({
+    ...event(id, ""),
+    action,
+    details,
+    root: { id: "fuel", label: "Fuel", type: "finance_category" },
+    subject: { id: "rule-1", type: "finance_categorization_rule" },
+  });
+  const changes: ActivityEvent[] = [
+    {
+      ...event(4, ""),
+      action: "finance.transaction_categorized",
+      actor: system,
+      details: {
+        after: "fuel",
+        afterName: "Fuel",
+        before: null,
+        beforeName: null,
+        ruleId: "rule-1",
+        rulePayeeName: "Shell",
+      },
+      root: { id: "txn-1", label: "Shell", type: "finance_transaction" },
+      subject: { id: "txn-1", type: "finance_transaction" },
+    },
+    rule(3, "finance.categorization_rule_deleted", {
+      categoryName: "Fuel",
+      payeeName: "Shell",
+      reason: "category_deleted",
+    }),
+    rule(2, "finance.categorization_rule_applied", {
+      categoryName: "Fuel",
+      count: 12,
+      payeeName: "Shell",
+    }),
+    rule(1, "finance.categorization_rule_created", {
+      categoryName: "Fuel",
+      payeeName: "Shell",
+    }),
+  ];
+  respond(async () => Response.json({ events: changes, nextCursor: null }));
+  ({ container } = await mount(<ActivityFeed onNavigate={() => undefined} />));
+  const rows = [...container.querySelectorAll(".activityRow")].map(
+    (row) => row.textContent ?? "",
+  );
+  expect(rows[0]).toContain("Balebase rules changed the expense category");
+  expect(rows[0]).toContain("By the rule for “Shell”");
+  expect(rows[1]).toContain("deleted a categorization rule");
+  expect(rows[1]).toContain("Shell → Fuel · With its category");
+  expect(rows[2]).toContain("categorized a payee's transactions by rule");
+  expect(rows[2]).toContain("Shell → Fuel · 12 transactions");
+  expect(rows[3]).toContain("created a categorization rule");
+  expect(rows[3]).toContain("Shell → Fuel");
+});
+
 it("summarizes billing cancellations, portal sessions, and login repairs", async () => {
   const change = (
     id: number,

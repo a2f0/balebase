@@ -54,9 +54,23 @@ export function contractSigningActor(contractEventId: string): SystemActor {
   };
 }
 
+/**
+ * The system source of what categorization rules do to imported
+ * transactions: a rule a person set up applies, with no person acting.
+ */
+const categorizationRuleSource = "categorizationRule";
+
+/** Categorization rules, as the actor of one sync page's categorizations. */
+export function categorizationRuleActor(
+  causation: ActivityCausation,
+): SystemActor {
+  return { causation, jobId: categorizationRuleSource, type: "system" };
+}
+
 /** The label stored with a system or provider event. */
 function systemActorName(actor: SystemActor) {
   if (actor.type === "provider") return activityProviderNames[actor.provider];
+  if (actor.jobId === categorizationRuleSource) return `${productName} rules`;
   return actor.jobId === contractSigningSource
     ? `${productName} signing`
     : `${productName} maintenance`;

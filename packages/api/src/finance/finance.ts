@@ -46,6 +46,7 @@ import {
 } from "./financeLinkTokens";
 import { financeListingFilters } from "./financeListingFilters";
 import { expenseReport } from "./financeReports";
+import { categorizationRules } from "./financeRules";
 import type { PlaidItemRow } from "./financeSync";
 import {
   connectionSyncStatus,
@@ -137,6 +138,7 @@ export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
   finance.post("/categories/defaults", addDefaultCategories);
   finance.patch("/categories/:id", renameCategory);
   finance.delete("/categories/:id", deleteCategory);
+  finance.route("/categorization-rules", categorizationRules);
   finance.get("/reports/expenses", expenseReport);
   finance.onError((error, context) => {
     if (error instanceof PlaidApiError) {

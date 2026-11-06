@@ -429,6 +429,7 @@ describe("Finance filters", () => {
       "Annotate",
       "Raise issue",
       "Show only “Shell”",
+      "Create rule for “Shell”",
     ]);
     await act(async () =>
       document.dispatchEvent(
@@ -456,6 +457,9 @@ describe("Finance filters", () => {
     await openRowMenu("Olive Garden");
     await choose("Raise issue");
     expect(currentPath).toBe(transactionIssuePath("Olive Garden"));
+    await openRowMenu("Shell");
+    await choose("Create rule for “Shell”");
+    expect(currentPath).toBe("/finance/categories?payee=Shell");
   });
 
   it("keeps every shown row and the annotation form while a saved note refreshes", async () => {

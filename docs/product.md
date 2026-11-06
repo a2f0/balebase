@@ -881,6 +881,23 @@ accounts is not double-counted. Totals are grouped by currency. Earlier
 free-text category overrides were converted into categories by migration
 `0034`.
 
+Categorization rules, listed under the categories at `/finance/categories`,
+give one payee's transactions an expense category. A rule names a payee
+exactly as transactions show it (the merchant's name, else the bank's
+description, as **Show only** matches it) and a category; each payee has at
+most one rule, so at most one rule matches a transaction. A transaction row's
+menu offers **Create rule** with its name filled in. Rules fill only
+transactions without a category and never change one someone chose. When a
+Plaid sync imports a new transaction whose payee has a rule, the transaction
+takes that category, recorded as Balebase's (**Balebase rules**) with the
+rule named. Creating a rule can also fill the payee's existing uncategorized
+transactions, and a rule's **Categorize** button does so later; those are
+recorded as the person's, each transaction with its own category event.
+Creating, applying (with how many it filled), and deleting rules appear under
+**Expense categories** in Activity. Deleting a category deletes its rules,
+each recorded; transactions a rule categorized keep their category when the
+rule goes. An organization keeps up to 500 rules.
+
 When a connection stops syncing with an error, such as Plaid's
 `ITEM_LOGIN_REQUIRED` after a bank password or MFA change, **Update login** on
 the Connections tab opens Plaid Link in update mode for that same Item. No

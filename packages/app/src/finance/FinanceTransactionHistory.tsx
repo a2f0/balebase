@@ -31,6 +31,7 @@ import { AppLink } from "../shared/AppLink";
 import { InfiniteScroll } from "../shared/InfiniteScroll";
 import { countLabel, formatCalendarDate, formatLabel } from "../shared/labels";
 import {
+  financeRulePath,
   financeTransactionPath,
   inboxEmailPath,
   transactionIssuePath,
@@ -434,6 +435,12 @@ function transactionMenuItems({
       id: "same-name",
       label: `Show only “${title}”`,
       onSelect: () => onFilterByName(title),
+    });
+    items.push({
+      icon: "layers",
+      id: "create-rule",
+      label: `Create rule for “${title}”`,
+      onSelect: () => onNavigate(financeRulePath(title)),
     });
   }
   return items;

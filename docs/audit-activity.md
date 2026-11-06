@@ -120,6 +120,14 @@ or a failed provider request, records nothing:
   page (`plaid_sync_page`: the job run, its restarts, its page, and the
   attempt's lease); a replayed page finds its rows already moved or removed
   and records nothing.
+- `finance.transaction_categorized` by **Balebase rules** (system source
+  `categorizationRule`, root and subject the transaction) records a
+  categorization rule giving a newly imported transaction its category. The
+  details name the rule (`ruleId`, `rulePayeeName`), and the cause is the same
+  `plaid_sync_page`. The annotation it writes has no creator or editor, since
+  no person acted; a replayed page finds the annotation in place and records
+  nothing. A person applying a rule to existing transactions is recorded as
+  that person instead.
 
 Billing events are for owners and admins and bank connection events need
 Finance capability, as for people's own events.

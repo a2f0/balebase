@@ -334,6 +334,40 @@ const CategoriesResponseSchema = z.object({
   categories: z.array(ExpenseCategorySchema),
 });
 
+const payeeNameRule = `Payee names need 1 to ${financeLimits.payeeName} characters.`;
+
+/**
+ * Gives a payee's transactions an expense category: those shown under exactly
+ * `payeeName` (the merchant, else the bank's description). Rules only fill
+ * uncategorized transactions.
+ */
+const CategorizationRuleSchema = z.object({
+  category: z.object({ id: z.string(), name: z.string() }),
+  createdAt: z.string(),
+  id: z.string(),
+  payeeName: z.string(),
+  /** The payee's uncategorized transactions, which applying the rule fills. */
+  uncategorizedCount: z.number(),
+});
+export type CategorizationRule = z.infer<typeof CategorizationRuleSchema>;
+
+const CreateCategorizationRuleSchema = z.object(
+  {
+    /** Also fill the payee's existing uncategorized transactions. */
+    applyToExisting: z.boolean(),
+    categoryId: RecordIdSchema,
+    // Matched exactly, as rows show it, so it is neither trimmed nor folded.
+    payeeName: z
+      .string({ error: payeeNameRule })
+      .min(1, payeeNameRule)
+      .max(financeLimits.payeeName, payeeNameRule),
+  },
+  { error: "A payee name, a category, and applyToExisting are required." },
+);
+
+/** How many existing transactions a rule categorized. */
+const RuleAppliedSchema = z.object({ applied: z.number() });
+
 const searchRule = `Searches need ${financeLimits.search} characters or fewer.`;
 
 const reportRangeRule = "Use YYYY-MM-DD dates with from on or before to.";
@@ -580,6 +614,27 @@ export const financeRoutes = {
   deleteCategory: route({
     method: "DELETE",
     path: "/api/finance/categories/:id",
+    response: "empty",
+  }),
+  listCategorizationRules: route({
+    method: "GET",
+    path: "/api/finance/categorization-rules",
+    response: z.object({ rules: z.array(CategorizationRuleSchema) }),
+  }),
+  createCategorizationRule: route({
+    method: "POST",
+    path: "/api/finance/categorization-rules",
+    body: CreateCategorizationRuleSchema,
+    response: RuleAppliedSchema.extend({ rule: CategorizationRuleSchema }),
+  }),
+  applyCategorizationRule: route({
+    method: "POST",
+    path: "/api/finance/categorization-rules/:id/apply",
+    response: RuleAppliedSchema,
+  }),
+  deleteCategorizationRule: route({
+    method: "DELETE",
+    path: "/api/finance/categorization-rules/:id",
     response: "empty",
   }),
   expenseReport: route({

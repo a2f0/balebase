@@ -4,6 +4,7 @@ import {
   carriedOverStatement,
   removedTransactionsStatement,
 } from "./financeProviderActivity";
+import { applyRulesToImported } from "./financeRules";
 import {
   type PlaidAccount,
   PlaidApiError,
@@ -88,12 +89,15 @@ async function persistPage(
       await upsertAccount(database, organizationId, itemId, account, carryOver),
     );
   }
+  // Transactions the page adds that are new here, which rules categorize.
+  const imported: string[] = [];
+  const added = new Set(page.added);
   for (const transaction of [...page.added, ...page.modified]) {
     const accountId = accountIds.get(transaction.account_id);
     if (!accountId) {
       throw new Error("Plaid returned a transaction without its account.");
     }
-    await upsertTransaction(
+    const id = await upsertTransaction(
       database,
       organizationId,
       itemId,
@@ -101,6 +105,9 @@ async function persistPage(
       transaction,
       carryOver,
     );
+    if (added.has(transaction) && !carryOver.carriedTransactionIds.has(id)) {
+      imported.push(id);
+    }
   }
   if (carryOver.accounts.size > 0 || carryOver.carriedTransactionIds.size > 0) {
     await database.batch([
@@ -111,6 +118,11 @@ async function persistPage(
       ...carryOver.accounts.values(),
       ...carryOver.transactions.values(),
     ]);
+  }
+  if (imported.length > 0) {
+    await database.batch(
+      applyRulesToImported(database, organizationId, causation, imported),
+    );
   }
   if (page.removed.length === 0) return;
   const removed = page.removed.map(
@@ -326,6 +338,7 @@ async function upsertTransaction(
   } else {
     await upsert.run();
   }
+  return id;
 }
 
 function findSourceTransaction(

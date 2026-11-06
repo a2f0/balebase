@@ -10,15 +10,33 @@ import { textValue } from "./activityLabels";
 /** The system source of what a signing link did (the API's signing workflow). */
 const contractSigningSource = "contractSigning";
 
+/** The system source of what categorization rules did on import. */
+const categorizationRuleSource = "categorizationRule";
+
+/** Each system source's name, and the kind of change it makes. */
+const systemSources: Record<string, { detail: string; name: string }> = {
+  [categorizationRuleSource]: {
+    detail: "Categorization rule",
+    name: `${productName} rules`,
+  },
+  [contractSigningSource]: {
+    detail: "Signing link",
+    name: `${productName} signing`,
+  },
+};
+
+const maintenance = {
+  detail: "Automatic maintenance",
+  name: `${productName} maintenance`,
+};
+
 /**
- * Who made a change: a person, Balebase's maintenance or signing workflow, or
- * a provider.
+ * Who made a change: a person, Balebase's maintenance, signing workflow, or
+ * categorization rules, or a provider.
  */
 export function actorName(actor: ActivityActor) {
   if (actor.type === "system")
-    return actor.source === contractSigningSource
-      ? `${productName} signing`
-      : `${productName} maintenance`;
+    return (systemSources[actor.source ?? ""] ?? maintenance).name;
   if (actor.type === "provider")
     return Reflect.get(activityProviderNames, actor.source ?? "") ?? actor.name;
   return actor.name || actor.email;
@@ -27,9 +45,7 @@ export function actorName(actor: ActivityActor) {
 /** The line under an actor: a person's email, or what kind of change it was. */
 export function actorDetail(actor: ActivityActor) {
   if (actor.type === "system")
-    return actor.source === contractSigningSource
-      ? "Signing link"
-      : "Automatic maintenance";
+    return (systemSources[actor.source ?? ""] ?? maintenance).detail;
   if (actor.type === "provider") return "Provider update";
   return actor.email;
 }

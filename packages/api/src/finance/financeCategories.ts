@@ -6,6 +6,7 @@ import { financeLimits } from "@balebase/validators/rules";
 import { activityBatch, requestActor } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import type { FinanceContext } from "./financeContext";
+import { deleteCategoryRulesStatements } from "./financeRules";
 
 interface CategoryRow {
   id: string;
@@ -202,6 +203,14 @@ export async function deleteCategory(context: FinanceContext) {
       occurredAt: now,
       organizationId,
     }),
+    // Its rules go with it; each records its deletion first.
+    ...deleteCategoryRulesStatements(
+      database,
+      actor.userId,
+      now,
+      organizationId,
+      id,
+    ),
     database
       .prepare(
         `UPDATE finance_transaction_annotations
