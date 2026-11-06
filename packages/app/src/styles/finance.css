@@ -516,6 +516,25 @@
   flex: 1 1 12rem;
 }
 
+/* A payee row's categorize or rule form: the field, then its options. */
+.financePayeeAction {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.financePayeeAction > .field {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+/* A long unbroken payee name wraps in the label instead of widening the row. */
+.financePayeeAction .fieldLabel {
+  overflow-wrap: anywhere;
+}
+
 /* Compact filters wrap alongside the period selector on narrow screens. */
 .financeTransactionFilters {
   display: flex;

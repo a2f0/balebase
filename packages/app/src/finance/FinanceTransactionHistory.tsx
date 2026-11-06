@@ -38,6 +38,7 @@ import {
 } from "../workspace/workspacePaths";
 import {
   FinancePayeeList,
+  ruleNameFits,
   type TransactionView,
   TransactionViewSwitch,
 } from "./FinancePayeeList";
@@ -52,6 +53,7 @@ import {
   useTransactionSelection,
 } from "./FinanceTransactionSelection";
 import { formatMoney } from "./financeFormat";
+import type { CreateRule } from "./financeRuleAction";
 import { groupByPayee, type PayeeGroup, transactionTitle } from "./payeeGroups";
 
 interface AnnotationHandlers {
@@ -106,6 +108,8 @@ export function FinanceTransactionHistory({
   loadError: string | undefined;
   onLoadMore: () => Promise<boolean>;
   onReload: () => Promise<void>;
+  /** Creates a payee's categorization rule; resolves whether it saved. */
+  onCreateRule: CreateRule;
 }) {
   const [view, setView] = useState<TransactionView>("list");
   const transactions = matching?.slice(0, visible);
@@ -164,26 +168,31 @@ export function FinanceTransactionHistory({
           {loadError}
         </Banner>
       )}
-      {(!loadError || matching) &&
-        (payees?.length ? (
-          <FinancePayeeList
-            onSelect={(name) => {
-              setView("list");
-              onFiltersChange({ ...filters, name });
-            }}
-            payees={payees.slice(0, visible)}
-          />
-        ) : (
-          <TransactionContent
-            filtered={hasTransactionFilters(filters)}
-            loadingLabel={loadingLabel}
-            onCategorizeMany={onCategorizeMany}
-            onFilterByName={(name) => onFiltersChange({ ...filters, name })}
-            selection={selection}
-            transactions={transactions}
-            {...handlers}
-          />
-        ))}
+      {/* Kept while the payee view shows, even empty: a payee's open form
+          outlives its row leaving the list as it saves. */}
+      {payees && (
+        <FinancePayeeList
+          {...handlers}
+          matching={matching ?? []}
+          onCategorizeMany={onCategorizeMany}
+          onSelect={(name) => {
+            setView("list");
+            onFiltersChange({ ...filters, name });
+          }}
+          payees={payees.slice(0, visible)}
+        />
+      )}
+      {(!loadError || matching) && !payees?.length && (
+        <TransactionContent
+          filtered={hasTransactionFilters(filters)}
+          loadingLabel={loadingLabel}
+          onCategorizeMany={onCategorizeMany}
+          onFilterByName={(name) => onFiltersChange({ ...filters, name })}
+          selection={selection}
+          transactions={transactions}
+          {...handlers}
+        />
+      )}
       {nextCursor && (
         <InfiniteScroll
           autoLoad={!loadError}
@@ -440,7 +449,8 @@ function transactionMenuItems({
   }
   // A rule names a category: with none yet, the overview offers setting
   // categories up instead (and a payee sent to Rules would be lost there).
-  if (onFilterByName && categories.length > 0) {
+  // A name longer than a rule can match gets none.
+  if (onFilterByName && categories.length > 0 && ruleNameFits(title)) {
     items.push({
       icon: "layers",
       id: "create-rule",

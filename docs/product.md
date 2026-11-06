@@ -833,7 +833,12 @@ uses. Each payee shows its count, latest date, pending count, and total (or
 "Several currencies"), most transactions first, so the uncategorized filter
 and **By payee** together count each payee's uncategorized expenses. Selecting
 anywhere on a payee's row returns to the list filtered to that name, keeping
-the other filters.
+the other filters. Once the organization has a category, a payee's menu (its
+menu button or a right-click) opens a form in the row, without leaving the
+view: **Categorize N transactions** gives every transaction the filters match
+under that name one category (or **Uncategorized**), as the bulk toolbar does,
+and **Create rule** adds the payee's categorization rule, optionally filling
+its existing uncategorized transactions.
 
 The overview keeps every one of the organization's transactions on the device
 (IndexedDB, per person and organization) and catches up on each visit, after a

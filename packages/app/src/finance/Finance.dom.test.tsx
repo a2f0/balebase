@@ -397,6 +397,359 @@ describe("Finance filters", () => {
     expect(container.textContent).toContain("250 of 254 shown");
   });
 
+  /** Shell three times (one already Meals) and Olive Garden, with writes. */
+  function payeeFixture() {
+    const writes: Array<{ body: unknown; method: string; path: string }> = [];
+    respond(async (url, init) => {
+      const method = init?.method ?? "GET";
+      if (method === "GET" && !url.pathname.endsWith("/categorization-rules"))
+        return Response.json({
+          ...data,
+          transactions: [
+            ...dated(["shell-1", "shell-2"]).map((row) => ({
+              ...row,
+              merchantName: "Shell",
+            })),
+            transaction("shell-3", {
+              expenseCategoryId: "meals",
+              merchantName: "Shell",
+            }),
+            transaction("Olive Garden"),
+          ],
+        });
+      const body: unknown = init?.body ? JSON.parse(String(init.body)) : null;
+      writes.push({ body, method, path: url.pathname });
+      if (url.pathname.endsWith("/categorization-rules"))
+        return Response.json(
+          {
+            applied: 2,
+            rule: {
+              category: { id: "meals", name: "Meals" },
+              createdAt: "2026-11-06T12:00:00.000Z",
+              id: "rule-1",
+              owner: null,
+              payeeName: "Shell",
+              uncategorizedCount: 0,
+            },
+          },
+          { status: 201 },
+        );
+      return Response.json({ updated: 2 });
+    });
+    return writes;
+  }
+
+  async function choosePayeeAction(payee: string, label: string) {
+    await openRowMenu(payee);
+    await choose(label);
+    const form = container.querySelector("form.financePayeeAction");
+    const select = form?.querySelector("select");
+    if (!form || !select) throw new Error("No payee form");
+    return { form, select };
+  }
+
+  async function pick(select: HTMLSelectElement, value: string) {
+    await act(async () => {
+      select.value = value;
+      select.dispatchEvent(
+        new dom.Event("change", { bubbles: true }) as unknown as Event,
+      );
+    });
+  }
+
+  it("gives all of a payee's matching transactions one category in place", async () => {
+    const writes = payeeFixture();
+    await mountFinance();
+    await click("By payee");
+    await openRowMenu("Shell");
+    expect(menuItems()).toEqual(["Categorize 3 transactions…", "Create rule…"]);
+    await act(async () =>
+      document.dispatchEvent(
+        new dom.KeyboardEvent("keydown", {
+          bubbles: true,
+          key: "Escape",
+        }) as unknown as Event,
+      ),
+    );
+    const { form, select } = await choosePayeeAction(
+      "Shell",
+      "Categorize 3 transactions…",
+    );
+    expect(document.activeElement).toBe(select);
+    expect(form.textContent).toContain(
+      "Category for 3 transactions from “Shell”",
+    );
+    await pick(select, "meals");
+    await click("Categorize");
+    // Only Shell's rows not already in Meals; the view stays where it was.
+    expect(writes).toEqual([
+      {
+        body: { categoryId: "meals", transactionIds: ["shell-1", "shell-2"] },
+        method: "PUT",
+        path: "/api/finance/transactions/category",
+      },
+    ]);
+    expect(currentPath).toBe("/finance");
+    expect(button("By payee").getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector("form.financePayeeAction")).toBeNull();
+    expect(document.activeElement?.getAttribute("aria-label")).toBe(
+      "Actions for Shell",
+    );
+  });
+
+  it("categorizes every payee transaction the filters match, shown or not", async () => {
+    const sent: string[] = [];
+    const shell = (id: string, overrides: Partial<FinanceTransaction> = {}) =>
+      transaction(id, { merchantName: "Shell", ...overrides });
+    respond(async (_url, init) => {
+      if (init?.method === "PUT") {
+        const body = JSON.parse(String(init.body)) as {
+          categoryId: string;
+          transactionIds: string[];
+        };
+        expect(body.categoryId).toBe("meals");
+        sent.push(...body.transactionIds);
+        return Response.json({ updated: body.transactionIds.length });
+      }
+      return Response.json({
+        ...data,
+        transactions: [
+          // More than a page, all this year.
+          ...Array.from({ length: 260 }, (_, index) => shell(`now-${index}`)),
+          // Already Meals: left alone.
+          shell("now-meals", { expenseCategoryId: "meals" }),
+          // Outside the period filter.
+          shell("last-year", { transactionDate: `${year - 1}-05-01` }),
+          // Another payee.
+          transaction("Olive Garden"),
+        ],
+      });
+    });
+    await mountFinance();
+    await click("Current year");
+    await click("By payee");
+    const { select } = await choosePayeeAction(
+      "Shell",
+      "Categorize 261 transactions…",
+    );
+    await pick(select, "meals");
+    await click("Categorize");
+    expect(new Set(sent)).toEqual(
+      new Set(Array.from({ length: 260 }, (_, index) => `now-${index}`)),
+    );
+    expect(sent).toHaveLength(260);
+  });
+
+  it("brings a payee's form back as it was when categorizing it fails", async () => {
+    const failure = Promise.withResolvers<void>();
+    respond(async (_url, init) => {
+      if (init?.method === "PUT") {
+        await failure.promise;
+        return Response.json({ error: "Could not save." }, { status: 500 });
+      }
+      return Response.json({
+        ...data,
+        transactions: dated(["shell-1", "shell-2"]).map((row) => ({
+          ...row,
+          merchantName: "Shell",
+        })),
+      });
+    });
+    await mountFinance();
+    await click("By payee");
+    await click("Uncategorized expenses");
+    const { select } = await choosePayeeAction(
+      "Shell",
+      "Categorize 2 transactions…",
+    );
+    await pick(select, "meals");
+    await click("Categorize");
+    // Categorized, Shell's rows leave the uncategorized list while it saves.
+    expect(container.querySelector(".financePayee")).toBeNull();
+    expect(container.querySelector("form.financePayeeAction")).toBeNull();
+    await act(async () => {
+      failure.resolve();
+      await Bun.sleep(5);
+    });
+    const form = container.querySelector("form.financePayeeAction");
+    expect(form?.getAttribute("aria-label")).toBe("Categorize Shell");
+    expect(form?.querySelector("select")?.value).toBe("meals");
+    expect(container.textContent).toContain("Could not save.");
+    // Ready to retry from the keyboard.
+    expect(document.activeElement).toBe(form?.querySelector("select") ?? null);
+  });
+
+  it("creates a rule for a payee in place", async () => {
+    const writes = payeeFixture();
+    await mountFinance();
+    await click("By payee");
+    const { form, select } = await choosePayeeAction("Shell", "Create rule…");
+    // A rule cannot clear categories.
+    expect(
+      [...select.options].map((option) => option.textContent),
+    ).not.toContain("Uncategorized");
+    expect(button("Create rule").disabled).toBe(true);
+    await pick(select, "meals");
+    await click("Create rule");
+    expect(writes).toEqual([
+      {
+        body: {
+          applyToExisting: true,
+          categoryId: "meals",
+          payeeName: "Shell",
+        },
+        method: "POST",
+        path: "/api/finance/categorization-rules",
+      },
+    ]);
+    expect(currentPath).toBe("/finance");
+    expect(form.isConnected).toBe(false);
+    expect(container.textContent).toContain(
+      "Added a rule for “Shell” and categorized 2 transactions.",
+    );
+  });
+
+  it("holds Finance busy and reports a rule save that lands after leaving the payee view", async () => {
+    const refusal = Promise.withResolvers<void>();
+    respond(async (url) => {
+      if (url.pathname.endsWith("/categorization-rules")) {
+        await refusal.promise;
+        return Response.json(
+          { error: "That payee already has a rule." },
+          { status: 409 },
+        );
+      }
+      return Response.json({
+        ...data,
+        transactions: dated(["Shell"]),
+      });
+    });
+    await mountFinance();
+    await click("By payee");
+    const { select } = await choosePayeeAction("Shell", "Create rule…");
+    await pick(select, "meals");
+    await click("Create rule");
+    await click("Transactions");
+    // Category controls wait for the rule, which may categorize these rows.
+    expect(
+      container.querySelector<HTMLSelectElement>(
+        '[aria-label="Expense category for Shell"]',
+      )?.disabled,
+    ).toBe(true);
+    await act(async () => {
+      refusal.resolve();
+      await Bun.sleep(5);
+    });
+    expect(container.textContent).toContain("That payee already has a rule.");
+    expect(
+      container.querySelector<HTMLSelectElement>(
+        '[aria-label="Expense category for Shell"]',
+      )?.disabled,
+    ).toBe(false);
+  });
+
+  it("shows a payee's rule on Rules when its save lands after opening them", async () => {
+    const save = Promise.withResolvers<void>();
+    let created = false;
+    const rule = {
+      category: { id: "meals", name: "Meals" },
+      createdAt: "2026-11-06T12:00:00.000Z",
+      id: "rule-1",
+      owner: null,
+      payeeName: "Shell",
+      uncategorizedCount: 0,
+    };
+    respond(async (url, init) => {
+      if (url.pathname.endsWith("/categorization-rules")) {
+        if (init?.method !== "POST")
+          return Response.json({ rules: created ? [rule] : [] });
+        await save.promise;
+        created = true;
+        return Response.json({ applied: 0, rule }, { status: 201 });
+      }
+      return Response.json({ ...data, transactions: dated(["Shell"]) });
+    });
+    const navigate = await mountFinance();
+    await click("By payee");
+    const { select } = await choosePayeeAction("Shell", "Create rule…");
+    await pick(select, "meals");
+    await click("Create rule");
+    await navigate("/finance/rules");
+    expect(container.textContent).toContain("No categorization rules yet");
+    await act(async () => {
+      save.resolve();
+      await Bun.sleep(5);
+    });
+    expect(
+      container.querySelector('[aria-label="Categorization rules"]')
+        ?.textContent,
+    ).toContain("Shell");
+  });
+
+  it("leaves focus where it went while a payee's categories saved", async () => {
+    const save = Promise.withResolvers<void>();
+    respond(async (_url, init) => {
+      if (init?.method === "PUT") {
+        await save.promise;
+        return Response.json({ updated: 1 });
+      }
+      return Response.json({ ...data, transactions: dated(["Shell"]) });
+    });
+    await mountFinance();
+    await click("By payee");
+    const { select } = await choosePayeeAction(
+      "Shell",
+      "Categorize 1 transaction…",
+    );
+    await pick(select, "meals");
+    await click("Categorize");
+    const elsewhere = button("Transactions");
+    await act(async () => elsewhere.focus());
+    await act(async () => {
+      save.resolve();
+      await Bun.sleep(5);
+    });
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
+  it("offers no rule for a name longer than a rule can match", async () => {
+    const long = "x".repeat(201);
+    respond(() => Response.json({ ...data, transactions: dated([long]) }));
+    await mountFinance();
+    await openRowMenu(long);
+    expect(menuItems()).not.toContain(`Create rule for “${long}”`);
+    await act(async () =>
+      document.dispatchEvent(
+        new dom.KeyboardEvent("keydown", {
+          bubbles: true,
+          key: "Escape",
+        }) as unknown as Event,
+      ),
+    );
+    await click("By payee");
+    await openRowMenu(long);
+    const item = [
+      ...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+    ].find((element) => element.textContent?.startsWith("Create rule…"));
+    expect(item?.disabled).toBe(true);
+    expect(item?.textContent).toContain("names over 200 characters");
+  });
+
+  it("offers payee actions only once there is a category", async () => {
+    respond(() =>
+      Response.json({
+        ...data,
+        categories: [],
+        transactions: dated(["Shell"]),
+      }),
+    );
+    await mountFinance();
+    await click("By payee");
+    expect(
+      container.querySelector('[aria-label="Actions for Shell"]'),
+    ).toBeNull();
+  });
+
   it("annotates, raises an issue, or filters by name from a row's menu", async () => {
     respond(() =>
       Response.json({
