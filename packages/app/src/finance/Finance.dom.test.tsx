@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { DialogHost } from "@balebase/ui/react";
 import type {
   FinanceData,
   FinanceTransaction,
@@ -130,7 +131,12 @@ afterEach(() => {
 async function mountFinance(pathname = "/finance") {
   const page = (path: string) => {
     currentPath = path;
-    return <Finance onNavigate={navigate} pathname={path} />;
+    return (
+      <>
+        <Finance onNavigate={navigate} pathname={path} />
+        <DialogHost />
+      </>
+    );
   };
   const view = await mount(page(pathname));
   container = view.container;
@@ -459,7 +465,24 @@ describe("Finance filters", () => {
     expect(currentPath).toBe(transactionIssuePath("Olive Garden"));
     await openRowMenu("Shell");
     await choose("Create rule for “Shell”");
-    expect(currentPath).toBe("/finance/categories?payee=Shell");
+    expect(currentPath).toBe("/finance/rules?payee=Shell");
+  });
+
+  it("offers Create rule only once there is a category to give", async () => {
+    respond(() =>
+      Response.json({
+        ...data,
+        categories: [],
+        transactions: dated(["Shell"]),
+      }),
+    );
+    await mountFinance();
+    await openRowMenu("Shell");
+    expect(menuItems()).toEqual([
+      "Annotate",
+      "Raise issue",
+      "Show only “Shell”",
+    ]);
   });
 
   it("keeps every shown row and the annotation form while a saved note refreshes", async () => {
@@ -630,7 +653,7 @@ describe("Finance filters", () => {
       }
       return Response.json(data);
     });
-    const navigate = await mountFinance("/finance/categories");
+    const navigate = await mountFinance("/finance/rules");
     const payee = container.querySelector<HTMLInputElement>(
       'input[placeholder="Shell"]',
     );
@@ -662,7 +685,7 @@ describe("Finance filters", () => {
     await navigate("/finance");
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
     // The save's closing reload uses the overview's loader, not the
-    // summary-only one Categories had.
+    // summary-only one Rules had.
     await act(async () => save.resolve());
     await act(async () => Bun.sleep(5));
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
@@ -907,6 +930,81 @@ describe("Finance filters", () => {
 
   it("keeps nothing when Reports find access gone", () => refusedOn("reports"));
 
+  it("forgets Finance when a Categories refusal lands after leaving the tab", async () => {
+    const refusal = Promise.withResolvers<void>();
+    let stalled = false;
+    respond(async (url) => {
+      if (url.pathname.endsWith("/categories/defaults")) {
+        await refusal.promise;
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      }
+      // The overview's own load never finishes.
+      if (stalled) return new Promise<Response>(() => undefined);
+      return Response.json(data);
+    });
+    const navigate = await mountFinance();
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    await navigate("/finance/categories");
+    await click("Add common categories");
+    stalled = true;
+    await navigate("/finance");
+    await act(async () => {
+      refusal.resolve();
+      await Bun.sleep(5);
+    });
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).toContain("Finance access required.");
+  });
+
+  it("keeps another organization's Finance when an earlier one's save is refused", async () => {
+    const refusal = Promise.withResolvers<void>();
+    let organizationId = "organization";
+    respond(async (url) => {
+      if (url.pathname.endsWith("/categories/defaults")) {
+        await refusal.promise;
+        return Response.json(
+          { error: "Finance access required." },
+          { status: 403 },
+        );
+      }
+      return Response.json({
+        ...data,
+        categories: [
+          {
+            id: organizationId,
+            name: `${organizationId} meals`,
+            slug: "meals",
+            transactionCount: 0,
+          },
+        ],
+        organizationId,
+      });
+    });
+    const page = (organization: string) => (
+      <Finance
+        onNavigate={() => undefined}
+        pathname="/finance/categories"
+        scope={{ organizationId: organization, userId: "person" }}
+      />
+    );
+    const view = await mount(page("organization"));
+    container = view.container;
+    await click("Add common categories");
+    // The session moves to another organization while the save waits.
+    organizationId = "other";
+    await view.render(page("other"));
+    await act(async () => Bun.sleep(5));
+    expect(container.textContent).toContain("other meals");
+    await act(async () => {
+      refusal.resolve();
+      await Bun.sleep(5);
+    });
+    expect(container.textContent).toContain("other meals");
+  });
+
   it("keeps nothing for someone who loses access", async () => {
     let refused = false;
     respond(() =>
@@ -1052,6 +1150,74 @@ describe("Finance filters", () => {
     expect(container.textContent).toContain(
       "No transactions match these filters",
     );
+  });
+
+  it("renames and deletes a category from its row's menu button", async () => {
+    let categories = [
+      { id: "travel", name: "Travel", slug: "travel", transactionCount: 0 },
+    ];
+    const writes: string[] = [];
+    respond(async (url, init) => {
+      const method = init?.method ?? "GET";
+      if (method !== "GET") {
+        writes.push(`${method} ${url.pathname} ${init?.body ?? ""}`);
+        categories =
+          method === "DELETE"
+            ? []
+            : [{ ...categories[0], name: "Trips" } as (typeof categories)[0]];
+        return method === "DELETE"
+          ? new Response(null, { status: 204 })
+          : Response.json({
+              category: { id: "travel", name: "Trips", slug: "trips" },
+            });
+      }
+      return Response.json({ ...data, categories });
+    });
+    await mountFinance("/finance/categories");
+    // Rename and Delete live in the row's menu, not as row buttons.
+    expect(container.querySelector(".rowActions")?.textContent).toBe("");
+    await openRowMenu("Travel");
+    expect(menuItems()).toEqual(["Show transactions", "Rename", "Delete"]);
+    await choose("Rename");
+    const field = container.querySelector<HTMLInputElement>(
+      '[aria-label="Rename Travel"] input',
+    );
+    if (!field) throw new Error("Missing rename field");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        dom.HTMLInputElement.prototype,
+        "value",
+      )?.set?.call(field, "Trips");
+      field.dispatchEvent(
+        new dom.Event("input", { bubbles: true }) as unknown as Event,
+      );
+    });
+    await click("Save");
+    expect(button("Trips")).toBeDefined();
+    await openRowMenu("Trips");
+    await choose("Delete");
+    await click("Delete category");
+    expect(writes).toEqual([
+      'PATCH /api/finance/categories/travel {"name":"Trips"}',
+      "DELETE /api/finance/categories/travel ",
+    ]);
+    expect(container.textContent).toContain("No expense categories yet");
+  });
+
+  it("opens Rules as its own tab", async () => {
+    respond((url) =>
+      url.pathname.endsWith("/categorization-rules")
+        ? Response.json({ rules: [] })
+        : Response.json(data),
+    );
+    const navigate = await mountFinance("/finance/categories");
+    expect(container.textContent).not.toContain("Categorization rules");
+    await navigate("/finance/rules");
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toBe(
+      "Rules",
+    );
+    expect(container.textContent).toContain("Categorization rules");
+    expect(container.textContent).not.toContain("Add a category");
   });
 
   it("opens a bookmarked category path with one load", async () => {

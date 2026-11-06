@@ -155,21 +155,7 @@ function useCachedLoad(
       settle(errorMessage(cause, "Could not load finances."));
     }
   }, [forget, keepTransactions, settle, store]);
-  /**
-   * A save was refused (or another tab, which `announce: false` does not
-   * tell again, found access gone): nothing shown or saved stays, without
-   * waiting on a reload that an outage could keep from finishing.
-   */
-  const onRefused = useCallback(
-    async (cause: unknown, announce = true) => {
-      // Loads still running would show what they read.
-      ++requestId.current;
-      forget();
-      settle(errorMessage(cause, "Could not load finances."));
-      await forgetFinance(store.value, store.scope, announce);
-    },
-    [forget, settle, store],
-  );
+  const onRefused = useRefusal(store, requestId, forget, settle);
   useEffect(() => {
     void load();
     return () => {
@@ -213,6 +199,40 @@ export type FinanceListingState = Omit<
   ReturnType<typeof useFinanceData>,
   "load" | "onRefused" | "setData"
 >;
+
+/**
+ * A save was refused (or another tab, which `announce: false` does not tell
+ * again, found access gone): nothing shown or saved stays, without waiting on
+ * a reload an outage could stall. A refusal for an earlier organization's
+ * store (the session moved on) forgets only that one's saved copy.
+ */
+function useRefusal(
+  store: ReturnType<typeof useTransactionStore>,
+  requestId: { current: number },
+  forget: () => void,
+  settle: (error?: string) => void,
+) {
+  const isShown = useIsLatest(store);
+  return useCallback(
+    async (cause: unknown, announce = true) => {
+      if (isShown(store)) {
+        // Loads still running would show what they read.
+        ++requestId.current;
+        forget();
+        settle(errorMessage(cause, "Could not load finances."));
+      }
+      await forgetFinance(store.value, store.scope, announce);
+    },
+    [forget, isShown, requestId, settle, store],
+  );
+}
+
+/** Whether a value is the latest one rendered. */
+function useIsLatest<Value>(value: Value) {
+  const latest = useRef(value);
+  latest.current = value;
+  return useCallback((candidate: Value) => candidate === latest.current, []);
+}
 
 /** Sign-in scopes keep IndexedDB; without one, or without IndexedDB, memory. */
 function useTransactionStore(scope: CacheScope | undefined) {

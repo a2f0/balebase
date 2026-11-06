@@ -43,6 +43,7 @@ import {
 } from "./FinanceAccounts";
 import { FinanceCategories } from "./FinanceCategories";
 import { FinanceReports } from "./FinanceReports";
+import { FinanceRules } from "./FinanceRules";
 import { FinanceTransactionHistory } from "./FinanceTransactionHistory";
 import {
   confirmDataDeletion,
@@ -426,6 +427,14 @@ export function FinanceView({
                 categorySlug: category.slug,
               })
             }
+          />
+        )}
+        {page === "rules" && (
+          <FinanceRules
+            categories={data?.categories}
+            onChanged={onReload}
+            onNavigate={handlers.onNavigate}
+            onRefused={handlers.onRefused}
           />
         )}
         {page === "connections" && (

@@ -8,7 +8,7 @@ import {
 import { FinanceCategories } from "../src/finance/FinanceCategories";
 import { stylesheets } from "./stylesheets";
 
-it("opens a category from anywhere on its row except its own buttons", async () => {
+it("opens a category from anywhere on its row except its menu button", async () => {
   const markup = renderToStaticMarkup(
     <FinanceCategories
       categories={[
@@ -36,7 +36,9 @@ it("opens a category from anywhere on its row except its own buttons", async () 
             const element = document.elementFromPoint(x, y);
             return element?.closest(".rowTarget")
               ? "row"
-              : (element?.closest("button")?.textContent ?? "nothing");
+              : (element?.closest("button")?.getAttribute("aria-label") ??
+                  element?.closest("button")?.textContent ??
+                  "nothing");
           };
           const center = (selector: string) => {
             const element = row.querySelector(selector);
@@ -52,36 +54,34 @@ it("opens a category from anywhere on its row except its own buttons", async () 
             .querySelector(".rowActions")
             ?.getBoundingClientRect();
           if (!actions) throw new Error("Missing row actions");
-          const [rename, remove] = [
-            ...row.querySelectorAll(".rowActions button"),
-          ].map((button) => button.getBoundingClientRect());
-          if (!rename || !remove) throw new Error("Missing row buttons");
           return {
-            betweenActions: hit(
-              (rename.right + remove.left) / 2,
-              rename.top + rename.height / 2,
-            ),
             beforeActions: hit(
               actions.left - 4,
               actions.top + actions.height / 2,
             ),
             corner: hit(bounds.left + 4, bounds.top + 4),
             count: center(".rowMeta"),
-            delete: center(".rowActions button:last-child"),
-            rename: center(".rowActions button:first-child"),
+            menu: center(".rowActions button"),
+            rowButtons: row.querySelectorAll(".rowActions button").length,
           };
         }),
       );
-      expect(hits).toEqual(
-        Array(2).fill({
+      expect(hits).toEqual([
+        {
           beforeActions: "row",
-          betweenActions: "row",
           corner: "row",
           count: "row",
-          delete: "Delete",
-          rename: "Rename",
-        }),
-      );
+          menu: "Actions for Meals",
+          rowButtons: 1,
+        },
+        {
+          beforeActions: "row",
+          corner: "row",
+          count: "row",
+          menu: "Actions for Travel",
+          rowButtons: 1,
+        },
+      ]);
     }
   } finally {
     await closeChrome(browser);

@@ -149,7 +149,12 @@ export function transactionIssuePath(id: string) {
   return `/issues/new/transactions/${encodeURIComponent(id)}`;
 }
 
-export type FinancePage = "categories" | "connections" | "overview" | "reports";
+export type FinancePage =
+  | "categories"
+  | "connections"
+  | "overview"
+  | "reports"
+  | "rules";
 
 export const financePages: {
   label: string;
@@ -159,6 +164,7 @@ export const financePages: {
   { label: "Overview", page: "overview", path: "/finance" },
   { label: "Reports", page: "reports", path: "/finance/reports" },
   { label: "Categories", page: "categories", path: "/finance/categories" },
+  { label: "Rules", page: "rules", path: "/finance/rules" },
   { label: "Connections", page: "connections", path: "/finance/connections" },
 ];
 
@@ -203,10 +209,11 @@ export function expenseCategoryFiltersFor(
 }
 
 export const financeCategoriesPath = "/finance/categories";
+const financeRulesPath = "/finance/rules";
 
-/** Categories, with a new categorization rule for `payee` filled in. */
+/** Rules, with a new categorization rule for `payee` filled in. */
 export function financeRulePath(payee: string) {
-  return `${financeCategoriesPath}?${new URLSearchParams({ payee })}`;
+  return `${financeRulesPath}?${new URLSearchParams({ payee })}`;
 }
 
 export function financeAccountPath(id: string) {
