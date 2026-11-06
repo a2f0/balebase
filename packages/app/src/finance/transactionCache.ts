@@ -5,6 +5,7 @@ import type {
   FinanceTransactionChanges,
 } from "@balebase/validators/finance";
 import { apiUrl } from "../shared/config";
+import { savedSummary } from "./savedSummary";
 
 /** Whose transactions a device keeps: one person in one organization. */
 export interface CacheScope {
@@ -314,13 +315,15 @@ export function indexedDbTransactionStore(): TransactionStore {
             stores.transactions.index("scope").getAll(IDBKeyRange.only(key)),
           ),
         ]);
+        const transactions = (
+          rows as { transaction: FinanceTransaction }[]
+        ).map((row) => row.transaction);
         return {
           completedAt: state.completedAt,
           cursor: state.cursor,
-          summary: state.summary,
-          transactions: (rows as { transaction: FinanceTransaction }[]).map(
-            (row) => row.transaction,
-          ),
+          // A summary saved by an earlier release lacks newer fields.
+          summary: savedSummary(state.summary, transactions),
+          transactions,
         };
       });
     },
