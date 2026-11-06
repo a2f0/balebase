@@ -397,6 +397,51 @@ it("keeps an accepted sync visible after navigation and polls its saved outcome"
   expect(starts).toBe(1);
 });
 
+it("drops a failed poll's error once the sync stops pending", async () => {
+  using polls = holdTimers(syncPollMs);
+  const job = {
+    id: "sync-1",
+    status: "queued" as "queued" | "cancelled",
+    source: "manual",
+    added: 0,
+    modified: 0,
+    removed: 0,
+    createdAt: "2026-10-26T12:00:00Z",
+    finishedAt: null,
+    errorCode: null,
+  } as const;
+  let disconnected = false;
+  respond(async (url, init) => {
+    if (init?.method === "DELETE") {
+      disconnected = true;
+      return new Response(null, { status: 204 });
+    }
+    if (url.href.endsWith("/sync-status"))
+      return Response.json({ error: "Try again." }, { status: 503 });
+    if (url.href.endsWith("/institution-health"))
+      return Response.json(health());
+    return Response.json(
+      detail(
+        disconnected
+          ? {
+              disconnectedAt: "2026-10-26T12:02:00Z",
+              status: "disconnected",
+              syncJob: { ...job, status: "cancelled" },
+            }
+          : { syncJob: job },
+      ),
+    );
+  });
+  await mountPage();
+  await polls.fire();
+  expect(container.textContent).toContain("Try again.");
+  // Disconnecting cancels the sync; its failed poll no longer applies.
+  await click("Disconnect");
+  await answer("Disconnect");
+  expect(container.textContent).toContain("Bank disconnected.");
+  expect(container.textContent).not.toContain("Try again.");
+});
+
 it("saves daily sync for the bank connection and preserves the setting on a failed save", async () => {
   let enabled = false;
   let fail = false;

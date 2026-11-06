@@ -21,7 +21,7 @@ import {
   type SetStateAction,
   useCallback,
   useEffect,
-  useState,
+  useReducer,
 } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
 import { AppLink } from "../shared/AppLink";
@@ -42,6 +42,11 @@ import {
   syncPollMs,
 } from "./financeConnectionActions";
 import { formatImportedHistory, formatMoney } from "./financeFormat";
+import {
+  initialSyncPoll,
+  syncPollError,
+  syncPollTransition,
+} from "./syncPollState";
 import type { CacheScope } from "./transactionCache";
 import { useGuardedLoad } from "./useCacheScope";
 
@@ -357,9 +362,10 @@ function useConnection(
     "Could not load connection.",
   );
   const { data, guard, reload, setData } = loaded;
+  const syncJob = data?.connection.syncJob;
   const pollError = useSyncStatusPolling(
     id,
-    syncPending(data?.connection.syncJob?.status),
+    syncJob && syncPending(syncJob.status) ? syncJob.id : null,
     setData,
     reload,
     guard,
@@ -399,24 +405,29 @@ function useConnection(
   };
 }
 
-/** Polls a running sync; balances and history reload once it finishes. */
+/**
+ * Polls a running sync; balances and history reload once it finishes. A
+ * failed poll's error belongs to the job it polled (`syncPollState.ts`).
+ */
 function useSyncStatusPolling(
   id: string,
-  pending: boolean,
+  /** The pending sync job's ID, or null when none is pending. */
+  job: string | null,
   setData: Dispatch<SetStateAction<FinanceConnectionDetail | undefined>>,
   reload: () => Promise<unknown>,
   guard: <T>(work: Promise<T>) => Promise<T>,
 ) {
-  const [error, setError] = useState<string>();
+  const [state, dispatch] = useReducer(syncPollTransition, initialSyncPoll);
+  useEffect(() => dispatch({ job, type: "pendingSeen" }), [job]);
   useEffect(() => {
-    if (!pending) return;
+    if (job === null) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    async function poll() {
+    async function poll(polled: string) {
       try {
         const next = await guard(api.finance.syncStatus(id));
         if (!active) return;
-        setError(undefined);
+        dispatch({ job: polled, type: "pollSucceeded" });
         if (syncPending(next.connection.syncJob?.status)) {
           setData(
             (current) =>
@@ -429,17 +440,22 @@ function useSyncStatusPolling(
           await reload();
         }
       } catch (cause) {
-        if (active) setError(errorMessage(cause, "Could not load connection."));
+        if (active)
+          dispatch({
+            job: polled,
+            message: errorMessage(cause, "Could not load connection."),
+            type: "pollFailed",
+          });
       }
-      if (active) timer = setTimeout(() => void poll(), syncPollMs);
+      if (active) timer = setTimeout(() => void poll(polled), syncPollMs);
     }
-    timer = setTimeout(() => void poll(), syncPollMs);
+    timer = setTimeout(() => void poll(job), syncPollMs);
     return () => {
       active = false;
       clearTimeout(timer);
     };
-  }, [guard, id, pending, reload, setData]);
-  return error;
+  }, [guard, id, job, reload, setData]);
+  return syncPollError(state);
 }
 
 function sourceFields({
