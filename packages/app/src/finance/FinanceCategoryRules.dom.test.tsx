@@ -167,6 +167,10 @@ describe("categorization rules", () => {
     expect(ruleRows(container)).toEqual([expect.stringContaining("Chevron")]);
     expect(ruleRows(container)[0]).toContain("Meals · 2 uncategorized");
     expect(ruleRows(container)[0]).toContain("Created by Dan Sullivan");
+    // Focus returns to the menu button that opened the editor.
+    expect(document.activeElement?.getAttribute("aria-label")).toBe(
+      "Actions for the rule for Chevron",
+    );
     expect(calls.changed).toBe(1);
   });
 
@@ -192,6 +196,9 @@ describe("categorization rules", () => {
     expect(form.querySelector("input")?.value).toBe("Chevron");
     await click(queryButton("Cancel", form));
     expect(ruleRows(container)).toEqual([expect.stringContaining("Shell")]);
+    expect(document.activeElement?.getAttribute("aria-label")).toBe(
+      "Actions for the rule for Shell",
+    );
   });
 
   it("adds a rule that also fills the payee's uncategorized transactions", async () => {

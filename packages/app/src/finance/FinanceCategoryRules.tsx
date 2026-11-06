@@ -303,12 +303,24 @@ function RuleRow({
   run: RunChange;
 }) {
   const [editing, setEditing] = useState(false);
+  // Closing the editor removes the focused form: focus returns to the
+  // row's menu button, which opened it.
+  const actions = useRef<HTMLDivElement>(null);
+  const returnFocus = useRef(false);
+  useEffect(() => {
+    if (editing || !returnFocus.current) return;
+    returnFocus.current = false;
+    actions.current?.querySelector("button")?.focus();
+  }, [editing]);
   if (editing) {
     return (
       <EditRuleRow
         busy={busy}
         categories={categories}
-        onClose={() => setEditing(false)}
+        onClose={() => {
+          returnFocus.current = true;
+          setEditing(false);
+        }}
         rule={rule}
         run={run}
       />
@@ -372,7 +384,7 @@ function RuleRow({
               {rule.owner && ` · Created by ${rule.owner.name}`}
             </span>
           </div>
-          <div className="rowActions">
+          <div className="rowActions" ref={actions}>
             <MenuButton {...menuButton} label={label} />
           </div>
         </li>
