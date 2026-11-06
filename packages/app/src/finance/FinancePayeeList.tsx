@@ -1,4 +1,4 @@
-import { Badge, Card, cx } from "@balebase/ui/react";
+import { Badge, Button, Card, cx } from "@balebase/ui/react";
 import { countLabel, formatCalendarDate } from "../shared/labels";
 import { formatMoney } from "./financeFormat";
 import type { PayeeGroup } from "./payeeGroups";
@@ -18,16 +18,17 @@ export function FinancePayeeList({
     <Card className="financeListCard" flush>
       <ul aria-label="Payees" className="rowList financePayees">
         {payees.map((payee) => (
-          <li className="row financePayee" key={payee.name}>
+          // The name's button covers the whole row, so any click there opens it.
+          <li className="row rowInteractive financePayee" key={payee.name}>
             <div className="rowMain">
-              <button
+              <Button
                 aria-label={`Show transactions for ${payee.name}`}
-                className="rowTitle financePayeeName"
+                className="rowTitle rowTarget financePayeeName"
                 onClick={() => onSelect(payee.name)}
-                type="button"
+                variant="link"
               >
                 {payee.name}
-              </button>
+              </Button>
               <span className="rowMeta">
                 {countLabel(payee.count, "transaction")} · Latest{" "}
                 {formatCalendarDate(payee.latestDate)}
