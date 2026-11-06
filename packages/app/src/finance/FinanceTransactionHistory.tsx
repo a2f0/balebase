@@ -166,30 +166,32 @@ export function FinanceTransactionHistory({
           {loadError}
         </Banner>
       )}
-      {(!loadError || matching) &&
-        (payees?.length ? (
-          <FinancePayeeList
-            {...handlers}
-            matching={matching ?? []}
-            onCategorizeMany={onCategorizeMany}
-            onReload={onReload}
-            onSelect={(name) => {
-              setView("list");
-              onFiltersChange({ ...filters, name });
-            }}
-            payees={payees.slice(0, visible)}
-          />
-        ) : (
-          <TransactionContent
-            filtered={hasTransactionFilters(filters)}
-            loadingLabel={loadingLabel}
-            onCategorizeMany={onCategorizeMany}
-            onFilterByName={(name) => onFiltersChange({ ...filters, name })}
-            selection={selection}
-            transactions={transactions}
-            {...handlers}
-          />
-        ))}
+      {/* Kept while the payee view shows, even empty: a payee's open form
+          outlives its row leaving the list as it saves. */}
+      {payees && (
+        <FinancePayeeList
+          {...handlers}
+          matching={matching ?? []}
+          onCategorizeMany={onCategorizeMany}
+          onReload={onReload}
+          onSelect={(name) => {
+            setView("list");
+            onFiltersChange({ ...filters, name });
+          }}
+          payees={payees.slice(0, visible)}
+        />
+      )}
+      {(!loadError || matching) && !payees?.length && (
+        <TransactionContent
+          filtered={hasTransactionFilters(filters)}
+          loadingLabel={loadingLabel}
+          onCategorizeMany={onCategorizeMany}
+          onFilterByName={(name) => onFiltersChange({ ...filters, name })}
+          selection={selection}
+          transactions={transactions}
+          {...handlers}
+        />
+      )}
       {nextCursor && (
         <InfiniteScroll
           autoLoad={!loadError}

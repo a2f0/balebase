@@ -497,6 +497,43 @@ describe("Finance filters", () => {
     );
   });
 
+  it("brings a payee's form back as it was when categorizing it fails", async () => {
+    const failure = Promise.withResolvers<void>();
+    respond(async (_url, init) => {
+      if (init?.method === "PUT") {
+        await failure.promise;
+        return Response.json({ error: "Could not save." }, { status: 500 });
+      }
+      return Response.json({
+        ...data,
+        transactions: dated(["shell-1", "shell-2"]).map((row) => ({
+          ...row,
+          merchantName: "Shell",
+        })),
+      });
+    });
+    await mountFinance();
+    await click("By payee");
+    await click("Uncategorized expenses");
+    const { select } = await choosePayeeAction(
+      "Shell",
+      "Categorize 2 transactions…",
+    );
+    await pick(select, "meals");
+    await click("Categorize");
+    // Categorized, Shell's rows leave the uncategorized list while it saves.
+    expect(container.querySelector(".financePayee")).toBeNull();
+    expect(container.querySelector("form.financePayeeAction")).toBeNull();
+    await act(async () => {
+      failure.resolve();
+      await Bun.sleep(5);
+    });
+    const form = container.querySelector("form.financePayeeAction");
+    expect(form?.getAttribute("aria-label")).toBe("Categorize Shell");
+    expect(form?.querySelector("select")?.value).toBe("meals");
+    expect(container.textContent).toContain("Could not save.");
+  });
+
   it("creates a rule for a payee in place", async () => {
     const writes = payeeFixture();
     await mountFinance();

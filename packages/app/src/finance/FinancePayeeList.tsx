@@ -17,9 +17,9 @@ import { countLabel, formatCalendarDate } from "../shared/labels";
 import { formatMoney } from "./financeFormat";
 import { useFinanceSave } from "./financeSave";
 import {
-  type PayeeAction,
   PayeeActionForm,
-  type PayeeActionInput,
+  type PayeeForm,
+  uncategorizedValue,
 } from "./PayeeActionForm";
 import { type PayeeGroup, transactionTitle } from "./payeeGroups";
 
@@ -59,11 +59,34 @@ export function FinancePayeeList({
   payees,
 }: PayeeListActions & { payees: PayeeGroup[] }) {
   const rules = useFinanceSave("Could not save the rule.", onReload, onRefused);
-  async function submit(payee: string, input: PayeeActionInput) {
+  const [forms, setForms] = useState<ReadonlyMap<string, PayeeForm>>(new Map());
+  const current = useRef(forms);
+  current.current = forms;
+  const setForm = (payee: string, form: PayeeForm | undefined) =>
+    setForms((all) => {
+      const next = new Map(all);
+      if (form) next.set(payee, form);
+      else next.delete(payee);
+      return next;
+    });
+  // A save closes its form once it lands, unless the form changed since.
+  async function submit(payee: string) {
+    const form = current.current.get(payee);
+    if (!form) return;
+    if (await save(payee, form)) {
+      setForms((all) => {
+        if (all.get(payee) !== form) return all;
+        const next = new Map(all);
+        next.delete(payee);
+        return next;
+      });
+    }
+  }
+  function save(payee: string, input: PayeeForm) {
     if (input.action === "categorize") {
       return onCategorizeMany(
         matching.filter((row) => transactionTitle(row) === payee),
-        input.categoryId,
+        input.categoryId === uncategorizedValue ? null : input.categoryId,
       );
     }
     return rules.run(async () => {
@@ -81,20 +104,24 @@ export function FinancePayeeList({
     <>
       {rules.error && <Toast tone="danger">{rules.error}</Toast>}
       {rules.notice && <Toast tone="success">{rules.notice}</Toast>}
-      <Card className="financeListCard" flush>
-        <ul aria-label="Payees" className="rowList financePayees">
-          {payees.map((payee) => (
-            <PayeeRow
-              busy={busy || rules.busy}
-              categories={categories}
-              key={payee.name}
-              onSelect={onSelect}
-              onSubmit={(input) => submit(payee.name, input)}
-              payee={payee}
-            />
-          ))}
-        </ul>
-      </Card>
+      {payees.length > 0 && (
+        <Card className="financeListCard" flush>
+          <ul aria-label="Payees" className="rowList financePayees">
+            {payees.map((payee) => (
+              <PayeeRow
+                busy={busy || rules.busy}
+                categories={categories}
+                form={forms.get(payee.name)}
+                key={payee.name}
+                onForm={(form) => setForm(payee.name, form)}
+                onSelect={onSelect}
+                onSubmit={() => void submit(payee.name)}
+                payee={payee}
+              />
+            ))}
+          </ul>
+        </Card>
+      )}
     </>
   );
 }
@@ -102,41 +129,49 @@ export function FinancePayeeList({
 function PayeeRow({
   busy,
   categories,
+  form,
+  onForm,
   onSelect,
   onSubmit,
   payee,
 }: {
   busy: boolean;
   categories: ExpenseCategory[];
+  form: PayeeForm | undefined;
+  onForm: (form: PayeeForm | undefined) => void;
   onSelect: (name: string) => void;
-  onSubmit: (input: PayeeActionInput) => Promise<boolean>;
+  onSubmit: () => void;
   payee: PayeeGroup;
 }) {
-  const [action, setAction] = useState<PayeeAction>();
   // Closing the form removes the focused field: focus returns to the row's
   // menu button, which opened it.
   const actions = useRef<HTMLDivElement>(null);
-  const returnFocus = useRef(false);
+  const hadForm = useRef(false);
+  const open = Boolean(form);
   useEffect(() => {
-    if (action || !returnFocus.current) return;
-    returnFocus.current = false;
+    if (open) {
+      hadForm.current = true;
+      return;
+    }
+    if (!hadForm.current) return;
+    hadForm.current = false;
     actions.current?.querySelector("button")?.focus();
-  }, [action]);
-  if (action) {
+  }, [open]);
+  if (form) {
     return (
       <PayeeActionForm
-        action={action}
         busy={busy}
         categories={categories}
-        onClose={() => {
-          returnFocus.current = true;
-          setAction(undefined);
-        }}
+        form={form}
+        onCancel={() => onForm(undefined)}
+        onChange={onForm}
         onSubmit={onSubmit}
         payee={payee}
       />
     );
   }
+  const start = (action: PayeeForm["action"]) =>
+    onForm({ action, applyToExisting: true, categoryId: "" });
   const label = `Actions for ${payee.name}`;
   // Both actions give a category, so they wait for one to exist.
   const items: ComponentProps<typeof ContextMenu>["items"][number][] =
@@ -147,14 +182,14 @@ function PayeeRow({
             icon: "list",
             id: "categorize",
             label: `Categorize ${countLabel(payee.count, "transaction")}…`,
-            onSelect: () => setAction("categorize"),
+            onSelect: () => start("categorize"),
           },
           {
             disabled: busy,
             icon: "layers",
             id: "create-rule",
             label: "Create rule…",
-            onSelect: () => setAction("rule"),
+            onSelect: () => start("rule"),
           },
         ]
       : [];
