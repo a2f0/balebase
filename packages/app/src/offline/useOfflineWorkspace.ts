@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useReducer } from "react";
 import { errorMessage } from "../shared/errors";
 import { isOnline, onNetworkChange, useOnline } from "../shared/network";
 import {
@@ -8,11 +8,17 @@ import {
   readOfflineWorkspace,
 } from "./offlineStore";
 import { syncOfflineWorkspace } from "./offlineSync";
+import {
+  initialOfflineWorkspace,
+  offlineWorkspaceError,
+  offlineWorkspaceTransition,
+} from "./offlineWorkspaceState";
 
 /** Storage the hook reads and syncs; tests pass their own. */
 export interface OfflineWorkspaceStorage {
   read: (key: string) => Promise<OfflineWorkspace | undefined>;
-  sync: (key: string) => Promise<unknown>;
+  /** Resolves whether the drain ran; a skipped one reports nothing. */
+  sync: (key: string) => Promise<boolean>;
 }
 
 const deviceStorage: OfflineWorkspaceStorage = {
@@ -25,48 +31,53 @@ const deviceStorage: OfflineWorkspaceStorage = {
  * in another tab, and its queued work sent whenever the device is online:
  * now, on reconnecting, on focus, and every 30 seconds.
  *
- * Reads and syncs overlap, so only the newest of each kind reports, and each
- * kind keeps its own error: a read landing does not hide a sync that still
- * fails, and an older read's failure never covers newer data.
+ * Reads and syncs overlap, so their results go through one machine
+ * (`offlineWorkspaceState.ts`) keyed by the active workspace: only the
+ * newest read lands, each kind keeps its own error, and changing workspace
+ * drops the last one's errors.
  */
 export function useOfflineWorkspace(storage = deviceStorage) {
-  const [workspace, setWorkspace] = useState<OfflineWorkspace>();
+  const [state, dispatch] = useReducer(
+    offlineWorkspaceTransition,
+    initialOfflineWorkspace,
+  );
   const online = useOnline();
-  const [loadError, setLoadError] = useState<string>();
-  const [syncError, setSyncError] = useState<string>();
   useEffect(() => {
     let current = true;
     let loads = 0;
-    let syncs = 0;
-    const load = async () => {
+    const send: typeof dispatch = (event) => {
+      if (current) dispatch(event);
+    };
+    const load = async (key: string | null) => {
       const request = ++loads;
-      const key = activeOfflineKey();
+      send({ key, request, type: "loadStarted" });
       try {
-        const saved = key ? await storage.read(key) : undefined;
-        if (current && request === loads) {
-          setWorkspace(saved);
-          setLoadError(undefined);
-        }
+        const workspace = key ? await storage.read(key) : undefined;
+        send({ request, type: "loadLanded", workspace });
       } catch (cause) {
-        if (current && request === loads)
-          setLoadError(errorMessage(cause, "Offline storage is unavailable."));
+        send({
+          message: errorMessage(cause, "Offline storage is unavailable."),
+          request,
+          type: "loadFailed",
+        });
       }
     };
-    const sync = async () => {
-      const key = activeOfflineKey();
+    const sync = async (key: string | null) => {
       if (!key || !isOnline()) return;
-      const request = ++syncs;
       try {
-        await storage.sync(key);
-        if (current && request === syncs) setSyncError(undefined);
+        if (await storage.sync(key)) send({ key, type: "syncSucceeded" });
       } catch (cause) {
-        if (current && request === syncs)
-          setSyncError(errorMessage(cause, "Could not sync offline work."));
+        send({
+          key,
+          message: errorMessage(cause, "Could not sync offline work."),
+          type: "syncFailed",
+        });
       }
     };
     const refresh = () => {
-      void load();
-      void sync();
+      const key = activeOfflineKey();
+      void load(key);
+      void sync(key);
     };
     refresh();
     window.addEventListener(offlineChanged, refresh);
@@ -82,5 +93,9 @@ export function useOfflineWorkspace(storage = deviceStorage) {
         window.removeEventListener(event, refresh);
     };
   }, [storage]);
-  return { workspace, online, error: loadError ?? syncError };
+  return {
+    workspace: state.workspace,
+    online,
+    error: offlineWorkspaceError(state),
+  };
 }

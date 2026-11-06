@@ -20,7 +20,7 @@ const workspace = { projects: [] } as unknown as OfflineWorkspace;
 /** Storage whose every read and sync waits for the test to settle it. */
 function heldStorage() {
   const reads: Array<PromiseWithResolvers<OfflineWorkspace | undefined>> = [];
-  const syncs: Array<PromiseWithResolvers<unknown>> = [];
+  const syncs: Array<PromiseWithResolvers<boolean>> = [];
   const storage: OfflineWorkspaceStorage = {
     read: () => {
       const read = Promise.withResolvers<OfflineWorkspace | undefined>();
@@ -28,7 +28,7 @@ function heldStorage() {
       return read.promise;
     },
     sync: () => {
-      const sync = Promise.withResolvers<unknown>();
+      const sync = Promise.withResolvers<boolean>();
       syncs.push(sync);
       return sync.promise;
     },
@@ -96,7 +96,42 @@ describe("offline workspace", () => {
     await act(async () => {
       window.dispatchEvent(new window.Event("focus"));
     });
-    await settleWith(held.syncs[1], { value: undefined });
+    await settleWith(held.syncs[1], { value: true });
+    expect(view().error).toBeUndefined();
+  });
+
+  it("keeps a running sync's failure over a skipped one", async () => {
+    const held = heldStorage();
+    const view = await mountWorkspace(held.storage);
+    await act(async () => {
+      window.dispatchEvent(new window.Event("focus"));
+    });
+    // The second drain found the first holding the lock, so it skipped.
+    await settleWith(held.syncs[1], { value: false });
+    await settleWith(held.syncs[0], { error: new Error("Queue stuck.") });
+    expect(view().error).toBe("Queue stuck.");
+  });
+
+  it("keeps a sync's failure when a later drain is skipped", async () => {
+    const held = heldStorage();
+    const view = await mountWorkspace(held.storage);
+    await settleWith(held.syncs[0], { error: new Error("Queue stuck.") });
+    await act(async () => {
+      window.dispatchEvent(new window.Event("focus"));
+    });
+    // Another tab holds the lock, so this drain skipped; nothing was sent.
+    await settleWith(held.syncs[1], { value: false });
+    expect(view().error).toBe("Queue stuck.");
+  });
+
+  it("drops the last workspace's sync error on switching", async () => {
+    const held = heldStorage();
+    const view = await mountWorkspace(held.storage);
+    await settleWith(held.syncs[0], { error: new Error("Queue stuck.") });
+    expect(view().error).toBe("Queue stuck.");
+    await act(async () => {
+      activateOfflineWorkspace("user-1:org-2");
+    });
     expect(view().error).toBeUndefined();
   });
 });
