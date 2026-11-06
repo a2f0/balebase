@@ -79,4 +79,20 @@ describe("offline audit answers", () => {
     await answer(answers, "exit", "pass");
     expect(answers().error).toBe("Queue unavailable.");
   });
+
+  it("shows an answer that will not save over a failed completion", async () => {
+    const { answers } = await mountAnswers(
+      [new Error("Storage full.")],
+      new Error("Queue unavailable."),
+    );
+    // The completion writes nothing, so the failing write is the answer's.
+    await act(async () => {
+      await answers().save(true);
+    });
+    expect(answers().error).toBe("Queue unavailable.");
+    await answer(answers, "exit", "fail");
+    expect(answers().error).toBe("Storage full.");
+    await answer(answers, "exit", "pass");
+    expect(answers().error).toBe("Queue unavailable.");
+  });
 });

@@ -24,7 +24,8 @@ const deviceStorage: OfflineAnswerStorage = {
  * An audit's answers, each written to the device as it is given. A failed
  * answer's error lasts only while some answer is still unsaved: answering
  * again, once every edit is written, clears it. A failed completion keeps its
- * error until a save succeeds, since its answers may all be written.
+ * error until a save succeeds, since its answers may all be written; an
+ * answer's error shows over it meanwhile.
  */
 export function useOfflineAnswers(
   audit: OfflineAudit,
@@ -38,7 +39,9 @@ export function useOfflineAnswers(
   const [answerError, setAnswerError] = useState<string>();
   const [saveError, setSaveError] = useState<string>();
   const [sealing, setSealing] = useState(false);
-  const error = saveError ?? answerError;
+  // The newest trouble first: an answer that will not save outranks a
+  // completion that failed earlier, which shows again once answers save.
+  const error = answerError ?? saveError;
   useUnsavedChanges(
     pending > 0 || Boolean(error),
     "Some audit answers have not been saved on this device.",
