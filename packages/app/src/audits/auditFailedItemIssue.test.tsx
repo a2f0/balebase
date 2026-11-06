@@ -11,8 +11,8 @@ import {
   type FailIssueState,
   failIssueReducer,
 } from "./AuditChecklist";
-import { runStateReducer } from "./AuditRunPage";
 import { createIssueWithImages } from "./auditIssueImages";
+import { runStateReducer } from "./useAuditRun";
 
 const item: AuditTemplateItem = {
   id: "panel-labels",

@@ -228,6 +228,7 @@ export function AuditTemplateBuilder({
         versions={versions ?? []}
       />
       <BuilderBody
+        busy={busy}
         error={error}
         manageGlobal={manageGlobal}
         notice={notice}
@@ -272,6 +273,7 @@ function backLink(
 }
 
 function BuilderBody({
+  busy,
   error,
   manageGlobal,
   notice,
@@ -280,6 +282,11 @@ function BuilderBody({
   panel,
   template,
 }: {
+  /**
+   * A save or version load in flight. Its result replaces the form, so the
+   * fields hold still until it lands instead of dropping later edits.
+   */
+  busy: boolean;
   error: ErrorNotice | undefined;
   manageGlobal: boolean;
   notice: string | undefined;
@@ -315,7 +322,7 @@ function BuilderBody({
       />
       {panel(
         "form",
-        <fieldset className="fieldset auditBuilderFields">
+        <fieldset className="fieldset auditBuilderFields" disabled={busy}>
           <TemplateDetails template={template} update={onChange} />
           <div className="stack">
             <div className="sectionHeader">
