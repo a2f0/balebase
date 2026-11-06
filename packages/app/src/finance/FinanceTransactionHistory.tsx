@@ -38,6 +38,7 @@ import {
 } from "../workspace/workspacePaths";
 import {
   FinancePayeeList,
+  ruleNameFits,
   type TransactionView,
   TransactionViewSwitch,
 } from "./FinancePayeeList";
@@ -448,7 +449,8 @@ function transactionMenuItems({
   }
   // A rule names a category: with none yet, the overview offers setting
   // categories up instead (and a payee sent to Rules would be lost there).
-  if (onFilterByName && categories.length > 0) {
+  // A name longer than a rule can match gets none.
+  if (onFilterByName && categories.length > 0 && ruleNameFits(title)) {
     items.push({
       icon: "layers",
       id: "create-rule",

@@ -10,6 +10,7 @@ import type {
   ExpenseCategory,
   FinanceTransaction,
 } from "@balebase/validators/finance";
+import { financeLimits } from "@balebase/validators/rules";
 import { type ComponentProps, useEffect, useRef, useState } from "react";
 import { countLabel, formatCalendarDate } from "../shared/labels";
 import { formatMoney } from "./financeFormat";
@@ -177,13 +178,22 @@ function PayeeRow({
             label: `Categorize ${countLabel(payee.count, "transaction")}…`,
             onSelect: () => start("categorize"),
           },
-          {
-            disabled: busy,
-            icon: "layers",
-            id: "create-rule",
-            label: "Create rule…",
-            onSelect: () => start("rule"),
-          },
+          // A rule matches the name exactly, within the API's length limit.
+          ruleNameFits(payee.name)
+            ? {
+                disabled: busy,
+                icon: "layers",
+                id: "create-rule",
+                label: "Create rule…",
+                onSelect: () => start("rule"),
+              }
+            : {
+                disabled: true,
+                icon: "layers",
+                id: "create-rule",
+                label: `Create rule… (names over ${financeLimits.payeeName} characters cannot have one)`,
+                onSelect: () => undefined,
+              },
         ]
       : [];
   return (
@@ -227,6 +237,11 @@ function PayeeRow({
       )}
     </ContextMenu>
   );
+}
+
+/** Whether a categorization rule can name `name` (the API's limit). */
+export function ruleNameFits(name: string) {
+  return name.length <= financeLimits.payeeName;
 }
 
 /** Switches the Transactions section between rows and payee totals. */

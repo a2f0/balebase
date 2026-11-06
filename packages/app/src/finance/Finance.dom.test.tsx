@@ -712,6 +712,29 @@ describe("Finance filters", () => {
     expect(document.activeElement).toBe(elsewhere);
   });
 
+  it("offers no rule for a name longer than a rule can match", async () => {
+    const long = "x".repeat(201);
+    respond(() => Response.json({ ...data, transactions: dated([long]) }));
+    await mountFinance();
+    await openRowMenu(long);
+    expect(menuItems()).not.toContain(`Create rule for “${long}”`);
+    await act(async () =>
+      document.dispatchEvent(
+        new dom.KeyboardEvent("keydown", {
+          bubbles: true,
+          key: "Escape",
+        }) as unknown as Event,
+      ),
+    );
+    await click("By payee");
+    await openRowMenu(long);
+    const item = [
+      ...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+    ].find((element) => element.textContent?.startsWith("Create rule…"));
+    expect(item?.disabled).toBe(true);
+    expect(item?.textContent).toContain("names over 200 characters");
+  });
+
   it("offers payee actions only once there is a category", async () => {
     respond(() =>
       Response.json({
