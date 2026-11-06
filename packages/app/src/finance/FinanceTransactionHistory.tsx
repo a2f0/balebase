@@ -29,12 +29,17 @@ import {
 } from "react";
 import { AppLink } from "../shared/AppLink";
 import { InfiniteScroll } from "../shared/InfiniteScroll";
-import { formatCalendarDate, formatLabel } from "../shared/labels";
+import { countLabel, formatCalendarDate, formatLabel } from "../shared/labels";
 import {
   financeTransactionPath,
   inboxEmailPath,
   transactionIssuePath,
 } from "../workspace/workspacePaths";
+import {
+  FinancePayeeList,
+  type TransactionView,
+  TransactionViewSwitch,
+} from "./FinancePayeeList";
 import {
   FinanceTransactionFilters,
   hasTransactionFilters,
@@ -46,6 +51,7 @@ import {
   useTransactionSelection,
 } from "./FinanceTransactionSelection";
 import { formatMoney } from "./financeFormat";
+import { groupByPayee, type PayeeGroup, transactionTitle } from "./payeeGroups";
 
 interface AnnotationHandlers {
   busy: boolean;
@@ -76,31 +82,42 @@ export function FinanceTransactionHistory({
   onClearFilter,
   filters,
   onFiltersChange,
-  nextCursor,
   loadError,
   loadingLabel,
+  matching,
   onCategorizeMany,
   onLoadMore,
   onReload,
-  total,
-  transactions,
+  visible,
   ...handlers
 }: Omit<AnnotationHandlers, "onFilterByName"> & {
   accountName: string | undefined;
   /** Shown while the list loads, such as a first download's progress. */
   loadingLabel?: string | undefined;
-  /** How many transactions match the filters; more than shown when paged. */
-  total?: number | undefined;
+  /** Every transaction the filters match, newest first; absent while loading. */
+  matching: FinanceTransaction[] | undefined;
+  /** How many rows (transactions or payees) to show; the end shows more. */
+  visible: number;
   onCategorizeMany: CategorizeMany;
   onClearFilter: () => void;
   filters: FinanceFilters;
   onFiltersChange: (filters: FinanceFilters) => void;
-  nextCursor: string | null | undefined;
   loadError: string | undefined;
   onLoadMore: () => Promise<boolean>;
   onReload: () => Promise<void>;
-  transactions: FinanceTransaction[] | undefined;
 }) {
+  const [view, setView] = useState<TransactionView>("list");
+  const transactions = matching?.slice(0, visible);
+  // Payees group everything the filters match, not only the rows shown.
+  const payees =
+    view === "payees" && matching ? groupByPayee(matching) : undefined;
+  const listed = payees ?? matching;
+  // Names the view and filters too: InfiniteScroll asks once per cursor, and
+  // the same count under another view or filters is a new place.
+  const nextCursor =
+    listed && listed.length > visible
+      ? `${view}:${JSON.stringify(filters)}#${visible}`
+      : null;
   // Any change to the filters (toolbar, account cards, Back) starts afresh.
   const selection = useTransactionSelection(
     transactions,
@@ -111,9 +128,8 @@ export function FinanceTransactionHistory({
       actions={
         <TransactionSummary
           accountName={accountName}
+          label={summaryLabel(matching, payees, visible)}
           onClearFilter={onClearFilter}
-          total={total}
-          transactions={transactions}
         />
       }
       title="Transactions"
@@ -122,30 +138,19 @@ export function FinanceTransactionHistory({
         categories={handlers.categories}
         filters={filters}
         onChange={onFiltersChange}
-      />
+      >
+        <TransactionViewSwitch onChange={setView} view={view} />
+      </FinanceTransactionFilters>
       <CategoryFilterNotice
         categories={handlers.categories}
         filters={filters}
-        loaded={Boolean(transactions)}
+        loaded={Boolean(matching)}
         onNavigate={handlers.onNavigate}
       />
-      {Boolean(transactions?.length) && !handlers.categories.length && (
-        <Banner
-          actions={
-            <Button
-              onClick={() => handlers.onNavigate("/finance/categories")}
-              size="sm"
-            >
-              Set up categories
-            </Button>
-          }
-          announce={false}
-          icon="layers"
-          title="Sort spending into expense categories"
-        >
-          Give each transaction a category to see totals by category in Reports.
-        </Banner>
-      )}
+      <CategorySetupBanner
+        onNavigate={handlers.onNavigate}
+        shown={Boolean(matching?.length) && !handlers.categories.length}
+      />
       {loadError && (
         <Banner
           tone="danger"
@@ -158,18 +163,27 @@ export function FinanceTransactionHistory({
           {loadError}
         </Banner>
       )}
-      {(!loadError || transactions) && (
-        <TransactionContent
-          filtered={hasTransactionFilters(filters)}
-          loadingLabel={loadingLabel}
-          onCategorizeMany={onCategorizeMany}
-          onFilterByName={(name) => onFiltersChange({ ...filters, name })}
-          selection={selection}
-          transactions={transactions}
-          {...handlers}
-        />
-      )}
-      {nextCursor && transactions && (
+      {(!loadError || matching) &&
+        (payees?.length ? (
+          <FinancePayeeList
+            onSelect={(name) => {
+              setView("list");
+              onFiltersChange({ ...filters, name });
+            }}
+            payees={payees.slice(0, visible)}
+          />
+        ) : (
+          <TransactionContent
+            filtered={hasTransactionFilters(filters)}
+            loadingLabel={loadingLabel}
+            onCategorizeMany={onCategorizeMany}
+            onFilterByName={(name) => onFiltersChange({ ...filters, name })}
+            selection={selection}
+            transactions={transactions}
+            {...handlers}
+          />
+        ))}
+      {nextCursor && (
         <InfiniteScroll
           autoLoad={!loadError}
           cursor={nextCursor}
@@ -177,33 +191,68 @@ export function FinanceTransactionHistory({
           disabled={handlers.busy}
           onLoadMore={onLoadMore}
         >
-          Load more transactions
+          {view === "payees" ? "Load more payees" : "Load more transactions"}
         </InfiniteScroll>
       )}
     </PageSection>
   );
 }
 
+/** "250 of 300 shown", or for payees "12 payees · 40 transactions". */
+function summaryLabel(
+  matching: FinanceTransaction[] | undefined,
+  payees: PayeeGroup[] | undefined,
+  visible: number,
+) {
+  if (!matching) return "";
+  const of = (total: number) =>
+    total > visible
+      ? `${visible.toLocaleString()} of ${total.toLocaleString()}`
+      : total.toLocaleString();
+  if (payees) {
+    const noun = payees.length === 1 ? "payee" : "payees";
+    return `${of(payees.length)} ${noun} · ${countLabel(matching.length, "transaction")}`;
+  }
+  return `${of(matching.length)} shown`;
+}
+
+function CategorySetupBanner({
+  onNavigate,
+  shown,
+}: {
+  onNavigate: (pathname: string) => void;
+  shown: boolean;
+}) {
+  if (!shown) return null;
+  return (
+    <Banner
+      actions={
+        <Button onClick={() => onNavigate("/finance/categories")} size="sm">
+          Set up categories
+        </Button>
+      }
+      announce={false}
+      icon="layers"
+      title="Sort spending into expense categories"
+    >
+      Give each transaction a category to see totals by category in Reports.
+    </Banner>
+  );
+}
+
 function TransactionSummary({
   accountName,
+  label,
   onClearFilter,
-  total,
-  transactions,
 }: {
   accountName: string | undefined;
+  label: string;
   onClearFilter: () => void;
-  total: number | undefined;
-  transactions: FinanceTransaction[] | undefined;
 }) {
-  const shown = transactions?.length;
   return (
     <div className="cluster">
       <span className="sectionCount" aria-live="polite">
-        {shown === undefined
-          ? ""
-          : total !== undefined && total > shown
-            ? `${shown.toLocaleString()} of ${total.toLocaleString()} shown`
-            : `${shown.toLocaleString()} shown`}
+        {label}
         {accountName ? ` for ${accountName}` : ""}
       </span>
       {accountName && (
@@ -623,11 +672,6 @@ function transactionMeta(transaction: FinanceTransaction) {
   return transaction.categoryPrimary
     ? `${transaction.accountName} · ${formatLabel(transaction.categoryPrimary)}`
     : transaction.accountName;
-}
-
-/** The name a row shows, and the one the same-name filter matches. */
-function transactionTitle(transaction: FinanceTransaction) {
-  return transaction.merchantName ?? transaction.name;
 }
 
 function hasAnnotation(transaction: FinanceTransaction) {

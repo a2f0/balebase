@@ -516,13 +516,6 @@ function FinanceOverview({
         accountName={accountName}
         filters={filters}
         onFiltersChange={onFiltersChange}
-        // Names the filters too: InfiniteScroll asks once per cursor, and
-        // the same count under other filters is a new place.
-        nextCursor={
-          matching && matching.length > visible
-            ? `${JSON.stringify(filters)}#${visible}`
-            : null
-        }
         loadError={loadError}
         loadingLabel={
           saving === undefined
@@ -544,8 +537,8 @@ function FinanceOverview({
           )
         }
         selectedTransactionId={selectedTransactionId}
-        total={matching?.length}
-        transactions={matching?.slice(0, visible)}
+        matching={matching}
+        visible={visible}
       />
     </>
   );

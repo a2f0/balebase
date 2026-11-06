@@ -1,6 +1,7 @@
 import type { FinanceFilters } from "@balebase/api-client";
 import { Button } from "@balebase/ui/react";
 import type { ExpenseCategory } from "@balebase/validators/finance";
+import type { ReactNode } from "react";
 import { initialFilters } from "./useFinanceData";
 
 /** Whether any filter narrows the transaction list. */
@@ -16,10 +17,13 @@ export function hasTransactionFilters(filters: FinanceFilters) {
 
 export function FinanceTransactionFilters({
   categories,
+  children,
   filters,
   onChange,
 }: {
   categories: ExpenseCategory[];
+  /** Controls shown before the filters, such as the view switch. */
+  children?: ReactNode;
   filters: FinanceFilters;
   onChange: (filters: FinanceFilters) => void;
 }) {
@@ -30,6 +34,7 @@ export function FinanceTransactionFilters({
     : undefined;
   return (
     <div className="financeTransactionFilters">
+      {children}
       <fieldset className="segmented">
         <legend className="srOnly">Transaction period</legend>
         {[
