@@ -138,7 +138,9 @@ export function Finance({
       }}
       onNavigate={onNavigate}
       onRefused={onRefused}
-      onReload={load}
+      // Category and rule saves on Categories reload once they finish, maybe
+      // after navigation: with the loader for the page shown by then.
+      onReload={reloadLatest}
       onRepair={plaid.repair}
       onSync={actions.sync}
       page={page}

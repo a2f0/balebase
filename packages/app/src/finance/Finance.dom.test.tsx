@@ -608,6 +608,66 @@ describe("Finance filters", () => {
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
   });
 
+  it("keeps the overview's rows when a rule save finishes after leaving", async () => {
+    const save = Promise.withResolvers<void>();
+    respond(async (url, init) => {
+      if (url.pathname.endsWith("/categorization-rules")) {
+        if (init?.method !== "POST") return Response.json({ rules: [] });
+        await save.promise;
+        return Response.json(
+          {
+            applied: 0,
+            rule: {
+              category: { id: "meals", name: "Meals" },
+              createdAt: "2026-11-06T12:00:00.000Z",
+              id: "rule-1",
+              payeeName: "Coffee",
+              uncategorizedCount: 0,
+            },
+          },
+          { status: 201 },
+        );
+      }
+      return Response.json(data);
+    });
+    const navigate = await mountFinance("/finance/categories");
+    const payee = container.querySelector<HTMLInputElement>(
+      'input[placeholder="Shell"]',
+    );
+    const category = [...container.querySelectorAll("select")].at(-1);
+    await act(async () => {
+      for (const [field, value] of [
+        [payee, "Coffee"],
+        [category, "meals"],
+      ] as const) {
+        const prototype =
+          field instanceof dom.HTMLSelectElement
+            ? dom.HTMLSelectElement.prototype
+            : dom.HTMLInputElement.prototype;
+        Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(
+          field,
+          value,
+        );
+        field?.dispatchEvent(
+          new dom.Event(
+            field instanceof dom.HTMLSelectElement ? "change" : "input",
+            {
+              bubbles: true,
+            },
+          ) as unknown as Event,
+        );
+      }
+    });
+    await act(async () => button("Add rule").click());
+    await navigate("/finance");
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    // The save's closing reload uses the overview's loader, not the
+    // summary-only one Categories had.
+    await act(async () => save.resolve());
+    await act(async () => Bun.sleep(5));
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+  });
+
   it("stops showing transactions another tab cleared", async () => {
     let down = false;
     respond(() =>
