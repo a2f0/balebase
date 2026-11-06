@@ -886,7 +886,9 @@ category changes its slug, and `uncategorized` is reserved. Selecting a
 category's row, or **Show transactions** in its menu (the row's menu button
 or a right-click, which also offers **Rename** and **Delete**), opens
 `/finance/expenses/category/<slug>`, the overview filtered to that category's
-transactions across all imported history. Deleting a category leaves its
+transactions across all imported history. **Hide categories with no
+transactions** leaves out categories nothing is filed under and says how many
+it hides; the choice is kept on the device. Deleting a category leaves its
 transactions uncategorized. Creating, renaming (with the old and new name and
 slug), deleting (with how many transactions it leaves uncategorized), and adding
 the common set (naming the categories added) appear in Activity under

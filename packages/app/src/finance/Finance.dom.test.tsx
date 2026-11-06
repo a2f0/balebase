@@ -1436,6 +1436,69 @@ describe("Finance filters", () => {
     expect(button("Previous year").getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("hides categories with no transactions and remembers the choice", async () => {
+    respond(() =>
+      Response.json({
+        ...data,
+        categories: [
+          { id: "meals", name: "Meals", slug: "meals", transactionCount: 2 },
+          { id: "travel", name: "Travel", slug: "travel", transactionCount: 0 },
+          { id: "gifts", name: "Gifts", slug: "gifts", transactionCount: 0 },
+        ],
+      }),
+    );
+    const categoryNames = () =>
+      [...container.querySelectorAll(".rowTitle")].map(
+        (row) => row.textContent,
+      );
+    const toggle = () => {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[role="switch"]',
+      );
+      if (!input) throw new Error("Missing switch");
+      return input;
+    };
+    try {
+      const navigate = await mountFinance("/finance/categories");
+      expect(categoryNames()).toEqual(["Meals", "Travel", "Gifts"]);
+      expect(toggle().checked).toBe(false);
+      await act(async () => toggle().click());
+      expect(categoryNames()).toEqual(["Meals"]);
+      expect(container.textContent).toContain(
+        "2 categories with no transactions are hidden.",
+      );
+      expect(
+        dom.localStorage.getItem("balebase.finance-hide-empty-categories"),
+      ).toBe("true");
+      await navigate("/finance");
+      await navigate("/finance/categories");
+      expect(toggle().checked).toBe(true);
+      expect(categoryNames()).toEqual(["Meals"]);
+      await act(async () => toggle().click());
+      expect(categoryNames()).toEqual(["Meals", "Travel", "Gifts"]);
+      expect(container.textContent).not.toContain("are hidden");
+    } finally {
+      dom.localStorage.clear();
+    }
+  });
+
+  it("says so when every category is hidden", async () => {
+    respond(() => Response.json(data));
+    dom.localStorage.setItem("balebase.finance-hide-empty-categories", "true");
+    try {
+      await mountFinance("/finance/categories");
+      expect(container.querySelectorAll(".rowTitle")).toHaveLength(0);
+      expect(container.textContent).toContain(
+        "No categories have transactions yet",
+      );
+      expect(container.textContent).toContain(
+        "1 category with no transactions is hidden.",
+      );
+    } finally {
+      dom.localStorage.clear();
+    }
+  });
+
   it("drills into one category from Categories, drops recategorized rows, and clears back to all", async () => {
     const categories = [
       { id: "category-1", name: "Meals", slug: "meals", transactionCount: 2 },

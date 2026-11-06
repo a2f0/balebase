@@ -15,6 +15,11 @@ import { financeLimits } from "@balebase/validators/rules";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
+import {
+  readHideEmptyCategories,
+  storeHideEmptyCategories,
+  visibleCategories,
+} from "./emptyCategories";
 import { useFinanceSave } from "./financeSave";
 
 export function FinanceCategories({
@@ -34,6 +39,11 @@ export function FinanceCategories({
     onChanged,
     onRefused,
   );
+  const [hideEmpty, setHideEmpty] = useState(readHideEmptyCategories);
+  const changeHideEmpty = (hide: boolean) => {
+    setHideEmpty(hide);
+    storeHideEmptyCategories(hide);
+  };
   const addDefaults = () =>
     run(async () => {
       const before = categories?.length ?? 0;
@@ -65,6 +75,7 @@ export function FinanceCategories({
               <span className="sectionCount">
                 {countLabel(categories.length, "category", "categories")}
               </span>
+              <HideEmptySwitch hide={hideEmpty} onChange={changeHideEmpty} />
               <Button
                 disabled={busy}
                 icon="layers"
@@ -82,6 +93,7 @@ export function FinanceCategories({
         <CategoryList
           busy={busy}
           categories={categories}
+          hideEmpty={hideEmpty}
           onAddDefaults={addDefaults}
           onDelete={(category) =>
             run(async () => {
@@ -99,6 +111,27 @@ export function FinanceCategories({
         />
       </PageSection>
     </>
+  );
+}
+
+function HideEmptySwitch({
+  hide,
+  onChange,
+}: {
+  hide: boolean;
+  onChange: (hide: boolean) => void;
+}) {
+  return (
+    <label className="check">
+      <input
+        aria-checked={hide}
+        checked={hide}
+        onChange={(event) => onChange(event.target.checked)}
+        role="switch"
+        type="checkbox"
+      />
+      Hide categories with no transactions
+    </label>
   );
 }
 
@@ -148,6 +181,7 @@ function AddCategoryForm({
 function CategoryList({
   busy,
   categories,
+  hideEmpty,
   onAddDefaults,
   onDelete,
   onRename,
@@ -155,6 +189,7 @@ function CategoryList({
 }: {
   busy: boolean;
   categories: ExpenseCategory[] | undefined;
+  hideEmpty: boolean;
   onAddDefaults: () => Promise<boolean>;
   onDelete: (category: ExpenseCategory) => Promise<boolean>;
   onRename: (category: ExpenseCategory, name: string) => Promise<boolean>;
@@ -181,21 +216,36 @@ function CategoryList({
       </EmptyState>
     );
   }
+  const { hidden, shown } = visibleCategories(categories, hideEmpty);
   return (
-    <Card flush>
-      <ul className="rowList">
-        {categories.map((category) => (
-          <CategoryRow
-            busy={busy}
-            category={category}
-            key={category.id}
-            onDelete={onDelete}
-            onRename={onRename}
-            onShowTransactions={onShowTransactions}
-          />
-        ))}
-      </ul>
-    </Card>
+    <>
+      {shown.length > 0 ? (
+        <Card flush>
+          <ul className="rowList">
+            {shown.map((category) => (
+              <CategoryRow
+                busy={busy}
+                category={category}
+                key={category.id}
+                onDelete={onDelete}
+                onRename={onRename}
+                onShowTransactions={onShowTransactions}
+              />
+            ))}
+          </ul>
+        </Card>
+      ) : (
+        <EmptyState icon="layers" title="No categories have transactions yet">
+          Categorize transactions to see their categories here.
+        </EmptyState>
+      )}
+      {hidden > 0 && (
+        <p className="textMuted">
+          {countLabel(hidden, "category", "categories")} with no transactions{" "}
+          {hidden === 1 ? "is" : "are"} hidden.
+        </p>
+      )}
+    </>
   );
 }
 
