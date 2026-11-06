@@ -37,7 +37,7 @@ export function FinanceStartSetting({
           saved={opensUncategorized}
         />
         <SettingSwitch
-          label="Group transactions by payee"
+          label="Open Finance on transactions grouped by payee"
           onSessionChanged={onSessionChanged}
           save={(value) => api.accountSettings.updateFinanceView(value)}
           saved={opensByPayee}
