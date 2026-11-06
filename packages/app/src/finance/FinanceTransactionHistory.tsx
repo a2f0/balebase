@@ -84,6 +84,7 @@ export function FinanceTransactionHistory({
   accountName,
   onClearFilter,
   filters,
+  initialView = "list",
   onFiltersChange,
   loadError,
   loadingLabel,
@@ -95,6 +96,8 @@ export function FinanceTransactionHistory({
   ...handlers
 }: Omit<AnnotationHandlers, "onFilterByName"> & {
   accountName: string | undefined;
+  /** How the list starts: as transactions, or grouped by payee (Account). */
+  initialView?: TransactionView;
   /** Shown while the list loads, such as a first download's progress. */
   loadingLabel?: string | undefined;
   /** Every transaction the filters match, newest first; absent while loading. */
@@ -111,7 +114,7 @@ export function FinanceTransactionHistory({
   /** Creates a payee's categorization rule; resolves whether it saved. */
   onCreateRule: CreateRule;
 }) {
-  const [view, setView] = useState<TransactionView>("list");
+  const [view, setView] = useState<TransactionView>(initialView);
   const transactions = matching?.slice(0, visible);
   // Payees group everything the filters match, not only the rows shown.
   const payees =

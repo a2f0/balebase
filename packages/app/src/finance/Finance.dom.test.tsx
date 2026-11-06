@@ -128,12 +128,16 @@ afterEach(() => {
 });
 
 /** Renders Finance at a path; the result navigates as Back or a link would. */
-async function mountFinance(pathname = "/finance") {
+async function mountFinance(pathname = "/finance", opensByPayee = false) {
   const page = (path: string) => {
     currentPath = path;
     return (
       <>
-        <Finance onNavigate={navigate} pathname={path} />
+        <Finance
+          onNavigate={navigate}
+          opensByPayee={opensByPayee}
+          pathname={path}
+        />
         <DialogHost />
       </>
     );
@@ -395,6 +399,19 @@ describe("Finance filters", () => {
     expect(button("Name: Shell").getAttribute("aria-pressed")).toBe("true");
     expect(new Set(rowNames())).toEqual(new Set(["Shell"]));
     expect(container.textContent).toContain("250 of 254 shown");
+  });
+
+  it("opens transactions grouped by payee when the person chose it", async () => {
+    payeeFixture();
+    const go = await mountFinance("/finance", true);
+    expect(button("By payee").getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector(".financePayee")).not.toBeNull();
+    // Combined with opening on uncategorized expenses, as the sidebar does.
+    await go("/finance/expenses/category/uncategorized");
+    expect(button("By payee").getAttribute("aria-pressed")).toBe("true");
+    // The person can still switch to the list.
+    await click("Transactions");
+    expect(button("By payee").getAttribute("aria-pressed")).toBe("false");
   });
 
   /** Shell three times (one already Meals) and Olive Garden, with writes. */

@@ -21,6 +21,7 @@ import { ThemeSwitcher } from "./ThemeSwitcher";
 
 export function AccountSettings({
   defaultOrganizationId,
+  financeOpensByPayee,
   financeOpensUncategorized,
   onNavigate,
   onSessionChanged,
@@ -29,6 +30,7 @@ export function AccountSettings({
   twoFactorEnabled,
 }: {
   defaultOrganizationId: string | null | undefined;
+  financeOpensByPayee: boolean;
   financeOpensUncategorized: boolean;
   onNavigate: (pathname: string) => void;
   onSessionChanged: () => Promise<unknown>;
@@ -89,7 +91,8 @@ export function AccountSettings({
               organizations={organizations}
             />
             <FinanceStartSetting
-              on={financeOpensUncategorized}
+              opensByPayee={financeOpensByPayee}
+              opensUncategorized={financeOpensUncategorized}
               onSessionChanged={onSessionChanged}
             />
             <AccountDeletion />

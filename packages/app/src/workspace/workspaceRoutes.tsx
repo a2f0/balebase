@@ -45,6 +45,7 @@ interface RouteContext {
   user: {
     id: string;
     defaultOrganizationId?: string | null | undefined;
+    financeOpensByPayee?: boolean | null | undefined;
     financeOpensUncategorized?: boolean | null | undefined;
     twoFactorEnabled?: boolean | null | undefined;
   };
@@ -132,6 +133,7 @@ const routes: WorkspaceRoute[] = [
         workspace.activeOrganizationId
           ? { organizationId: workspace.activeOrganizationId, userId: user.id }
           : undefined,
+        Boolean(user.financeOpensByPayee),
       ),
   },
   {
@@ -198,6 +200,7 @@ const routes: WorkspaceRoute[] = [
     render: ({ navigate, onSecurityChanged, pathname, user, workspace }) => (
       <AccountSettings
         defaultOrganizationId={user.defaultOrganizationId}
+        financeOpensByPayee={Boolean(user.financeOpensByPayee)}
         financeOpensUncategorized={Boolean(user.financeOpensUncategorized)}
         onNavigate={navigate}
         onSessionChanged={onSecurityChanged}
@@ -253,6 +256,7 @@ function financeContent(
   pathname: string,
   navigate: (path: string) => void,
   scope: CacheScope | undefined,
+  opensByPayee: boolean,
 ) {
   const accountId = recordIdForPath(pathname, "/finance/accounts");
   if (accountId)
@@ -284,5 +288,12 @@ function financeContent(
         scope={scope}
       />
     );
-  return <Finance onNavigate={navigate} pathname={pathname} scope={scope} />;
+  return (
+    <Finance
+      onNavigate={navigate}
+      opensByPayee={opensByPayee}
+      pathname={pathname}
+      scope={scope}
+    />
+  );
 }

@@ -9,17 +9,59 @@ import {
 } from "./financeStartState";
 
 /**
- * Whether the sidebar's Finance opens on uncategorized expenses rather than
- * every transaction. Saved to the account, so it follows the person to every
- * device; the switch shows the new choice while it saves.
+ * Where Finance starts: the sidebar's Finance can open on uncategorized
+ * expenses rather than every transaction, and its transactions grouped by
+ * payee rather than as a list. The two combine. Each is saved to the account,
+ * so it follows the person to every device.
  */
 export function FinanceStartSetting({
-  on,
+  opensByPayee,
+  opensUncategorized,
   onSessionChanged,
 }: {
-  on: boolean;
-  /** Reloads the session, which carries the saved choice. */
+  opensByPayee: boolean;
+  opensUncategorized: boolean;
+  /** Reloads the session, which carries the saved choices. */
   onSessionChanged: () => Promise<unknown>;
+}) {
+  return (
+    <Card
+      description="Choose what opens when you select Finance in the sidebar."
+      title="Finance"
+    >
+      <div className="stack">
+        <SettingSwitch
+          label="Open Finance on uncategorized expenses"
+          onSessionChanged={onSessionChanged}
+          save={(value) => api.accountSettings.updateFinanceStart(value)}
+          saved={opensUncategorized}
+        />
+        <SettingSwitch
+          label="Group transactions by payee"
+          onSessionChanged={onSessionChanged}
+          save={(value) => api.accountSettings.updateFinanceView(value)}
+          saved={opensByPayee}
+        />
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * One account switch. It shows the saved choice, or the choice being saved
+ * while it saves, through its own save machine (`financeStartState.ts`), so
+ * the switches save independently.
+ */
+function SettingSwitch({
+  label,
+  onSessionChanged,
+  save,
+  saved,
+}: {
+  label: string;
+  onSessionChanged: () => Promise<unknown>;
+  save: (value: boolean) => Promise<unknown>;
+  saved: boolean;
 }) {
   const [state, dispatch] = useReducer(
     financeStartTransition,
@@ -39,7 +81,7 @@ export function FinanceStartSetting({
     const request = ++requests.current;
     dispatch({ request, type: "saveStarted", value });
     try {
-      await api.accountSettings.updateFinanceStart(value);
+      await save(value);
       if (!active.current) return;
       await onSessionChanged();
       dispatch({ request, type: "saveFinished" });
@@ -51,25 +93,20 @@ export function FinanceStartSetting({
       if (active.current) dispatch({ message, request, type: "saveFailed" });
     }
   }
-  const shown = shownFinanceStart(state, on);
+  const shown = shownFinanceStart(state, saved);
   return (
     <>
-      <Card
-        description="Choose what opens when you select Finance in the sidebar."
-        title="Finance"
-      >
-        <label className="check">
-          <input
-            aria-checked={shown}
-            checked={shown}
-            disabled={state.status === "saving"}
-            onChange={(event) => void change(event.target.checked)}
-            role="switch"
-            type="checkbox"
-          />
-          Open Finance on uncategorized expenses
-        </label>
-      </Card>
+      <label className="check">
+        <input
+          aria-checked={shown}
+          checked={shown}
+          disabled={state.status === "saving"}
+          onChange={(event) => void change(event.target.checked)}
+          role="switch"
+          type="checkbox"
+        />
+        {label}
+      </label>
       {state.status === "failed" && (
         <Toast tone="danger">{state.message}</Toast>
       )}

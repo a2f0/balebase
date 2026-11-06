@@ -30,6 +30,13 @@ export const accountSettingsRoutes = {
     body: z.object({ uncategorized: z.boolean() }),
     response: z.object({ uncategorized: z.boolean() }),
   }),
+  /** Whether Finance's transactions open grouped by payee. */
+  updateFinanceView: route({
+    method: "PATCH",
+    path: "/api/account-settings/finance-view",
+    body: z.object({ byPayee: z.boolean() }),
+    response: z.object({ byPayee: z.boolean() }),
+  }),
   securityEvents: route({
     method: "GET",
     path: "/api/account-settings/security-events",
