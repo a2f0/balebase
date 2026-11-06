@@ -41,8 +41,14 @@ export function PayeeActionForm({
   payee: PayeeGroup;
 }) {
   const select = useRef<HTMLSelectElement>(null);
-  // The menu that opened the form is gone; move focus to its field.
-  useEffect(() => select.current?.focus(), []);
+  // The menu that opened the form is gone; move focus to its field once it
+  // can take it. A failed save can bring the form back while Finance is
+  // still busy, so this waits for that too, unless focus went elsewhere.
+  useEffect(() => {
+    const active = document.activeElement;
+    if (busy || (active && active !== document.body)) return;
+    select.current?.focus();
+  }, [busy]);
   const rule = form.action === "rule";
   return (
     <li className="row">

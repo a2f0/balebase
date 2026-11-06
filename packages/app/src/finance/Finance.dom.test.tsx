@@ -532,6 +532,8 @@ describe("Finance filters", () => {
     expect(form?.getAttribute("aria-label")).toBe("Categorize Shell");
     expect(form?.querySelector("select")?.value).toBe("meals");
     expect(container.textContent).toContain("Could not save.");
+    // Ready to retry from the keyboard.
+    expect(document.activeElement).toBe(form?.querySelector("select") ?? null);
   });
 
   it("creates a rule for a payee in place", async () => {
