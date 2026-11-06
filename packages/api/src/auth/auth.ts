@@ -35,6 +35,13 @@ const userAdditionalFields = {
     required: false,
     type: "string",
   },
+  // Set on the account page; the app's sidebar reads it from the session.
+  financeOpensUncategorized: {
+    defaultValue: false,
+    input: false,
+    required: false,
+    type: "boolean",
+  },
   // Stamped by requireAuth; returned so root admins see it when listing users.
   lastActiveAt: {
     input: false,

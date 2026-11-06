@@ -2,7 +2,12 @@ import { describe, expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { WorkspaceShell } from "./WorkspaceShell";
 
-function navigationGroups(role: string) {
+function navigationGroups(
+  role: string,
+  finance: { canAccessFinance: boolean; opensUncategorized?: boolean } = {
+    canAccessFinance: false,
+  },
+) {
   const markup = renderToStaticMarkup(
     <WorkspaceShell
       accountLoadError={undefined}
@@ -10,7 +15,7 @@ function navigationGroups(role: string) {
       activeOrganizationId={undefined}
       activePage="organization"
       activeSessionToken=""
-      canAccessFinance={false}
+      canAccessFinance={finance.canAccessFinance}
       contentKey={undefined}
       onAccountChange={async () => undefined}
       onAccountSettings={() => undefined}
@@ -24,6 +29,7 @@ function navigationGroups(role: string) {
       user={{
         email: "user@example.com",
         emailVerified: true,
+        financeOpensUncategorized: finance.opensUncategorized,
         name: "User",
         role,
       }}
@@ -37,6 +43,18 @@ function navigationGroups(role: string) {
 }
 
 describe("workspace navigation", () => {
+  it("opens Finance where the person chose, and only with Finance access", () => {
+    const financeLink = (finance: Parameters<typeof navigationGroups>[1]) =>
+      navigationGroups("user", finance)
+        .join("")
+        .match(/href="(\/finance[^"]*)"/)?.[1];
+    expect(financeLink({ canAccessFinance: false })).toBeUndefined();
+    expect(financeLink({ canAccessFinance: true })).toBe("/finance");
+    expect(
+      financeLink({ canAccessFinance: true, opensUncategorized: true }),
+    ).toBe("/finance/expenses/category/uncategorized");
+  });
+
   it("shows Organization in Admin without showing Root Admin to a regular user", () => {
     const groups = navigationGroups("user");
     expect(groups.some((group) => group?.includes('href="/issues"'))).toBe(

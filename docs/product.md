@@ -111,6 +111,12 @@ Account settings let each user choose the default organization for new sign-ins,
 including signing in after a session expires. Saving that preference does not
 switch an existing session: reopening or refreshing it keeps its active
 organization. This behavior is shared by the web, iOS, and Android apps.
+The **Finance** switch under **Account settings → General** makes the
+sidebar's Finance open on uncategorized expenses
+(`/finance/expenses/category/uncategorized`) instead of every transaction. It
+is saved to the account (`PATCH /api/account-settings/finance-start`, returned
+with the session), so it follows the person to every device. Like the theme
+and default organization, it is a personal choice and records no activity.
 
 Root admins use `/root/jobs` to run platform maintenance and inspect maintenance
 and bank sync history. Every run uses the shared background queue and D1 run
