@@ -25,20 +25,24 @@ function readyOfflineJob(workspace: OfflineWorkspace, now: number) {
   );
 }
 
-/** Locks span tabs; server receipts are still authoritative after a crash. */
-export async function syncOfflineWorkspace(key: string) {
-  if (!isOnline() || activeOfflineKey() !== key) return;
-  if (!navigator.locks) return; // Supported shells provide Web Locks; never race an unguarded drain.
-  await navigator.locks.request(
+/**
+ * Locks span tabs; server receipts are still authoritative after a crash.
+ * Resolves whether this call drained the queue: false when it was skipped
+ * (offline, another workspace, or another drain holding the lock).
+ */
+export async function syncOfflineWorkspace(key: string): Promise<boolean> {
+  if (!isOnline() || activeOfflineKey() !== key) return false;
+  if (!navigator.locks) return false; // Supported shells provide Web Locks; never race an unguarded drain.
+  return navigator.locks.request(
     `balebase-sync:${key}`,
     { ifAvailable: true },
     async (lock) => {
-      if (!lock) return;
+      if (!lock) return false;
       while (isOnline() && activeOfflineKey() === key) {
         const workspace = await readOfflineWorkspace(key);
-        if (!workspace) return;
+        if (!workspace) return true;
         const job = readyOfflineJob(workspace, Date.now());
-        if (!job) return;
+        if (!job) return true;
         try {
           await send(workspace, job);
           await recordResult(key, job.id);
@@ -51,9 +55,10 @@ export async function syncOfflineWorkspace(key: string) {
             [401, 403, 408, 429].includes(cause.status) ||
             cause.status >= 500
           )
-            return;
+            return true;
         }
       }
+      return true;
     },
   );
 }
