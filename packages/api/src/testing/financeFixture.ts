@@ -22,6 +22,7 @@ export interface Category {
   name: string;
   slug: string;
   transactionCount: number;
+  transactionCountsByYear: { transactionCount: number; year: number }[];
 }
 
 export async function createCategory(

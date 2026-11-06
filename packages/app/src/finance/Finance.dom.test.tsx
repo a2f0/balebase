@@ -110,7 +110,13 @@ const data: FinanceData = {
     account("card", "Card"),
   ],
   categories: [
-    { id: "meals", name: "Meals", slug: "meals", transactionCount: 0 },
+    {
+      id: "meals",
+      name: "Meals",
+      slug: "meals",
+      transactionCount: 0,
+      transactionCountsByYear: [],
+    },
   ],
   configured: true,
   connections: [],
@@ -1349,6 +1355,7 @@ describe("Finance filters", () => {
             name: `${organizationId} meals`,
             slug: "meals",
             transactionCount: 0,
+            transactionCountsByYear: [],
           },
         ],
         organizationId,
@@ -1436,14 +1443,131 @@ describe("Finance filters", () => {
     expect(button("Previous year").getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("counts categories in the period the overview filters by", async () => {
+    respond(() =>
+      Response.json({
+        ...data,
+        categories: [
+          {
+            id: "meals",
+            name: "Meals",
+            slug: "meals",
+            transactionCount: 3,
+            transactionCountsByYear: [
+              { transactionCount: 1, year: year - 1 },
+              { transactionCount: 2, year },
+            ],
+          },
+          {
+            id: "travel",
+            name: "Travel",
+            slug: "travel",
+            transactionCount: 1,
+            transactionCountsByYear: [{ transactionCount: 1, year: year - 1 }],
+          },
+        ],
+        transactions: [
+          transaction("This year", {
+            expenseCategoryId: "meals",
+            transactionDate: `${year}-02-01`,
+          }),
+          transaction("Last year", {
+            expenseCategoryId: "meals",
+            transactionDate: `${year - 1}-02-01`,
+          }),
+        ],
+      }),
+    );
+    const counts = () =>
+      [...container.querySelectorAll(".rowInteractive")].map(
+        (row) =>
+          `${row.querySelector(".rowTitle")?.textContent}: ${row.querySelector(".rowMeta")?.textContent}`,
+      );
+    const navigate = await mountFinance("/finance/categories");
+    expect(button("All time").getAttribute("aria-pressed")).toBe("true");
+    expect(counts()).toEqual([
+      "Meals: 3 transactions",
+      "Travel: 1 transaction",
+    ]);
+    await click("Current year");
+    expect(currentPath).toBe("/finance/categories");
+    expect(counts()).toEqual([
+      "Meals: 2 transactions",
+      "Travel: 0 transactions",
+    ]);
+    await click("Previous year");
+    expect(counts()).toEqual(["Meals: 1 transaction", "Travel: 1 transaction"]);
+    // The period is the overview's: it holds there and back.
+    await navigate("/finance");
+    expect(button("Previous year").getAttribute("aria-pressed")).toBe("true");
+    await click("Current year");
+    await navigate("/finance/categories");
+    expect(button("Current year").getAttribute("aria-pressed")).toBe("true");
+    // A category opens its transactions in the same period.
+    await click("Meals");
+    expect(currentPath).toBe("/finance/expenses/category/meals");
+    expect(button("Current year").getAttribute("aria-pressed")).toBe("true");
+    expect(rowNames()).toEqual(["This year"]);
+  });
+
+  it("hides categories with no transactions in the period", async () => {
+    respond(() =>
+      Response.json({
+        ...data,
+        categories: [
+          {
+            id: "meals",
+            name: "Meals",
+            slug: "meals",
+            transactionCount: 1,
+            transactionCountsByYear: [{ transactionCount: 1, year: year - 1 }],
+          },
+        ],
+      }),
+    );
+    dom.localStorage.setItem("balebase.finance-hide-empty-categories", "true");
+    try {
+      await mountFinance("/finance/categories");
+      expect(container.querySelectorAll(".rowTitle")).toHaveLength(1);
+      await click("Current year");
+      expect(container.querySelectorAll(".rowTitle")).toHaveLength(0);
+      expect(container.textContent).toContain(
+        `No categories have transactions in ${year}`,
+      );
+      expect(container.textContent).toContain(
+        `1 category with no transactions in ${year} is hidden.`,
+      );
+    } finally {
+      dom.localStorage.clear();
+    }
+  });
+
   it("hides categories with no transactions and remembers the choice", async () => {
     respond(() =>
       Response.json({
         ...data,
         categories: [
-          { id: "meals", name: "Meals", slug: "meals", transactionCount: 2 },
-          { id: "travel", name: "Travel", slug: "travel", transactionCount: 0 },
-          { id: "gifts", name: "Gifts", slug: "gifts", transactionCount: 0 },
+          {
+            id: "meals",
+            name: "Meals",
+            slug: "meals",
+            transactionCount: 2,
+            transactionCountsByYear: [{ transactionCount: 2, year }],
+          },
+          {
+            id: "travel",
+            name: "Travel",
+            slug: "travel",
+            transactionCount: 0,
+            transactionCountsByYear: [],
+          },
+          {
+            id: "gifts",
+            name: "Gifts",
+            slug: "gifts",
+            transactionCount: 0,
+            transactionCountsByYear: [],
+          },
         ],
       }),
     );
@@ -1501,8 +1625,20 @@ describe("Finance filters", () => {
 
   it("drills into one category from Categories, drops recategorized rows, and clears back to all", async () => {
     const categories = [
-      { id: "category-1", name: "Meals", slug: "meals", transactionCount: 2 },
-      { id: "category-2", name: "Travel", slug: "travel", transactionCount: 0 },
+      {
+        id: "category-1",
+        name: "Meals",
+        slug: "meals",
+        transactionCount: 2,
+        transactionCountsByYear: [{ transactionCount: 2, year }],
+      },
+      {
+        id: "category-2",
+        name: "Travel",
+        slug: "travel",
+        transactionCount: 0,
+        transactionCountsByYear: [],
+      },
     ];
     const moved = new Set<string>();
     respond((url, init) => {
@@ -1553,6 +1689,7 @@ describe("Finance filters", () => {
             name: "Travel",
             slug: "travel",
             transactionCount: 0,
+            transactionCountsByYear: [],
           },
         ],
       }),
@@ -1588,7 +1725,13 @@ describe("Finance filters", () => {
 
   it("renames and deletes a category from its row's menu button", async () => {
     let categories = [
-      { id: "travel", name: "Travel", slug: "travel", transactionCount: 0 },
+      {
+        id: "travel",
+        name: "Travel",
+        slug: "travel",
+        transactionCount: 0,
+        transactionCountsByYear: [],
+      },
     ];
     const writes: string[] = [];
     respond(async (url, init) => {
@@ -1777,8 +1920,20 @@ describe("Bulk categorization", () => {
   const listing: FinanceData = {
     ...data,
     categories: [
-      { id: "meals", name: "Meals", slug: "meals", transactionCount: 0 },
-      { id: "travel", name: "Travel", slug: "travel", transactionCount: 0 },
+      {
+        id: "meals",
+        name: "Meals",
+        slug: "meals",
+        transactionCount: 0,
+        transactionCountsByYear: [],
+      },
+      {
+        id: "travel",
+        name: "Travel",
+        slug: "travel",
+        transactionCount: 0,
+        transactionCountsByYear: [],
+      },
     ],
     transactions: rows,
   };

@@ -12,8 +12,20 @@ const { click, fill, mount, queryButton, respond, settle, window } = installDom(
 );
 
 const categories: ExpenseCategory[] = [
-  { id: "fuel", name: "Fuel", slug: "fuel", transactionCount: 0 },
-  { id: "meals", name: "Meals", slug: "meals", transactionCount: 0 },
+  {
+    id: "fuel",
+    name: "Fuel",
+    slug: "fuel",
+    transactionCount: 0,
+    transactionCountsByYear: [],
+  },
+  {
+    id: "meals",
+    name: "Meals",
+    slug: "meals",
+    transactionCount: 0,
+    transactionCountsByYear: [],
+  },
 ];
 
 function rule(overrides: Partial<CategorizationRule> = {}): CategorizationRule {

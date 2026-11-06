@@ -25,6 +25,8 @@ export interface OverviewHandlers {
   onDeleteData: (connection: FinanceConnection) => Promise<void>;
   onDisconnect: (connection: FinanceConnection) => Promise<void>;
   onNavigate: (pathname: string) => void;
+  /** Changes the period filter in place, from a page other than the list. */
+  onPeriodChange: (year: number | null) => void;
   /** A request was refused: access ended, so nothing shown or saved stays. */
   onRefused: (cause: unknown) => Promise<void>;
   onRepair: (connection: FinanceConnection) => Promise<void>;

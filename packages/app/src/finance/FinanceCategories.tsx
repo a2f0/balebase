@@ -16,10 +16,12 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
 import {
+  periodTransactionCount,
   readHideEmptyCategories,
   storeHideEmptyCategories,
   visibleCategories,
 } from "./emptyCategories";
+import { FinancePeriodFilter } from "./FinancePeriodFilter";
 import { useFinanceSave } from "./financeSave";
 
 export function FinanceCategories({
@@ -27,12 +29,17 @@ export function FinanceCategories({
   onChanged,
   onRefused,
   onShowTransactions,
+  onYearChange,
+  year,
 }: {
   categories: ExpenseCategory[] | undefined;
   onChanged: () => Promise<void>;
   /** A save was refused: access ended. */
   onRefused: (cause: unknown) => Promise<void>;
   onShowTransactions: (category: ExpenseCategory) => void;
+  onYearChange: (year: number | null) => void;
+  /** Counts only transactions dated in this year; null counts them all. */
+  year: number | null;
 }) {
   const { busy, error, notice, run } = useFinanceSave(
     "Could not save the category.",
@@ -87,9 +94,14 @@ export function FinanceCategories({
             </div>
           ) : undefined
         }
-        description="Each transaction can have one expense category. Reports total spending by category. Select a category to see its transactions, or open its menu to rename or delete it."
+        description="Each transaction can have one expense category. Reports total spending by category. Select a category to see its transactions in the chosen period, or open its menu to rename or delete it."
         title="Expense categories"
       >
+        {categories?.length ? (
+          <div className="cluster">
+            <FinancePeriodFilter onChange={onYearChange} year={year} />
+          </div>
+        ) : null}
         <CategoryList
           busy={busy}
           categories={categories}
@@ -108,6 +120,7 @@ export function FinanceCategories({
             })
           }
           onShowTransactions={onShowTransactions}
+          year={year}
         />
       </PageSection>
     </>
@@ -186,6 +199,7 @@ function CategoryList({
   onDelete,
   onRename,
   onShowTransactions,
+  year,
 }: {
   busy: boolean;
   categories: ExpenseCategory[] | undefined;
@@ -194,6 +208,7 @@ function CategoryList({
   onDelete: (category: ExpenseCategory) => Promise<boolean>;
   onRename: (category: ExpenseCategory, name: string) => Promise<boolean>;
   onShowTransactions: (category: ExpenseCategory) => void;
+  year: number | null;
 }) {
   if (!categories) return <LoadingState label="Loading categories…" />;
   if (!categories.length) {
@@ -216,7 +231,8 @@ function CategoryList({
       </EmptyState>
     );
   }
-  const { hidden, shown } = visibleCategories(categories, hideEmpty);
+  const { hidden, shown } = visibleCategories(categories, hideEmpty, year);
+  const period = year === null ? "" : ` in ${year}`;
   return (
     <>
       {shown.length > 0 ? (
@@ -230,19 +246,23 @@ function CategoryList({
                 onDelete={onDelete}
                 onRename={onRename}
                 onShowTransactions={onShowTransactions}
+                transactionCount={periodTransactionCount(category, year)}
               />
             ))}
           </ul>
         </Card>
       ) : (
-        <EmptyState icon="layers" title="No categories have transactions yet">
+        <EmptyState
+          icon="layers"
+          title={`No categories have transactions${period || " yet"}`}
+        >
           Categorize transactions to see their categories here.
         </EmptyState>
       )}
       {hidden > 0 && (
         <p className="textMuted">
-          {countLabel(hidden, "category", "categories")} with no transactions{" "}
-          {hidden === 1 ? "is" : "are"} hidden.
+          {countLabel(hidden, "category", "categories")} with no transactions
+          {period} {hidden === 1 ? "is" : "are"} hidden.
         </p>
       )}
     </>
@@ -255,12 +275,15 @@ function CategoryRow({
   onDelete,
   onRename,
   onShowTransactions,
+  transactionCount,
 }: {
   busy: boolean;
   category: ExpenseCategory;
   onDelete: (category: ExpenseCategory) => Promise<boolean>;
   onRename: (category: ExpenseCategory, name: string) => Promise<boolean>;
   onShowTransactions: (category: ExpenseCategory) => void;
+  /** Its transactions in the period shown. */
+  transactionCount: number;
 }) {
   const [editing, setEditing] = useState(false);
   if (editing) {
@@ -316,7 +339,7 @@ function CategoryRow({
               {category.name}
             </Button>
             <span className="rowMeta">
-              {countLabel(category.transactionCount, "transaction")}
+              {countLabel(transactionCount, "transaction")}
             </span>
           </div>
           <div className="rowActions">

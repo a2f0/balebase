@@ -32,13 +32,26 @@ export function storeHideEmptyCategories(
   }
 }
 
-/** The categories to list, and how many the switch hides. */
+/** A category's transactions dated in `year`, or all of them for null. */
+export function periodTransactionCount(
+  category: ExpenseCategory,
+  year: number | null,
+) {
+  if (year === null) return category.transactionCount;
+  return (
+    category.transactionCountsByYear.find((entry) => entry.year === year)
+      ?.transactionCount ?? 0
+  );
+}
+
+/** The categories to list, and how many the switch hides, in a period. */
 export function visibleCategories(
   categories: ExpenseCategory[],
   hideEmpty: boolean,
+  year: number | null,
 ) {
   const shown = hideEmpty
-    ? categories.filter((category) => category.transactionCount > 0)
+    ? categories.filter((category) => periodTransactionCount(category, year))
     : categories;
   return { hidden: categories.length - shown.length, shown };
 }

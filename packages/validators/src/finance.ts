@@ -233,6 +233,13 @@ const ExpenseCategorySchema = z.object({
   /** Unique in the organization; changes when the category is renamed. */
   slug: z.string(),
   transactionCount: z.number(),
+  /**
+   * The same count split by the year of each transaction's date, for years
+   * that have any; together they make `transactionCount`.
+   */
+  transactionCountsByYear: z.array(
+    z.object({ transactionCount: z.number(), year: z.number().int() }),
+  ),
 });
 export type ExpenseCategory = z.infer<typeof ExpenseCategorySchema>;
 
@@ -622,7 +629,10 @@ export const financeRoutes = {
     path: "/api/finance/categories/:id",
     body: CategoryNameSchema,
     response: z.object({
-      category: ExpenseCategorySchema.omit({ transactionCount: true }),
+      category: ExpenseCategorySchema.omit({
+        transactionCount: true,
+        transactionCountsByYear: true,
+      }),
     }),
   }),
   deleteCategory: route({

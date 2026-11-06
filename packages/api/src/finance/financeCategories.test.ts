@@ -223,6 +223,56 @@ describe("expense categories", () => {
     expect(defaults.body.categories).toHaveLength(21);
   });
 
+  it("splits each category's count by the year of its transactions", async () => {
+    const fixture = await createFixture();
+    const ids = seedTransactions(fixture.database);
+    const meals = await createCategory(fixture, "Meals");
+    await createCategory(fixture, "Travel");
+    // Rows 0 and 1 stay in 2026, row 3 moves to 2025, and row 8 was removed.
+    fixture.database
+      .query(
+        "UPDATE plaid_transactions SET transaction_date = '2025-12-31' WHERE id = ?",
+      )
+      .run(ids[3] ?? "");
+    for (const index of [0, 1, 3, 8]) {
+      fixture.database
+        .query(
+          `INSERT INTO finance_transaction_annotations
+             (transaction_id, organization_id, expense_category_id,
+              created_by, updated_by, created_at, updated_at)
+           VALUES (?, 'org_user-1', ?, 'user-1', 'user-1',
+                   '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z')`,
+        )
+        .run(ids[index] ?? "", meals);
+    }
+    const listed = await jsonRequest<{ categories: Category[] }>(
+      fixture.app,
+      fixture.bindings,
+      "/categories",
+      "GET",
+    );
+    expect(listed.status).toBe(200);
+    expect(
+      listed.body.categories.map(
+        ({ name, transactionCount, transactionCountsByYear }) => ({
+          name,
+          transactionCount,
+          transactionCountsByYear,
+        }),
+      ),
+    ).toEqual([
+      {
+        name: "Meals",
+        transactionCount: 3,
+        transactionCountsByYear: [
+          { transactionCount: 1, year: 2025 },
+          { transactionCount: 2, year: 2026 },
+        ],
+      },
+      { name: "Travel", transactionCount: 0, transactionCountsByYear: [] },
+    ]);
+  });
+
   it("assigns at most one category per transaction and unassigns on delete", async () => {
     const fixture = await createFixture();
     const [transactionId] = seedTransactions(fixture.database);

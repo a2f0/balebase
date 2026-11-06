@@ -115,6 +115,66 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
       rows: ["a:1", "b:1"],
     });
 
+    // A summary saved before categories carried per-year counts reads back
+    // with them, counted from the saved transactions.
+    const legacy = { organizationId: "legacy-org", userId: "person" };
+    const legacyCategories = await target.evaluate(
+      async (who, first) => {
+        const store = window.transactionCacheTest?.store;
+        if (!store) throw new Error("No fixture");
+        const { epoch } = await store.position(who);
+        await store.apply(who, { cursor: null, epoch }, first, "t1");
+        await store.saveSummary(
+          who,
+          {
+            accounts: [],
+            categories: [
+              {
+                id: "meals",
+                name: "Meals",
+                slug: "meals",
+                transactionCount: 2,
+              },
+            ],
+            configured: true,
+            connections: [],
+            organizationId: who.organizationId,
+            userId: who.userId,
+          } as never,
+          epoch,
+        );
+        return (await store.read(who)).summary?.categories;
+      },
+      legacy,
+      {
+        ...page("1", false, [
+          {
+            ...row("old"),
+            expenseCategoryId: "meals",
+            transactionDate: "2025-05-01",
+          },
+          { ...row("new"), expenseCategoryId: "meals" },
+        ]),
+        organizationId: legacy.organizationId,
+      },
+    );
+    expect(legacyCategories).toEqual([
+      {
+        id: "meals",
+        name: "Meals",
+        slug: "meals",
+        transactionCount: 2,
+        transactionCountsByYear: [
+          { transactionCount: 1, year: 2025 },
+          { transactionCount: 1, year: 2026 },
+        ],
+      },
+    ]);
+    await target.evaluate(
+      (who) => window.transactionCacheTest?.store.clear(who),
+      legacy,
+    );
+
     // A page that cannot be stored leaves nothing of itself behind.
     const failed = await target.evaluate(async (who) => {
       const broken = {

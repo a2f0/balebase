@@ -886,12 +886,15 @@ category changes its slug, and `uncategorized` is reserved. Selecting a
 category's row, or **Show transactions** in its menu (the row's menu button
 or a right-click, which also offers **Rename** and **Delete**), opens
 `/finance/expenses/category/<slug>`, the overview filtered to that category's
-transactions across all imported history. **Hide categories with no
-transactions** leaves out categories nothing is filed under and says how many
-it hides; the choice is kept on the device. Deleting a category leaves its
-transactions uncategorized. Creating, renaming (with the old and new name and
-slug), deleting (with how many transactions it leaves uncategorized), and adding
-the common set (naming the categories added) appear in Activity under
+transactions in the chosen period. Categories has the overview's period
+choice (**All time**, **Current year**, **Previous year**, by transaction
+date), shared with the overview, and each row counts the category's
+transactions in that period. **Hide categories with no transactions** leaves
+out categories with none in the period and says how many it hides; the choice
+is kept on the device. Deleting a category leaves all of its transactions
+uncategorized, whatever the period. Creating, renaming (with the old and new
+name and slug), deleting (with how many transactions it leaves uncategorized),
+and adding the common set (naming the categories added) appear in Activity under
 **Expense categories**, which requires Finance access. `/finance/reports` totals
 expenses by category over a period: posted outflows count as spending, refunds
 assigned to a category reduce it, and unassigned transfers and loan or card

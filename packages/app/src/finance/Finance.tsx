@@ -36,6 +36,7 @@ import {
   financePageFor,
   financePages,
 } from "../workspace/workspacePaths";
+import { type CategoryChange, categoryYearCounts } from "./categoryYearCounts";
 import {
   FinanceAccounts,
   FinanceConnectionAlert,
@@ -143,6 +144,7 @@ export function Finance({
         if (path !== pathname) onNavigate(path);
       }}
       onNavigate={onNavigate}
+      onPeriodChange={(year) => onFiltersChange({ ...listing.filters, year })}
       onRefused={onRefused}
       // Category and rule saves on Categories reload once they finish, maybe
       // after navigation: with the loader for the page shown by then.
@@ -260,12 +262,6 @@ async function saveCategories(
   return true;
 }
 
-interface CategoryChange {
-  from: string | null;
-  id: string;
-  to: string | null;
-}
-
 function reversed(changes: CategoryChange[]): CategoryChange[] {
   return changes.map(({ from, id, to }) => ({ from: to, id, to: from }));
 }
@@ -276,6 +272,14 @@ function withCategories(
 ): FinanceData | undefined {
   if (!data || !changes.length) return data;
   const byId = new Map(changes.map((change) => [change.id, change]));
+  const years = new Map(
+    data.transactions
+      .filter((transaction) => byId.has(transaction.id))
+      .map((transaction) => [
+        transaction.id,
+        Number(transaction.transactionDate.slice(0, 4)),
+      ]),
+  );
   const counts = new Map<string | null, number>();
   for (const { from, to } of changes) {
     counts.set(to, (counts.get(to) ?? 0) + 1);
@@ -286,7 +290,16 @@ function withCategories(
     categories: data.categories.map((category) => {
       const change = counts.get(category.id) ?? 0;
       return change
-        ? { ...category, transactionCount: category.transactionCount + change }
+        ? {
+            ...category,
+            transactionCount: category.transactionCount + change,
+            transactionCountsByYear: categoryYearCounts(
+              category.id,
+              category.transactionCountsByYear,
+              changes,
+              years,
+            ),
+          }
         : category;
     }),
     transactions: data.transactions.map((transaction) => {
@@ -412,8 +425,11 @@ export function FinanceView({
               handlers.onFiltersChange({
                 ...initialFilters,
                 categorySlug: category.slug,
+                year: handlers.filters.year,
               })
             }
+            onYearChange={handlers.onPeriodChange}
+            year={handlers.filters.year}
           />
         )}
         {page === "rules" && (

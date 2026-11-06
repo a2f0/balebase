@@ -25,7 +25,13 @@ it("opens a payee from anywhere on its row but its menu, without overflowing a p
         <FinancePayeeList
           busy={false}
           categories={[
-            { id: "fuel", name: "Fuel", slug: "fuel", transactionCount: 0 },
+            {
+              id: "fuel",
+              name: "Fuel",
+              slug: "fuel",
+              transactionCount: 0,
+              transactionCountsByYear: [],
+            },
           ]}
           matching={[]}
           onCategorizeMany={async () => true}
@@ -128,7 +134,13 @@ it("opens a payee from anywhere on its row but its menu, without overflowing a p
 it("wraps a long payee name in an open payee form on a phone", async () => {
   const name = `Long${"Payee".repeat(30)}`;
   const categories = [
-    { id: "fuel", name: "Fuel", slug: "fuel", transactionCount: 0 },
+    {
+      id: "fuel",
+      name: "Fuel",
+      slug: "fuel",
+      transactionCount: 0,
+      transactionCountsByYear: [],
+    },
   ];
   const markup = renderToStaticMarkup(
     <div className="card financeListCard">
