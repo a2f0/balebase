@@ -6,6 +6,7 @@ import {
   EmptyState,
   Field,
   LoadingState,
+  MenuButton,
   PageSection,
   Toast,
 } from "@balebase/ui/react";
@@ -14,9 +15,7 @@ import { financeLimits } from "@balebase/validators/rules";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
-import { useAction } from "../shared/useAction";
-import { FinanceCategoryRules } from "./FinanceCategoryRules";
-import { refused } from "./transactionCache";
+import { useFinanceSave } from "./financeSave";
 
 export function FinanceCategories({
   categories,
@@ -30,8 +29,11 @@ export function FinanceCategories({
   onRefused: (cause: unknown) => Promise<void>;
   onShowTransactions: (category: ExpenseCategory) => void;
 }) {
-  const action = useAction("Could not save the category.");
-  const { busy, error, notice } = action;
+  const { busy, error, notice, run } = useFinanceSave(
+    "Could not save the category.",
+    onChanged,
+    onRefused,
+  );
   const addDefaults = () =>
     run(async () => {
       const before = categories?.length ?? 0;
@@ -42,21 +44,6 @@ export function FinanceCategories({
         ? `Added ${countLabel(added, "common category", "common categories")}.`
         : "All common categories are already here.";
     });
-
-  const run = (change: () => Promise<string>) =>
-    action.run(
-      async () => {
-        try {
-          const message = await change();
-          await onChanged();
-          return message;
-        } catch (cause) {
-          if (refused(cause)) await onRefused(cause);
-          throw cause;
-        }
-      },
-      (message) => message,
-    );
 
   return (
     <>
@@ -89,7 +76,7 @@ export function FinanceCategories({
             </div>
           ) : undefined
         }
-        description="Each transaction can have one expense category. Reports total spending by category. Select a category to see its transactions."
+        description="Each transaction can have one expense category. Reports total spending by category. Select a category to see its transactions, or open its menu to rename or delete it."
         title="Expense categories"
       >
         <CategoryList
@@ -111,15 +98,6 @@ export function FinanceCategories({
           onShowTransactions={onShowTransactions}
         />
       </PageSection>
-      {/* Gone with the categories when access ends, and loaded afresh. */}
-      {categories && (
-        <FinanceCategoryRules
-          busy={busy}
-          categories={categories}
-          onRefused={onRefused}
-          run={run}
-        />
-      )}
     </>
   );
 }
@@ -250,6 +228,7 @@ function CategoryRow({
   async function remove() {
     if (await confirmCategoryDeletion(category)) void onDelete(category);
   }
+  const label = `Actions for ${category.name}`;
   return (
     <ContextMenu
       items={[
@@ -259,10 +238,24 @@ function CategoryRow({
           label: "Show transactions",
           onSelect: () => onShowTransactions(category),
         },
+        {
+          disabled: busy,
+          icon: "edit",
+          id: "rename",
+          label: "Rename",
+          onSelect: () => setEditing(true),
+        },
+        {
+          disabled: busy,
+          icon: "trash",
+          id: "delete",
+          label: "Delete",
+          onSelect: () => void remove(),
+        },
       ]}
-      label={`Actions for ${category.name}`}
+      label={label}
     >
-      {(targetProps) => (
+      {(targetProps, menuButton) => (
         <li className="row rowInteractive" {...targetProps}>
           <div className="rowMain">
             <Button
@@ -277,24 +270,7 @@ function CategoryRow({
             </span>
           </div>
           <div className="rowActions">
-            <Button
-              disabled={busy}
-              icon="edit"
-              onClick={() => setEditing(true)}
-              size="sm"
-              variant="ghost"
-            >
-              Rename
-            </Button>
-            <Button
-              disabled={busy}
-              icon="trash"
-              onClick={() => void remove()}
-              size="sm"
-              variant="danger"
-            >
-              Delete
-            </Button>
+            <MenuButton {...menuButton} label={label} />
           </div>
         </li>
       )}

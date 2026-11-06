@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { DialogHost } from "@balebase/ui/react";
 import type {
   FinanceData,
   FinanceTransaction,
@@ -130,7 +131,12 @@ afterEach(() => {
 async function mountFinance(pathname = "/finance") {
   const page = (path: string) => {
     currentPath = path;
-    return <Finance onNavigate={navigate} pathname={path} />;
+    return (
+      <>
+        <Finance onNavigate={navigate} pathname={path} />
+        <DialogHost />
+      </>
+    );
   };
   const view = await mount(page(pathname));
   container = view.container;
@@ -459,7 +465,7 @@ describe("Finance filters", () => {
     expect(currentPath).toBe(transactionIssuePath("Olive Garden"));
     await openRowMenu("Shell");
     await choose("Create rule for “Shell”");
-    expect(currentPath).toBe("/finance/categories?payee=Shell");
+    expect(currentPath).toBe("/finance/rules?payee=Shell");
   });
 
   it("keeps every shown row and the annotation form while a saved note refreshes", async () => {
@@ -630,7 +636,7 @@ describe("Finance filters", () => {
       }
       return Response.json(data);
     });
-    const navigate = await mountFinance("/finance/categories");
+    const navigate = await mountFinance("/finance/rules");
     const payee = container.querySelector<HTMLInputElement>(
       'input[placeholder="Shell"]',
     );
@@ -662,7 +668,7 @@ describe("Finance filters", () => {
     await navigate("/finance");
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
     // The save's closing reload uses the overview's loader, not the
-    // summary-only one Categories had.
+    // summary-only one Rules had.
     await act(async () => save.resolve());
     await act(async () => Bun.sleep(5));
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
@@ -1052,6 +1058,74 @@ describe("Finance filters", () => {
     expect(container.textContent).toContain(
       "No transactions match these filters",
     );
+  });
+
+  it("renames and deletes a category from its row's menu button", async () => {
+    let categories = [
+      { id: "travel", name: "Travel", slug: "travel", transactionCount: 0 },
+    ];
+    const writes: string[] = [];
+    respond(async (url, init) => {
+      const method = init?.method ?? "GET";
+      if (method !== "GET") {
+        writes.push(`${method} ${url.pathname} ${init?.body ?? ""}`);
+        categories =
+          method === "DELETE"
+            ? []
+            : [{ ...categories[0], name: "Trips" } as (typeof categories)[0]];
+        return method === "DELETE"
+          ? new Response(null, { status: 204 })
+          : Response.json({
+              category: { id: "travel", name: "Trips", slug: "trips" },
+            });
+      }
+      return Response.json({ ...data, categories });
+    });
+    await mountFinance("/finance/categories");
+    // Rename and Delete live in the row's menu, not as row buttons.
+    expect(container.querySelector(".rowActions")?.textContent).toBe("");
+    await openRowMenu("Travel");
+    expect(menuItems()).toEqual(["Show transactions", "Rename", "Delete"]);
+    await choose("Rename");
+    const field = container.querySelector<HTMLInputElement>(
+      '[aria-label="Rename Travel"] input',
+    );
+    if (!field) throw new Error("Missing rename field");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        dom.HTMLInputElement.prototype,
+        "value",
+      )?.set?.call(field, "Trips");
+      field.dispatchEvent(
+        new dom.Event("input", { bubbles: true }) as unknown as Event,
+      );
+    });
+    await click("Save");
+    expect(button("Trips")).toBeDefined();
+    await openRowMenu("Trips");
+    await choose("Delete");
+    await click("Delete category");
+    expect(writes).toEqual([
+      'PATCH /api/finance/categories/travel {"name":"Trips"}',
+      "DELETE /api/finance/categories/travel ",
+    ]);
+    expect(container.textContent).toContain("No expense categories yet");
+  });
+
+  it("opens Rules as its own tab", async () => {
+    respond((url) =>
+      url.pathname.endsWith("/categorization-rules")
+        ? Response.json({ rules: [] })
+        : Response.json(data),
+    );
+    const navigate = await mountFinance("/finance/categories");
+    expect(container.textContent).not.toContain("Categorization rules");
+    await navigate("/finance/rules");
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toBe(
+      "Rules",
+    );
+    expect(container.textContent).toContain("Categorization rules");
+    expect(container.textContent).not.toContain("Add a category");
   });
 
   it("opens a bookmarked category path with one load", async () => {

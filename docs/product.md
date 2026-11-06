@@ -873,7 +873,8 @@ new one. Each changed transaction records its own category event; rows already
 in the category are left alone. Each category
 has a slug derived from its name and unique within the organization; renaming a
 category changes its slug, and `uncategorized` is reserved. Selecting a
-category's row, or **Show transactions** in its context menu, opens
+category's row, or **Show transactions** in its menu (the row's menu button
+or a right-click, which also offers **Rename** and **Delete**), opens
 `/finance/expenses/category/<slug>`, the overview filtered to that category's
 transactions across all imported history. Deleting a category leaves its
 transactions uncategorized. Creating, renaming (with the old and new name and
@@ -887,12 +888,13 @@ accounts is not double-counted. Totals are grouped by currency. Earlier
 free-text category overrides were converted into categories by migration
 `0034`.
 
-Categorization rules, listed under the categories at `/finance/categories`,
+Categorization rules, on Finance's **Rules** tab at `/finance/rules`,
 give one payee's transactions an expense category. A rule names a payee
 exactly as transactions show it (the merchant's name, else the bank's
 description, as **Show only** matches it) and a category; each payee has at
 most one rule, so at most one rule matches a transaction. A transaction row's
-menu offers **Create rule** with its name filled in. Rules fill only
+menu offers **Create rule**, which opens the Rules tab with its name filled
+in. Rules fill only
 transactions without a category and never change one someone chose. When a
 Plaid sync imports a new transaction whose payee has a rule, the transaction
 takes that category, recorded as Balebase's (**Balebase rules**) with the

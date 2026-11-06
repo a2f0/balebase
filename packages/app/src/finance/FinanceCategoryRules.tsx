@@ -24,10 +24,8 @@ import {
 import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
 import { useLoad } from "../shared/useLoad";
+import type { RunChange } from "./financeSave";
 import { refused } from "./transactionCache";
-
-/** Runs a rule change; resolves a success message, or throws its failure. */
-type RunChange = (change: () => Promise<string>) => Promise<boolean>;
 
 /**
  * Categorization rules: each gives one payee's transactions (those shown

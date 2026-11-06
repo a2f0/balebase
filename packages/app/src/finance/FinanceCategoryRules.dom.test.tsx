@@ -5,10 +5,10 @@ import type {
   ExpenseCategory,
 } from "@balebase/validators/finance";
 import { installDom } from "../testing/dom";
-import { FinanceCategories } from "./FinanceCategories";
+import { FinanceRules } from "./FinanceRules";
 
 const { click, fill, mount, queryButton, respond, settle, window } = installDom(
-  { url: "http://localhost:5173/finance/categories" },
+  { url: "http://localhost:5173/finance/rules" },
 );
 
 const categories: ExpenseCategory[] = [
@@ -56,20 +56,22 @@ function stubApi(initial: CategorizationRule[], status?: number) {
 }
 
 function page(
-  calls: { changed: number; refused: number },
+  calls: { changed: number; navigated: string[]; refused: number },
   shown: ExpenseCategory[] | undefined,
 ) {
   return (
     <>
-      <FinanceCategories
+      <FinanceRules
         categories={shown}
         onChanged={async () => {
           calls.changed++;
         }}
+        onNavigate={(path) => {
+          calls.navigated.push(path);
+        }}
         onRefused={async () => {
           calls.refused++;
         }}
-        onShowTransactions={() => undefined}
       />
       <DialogHost />
     </>
@@ -77,7 +79,7 @@ function page(
 }
 
 async function render() {
-  const calls = { changed: 0, refused: 0 };
+  const calls = { changed: 0, navigated: [] as string[], refused: 0 };
   const view = await mount(page(calls, categories));
   await settle();
   return {
@@ -179,13 +181,19 @@ describe("categorization rules", () => {
     expect(payee?.hasAttribute("disabled")).toBe(false);
   });
 
+  it("points to Categories when there is no category to choose", async () => {
+    stubApi([]);
+    const { calls, container, rerender } = await render();
+    await rerender([]);
+    expect(container.textContent).toContain("Add an expense category first");
+    expect(queryButton("Add rule", container)).toBeNull();
+    await click(queryButton("Open categories", container));
+    expect(calls.navigated).toEqual(["/finance/categories"]);
+  });
+
   it("fills the payee a transaction's menu sent, once", async () => {
     stubApi([]);
-    window.history.replaceState(
-      null,
-      "",
-      "/finance/categories?payee=Shell+%26+Co",
-    );
+    window.history.replaceState(null, "", "/finance/rules?payee=Shell+%26+Co");
     const { container } = await render();
     expect(
       container.querySelector<HTMLInputElement>('input[placeholder="Shell"]')
