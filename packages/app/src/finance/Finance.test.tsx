@@ -80,6 +80,7 @@ function renderFinance(
       onAnnotate={async () => undefined}
       onCategorize={async () => undefined}
       onCategorizeMany={async () => true}
+      onCreateRule={async () => true}
       onConnect={async () => undefined}
       onDeleteData={async () => undefined}
       onDisconnect={async () => undefined}

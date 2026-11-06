@@ -29,8 +29,7 @@ it("opens a payee from anywhere on its row but its menu, without overflowing a p
           ]}
           matching={[]}
           onCategorizeMany={async () => true}
-          onRefused={async () => undefined}
-          onReload={async () => undefined}
+          onCreateRule={async () => true}
           onSelect={() => undefined}
           payees={[payee("Shell", 1), payee(`Long${"Payee".repeat(30)}`)]}
         />

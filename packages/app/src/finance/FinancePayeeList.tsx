@@ -5,17 +5,15 @@ import {
   ContextMenu,
   cx,
   MenuButton,
-  Toast,
 } from "@balebase/ui/react";
 import type {
   ExpenseCategory,
   FinanceTransaction,
 } from "@balebase/validators/finance";
 import { type ComponentProps, useEffect, useRef, useState } from "react";
-import { api } from "../shared/apiClient";
 import { countLabel, formatCalendarDate } from "../shared/labels";
 import { formatMoney } from "./financeFormat";
-import { useFinanceSave } from "./financeSave";
+import type { CreateRule } from "./financeRuleAction";
 import {
   PayeeActionForm,
   type PayeeForm,
@@ -36,10 +34,11 @@ interface PayeeListActions {
     transactions: FinanceTransaction[],
     categoryId: string | null,
   ) => Promise<boolean>;
-  /** Reloads Finance after a rule may have categorized transactions. */
-  onReload: () => Promise<void>;
-  /** A save was refused: access ended. */
-  onRefused: (cause: unknown) => Promise<void>;
+  /**
+   * Creates a payee's rule as Finance's action (its busy state, messages,
+   * and reload outlive this view); resolves whether it saved.
+   */
+  onCreateRule: CreateRule;
   onSelect: (name: string) => void;
 }
 
@@ -53,12 +52,10 @@ export function FinancePayeeList({
   categories,
   matching,
   onCategorizeMany,
-  onReload,
-  onRefused,
+  onCreateRule,
   onSelect,
   payees,
 }: PayeeListActions & { payees: PayeeGroup[] }) {
-  const rules = useFinanceSave("Could not save the rule.", onReload, onRefused);
   const [forms, setForms] = useState<ReadonlyMap<string, PayeeForm>>(new Map());
   const current = useRef(forms);
   current.current = forms;
@@ -89,27 +86,20 @@ export function FinancePayeeList({
         input.categoryId === uncategorizedValue ? null : input.categoryId,
       );
     }
-    return rules.run(async () => {
-      const { applied } = await api.finance.createCategorizationRule({
-        applyToExisting: input.applyToExisting,
-        categoryId: input.categoryId,
-        payeeName: payee,
-      });
-      return input.applyToExisting
-        ? `Added a rule for “${payee}” and categorized ${countLabel(applied, "transaction")}.`
-        : `Added a rule for “${payee}”.`;
+    return onCreateRule({
+      applyToExisting: input.applyToExisting,
+      categoryId: input.categoryId,
+      payeeName: payee,
     });
   }
   return (
     <>
-      {rules.error && <Toast tone="danger">{rules.error}</Toast>}
-      {rules.notice && <Toast tone="success">{rules.notice}</Toast>}
       {payees.length > 0 && (
         <Card className="financeListCard" flush>
           <ul aria-label="Payees" className="rowList financePayees">
             {payees.map((payee) => (
               <PayeeRow
-                busy={busy || rules.busy}
+                busy={busy}
                 categories={categories}
                 form={forms.get(payee.name)}
                 key={payee.name}

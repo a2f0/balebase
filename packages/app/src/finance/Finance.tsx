@@ -50,6 +50,7 @@ import {
   confirmDisconnect,
   syncNotice,
 } from "./financeConnectionActions";
+import { type CreateRule, createRuleAction } from "./financeRuleAction";
 import {
   filterTransactions,
   selectFinanceAccount,
@@ -114,6 +115,7 @@ export function Finance({
       error={error}
       notice={notice}
       onAnnotate={actions.annotate}
+      onCreateRule={actions.createRule}
       onCategorize={categorizeTransaction(
         setData,
         setError,
@@ -297,8 +299,9 @@ function financeActions(
   onRefused: (cause: unknown) => Promise<void>,
   runAction: ReturnType<typeof useAction>["run"],
 ) {
-  async function run(action: () => Promise<string>) {
-    await runAction(
+  /** Runs `action` as Finance's one action; resolves whether it saved. */
+  function save(action: () => Promise<string>) {
+    return runAction(
       async () => {
         try {
           const notice = await action();
@@ -312,6 +315,9 @@ function financeActions(
       },
       (notice) => notice,
     );
+  }
+  async function run(action: () => Promise<string>) {
+    await save(action);
   }
   return {
     annotate: (
@@ -340,6 +346,7 @@ function financeActions(
     },
     sync: (id: string) =>
       run(async () => syncNotice(await api.finance.startSync(id))),
+    createRule: createRuleAction(save),
   };
 }
 
@@ -347,6 +354,7 @@ const setupNoticeId = "finance-setup-notice";
 
 interface OverviewHandlers {
   busy: boolean;
+  onCreateRule: CreateRule;
   onAnnotate: (
     transaction: FinanceTransaction,
     input: FinanceTransactionAnnotation,
@@ -542,7 +550,7 @@ function FinanceOverview({
         onCategorizeMany={handlers.onCategorizeMany}
         onClearFilter={() => onFiltersChange({ ...filters, accountIds: [] })}
         onNavigate={handlers.onNavigate}
-        onRefused={handlers.onRefused}
+        onCreateRule={handlers.onCreateRule}
         onSelectAnnotation={(transactionId) =>
           setSelectedTransactionId((current) =>
             current === transactionId ? undefined : transactionId,

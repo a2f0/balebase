@@ -564,6 +564,45 @@ describe("Finance filters", () => {
     );
   });
 
+  it("holds Finance busy and reports a rule save that lands after leaving the payee view", async () => {
+    const refusal = Promise.withResolvers<void>();
+    respond(async (url) => {
+      if (url.pathname.endsWith("/categorization-rules")) {
+        await refusal.promise;
+        return Response.json(
+          { error: "That payee already has a rule." },
+          { status: 409 },
+        );
+      }
+      return Response.json({
+        ...data,
+        transactions: dated(["Shell"]),
+      });
+    });
+    await mountFinance();
+    await click("By payee");
+    const { select } = await choosePayeeAction("Shell", "Create rule…");
+    await pick(select, "meals");
+    await click("Create rule");
+    await click("Transactions");
+    // Category controls wait for the rule, which may categorize these rows.
+    expect(
+      container.querySelector<HTMLSelectElement>(
+        '[aria-label="Expense category for Shell"]',
+      )?.disabled,
+    ).toBe(true);
+    await act(async () => {
+      refusal.resolve();
+      await Bun.sleep(5);
+    });
+    expect(container.textContent).toContain("That payee already has a rule.");
+    expect(
+      container.querySelector<HTMLSelectElement>(
+        '[aria-label="Expense category for Shell"]',
+      )?.disabled,
+    ).toBe(false);
+  });
+
   it("offers payee actions only once there is a category", async () => {
     respond(() =>
       Response.json({

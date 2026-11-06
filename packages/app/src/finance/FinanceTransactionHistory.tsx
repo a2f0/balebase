@@ -52,6 +52,7 @@ import {
   useTransactionSelection,
 } from "./FinanceTransactionSelection";
 import { formatMoney } from "./financeFormat";
+import type { CreateRule } from "./financeRuleAction";
 import { groupByPayee, type PayeeGroup, transactionTitle } from "./payeeGroups";
 
 interface AnnotationHandlers {
@@ -106,8 +107,8 @@ export function FinanceTransactionHistory({
   loadError: string | undefined;
   onLoadMore: () => Promise<boolean>;
   onReload: () => Promise<void>;
-  /** A save was refused: access ended. */
-  onRefused: (cause: unknown) => Promise<void>;
+  /** Creates a payee's categorization rule; resolves whether it saved. */
+  onCreateRule: CreateRule;
 }) {
   const [view, setView] = useState<TransactionView>("list");
   const transactions = matching?.slice(0, visible);
@@ -173,7 +174,6 @@ export function FinanceTransactionHistory({
           {...handlers}
           matching={matching ?? []}
           onCategorizeMany={onCategorizeMany}
-          onReload={onReload}
           onSelect={(name) => {
             setView("list");
             onFiltersChange({ ...filters, name });
