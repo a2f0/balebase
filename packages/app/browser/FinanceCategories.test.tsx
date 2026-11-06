@@ -12,12 +12,26 @@ it("opens a category from anywhere on its row except its menu button", async () 
   const markup = renderToStaticMarkup(
     <FinanceCategories
       categories={[
-        { id: "meals", name: "Meals", slug: "meals", transactionCount: 2 },
-        { id: "travel", name: "Travel", slug: "travel", transactionCount: 0 },
+        {
+          id: "meals",
+          name: "Meals",
+          slug: "meals",
+          transactionCount: 2,
+          transactionCountsByYear: [{ transactionCount: 2, year: 2026 }],
+        },
+        {
+          id: "travel",
+          name: "Travel",
+          slug: "travel",
+          transactionCount: 0,
+          transactionCountsByYear: [],
+        },
       ]}
       onChanged={async () => undefined}
       onRefused={async () => undefined}
       onShowTransactions={() => undefined}
+      onYearChange={() => undefined}
+      year={null}
     />,
   );
   const css = stylesheets(["tokens", "base", "controls", "surfaces"]);

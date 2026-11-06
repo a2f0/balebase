@@ -176,7 +176,13 @@ describe("loading cached finances", () => {
     const renamed = {
       ...summary,
       categories: [
-        { id: "meals", name: "Dining", slug: "dining", transactionCount: 0 },
+        {
+          id: "meals",
+          name: "Dining",
+          slug: "dining",
+          transactionCount: 0,
+          transactionCountsByYear: [],
+        },
       ],
     };
     await loadFinance(store, scope, false, {

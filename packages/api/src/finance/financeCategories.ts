@@ -13,6 +13,8 @@ interface CategoryRow {
   name: string;
   slug: string;
   transaction_count: number;
+  /** Null for a category with no transactions. */
+  year: number | null;
 }
 
 const invalidName = `Category names need 1 to ${financeLimits.categoryName} characters.`;
@@ -47,6 +49,7 @@ export async function listExpenseCategories(
   const result = await database
     .prepare(
       `SELECT category.id, category.name, category.slug,
+              CAST(substr(txn.transaction_date, 1, 4) AS INTEGER) AS year,
               COUNT(txn.id) AS transaction_count
        FROM finance_expense_categories AS category
        LEFT JOIN finance_transaction_annotations AS annotation
@@ -55,12 +58,24 @@ export async function listExpenseCategories(
          ON txn.id = annotation.transaction_id
         AND txn.source_status = 'active'
        WHERE category.organization_id = ?
-       GROUP BY category.id
-       ORDER BY category.name COLLATE NOCASE ASC`,
+       GROUP BY category.id, year
+       ORDER BY category.name COLLATE NOCASE ASC, category.id, year`,
     )
     .bind(organizationId)
     .all<CategoryRow>();
-  return result.results.map(toCategory);
+  // One row per category and year, read together so the years add up.
+  const categories = new Map<string, ExpenseCategory>();
+  for (const row of result.results) {
+    const category = categories.get(row.id) ?? toCategory(row);
+    categories.set(row.id, category);
+    if (row.year === null || !row.transaction_count) continue;
+    category.transactionCount += row.transaction_count;
+    category.transactionCountsByYear.push({
+      transactionCount: row.transaction_count,
+      year: row.year,
+    });
+  }
+  return [...categories.values()];
 }
 
 export async function listCategories(context: FinanceContext) {
@@ -115,7 +130,15 @@ export async function createCategory(context: FinanceContext) {
   return respond(
     context,
     financeRoutes.createCategory,
-    { category: { id, name, slug, transactionCount: 0 } },
+    {
+      category: {
+        id,
+        name,
+        slug,
+        transactionCount: 0,
+        transactionCountsByYear: [],
+      },
+    },
     201,
   );
 }
@@ -597,7 +620,8 @@ function toCategory(row: CategoryRow): ExpenseCategory {
     id: row.id,
     name: row.name,
     slug: row.slug,
-    transactionCount: row.transaction_count,
+    transactionCount: 0,
+    transactionCountsByYear: [],
   };
 }
 

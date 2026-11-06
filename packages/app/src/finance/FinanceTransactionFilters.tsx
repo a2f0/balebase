@@ -2,6 +2,7 @@ import type { FinanceFilters } from "@balebase/api-client";
 import { Button } from "@balebase/ui/react";
 import type { ExpenseCategory } from "@balebase/validators/finance";
 import type { ReactNode } from "react";
+import { FinancePeriodFilter } from "./FinancePeriodFilter";
 import { initialFilters } from "./useFinanceData";
 
 /** Whether any filter narrows the transaction list. */
@@ -27,7 +28,6 @@ export function FinanceTransactionFilters({
   filters: FinanceFilters;
   onChange: (filters: FinanceFilters) => void;
 }) {
-  const year = new Date().getFullYear();
   const categoryName = filters.categorySlug
     ? (categories.find(({ slug }) => slug === filters.categorySlug)?.name ??
       filters.categorySlug)
@@ -35,23 +35,10 @@ export function FinanceTransactionFilters({
   return (
     <div className="financeTransactionFilters">
       {children}
-      <fieldset className="segmented">
-        <legend className="srOnly">Transaction period</legend>
-        {[
-          { label: "All time", year: null },
-          { label: "Current year", year },
-          { label: "Previous year", year: year - 1 },
-        ].map((item) => (
-          <button
-            aria-pressed={filters.year === item.year}
-            key={item.label}
-            onClick={() => onChange({ ...filters, year: item.year })}
-            type="button"
-          >
-            {item.label}
-          </button>
-        ))}
-      </fieldset>
+      <FinancePeriodFilter
+        onChange={(year) => onChange({ ...filters, year })}
+        year={filters.year}
+      />
       {categoryName && (
         <Button
           aria-pressed

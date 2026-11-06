@@ -85,6 +85,7 @@ function renderFinance(
       onDeleteData={async () => undefined}
       onDisconnect={async () => undefined}
       onNavigate={() => undefined}
+      onPeriodChange={() => undefined}
       onReload={async () => undefined}
       onRefused={async () => undefined}
       onRepair={async () => undefined}
