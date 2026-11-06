@@ -497,6 +497,49 @@ describe("Finance filters", () => {
     );
   });
 
+  it("categorizes every payee transaction the filters match, shown or not", async () => {
+    const sent: string[] = [];
+    const shell = (id: string, overrides: Partial<FinanceTransaction> = {}) =>
+      transaction(id, { merchantName: "Shell", ...overrides });
+    respond(async (_url, init) => {
+      if (init?.method === "PUT") {
+        const body = JSON.parse(String(init.body)) as {
+          categoryId: string;
+          transactionIds: string[];
+        };
+        expect(body.categoryId).toBe("meals");
+        sent.push(...body.transactionIds);
+        return Response.json({ updated: body.transactionIds.length });
+      }
+      return Response.json({
+        ...data,
+        transactions: [
+          // More than a page, all this year.
+          ...Array.from({ length: 260 }, (_, index) => shell(`now-${index}`)),
+          // Already Meals: left alone.
+          shell("now-meals", { expenseCategoryId: "meals" }),
+          // Outside the period filter.
+          shell("last-year", { transactionDate: `${year - 1}-05-01` }),
+          // Another payee.
+          transaction("Olive Garden"),
+        ],
+      });
+    });
+    await mountFinance();
+    await click("Current year");
+    await click("By payee");
+    const { select } = await choosePayeeAction(
+      "Shell",
+      "Categorize 261 transactions…",
+    );
+    await pick(select, "meals");
+    await click("Categorize");
+    expect(new Set(sent)).toEqual(
+      new Set(Array.from({ length: 260 }, (_, index) => `now-${index}`)),
+    );
+    expect(sent).toHaveLength(260);
+  });
+
   it("brings a payee's form back as it was when categorizing it fails", async () => {
     const failure = Promise.withResolvers<void>();
     respond(async (_url, init) => {
