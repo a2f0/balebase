@@ -64,8 +64,8 @@ interface CarryOver {
   plaidAccountIds: Map<string, string>;
   /** Plaid's ID of each waiting transaction, to its ID. */
   plaidTransactionIds: Map<string, string>;
-  /** Each waiting transaction's ID, and its write. */
-  transactions: Map<string, D1PreparedStatement>;
+  /** Each waiting transaction's ID, and its writes. */
+  transactions: Map<string, D1PreparedStatement[]>;
 }
 
 async function persistPage(
@@ -89,25 +89,18 @@ async function persistPage(
       await upsertAccount(database, organizationId, itemId, account, carryOver),
     );
   }
-  // Transactions the page adds that are new here, which rules categorize.
-  const imported: string[] = [];
-  const added = new Set(page.added);
   for (const transaction of [...page.added, ...page.modified]) {
     const accountId = accountIds.get(transaction.account_id);
     if (!accountId) {
       throw new Error("Plaid returned a transaction without its account.");
     }
-    const id = await upsertTransaction(
+    await upsertTransaction(
       database,
-      organizationId,
-      itemId,
+      { causation, itemId, organizationId },
       accountId,
       transaction,
       carryOver,
     );
-    if (added.has(transaction) && !carryOver.carriedTransactionIds.has(id)) {
-      imported.push(id);
-    }
   }
   if (carryOver.accounts.size > 0 || carryOver.carriedTransactionIds.size > 0) {
     await database.batch([
@@ -116,13 +109,8 @@ async function persistPage(
         transactionIds: [...carryOver.carriedTransactionIds],
       }),
       ...carryOver.accounts.values(),
-      ...carryOver.transactions.values(),
+      ...[...carryOver.transactions.values()].flat(),
     ]);
-  }
-  if (imported.length > 0) {
-    await database.batch(
-      applyRulesToImported(database, organizationId, causation, imported),
-    );
   }
   if (page.removed.length === 0) return;
   const removed = page.removed.map(
@@ -258,8 +246,11 @@ async function disconnectedAccountCandidates(
 
 async function upsertTransaction(
   database: D1Database,
-  organizationId: string,
-  itemId: string,
+  {
+    causation,
+    itemId,
+    organizationId,
+  }: { causation: ActivityCausation; itemId: string; organizationId: string },
   accountId: string,
   transaction: PlaidTransaction,
   carryOver: CarryOver,
@@ -328,17 +319,26 @@ async function upsertTransaction(
       new Date().toISOString(),
     );
   if (carriedId) carryOver.carriedTransactionIds.add(carriedId);
+  // Only a transaction first stored here is an import rules categorize, in
+  // the same batch as its insert: a replayed page finds the row stored, so a
+  // rule created since then without filling existing ones leaves it alone.
+  // A page that sends a waiting transaction again keeps its rule writes.
+  const rules =
+    carryOver.transactions.get(id)?.slice(1) ??
+    (existingId || pendingId || carriedId
+      ? []
+      : applyRulesToImported(database, organizationId, causation, [id]));
+  const writes = [upsert, ...rules];
   if (
     carriedId ||
     carryOver.transactions.has(id) ||
     carryOver.accounts.has(accountId)
   ) {
-    carryOver.transactions.set(id, upsert);
+    carryOver.transactions.set(id, writes);
     carryOver.plaidTransactionIds.set(transaction.transaction_id, id);
   } else {
-    await upsert.run();
+    await database.batch(writes);
   }
-  return id;
 }
 
 function findSourceTransaction(

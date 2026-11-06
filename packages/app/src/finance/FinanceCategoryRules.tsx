@@ -158,8 +158,13 @@ function AddRuleForm({
   const [payeeName, setPayeeName] = useState(requested);
   const [categoryId, setCategoryId] = useState("");
   const [applyToExisting, setApplyToExisting] = useState(true);
+  // The fields hold still while any change saves, and a save clears only
+  // the values it sent.
+  const current = useRef({ categoryId, payeeName });
+  current.current = { categoryId, payeeName };
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const sent = { categoryId, payeeName };
     const saved = await run(async () => {
       const { applied } = await api.finance.createCategorizationRule({
         applyToExisting,
@@ -170,7 +175,12 @@ function AddRuleForm({
         ? `Added a rule for “${payeeName}” and categorized ${countLabel(applied, "transaction")}.`
         : `Added a rule for “${payeeName}”.`;
     });
-    if (saved) {
+    const now = current.current;
+    if (
+      saved &&
+      now.payeeName === sent.payeeName &&
+      now.categoryId === sent.categoryId
+    ) {
       setPayeeName("");
       setCategoryId("");
     }
@@ -196,6 +206,7 @@ function AddRuleForm({
         <Field label="Payee name">
           <input
             className="input"
+            disabled={busy}
             maxLength={financeLimits.payeeName}
             onChange={(event) => setPayeeName(event.target.value)}
             placeholder="Shell"
@@ -207,6 +218,7 @@ function AddRuleForm({
           <Select
             // Arriving from a transaction, the payee is filled in already.
             autoFocus={Boolean(requested)}
+            disabled={busy}
             onChange={(event) => setCategoryId(event.target.value)}
             required
             value={categoryId}
@@ -223,6 +235,7 @@ function AddRuleForm({
       <label className="check">
         <input
           checked={applyToExisting}
+          disabled={busy}
           onChange={(event) => setApplyToExisting(event.target.checked)}
           type="checkbox"
         />

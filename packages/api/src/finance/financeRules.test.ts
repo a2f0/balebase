@@ -488,6 +488,51 @@ describe("categorization rules on import", () => {
     expect(events(fixture, "finance.transaction_categorized")).toHaveLength(1);
   });
 
+  it("leaves an earlier import alone when a page is replayed after a future-only rule", async () => {
+    const fixture = await createFixture();
+    const meals = await createCategory(fixture, "Meals");
+    const connectionId = await connect(fixture);
+    await sync(fixture, connectionId);
+    await createRule(fixture, {
+      applyToExisting: false,
+      categoryId: meals,
+      payeeName: "Test Cafe",
+    });
+    // Plaid sends the transaction as added again (a replayed page).
+    fixture.database.run("UPDATE plaid_items SET cursor = NULL");
+    await sync(fixture, connectionId);
+    expect(annotation(fixture)).toBeNull();
+    expect(events(fixture, "finance.transaction_categorized")).toEqual([]);
+  });
+
+  it("stores a new transaction only with its rule's category", async () => {
+    const fixture = await createFixture();
+    const meals = await createCategory(fixture, "Meals");
+    await createRule(fixture, {
+      applyToExisting: false,
+      categoryId: meals,
+      payeeName: "Test Cafe",
+    });
+    fixture.database.exec(`CREATE TRIGGER fail_activity
+      BEFORE INSERT ON activity_events
+      WHEN NEW.action = 'finance.transaction_categorized'
+      BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END`);
+    const connectionId = await connect(fixture);
+    await sync(fixture, connectionId);
+    expect(
+      fixture.database
+        .query("SELECT COUNT(*) AS count FROM plaid_transactions")
+        .get(),
+    ).toEqual({ count: 0 });
+    // The retry finds the transaction new, so the rule still applies.
+    fixture.database.exec("DROP TRIGGER fail_activity");
+    // The failed page's retry is due at once.
+    fixture.database.run("UPDATE job_runs SET available_at = '2000-01-01'");
+    await sync(fixture, connectionId);
+    expect(annotation(fixture)).toMatchObject({ category: meals });
+    expect(events(fixture, "finance.transaction_categorized")).toHaveLength(1);
+  });
+
   it("never replaces a category someone chose, and skips payees without a rule", async () => {
     const fixture = await createFixture();
     const meals = await createCategory(fixture, "Meals");

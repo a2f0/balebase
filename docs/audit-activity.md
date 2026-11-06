@@ -124,9 +124,10 @@ or a failed provider request, records nothing:
   `categorizationRule`, root and subject the transaction) records a
   categorization rule giving a newly imported transaction its category. The
   details name the rule (`ruleId`, `rulePayeeName`), and the cause is the same
-  `plaid_sync_page`. The annotation it writes has no creator or editor, since
-  no person acted; a replayed page finds the annotation in place and records
-  nothing. A person applying a rule to existing transactions is recorded as
+  `plaid_sync_page`. Only a transaction stored for the first time counts,
+  in the batch that inserts it; a replayed page finds it stored and records
+  nothing. The annotation it writes has no creator or editor, since no person
+  acted. A person applying a rule to existing transactions is recorded as
   that person instead.
 
 Billing events are for owners and admins and bank connection events need

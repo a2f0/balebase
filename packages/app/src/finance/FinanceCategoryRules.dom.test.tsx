@@ -144,6 +144,41 @@ describe("categorization rules", () => {
     expect(container.textContent).toContain("Added a rule for “Cafe”.");
   });
 
+  it("holds the form still while a rule saves, then clears what it sent", async () => {
+    const held = Promise.withResolvers<Response>();
+    respond(async (_url, init) =>
+      (init?.method ?? "GET") === "GET"
+        ? Response.json({ rules: [] })
+        : held.promise,
+    );
+    const { container } = await render();
+    const payee = container.querySelector<HTMLInputElement>(
+      'input[placeholder="Shell"]',
+    );
+    await fill(payee, "Cafe");
+    await fill(container.querySelector("select"), "meals");
+    await click(queryButton("Add rule", container));
+    const fields = [
+      payee,
+      container.querySelector("select"),
+      container.querySelector('input[type="checkbox"]'),
+    ];
+    expect(fields.map((field) => field?.hasAttribute("disabled"))).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    held.resolve(
+      Response.json(
+        { applied: 0, rule: rule({ id: "rule-2", payeeName: "Cafe" }) },
+        { status: 201 },
+      ),
+    );
+    await settle();
+    expect(payee?.value).toBe("");
+    expect(payee?.hasAttribute("disabled")).toBe(false);
+  });
+
   it("fills the payee a transaction's menu sent, once", async () => {
     stubApi([]);
     window.history.replaceState(
