@@ -157,6 +157,35 @@ const endpoints = {
     path: "/api/finance/categories/:id",
     response: "empty",
   }),
+  listCategorizationRules: endpoint<
+    typeof financeRoutes.listCategorizationRules
+  >({
+    method: "GET",
+    path: "/api/finance/categorization-rules",
+    response: "json",
+  }),
+  createCategorizationRule: endpoint<
+    typeof financeRoutes.createCategorizationRule
+  >({
+    method: "POST",
+    path: "/api/finance/categorization-rules",
+    body: "json",
+    response: "json",
+  }),
+  applyCategorizationRule: endpoint<
+    typeof financeRoutes.applyCategorizationRule
+  >({
+    method: "POST",
+    path: "/api/finance/categorization-rules/:id/apply",
+    response: "json",
+  }),
+  deleteCategorizationRule: endpoint<
+    typeof financeRoutes.deleteCategorizationRule
+  >({
+    method: "DELETE",
+    path: "/api/finance/categorization-rules/:id",
+    response: "empty",
+  }),
   expenseReport: endpoint<typeof financeRoutes.expenseReport>({
     method: "GET",
     path: "/api/finance/reports/expenses",
@@ -313,6 +342,30 @@ function financeCategoryApi(transport: Transport) {
     },
     addDefaultExpenseCategories() {
       return transport.call(endpoints.addDefaultCategories);
+    },
+    categorizationRules() {
+      return transport.call(endpoints.listCategorizationRules);
+    },
+    /** A payee's rule; `applyToExisting` also fills its uncategorized transactions. */
+    createCategorizationRule(input: {
+      applyToExisting: boolean;
+      categoryId: string;
+      payeeName: string;
+    }) {
+      return transport.call(endpoints.createCategorizationRule, {
+        body: input,
+      });
+    },
+    /** Fills the rule's payee's uncategorized transactions. */
+    applyCategorizationRule(id: string) {
+      return transport.call(endpoints.applyCategorizationRule, {
+        params: { id },
+      });
+    },
+    deleteCategorizationRule(id: string) {
+      return transport.call(endpoints.deleteCategorizationRule, {
+        params: { id },
+      });
     },
   };
 }

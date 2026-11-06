@@ -13,6 +13,10 @@ export const financeActionLabels: Record<string, string> = {
   "billing.portal_opened": "opened the Stripe billing portal",
   "billing.subscription_canceled": "canceled the Pro subscription",
   "finance.categories_defaults_added": "added the common expense categories",
+  "finance.categorization_rule_applied":
+    "categorized a payee's transactions by rule",
+  "finance.categorization_rule_created": "created a categorization rule",
+  "finance.categorization_rule_deleted": "deleted a categorization rule",
   "finance.category_created": "created an expense category",
   "finance.category_deleted": "deleted an expense category",
   "finance.category_renamed": "renamed an expense category",
@@ -40,6 +44,18 @@ interface SubscriptionState {
 interface ConnectionState {
   errorCode?: unknown;
   status?: unknown;
+}
+
+/** "Shell → Fuel" for a categorization rule's payee and category. */
+function ruleSummary(details: ActivityEvent["details"]) {
+  return `${textValue(details.payeeName)} → ${textValue(details.categoryName)}`;
+}
+
+/** The rule that categorized a transaction, when one did. */
+export function categorizedByRule({ details }: ActivityEvent) {
+  return details.ruleId
+    ? `By the rule for “${textValue(details.rulePayeeName)}”`
+    : "";
 }
 
 /** A recorded object detail, such as a before or after state. */
@@ -98,6 +114,13 @@ const summaries: Partial<Record<string, (event: ActivityEvent) => string>> = {
       .join(" · "),
   "finance.categories_defaults_added": ({ details }) =>
     Array.isArray(details.names) ? details.names.map(textValue).join(", ") : "",
+  "finance.categorization_rule_applied": ({ details }) =>
+    `${ruleSummary(details)} · ${count(details.count, "transaction")}`,
+  "finance.categorization_rule_created": ({ details }) => ruleSummary(details),
+  "finance.categorization_rule_deleted": ({ details }) =>
+    details.reason === "category_deleted"
+      ? `${ruleSummary(details)} · With its category`
+      : ruleSummary(details),
   "finance.category_created": ({ details }) => textValue(details.name),
   "finance.category_deleted": ({ details }) =>
     `${textValue(details.name)} · ${count(details.transactionCount, "transaction")} left uncategorized`,

@@ -47,6 +47,10 @@ export const financeLimits = {
   /** Transactions one bulk categorize request may change; a full page. */
   bulkCategorize: 250,
   categoryName: 60,
+  /** Categorization rules one organization may keep. */
+  categorizationRules: 500,
+  /** A payee name, as the name filter and categorization rules match it. */
+  payeeName: 200,
   search: 100,
   /** Transaction changes per device sync page. */
   syncPage: 500,

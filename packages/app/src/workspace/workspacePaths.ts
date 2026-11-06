@@ -204,6 +204,11 @@ export function expenseCategoryFiltersFor(
 
 export const financeCategoriesPath = "/finance/categories";
 
+/** Categories, with a new categorization rule for `payee` filled in. */
+export function financeRulePath(payee: string) {
+  return `${financeCategoriesPath}?${new URLSearchParams({ payee })}`;
+}
+
 export function financeAccountPath(id: string) {
   return `/finance/accounts/${encodeURIComponent(id)}`;
 }

@@ -15,6 +15,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
+import { FinanceCategoryRules } from "./FinanceCategoryRules";
 import { refused } from "./transactionCache";
 
 export function FinanceCategories({
@@ -110,6 +111,15 @@ export function FinanceCategories({
           onShowTransactions={onShowTransactions}
         />
       </PageSection>
+      {/* Gone with the categories when access ends, and loaded afresh. */}
+      {categories && (
+        <FinanceCategoryRules
+          busy={busy}
+          categories={categories}
+          onRefused={onRefused}
+          run={run}
+        />
+      )}
     </>
   );
 }

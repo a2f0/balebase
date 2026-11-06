@@ -47,7 +47,11 @@ import {
   EquipmentActivityDetails,
   equipmentActivitySummary,
 } from "./EquipmentActivity";
-import { financeActionLabels, financeActivitySummary } from "./financeActivity";
+import {
+  categorizedByRule,
+  financeActionLabels,
+  financeActivitySummary,
+} from "./financeActivity";
 import { groupActivitySummary } from "./groupActivity";
 import {
   isLibraryActivity,
@@ -372,7 +376,9 @@ function activitySummary(event: ActivityEvent) {
   if (event.action === "finance.transaction_annotated")
     return "Annotation changes";
   if (event.action === "finance.transaction_categorized") {
-    return `${categoryLabel(details.before, details.beforeName)} → ${categoryLabel(details.after, details.afterName)}`;
+    const change = `${categoryLabel(details.before, details.beforeName)} → ${categoryLabel(details.after, details.afterName)}`;
+    const rule = categorizedByRule(event);
+    return rule ? `${change} · ${rule}` : change;
   }
   const financeSummary = financeActivitySummary(event);
   if (financeSummary !== undefined) return financeSummary;
@@ -483,16 +489,7 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
         </div>
       );
     case "finance.transaction_categorized":
-      return (
-        <div className="activityDetails">
-          <p className="activityChange">
-            <span>{categoryLabel(details.before, details.beforeName)}</span>
-            <span aria-hidden="true">→</span>
-            <span className="srOnly">changed to</span>
-            <span>{categoryLabel(details.after, details.afterName)}</span>
-          </p>
-        </div>
-      );
+      return <CategorizationDetails event={event} />;
     case "audit.answer_changed":
       return (
         <div className="activityDetails">
@@ -620,6 +617,23 @@ function answerLabel(value: unknown, responseType: unknown) {
 }
 
 /** Names the category as it was when the event was recorded. */
+/** A category change, and the rule that made it when one did. */
+function CategorizationDetails({ event }: { event: ActivityEvent }) {
+  const { details } = event;
+  const rule = categorizedByRule(event);
+  return (
+    <div className="activityDetails">
+      <p className="activityChange">
+        <span>{categoryLabel(details.before, details.beforeName)}</span>
+        <span aria-hidden="true">→</span>
+        <span className="srOnly">changed to</span>
+        <span>{categoryLabel(details.after, details.afterName)}</span>
+      </p>
+      {rule && <p>{rule}</p>}
+    </div>
+  );
+}
+
 function categoryLabel(id: unknown, name: unknown) {
   if (id == null) return "Uncategorized";
   return textValue(name) || "Deleted category";
