@@ -45,6 +45,19 @@ Capture screenshots through the `take-screenshots` skill, not by running
 `bun run screenshots` directly, and check its `status` before anything
 publishes them; [CONTRIBUTING.md](CONTRIBUTING.md#screenshots) has the layout.
 
+State machines: make implicit state machines explicit when you write or change
+code: one closed state type (a discriminated union, enum, or sealed type)
+carrying each state's data, typed events, and one pure transition function,
+with effects run on entering a state and async work tagged so only the current
+request can finish. Follow the `explicit-state-machines` skill for what to
+convert, what to leave alone, and how to prove behavior did not change;
+`agent-tool state-machines` lists leads. Reviews flag new implicit machines.
+Here, app machines are a `status`-tagged union with `type`-tagged events and an
+exhaustive reducer in a `<thing>State.ts` beside its hook, with a table-driven
+test (`shared/cursorPagesState.ts`, `businesses/businessRowState.ts`). Server
+status columns (job runs, Plaid items, contracts and recipients) change only
+through conditional `UPDATE ... WHERE status = <from>` writes; keep new ones so.
+
 The skills in `.claude/skills` and `.agents/skills`, and the permission rules
 in `.claude/settings.json` and `.codex/rules/agent-tool.rules`, come from the
 pinned `@a2f0/agent-tool`; do not edit them. Classify the executables agents
