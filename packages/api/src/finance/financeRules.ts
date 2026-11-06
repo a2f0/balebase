@@ -204,7 +204,9 @@ function applyStatements(
       )
       .bind(userId, now, id, organizationId),
     // The trigger recorded each change as the person's; name the rule on
-    // them, as an import's do, so each transaction's history shows it.
+    // them, as an import's do, so each transaction's history shows it. Only
+    // this batch's: the `count` events right after its applied event, which
+    // is recorded above only when something is filled.
     database
       .prepare(
         `UPDATE activity_events
@@ -221,6 +223,19 @@ function applyStatements(
            AND activity_events.action = 'finance.transaction_categorized'
            AND activity_events.actor_user_id = ?1
            AND activity_events.occurred_at = ?2
+           AND EXISTS (
+             SELECT 1 FROM activity_events AS applied
+             WHERE applied.id = (
+                 SELECT MAX(latest.id) FROM activity_events AS latest
+                 WHERE latest.organization_id = rule.organization_id
+                   AND latest.action = 'finance.categorization_rule_applied'
+                   AND latest.subject_type = 'finance_categorization_rule'
+                   AND latest.subject_id = rule.id
+                   AND latest.actor_user_id = ?1
+                   AND latest.occurred_at = ?2)
+               AND activity_events.id > applied.id
+               AND activity_events.id
+                 <= applied.id + json_extract(applied.details, '$.count'))
            AND json_extract(activity_events.details, '$.after')
              = rule.expense_category_id
            AND json_extract(activity_events.details, '$.ruleId') IS NULL`,

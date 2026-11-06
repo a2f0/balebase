@@ -401,10 +401,17 @@ function EditRuleRow({
   const [payeeName, setPayeeName] = useState(rule.payeeName);
   const [categoryId, setCategoryId] = useState(rule.category.id);
   const input = useRef<HTMLInputElement>(null);
+  // A save finishing after this form closed (the rules went with access, or
+  // the page changed) must not close whatever shows by then.
+  const open = useRef(true);
   // The menu that opened this form is gone; move focus to the payee.
   useEffect(() => {
+    open.current = true;
     input.current?.focus();
     input.current?.select();
+    return () => {
+      open.current = false;
+    };
   }, []);
   const unchanged =
     payeeName === rule.payeeName && categoryId === rule.category.id;
@@ -417,7 +424,7 @@ function EditRuleRow({
       });
       return `Saved the rule for “${payeeName}”.`;
     });
-    if (saved) onClose();
+    if (saved && open.current) onClose();
   }
   return (
     <li className="row">

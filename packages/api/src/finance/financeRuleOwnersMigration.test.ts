@@ -42,6 +42,12 @@ it("names each earlier rule's creator and the rule behind its applications", () 
       ('org', 'finance_transaction', 'txn-3', 'Shell', 'finance_transaction',
        'txn-3', 'finance.transaction_categorized', 'pat', 'Pat',
        'pat@example.com', '2026-11-06T10:00:00.000Z',
+       '{"before":null,"beforeName":null,"after":"fuel","afterName":"Fuel"}'),
+      -- The same person's hand-chosen category at the same moment, in a
+      -- later request: past the application's count, so not the rule's.
+      ('org', 'finance_transaction', 'txn-4', 'Shell', 'finance_transaction',
+       'txn-4', 'finance.transaction_categorized', 'dan', 'Dan',
+       'dan@example.com', '2026-11-06T10:00:00.000Z',
        '{"before":null,"beforeName":null,"after":"fuel","afterName":"Fuel"}');
   `);
 
@@ -76,5 +82,6 @@ it("names each earlier rule's creator and the rule behind its applications", () 
     ["txn-1", "rule-1"],
     ["txn-2", null],
     ["txn-3", null],
+    ["txn-4", null],
   ]);
 });
