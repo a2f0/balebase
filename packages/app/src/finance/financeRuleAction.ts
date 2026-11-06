@@ -8,6 +8,12 @@ interface NewRule {
   payeeName: string;
 }
 
+/**
+ * Announces a rule created outside the rule list (a payee's form), so a
+ * mounted list, such as Rules opened while the save ran, loads it.
+ */
+export const rulesChanged = new EventTarget();
+
 /** Creates a payee's rule; resolves whether it saved. */
 export type CreateRule = (input: NewRule) => Promise<boolean>;
 
@@ -21,6 +27,7 @@ export function createRuleAction(
   return (input) =>
     save(async () => {
       const { applied } = await api.finance.createCategorizationRule(input);
+      rulesChanged.dispatchEvent(new Event("change"));
       return input.applyToExisting
         ? `Added a rule for “${input.payeeName}” and categorized ${countLabel(applied, "transaction")}.`
         : `Added a rule for “${input.payeeName}”.`;

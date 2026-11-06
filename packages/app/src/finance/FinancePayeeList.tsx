@@ -145,6 +145,9 @@ function PayeeRow({
     }
     if (!hadForm.current) return;
     hadForm.current = false;
+    // Only when focus went with the form, not if it moved on meanwhile.
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
     actions.current?.querySelector("button")?.focus();
   }, [open]);
   if (form) {

@@ -605,6 +605,70 @@ describe("Finance filters", () => {
     ).toBe(false);
   });
 
+  it("shows a payee's rule on Rules when its save lands after opening them", async () => {
+    const save = Promise.withResolvers<void>();
+    let created = false;
+    const rule = {
+      category: { id: "meals", name: "Meals" },
+      createdAt: "2026-11-06T12:00:00.000Z",
+      id: "rule-1",
+      owner: null,
+      payeeName: "Shell",
+      uncategorizedCount: 0,
+    };
+    respond(async (url, init) => {
+      if (url.pathname.endsWith("/categorization-rules")) {
+        if (init?.method !== "POST")
+          return Response.json({ rules: created ? [rule] : [] });
+        await save.promise;
+        created = true;
+        return Response.json({ applied: 0, rule }, { status: 201 });
+      }
+      return Response.json({ ...data, transactions: dated(["Shell"]) });
+    });
+    const navigate = await mountFinance();
+    await click("By payee");
+    const { select } = await choosePayeeAction("Shell", "Create rule…");
+    await pick(select, "meals");
+    await click("Create rule");
+    await navigate("/finance/rules");
+    expect(container.textContent).toContain("No categorization rules yet");
+    await act(async () => {
+      save.resolve();
+      await Bun.sleep(5);
+    });
+    expect(
+      container.querySelector('[aria-label="Categorization rules"]')
+        ?.textContent,
+    ).toContain("Shell");
+  });
+
+  it("leaves focus where it went while a payee's categories saved", async () => {
+    const save = Promise.withResolvers<void>();
+    respond(async (_url, init) => {
+      if (init?.method === "PUT") {
+        await save.promise;
+        return Response.json({ updated: 1 });
+      }
+      return Response.json({ ...data, transactions: dated(["Shell"]) });
+    });
+    await mountFinance();
+    await click("By payee");
+    const { select } = await choosePayeeAction(
+      "Shell",
+      "Categorize 1 transaction…",
+    );
+    await pick(select, "meals");
+    await click("Categorize");
+    const elsewhere = button("Transactions");
+    await act(async () => elsewhere.focus());
+    await act(async () => {
+      save.resolve();
+      await Bun.sleep(5);
+    });
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
   it("offers payee actions only once there is a category", async () => {
     respond(() =>
       Response.json({

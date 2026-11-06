@@ -27,6 +27,7 @@ import {
 import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
 import { useLoad } from "../shared/useLoad";
+import { rulesChanged } from "./financeRuleAction";
 import type { RunChange } from "./financeSave";
 import { refused } from "./transactionCache";
 
@@ -71,6 +72,11 @@ export function FinanceCategoryRules({
   }, []);
   const rules = useLoad(load, "Could not load the rules.");
   useCategoryRefresh(categories, rules.reload);
+  useEffect(() => {
+    const reload = () => void rules.reload();
+    rulesChanged.addEventListener("change", reload);
+    return () => rulesChanged.removeEventListener("change", reload);
+  }, [rules.reload]);
   const change: RunChange = (work) =>
     run(async () => {
       const message = await work();
