@@ -403,6 +403,7 @@ export function FinanceTransactionRow(
 }
 
 function transactionMenuItems({
+  categories,
   onFilterByName,
   onNavigate,
   onSelectAnnotation,
@@ -436,6 +437,10 @@ function transactionMenuItems({
       label: `Show only “${title}”`,
       onSelect: () => onFilterByName(title),
     });
+  }
+  // A rule names a category: with none yet, the overview offers setting
+  // categories up instead (and a payee sent to Rules would be lost there).
+  if (onFilterByName && categories.length > 0) {
     items.push({
       icon: "layers",
       id: "create-rule",

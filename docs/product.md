@@ -893,8 +893,8 @@ give one payee's transactions an expense category. A rule names a payee
 exactly as transactions show it (the merchant's name, else the bank's
 description, as **Show only** matches it) and a category; each payee has at
 most one rule, so at most one rule matches a transaction. A transaction row's
-menu offers **Create rule**, which opens the Rules tab with its name filled
-in. Rules fill only
+menu offers **Create rule** once the organization has a category, which opens
+the Rules tab with its name filled in. Rules fill only
 transactions without a category and never change one someone chose. When a
 Plaid sync imports a new transaction whose payee has a rule, the transaction
 takes that category, recorded as Balebase's (**Balebase rules**) with the

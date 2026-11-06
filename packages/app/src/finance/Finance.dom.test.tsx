@@ -468,6 +468,23 @@ describe("Finance filters", () => {
     expect(currentPath).toBe("/finance/rules?payee=Shell");
   });
 
+  it("offers Create rule only once there is a category to give", async () => {
+    respond(() =>
+      Response.json({
+        ...data,
+        categories: [],
+        transactions: dated(["Shell"]),
+      }),
+    );
+    await mountFinance();
+    await openRowMenu("Shell");
+    expect(menuItems()).toEqual([
+      "Annotate",
+      "Raise issue",
+      "Show only “Shell”",
+    ]);
+  });
+
   it("keeps every shown row and the annotation form while a saved note refreshes", async () => {
     const rows = dated(
       Array.from({ length: 260 }, (_, index) => `Row ${index}`),
