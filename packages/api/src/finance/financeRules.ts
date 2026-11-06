@@ -1,7 +1,4 @@
-import {
-  type CategorizationRule,
-  financeRoutes,
-} from "@balebase/validators/finance";
+import { financeRoutes } from "@balebase/validators/finance";
 import { financeLimits } from "@balebase/validators/rules";
 import { Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
@@ -13,6 +10,14 @@ import {
   systemActivityRowsStatement,
 } from "../shared/systemActivity";
 import type { FinanceContext } from "./financeContext";
+import { updateRule } from "./financeRuleEdit";
+import {
+  payee,
+  readRules,
+  ruleNotFound,
+  toRule,
+  uncategorized,
+} from "./financeRuleRows";
 
 /**
  * Categorization rules: a payee's transactions (those shown under exactly
@@ -25,47 +30,8 @@ export const categorizationRules = new Hono<ApiEnv>();
 categorizationRules.get("/", listRules);
 categorizationRules.post("/", createRule);
 categorizationRules.post("/:id/apply", applyRule);
+categorizationRules.patch("/:id", updateRule);
 categorizationRules.delete("/:id", deleteRule);
-
-interface RuleRow {
-  category_id: string;
-  category_name: string;
-  created_at: string;
-  id: string;
-  payee_name: string;
-  uncategorized_count: number;
-}
-
-/** The name a transaction is shown under, as rules and the name filter match it. */
-const payee = "COALESCE(txn.merchant_name, txn.name)";
-
-/**
- * A payee's active transactions without a category, for the `rule` in scope:
- * the rows applying it fills.
- */
-const uncategorized = `FROM plaid_transactions AS txn
-  LEFT JOIN finance_transaction_annotations AS annotation
-    ON annotation.transaction_id = txn.id
-  WHERE txn.organization_id = rule.organization_id
-    AND txn.source_status = 'active'
-    AND ${payee} = rule.payee_name
-    AND annotation.expense_category_id IS NULL`;
-
-function readRules(database: D1Database, organizationId: string, id?: string) {
-  return database
-    .prepare(
-      `SELECT rule.id, rule.payee_name, rule.created_at,
-              category.id AS category_id, category.name AS category_name,
-              (SELECT COUNT(*) ${uncategorized}) AS uncategorized_count
-       FROM finance_categorization_rules AS rule
-       JOIN finance_expense_categories AS category
-         ON category.id = rule.expense_category_id
-       WHERE rule.organization_id = ? AND (? IS NULL OR rule.id = ?)
-       ORDER BY rule.payee_name`,
-    )
-    .bind(organizationId, id ?? null, id ?? null)
-    .all<RuleRow>();
-}
 
 async function listRules(context: FinanceContext) {
   const rules = await readRules(context.env.DB, context.get("organizationId"));
@@ -92,8 +58,9 @@ async function createRule(context: FinanceContext) {
     database
       .prepare(
         `INSERT OR IGNORE INTO finance_categorization_rules
-           (id, organization_id, payee_name, expense_category_id, created_at)
-         SELECT ?, category.organization_id, ?, category.id, ?
+           (id, organization_id, payee_name, expense_category_id, created_at,
+            created_by)
+         SELECT ?, category.organization_id, ?, category.id, ?, ?
          FROM finance_expense_categories AS category
          WHERE category.id = ? AND category.organization_id = ?
            AND (SELECT COUNT(*) FROM finance_categorization_rules
@@ -103,6 +70,7 @@ async function createRule(context: FinanceContext) {
         id,
         input.payeeName,
         now,
+        actor.userId,
         input.categoryId,
         organizationId,
         organizationId,
@@ -235,12 +203,50 @@ function applyStatements(
          WHERE expense_category_id IS NULL`,
       )
       .bind(userId, now, id, organizationId),
+    // The trigger recorded each change as the person's; name the rule on
+    // them, as an import's do, so each transaction's history shows it. Only
+    // this batch's: the `count` events right after its applied event, which
+    // is recorded above only when something is filled.
+    database
+      .prepare(
+        `UPDATE activity_events
+         SET details = json_set(activity_events.details, '$.ruleId', rule.id,
+                                '$.rulePayeeName', rule.payee_name)
+         FROM finance_categorization_rules AS rule
+         WHERE rule.id = ?3 AND rule.organization_id = ?4
+           AND activity_events.root_type = 'finance_transaction'
+           AND activity_events.root_id IN (
+             SELECT txn.id FROM plaid_transactions AS txn
+             WHERE txn.organization_id = rule.organization_id
+               AND ${payee} = rule.payee_name)
+           AND activity_events.organization_id = rule.organization_id
+           AND activity_events.action = 'finance.transaction_categorized'
+           AND activity_events.actor_user_id = ?1
+           AND activity_events.occurred_at = ?2
+           AND EXISTS (
+             SELECT 1 FROM activity_events AS applied
+             WHERE applied.id = (
+                 SELECT MAX(latest.id) FROM activity_events AS latest
+                 WHERE latest.organization_id = rule.organization_id
+                   AND latest.action = 'finance.categorization_rule_applied'
+                   AND latest.subject_type = 'finance_categorization_rule'
+                   AND latest.subject_id = rule.id
+                   AND latest.actor_user_id = ?1
+                   AND latest.occurred_at = ?2)
+               AND activity_events.id > applied.id
+               AND activity_events.id
+                 <= applied.id + json_extract(applied.details, '$.count'))
+           AND json_extract(activity_events.details, '$.after')
+             = rule.expense_category_id
+           AND json_extract(activity_events.details, '$.ruleId') IS NULL`,
+      )
+      .bind(userId, now, id, organizationId),
   ];
 }
 
 /** The count `applyStatements` read, from the batch results that hold it. */
 function appliedCount(results: D1Result[]) {
-  const row = results.at(-3)?.results[0] as { applied: number } | undefined;
+  const row = results.at(-4)?.results[0] as { applied: number } | undefined;
   return row?.applied ?? 0;
 }
 
@@ -410,18 +416,4 @@ export function applyRulesToImported(
       },
     ),
   ];
-}
-
-function toRule(row: RuleRow): CategorizationRule {
-  return {
-    category: { id: row.category_id, name: row.category_name },
-    createdAt: row.created_at,
-    id: row.id,
-    payeeName: row.payee_name,
-    uncategorizedCount: row.uncategorized_count,
-  };
-}
-
-function ruleNotFound(context: FinanceContext) {
-  return context.json({ error: "Rule not found." }, 404);
 }

@@ -128,7 +128,9 @@ or a failed provider request, records nothing:
   in the batch that inserts it; a replayed page finds it stored and records
   nothing. The annotation it writes has no creator or editor, since no person
   acted. A person applying a rule to existing transactions is recorded as
-  that person instead.
+  that person instead, each transaction's event still naming the rule
+  (`ruleId`, `rulePayeeName`), so its history shows the rule either way.
+  Migration `0095` named the rule on such events recorded before it.
 
 Billing events are for owners and admins and bank connection events need
 Finance capability, as for people's own events.

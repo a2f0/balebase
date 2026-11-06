@@ -17,6 +17,7 @@ export const financeActionLabels: Record<string, string> = {
     "categorized a payee's transactions by rule",
   "finance.categorization_rule_created": "created a categorization rule",
   "finance.categorization_rule_deleted": "deleted a categorization rule",
+  "finance.categorization_rule_updated": "edited a categorization rule",
   "finance.category_created": "created an expense category",
   "finance.category_deleted": "deleted an expense category",
   "finance.category_renamed": "renamed an expense category",
@@ -121,6 +122,8 @@ const summaries: Partial<Record<string, (event: ActivityEvent) => string>> = {
     details.reason === "category_deleted"
       ? `${ruleSummary(details)} · With its category`
       : ruleSummary(details),
+  "finance.categorization_rule_updated": ({ details }) =>
+    `${textValue(details.previousPayeeName)} → ${textValue(details.previousCategoryName)} changed to ${ruleSummary(details)}`,
   "finance.category_created": ({ details }) => textValue(details.name),
   "finance.category_deleted": ({ details }) =>
     `${textValue(details.name)} · ${count(details.transactionCount, "transaction")} left uncategorized`,

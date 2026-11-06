@@ -2,10 +2,12 @@ import {
   Banner,
   Button,
   Card,
+  ContextMenu,
   confirmDialog,
   EmptyState,
   Field,
   LoadingState,
+  MenuButton,
   PageSection,
   Select,
 } from "@balebase/ui/react";
@@ -15,6 +17,7 @@ import type {
 } from "@balebase/validators/finance";
 import { financeLimits } from "@balebase/validators/rules";
 import {
+  type ComponentProps,
   type FormEvent,
   useCallback,
   useEffect,
@@ -102,7 +105,12 @@ export function FinanceCategoryRules({
             {rules.error}
           </Banner>
         )}
-        <RuleList busy={busy} rules={rules.data} run={change} />
+        <RuleList
+          busy={busy}
+          categories={categories}
+          rules={rules.data}
+          run={change}
+        />
       </PageSection>
     </>
   );
@@ -245,10 +253,12 @@ function AddRuleForm({
 
 function RuleList({
   busy,
+  categories,
   rules,
   run,
 }: {
   busy: boolean;
+  categories: ExpenseCategory[];
   rules: CategorizationRule[] | undefined;
   run: RunChange;
 }) {
@@ -264,22 +274,58 @@ function RuleList({
     <Card flush>
       <ul aria-label="Categorization rules" className="rowList">
         {rules.map((rule) => (
-          <RuleRow busy={busy} key={rule.id} rule={rule} run={run} />
+          <RuleRow
+            busy={busy}
+            categories={categories}
+            key={rule.id}
+            rule={rule}
+            run={run}
+          />
         ))}
       </ul>
     </Card>
   );
 }
 
+/**
+ * A rule. Its menu, from the menu button or a right-click anywhere on the
+ * row, edits it, fills its payee's uncategorized transactions, or deletes it.
+ */
 function RuleRow({
   busy,
+  categories,
   rule,
   run,
 }: {
   busy: boolean;
+  categories: ExpenseCategory[];
   rule: CategorizationRule;
   run: RunChange;
 }) {
+  const [editing, setEditing] = useState(false);
+  // Closing the editor removes the focused form: focus returns to the
+  // row's menu button, which opened it.
+  const actions = useRef<HTMLDivElement>(null);
+  const returnFocus = useRef(false);
+  useEffect(() => {
+    if (editing || !returnFocus.current) return;
+    returnFocus.current = false;
+    actions.current?.querySelector("button")?.focus();
+  }, [editing]);
+  if (editing) {
+    return (
+      <EditRuleRow
+        busy={busy}
+        categories={categories}
+        onClose={() => {
+          returnFocus.current = true;
+          setEditing(false);
+        }}
+        rule={rule}
+        run={run}
+      />
+    );
+  }
   const apply = () =>
     run(async () => {
       const { applied } = await api.finance.applyCategorizationRule(rule.id);
@@ -299,38 +345,146 @@ function RuleRow({
       return `Deleted the rule for “${rule.payeeName}”.`;
     });
   }
+  const label = `Actions for the rule for ${rule.payeeName}`;
+  const items: ComponentProps<typeof ContextMenu>["items"][number][] = [
+    {
+      disabled: busy,
+      icon: "edit",
+      id: "edit",
+      label: "Edit",
+      onSelect: () => setEditing(true),
+    },
+  ];
+  if (rule.uncategorizedCount > 0) {
+    items.push({
+      disabled: busy,
+      icon: "layers",
+      id: "apply",
+      label: `Categorize ${countLabel(rule.uncategorizedCount, "transaction")}`,
+      onSelect: () => void apply(),
+    });
+  }
+  items.push({
+    disabled: busy,
+    icon: "trash",
+    id: "delete",
+    label: "Delete",
+    onSelect: () => void remove(),
+  });
+  return (
+    <ContextMenu items={items} label={label}>
+      {(targetProps, menuButton) => (
+        <li className="row" {...targetProps}>
+          <div className="rowMain">
+            <span className="rowTitle">{rule.payeeName}</span>
+            <span className="rowMeta">
+              {rule.category.name}
+              {rule.uncategorizedCount > 0 &&
+                ` · ${countLabel(rule.uncategorizedCount, "uncategorized transaction")}`}
+              {rule.owner && ` · Created by ${rule.owner.name}`}
+            </span>
+          </div>
+          <div className="rowActions" ref={actions}>
+            <MenuButton {...menuButton} label={label} />
+          </div>
+        </li>
+      )}
+    </ContextMenu>
+  );
+}
+
+/**
+ * Edits a rule's payee and category in place. Saving categorizes nothing:
+ * the row then shows the new payee's uncategorized transactions to fill.
+ */
+function EditRuleRow({
+  busy,
+  categories,
+  onClose,
+  rule,
+  run,
+}: {
+  busy: boolean;
+  categories: ExpenseCategory[];
+  onClose: () => void;
+  rule: CategorizationRule;
+  run: RunChange;
+}) {
+  const [payeeName, setPayeeName] = useState(rule.payeeName);
+  const [categoryId, setCategoryId] = useState(rule.category.id);
+  const input = useRef<HTMLInputElement>(null);
+  // A save finishing after this form closed (the rules went with access, or
+  // the page changed) must not close whatever shows by then.
+  const open = useRef(true);
+  // The menu that opened this form is gone; move focus to the payee.
+  useEffect(() => {
+    open.current = true;
+    input.current?.focus();
+    input.current?.select();
+    return () => {
+      open.current = false;
+    };
+  }, []);
+  const unchanged =
+    payeeName === rule.payeeName && categoryId === rule.category.id;
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const saved = await run(async () => {
+      await api.finance.updateCategorizationRule(rule.id, {
+        categoryId,
+        payeeName,
+      });
+      return `Saved the rule for “${payeeName}”.`;
+    });
+    if (saved && open.current) onClose();
+  }
   return (
     <li className="row">
-      <div className="rowMain">
-        <span className="rowTitle">{rule.payeeName}</span>
-        <span className="rowMeta">
-          {rule.category.name}
-          {rule.uncategorizedCount > 0 &&
-            ` · ${countLabel(rule.uncategorizedCount, "uncategorized transaction")}`}
-        </span>
-      </div>
-      <div className="rowActions">
-        {rule.uncategorizedCount > 0 && (
-          <Button
+      <form
+        aria-label={`Edit the rule for ${rule.payeeName}`}
+        className="financeRuleEdit"
+        onSubmit={(event) => void submit(event)}
+      >
+        <Field label="Payee name">
+          <input
+            className="input inputSm"
             disabled={busy}
-            icon="layers"
-            onClick={() => void apply()}
-            size="sm"
+            maxLength={financeLimits.payeeName}
+            onChange={(event) => setPayeeName(event.target.value)}
+            ref={input}
+            required
+            value={payeeName}
+          />
+        </Field>
+        <Field label="Category">
+          <Select
+            disabled={busy}
+            onChange={(event) => setCategoryId(event.target.value)}
+            required
+            value={categoryId}
           >
-            Categorize {rule.uncategorizedCount.toLocaleString()}
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <div className="rowActions">
+          <Button disabled={busy} onClick={onClose} size="sm" variant="ghost">
+            Cancel
           </Button>
-        )}
-        <Button
-          aria-label={`Delete the rule for ${rule.payeeName}`}
-          disabled={busy}
-          icon="trash"
-          onClick={() => void remove()}
-          size="sm"
-          variant="danger"
-        >
-          Delete
-        </Button>
-      </div>
+          <Button
+            busy={busy}
+            disabled={!payeeName || unchanged}
+            size="sm"
+            type="submit"
+            variant="primary"
+          >
+            Save
+          </Button>
+        </div>
+      </form>
     </li>
   );
 }

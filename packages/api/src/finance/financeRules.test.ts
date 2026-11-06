@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setSystemTime } from "bun:test";
 import {
   createCategory,
   createFixture,
@@ -11,6 +11,7 @@ type Fixture = Awaited<ReturnType<typeof createFixture>>;
 interface Rule {
   category: { id: string; name: string };
   id: string;
+  owner: { id: string; name: string } | null;
   payeeName: string;
   uncategorizedCount: number;
 }
@@ -196,6 +197,85 @@ describe("categorization rules", () => {
         subject_id: created.body.rule.id,
       }),
     ]);
+    // Each filled transaction's own history names the rule; the category
+    // someone chose before does not.
+    const byRule = categorized.filter(
+      ({ details }) => (details as { after?: unknown }).after === fuel,
+    );
+    expect(byRule.map(({ details }) => details)).toEqual(
+      Array(3).fill({
+        after: fuel,
+        afterName: "Fuel",
+        before: null,
+        beforeName: null,
+        ruleId: created.body.rule.id,
+        rulePayeeName: "Shell",
+      }),
+    );
+    expect(
+      categorized.find(
+        ({ details }) => (details as { after?: unknown }).after === meals,
+      )?.details,
+    ).not.toHaveProperty("ruleId");
+    expect(created.body.rule.owner).toEqual({
+      id: "user-1",
+      name: expect.any(String),
+    });
+  });
+
+  it("names the rule only on its own application's events, even in the same millisecond", async () => {
+    const { fixture, fuel, ids } = await shellFixture();
+    const moment = new Date("2026-11-06T12:00:00.000Z");
+    // The same person's own category for a Shell transaction, recorded in
+    // another request at the very moment the rule is then applied.
+    const manual = () =>
+      fixture.database
+        .query(
+          `INSERT INTO activity_events
+             (organization_id, root_type, root_id, root_label, subject_type,
+              subject_id, action, actor_user_id, actor_name, actor_email,
+              occurred_at, details)
+           SELECT organization_id, 'finance_transaction', id, 'Shell',
+                  'finance_transaction', id, 'finance.transaction_categorized',
+                  'user-1', 'User', 'user@example.com', ?,
+                  json_object('before', NULL, 'beforeName', NULL,
+                              'after', ?, 'afterName', 'Fuel')
+           FROM plaid_transactions WHERE id = ?`,
+        )
+        .run(moment.toISOString(), fuel, ids[0] ?? "");
+    const ruleIds = () =>
+      events(fixture, "finance.transaction_categorized").map(
+        ({ details }) => (details as { ruleId?: string }).ruleId ?? null,
+      );
+    manual();
+    setSystemTime(moment);
+    try {
+      const created = await createRule(fixture, {
+        applyToExisting: false,
+        categoryId: fuel,
+        payeeName: "Shell",
+      });
+      const apply = () =>
+        jsonRequest<{ applied: number }>(
+          fixture.app,
+          fixture.bindings,
+          `/categorization-rules/${created.body.rule.id}/apply`,
+          "POST",
+        );
+      expect((await apply()).body.applied).toBe(4);
+      expect(ruleIds()).toEqual([null, ...Array(4).fill(created.body.rule.id)]);
+      // Another hand-chosen category at the same moment, then an application
+      // that fills nothing: it relabels nothing.
+      manual();
+      expect((await apply()).body.applied).toBe(0);
+      expect(ruleIds()).toEqual([
+        null,
+        ...Array(4).fill(created.body.rule.id),
+        null,
+      ]);
+    } finally {
+      setSystemTime();
+    }
   });
 
   it("applies an existing rule on request and records nothing when nothing is left", async () => {

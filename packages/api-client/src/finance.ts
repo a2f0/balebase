@@ -179,6 +179,14 @@ const endpoints = {
     path: "/api/finance/categorization-rules/:id/apply",
     response: "json",
   }),
+  updateCategorizationRule: endpoint<
+    typeof financeRoutes.updateCategorizationRule
+  >({
+    method: "PATCH",
+    path: "/api/finance/categorization-rules/:id",
+    body: "json",
+    response: "json",
+  }),
   deleteCategorizationRule: endpoint<
     typeof financeRoutes.deleteCategorizationRule
   >({
@@ -359,6 +367,16 @@ function financeCategoryApi(transport: Transport) {
     /** Fills the rule's payee's uncategorized transactions. */
     applyCategorizationRule(id: string) {
       return transport.call(endpoints.applyCategorizationRule, {
+        params: { id },
+      });
+    },
+    /** Changes a rule's payee or category; it categorizes nothing itself. */
+    updateCategorizationRule(
+      id: string,
+      input: { categoryId: string; payeeName: string },
+    ) {
+      return transport.call(endpoints.updateCategorizationRule, {
+        body: input,
         params: { id },
       });
     },
