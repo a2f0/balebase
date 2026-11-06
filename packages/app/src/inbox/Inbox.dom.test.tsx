@@ -186,6 +186,62 @@ describe("Inbox, mounted", () => {
     expect(requests).toContain("POST /api/inbox/email-1/restore");
   });
 
+  it("keeps a message chosen while another is being archived", async () => {
+    const archived = new Set<string>();
+    const archiving = Promise.withResolvers<void>();
+    const message = (id: string, subject: string, receivedAt: string) => ({
+      attachmentCount: 0,
+      attachments: [],
+      deletedAt: null,
+      deletedByEmail: null,
+      deletedByName: null,
+      deletedByUserId: null,
+      from: "sender@example.com",
+      html: null,
+      id,
+      linkCount: 0,
+      links: [],
+      rawSize: 42,
+      receivedAt,
+      status: "inbox" as const,
+      subject,
+      text: `${subject} body`,
+      to: "upload@example.com",
+    });
+    const emails = [
+      message("email-1", "Receipt", "2026-10-12T12:00:00.000Z"),
+      message("email-2", "Invoice", "2026-10-11T12:00:00.000Z"),
+      message("email-3", "Statement", "2026-10-10T12:00:00.000Z"),
+    ];
+    respond(async (url) => {
+      if (url.pathname.endsWith("/archive")) {
+        await archiving.promise;
+        archived.add("email-1");
+        return Response.json({ emailId: "email-1" });
+      }
+      if (url.pathname.endsWith("/activity"))
+        return Response.json({ events: [], nextCursor: null });
+      const opened = emails.find(({ id }) => url.pathname.endsWith(`/${id}`));
+      if (opened) return Response.json({ email: opened });
+      return Response.json({
+        address: "upload@example.com",
+        emails: emails.filter(({ id }) => !archived.has(id)),
+      });
+    });
+    await render();
+    await click("Archive");
+    // Chosen while the archive of the first message is still on its way.
+    const statement = [
+      ...container.querySelectorAll<HTMLButtonElement>(".inboxItem"),
+    ].find((item) => item.textContent?.includes("Statement"));
+    await act(async () => statement?.click());
+    await act(async () => archiving.resolve());
+    await settle();
+    expect(container.textContent).toContain("Email archived.");
+    const selected = container.querySelector('.inboxItem[aria-pressed="true"]');
+    expect(selected?.textContent).toContain("Statement");
+  });
+
   it("disables Trash for hidden links while allowing Archive", async () => {
     fixture(1);
     await render();
