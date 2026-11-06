@@ -1,7 +1,15 @@
 import { countLabel, formatCalendarDate } from "../shared/labels";
 
-/** Formats an amount in its currency, or as a plain number without one. */
-export function formatMoney(value: number | null, currency: string | null) {
+/**
+ * Formats an amount in its currency, or as a plain number without one. Next
+ * to amounts in other currencies, `code` names it (USD, CAD) rather than a
+ * symbol several share ($).
+ */
+export function formatMoney(
+  value: number | null,
+  currency: string | null,
+  currencyDisplay: "code" | "narrowSymbol" = "narrowSymbol",
+) {
   if (value === null) return "—";
   if (!currency) {
     return new Intl.NumberFormat(undefined, {
@@ -11,7 +19,7 @@ export function formatMoney(value: number | null, currency: string | null) {
   }
   return new Intl.NumberFormat(undefined, {
     currency,
-    currencyDisplay: "narrowSymbol",
+    currencyDisplay,
     style: "currency",
   }).format(value);
 }

@@ -1510,7 +1510,7 @@ describe("Finance filters", () => {
     expect(button("All time").getAttribute("aria-pressed")).toBe("true");
     expect(counts()).toEqual([
       "Meals: 3 transactions = -$35.50",
-      "Travel: 2 transactions = -€7.00 · $3.00",
+      "Travel: 2 transactions = -EUR\u00a07.00 · USD\u00a03.00",
     ]);
     await click("Current year");
     expect(currentPath).toBe("/finance/categories");
@@ -1521,7 +1521,7 @@ describe("Finance filters", () => {
     await click("Previous year");
     expect(counts()).toEqual([
       "Meals: 1 transaction = -$10.00",
-      "Travel: 2 transactions = -€7.00 · $3.00",
+      "Travel: 2 transactions = -EUR\u00a07.00 · USD\u00a03.00",
     ]);
     // The period is the overview's: it holds there and back.
     await navigate("/finance");
