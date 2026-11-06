@@ -59,7 +59,7 @@
     },
     "packages/app": {
       "name": "@balebase/app",
-      "version": "0.1.143",
+      "version": "0.1.144",
       "dependencies": {
         "@balebase/api-client": "workspace:*",
         "@balebase/ui": "workspace:*",
