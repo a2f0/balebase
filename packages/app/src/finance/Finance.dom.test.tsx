@@ -326,6 +326,71 @@ describe("Finance filters", () => {
     expect(rowNames()).toHaveLength(365);
   });
 
+  it("groups every matching transaction by payee under the current filters", async () => {
+    const shell = (id: string, overrides: Partial<FinanceTransaction> = {}) =>
+      transaction(id, {
+        merchantName: "Shell",
+        name: id.toUpperCase(),
+        ...overrides,
+      });
+    respond(() =>
+      Response.json({
+        ...data,
+        transactions: [
+          // More rows than one page shows, so counts cover unshown rows too.
+          ...Array.from({ length: 255 }, (_, index) =>
+            shell(`shell-${index}`, { pending: index === 0 }),
+          ),
+          ...Array.from({ length: 5 }, (_, index) =>
+            shell(`shell-meal-${index}`, { expenseCategoryId: "meals" }),
+          ),
+          shell("shell-old-1", { transactionDate: `${year - 1}-05-01` }),
+          shell("shell-old-2", { transactionDate: `${year - 1}-04-01` }),
+          transaction("Olive Garden", { amount: 25.5 }),
+        ],
+      }),
+    );
+    const payees = () =>
+      [...container.querySelectorAll(".financePayee")].map((row) => [
+        row.querySelector(".financePayeeName")?.textContent,
+        row.querySelector(".rowMeta")?.textContent?.split(" · ")[0],
+      ]);
+    await mountFinance();
+    expect(rowNames()).toHaveLength(250);
+    await click("By payee");
+    expect(button("By payee").getAttribute("aria-pressed")).toBe("true");
+    expect(payees()).toEqual([
+      ["Shell", "262 transactions"],
+      ["Olive Garden", "1 transaction"],
+    ]);
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).toContain("2 payees · 263 transactions");
+    expect(container.textContent).toContain("1 pending");
+    expect(container.textContent).toContain("-$25.50");
+    // Uncategorized expenses leave out categorized and pending rows.
+    await click("Uncategorized expenses");
+    expect(payees()).toEqual([
+      ["Shell", "256 transactions"],
+      ["Olive Garden", "1 transaction"],
+    ]);
+    await click("Current year");
+    expect(payees()).toEqual([
+      ["Shell", "254 transactions"],
+      ["Olive Garden", "1 transaction"],
+    ]);
+    expect(container.textContent).toContain("2 payees · 255 transactions");
+    // Choosing a payee lists its transactions under the same filters.
+    const name = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Show transactions for Shell"]',
+    );
+    if (!name) throw new Error("No Shell payee");
+    await act(async () => name.click());
+    expect(button("By payee").getAttribute("aria-pressed")).toBe("false");
+    expect(button("Name: Shell").getAttribute("aria-pressed")).toBe("true");
+    expect(new Set(rowNames())).toEqual(new Set(["Shell"]));
+    expect(container.textContent).toContain("250 of 254 shown");
+  });
+
   it("annotates, raises an issue, or filters by name from a row's menu", async () => {
     respond(() =>
       Response.json({
