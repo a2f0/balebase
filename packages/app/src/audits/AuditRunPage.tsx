@@ -13,18 +13,9 @@ import type {
   AuditIssue,
   AuditRun,
 } from "@balebase/validators/audits";
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useMemo } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
 import { api } from "../shared/apiClient";
-import { errorMessage } from "../shared/errors";
 import { countLabel, formatDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { AuditChecklist } from "./AuditChecklist";
@@ -36,102 +27,12 @@ import {
 } from "./AuditRunHeader";
 import { AuditIssuePanel } from "./AuditRunIssues";
 import { progressFor } from "./auditProgress";
+import type { AuditRunReload } from "./auditRunFetch";
+import { useAuditRun } from "./useAuditRun";
 
 interface AuditRunPageProps {
   id: string;
   onNavigate: (pathname: string) => void;
-}
-
-interface RunState {
-  detail: AuditDetail | undefined;
-  responses: Record<string, string>;
-}
-
-type RunAction =
-  | { deletedAt: string; type: "discarded" }
-  | { detail: AuditDetail; type: "loaded" }
-  | { detail: AuditDetail; type: "issuesRefreshed" }
-  | { itemId: string; response: string; type: "answered" };
-
-/**
- * The run page's audit and answers. Issue changes refresh the audit without
- * discarding unsaved answers, so a Fail survives raising its issue.
- */
-export function runStateReducer(state: RunState, action: RunAction): RunState {
-  switch (action.type) {
-    case "loaded":
-      return {
-        detail: action.detail,
-        responses: action.detail.audit.responses,
-      };
-    case "issuesRefreshed":
-      return {
-        ...state,
-        detail: {
-          ...action.detail,
-          audit: state.detail?.audit ?? action.detail.audit,
-        },
-      };
-    case "answered":
-      return {
-        ...state,
-        responses: { ...state.responses, [action.itemId]: action.response },
-      };
-    // Read-only at once, even if the reload that follows fails; unsaved
-    // answers were not kept, so show the saved ones.
-    case "discarded":
-      return state.detail
-        ? {
-            detail: {
-              ...state.detail,
-              audit: { ...state.detail.audit, deletedAt: action.deletedAt },
-            },
-            responses: state.detail.audit.responses,
-          }
-        : state;
-  }
-}
-
-/**
- * The run and its unsaved answers. The reducer keeps those answers across
- * issue refreshes, so this guards its own requests instead of using useLoad.
- */
-function useAuditRun(id: string) {
-  const [{ detail, responses }, dispatch] = useReducer(runStateReducer, {
-    detail: undefined,
-    responses: {},
-  });
-  const [loadError, setLoadError] = useState<string>();
-  const latest = useRef(0);
-
-  const fetchRun = useCallback(
-    async (type: "issuesRefreshed" | "loaded") => {
-      const request = ++latest.current;
-      try {
-        const next = await api.audits.getRun(id);
-        if (request !== latest.current) return;
-        dispatch({ detail: next, type });
-        if (type === "loaded") setLoadError(undefined);
-      } catch (cause) {
-        if (request === latest.current)
-          setLoadError(errorMessage(cause, "Could not load the audit."));
-      }
-    },
-    [id],
-  );
-  const load = useCallback(() => fetchRun("loaded"), [fetchRun]);
-  const refreshIssues = useCallback(
-    () => fetchRun("issuesRefreshed"),
-    [fetchRun],
-  );
-
-  useEffect(() => {
-    void load();
-    return () => {
-      latest.current += 1;
-    };
-  }, [load]);
-  return { detail, dispatch, load, loadError, refreshIssues, responses };
 }
 
 export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
@@ -141,11 +42,18 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
   const error = action.error ?? loadError;
   const sections = useRunSections();
 
-  /** Runs a change, then reloads the audit so the page shows what was stored. */
-  async function perform(change: () => Promise<unknown>, success: string) {
+  /**
+   * Runs a change, then reloads the audit so the page shows what was stored,
+   * as `reload` says (after a save, keeping answers changed since it).
+   */
+  async function perform(
+    change: () => Promise<unknown>,
+    success: string,
+    reload?: AuditRunReload,
+  ) {
     await run(async () => {
       await change();
-      await load();
+      await load(reload);
     }, success);
   }
 
@@ -155,6 +63,7 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
     await perform(
       () => api.audits.saveRun(id, responses, status, revision),
       status === "completed" ? "Audit completed." : "Audit saved.",
+      { keepSince: responses },
     );
   }
 

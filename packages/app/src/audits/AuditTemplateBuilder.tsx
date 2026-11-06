@@ -228,6 +228,7 @@ export function AuditTemplateBuilder({
         versions={versions ?? []}
       />
       <BuilderBody
+        busy={busy}
         error={error}
         manageGlobal={manageGlobal}
         notice={notice}
@@ -272,14 +273,22 @@ function backLink(
 }
 
 function BuilderBody({
+  busy,
   error,
   manageGlobal,
   notice,
-  onChange,
+  onChange: change,
   onNavigate,
   panel,
   template,
 }: {
+  /**
+   * A save or version load in flight. Its result replaces the form, so the
+   * form holds still until it lands instead of dropping later edits: the
+   * fieldset disables the fields, and changes from anywhere else (dragging
+   * or arrow keys on a reorder handle) are ignored.
+   */
+  busy: boolean;
   error: ErrorNotice | undefined;
   manageGlobal: boolean;
   notice: string | undefined;
@@ -288,6 +297,9 @@ function BuilderBody({
   panel: BuilderSections["panel"];
   template: AuditTemplate;
 }) {
+  const onChange = (next: AuditTemplate) => {
+    if (!busy) change(next);
+  };
   const sections = template.definition.sections;
   const updateSections = (nextSections: AuditTemplateSection[]) =>
     onChange({
@@ -315,7 +327,7 @@ function BuilderBody({
       />
       {panel(
         "form",
-        <fieldset className="fieldset auditBuilderFields">
+        <fieldset className="fieldset auditBuilderFields" disabled={busy}>
           <TemplateDetails template={template} update={onChange} />
           <div className="stack">
             <div className="sectionHeader">
