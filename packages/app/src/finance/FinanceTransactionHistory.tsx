@@ -106,6 +106,8 @@ export function FinanceTransactionHistory({
   loadError: string | undefined;
   onLoadMore: () => Promise<boolean>;
   onReload: () => Promise<void>;
+  /** A save was refused: access ended. */
+  onRefused: (cause: unknown) => Promise<void>;
 }) {
   const [view, setView] = useState<TransactionView>("list");
   const transactions = matching?.slice(0, visible);
@@ -167,6 +169,10 @@ export function FinanceTransactionHistory({
       {(!loadError || matching) &&
         (payees?.length ? (
           <FinancePayeeList
+            {...handlers}
+            matching={matching ?? []}
+            onCategorizeMany={onCategorizeMany}
+            onReload={onReload}
             onSelect={(name) => {
               setView("list");
               onFiltersChange({ ...filters, name });

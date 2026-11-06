@@ -542,6 +542,7 @@ function FinanceOverview({
         onCategorizeMany={handlers.onCategorizeMany}
         onClearFilter={() => onFiltersChange({ ...filters, accountIds: [] })}
         onNavigate={handlers.onNavigate}
+        onRefused={handlers.onRefused}
         onSelectAnnotation={(transactionId) =>
           setSelectedTransactionId((current) =>
             current === transactionId ? undefined : transactionId,

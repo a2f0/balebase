@@ -17,11 +17,19 @@ const payee = (name: string, pending = 0) => ({
   total: -42.5,
 });
 
-it("opens a payee from anywhere on its row, without overflowing a phone", async () => {
+it("opens a payee from anywhere on its row but its menu, without overflowing a phone", async () => {
   const markup = renderToStaticMarkup(
     <div className="card financeListCard">
       <div className="cardFlush">
         <FinancePayeeList
+          busy={false}
+          categories={[
+            { id: "fuel", name: "Fuel", slug: "fuel", transactionCount: 0 },
+          ]}
+          matching={[]}
+          onCategorizeMany={async () => true}
+          onRefused={async () => undefined}
+          onReload={async () => undefined}
           onSelect={() => undefined}
           payees={[payee("Shell", 1), payee(`Long${"Payee".repeat(30)}`)]}
         />
@@ -55,10 +63,17 @@ it("opens a payee from anywhere on its row, without overflowing a phone", async 
             return found === target ? "name" : (found?.className ?? "nothing");
           };
           const bounds = row.getBoundingClientRect();
-          // The row's far edge, clear of a last row's rounded corners.
+          const menu = row.querySelector(".rowActions button");
+          if (!menu) throw new Error("No menu button");
+          const menuBounds = menu.getBoundingClientRect();
+          // Just before the menu button, the row's far end.
           const edge = document.elementFromPoint(
-            bounds.right - 2,
+            menuBounds.left - 4,
             bounds.top + bounds.height / 2,
+          );
+          const menuHit = document.elementFromPoint(
+            menuBounds.left + menuBounds.width / 2,
+            menuBounds.top + menuBounds.height / 2,
           );
           // A long name keeps its first letters and ends in an ellipsis.
           if (!(target instanceof HTMLElement)) throw new Error("No target");
@@ -78,6 +93,7 @@ it("opens a payee from anywhere on its row, without overflowing a phone", async 
               ? hit(row.querySelector(".badge"))
               : "none",
             edge: edge === target ? "name" : "elsewhere",
+            menu: menuHit?.closest("button") === menu ? "menu" : "covered",
             meta: hit(row.querySelector(".rowMeta")),
           };
         }),
@@ -89,6 +105,7 @@ it("opens a payee from anywhere on its row, without overflowing a phone", async 
             amount: "name",
             badge: "name",
             edge: "name",
+            menu: "menu",
             meta: "name",
             name: "fits",
           },
@@ -96,6 +113,7 @@ it("opens a payee from anywhere on its row, without overflowing a phone", async 
             amount: "name",
             badge: "none",
             edge: "name",
+            menu: "menu",
             meta: "name",
             name: "ellipsis",
           },

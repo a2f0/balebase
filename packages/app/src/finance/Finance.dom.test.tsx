@@ -397,6 +397,151 @@ describe("Finance filters", () => {
     expect(container.textContent).toContain("250 of 254 shown");
   });
 
+  /** Shell three times (one already Meals) and Olive Garden, with writes. */
+  function payeeFixture() {
+    const writes: Array<{ body: unknown; method: string; path: string }> = [];
+    respond(async (url, init) => {
+      const method = init?.method ?? "GET";
+      if (method === "GET" && !url.pathname.endsWith("/categorization-rules"))
+        return Response.json({
+          ...data,
+          transactions: [
+            ...dated(["shell-1", "shell-2"]).map((row) => ({
+              ...row,
+              merchantName: "Shell",
+            })),
+            transaction("shell-3", {
+              expenseCategoryId: "meals",
+              merchantName: "Shell",
+            }),
+            transaction("Olive Garden"),
+          ],
+        });
+      const body: unknown = init?.body ? JSON.parse(String(init.body)) : null;
+      writes.push({ body, method, path: url.pathname });
+      if (url.pathname.endsWith("/categorization-rules"))
+        return Response.json(
+          {
+            applied: 2,
+            rule: {
+              category: { id: "meals", name: "Meals" },
+              createdAt: "2026-11-06T12:00:00.000Z",
+              id: "rule-1",
+              owner: null,
+              payeeName: "Shell",
+              uncategorizedCount: 0,
+            },
+          },
+          { status: 201 },
+        );
+      return Response.json({ updated: 2 });
+    });
+    return writes;
+  }
+
+  async function choosePayeeAction(payee: string, label: string) {
+    await openRowMenu(payee);
+    await choose(label);
+    const form = container.querySelector("form.financePayeeAction");
+    const select = form?.querySelector("select");
+    if (!form || !select) throw new Error("No payee form");
+    return { form, select };
+  }
+
+  async function pick(select: HTMLSelectElement, value: string) {
+    await act(async () => {
+      select.value = value;
+      select.dispatchEvent(
+        new dom.Event("change", { bubbles: true }) as unknown as Event,
+      );
+    });
+  }
+
+  it("gives all of a payee's matching transactions one category in place", async () => {
+    const writes = payeeFixture();
+    await mountFinance();
+    await click("By payee");
+    await openRowMenu("Shell");
+    expect(menuItems()).toEqual(["Categorize 3 transactions…", "Create rule…"]);
+    await act(async () =>
+      document.dispatchEvent(
+        new dom.KeyboardEvent("keydown", {
+          bubbles: true,
+          key: "Escape",
+        }) as unknown as Event,
+      ),
+    );
+    const { form, select } = await choosePayeeAction(
+      "Shell",
+      "Categorize 3 transactions…",
+    );
+    expect(document.activeElement).toBe(select);
+    expect(form.textContent).toContain(
+      "Category for 3 transactions from “Shell”",
+    );
+    await pick(select, "meals");
+    await click("Categorize");
+    // Only Shell's rows not already in Meals; the view stays where it was.
+    expect(writes).toEqual([
+      {
+        body: { categoryId: "meals", transactionIds: ["shell-1", "shell-2"] },
+        method: "PUT",
+        path: "/api/finance/transactions/category",
+      },
+    ]);
+    expect(currentPath).toBe("/finance");
+    expect(button("By payee").getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector("form.financePayeeAction")).toBeNull();
+    expect(document.activeElement?.getAttribute("aria-label")).toBe(
+      "Actions for Shell",
+    );
+  });
+
+  it("creates a rule for a payee in place", async () => {
+    const writes = payeeFixture();
+    await mountFinance();
+    await click("By payee");
+    const { form, select } = await choosePayeeAction("Shell", "Create rule…");
+    // A rule cannot clear categories.
+    expect(
+      [...select.options].map((option) => option.textContent),
+    ).not.toContain("Uncategorized");
+    expect(button("Create rule").disabled).toBe(true);
+    await pick(select, "meals");
+    await click("Create rule");
+    expect(writes).toEqual([
+      {
+        body: {
+          applyToExisting: true,
+          categoryId: "meals",
+          payeeName: "Shell",
+        },
+        method: "POST",
+        path: "/api/finance/categorization-rules",
+      },
+    ]);
+    expect(currentPath).toBe("/finance");
+    expect(form.isConnected).toBe(false);
+    expect(container.textContent).toContain(
+      "Added a rule for “Shell” and categorized 2 transactions.",
+    );
+  });
+
+  it("offers payee actions only once there is a category", async () => {
+    respond(() =>
+      Response.json({
+        ...data,
+        categories: [],
+        transactions: dated(["Shell"]),
+      }),
+    );
+    await mountFinance();
+    await click("By payee");
+    expect(
+      container.querySelector('[aria-label="Actions for Shell"]'),
+    ).toBeNull();
+  });
+
   it("annotates, raises an issue, or filters by name from a row's menu", async () => {
     respond(() =>
       Response.json({
