@@ -825,8 +825,9 @@ also shows them by hand; changing filters starts a fresh list.
 the filters match (not only the rows shown) by the same name **Show only**
 uses. Each payee shows its count, latest date, pending count, and total (or
 "Several currencies"), most transactions first, so the uncategorized filter
-and **By payee** together count each payee's uncategorized expenses. Choosing
-a payee returns to the list filtered to that name, keeping the other filters.
+and **By payee** together count each payee's uncategorized expenses. Selecting
+anywhere on a payee's row returns to the list filtered to that name, keeping
+the other filters.
 
 The overview keeps every one of the organization's transactions on the device
 (IndexedDB, per person and organization) and catches up on each visit, after a

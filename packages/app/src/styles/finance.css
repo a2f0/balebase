@@ -226,14 +226,13 @@
   color: var(--color-green-strong);
 }
 
-/* A payee's name lists its transactions, so it reads like a row's link. */
+/*
+ * A long payee name keeps its start and ends in an ellipsis instead of
+ * widening its row; a button's centered inline-flex would clip both ends.
+ */
 .financePayeeName {
-  justify-self: start;
+  display: block;
   max-width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
   text-align: start;
   white-space: nowrap;
 }
@@ -241,17 +240,6 @@
 /* Keeps a payee's total at the right when a narrow row wraps it. */
 .financePayee .financeAmount {
   margin-inline-start: auto;
-}
-
-.financePayeeName:hover {
-  text-decoration: underline;
-}
-
-@media (pointer: coarse) {
-  .financePayeeName {
-    padding-block: var(--space-3);
-    margin-block: calc(var(--space-3) * -1);
-  }
 }
 
 /* The row's menu button sits after the amount. */
