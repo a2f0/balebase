@@ -226,9 +226,14 @@
   color: var(--color-green-strong);
 }
 
-/* A long payee name is clipped instead of widening its row. */
+/*
+ * A long payee name keeps its start and ends in an ellipsis instead of
+ * widening its row; a button's centered inline-flex would clip both ends.
+ */
 .financePayeeName {
+  display: block;
   max-width: 100%;
+  text-align: start;
   white-space: nowrap;
 }
 

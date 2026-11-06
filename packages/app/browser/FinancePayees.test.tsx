@@ -60,8 +60,20 @@ it("opens a payee from anywhere on its row, without overflowing a phone", async 
             bounds.right - 2,
             bounds.top + bounds.height / 2,
           );
+          // A long name keeps its first letters and ends in an ellipsis.
+          if (!(target instanceof HTMLElement)) throw new Error("No target");
+          const text = document.createRange();
+          text.selectNodeContents(target);
+          const textLeft = text.getClientRects()[0]?.left ?? Number.NaN;
+          const name =
+            Math.abs(textLeft - target.getBoundingClientRect().left) > 1
+              ? "start cut off"
+              : target.scrollWidth > target.clientWidth
+                ? getComputedStyle(target).textOverflow
+                : "fits";
           return {
             amount: hit(row.querySelector(".financeAmount")),
+            name,
             badge: row.querySelector(".badge")
               ? hit(row.querySelector(".badge"))
               : "none",
@@ -73,8 +85,20 @@ it("opens a payee from anywhere on its row, without overflowing a phone", async 
       expect(result).toEqual({
         overflows: false,
         rows: [
-          { amount: "name", badge: "name", edge: "name", meta: "name" },
-          { amount: "name", badge: "none", edge: "name", meta: "name" },
+          {
+            amount: "name",
+            badge: "name",
+            edge: "name",
+            meta: "name",
+            name: "fits",
+          },
+          {
+            amount: "name",
+            badge: "none",
+            edge: "name",
+            meta: "name",
+            name: "ellipsis",
+          },
         ],
       });
     }
