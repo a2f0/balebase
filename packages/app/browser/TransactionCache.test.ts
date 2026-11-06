@@ -115,8 +115,8 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
       rows: ["a:1", "b:1"],
     });
 
-    // A summary saved before categories carried per-year counts reads back
-    // with them, counted from the saved transactions.
+    // A summary saved before categories carried per-year counts and totals
+    // reads back with them, counted from the saved transactions.
     const legacy = { organizationId: "legacy-org", userId: "person" };
     const legacyCategories = await target.evaluate(
       async (who, first) => {
@@ -165,8 +165,16 @@ it("keeps transactions in IndexedDB a page at a time, across reloads and interru
         slug: "meals",
         transactionCount: 2,
         transactionCountsByYear: [
-          { transactionCount: 1, year: 2025 },
-          { transactionCount: 1, year: 2026 },
+          {
+            totals: [{ currencyCode: "USD", total: -1 }],
+            transactionCount: 1,
+            year: 2025,
+          },
+          {
+            totals: [{ currencyCode: "USD", total: -1 }],
+            transactionCount: 1,
+            year: 2026,
+          },
         ],
       },
     ]);

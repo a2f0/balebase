@@ -235,10 +235,18 @@ const ExpenseCategorySchema = z.object({
   transactionCount: z.number(),
   /**
    * The same count split by the year of each transaction's date, for years
-   * that have any; together they make `transactionCount`.
+   * that have any; together they make `transactionCount`. Each year also sums
+   * its transactions' amounts per currency, as rows show them (spending
+   * negative).
    */
   transactionCountsByYear: z.array(
-    z.object({ transactionCount: z.number(), year: z.number().int() }),
+    z.object({
+      totals: z.array(
+        z.object({ currencyCode: z.string().nullable(), total: z.number() }),
+      ),
+      transactionCount: z.number(),
+      year: z.number().int(),
+    }),
   ),
 });
 export type ExpenseCategory = z.infer<typeof ExpenseCategorySchema>;

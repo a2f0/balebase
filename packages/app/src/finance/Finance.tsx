@@ -272,13 +272,10 @@ function withCategories(
 ): FinanceData | undefined {
   if (!data || !changes.length) return data;
   const byId = new Map(changes.map((change) => [change.id, change]));
-  const years = new Map(
+  const moved = new Map(
     data.transactions
       .filter((transaction) => byId.has(transaction.id))
-      .map((transaction) => [
-        transaction.id,
-        Number(transaction.transactionDate.slice(0, 4)),
-      ]),
+      .map((transaction) => [transaction.id, transaction]),
   );
   const counts = new Map<string | null, number>();
   for (const { from, to } of changes) {
@@ -297,7 +294,7 @@ function withCategories(
               category.id,
               category.transactionCountsByYear,
               changes,
-              years,
+              moved,
             ),
           }
         : category;

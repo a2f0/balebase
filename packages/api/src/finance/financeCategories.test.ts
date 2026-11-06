@@ -223,18 +223,19 @@ describe("expense categories", () => {
     expect(defaults.body.categories).toHaveLength(21);
   });
 
-  it("splits each category's count by the year of its transactions", async () => {
+  it("splits each category's count and total by year and currency", async () => {
     const fixture = await createFixture();
     const ids = seedTransactions(fixture.database);
     const meals = await createCategory(fixture, "Meals");
     await createCategory(fixture, "Travel");
-    // Rows 0 and 1 stay in 2026, row 3 moves to 2025, and row 8 was removed.
+    // Rows 0, 2 (a refund), and 10 (EUR) stay in 2026, row 3 moves to 2025,
+    // and row 8 was removed.
     fixture.database
       .query(
         "UPDATE plaid_transactions SET transaction_date = '2025-12-31' WHERE id = ?",
       )
       .run(ids[3] ?? "");
-    for (const index of [0, 1, 3, 8]) {
+    for (const index of [0, 2, 3, 8, 10]) {
       fixture.database
         .query(
           `INSERT INTO finance_transaction_annotations
@@ -263,10 +264,21 @@ describe("expense categories", () => {
     ).toEqual([
       {
         name: "Meals",
-        transactionCount: 3,
+        transactionCount: 4,
         transactionCountsByYear: [
-          { transactionCount: 1, year: 2025 },
-          { transactionCount: 2, year: 2026 },
+          {
+            totals: [{ currencyCode: "USD", total: -300 }],
+            transactionCount: 1,
+            year: 2025,
+          },
+          {
+            totals: [
+              { currencyCode: "EUR", total: -45 },
+              { currencyCode: "USD", total: -80 },
+            ],
+            transactionCount: 3,
+            year: 2026,
+          },
         ],
       },
       { name: "Travel", transactionCount: 0, transactionCountsByYear: [] },

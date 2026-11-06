@@ -1443,7 +1443,7 @@ describe("Finance filters", () => {
     expect(button("Previous year").getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("counts categories in the period the overview filters by", async () => {
+  it("counts and sums categories in the period the overview filters by", async () => {
     respond(() =>
       Response.json({
         ...data,
@@ -1454,16 +1454,33 @@ describe("Finance filters", () => {
             slug: "meals",
             transactionCount: 3,
             transactionCountsByYear: [
-              { transactionCount: 1, year: year - 1 },
-              { transactionCount: 2, year },
+              {
+                totals: [{ currencyCode: "USD", total: -10 }],
+                transactionCount: 1,
+                year: year - 1,
+              },
+              {
+                totals: [{ currencyCode: "USD", total: -25.5 }],
+                transactionCount: 2,
+                year,
+              },
             ],
           },
           {
             id: "travel",
             name: "Travel",
             slug: "travel",
-            transactionCount: 1,
-            transactionCountsByYear: [{ transactionCount: 1, year: year - 1 }],
+            transactionCount: 2,
+            transactionCountsByYear: [
+              {
+                totals: [
+                  { currencyCode: "EUR", total: -7 },
+                  { currencyCode: "USD", total: 3 },
+                ],
+                transactionCount: 2,
+                year: year - 1,
+              },
+            ],
           },
         ],
         transactions: [
@@ -1481,22 +1498,29 @@ describe("Finance filters", () => {
     const counts = () =>
       [...container.querySelectorAll(".rowInteractive")].map(
         (row) =>
-          `${row.querySelector(".rowTitle")?.textContent}: ${row.querySelector(".rowMeta")?.textContent}`,
+          `${row.querySelector(".rowTitle")?.textContent}: ${row.querySelector(".rowMeta")?.textContent}${
+            row.querySelector(".financeAmount")
+              ? ` = ${row.querySelector(".financeAmount")?.textContent}`
+              : ""
+          }`,
       );
     const navigate = await mountFinance("/finance/categories");
     expect(button("All time").getAttribute("aria-pressed")).toBe("true");
     expect(counts()).toEqual([
-      "Meals: 3 transactions",
-      "Travel: 1 transaction",
+      "Meals: 3 transactions = -$35.50",
+      "Travel: 2 transactions = -€7.00 · $3.00",
     ]);
     await click("Current year");
     expect(currentPath).toBe("/finance/categories");
     expect(counts()).toEqual([
-      "Meals: 2 transactions",
+      "Meals: 2 transactions = -$25.50",
       "Travel: 0 transactions",
     ]);
     await click("Previous year");
-    expect(counts()).toEqual(["Meals: 1 transaction", "Travel: 1 transaction"]);
+    expect(counts()).toEqual([
+      "Meals: 1 transaction = -$10.00",
+      "Travel: 2 transactions = -€7.00 · $3.00",
+    ]);
     // The period is the overview's: it holds there and back.
     await navigate("/finance");
     expect(button("Previous year").getAttribute("aria-pressed")).toBe("true");
@@ -1520,7 +1544,9 @@ describe("Finance filters", () => {
             name: "Meals",
             slug: "meals",
             transactionCount: 1,
-            transactionCountsByYear: [{ transactionCount: 1, year: year - 1 }],
+            transactionCountsByYear: [
+              { totals: [], transactionCount: 1, year: year - 1 },
+            ],
           },
         ],
       }),
@@ -1552,7 +1578,9 @@ describe("Finance filters", () => {
             name: "Meals",
             slug: "meals",
             transactionCount: 2,
-            transactionCountsByYear: [{ transactionCount: 2, year }],
+            transactionCountsByYear: [
+              { totals: [], transactionCount: 2, year },
+            ],
           },
           {
             id: "travel",
@@ -1630,7 +1658,7 @@ describe("Finance filters", () => {
         name: "Meals",
         slug: "meals",
         transactionCount: 2,
-        transactionCountsByYear: [{ transactionCount: 2, year }],
+        transactionCountsByYear: [{ totals: [], transactionCount: 2, year }],
       },
       {
         id: "category-2",

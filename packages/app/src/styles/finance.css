@@ -242,6 +242,25 @@
   margin-inline-start: auto;
 }
 
+/*
+ * A category's name, total, and menu stay on one line: the name gives way,
+ * ending in an ellipsis, so the total never wraps under it.
+ */
+.financeCategory {
+  flex-wrap: nowrap;
+}
+
+.financeCategory .rowMain {
+  flex-basis: 0;
+}
+
+.financeCategory .rowTitle {
+  display: block;
+  max-width: 100%;
+  text-align: start;
+  white-space: nowrap;
+}
+
 /* The row's menu button sits after the amount. */
 .financeTransactionActions {
   justify-self: end;

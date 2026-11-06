@@ -8,7 +8,11 @@ import {
 
 const category = (name: string, counts: Record<number, number> = {}) => {
   const transactionCountsByYear = Object.entries(counts).map(
-    ([year, transactionCount]) => ({ transactionCount, year: Number(year) }),
+    ([year, transactionCount]) => ({
+      totals: [],
+      transactionCount,
+      year: Number(year),
+    }),
   );
   return {
     id: name,
