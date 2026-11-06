@@ -19,6 +19,12 @@ const endpoints = {
       response: "json",
     },
   ),
+  updateFinanceView: endpoint<typeof accountSettingsRoutes.updateFinanceView>({
+    method: "PATCH",
+    path: "/api/account-settings/finance-view",
+    body: "json",
+    response: "json",
+  }),
   securityEvents: endpoint<typeof accountSettingsRoutes.securityEvents>({
     method: "GET",
     path: "/api/account-settings/security-events",
@@ -54,6 +60,12 @@ export function accountSettingsApi(transport: Transport) {
     updateFinanceStart(uncategorized: boolean) {
       return transport.call(endpoints.updateFinanceStart, {
         body: { uncategorized },
+      });
+    },
+    /** Opens Finance's transactions grouped by payee, or not. */
+    updateFinanceView(byPayee: boolean) {
+      return transport.call(endpoints.updateFinanceView, {
+        body: { byPayee },
       });
     },
     /** The signed-in person's latest security and profile changes. */

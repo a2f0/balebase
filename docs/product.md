@@ -115,8 +115,13 @@ The **Finance** switch under **Account settings → General** makes the
 sidebar's Finance open on uncategorized expenses
 (`/finance/expenses/category/uncategorized`) instead of every transaction. It
 is saved to the account (`PATCH /api/account-settings/finance-start`, returned
-with the session), so it follows the person to every device. Like the theme
-and default organization, it is a personal choice and records no activity.
+with the session), so it follows the person to every device. A second switch
+in the same card, **Group transactions by payee**, makes Finance's
+transactions open in the **By payee** view instead of the list
+(`PATCH /api/account-settings/finance-view`, also returned with the session);
+the two combine, opening uncategorized expenses grouped by payee, and the
+view can still be switched on the page. Like the theme and default
+organization, these are personal choices and record no activity.
 
 Root admins use `/root/jobs` to run platform maintenance and inspect maintenance
 and bank sync history. Every run uses the shared background queue and D1 run

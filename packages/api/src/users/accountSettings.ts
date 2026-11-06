@@ -58,6 +58,24 @@ accountSettings.patch("/finance-start", async (context) => {
   });
 });
 
+// The same kind of personal choice: how Finance's transactions open.
+accountSettings.patch("/finance-view", async (context) => {
+  const body = await readBody(
+    context,
+    accountSettingsRoutes.updateFinanceView,
+    "Choose whether Finance's transactions open grouped by payee.",
+  );
+  if (body instanceof Response) return body;
+  await context.env.DB.prepare(
+    `UPDATE "user" SET "financeOpensByPayee" = ? WHERE "id" = ?`,
+  )
+    .bind(body.byPayee ? 1 : 0, context.get("authSession").user.id)
+    .run();
+  return respond(context, accountSettingsRoutes.updateFinanceView, {
+    byPayee: body.byPayee,
+  });
+});
+
 // Triggers record these when Better Auth changes the person's two-factor
 // setting, authenticator, backup codes, password, name or picture (migrations
 // 0082 and 0085). Only the person reads them here; root admins read them in D1.

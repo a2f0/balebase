@@ -187,6 +187,76 @@ describe("password authentication", () => {
     await Promise.all(fixture.pending);
   });
 
+  it("returns the Finance payee view choice with the session", async () => {
+    const fixture = await createFixture();
+    const cookies = new CookieJar();
+    const request = async (
+      path: string,
+      body?: Record<string, unknown>,
+      method = "POST",
+    ) => {
+      const response = await app.request(
+        `/api${path}`,
+        {
+          method: body ? method : "GET",
+          headers: {
+            "content-type": "application/json",
+            cookie: cookies.header(),
+            origin,
+          },
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        },
+        fixture.bindings,
+        executionContext(fixture.pending),
+      );
+      cookies.absorb(response);
+      return { body: await response.json(), status: response.status };
+    };
+    const credentials = {
+      email: `${crypto.randomUUID()}@example.com`,
+      password: originalPassword,
+    };
+    await request("/auth/sign-up/email", {
+      ...credentials,
+      name: "Finance View",
+      termsAccepted: true,
+    });
+    await request("/auth/sign-in/email", credentials);
+    expect((await request("/auth/get-session")).body).toMatchObject({
+      user: { financeOpensByPayee: false },
+    });
+    for (const byPayee of [true, false, true]) {
+      expect(
+        await request("/account-settings/finance-view", { byPayee }, "PATCH"),
+      ).toEqual({ body: { byPayee }, status: 200 });
+      expect((await request("/auth/get-session")).body).toMatchObject({
+        user: { financeOpensByPayee: byPayee },
+      });
+    }
+    for (const body of [{}, { byPayee: "yes" }]) {
+      expect(
+        (await request("/account-settings/finance-view", body, "PATCH")).status,
+      ).toBe(400);
+    }
+    // Sign-up cannot set it: the field takes no input.
+    const sneaky = `${crypto.randomUUID()}@example.com`;
+    await request("/auth/sign-up/email", {
+      email: sneaky,
+      financeOpensByPayee: true,
+      name: "Sneaky",
+      password: originalPassword,
+      termsAccepted: true,
+    });
+    expect(
+      fixture.database
+        .query(
+          'SELECT "financeOpensByPayee" AS value FROM user WHERE email = ?',
+        )
+        .get(sneaky),
+    ).toEqual({ value: 0 });
+    await Promise.all(fixture.pending);
+  });
+
   it("supports native cookie sessions without accepting foreign origins", async () => {
     const { auth } = await createFixture();
     // Better Auth skips origin validation in tests unless explicitly enabled.

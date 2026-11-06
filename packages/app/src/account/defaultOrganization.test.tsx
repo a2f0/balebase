@@ -44,6 +44,7 @@ describe("account settings", () => {
     const markup = renderToStaticMarkup(
       <AccountSettings
         defaultOrganizationId={null}
+        financeOpensByPayee={false}
         financeOpensUncategorized={false}
         onNavigate={() => undefined}
         onSessionChanged={async () => undefined}

@@ -6,8 +6,11 @@ const { click, mount, respond, settle } = installDom({
   url: "http://localhost:5173/account",
 });
 
-function toggle(container: HTMLElement) {
-  const input = container.querySelector<HTMLInputElement>('[role="switch"]');
+/** The first switch (uncategorized), or the one labeled `label`. */
+function toggle(container: HTMLElement, label?: string) {
+  const input = [
+    ...container.querySelectorAll<HTMLInputElement>('[role="switch"]'),
+  ].find((item) => !label || item.parentElement?.textContent === label);
   if (!input) throw new Error("No switch");
   return input;
 }
@@ -26,7 +29,8 @@ describe("Finance start setting", () => {
     const render = () =>
       view.render(
         <FinanceStartSetting
-          on={on}
+          opensByPayee={false}
+          opensUncategorized={on}
           onSessionChanged={async () => {
             events.push("session");
             on = true;
@@ -60,7 +64,8 @@ describe("Finance start setting", () => {
     let refreshed = 0;
     const view = await mount(
       <FinanceStartSetting
-        on={false}
+        opensByPayee={false}
+        opensUncategorized={false}
         onSessionChanged={async () => {
           refreshed++;
         }}
@@ -81,7 +86,8 @@ describe("Finance start setting", () => {
     let refreshed = false;
     const { container } = await mount(
       <FinanceStartSetting
-        on={false}
+        opensByPayee={false}
+        opensUncategorized={false}
         onSessionChanged={async () => {
           refreshed = true;
         }}
@@ -91,5 +97,39 @@ describe("Finance start setting", () => {
     expect(toggle(container).checked).toBe(false);
     expect(container.textContent).toContain("Could not save.");
     expect(refreshed).toBe(false);
+  });
+
+  it("saves grouping by payee on its own, beside the other switch", async () => {
+    const events: string[] = [];
+    respond(async (url, init) => {
+      events.push(`${init?.method} ${url.pathname} ${init?.body}`);
+      return Response.json({ byPayee: true });
+    });
+    let byPayee = false;
+    const view = await mount(<span />);
+    const render = () =>
+      view.render(
+        <FinanceStartSetting
+          opensByPayee={byPayee}
+          opensUncategorized={true}
+          onSessionChanged={async () => {
+            events.push("session");
+            byPayee = true;
+            await render();
+          }}
+        />,
+      );
+    await render();
+    const payees = () => toggle(view.container, "Group transactions by payee");
+    expect(payees().checked).toBe(false);
+    expect(toggle(view.container).checked).toBe(true);
+    await click(payees());
+    await settle();
+    expect(events).toEqual([
+      'PATCH /api/account-settings/finance-view {"byPayee":true}',
+      "session",
+    ]);
+    expect(payees().checked).toBe(true);
+    expect(toggle(view.container).checked).toBe(true);
   });
 });

@@ -50,7 +50,8 @@ import {
   confirmDisconnect,
   syncNotice,
 } from "./financeConnectionActions";
-import { type CreateRule, createRuleAction } from "./financeRuleAction";
+import type { OverviewHandlers } from "./financeOverviewHandlers";
+import { createRuleAction } from "./financeRuleAction";
 import {
   filterTransactions,
   selectFinanceAccount,
@@ -79,10 +80,12 @@ const updateConnectionStorageKey = "balebase.plaid.updateConnection";
 
 export function Finance({
   onNavigate,
+  opensByPayee,
   pathname,
   scope,
 }: {
   onNavigate: (pathname: string) => void;
+  opensByPayee?: boolean | undefined;
   pathname: string;
   /** Whose saved transactions this device reads; memory only without it. */
   scope?: CacheScope | undefined;
@@ -146,6 +149,7 @@ export function Finance({
       onReload={reloadLatest}
       onRepair={plaid.repair}
       onSync={actions.sync}
+      opensByPayee={opensByPayee}
       page={page}
     />
   );
@@ -352,31 +356,6 @@ function financeActions(
 
 const setupNoticeId = "finance-setup-notice";
 
-interface OverviewHandlers {
-  busy: boolean;
-  onCreateRule: CreateRule;
-  onAnnotate: (
-    transaction: FinanceTransaction,
-    input: FinanceTransactionAnnotation,
-  ) => Promise<void>;
-  onCategorize: (
-    transaction: FinanceTransaction,
-    categoryId: string | null,
-  ) => Promise<void>;
-  onCategorizeMany: (
-    transactions: FinanceTransaction[],
-    categoryId: string | null,
-  ) => Promise<boolean>;
-  onConnect: () => Promise<void>;
-  onDeleteData: (connection: FinanceConnection) => Promise<void>;
-  onDisconnect: (connection: FinanceConnection) => Promise<void>;
-  onNavigate: (pathname: string) => void;
-  /** A request was refused: access ended, so nothing shown or saved stays. */
-  onRefused: (cause: unknown) => Promise<void>;
-  onRepair: (connection: FinanceConnection) => Promise<void>;
-  onSync: (id: string) => Promise<void>;
-}
-
 export function FinanceView({
   data,
   error,
@@ -479,6 +458,7 @@ function FinanceOverview({
   onFiltersChange,
   onLoadMore,
   onReload,
+  opensByPayee,
   ...handlers
 }: OverviewHandlers & FinanceListingState & { onReload: () => Promise<void> }) {
   const [selectedTransactionId, setSelectedTransactionId] = useState<string>();
@@ -533,6 +513,7 @@ function FinanceOverview({
       />
       <FinanceTransactionHistory
         accountName={accountName}
+        initialView={opensByPayee ? "payees" : "list"}
         filters={filters}
         onFiltersChange={onFiltersChange}
         loadError={loadError}
