@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { errorMessage } from "../shared/errors";
 import { useUnsavedChanges } from "../workspace/unsavedChanges";
+import {
+  initialOfflineAnswers,
+  offlineAnswersError,
+  offlineAnswersTransition,
+} from "./offlineAnswersState";
 import type { OfflineAudit } from "./offlineStore";
 import { queueOfflineAudit, saveOfflineAnswer } from "./offlineWork";
 
@@ -21,11 +26,9 @@ const deviceStorage: OfflineAnswerStorage = {
 };
 
 /**
- * An audit's answers, each written to the device as it is given. A failed
- * answer's error lasts only while some answer is still unsaved: answering
- * again, once every edit is written, clears it. A failed completion keeps its
- * error until a save succeeds, since its answers may all be written; an
- * answer's error shows over it meanwhile.
+ * An audit's answers, each written to the device as it is given. What went
+ * wrong is one machine (`offlineAnswersState.ts`): a failed write lasts until
+ * every answer is written, a failed completion until a save succeeds.
  */
 export function useOfflineAnswers(
   audit: OfflineAudit,
@@ -36,12 +39,12 @@ export function useOfflineAnswers(
   const dirty = useRef<Record<string, { value: string }>>({});
   const writes = useRef(Promise.resolve());
   const [pending, setPending] = useState(0);
-  const [answerError, setAnswerError] = useState<string>();
-  const [saveError, setSaveError] = useState<string>();
+  const [failures, report] = useReducer(
+    offlineAnswersTransition,
+    initialOfflineAnswers,
+  );
   const [sealing, setSealing] = useState(false);
-  // The newest trouble first: an answer that will not save outranks a
-  // completion that failed earlier, which shows again once answers save.
-  const error = answerError ?? saveError;
+  const error = offlineAnswersError(failures);
   useUnsavedChanges(
     pending > 0 || Boolean(error),
     "Some audit answers have not been saved on this device.",
@@ -56,8 +59,21 @@ export function useOfflineAnswers(
   }, [audit.responses]);
   function write(itemId: string, edit: { value: string }) {
     const result = writes.current.then(async () => {
-      await storage.saveAnswer(key, audit.id, itemId, edit.value);
+      try {
+        await storage.saveAnswer(key, audit.id, itemId, edit.value);
+      } catch (cause) {
+        report({
+          message: errorMessage(
+            cause,
+            "Answer not saved. Check device storage and retry.",
+          ),
+          type: "writeFailed",
+        });
+        throw cause;
+      }
       if (dirty.current[itemId] === edit) delete dirty.current[itemId];
+      if (Object.keys(dirty.current).length === 0)
+        report({ type: "allWritten" });
     });
     // Preserve typing order within this tab, including after a failed write.
     writes.current = result.catch(() => undefined);
@@ -70,14 +86,8 @@ export function useOfflineAnswers(
     setPending((count) => count + 1);
     try {
       await write(itemId, edit);
-      if (Object.keys(dirty.current).length === 0) setAnswerError(undefined);
-    } catch (cause) {
-      setAnswerError(
-        errorMessage(
-          cause,
-          "Answer not saved. Check device storage and retry.",
-        ),
-      );
+    } catch {
+      // Reported as the write failed.
     } finally {
       setPending((count) => count - 1);
     }
@@ -85,16 +95,22 @@ export function useOfflineAnswers(
   async function save(complete: boolean) {
     setSealing(true);
     setPending((count) => count + 1);
+    // A failed write reports itself; only queueing reports here.
+    let written = false;
     try {
       // Retry only unsaved edits. Already-saved answers may have been updated
       // by another tab; completion seals the latest durable snapshot.
       for (const [id, edit] of Object.entries(dirty.current))
         await write(id, edit);
+      written = true;
       if (complete) await storage.queueAudit(key, audit.id);
-      setAnswerError(undefined);
-      setSaveError(undefined);
+      report({ type: "saved" });
     } catch (cause) {
-      setSaveError(errorMessage(cause, "Could not queue audit."));
+      if (written)
+        report({
+          message: errorMessage(cause, "Could not queue audit."),
+          type: "queueFailed",
+        });
     } finally {
       setSealing(false);
       setPending((count) => count - 1);

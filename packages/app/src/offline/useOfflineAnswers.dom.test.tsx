@@ -95,4 +95,31 @@ describe("offline audit answers", () => {
     await answer(answers, "exit", "pass");
     expect(answers().error).toBe("Queue unavailable.");
   });
+
+  it("clears a retried save's failed write once every answer saves", async () => {
+    const { answers } = await mountAnswers([
+      new Error("Storage full."),
+      new Error("Storage full."),
+    ]);
+    await answer(answers, "exit", "fail");
+    // Retrying the draft fails to write it again.
+    await act(async () => {
+      await answers().save(false);
+    });
+    expect(answers().error).toBe("Storage full.");
+    await answer(answers, "exit", "pass");
+    expect(answers().error).toBeUndefined();
+  });
+
+  it("shows the completion's error once retried writes succeed", async () => {
+    const { answers } = await mountAnswers(
+      [new Error("Storage full.")],
+      new Error("Required answers are missing."),
+    );
+    await answer(answers, "exit", "fail");
+    await act(async () => {
+      await answers().save(true);
+    });
+    expect(answers().error).toBe("Required answers are missing.");
+  });
 });
