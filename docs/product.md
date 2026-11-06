@@ -116,8 +116,8 @@ sidebar's Finance open on uncategorized expenses
 (`/finance/expenses/category/uncategorized`) instead of every transaction. It
 is saved to the account (`PATCH /api/account-settings/finance-start`, returned
 with the session), so it follows the person to every device. A second switch
-in the same card, **Group transactions by payee**, makes Finance's
-transactions open in the **By payee** view instead of the list
+in the same card, **Open Finance on transactions grouped by payee**, makes
+Finance's transactions open in the **By payee** view instead of the list
 (`PATCH /api/account-settings/finance-view`, also returned with the session);
 the two combine, opening uncategorized expenses grouped by payee, and the
 view can still be switched on the page. Like the theme and default

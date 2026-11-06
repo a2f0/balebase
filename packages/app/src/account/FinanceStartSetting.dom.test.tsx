@@ -120,7 +120,8 @@ describe("Finance start setting", () => {
         />,
       );
     await render();
-    const payees = () => toggle(view.container, "Group transactions by payee");
+    const payees = () =>
+      toggle(view.container, "Open Finance on transactions grouped by payee");
     expect(payees().checked).toBe(false);
     expect(toggle(view.container).checked).toBe(true);
     await click(payees());
