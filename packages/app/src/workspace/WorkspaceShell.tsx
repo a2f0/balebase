@@ -24,11 +24,14 @@ import { AppLink } from "../shared/AppLink";
 import { useAction } from "../shared/useAction";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { readSidebarWidth } from "./sidebarWidth";
+import { financeOverviewPath } from "./workspacePaths";
 
 export interface WorkspaceUser {
   email: string;
   emailVerified: boolean;
   name: string;
+  /** The sidebar's Finance opens on uncategorized expenses (Account). */
+  financeOpensUncategorized?: boolean | null | undefined;
   role?: string | null | undefined;
   twoFactorEnabled?: boolean | null | undefined;
 }
@@ -129,7 +132,10 @@ function Sidebar({
     setOpen(false);
     onNavigate(pathname);
   };
-  const groups = navigationFor(canAccessFinance, hasRole(user.role, "admin"));
+  const groups = navigationFor(
+    canAccessFinance && financeStartPath(user),
+    hasRole(user.role, "admin"),
+  );
   return (
     <aside className="sidebar onDark" data-open={open} ref={sidebar}>
       <div className="sidebarInner">
@@ -246,7 +252,15 @@ function useNavigationDismissal(
   }, [close, open, sidebar, toggle]);
 }
 
-function navigationFor(canAccessFinance: boolean, isAdmin: boolean) {
+/** Where the sidebar's Finance opens, by the person's Account choice. */
+function financeStartPath(user: WorkspaceUser) {
+  return user.financeOpensUncategorized
+    ? financeOverviewPath({ categorySlug: null, uncategorized: true })
+    : "/finance";
+}
+
+/** `financeHref` is where Finance opens, or false without Finance access. */
+function navigationFor(financeHref: string | false, isAdmin: boolean) {
   const workspace: NavigationItem[] = [
     { href: "/", icon: "library", label: "Library", page: "library" },
     {
@@ -286,9 +300,9 @@ function navigationFor(canAccessFinance: boolean, isAdmin: boolean) {
       page: "equipment",
     },
   ];
-  if (canAccessFinance) {
+  if (financeHref) {
     records.push({
-      href: "/finance",
+      href: financeHref,
       icon: "finance",
       label: "Finance",
       page: "finance",

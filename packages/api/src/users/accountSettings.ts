@@ -39,6 +39,25 @@ accountSettings.patch("/default-organization", async (context) => {
   });
 });
 
+// A personal display choice, like the theme: it changes nothing anyone else
+// sees, so it records no history (as the default organization does not).
+accountSettings.patch("/finance-start", async (context) => {
+  const body = await readBody(
+    context,
+    accountSettingsRoutes.updateFinanceStart,
+    "Choose whether Finance opens on uncategorized expenses.",
+  );
+  if (body instanceof Response) return body;
+  await context.env.DB.prepare(
+    `UPDATE "user" SET "financeOpensUncategorized" = ? WHERE "id" = ?`,
+  )
+    .bind(body.uncategorized ? 1 : 0, context.get("authSession").user.id)
+    .run();
+  return respond(context, accountSettingsRoutes.updateFinanceStart, {
+    uncategorized: body.uncategorized,
+  });
+});
+
 // Triggers record these when Better Auth changes the person's two-factor
 // setting, authenticator, backup codes, password, name or picture (migrations
 // 0082 and 0085). Only the person reads them here; root admins read them in D1.

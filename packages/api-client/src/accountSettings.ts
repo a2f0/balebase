@@ -11,6 +11,14 @@ const endpoints = {
     body: "json",
     response: "json",
   }),
+  updateFinanceStart: endpoint<typeof accountSettingsRoutes.updateFinanceStart>(
+    {
+      method: "PATCH",
+      path: "/api/account-settings/finance-start",
+      body: "json",
+      response: "json",
+    },
+  ),
   securityEvents: endpoint<typeof accountSettingsRoutes.securityEvents>({
     method: "GET",
     path: "/api/account-settings/security-events",
@@ -40,6 +48,12 @@ export function accountSettingsApi(transport: Transport) {
     updateDefaultOrganization(organizationId: string) {
       return transport.call(endpoints.updateDefaultOrganization, {
         body: { organizationId },
+      });
+    },
+    /** Opens the sidebar's Finance on uncategorized expenses, or not. */
+    updateFinanceStart(uncategorized: boolean) {
+      return transport.call(endpoints.updateFinanceStart, {
+        body: { uncategorized },
       });
     },
     /** The signed-in person's latest security and profile changes. */

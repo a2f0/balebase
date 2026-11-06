@@ -16,10 +16,12 @@ import { AccountDeletion } from "./AccountDeletion";
 import { AccountSecurity } from "./AccountSecurity";
 import { AccountSecurityHistory } from "./AccountSecurityHistory";
 import { saveDefaultOrganizationPreference } from "./defaultOrganization";
+import { FinanceStartSetting } from "./FinanceStartSetting";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 
 export function AccountSettings({
   defaultOrganizationId,
+  financeOpensUncategorized,
   onNavigate,
   onSessionChanged,
   organizations,
@@ -27,6 +29,7 @@ export function AccountSettings({
   twoFactorEnabled,
 }: {
   defaultOrganizationId: string | null | undefined;
+  financeOpensUncategorized: boolean;
   onNavigate: (pathname: string) => void;
   onSessionChanged: () => Promise<unknown>;
   organizations: WorkspaceOrganization[];
@@ -79,11 +82,18 @@ export function AccountSettings({
             />
           </>
         ) : (
-          <AccountGeneral
-            defaultOrganizationId={defaultOrganizationId}
-            onSessionChanged={onSessionChanged}
-            organizations={organizations}
-          />
+          <>
+            <AccountGeneral
+              defaultOrganizationId={defaultOrganizationId}
+              onSessionChanged={onSessionChanged}
+              organizations={organizations}
+            />
+            <FinanceStartSetting
+              on={financeOpensUncategorized}
+              onSessionChanged={onSessionChanged}
+            />
+            <AccountDeletion />
+          </>
         )}
       </PageBody>
     </Page>
@@ -193,7 +203,6 @@ function AccountGeneral({
       >
         <ThemeSwitcher className="appearanceTheme" />
       </Card>
-      <AccountDeletion />
     </>
   );
 }

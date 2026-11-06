@@ -23,6 +23,13 @@ export const accountSettingsRoutes = {
     body: z.object({ organizationId: z.string().min(1) }),
     response: z.object({ defaultOrganizationId: z.string() }),
   }),
+  /** Whether the sidebar's Finance opens on uncategorized expenses. */
+  updateFinanceStart: route({
+    method: "PATCH",
+    path: "/api/account-settings/finance-start",
+    body: z.object({ uncategorized: z.boolean() }),
+    response: z.object({ uncategorized: z.boolean() }),
+  }),
   securityEvents: route({
     method: "GET",
     path: "/api/account-settings/security-events",

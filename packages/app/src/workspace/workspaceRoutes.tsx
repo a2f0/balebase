@@ -45,6 +45,7 @@ interface RouteContext {
   user: {
     id: string;
     defaultOrganizationId?: string | null | undefined;
+    financeOpensUncategorized?: boolean | null | undefined;
     twoFactorEnabled?: boolean | null | undefined;
   };
   workspace: {
@@ -197,6 +198,7 @@ const routes: WorkspaceRoute[] = [
     render: ({ navigate, onSecurityChanged, pathname, user, workspace }) => (
       <AccountSettings
         defaultOrganizationId={user.defaultOrganizationId}
+        financeOpensUncategorized={Boolean(user.financeOpensUncategorized)}
         onNavigate={navigate}
         onSessionChanged={onSecurityChanged}
         organizations={workspace.organizations}
