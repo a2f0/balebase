@@ -889,7 +889,9 @@ or a right-click, which also offers **Rename** and **Delete**), opens
 transactions in the chosen period. Categories has the overview's period
 choice (**All time**, **Current year**, **Previous year**, by transaction
 date), shared with the overview, and each row counts the category's
-transactions in that period. **Hide categories with no transactions** leaves
+transactions in that period and sums their amounts as rows show them
+(spending negative, refunds offsetting it, pending included), one amount per
+currency. **Hide categories with no transactions** leaves
 out categories with none in the period and says how many it hides; the choice
 is kept on the device. Deleting a category leaves all of its transactions
 uncategorized, whatever the period. Creating, renaming (with the old and new

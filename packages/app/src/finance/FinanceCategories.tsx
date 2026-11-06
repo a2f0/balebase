@@ -3,6 +3,7 @@ import {
   Card,
   ContextMenu,
   confirmDialog,
+  cx,
   EmptyState,
   Field,
   LoadingState,
@@ -15,6 +16,7 @@ import { financeLimits } from "@balebase/validators/rules";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
+import { type CategoryTotals, periodTotals } from "./categoryYearCounts";
 import {
   periodTransactionCount,
   readHideEmptyCategories,
@@ -22,6 +24,7 @@ import {
   visibleCategories,
 } from "./emptyCategories";
 import { FinancePeriodFilter } from "./FinancePeriodFilter";
+import { formatMoney } from "./financeFormat";
 import { useFinanceSave } from "./financeSave";
 
 export function FinanceCategories({
@@ -246,6 +249,7 @@ function CategoryList({
                 onDelete={onDelete}
                 onRename={onRename}
                 onShowTransactions={onShowTransactions}
+                totals={periodTotals(category.transactionCountsByYear, year)}
                 transactionCount={periodTransactionCount(category, year)}
               />
             ))}
@@ -275,6 +279,7 @@ function CategoryRow({
   onDelete,
   onRename,
   onShowTransactions,
+  totals,
   transactionCount,
 }: {
   busy: boolean;
@@ -282,7 +287,8 @@ function CategoryRow({
   onDelete: (category: ExpenseCategory) => Promise<boolean>;
   onRename: (category: ExpenseCategory, name: string) => Promise<boolean>;
   onShowTransactions: (category: ExpenseCategory) => void;
-  /** Its transactions in the period shown. */
+  /** Its transactions in the period shown, and their sum per currency. */
+  totals: CategoryTotals;
   transactionCount: number;
 }) {
   const [editing, setEditing] = useState(false);
@@ -329,7 +335,7 @@ function CategoryRow({
       label={label}
     >
       {(targetProps, menuButton) => (
-        <li className="row rowInteractive" {...targetProps}>
+        <li className="row rowInteractive financeCategory" {...targetProps}>
           <div className="rowMain">
             <Button
               className="rowTitle rowTarget"
@@ -342,12 +348,44 @@ function CategoryRow({
               {countLabel(transactionCount, "transaction")}
             </span>
           </div>
+          {transactionCount > 0 && <CategoryTotal totals={totals} />}
           <div className="rowActions">
             <MenuButton {...menuButton} label={label} />
           </div>
         </li>
       )}
     </ContextMenu>
+  );
+}
+
+/**
+ * A category's transactions summed as rows show amounts (spending negative),
+ * one amount per currency (named by code, and wrapping onto their own lines
+ * when the row is narrow); a currency that sums to zero shows only when
+ * every one does.
+ */
+function CategoryTotal({ totals }: { totals: CategoryTotals }) {
+  const shown = totals.filter(({ total }) => total !== 0);
+  const amounts = shown.length ? shown : totals.slice(0, 1);
+  return (
+    <span
+      className={cx(
+        "financeAmount",
+        amounts.length === 1 &&
+          (amounts[0]?.total ?? 0) > 0 &&
+          "financeAmountCredit",
+      )}
+    >
+      {amounts.map(({ currencyCode, total }) => (
+        <span key={currencyCode ?? ""}>
+          {formatMoney(
+            total,
+            currencyCode,
+            amounts.length > 1 ? "code" : "narrowSymbol",
+          )}
+        </span>
+      ))}
+    </span>
   );
 }
 
