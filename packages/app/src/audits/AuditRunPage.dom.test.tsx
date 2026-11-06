@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { AuditDetail } from "@balebase/validators/audits";
+import { act } from "react";
 import { installDom } from "../testing/dom";
 import { AuditRunPage } from "./AuditRunPage";
 
@@ -115,6 +116,42 @@ describe("audit save conflicts, mounted", () => {
       responses: { check: "fail" },
       status: "in_progress",
     });
+  });
+});
+
+describe("answering while a save runs, mounted", () => {
+  it("keeps an answer changed while the save was in flight", async () => {
+    const saving = Promise.withResolvers<void>();
+    let reads = 0;
+    respond(async (url, init) => {
+      if (url.href.endsWith("/activity")) {
+        return Response.json({ events: [], nextCursor: null });
+      }
+      if (init?.method === "PATCH") {
+        await saving.promise;
+        return Response.json({
+          status: "in_progress",
+          updatedAt: "2026-10-02T12:01:00.000Z",
+        });
+      }
+      reads += 1;
+      // The save stored "pass"; the reload shows the stored answer.
+      return Response.json(detail(reads === 1 ? 3 : 4, "pass"));
+    });
+    ({ container } = await mount(
+      <AuditRunPage id="run-1" onNavigate={() => {}} />,
+    ));
+    await settle();
+    await click("Save");
+    await click("N/A");
+    await act(async () => saving.resolve());
+    await settle();
+    expect(reads).toBe(2);
+    expect(container.textContent).toContain("Audit saved.");
+    expect(
+      container.querySelector('button[aria-pressed="true"]')?.textContent,
+    ).toBe("N/A");
+    expect(container.textContent).toContain("Unsaved answer");
   });
 });
 
