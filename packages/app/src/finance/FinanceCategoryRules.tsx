@@ -14,7 +14,13 @@ import type {
   ExpenseCategory,
 } from "@balebase/validators/finance";
 import { financeLimits } from "@balebase/validators/rules";
-import { type FormEvent, useCallback, useRef, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
 import { useLoad } from "../shared/useLoad";
@@ -35,22 +41,35 @@ export function FinanceCategoryRules({
   run,
 }: {
   busy: boolean;
-  categories: ExpenseCategory[] | undefined;
+  categories: ExpenseCategory[];
   /** Loading the rules was refused: access ended. */
   onRefused: (cause: unknown) => Promise<void>;
   run: RunChange;
 }) {
   const refusedRef = useRef(onRefused);
   refusedRef.current = onRefused;
+  // Only the newest load, while mounted, may report a refusal: an older or
+  // abandoned one must not clear what Finance shows now.
+  const latest = useRef(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const load = useCallback(async () => {
+    const request = ++latest.current;
     try {
       return (await api.finance.categorizationRules()).rules;
     } catch (cause) {
-      if (refused(cause)) await refusedRef.current(cause);
+      if (refused(cause) && mounted.current && request === latest.current)
+        await refusedRef.current(cause);
       throw cause;
     }
   }, []);
   const rules = useLoad(load, "Could not load the rules.");
+  useCategoryRefresh(categories, rules.reload);
   const change: RunChange = (work) =>
     run(async () => {
       const message = await work();
@@ -59,7 +78,7 @@ export function FinanceCategoryRules({
     });
   return (
     <>
-      {categories && categories.length > 0 && (
+      {categories.length > 0 && (
         <AddRuleForm busy={busy} categories={categories} run={change} />
       )}
       <PageSection
@@ -89,6 +108,24 @@ export function FinanceCategoryRules({
       </PageSection>
     </>
   );
+}
+
+/**
+ * Reloads the rules after a category is renamed or deleted (deleting one
+ * deletes its rules), so none shows a stale name or stays actionable.
+ */
+function useCategoryRefresh(
+  categories: ExpenseCategory[],
+  reload: () => Promise<boolean>,
+) {
+  const key = JSON.stringify(categories.map(({ id, name }) => [id, name]));
+  const first = useRef(key);
+  useEffect(() => {
+    if (key !== first.current) {
+      first.current = key;
+      void reload();
+    }
+  }, [key, reload]);
 }
 
 /**

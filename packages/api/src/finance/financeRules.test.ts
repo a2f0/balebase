@@ -286,6 +286,20 @@ describe("categorization rules", () => {
     fixture.database.run(`INSERT INTO finance_categorization_rules
       (id, organization_id, payee_name, expense_category_id, created_at)
       VALUES ('foreign-rule', 'organization-2', 'Shell', 'foreign-category', '2026')`);
+    // The other organization's own Shell transaction, which its rule matches.
+    fixture.database.run(`INSERT INTO plaid_transactions
+      (id, plaid_transaction_id, organization_id, plaid_item_record_id,
+       account_record_id, name, merchant_name, amount, transaction_date,
+       pending, source_status, updated_at)
+      VALUES ('foreign-txn', 'plaid-foreign-txn', 'organization-2',
+              'item-report', 'account-report', 'SHELL', 'Shell', 30,
+              '2026-08-20', 0, 'active', '2026')`);
+    const before = categories(fixture);
+    const activity = () =>
+      fixture.database
+        .query("SELECT COUNT(*) AS count FROM activity_events")
+        .get();
+    const recorded = activity();
     const listed = await jsonRequest<{ rules: Rule[] }>(
       fixture.app,
       fixture.bindings,
@@ -301,6 +315,13 @@ describe("categorization rules", () => {
         (await jsonRequest(fixture.app, fixture.bindings, path, method)).status,
       ).toBe(404);
     }
+    expect(categories(fixture)).toEqual(before);
+    expect(activity()).toEqual(recorded);
+    expect(
+      fixture.database
+        .query("SELECT COUNT(*) AS count FROM finance_categorization_rules")
+        .get(),
+    ).toEqual({ count: 1 });
     expect(
       (
         await createRule(fixture, {

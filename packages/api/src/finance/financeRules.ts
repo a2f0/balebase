@@ -112,9 +112,10 @@ async function createRule(context: FinanceContext) {
       action: "finance.categorization_rule_created",
       details: `json_object('payeeName', rule.payee_name,
         'categoryId', category.id, 'categoryName', category.name)`,
+      organizationId,
     }),
     ...(input.applyToExisting
-      ? applyStatements(database, actor.userId, now, id)
+      ? applyStatements(database, actor.userId, now, id, organizationId)
       : []),
   ];
   const results = await activityBatch(database, actor.apiKey, statements);
@@ -171,7 +172,13 @@ async function applyRule(context: FinanceContext) {
          WHERE id = ? AND organization_id = ?`,
       )
       .bind(id, organizationId),
-    ...applyStatements(database, actor.userId, new Date().toISOString(), id),
+    ...applyStatements(
+      database,
+      actor.userId,
+      new Date().toISOString(),
+      id,
+      organizationId,
+    ),
   ]);
   if (!results[0]?.results.length) return ruleNotFound(context);
   return respond(context, financeRoutes.applyCategorizationRule, {
@@ -192,18 +199,20 @@ function applyStatements(
   userId: string,
   now: string,
   id: string,
+  organizationId: string,
 ) {
   const rule = `FROM finance_categorization_rules AS rule
-    WHERE rule.id = ?`;
+    WHERE rule.id = ? AND rule.organization_id = ?`;
   return [
     database
       .prepare(`SELECT (SELECT COUNT(*) ${uncategorized}) AS applied ${rule}`)
-      .bind(id),
+      .bind(id, organizationId),
     ruleEvent(database, userId, now, id, {
       action: "finance.categorization_rule_applied",
       details: `json_object('payeeName', rule.payee_name,
         'categoryId', category.id, 'categoryName', category.name,
         'count', (SELECT COUNT(*) ${uncategorized}))`,
+      organizationId,
       when: `EXISTS (SELECT 1 ${uncategorized})`,
     }),
     database
@@ -218,14 +227,14 @@ function applyStatements(
            ON txn.organization_id = rule.organization_id
           AND txn.source_status = 'active'
           AND ${payee} = rule.payee_name
-         WHERE rule.id = ?3
+         WHERE rule.id = ?3 AND rule.organization_id = ?4
          ON CONFLICT(transaction_id) DO UPDATE SET
            expense_category_id = excluded.expense_category_id,
            updated_by = excluded.updated_by,
            updated_at = excluded.updated_at
          WHERE expense_category_id IS NULL`,
       )
-      .bind(userId, now, id),
+      .bind(userId, now, id, organizationId),
   ];
 }
 
@@ -261,7 +270,7 @@ async function deleteRule(context: FinanceContext) {
 /**
  * An event for one stored rule, under its category, labelled and detailed
  * from the rows as the batch reads them. Nothing is recorded when the rule
- * (in `organizationId`, when given) is gone, or `when` does not hold.
+ * is gone or belongs to another organization, or `when` does not hold.
  */
 function ruleEvent(
   database: D1Database,
@@ -272,7 +281,7 @@ function ruleEvent(
     action: string;
     /** A JSON expression over the `rule` and `category` rows. */
     details: string;
-    organizationId?: string;
+    organizationId: string;
     when?: string;
   },
 ) {
@@ -290,17 +299,10 @@ function ruleEvent(
        JOIN finance_expense_categories AS category
          ON category.id = rule.expense_category_id
        JOIN user AS actor ON actor.id = ?
-       WHERE rule.id = ? AND (? IS NULL OR rule.organization_id = ?)
+       WHERE rule.id = ? AND rule.organization_id = ?
          AND ${input.when ?? "1"}`,
     )
-    .bind(
-      input.action,
-      occurredAt,
-      actorId,
-      id,
-      input.organizationId ?? null,
-      input.organizationId ?? null,
-    );
+    .bind(input.action, occurredAt, actorId, id, input.organizationId);
 }
 
 /**

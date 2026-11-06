@@ -111,12 +111,15 @@ export function FinanceCategories({
           onShowTransactions={onShowTransactions}
         />
       </PageSection>
-      <FinanceCategoryRules
-        busy={busy}
-        categories={categories}
-        onRefused={onRefused}
-        run={run}
-      />
+      {/* Gone with the categories when access ends, and loaded afresh. */}
+      {categories && (
+        <FinanceCategoryRules
+          busy={busy}
+          categories={categories}
+          onRefused={onRefused}
+          run={run}
+        />
+      )}
     </>
   );
 }

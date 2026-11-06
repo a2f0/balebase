@@ -55,12 +55,14 @@ function stubApi(initial: CategorizationRule[], status?: number) {
   return writes;
 }
 
-async function render() {
-  const calls = { changed: 0, refused: 0 };
-  const { container } = await mount(
+function page(
+  calls: { changed: number; refused: number },
+  shown: ExpenseCategory[] | undefined,
+) {
+  return (
     <>
       <FinanceCategories
-        categories={categories}
+        categories={shown}
         onChanged={async () => {
           calls.changed++;
         }}
@@ -70,10 +72,23 @@ async function render() {
         onShowTransactions={() => undefined}
       />
       <DialogHost />
-    </>,
+    </>
   );
+}
+
+async function render() {
+  const calls = { changed: 0, refused: 0 };
+  const view = await mount(page(calls, categories));
   await settle();
-  return { calls, container };
+  return {
+    calls,
+    container: view.container,
+    rerender: async (shown: ExpenseCategory[] | undefined) => {
+      await view.render(page(calls, shown));
+      await settle();
+    },
+    unmount: view.unmount,
+  };
 }
 
 function ruleRows(container: HTMLElement) {
@@ -167,6 +182,52 @@ describe("categorization rules", () => {
     });
     expect(container.textContent).toContain("No categorization rules yet");
     expect(calls.changed).toBe(2);
+  });
+
+  it("reports no refusal that arrives after the rules are gone", async () => {
+    const held = Promise.withResolvers<Response>();
+    respond(() => held.promise);
+    const { calls, unmount } = await render();
+    await unmount();
+    held.resolve(Response.json({ error: "Access ended." }, { status: 403 }));
+    await settle();
+    expect(calls.refused).toBe(0);
+  });
+
+  it("goes with the categories when access ends, and loads afresh after", async () => {
+    let lists = 0;
+    respond(() => {
+      lists++;
+      return Response.json({ rules: [rule()] });
+    });
+    const { container, rerender } = await render();
+    expect(ruleRows(container)).toHaveLength(1);
+    await rerender(undefined);
+    expect(container.textContent).not.toContain("Categorization rules");
+    expect(container.textContent).not.toContain("Shell");
+    await rerender(categories);
+    expect(ruleRows(container)).toHaveLength(1);
+    expect(lists).toBe(2);
+  });
+
+  it("reloads the rules when a category is renamed or deleted", async () => {
+    let name = "Fuel";
+    let lists = 0;
+    respond(() => {
+      lists++;
+      return Response.json({
+        rules: [rule({ category: { id: "fuel", name } })],
+      });
+    });
+    const { container, rerender } = await render();
+    expect(ruleRows(container)[0]).toContain("Fuel");
+    // The same categories again, as an unrelated reload sends them.
+    await rerender(categories.map((category) => ({ ...category })));
+    expect(lists).toBe(1);
+    name = "Gas";
+    await rerender([{ ...categories[0], name: "Gas" } as ExpenseCategory]);
+    expect(lists).toBe(2);
+    expect(ruleRows(container)[0]).toContain("Gas");
   });
 
   it("forgets Finance when loading the rules finds access gone", async () => {
