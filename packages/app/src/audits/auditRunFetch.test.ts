@@ -6,14 +6,16 @@ import {
   initialAuditRunFetch,
 } from "./auditRunFetch";
 
+const kept = { keepSince: { exit: "pass" } };
+const reloadOf = (full: boolean) => (full ? kept : null);
 const fetching = (request: number, full: boolean): AuditRunFetch => ({
-  full,
+  reload: reloadOf(full),
   request,
   status: "fetching",
 });
 const failed = (full: boolean): AuditRunFetch => ({
-  full,
   message: "Try again.",
+  reload: reloadOf(full),
   status: "failed",
 });
 
@@ -22,37 +24,37 @@ describe("audit run fetch", () => {
     [
       "starts a full read",
       initialAuditRunFetch,
-      { full: true, request: 1, type: "started" },
+      { reload: kept, request: 1, type: "started" },
       fetching(1, true),
     ],
     [
       "starts an issues read",
       initialAuditRunFetch,
-      { full: false, request: 1, type: "started" },
+      { reload: null, request: 1, type: "started" },
       fetching(1, false),
     ],
     [
       "keeps a replaced full read full",
       fetching(1, true),
-      { full: false, request: 2, type: "started" },
+      { reload: null, request: 2, type: "started" },
       fetching(2, true),
     ],
     [
       "upgrades a replaced issues read",
       fetching(1, false),
-      { full: true, request: 2, type: "started" },
+      { reload: kept, request: 2, type: "started" },
       fetching(2, true),
     ],
     [
       "keeps a failed full read full",
       failed(true),
-      { full: false, request: 2, type: "started" },
+      { reload: null, request: 2, type: "started" },
       fetching(2, true),
     ],
     [
       "reads issues after a failed issues read",
       failed(false),
-      { full: false, request: 2, type: "started" },
+      { reload: null, request: 2, type: "started" },
       fetching(2, false),
     ],
     [
@@ -95,10 +97,20 @@ describe("audit run fetch", () => {
     expect(auditRunFetchTransition(state, event)).toEqual(next);
   });
 
+  it("lets a newer reload's choice win over a pending one", () => {
+    expect(
+      auditRunFetchTransition(fetching(1, true), {
+        reload: {},
+        request: 2,
+        type: "started",
+      }),
+    ).toEqual({ reload: {}, request: 2, status: "fetching" });
+  });
+
   it("lets only the newest read land, still full", () => {
     const events: AuditRunFetchEvent[] = [
-      { full: true, request: 1, type: "started" },
-      { full: false, request: 2, type: "started" },
+      { reload: kept, request: 1, type: "started" },
+      { reload: null, request: 2, type: "started" },
       { request: 1, type: "landed" },
     ];
     expect(

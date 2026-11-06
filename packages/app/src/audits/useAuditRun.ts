@@ -5,6 +5,7 @@ import { errorMessage } from "../shared/errors";
 import {
   type AuditRunFetch,
   type AuditRunFetchEvent,
+  type AuditRunReload,
   auditRunFetchTransition,
   initialAuditRunFetch,
 } from "./auditRunFetch";
@@ -12,18 +13,16 @@ import {
 interface RunState {
   detail: AuditDetail | undefined;
   responses: Record<string, string>;
-  /**
-   * The answers the last save sent, until a full reload lands. Answers stay
-   * editable while it saves and after its reload fails, so the reload keeps
-   * every answer changed since.
-   */
-  sent?: Record<string, string> | undefined;
 }
 
 type RunAction =
   | { deletedAt: string; type: "discarded" }
-  | { responses: Record<string, string>; type: "saveSent" }
-  | { detail: AuditDetail; type: "loaded" }
+  | {
+      detail: AuditDetail;
+      /** Keep answers changed since these (the ones a save sent). */
+      keepSince?: Record<string, string> | undefined;
+      type: "loaded";
+    }
   | { detail: AuditDetail; type: "issuesRefreshed" }
   | { itemId: string; response: string; type: "answered" };
 
@@ -36,10 +35,11 @@ export function runStateReducer(state: RunState, action: RunAction): RunState {
     case "loaded":
       return {
         detail: action.detail,
-        responses: { ...action.detail.audit.responses, ...editedSince(state) },
+        responses: {
+          ...action.detail.audit.responses,
+          ...editedSince(state.responses, action.keepSince),
+        },
       };
-    case "saveSent":
-      return { ...state, sent: action.responses };
     case "issuesRefreshed":
       return {
         ...state,
@@ -68,11 +68,14 @@ export function runStateReducer(state: RunState, action: RunAction): RunState {
   }
 }
 
-/** Answers changed since the last save sent them; none without a save. */
-function editedSince({ responses, sent }: RunState) {
-  if (!sent) return {};
+/** Answers changed since `since`; none without it. */
+function editedSince(
+  responses: Record<string, string>,
+  since: Record<string, string> | undefined,
+) {
+  if (!since) return {};
   return Object.fromEntries(
-    Object.entries(responses).filter(([id, value]) => sent[id] !== value),
+    Object.entries(responses).filter(([id, value]) => since[id] !== value),
   );
 }
 
@@ -80,7 +83,7 @@ function editedSince({ responses, sent }: RunState) {
  * The run and its unsaved answers. The reducer keeps those answers across
  * issue refreshes, so this guards its own reads (`auditRunFetch.ts`): only
  * the newest lands, and an issues refresh that replaces a pending or failed
- * full reload reads as a full one.
+ * reload carries that reload out, keeping what it would have kept.
  */
 export function useAuditRun(id: string) {
   const [{ detail, responses }, dispatch] = useReducer(runStateReducer, {
@@ -100,9 +103,9 @@ export function useAuditRun(id: string) {
   }, []);
 
   const fetchRun = useCallback(
-    async (full: boolean) => {
+    async (reload: AuditRunReload | null) => {
       const request = ++latest.current;
-      send({ full, request, type: "started" });
+      send({ reload, request, type: "started" });
       try {
         const next = await api.audits.getRun(id);
         // Unmounting retires every read in flight (the counter moves on).
@@ -110,10 +113,15 @@ export function useAuditRun(id: string) {
         if (request !== latest.current) return;
         if (state.status !== "fetching" || state.request !== request) return;
         send({ request, type: "landed" });
-        dispatch({
-          detail: next,
-          type: state.full ? "loaded" : "issuesRefreshed",
-        });
+        dispatch(
+          state.reload
+            ? {
+                detail: next,
+                keepSince: state.reload.keepSince,
+                type: "loaded",
+              }
+            : { detail: next, type: "issuesRefreshed" },
+        );
       } catch (cause) {
         if (request !== latest.current) return;
         send({
@@ -125,8 +133,12 @@ export function useAuditRun(id: string) {
     },
     [id, send],
   );
-  const load = useCallback(() => fetchRun(true), [fetchRun]);
-  const refreshIssues = useCallback(() => fetchRun(false), [fetchRun]);
+  /** Reloads the run; without `reload`, unsaved answers are replaced. */
+  const load = useCallback(
+    (reload: AuditRunReload = {}) => fetchRun(reload),
+    [fetchRun],
+  );
+  const refreshIssues = useCallback(() => fetchRun(null), [fetchRun]);
 
   useEffect(() => {
     void load();

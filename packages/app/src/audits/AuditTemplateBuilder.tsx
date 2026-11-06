@@ -277,14 +277,16 @@ function BuilderBody({
   error,
   manageGlobal,
   notice,
-  onChange,
+  onChange: change,
   onNavigate,
   panel,
   template,
 }: {
   /**
    * A save or version load in flight. Its result replaces the form, so the
-   * fields hold still until it lands instead of dropping later edits.
+   * form holds still until it lands instead of dropping later edits: the
+   * fieldset disables the fields, and changes from anywhere else (dragging
+   * or arrow keys on a reorder handle) are ignored.
    */
   busy: boolean;
   error: ErrorNotice | undefined;
@@ -295,6 +297,9 @@ function BuilderBody({
   panel: BuilderSections["panel"];
   template: AuditTemplate;
 }) {
+  const onChange = (next: AuditTemplate) => {
+    if (!busy) change(next);
+  };
   const sections = template.definition.sections;
   const updateSections = (nextSections: AuditTemplateSection[]) =>
     onChange({

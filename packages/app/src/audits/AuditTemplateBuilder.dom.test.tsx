@@ -221,6 +221,21 @@ describe("organization form publication", () => {
       await act(async () => publish?.click());
       // The saved form replaces this one when it lands; no edits meanwhile.
       expect(fields()?.disabled).toBe(true);
+      // Reorder handles sit outside what a fieldset disables.
+      const before = prompts();
+      await press(
+        questions()[0]?.querySelector(".auditDragHandle"),
+        "ArrowDown",
+      );
+      for (const [index, row] of questions().entries()) {
+        row.getBoundingClientRect = () =>
+          ({ height: 100, top: index * 100 }) as DOMRect;
+      }
+      const first = questions()[0]?.querySelector(".auditDragHandle");
+      await pointer(first, "pointerdown", 50);
+      await pointer(first, "pointermove", 260);
+      await pointer(first, "pointerup", 260);
+      expect(prompts()).toEqual(before);
       await act(async () => save.resolve());
       await settle(30);
       expect(fields()?.disabled).toBe(false);

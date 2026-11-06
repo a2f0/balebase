@@ -27,6 +27,7 @@ import {
 } from "./AuditRunHeader";
 import { AuditIssuePanel } from "./AuditRunIssues";
 import { progressFor } from "./auditProgress";
+import type { AuditRunReload } from "./auditRunFetch";
 import { useAuditRun } from "./useAuditRun";
 
 interface AuditRunPageProps {
@@ -41,21 +42,28 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
   const error = action.error ?? loadError;
   const sections = useRunSections();
 
-  /** Runs a change, then reloads the audit so the page shows what was stored. */
-  async function perform(change: () => Promise<unknown>, success: string) {
+  /**
+   * Runs a change, then reloads the audit so the page shows what was stored,
+   * as `reload` says (after a save, keeping answers changed since it).
+   */
+  async function perform(
+    change: () => Promise<unknown>,
+    success: string,
+    reload?: AuditRunReload,
+  ) {
     await run(async () => {
       await change();
-      await load();
+      await load(reload);
     }, success);
   }
 
   async function save(status: "completed" | "in_progress") {
     if (!detail) return;
     const { revision } = detail.audit;
-    dispatch({ responses, type: "saveSent" });
     await perform(
       () => api.audits.saveRun(id, responses, status, revision),
       status === "completed" ? "Audit completed." : "Audit saved.",
+      { keepSince: responses },
     );
   }
 
