@@ -369,6 +369,7 @@ function RuleRow({
               {rule.category.name}
               {rule.uncategorizedCount > 0 &&
                 ` · ${countLabel(rule.uncategorizedCount, "uncategorized transaction")}`}
+              {rule.owner && ` · Created by ${rule.owner.name}`}
             </span>
           </div>
           <div className="rowActions">

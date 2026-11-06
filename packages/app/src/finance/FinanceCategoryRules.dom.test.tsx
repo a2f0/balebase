@@ -21,6 +21,7 @@ function rule(overrides: Partial<CategorizationRule> = {}): CategorizationRule {
     category: { id: "fuel", name: "Fuel" },
     createdAt: "2026-11-05T12:00:00.000Z",
     id: "rule-1",
+    owner: { id: "user-1", name: "Dan Sullivan" },
     payeeName: "Shell",
     uncategorizedCount: 0,
     ...overrides,
@@ -165,6 +166,7 @@ describe("categorization rules", () => {
     ).toBeNull();
     expect(ruleRows(container)).toEqual([expect.stringContaining("Chevron")]);
     expect(ruleRows(container)[0]).toContain("Meals · 2 uncategorized");
+    expect(ruleRows(container)[0]).toContain("Created by Dan Sullivan");
     expect(calls.changed).toBe(1);
   });
 

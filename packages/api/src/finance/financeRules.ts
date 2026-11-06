@@ -58,8 +58,9 @@ async function createRule(context: FinanceContext) {
     database
       .prepare(
         `INSERT OR IGNORE INTO finance_categorization_rules
-           (id, organization_id, payee_name, expense_category_id, created_at)
-         SELECT ?, category.organization_id, ?, category.id, ?
+           (id, organization_id, payee_name, expense_category_id, created_at,
+            created_by)
+         SELECT ?, category.organization_id, ?, category.id, ?, ?
          FROM finance_expense_categories AS category
          WHERE category.id = ? AND category.organization_id = ?
            AND (SELECT COUNT(*) FROM finance_categorization_rules
@@ -69,6 +70,7 @@ async function createRule(context: FinanceContext) {
         id,
         input.payeeName,
         now,
+        actor.userId,
         input.categoryId,
         organizationId,
         organizationId,
@@ -201,12 +203,35 @@ function applyStatements(
          WHERE expense_category_id IS NULL`,
       )
       .bind(userId, now, id, organizationId),
+    // The trigger recorded each change as the person's; name the rule on
+    // them, as an import's do, so each transaction's history shows it.
+    database
+      .prepare(
+        `UPDATE activity_events
+         SET details = json_set(activity_events.details, '$.ruleId', rule.id,
+                                '$.rulePayeeName', rule.payee_name)
+         FROM finance_categorization_rules AS rule
+         WHERE rule.id = ?3 AND rule.organization_id = ?4
+           AND activity_events.root_type = 'finance_transaction'
+           AND activity_events.root_id IN (
+             SELECT txn.id FROM plaid_transactions AS txn
+             WHERE txn.organization_id = rule.organization_id
+               AND ${payee} = rule.payee_name)
+           AND activity_events.organization_id = rule.organization_id
+           AND activity_events.action = 'finance.transaction_categorized'
+           AND activity_events.actor_user_id = ?1
+           AND activity_events.occurred_at = ?2
+           AND json_extract(activity_events.details, '$.after')
+             = rule.expense_category_id
+           AND json_extract(activity_events.details, '$.ruleId') IS NULL`,
+      )
+      .bind(userId, now, id, organizationId),
   ];
 }
 
 /** The count `applyStatements` read, from the batch results that hold it. */
 function appliedCount(results: D1Result[]) {
-  const row = results.at(-3)?.results[0] as { applied: number } | undefined;
+  const row = results.at(-4)?.results[0] as { applied: number } | undefined;
   return row?.applied ?? 0;
 }
 

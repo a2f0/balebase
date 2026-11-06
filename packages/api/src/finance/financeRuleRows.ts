@@ -6,6 +6,8 @@ export interface RuleRow {
   category_name: string;
   created_at: string;
   id: string;
+  owner_id: string | null;
+  owner_name: string | null;
   payee_name: string;
   uncategorized_count: number;
 }
@@ -34,10 +36,12 @@ export function readRules(
     .prepare(
       `SELECT rule.id, rule.payee_name, rule.created_at,
               category.id AS category_id, category.name AS category_name,
+              owner.id AS owner_id, owner.name AS owner_name,
               (SELECT COUNT(*) ${uncategorized}) AS uncategorized_count
        FROM finance_categorization_rules AS rule
        JOIN finance_expense_categories AS category
          ON category.id = rule.expense_category_id
+       LEFT JOIN "user" AS owner ON owner.id = rule.created_by
        WHERE rule.organization_id = ? AND (? IS NULL OR rule.id = ?)
        ORDER BY rule.payee_name`,
     )
@@ -50,6 +54,10 @@ export function toRule(row: RuleRow): CategorizationRule {
     category: { id: row.category_id, name: row.category_name },
     createdAt: row.created_at,
     id: row.id,
+    owner:
+      row.owner_id === null
+        ? null
+        : { id: row.owner_id, name: row.owner_name ?? "" },
     payeeName: row.payee_name,
     uncategorizedCount: row.uncategorized_count,
   };

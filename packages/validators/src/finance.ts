@@ -345,6 +345,8 @@ const CategorizationRuleSchema = z.object({
   category: z.object({ id: z.string(), name: z.string() }),
   createdAt: z.string(),
   id: z.string(),
+  /** Who created the rule; null once that account is deleted. */
+  owner: z.object({ id: z.string(), name: z.string() }).nullable(),
   payeeName: z.string(),
   /** The payee's uncategorized transactions, which applying the rule fills. */
   uncategorizedCount: z.number(),

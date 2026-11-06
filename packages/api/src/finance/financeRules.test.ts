@@ -11,6 +11,7 @@ type Fixture = Awaited<ReturnType<typeof createFixture>>;
 interface Rule {
   category: { id: string; name: string };
   id: string;
+  owner: { id: string; name: string } | null;
   payeeName: string;
   uncategorizedCount: number;
 }
@@ -196,6 +197,30 @@ describe("categorization rules", () => {
         subject_id: created.body.rule.id,
       }),
     ]);
+    // Each filled transaction's own history names the rule; the category
+    // someone chose before does not.
+    const byRule = categorized.filter(
+      ({ details }) => (details as { after?: unknown }).after === fuel,
+    );
+    expect(byRule.map(({ details }) => details)).toEqual(
+      Array(3).fill({
+        after: fuel,
+        afterName: "Fuel",
+        before: null,
+        beforeName: null,
+        ruleId: created.body.rule.id,
+        rulePayeeName: "Shell",
+      }),
+    );
+    expect(
+      categorized.find(
+        ({ details }) => (details as { after?: unknown }).after === meals,
+      )?.details,
+    ).not.toHaveProperty("ruleId");
+    expect(created.body.rule.owner).toEqual({
+      id: "user-1",
+      name: expect.any(String),
+    });
   });
 
   it("applies an existing rule on request and records nothing when nothing is left", async () => {

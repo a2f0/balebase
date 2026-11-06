@@ -645,6 +645,7 @@ describe("Finance filters", () => {
               createdAt: "2026-11-06T12:00:00.000Z",
               id: "rule-1",
               payeeName: "Coffee",
+              owner: null,
               uncategorizedCount: 0,
             },
           },

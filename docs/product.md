@@ -910,7 +910,10 @@ editing (with the previous payee and category), applying (with how many it
 filled), and deleting rules appear under **Expense categories** in Activity.
 Deleting a category deletes its rules, each recorded; transactions a rule
 categorized keep their category when the rule goes. An organization keeps up
-to 500 rules.
+to 500 rules. Each rule names the person who created it (migration `0095`
+took earlier rules' creators from their creation events), shown on its row.
+A transaction's own Activity shows a rule's categorization, whether an import
+or a person applying the rule made it, as **By the rule for “Payee”**.
 
 When a connection stops syncing with an error, such as Plaid's
 `ITEM_LOGIN_REQUIRED` after a bank password or MFA change, **Update login** on
