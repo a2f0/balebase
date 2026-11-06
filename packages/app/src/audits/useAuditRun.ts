@@ -12,10 +12,17 @@ import {
 interface RunState {
   detail: AuditDetail | undefined;
   responses: Record<string, string>;
+  /**
+   * The answers the last save sent, until a full reload lands. Answers stay
+   * editable while it saves and after its reload fails, so the reload keeps
+   * every answer changed since.
+   */
+  sent?: Record<string, string> | undefined;
 }
 
 type RunAction =
   | { deletedAt: string; type: "discarded" }
+  | { responses: Record<string, string>; type: "saveSent" }
   | { detail: AuditDetail; type: "loaded" }
   | { detail: AuditDetail; type: "issuesRefreshed" }
   | { itemId: string; response: string; type: "answered" };
@@ -29,8 +36,10 @@ export function runStateReducer(state: RunState, action: RunAction): RunState {
     case "loaded":
       return {
         detail: action.detail,
-        responses: action.detail.audit.responses,
+        responses: { ...action.detail.audit.responses, ...editedSince(state) },
       };
+    case "saveSent":
+      return { ...state, sent: action.responses };
     case "issuesRefreshed":
       return {
         ...state,
@@ -57,6 +66,14 @@ export function runStateReducer(state: RunState, action: RunAction): RunState {
           }
         : state;
   }
+}
+
+/** Answers changed since the last save sent them; none without a save. */
+function editedSince({ responses, sent }: RunState) {
+  if (!sent) return {};
+  return Object.fromEntries(
+    Object.entries(responses).filter(([id, value]) => sent[id] !== value),
+  );
 }
 
 /**

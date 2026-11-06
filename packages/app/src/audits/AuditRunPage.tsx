@@ -52,6 +52,7 @@ export function AuditRunPage({ id, onNavigate }: AuditRunPageProps) {
   async function save(status: "completed" | "in_progress") {
     if (!detail) return;
     const { revision } = detail.audit;
+    dispatch({ responses, type: "saveSent" });
     await perform(
       () => api.audits.saveRun(id, responses, status, revision),
       status === "completed" ? "Audit completed." : "Audit saved.",

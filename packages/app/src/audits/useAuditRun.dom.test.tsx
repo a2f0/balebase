@@ -116,4 +116,22 @@ describe("audit run reads", () => {
     expect(run().loadError).toBeUndefined();
     expect(run().detail?.audit.revision).toBe(2);
   });
+
+  it("keeps answers given after a saved audit's reload failed", async () => {
+    const reads = heldReads();
+    const run = await mountRun();
+    await release(reads[0], detail(1, "in_progress"));
+    // Saved; then the reload that follows fails.
+    await act(async () => run().dispatch({ responses: {}, type: "saveSent" }));
+    await start(() => run().load());
+    await release(reads[1], new Error("Try again."));
+    await act(async () =>
+      run().dispatch({ itemId: "exit", response: "fail", type: "answered" }),
+    );
+    // Raising an issue refreshes; it reads the whole audit again.
+    await start(() => run().refreshIssues());
+    await release(reads[2], detail(2, "in_progress", ["Exit blocked"]));
+    expect(run().detail?.audit.revision).toBe(2);
+    expect(run().responses).toEqual({ exit: "fail" });
+  });
 });
