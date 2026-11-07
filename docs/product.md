@@ -832,6 +832,16 @@ all imported history. Scrolling near the end shows the next 250 matches,
 keeping earlier rows and annotation forms visible. **Load more transactions**
 also shows them by hand; changing filters starts a fresh list.
 
+**Money in** and **Money out**, above the list at the right, total every
+transaction the selected filters match, including rows not yet shown. They
+stay the same when switching between transactions and payees. Incoming and
+outgoing amounts are shown separately as positive amounts, grouped by currency
+(unknown currencies are labelled, never combined with a known currency).
+Pending transactions and transfers count when they match the filters; these
+are transaction totals, not the posted-spending totals in Reports. Empty
+results show zero without a currency; totals stay hidden until transactions
+have loaded.
+
 **By payee**, beside **Transactions** in the toolbar, groups every transaction
 the filters match (not only the rows shown) by the same name **Show only**
 uses. Each payee shows its count, latest date, pending count, and total (or

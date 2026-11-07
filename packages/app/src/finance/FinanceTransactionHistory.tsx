@@ -52,6 +52,7 @@ import {
   TransactionSelectionBar,
   useTransactionSelection,
 } from "./FinanceTransactionSelection";
+import { FinanceTransactionTotals } from "./FinanceTransactionTotals";
 import { formatMoney } from "./financeFormat";
 import type { CreateRule } from "./financeRuleAction";
 import { groupByPayee, type PayeeGroup, transactionTitle } from "./payeeGroups";
@@ -137,6 +138,7 @@ export function FinanceTransactionHistory({
         <TransactionSummary
           accountName={accountName}
           label={summaryLabel(matching, payees, visible)}
+          matching={matching}
           onClearFilter={onClearFilter}
         />
       }
@@ -256,10 +258,12 @@ function CategorySetupBanner({
 function TransactionSummary({
   accountName,
   label,
+  matching,
   onClearFilter,
 }: {
   accountName: string | undefined;
   label: string;
+  matching: FinanceTransaction[] | undefined;
   onClearFilter: () => void;
 }) {
   return (
@@ -273,6 +277,7 @@ function TransactionSummary({
           All accounts
         </Button>
       )}
+      {matching && <FinanceTransactionTotals matching={matching} />}
     </div>
   );
 }
