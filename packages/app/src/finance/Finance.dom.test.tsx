@@ -181,6 +181,11 @@ function rowNames() {
     (row) => row.textContent,
   );
 }
+function moneyTotals() {
+  return [...container.querySelectorAll(".financeTransactionTotals dd")].map(
+    (amount) => amount.textContent,
+  );
+}
 /** Opens a transaction row's menu from its menu button. */
 async function openRowMenu(name: string) {
   const trigger = container.querySelector<HTMLButtonElement>(
@@ -270,9 +275,11 @@ describe("Finance filters", () => {
       "Refund",
       "Old",
     ]);
+    expect(moneyTotals()).toEqual(["$5.00", "$50.00"]);
     await click("Checking");
     expect(selectedAccounts()).toEqual(["Checking"]);
     expect(rowNames()).toEqual(["Fuel"]);
+    expect(moneyTotals()).toEqual(["$0.00", "$10.00"]);
     await click("Savings", true);
     expect(selectedAccounts()).toEqual(["Checking", "Savings"]);
     await click("Current year");
@@ -280,18 +287,21 @@ describe("Finance filters", () => {
     expect(currentPath).toBe("/finance/expenses/category/uncategorized");
     // Uncategorized expenses leave out categorized rows, transfers, and refunds.
     expect(rowNames()).toEqual(["Fuel", "Rent"]);
+    expect(moneyTotals()).toEqual(["$0.00", "$20.00"]);
     await click("Checking", true);
     expect(rowNames()).toEqual(["Rent"]);
     await click("Previous year");
     expect(button("Current year").getAttribute("aria-pressed")).toBe("false");
     expect(button("Previous year").getAttribute("aria-pressed")).toBe("true");
     expect(rowNames()).toEqual([]);
+    expect(moneyTotals()).toEqual(["0.00", "0.00"]);
     await click("All accounts");
     expect(selectedAccounts()).toEqual([]);
     expect(rowNames()).toEqual(["Old"]);
     await click("Clear filters");
     expect(currentPath).toBe("/finance");
     expect(rowNames()).toHaveLength(6);
+    expect(moneyTotals()).toEqual(["$5.00", "$50.00"]);
     expect(button("All time").getAttribute("aria-pressed")).toBe("true");
     expect(button("Uncategorized expenses").getAttribute("aria-pressed")).toBe(
       "false",
@@ -314,16 +324,48 @@ describe("Finance filters", () => {
     await mountFinance();
     expect(rowNames()).toHaveLength(250);
     expect(container.textContent).toContain("250 of 300 shown");
+    expect(moneyTotals()).toEqual(["$0.00", "$3,000.00"]);
     await act(async () => IntersectionObserverFixture.intersect());
     expect(rowNames()).toHaveLength(300);
     expect(container.textContent).toContain("300 shown");
+    expect(moneyTotals()).toEqual(["$0.00", "$3,000.00"]);
     expect(container.textContent).not.toContain("Load more transactions");
     await click("Previous year");
     expect(rowNames()).toHaveLength(250);
     expect(container.textContent).toContain("250 of 299 shown");
+    expect(moneyTotals()).toEqual(["$0.00", "$2,990.00"]);
     await click("All time");
     expect(rowNames()).toHaveLength(250);
     expect(requests).toBe(2);
+  });
+
+  it("keeps currencies separate and includes pending rows in money in and out", async () => {
+    respond(() =>
+      Response.json({
+        ...data,
+        transactions: [
+          transaction("Charge", { amount: 0.1 }),
+          transaction("Pending charge", { amount: 0.2, pending: true }),
+          transaction("Refund", { amount: -0.3 }),
+          transaction("Deposit", { amount: -40, currencyCode: "CAD" }),
+          transaction("Transfer", {
+            amount: 12.5,
+            categoryPrimary: "TRANSFER_OUT",
+            currencyCode: "CAD",
+          }),
+          transaction("Unknown", { amount: 7, currencyCode: null }),
+        ],
+      }),
+    );
+    await mountFinance();
+    expect(moneyTotals()).toEqual([
+      "0.00 (unknown currency)",
+      "CAD\u00a040.00",
+      "USD\u00a00.30",
+      "7.00 (unknown currency)",
+      "CAD\u00a012.50",
+      "USD\u00a00.30",
+    ]);
   });
 
   it("keeps scrolling after filters change past a place already reached", async () => {
@@ -381,6 +423,7 @@ describe("Finance filters", () => {
     ]);
     expect(rowNames()).toEqual([]);
     expect(container.textContent).toContain("2 payees · 263 transactions");
+    expect(moneyTotals()).toEqual(["$0.00", "$2,645.50"]);
     expect(container.textContent).toContain("1 pending");
     expect(container.textContent).toContain("-$25.50");
     // Uncategorized expenses leave out categorized and pending rows.
@@ -395,6 +438,7 @@ describe("Finance filters", () => {
       ["Olive Garden", "1 transaction"],
     ]);
     expect(container.textContent).toContain("2 payees · 255 transactions");
+    expect(moneyTotals()).toEqual(["$0.00", "$2,565.50"]);
     // Choosing a payee lists its transactions under the same filters.
     const name = container.querySelector<HTMLButtonElement>(
       '[aria-label="Show transactions for Shell"]',
@@ -405,6 +449,7 @@ describe("Finance filters", () => {
     expect(button("Name: Shell").getAttribute("aria-pressed")).toBe("true");
     expect(new Set(rowNames())).toEqual(new Set(["Shell"]));
     expect(container.textContent).toContain("250 of 254 shown");
+    expect(moneyTotals()).toEqual(["$0.00", "$2,540.00"]);
   });
 
   it("opens transactions grouped by payee when the person chose it", async () => {
