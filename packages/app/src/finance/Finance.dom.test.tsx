@@ -354,6 +354,9 @@ describe("Finance filters", () => {
             currencyCode: "CAD",
           }),
           transaction("Unknown", { amount: 7, currencyCode: null }),
+          transaction("Blank currency", { amount: 0.5, currencyCode: "" }),
+          transaction("Dinar refund", { amount: -1.234, currencyCode: "KWD" }),
+          transaction("Dinar charge", { amount: 5.678, currencyCode: "KWD" }),
         ],
       }),
     );
@@ -361,9 +364,11 @@ describe("Finance filters", () => {
     expect(moneyTotals()).toEqual([
       "0.00 (unknown currency)",
       "CAD\u00a040.00",
+      "KWD\u00a01.234",
       "USD\u00a00.30",
-      "7.00 (unknown currency)",
+      "7.50 (unknown currency)",
       "CAD\u00a012.50",
+      "KWD\u00a05.678",
       "USD\u00a00.30",
     ]);
   });
@@ -990,8 +995,10 @@ describe("Finance filters", () => {
     await navigate("/finance");
     expect(container.textContent).toContain("Loading finances");
     expect(container.textContent).not.toContain("No transactions imported yet");
+    expect(moneyTotals()).toEqual([]);
     await act(async () => download.resolve());
     expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    expect(moneyTotals()).toEqual(["$0.00", "$20.00"]);
   });
 
   it("shows the saved copy at once, not an empty history, while a stalled refresh waits", async () => {

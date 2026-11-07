@@ -11,7 +11,6 @@ export function FinanceTransactionTotals({
   const totals = useMemo(() => totalsByCurrency(matching), [matching]);
   return (
     <dl
-      aria-label="Filtered transaction totals"
       aria-live="polite"
       aria-atomic="true"
       className="financeTransactionTotals"
@@ -23,7 +22,7 @@ export function FinanceTransactionTotals({
             totals.map(([currency, amounts]) => (
               <dd key={currency ?? ""}>
                 {formatMoney(
-                  amounts[direction] / 100,
+                  amounts[direction],
                   currency,
                   totals.length > 1 ? "code" : "narrowSymbol",
                 )}
@@ -42,13 +41,15 @@ export function FinanceTransactionTotals({
 function totalsByCurrency(transactions: FinanceTransaction[]) {
   const totals = new Map<string | null, { in: number; out: number }>();
   for (const { amount, currencyCode } of transactions) {
-    let total = totals.get(currencyCode);
+    const currency = currencyCode || null;
+    let total = totals.get(currency);
     if (!total) {
       total = { in: 0, out: 0 };
-      totals.set(currencyCode, total);
+      totals.set(currency, total);
     }
-    // Plaid uses positive amounts for money out. Sum cents, not floats.
-    total[amount < 0 ? "in" : "out"] += Math.round(Math.abs(amount) * 100);
+    // Plaid uses positive amounts for money out. Leave precision to the
+    // currency formatter, including currencies with three decimal places.
+    total[amount < 0 ? "in" : "out"] += Math.abs(amount);
   }
   return [...totals].sort(([a], [b]) => (a ?? "").localeCompare(b ?? ""));
 }

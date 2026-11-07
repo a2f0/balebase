@@ -839,7 +839,8 @@ outgoing amounts are shown separately as positive amounts, grouped by currency
 (unknown currencies are labelled, never combined with a known currency).
 Pending transactions and transfers count when they match the filters; these
 are transaction totals, not the posted-spending totals in Reports. Empty
-results show zero; totals stay hidden until transactions have loaded.
+results show zero without a currency; totals stay hidden until transactions
+have loaded.
 
 **By payee**, beside **Transactions** in the toolbar, groups every transaction
 the filters match (not only the rows shown) by the same name **Show only**
