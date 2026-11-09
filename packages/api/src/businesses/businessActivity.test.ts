@@ -250,8 +250,108 @@ describe("business activity", () => {
         .status,
     ).toBe(500);
     expect((await owner("DELETE", `/api/businesses/${id}`)).status).toBe(500);
-    expect(fixture.database.query("SELECT name FROM businesses").all()).toEqual(
-      [{ name: "Acme" }],
+    expect(
+      fixture.database.query("SELECT name, deleted_at FROM businesses").all(),
+    ).toEqual([{ deleted_at: null, name: "Acme" }]);
+  });
+
+  it("hides a deleted business until a manager restores it, keeping its identifiers", async () => {
+    const fixture = libraryFixture();
+    const owner = fixture.as("owner-user");
+    const member = fixture.as("member-user");
+    const id = await createAcme(fixture);
+    const path = `/api/businesses/${id}`;
+
+    expect((await owner("DELETE", path)).status).toBe(204);
+    expect(
+      (await member<{ businesses: unknown[] }>("GET", "/api/businesses")).body
+        .businesses,
+    ).toEqual([]);
+    for (const [method, route] of [
+      ["GET", path],
+      ["GET", `${path}/activity`],
+      ["PATCH", path],
+    ] as const) {
+      expect((await owner(method, route, { name: "Hidden" })).status).toBe(404);
+    }
+    const deleted = await member<{
+      businesses: Array<{ deletedBy: { id: string } | null; id: string }>;
+      canManage: boolean;
+    }>("GET", "/api/businesses/deleted");
+    expect(deleted.body).toMatchObject({
+      businesses: [
+        {
+          deletedAt: expect.any(String),
+          deletedBy: { id: "owner-user" },
+          ein: acme.ein,
+          id,
+          name: "Acme",
+        },
+      ],
+      canManage: false,
+    });
+    expect(
+      (await fixture.as("other-user")("GET", "/api/businesses/deleted")).body,
+    ).toMatchObject({ businesses: [] });
+
+    // The deleted business keeps its identifiers, so a new one cannot take
+    // them and is pointed to restoring it instead.
+    for (const [body, identifier] of [
+      [{ ein: acme.ein, name: "Acme again" }, "EIN"],
+      [{ duns: acme.duns, name: "Acme again" }, "DUNS number"],
+    ] as const) {
+      expect(await owner("POST", "/api/businesses", body)).toMatchObject({
+        body: {
+          error: `A deleted business has that ${identifier}. Restore it from Deleted businesses.`,
+        },
+        status: 409,
+      });
+    }
+
+    expect((await member("POST", `${path}/restore`)).status).toBe(403);
+    expect(
+      (await fixture.as("other-user")("POST", `${path}/restore`)).status,
+    ).toBe(404);
+    const restored = await owner<{ business: { id: string; name: string } }>(
+      "POST",
+      `${path}/restore`,
     );
+    expect(restored).toMatchObject({
+      body: { business: { id, name: "Acme" } },
+      status: 200,
+    });
+    // A repeated restore, like a repeated delete, finds nothing to change.
+    expect((await owner("POST", `${path}/restore`)).status).toBe(404);
+    expect(
+      (
+        await member<{ businesses: unknown[] }>(
+          "GET",
+          "/api/businesses/deleted",
+        )
+      ).body.businesses,
+    ).toEqual([]);
+    expect(
+      (await owner("POST", "/api/businesses", { ein: acme.ein, name: "Dup" }))
+        .body,
+    ).toEqual({ error: "A business with that EIN already exists." });
+
+    expect(
+      fixture
+        .events("root_type = 'business'")
+        .map(({ action, actor_user_id, details }) => [
+          action,
+          actor_user_id,
+          Reflect.get(details, "ein"),
+        ]),
+    ).toEqual([
+      ["business.created", "owner-user", "•••4321"],
+      ["business.deleted", "owner-user", "•••4321"],
+      ["business.restored", "owner-user", "•••4321"],
+    ]);
+    expect(
+      (await member<Page>("GET", `${path}/activity`)).body.events.map(
+        ({ action }) => action,
+      ),
+    ).toEqual(["business.restored", "business.deleted", "business.created"]);
   });
 });

@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
-import { calendarDate, optionalText, requiredText } from "./fields";
+import {
+  calendarDate,
+  optionalText,
+  PersonSchema,
+  requiredText,
+} from "./fields";
 import { route } from "./route";
 import { businessLimits } from "./rules";
 
@@ -77,6 +82,13 @@ const BusinessDetailSchema = z.object({
 
 const BusinessResponseSchema = z.object({ business: BusinessSchema });
 
+/** A deleted business, hidden from the list until it is restored. */
+const DeletedBusinessSchema = BusinessSchema.extend({
+  deletedAt: z.string(),
+  deletedBy: PersonSchema.nullable(),
+});
+export type DeletedBusiness = z.infer<typeof DeletedBusinessSchema>;
+
 export const businessesRoutes = {
   list: route({
     method: "GET",
@@ -106,9 +118,27 @@ export const businessesRoutes = {
     body: BusinessInputSchema,
     response: BusinessResponseSchema,
   }),
+  /**
+   * Hides the business; its history stays, and it keeps its EIN and DUNS
+   * number, so restoring brings it back as it was.
+   */
   delete: route({
     method: "DELETE",
     path: "/api/businesses/:id",
     response: "empty",
+  }),
+  /** Deleted businesses, most recently deleted first. */
+  listDeleted: route({
+    method: "GET",
+    path: "/api/businesses/deleted",
+    response: z.object({
+      businesses: z.array(DeletedBusinessSchema),
+      canManage: z.boolean(),
+    }),
+  }),
+  restore: route({
+    method: "POST",
+    path: "/api/businesses/:id/restore",
+    response: BusinessResponseSchema,
   }),
 };

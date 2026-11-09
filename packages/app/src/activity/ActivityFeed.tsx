@@ -90,6 +90,7 @@ const actionLabels: Record<string, string> = {
   "audit.answer_changed": "changed an answer",
   "business.created": "added a business",
   "business.deleted": "deleted a business",
+  "business.restored": "restored a business",
   "business.updated": "edited a business",
   "inbox.email_archived": "archived an email",
   "inbox.email_linked": "linked an email",

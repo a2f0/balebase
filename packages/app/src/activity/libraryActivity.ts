@@ -67,6 +67,7 @@ export function libraryActivitySummary(event: ActivityEvent) {
       return emailPurgeSummary(event);
     case "business.created":
     case "business.deleted":
+    case "business.restored":
       return businessSnapshot(details);
     case "business.updated":
       return businessChanges(details.changes);

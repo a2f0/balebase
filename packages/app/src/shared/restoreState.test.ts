@@ -1,33 +1,26 @@
 import { describe, expect, it } from "bun:test";
 import {
-  type DeletedEquipmentEvent,
-  type DeletedEquipmentState,
-  deletedEquipmentTransition,
-  initialDeletedEquipment,
-} from "./deletedEquipmentState";
+  initialRestore,
+  type RestoreEvent,
+  type RestoreState,
+  restoreTransition,
+} from "./restoreState";
 
-const idle: DeletedEquipmentState = { status: "idle" };
-const restoring: DeletedEquipmentState = { request: 1, status: "restoring" };
-const restored: DeletedEquipmentState = { id: "laptop", status: "restored" };
-const failed: DeletedEquipmentState = { error: "Gone.", status: "failed" };
+const idle: RestoreState = { status: "idle" };
+const restoring: RestoreState = { request: 1, status: "restoring" };
+const restored: RestoreState = { id: "laptop", status: "restored" };
+const failed: RestoreState = { error: "Gone.", status: "failed" };
 
-function run(state: DeletedEquipmentState, ...events: DeletedEquipmentEvent[]) {
-  return events.reduce(deletedEquipmentTransition, state);
+function run(state: RestoreState, ...events: RestoreEvent[]) {
+  return events.reduce(restoreTransition, state);
 }
 
-describe("deletedEquipmentTransition", () => {
+describe("restoreTransition", () => {
   it("starts idle", () => {
-    expect(initialDeletedEquipment).toEqual(idle);
+    expect(initialRestore).toEqual(idle);
   });
 
-  it.each<
-    [
-      string,
-      DeletedEquipmentState,
-      DeletedEquipmentEvent,
-      DeletedEquipmentState,
-    ]
-  >([
+  it.each<[string, RestoreState, RestoreEvent, RestoreState]>([
     [
       "starts a restore",
       idle,
@@ -53,10 +46,10 @@ describe("deletedEquipmentTransition", () => {
       failed,
     ],
   ])("%s", (_name, state, event, next) => {
-    expect(deletedEquipmentTransition(state, event)).toEqual(next);
+    expect(restoreTransition(state, event)).toEqual(next);
   });
 
-  it.each<[string, DeletedEquipmentState, DeletedEquipmentEvent]>([
+  it.each<[string, RestoreState, RestoreEvent]>([
     ["a second restore", restoring, { request: 2, type: "restoreStarted" }],
     [
       "a restore once one succeeded",
@@ -79,12 +72,12 @@ describe("deletedEquipmentTransition", () => {
       { id: "laptop", request: 1, type: "restoreSucceeded" },
     ],
     [
-      "a failure after the item opened",
+      "a failure after the record opened",
       restored,
       { error: "Gone.", request: 1, type: "restoreFailed" },
     ],
   ])("ignores %s", (_name, state, event) => {
-    expect(deletedEquipmentTransition(state, event)).toBe(state);
+    expect(restoreTransition(state, event)).toBe(state);
   });
 
   it("lets only the latest request finish after a retry", () => {
@@ -100,8 +93,8 @@ describe("deletedEquipmentTransition", () => {
   });
 
   it("rejects an unknown event", () => {
-    expect(() =>
-      deletedEquipmentTransition(idle, { type: "unknown" } as never),
-    ).toThrow("Unknown deleted equipment event");
+    expect(() => restoreTransition(idle, { type: "unknown" } as never)).toThrow(
+      "Unknown restore event",
+    );
   });
 });

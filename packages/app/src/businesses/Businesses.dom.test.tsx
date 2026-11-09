@@ -12,11 +12,20 @@ const {
   fill,
   mount,
   queryButton,
-  respond,
+  respond: respondTo,
   settle,
   stubClipboard,
   window: dom,
 } = installDom({ url: "http://localhost:5173/businesses" });
+
+/** Stubs `fetch` with `handler`, with no deleted businesses to list. */
+function respond(handler: Parameters<typeof respondTo>[0]) {
+  respondTo(async (url, init) =>
+    url.pathname === "/api/businesses/deleted"
+      ? Response.json({ businesses: [], canManage: true })
+      : handler(url, init),
+  );
+}
 
 function business(id: string, name: string): Business {
   return {
@@ -33,6 +42,8 @@ function business(id: string, name: string): Business {
     zip: null,
   };
 }
+
+const deletedBy = { email: "owner@example.com", id: "owner", name: "Olivia" };
 
 /** Serves the listing, and answers each create with `createResponse`. */
 function stubApi(
@@ -71,10 +82,21 @@ function page(container: HTMLElement) {
     [...container.querySelectorAll("form")].find((element) =>
       element.textContent?.includes("Add a business"),
     );
+  const section = (title: string) =>
+    [...container.querySelectorAll<HTMLElement>("section.pageSection")].find(
+      (element) =>
+        element.querySelector(".sectionTitle")?.textContent === title,
+    );
+  const listed = () => [
+    ...(section("Organization businesses")?.querySelectorAll<HTMLElement>(
+      ".rowList > li",
+    ) ?? []),
+  ];
   return {
     addButton: () =>
       queryButton("Add business", container.querySelector(".pageActions")),
     cancelButton: () => queryButton("Cancel", form()),
+    deleted: () => section("Deleted businesses")?.textContent,
     form,
     labelled: (label: string) =>
       container.querySelector<HTMLButtonElement>(
@@ -84,9 +106,8 @@ function page(container: HTMLElement) {
       form()?.querySelector<HTMLInputElement>(
         'input[placeholder="Acme, Inc."]',
       ) ?? null,
-    rows: () => container.querySelectorAll(".rowList > li").length,
-    row: (index = 0) =>
-      container.querySelectorAll<HTMLElement>(".rowList > li")[index],
+    rows: () => listed().length,
+    row: (index = 0) => listed()[index],
     submitButton: () =>
       form()?.querySelector<HTMLButtonElement>('button[type="submit"]'),
     text: () => container.textContent ?? "",
@@ -517,17 +538,23 @@ describe("deleting a business", () => {
     );
   }
 
-  it("asks in the app's dialog, and deletes only once confirmed", async () => {
+  it("asks in the app's dialog, and lists the business as deleted once confirmed", async () => {
+    const acme = business("b1", "Acme, Inc.");
     const deletes: string[] = [];
-    respond(async (url, init) => {
+    respondTo(async (url, init) => {
       if (init?.method === "DELETE") {
         deletes.push(url.href);
         return new Response(null, { status: 204 });
       }
-      return Response.json({
-        businesses: [business("b1", "Acme, Inc.")],
-        canManage: true,
-      });
+      if (url.pathname === "/api/businesses/deleted") {
+        return Response.json({
+          businesses: deletes.length
+            ? [{ ...acme, deletedAt: "2026-10-20T00:00:00.000Z", deletedBy }]
+            : [],
+          canManage: true,
+        });
+      }
+      return Response.json({ businesses: [acme], canManage: true });
     });
     const view = await mountPage();
     await click(queryButton("Actions for Acme, Inc.", document));
@@ -543,17 +570,53 @@ describe("deleting a business", () => {
     );
     const dialog = document.querySelector("dialog[open]");
     expect(dialog?.textContent).toContain("Delete Acme, Inc.?");
-    expect(dialog?.textContent).toContain("This can't be undone.");
+    expect(dialog?.textContent).toContain(
+      "An owner or admin can restore it from Deleted businesses.",
+    );
     await answer("Cancel");
     expect(document.querySelector("dialog[open]")).toBeNull();
     expect(deletes).toEqual([]);
     expect(view.rows()).toBe(1);
+    expect(view.deleted()).toBeUndefined();
 
     await choose("Delete");
     await answer("Delete business");
     expect(deletes).toEqual([expect.stringContaining("/api/businesses/b1")]);
     expect(view.rows()).toBe(0);
     expect(view.text()).toContain("Business deleted.");
+    expect(view.deleted()).toContain("Acme, Inc.");
+    expect(view.deleted()).toContain(`by ${deletedBy.name}`);
+  });
+
+  it("restores a deleted business and opens it", async () => {
+    const requests: string[] = [];
+    const oldCo = business("b9", "Old Co");
+    respondTo(async (url, init) => {
+      requests.push(`${init?.method ?? "GET"} ${url.pathname}`);
+      if (url.pathname === "/api/businesses/deleted") {
+        return Response.json({
+          businesses: [
+            { ...oldCo, deletedAt: "2026-10-20T00:00:00.000Z", deletedBy },
+          ],
+          canManage: true,
+        });
+      }
+      if (url.pathname === "/api/businesses/b9/restore") {
+        return Response.json({ business: oldCo });
+      }
+      return Response.json({ businesses: [], canManage: true });
+    });
+    const visited: string[] = [];
+    await mountPage((pathname) => visited.push(pathname));
+    await click(queryButton("Actions for Old Co", document));
+    await click(
+      [...document.querySelectorAll('[role="menuitem"]')].find(
+        (element) => element.textContent === "Restore",
+      ),
+    );
+    await settle();
+    expect(requests).toContain("POST /api/businesses/b9/restore");
+    expect(visited).toEqual(["/businesses/b9"]);
   });
 
   it("locks the row while deleting, and reopens it after a failure", async () => {

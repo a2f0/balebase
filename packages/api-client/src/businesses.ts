@@ -38,6 +38,16 @@ const endpoints = {
     path: "/api/businesses/:id",
     response: "empty",
   }),
+  listDeleted: endpoint<typeof businessesRoutes.listDeleted>({
+    method: "GET",
+    path: "/api/businesses/deleted",
+    response: "json",
+  }),
+  restore: endpoint<typeof businessesRoutes.restore>({
+    method: "POST",
+    path: "/api/businesses/:id/restore",
+    response: "json",
+  }),
 };
 
 export function businessesApi(transport: Transport) {
@@ -64,8 +74,18 @@ export function businessesApi(transport: Transport) {
         params: { id },
       });
     },
+    /** Hides the business until a manager restores it. */
     delete(id: string) {
       return transport.call(endpoints.delete, { params: { id } });
+    },
+    listDeleted() {
+      return transport.call(endpoints.listDeleted);
+    },
+    async restore(id: string) {
+      const { business } = await transport.call(endpoints.restore, {
+        params: { id },
+      });
+      return business;
     },
   };
 }

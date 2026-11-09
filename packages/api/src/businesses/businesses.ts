@@ -1,6 +1,7 @@
 import {
   type Business,
   businessesRoutes,
+  type DeletedBusiness,
 } from "@balebase/validators/businesses";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
@@ -30,6 +31,13 @@ interface BusinessRow {
   zip: string | null;
 }
 
+interface DeletedBusinessRow extends BusinessRow {
+  deleted_at: string;
+  deleter_email: string | null;
+  deleter_id: string | null;
+  deleter_name: string | null;
+}
+
 type BusinessContext = Context<ApiEnv>;
 
 const invalidBusinessMessage =
@@ -43,16 +51,34 @@ const requireBusinessManager = requireManager(
 
 businesses.get("/", async (context) => {
   const result = await context.env.DB.prepare(
-    `SELECT id, name, ein, duns, incorporation_date, street_address, city,
-            state, zip, created_at, updated_at
+    `SELECT ${businessSelect}
      FROM businesses
-     WHERE organization_id = ?
+     WHERE organization_id = ? AND deleted_at IS NULL
      ORDER BY created_at DESC, id DESC`,
   )
     .bind(context.get("organizationId"))
     .all<BusinessRow>();
   return respond(context, businessesRoutes.list, {
     businesses: result.results.map(businessResponse),
+    canManage: canManage(context),
+  });
+});
+
+businesses.get("/deleted", async (context) => {
+  const result = await context.env.DB.prepare(
+    `SELECT ${businessSelect}, businesses.deleted_at,
+            deleter.id AS deleter_id, deleter.name AS deleter_name,
+            deleter.email AS deleter_email
+     FROM businesses
+     LEFT JOIN user AS deleter ON deleter.id = businesses.deleted_by_user_id
+     WHERE businesses.organization_id = ?
+       AND businesses.deleted_at IS NOT NULL
+     ORDER BY businesses.deleted_at DESC, businesses.id DESC`,
+  )
+    .bind(context.get("organizationId"))
+    .all<DeletedBusinessRow>();
+  return respond(context, businessesRoutes.listDeleted, {
+    businesses: result.results.map(deletedBusinessResponse),
     canManage: canManage(context),
   });
 });
@@ -106,7 +132,7 @@ businesses.post("/", requireBusinessManager, async (context) => {
         timestamp,
         timestamp,
       ),
-    businessEvent(context, id, "business.created"),
+    businessEvent(context, id, "business.created", "live"),
   ]);
   if (!result?.meta.changes) {
     return (
@@ -177,7 +203,7 @@ businesses.patch("/:id", requireBusinessManager, async (context) => {
   // identifier (ignored) or a concurrent change records nothing.
   const asRead = {
     bindings: [id, organizationId, ...businessColumns.map((c) => existing[c])],
-    sql: `id = ? AND organization_id = ?
+    sql: `id = ? AND organization_id = ? AND deleted_at IS NULL
       ${businessColumns.map((column) => `AND ${column} IS ?`).join(" ")}`,
   };
   const [result] = await activityBatch(database, context.get("apiKey"), [
@@ -228,21 +254,54 @@ businesses.patch("/:id", requireBusinessManager, async (context) => {
   });
 });
 
+// Deleting hides the business: its history stays for a restore, and it keeps
+// its EIN and DUNS number, so no other business takes them meanwhile.
 businesses.delete("/:id", requireBusinessManager, async (context) => {
   const id = context.req.param("id");
   const database = context.env.DB;
-  // The event snapshots the row this batch deletes; the history stays until
-  // the organization is purged.
+  // The event snapshots the business this batch hides, so a repeated or
+  // racing delete records nothing.
   const [, result] = await activityBatch(database, context.get("apiKey"), [
-    businessEvent(context, id, "business.deleted"),
+    businessEvent(context, id, "business.deleted", "live"),
     database
-      .prepare(`DELETE FROM businesses WHERE id = ? AND organization_id = ?`)
-      .bind(id, context.get("organizationId")),
+      .prepare(
+        `UPDATE businesses SET deleted_at = ?, deleted_by_user_id = ?
+         WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`,
+      )
+      .bind(
+        new Date().toISOString(),
+        context.get("authSession").user.id,
+        id,
+        context.get("organizationId"),
+      ),
   ]);
   if (!result?.meta.changes) {
     return context.json({ error: "Business not found." }, 404);
   }
   return context.body(null, 204);
+});
+
+businesses.post("/:id/restore", requireBusinessManager, async (context) => {
+  const id = context.req.param("id");
+  const organizationId = context.get("organizationId");
+  const database = context.env.DB;
+  const [, result] = await activityBatch(database, context.get("apiKey"), [
+    businessEvent(context, id, "business.restored", "deleted"),
+    database
+      .prepare(
+        `UPDATE businesses SET deleted_at = NULL, deleted_by_user_id = NULL
+         WHERE id = ? AND organization_id = ? AND deleted_at IS NOT NULL`,
+      )
+      .bind(id, organizationId),
+  ]);
+  if (!result?.meta.changes) {
+    return context.json({ error: "Business not found." }, 404);
+  }
+  const restored = await findBusiness(database, organizationId, id);
+  if (!restored) return context.json({ error: "Business not found." }, 404);
+  return respond(context, businessesRoutes.restore, {
+    business: businessResponse(restored),
+  });
 });
 
 businesses.get("/:id/activity", async (context) => {
@@ -290,6 +349,11 @@ const businessFields = [
 
 const businessColumns = businessFields.map(([, column]) => column);
 
+/** The columns a business response reads. */
+const businessSelect = ["id", ...businessColumns, "created_at", "updated_at"]
+  .map((column) => `businesses.${column}`)
+  .join(", ");
+
 /**
  * Every member can read the activity feed, so events name only the last four
  * digits of an EIN or DUNS number, never the whole identifier.
@@ -326,9 +390,15 @@ function recordedValue(column: keyof BusinessValues, value: string | null) {
 
 /**
  * Records a business event snapshotting the stored row, labelled with its
- * name, only while the business exists in the organization.
+ * name, only while the business is in the organization and `state` (live or
+ * deleted). Put it before the change it describes.
  */
-function businessEvent(context: BusinessContext, id: string, action: string) {
+function businessEvent(
+  context: BusinessContext,
+  id: string,
+  action: string,
+  state: "deleted" | "live",
+) {
   return context.env.DB.prepare(
     `${insertActivity}
      SELECT business.organization_id, 'business', business.id, business.name,
@@ -342,7 +412,8 @@ function businessEvent(context: BusinessContext, id: string, action: string) {
                         'zip', business.zip)
      FROM businesses AS business
      JOIN user AS actor ON actor.id = ?
-     WHERE business.id = ? AND business.organization_id = ?`,
+     WHERE business.id = ? AND business.organization_id = ?
+       AND business.deleted_at IS ${state === "live" ? "" : "NOT "}NULL`,
   ).bind(
     action,
     new Date().toISOString(),
@@ -352,6 +423,7 @@ function businessEvent(context: BusinessContext, id: string, action: string) {
   );
 }
 
+/** A live business: deleted ones are found only through the deleted list. */
 function findBusiness(
   database: D1Database,
   organizationId: string,
@@ -359,10 +431,9 @@ function findBusiness(
 ) {
   return database
     .prepare(
-      `SELECT id, name, ein, duns, incorporation_date, street_address, city,
-              state, zip, created_at, updated_at
+      `SELECT ${businessSelect}
        FROM businesses
-       WHERE id = ? AND organization_id = ?`,
+       WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`,
     )
     .bind(id, organizationId)
     .first<BusinessRow>();
@@ -384,10 +455,25 @@ function businessResponse(row: BusinessRow): Business {
   };
 }
 
+function deletedBusinessResponse(row: DeletedBusinessRow): DeletedBusiness {
+  return {
+    ...businessResponse(row),
+    deletedAt: row.deleted_at,
+    deletedBy: row.deleter_id
+      ? {
+          email: row.deleter_email ?? "",
+          id: row.deleter_id,
+          name: row.deleter_name ?? "",
+        }
+      : null,
+  };
+}
+
 /**
  * The refusal for a write ignored because another business in the
  * organization already holds one of its identifiers, or null when none does;
- * name the DUNS number only when it alone collides.
+ * name the DUNS number only when it alone collides. A deleted business keeps
+ * its identifiers, so the refusal points to restoring it instead.
  */
 async function duplicateIdentifier(
   context: BusinessContext,
@@ -395,19 +481,28 @@ async function duplicateIdentifier(
   { duns, ein }: { duns: string | null; ein: string | null },
 ) {
   const holders = await context.env.DB.prepare(
-    `SELECT ein, duns
+    `SELECT ein, duns, deleted_at
      FROM businesses
      WHERE organization_id = ? AND id <> ? AND (ein = ? OR duns = ?)`,
   )
     .bind(context.get("organizationId"), id, ein, duns)
-    .all<Pick<BusinessRow, "duns" | "ein">>();
-  const held = (field: "duns" | "ein", value: string | null) =>
-    value !== null && holders.results.some((holder) => holder[field] === value);
-  if (!held("duns", duns) && !held("ein", ein)) return null;
-  const identifier =
-    held("duns", duns) && !held("ein", ein) ? "DUNS number" : "EIN";
+    .all<Pick<BusinessRow, "duns" | "ein"> & { deleted_at: string | null }>();
+  const holding = (field: "duns" | "ein", value: string | null) =>
+    value === null
+      ? []
+      : holders.results.filter((holder) => holder[field] === value);
+  const einHolders = holding("ein", ein);
+  const dunsHolders = holding("duns", duns);
+  if (!einHolders.length && !dunsHolders.length) return null;
+  const [identifier, colliding] = einHolders.length
+    ? (["EIN", einHolders] as const)
+    : (["DUNS number", dunsHolders] as const);
   return context.json(
-    { error: `A business with that ${identifier} already exists.` },
+    {
+      error: colliding.some((holder) => holder.deleted_at === null)
+        ? `A business with that ${identifier} already exists.`
+        : `A deleted business has that ${identifier}. Restore it from Deleted businesses.`,
+    },
     409,
   );
 }

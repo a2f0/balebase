@@ -47,6 +47,7 @@ function renderBusinesses(data: BusinessListing) {
   return renderState({
     adding: false,
     data,
+    deletions: 0,
     error: undefined,
     loading: false,
     notice: undefined,
