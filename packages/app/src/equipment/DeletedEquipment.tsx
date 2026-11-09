@@ -1,11 +1,15 @@
 import { Button, Card, PageSection, Toast } from "@balebase/ui/react";
-import { useCallback } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { api } from "../shared/apiClient";
+import { errorMessage } from "../shared/errors";
 import { ListRow } from "../shared/ListRow";
 import { countLabel, formatDate } from "../shared/labels";
-import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
 import { equipmentPath } from "../workspace/workspacePaths";
+import {
+  deletedEquipmentTransition,
+  initialDeletedEquipment,
+} from "./deletedEquipmentState";
 import { equipmentName } from "./equipmentLabels";
 
 /**
@@ -22,7 +26,16 @@ export function DeletedEquipment({
     "Could not load deleted equipment.",
   );
   const { reload } = loaded;
-  const action = useAction("Could not restore the equipment.");
+  const [restore, dispatch] = useReducer(
+    deletedEquipmentTransition,
+    initialDeletedEquipment,
+  );
+  const requests = useRef(0);
+  // Entering `restored` opens the item. An unmounted section runs no
+  // effects, so a restore that finishes after the person left stays put.
+  useEffect(() => {
+    if (restore.status === "restored") onNavigate(equipmentPath(restore.id));
+  }, [restore, onNavigate]);
   const listing = loaded.data;
   // A failed load says so, with a retry, so deleted equipment stays within
   // reach.
@@ -39,11 +52,21 @@ export function DeletedEquipment({
       <PageSection title="Deleted equipment">{failure}</PageSection>
     ) : null;
 
-  const restore = (id: string) =>
-    action.run(async () => {
-      await api.equipment.restore(id);
-      onNavigate(equipmentPath(id));
-    });
+  async function restoreItem(id: string) {
+    requests.current += 1;
+    const request = requests.current;
+    dispatch({ request, type: "restoreStarted" });
+    try {
+      const item = await api.equipment.restore(id);
+      dispatch({ id: item.id, request, type: "restoreSucceeded" });
+    } catch (cause) {
+      dispatch({
+        error: errorMessage(cause, "Could not restore the equipment."),
+        request,
+        type: "restoreFailed",
+      });
+    }
+  }
 
   return (
     <PageSection
@@ -56,7 +79,9 @@ export function DeletedEquipment({
       title="Deleted equipment"
     >
       {failure}
-      {action.error && <Toast tone="danger">{action.error}</Toast>}
+      {restore.status === "failed" && (
+        <Toast tone="danger">{restore.error}</Toast>
+      )}
       <Card flush>
         <ul className="rowList">
           {listing.equipment.map((item) => (
@@ -66,11 +91,13 @@ export function DeletedEquipment({
                 listing.canManage
                   ? [
                       {
-                        disabled: action.busy,
+                        disabled:
+                          restore.status === "restoring" ||
+                          restore.status === "restored",
                         icon: "restore",
                         id: "restore",
                         label: "Restore",
-                        onSelect: () => void restore(item.id),
+                        onSelect: () => void restoreItem(item.id),
                       },
                     ]
                   : []
