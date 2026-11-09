@@ -597,6 +597,46 @@ describe("project detail", () => {
     expect(visited).toEqual(["/projects/old-site"]);
   });
 
+  it("stays put when a restore finishes after the page closed", async () => {
+    const restore = Promise.withResolvers<void>();
+    const requests: string[] = [];
+    respond(async (url, init) => {
+      requests.push(`${init?.method ?? "GET"} ${url.pathname}`);
+      if (url.pathname === "/api/projects/deleted")
+        return Response.json({
+          canManage: true,
+          projects: [
+            {
+              deletedAt: "2026-10-20T00:00:00.000Z",
+              deletedBy: owner,
+              description: "",
+              id: "old-site",
+              name: "Old site",
+            },
+          ],
+        });
+      if (url.pathname === "/api/projects/old-site/restore") {
+        await restore.promise;
+        return Response.json({ project: {} });
+      }
+      return Response.json({ canManage: true, projects: [] });
+    });
+    const visited: string[] = [];
+    const { unmount } = await mount(
+      <Projects
+        onNavigate={(pathname) => visited.push(pathname)}
+        pathname="/projects"
+      />,
+    );
+    await settle();
+    await chooseFromRow("Old site", "Restore");
+    await unmount();
+    restore.resolve();
+    await settle();
+    expect(requests).toContain("POST /api/projects/old-site/restore");
+    expect(visited).toEqual([]);
+  });
+
   it("lets a manager edit and delete projects from their rows' menus", async () => {
     let projects = [listed("site", "Site walk"), listed("clinic", "Clinic")];
     const deleted: (ProjectSummary & { deletedAt: string })[] = [];
