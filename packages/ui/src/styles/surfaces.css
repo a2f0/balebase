@@ -288,8 +288,26 @@ a.row:focus-visible {
   --row-radius-bottom: calc(var(--radius-lg) - 1px);
 }
 
+/* A title link or button looks the same, as `buttonLink` does. */
 .rowTarget {
+  max-width: 100%;
   justify-self: start;
+  text-decoration-color: var(--color-border-strong);
+  text-decoration-thickness: 1px;
+}
+
+/*
+ * A title button lines up and ends in an ellipsis as a link does; a
+ * button's centered inline-flex would clip both ends of a long title.
+ */
+button.rowTarget {
+  display: block;
+  text-align: start;
+}
+
+.rowTarget:hover {
+  color: var(--color-green-strong);
+  text-decoration-color: currentColor;
 }
 
 .rowTarget::after {
@@ -313,6 +331,18 @@ a.row:focus-visible {
 .rowInteractive > .rowActions > * {
   position: relative;
   z-index: 1;
+}
+
+/*
+ * A row that keeps its icon, details, and actions on its title's line: the
+ * title and meta give way instead, so the menu button never wraps below.
+ */
+.rowInline {
+  flex-wrap: nowrap;
+}
+
+.rowInline > .rowMain {
+  flex-basis: 0;
 }
 
 /* Badges. */

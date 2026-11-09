@@ -71,6 +71,7 @@ import {
   Type,
   Unlink,
   Upload,
+  UserMinus,
   UserPlus,
   Users,
   X,
@@ -145,6 +146,7 @@ export const icons = {
   unlink: Unlink,
   upload: Upload,
   userAdd: UserPlus,
+  userRemove: UserMinus,
   void: Ban,
 } satisfies Record<string, IconNode>;
 

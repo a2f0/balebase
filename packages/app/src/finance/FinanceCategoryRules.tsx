@@ -2,12 +2,10 @@ import {
   Banner,
   Button,
   Card,
-  ContextMenu,
   confirmDialog,
   EmptyState,
   Field,
   LoadingState,
-  MenuButton,
   PageSection,
   Select,
 } from "@balebase/ui/react";
@@ -17,7 +15,6 @@ import type {
 } from "@balebase/validators/finance";
 import { financeLimits } from "@balebase/validators/rules";
 import {
-  type ComponentProps,
   type FormEvent,
   useCallback,
   useEffect,
@@ -25,6 +22,7 @@ import {
   useState,
 } from "react";
 import { api } from "../shared/apiClient";
+import { ListRow, type ListRowItem } from "../shared/ListRow";
 import { countLabel } from "../shared/labels";
 import { useLoad } from "../shared/useLoad";
 import { rulesChanged } from "./financeRuleAction";
@@ -351,8 +349,7 @@ function RuleRow({
       return `Deleted the rule for “${rule.payeeName}”.`;
     });
   }
-  const label = `Actions for the rule for ${rule.payeeName}`;
-  const items: ComponentProps<typeof ContextMenu>["items"][number][] = [
+  const items: ListRowItem[] = [
     {
       disabled: busy,
       icon: "edit",
@@ -378,24 +375,20 @@ function RuleRow({
     onSelect: () => void remove(),
   });
   return (
-    <ContextMenu items={items} label={label}>
-      {(targetProps, menuButton) => (
-        <li className="row" {...targetProps}>
-          <div className="rowMain">
-            <span className="rowTitle">{rule.payeeName}</span>
-            <span className="rowMeta">
-              {rule.category.name}
-              {rule.uncategorizedCount > 0 &&
-                ` · ${countLabel(rule.uncategorizedCount, "uncategorized transaction")}`}
-              {rule.owner && ` · Created by ${rule.owner.name}`}
-            </span>
-          </div>
-          <div className="rowActions" ref={actions}>
-            <MenuButton {...menuButton} label={label} />
-          </div>
-        </li>
-      )}
-    </ContextMenu>
+    <ListRow
+      actionsRef={actions}
+      items={items}
+      label={`Actions for the rule for ${rule.payeeName}`}
+      meta={
+        <>
+          {rule.category.name}
+          {rule.uncategorizedCount > 0 &&
+            ` · ${countLabel(rule.uncategorizedCount, "uncategorized transaction")}`}
+          {rule.owner && ` · Created by ${rule.owner.name}`}
+        </>
+      }
+      title={rule.payeeName}
+    />
   );
 }
 

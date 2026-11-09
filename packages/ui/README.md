@@ -76,7 +76,9 @@ both themes, so `.onDark` regions need no theme-specific styles.
   `cardDescription`, `cardActions`, `cardBody`, `cardFlush`, `cardFooter`,
   `cardInteractive`, `cardSelected`, `cardAccent`, `cardDanger`
 - **Rows:** `rowList`, `row`, `rowMain`, `rowTitle`, `rowMeta`, `rowActions`
-  (a `button.row` or `a.row` is clickable)
+  (a `button.row` or `a.row` is clickable; in a `rowInteractive` row, a
+  `rowTarget` title covers the row beside its actions; `rowInline` keeps a
+  row's icon, details, and actions on its title's line)
 - **Tables:** `tableWrap`, `table`
 - **Status:** `badge` + `badgeSuccess`, `badgeWarning`, `badgeDanger`,
   `badgeInfo`, `badgeAccent`, `badgeDot`; `banner` + `bannerSuccess`,

@@ -1,17 +1,11 @@
-import {
-  Badge,
-  Button,
-  Card,
-  ContextMenu,
-  cx,
-  MenuButton,
-} from "@balebase/ui/react";
+import { Badge, Card, cx } from "@balebase/ui/react";
 import type {
   ExpenseCategory,
   FinanceTransaction,
 } from "@balebase/validators/finance";
 import { financeLimits } from "@balebase/validators/rules";
-import { type ComponentProps, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ListRow, type ListRowItem } from "../shared/ListRow";
 import { countLabel, formatCalendarDate } from "../shared/labels";
 import { formatMoney } from "./financeFormat";
 import type { CreateRule } from "./financeRuleAction";
@@ -166,76 +160,61 @@ function PayeeRow({
   }
   const start = (action: PayeeForm["action"]) =>
     onForm({ action, applyToExisting: true, categoryId: "" });
-  const label = `Actions for ${payee.name}`;
   // Both actions give a category, so they wait for one to exist.
-  const items: ComponentProps<typeof ContextMenu>["items"][number][] =
-    categories.length
-      ? [
-          {
-            disabled: busy,
-            icon: "list",
-            id: "categorize",
-            label: `Categorize ${countLabel(payee.count, "transaction")}…`,
-            onSelect: () => start("categorize"),
-          },
-          // A rule matches the name exactly, within the API's length limit.
-          ruleNameFits(payee.name)
-            ? {
-                disabled: busy,
-                icon: "layers",
-                id: "create-rule",
-                label: "Create rule…",
-                onSelect: () => start("rule"),
-              }
-            : {
-                disabled: true,
-                icon: "layers",
-                id: "create-rule",
-                label: `Create rule… (names over ${financeLimits.payeeName} characters cannot have one)`,
-                onSelect: () => undefined,
-              },
-        ]
-      : [];
+  const items: ListRowItem[] = categories.length
+    ? [
+        {
+          disabled: busy,
+          icon: "list",
+          id: "categorize",
+          label: `Categorize ${countLabel(payee.count, "transaction")}…`,
+          onSelect: () => start("categorize"),
+        },
+        // A rule matches the name exactly, within the API's length limit.
+        ruleNameFits(payee.name)
+          ? {
+              disabled: busy,
+              icon: "layers",
+              id: "create-rule",
+              label: "Create rule…",
+              onSelect: () => start("rule"),
+            }
+          : {
+              disabled: true,
+              icon: "layers",
+              id: "create-rule",
+              label: `Create rule… (names over ${financeLimits.payeeName} characters cannot have one)`,
+              onSelect: () => undefined,
+            },
+      ]
+    : [];
   return (
-    <ContextMenu items={items} label={label}>
-      {(targetProps, menuButton) => (
-        // The name's button covers the whole row, so any click there opens it.
-        <li className="row rowInteractive financePayee" {...targetProps}>
-          <div className="rowMain">
-            <Button
-              aria-label={`Show transactions for ${payee.name}`}
-              className="rowTitle rowTarget financePayeeName"
-              onClick={() => onSelect(payee.name)}
-              variant="link"
-            >
-              {payee.name}
-            </Button>
-            <span className="rowMeta">
-              {countLabel(payee.count, "transaction")} · Latest{" "}
-              {formatCalendarDate(payee.latestDate)}
-            </span>
-          </div>
-          {payee.pending > 0 && (
-            <Badge tone="warning">{payee.pending} pending</Badge>
-          )}
-          <span
-            className={cx(
-              "financeAmount",
-              payee.total !== null && payee.total > 0 && "financeAmountCredit",
-            )}
-          >
-            {payee.total === null
-              ? "Several currencies"
-              : formatMoney(payee.total, payee.currencyCode)}
-          </span>
-          {items.length > 0 && (
-            <div className="rowActions" ref={actions}>
-              <MenuButton {...menuButton} label={label} />
-            </div>
-          )}
-        </li>
+    <ListRow
+      actionsRef={actions}
+      className="financePayee"
+      items={items}
+      meta={`${countLabel(payee.count, "transaction")} · Latest ${formatCalendarDate(payee.latestDate)}`}
+      open={{
+        label: `Show transactions for ${payee.name}`,
+        onClick: () => onSelect(payee.name),
+      }}
+      title={payee.name}
+      wrap
+    >
+      {payee.pending > 0 && (
+        <Badge tone="warning">{payee.pending} pending</Badge>
       )}
-    </ContextMenu>
+      <span
+        className={cx(
+          "financeAmount",
+          payee.total !== null && payee.total > 0 && "financeAmountCredit",
+        )}
+      >
+        {payee.total === null
+          ? "Several currencies"
+          : formatMoney(payee.total, payee.currencyCode)}
+      </span>
+    </ListRow>
   );
 }
 

@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   EmptyState,
-  Icon,
   Page,
   PageBody,
   PageHeader,
@@ -12,7 +11,7 @@ import {
 } from "@balebase/ui/react";
 import { OfflineAuditEditor } from "../offline/OfflineAuditEditor";
 import { useDevice } from "../offline/offlineContext";
-import { AppLink } from "../shared/AppLink";
+import { ListRow } from "../shared/ListRow";
 import { countLabel } from "../shared/labels";
 import {
   projectAuditForPath,
@@ -90,27 +89,15 @@ function DeviceProjectList({
         >
           {projects.length ? (
             <Card flush>
-              <ul className="rowList projectList">
+              <ul className="rowList">
                 {projects.map((project) => (
-                  <li key={project.id}>
-                    <AppLink
-                      className="row"
-                      href={projectPath(project.id)}
-                      onNavigate={onNavigate}
-                    >
-                      <span className="iconTile">
-                        <Icon name="layers" size={20} />
-                      </span>
-                      <span className="rowMain">
-                        <span className="rowTitle truncate">
-                          {project.name}
-                        </span>
-                        <span className="rowMeta truncate">
-                          {countLabel(project.formIds.length, "audit form")}
-                        </span>
-                      </span>
-                    </AppLink>
-                  </li>
+                  <ListRow
+                    icon="layers"
+                    key={project.id}
+                    meta={countLabel(project.formIds.length, "audit form")}
+                    open={{ href: projectPath(project.id), onNavigate }}
+                    title={project.name}
+                  />
                 ))}
               </ul>
             </Card>

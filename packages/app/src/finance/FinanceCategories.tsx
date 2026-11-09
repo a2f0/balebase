@@ -1,13 +1,11 @@
 import {
   Button,
   Card,
-  ContextMenu,
   confirmDialog,
   cx,
   EmptyState,
   Field,
   LoadingState,
-  MenuButton,
   PageSection,
   Toast,
 } from "@balebase/ui/react";
@@ -15,6 +13,7 @@ import type { ExpenseCategory } from "@balebase/validators/finance";
 import { financeLimits } from "@balebase/validators/rules";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
+import { ListRow } from "../shared/ListRow";
 import { countLabel } from "../shared/labels";
 import { type CategoryTotals, periodTotals } from "./categoryYearCounts";
 import {
@@ -307,9 +306,9 @@ function CategoryRow({
   async function remove() {
     if (await confirmCategoryDeletion(category)) void onDelete(category);
   }
-  const label = `Actions for ${category.name}`;
   return (
-    <ContextMenu
+    <ListRow
+      className="financeCategory"
       items={[
         {
           icon: "list",
@@ -332,29 +331,12 @@ function CategoryRow({
           onSelect: () => void remove(),
         },
       ]}
-      label={label}
+      meta={countLabel(transactionCount, "transaction")}
+      open={{ onClick: () => onShowTransactions(category) }}
+      title={category.name}
     >
-      {(targetProps, menuButton) => (
-        <li className="row rowInteractive financeCategory" {...targetProps}>
-          <div className="rowMain">
-            <Button
-              className="rowTitle rowTarget"
-              onClick={() => onShowTransactions(category)}
-              variant="link"
-            >
-              {category.name}
-            </Button>
-            <span className="rowMeta">
-              {countLabel(transactionCount, "transaction")}
-            </span>
-          </div>
-          {transactionCount > 0 && <CategoryTotal totals={totals} />}
-          <div className="rowActions">
-            <MenuButton {...menuButton} label={label} />
-          </div>
-        </li>
-      )}
-    </ContextMenu>
+      {transactionCount > 0 && <CategoryTotal totals={totals} />}
+    </ListRow>
   );
 }
 

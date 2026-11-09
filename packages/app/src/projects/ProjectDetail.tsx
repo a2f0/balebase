@@ -1,7 +1,6 @@
 import {
   Button,
   Card,
-  confirmDialog,
   EmptyState,
   LoadingState,
   Page,
@@ -29,6 +28,7 @@ import {
 } from "../audits/TemplateCollections";
 import { useDevice } from "../offline/offlineContext";
 import { api } from "../shared/apiClient";
+import { ListRow } from "../shared/ListRow";
 import { countLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -36,6 +36,7 @@ import { projectPath } from "../workspace/workspacePaths";
 import { DeviceProjects, unreachableNotice } from "./DeviceProjects";
 import { ProjectAuditForms } from "./ProjectAuditForms";
 import { ProjectForm } from "./ProjectForm";
+import { confirmProjectDeletion, editedFields } from "./projectChanges";
 
 function useProjectDetail(id: string, onNavigate: (pathname: string) => void) {
   const loaded = useLoad(
@@ -70,14 +71,7 @@ function useProjectDetail(id: string, onNavigate: (pathname: string) => void) {
   }
 
   async function remove(project: Project) {
-    const confirmed = await confirmDialog({
-      confirmLabel: "Delete project",
-      message:
-        "Its audits stay in Audits, and a manager can restore it from Deleted projects. Members keep the forms already on their devices.",
-      title: `Delete ${project.name}?`,
-      tone: "danger",
-    });
-    if (!confirmed) return;
+    if (!(await confirmProjectDeletion(project))) return;
     await action.run(async () => {
       await api.projects.delete(id);
       onNavigate(projectPath());
@@ -339,25 +333,24 @@ function ProjectMembers({
         <Card flush>
           <ul className="rowList">
             {members.map((member) => (
-              <li className="row" key={member.id}>
-                <span className="rowMain">
-                  <span className="rowTitle truncate">
-                    {member.name || member.email}
-                  </span>
-                  <span className="rowMeta truncate">{member.email}</span>
-                </span>
-                {canManage && (
-                  <Button
-                    aria-label={`Remove ${member.name || member.email}`}
-                    disabled={busy}
-                    onClick={() => onRemove(member.id)}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    Remove
-                  </Button>
-                )}
-              </li>
+              <ListRow
+                items={
+                  canManage
+                    ? [
+                        {
+                          disabled: busy,
+                          icon: "userRemove",
+                          id: "remove",
+                          label: "Remove from project",
+                          onSelect: () => onRemove(member.id),
+                        },
+                      ]
+                    : []
+                }
+                key={member.id}
+                meta={member.email}
+                title={member.name || member.email}
+              />
             ))}
           </ul>
         </Card>
@@ -482,21 +475,4 @@ function FormToggle({
       {on ? "On" : "Off"}
     </label>
   );
-}
-
-/**
- * Only the fields this editor changed, from the revision it loaded, so a
- * concurrent edit is refused rather than overwritten.
- */
-function editedFields(
-  project: Project,
-  input: { description: string; name: string },
-) {
-  return {
-    expectedRevision: project.revision,
-    ...(input.name === project.name ? {} : { name: input.name }),
-    ...(input.description === project.description
-      ? {}
-      : { description: input.description }),
-  };
 }
