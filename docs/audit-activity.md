@@ -296,11 +296,13 @@ transaction, its links are hidden with it, and kept, without an event. Inbound
 mail is a provider action with no user actor: the stored message and its raw
 `.eml` are its record.
 
-Creating, editing, and deleting a business records an event on the business
-(`business`). Edits list each changed field with its old and new value; a save
-that changes nothing, a duplicate EIN or DUNS number, and a save racing another
-change record nothing. Every member can read the feed, so events show only the
-last four digits of an EIN or DUNS number.
+Creating, editing, deleting, and restoring a business records an event on the
+business (`business`). Edits list each changed field with its old and new
+value; a save that changes nothing, a duplicate EIN or DUNS number, and a save
+racing another change record nothing. Deletions and restorations
+(`business.deleted`, `business.restored`) snapshot the business, and a
+repeated one records nothing. Every member can read the feed, so events show
+only the last four digits of an EIN or DUNS number.
 
 Folders, files, emails, and businesses show their own history. A folder's
 history also lists the file events that name it: uploads into it, moves into

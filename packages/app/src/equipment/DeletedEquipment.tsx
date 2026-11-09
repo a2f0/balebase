@@ -4,12 +4,9 @@ import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import { ListRow } from "../shared/ListRow";
 import { countLabel, formatDate } from "../shared/labels";
+import { initialRestore, restoreTransition } from "../shared/restoreState";
 import { useLoad } from "../shared/useLoad";
 import { equipmentPath } from "../workspace/workspacePaths";
-import {
-  deletedEquipmentTransition,
-  initialDeletedEquipment,
-} from "./deletedEquipmentState";
 import { equipmentName } from "./equipmentLabels";
 
 /**
@@ -26,10 +23,7 @@ export function DeletedEquipment({
     "Could not load deleted equipment.",
   );
   const { reload } = loaded;
-  const [restore, dispatch] = useReducer(
-    deletedEquipmentTransition,
-    initialDeletedEquipment,
-  );
+  const [restore, dispatch] = useReducer(restoreTransition, initialRestore);
   const requests = useRef(0);
   // Entering `restored` opens the item. An unmounted section runs no
   // effects, so a restore that finishes after the person left stays put.

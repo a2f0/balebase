@@ -47,6 +47,7 @@ import {
   initialBusinessListState,
   useIdentifierCopy,
 } from "./businessState";
+import { DeletedBusinesses } from "./DeletedBusinesses";
 
 export function Businesses({
   onNavigate,
@@ -159,6 +160,7 @@ export function BusinessListView(props: BusinessListViewProps) {
 function BusinessListBody({
   copyNotice,
   data,
+  deletions,
   error,
   formOpen,
   loading,
@@ -198,6 +200,7 @@ function BusinessListBody({
             onNavigate={onNavigate}
             onUpdated={onUpdated}
           />
+          <DeletedBusinesses deletions={deletions} onNavigate={onNavigate} />
         </>
       ) : (
         <BusinessEmptyState title="Businesses could not be loaded." />
@@ -527,7 +530,8 @@ function BusinessEmptyState({ title }: { title: string }) {
 function confirmBusinessDeletion(business: Business) {
   return confirmDialog({
     confirmLabel: "Delete business",
-    message: "This can't be undone.",
+    message:
+      "An owner or admin can restore it from Deleted businesses. It keeps its EIN and DUNS number meanwhile.",
     title: `Delete ${business.name}?`,
     tone: "danger",
   });

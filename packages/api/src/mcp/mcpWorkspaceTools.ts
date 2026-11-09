@@ -195,7 +195,7 @@ export const workspaceTools: McpTool[] = [
   },
   {
     description:
-      "Adds a business. EIN and DUNS numbers must be unique in the organization.",
+      "Adds a business. EIN and DUNS numbers must be unique in the organization, including among deleted businesses.",
     descriptions: businessFields,
     name: "create_business",
     route: businessesRoutes.create,
@@ -210,11 +210,26 @@ export const workspaceTools: McpTool[] = [
     title: "Update business",
   },
   {
-    description: "Deletes a business.",
+    description:
+      "Deletes a business. It is hidden with its history and keeps its EIN and DUNS number, and restore_business brings it back as it was.",
     descriptions: businessId,
     destructive: true,
     name: "delete_business",
     route: businessesRoutes.delete,
     title: "Delete business",
+  },
+  {
+    description:
+      "Lists deleted businesses, most recently deleted first, with who deleted each one.",
+    name: "list_deleted_businesses",
+    route: businessesRoutes.listDeleted,
+    title: "List deleted businesses",
+  },
+  {
+    description: "Restores a deleted business.",
+    descriptions: { id: "Business id from list_deleted_businesses." },
+    name: "restore_business",
+    route: businessesRoutes.restore,
+    title: "Restore business",
   },
 ];

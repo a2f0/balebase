@@ -67,6 +67,8 @@ export interface BusinessListState {
   /** The add form was opened on demand while businesses already exist. */
   adding: boolean;
   data: BusinessListing | undefined;
+  /** Counts businesses deleted from the list; each joins Deleted businesses. */
+  deletions: number;
   error: string | undefined;
   loading: boolean;
   notice: string | undefined;
@@ -86,6 +88,7 @@ export type BusinessListEvent =
 export const initialBusinessListState: BusinessListState = {
   adding: false,
   data: undefined,
+  deletions: 0,
   error: undefined,
   loading: true,
   notice: undefined,
@@ -144,12 +147,15 @@ export function businessListReducer(
         "Business updated.",
       );
     case "deleted":
-      return withBusinesses(
-        state,
-        (businesses) =>
-          businesses.filter((business) => business.id !== event.id),
-        "Business deleted.",
-      );
+      return {
+        ...withBusinesses(
+          state,
+          (businesses) =>
+            businesses.filter((business) => business.id !== event.id),
+          "Business deleted.",
+        ),
+        deletions: state.deletions + 1,
+      };
     case "failed":
       return { ...state, error: event.message, notice: undefined };
   }

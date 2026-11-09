@@ -418,6 +418,21 @@ including who held it, in its history. Migration
 list of equipment types, so adding one needs no migration; an item keeps its
 type if that type is later retired.
 
+## Businesses
+
+The organization-scoped Businesses page at `/businesses` keeps the
+organization's legal entities: name, EIN, DUNS number, incorporation date, and
+address. Every member can view businesses; organization owners and admins add,
+edit, delete, and restore them. EIN and DUNS numbers are unique in the
+organization. Deleting a business hides it: it keeps its history and its
+identifiers, and it is listed under **Deleted businesses** on the Businesses
+page, where owners and admins restore it as it was
+(`GET /api/businesses/deleted`, `POST /api/businesses/:id/restore`). Because
+a deleted business keeps its EIN and DUNS number, adding or editing a business
+to use one is refused with a pointer to restoring the deleted one, so a
+restore never collides. Migration `0098_soft_delete_businesses.sql` adds the
+soft delete.
+
 ## Projects
 
 The organization-scoped Projects page at `/projects` groups members around the
