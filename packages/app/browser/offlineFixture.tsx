@@ -15,10 +15,11 @@ import {
 } from "../src/offline/offlineStore";
 import { syncOfflineWorkspace } from "../src/offline/offlineSync";
 import {
+  completeOfflineAudit,
   createOfflineIssue,
-  queueOfflineAudit,
   retryOfflineWork,
   saveOfflineAnswer,
+  saveOfflineProgress,
   startOfflineAudit,
 } from "../src/offline/offlineWork";
 import { useOfflineWorkspace } from "../src/offline/useOfflineWorkspace";
@@ -111,7 +112,8 @@ const testApi = {
   read: () => readOfflineWorkspace(key),
   answer: (id: string, value: string) =>
     saveOfflineAnswer(key, id, "check", value),
-  queue: (id: string) => queueOfflineAudit(key, id),
+  progress: (id: string) => saveOfflineProgress(key, id),
+  complete: (id: string) => completeOfflineAudit(key, id),
   /** Raises an issue, with one photo, on the audit's only item. */
   issue: (auditId: string) =>
     createOfflineIssue(

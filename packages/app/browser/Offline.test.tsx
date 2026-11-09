@@ -102,12 +102,10 @@ it("persists audits and photos across reload, retries in dependency order, and i
     expect(
       (await page.evaluate(() => window.offlineTest.read()))?.forms,
     ).toHaveLength(1);
-    // The audit has not been submitted; its children must stay waiting.
+    // Raising the issue put its audit on the server first. That response is
+    // lost, so the issue and its photo keep waiting for it.
     await page.evaluate(() => window.offlineTest.sync());
-    expect(requests).toEqual([]);
-    await page.evaluate((id) => window.offlineTest.queue(id), auditId);
-    await page.evaluate(() => window.offlineTest.sync());
-    expect(requests).toEqual(["audit"]);
+    expect(requests).toEqual(["auditStart"]);
     expect(
       (await page.evaluate(() => window.offlineTest.read()))?.jobs.every(
         (job) => job.status === "pending",
@@ -121,7 +119,7 @@ it("persists audits and photos across reload, retries in dependency order, and i
       page.evaluate(() => window.offlineTest.sync()),
       otherTab.evaluate(() => window.offlineTest.sync()),
     ]);
-    expect(requests).toEqual(["audit", "audit", "issue", "image"]);
+    expect(requests).toEqual(["auditStart", "auditStart", "issue", "image"]);
     expect(received.size).toBe(3);
     expect(
       (await page.evaluate(() => window.offlineTest.read()))?.jobs.every(

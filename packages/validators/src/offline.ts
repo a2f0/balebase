@@ -11,21 +11,44 @@ export const OfflineScopeSchema = z.object({
 });
 export type OfflineScope = z.infer<typeof OfflineScopeSchema>;
 
+const OfflineResponsesSchema = z.record(
+  z.string().max(100),
+  z.string().max(2000),
+);
+
+// A receipt's digest is of the parsed operation, so a field's keys, order,
+// and normalization must not change between releases: a retry of work
+// synced before an upgrade must hash the same.
 export const OfflineOperationSchema = z.discriminatedUnion("type", [
+  /**
+   * Puts an audit started on a device on the server, in progress, with its
+   * answers so far. Its ID is the audit's, and it leaves revision 1.
+   */
   z.object({
     id: z.uuid(),
-    type: z.literal("audit"),
+    type: z.literal("auditStart"),
     /** The project the audit was started for on the device. */
     projectId: z.string().min(1).max(200),
     templateId: z.string().min(1).max(200),
     templateVersion: z.number().int().positive(),
-    startedAt: z.iso.datetime().optional(),
-    completedAt: z.iso.datetime().optional(),
-    responses: z.record(z.string().max(100), z.string().max(2000)),
+    responses: OfflineResponsesSchema,
   }),
-  // A receipt's digest is of the parsed operation, so a field's keys, order,
-  // and normalization must not change between releases: a retry of work
-  // synced before an upgrade must hash the same.
+  /**
+   * Saves a device audit's answers over the revision its last write left,
+   * and completes it when `completion` is given. Any other change to the
+   * audit since makes it stale.
+   */
+  z.object({
+    id: z.uuid(),
+    type: z.literal("auditSave"),
+    auditId: z.uuid(),
+    expectedRevision: z.number().int().positive(),
+    responses: OfflineResponsesSchema,
+    /** The device-reported times, kept apart from the server's own. */
+    completion: z
+      .object({ startedAt: z.iso.datetime(), completedAt: z.iso.datetime() })
+      .optional(),
+  }),
   z.object({
     id: z.uuid(),
     type: z.literal("issue"),
@@ -91,6 +114,7 @@ export const offlineRoutes = {
     method: "POST",
     path: "/api/offline/operations",
     body: OfflineScopeSchema.extend({ operation: OfflineOperationSchema }),
+    /** The audit or issue the operation created or saved. */
     response: z.object({ resourceId: z.string() }),
   }),
   uploadImage: route({

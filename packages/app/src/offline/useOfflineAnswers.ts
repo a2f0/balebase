@@ -7,28 +7,37 @@ import {
   offlineAnswersTransition,
 } from "./offlineAnswersState";
 import type { OfflineAudit } from "./offlineStore";
-import { queueOfflineAudit, saveOfflineAnswer } from "./offlineWork";
+import {
+  completeOfflineAudit,
+  saveOfflineAnswer,
+  saveOfflineProgress,
+} from "./offlineWork";
 
 /** Device storage the answers are written to; tests pass their own. */
 export interface OfflineAnswerStorage {
-  queueAudit: (key: string, auditId: string) => Promise<unknown>;
+  completeAudit: (key: string, auditId: string) => Promise<unknown>;
   saveAnswer: (
     key: string,
     auditId: string,
     itemId: string,
     value: string,
   ) => Promise<unknown>;
+  saveProgress: (key: string, auditId: string) => Promise<unknown>;
 }
 
 const deviceStorage: OfflineAnswerStorage = {
-  queueAudit: queueOfflineAudit,
+  completeAudit: completeOfflineAudit,
   saveAnswer: saveOfflineAnswer,
+  saveProgress: saveOfflineProgress,
 };
+
+/** What a save queues to sync after writing every answer to the device. */
+export type OfflineAuditSync = "progress" | "completion";
 
 /**
  * An audit's answers, each written to the device as it is given. What went
  * wrong is one machine (`offlineAnswersState.ts`): a failed write lasts until
- * every answer is written, a failed completion until a save succeeds.
+ * every answer is written, a failed sync request until a save succeeds.
  */
 export function useOfflineAnswers(
   audit: OfflineAudit,
@@ -92,23 +101,30 @@ export function useOfflineAnswers(
       setPending((count) => count - 1);
     }
   }
-  async function save(complete: boolean) {
+  /** Writes any unsaved answers, then queues `sync`, if given. */
+  async function save(sync?: OfflineAuditSync) {
     setSealing(true);
     setPending((count) => count + 1);
     // A failed write reports itself; only queueing reports here.
     let written = false;
     try {
       // Retry only unsaved edits. Already-saved answers may have been updated
-      // by another tab; completion seals the latest durable snapshot.
+      // by another tab; a sync takes the latest durable snapshot.
       for (const [id, edit] of Object.entries(dirty.current))
         await write(id, edit);
       written = true;
-      if (complete) await storage.queueAudit(key, audit.id);
+      if (sync === "progress") await storage.saveProgress(key, audit.id);
+      if (sync === "completion") await storage.completeAudit(key, audit.id);
       report({ type: "saved" });
     } catch (cause) {
       if (written)
         report({
-          message: errorMessage(cause, "Could not queue audit."),
+          message: errorMessage(
+            cause,
+            sync === "progress"
+              ? "Could not save progress."
+              : "Could not queue audit.",
+          ),
           type: "queueFailed",
         });
     } finally {

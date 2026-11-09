@@ -64,14 +64,17 @@ it("completes the latest saved answers without overwriting another tab's edit", 
     await page.bringToFront();
     await press(page, "Complete audit");
     await page.waitForFunction(
-      async () => (await window.offlineTest.read())?.audits[0]?.queued,
+      async () =>
+        (await window.offlineTest.read())?.audits[0]?.status === "completed",
       { polling: 100 },
     );
     const saved = await page.evaluate(() => window.offlineTest.read());
     expect(saved?.audits[0]?.responses).toEqual({ check: "fail" });
-    const operation = saved?.jobs.find((job) => job.id === id)?.operation;
-    expect(operation?.type).toBe("audit");
-    if (operation?.type === "audit")
+    const operation = saved?.jobs.find(
+      (job) => job.operation.type === "auditSave",
+    )?.operation;
+    expect(operation?.type).toBe("auditSave");
+    if (operation?.type === "auditSave")
       expect(operation.responses).toEqual({ check: "fail" });
     expect(await page.$eval("select", (field) => field.value)).toBe("fail");
   });
@@ -262,19 +265,30 @@ it("lists this device's audits by sync state and opens a synced audit", async ()
         );
       await button("Continue");
       expect(await status()).toBe(
-        "Online · All completed work synced · 1 draft on this device.",
+        "Online · Nothing waiting to sync · 1 audit in progress on this device.",
       );
       await page.evaluate(async (auditId) => {
         await window.offlineTest.answer(auditId, "pass");
-        await window.offlineTest.queue(auditId);
+        await window.offlineTest.progress(auditId);
       }, id);
-      // The server is unavailable, so the completed audit waits.
+      // The server is unavailable, so the saved progress waits.
+      await page.waitForFunction(
+        () => document.body.textContent?.includes("Progress waiting to sync"),
+        { polling: 100 },
+      );
+      expect(await status()).toBe(
+        "Online · 1 item waiting to sync · 1 audit in progress on this device.",
+      );
+      await page.evaluate(
+        (auditId) => window.offlineTest.complete(auditId),
+        id,
+      );
       await button("View");
       await page.waitForFunction(
         () => document.body.textContent?.includes("Waiting to sync"),
         { polling: 100 },
       );
-      expect(await status()).toBe("Online · 1 item waiting to sync.");
+      expect(await status()).toBe("Online · 2 items waiting to sync.");
       available = true;
       await press(page, "Retry sync");
       await press(page, "Open audit");
@@ -547,14 +561,16 @@ it("keeps unsaved issue details and photos when reconnecting with an expired ses
         { polling: 100 },
       );
       const saved = await page.evaluate(() => window.offlineTest.read());
-      expect(saved?.audits[0]?.queued).toBe(true);
+      expect(saved?.audits[0]?.status).toBe("completed");
       expect(saved?.issues[0]?.operation.title).toBe("Expired session draft");
       const image = saved?.issues[0]?.images[0];
       if (!image) throw new Error("Unsaved photo was lost on expiry");
       expect(
         await page.evaluate((id) => window.offlineTest.photo(id), image.id),
       ).toEqual({ type: "image/png", bytes: [1, 2, 3, 4] });
-      expect(requests).toEqual(["audit"]);
+      // Saving the issue put the audit on the server; the expired session
+      // holds that back, and everything after it waits.
+      expect(requests).toEqual(["auditStart"]);
     },
     async (request) => {
       const path = new URL(request.url).pathname;
@@ -649,7 +665,7 @@ it("guards opening a synced issue without relying on browser beforeunload protec
         const id = await window.offlineTest.seed();
         // An audit's issues sync after the audit itself.
         await window.offlineTest.answer(id, "fail");
-        await window.offlineTest.queue(id);
+        await window.offlineTest.complete(id);
         await window.offlineTest.issue(id);
         await window.offlineTest.sync();
         const path = window.offlineTest.auditPath(id);

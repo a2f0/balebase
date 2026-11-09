@@ -4,11 +4,15 @@ import {
   maxIssueImages,
 } from "@balebase/validators/issueRules";
 import type { IssueInput } from "@balebase/validators/issues";
-import { progressFor } from "../audits/auditProgress";
+import {
+  auditWrites,
+  type OfflineAuditEvent,
+  offlineAuditTransition,
+} from "./offlineAuditState";
 import {
   changeOfflineWorkspace,
-  type OfflineJob,
   type OfflineWorkspace,
+  pendingJob,
 } from "./offlineStore";
 
 function required(workspace: OfflineWorkspace | undefined) {
@@ -38,10 +42,29 @@ export function startOfflineAudit(
       startedAt: new Date().toISOString(),
       template,
       responses: {},
-      queued: false,
+      status: "draft",
     });
     return workspace;
   }).then(() => id);
+}
+
+/** Moves the audit by `event`, queueing the server writes it calls for. */
+function applyAuditEvent(
+  workspace: OfflineWorkspace,
+  auditId: string,
+  event: OfflineAuditEvent,
+) {
+  const index = workspace.audits.findIndex((entry) => entry.id === auditId);
+  const audit = workspace.audits[index];
+  if (!audit) throw new Error("The local audit is missing.");
+  const step = offlineAuditTransition(
+    audit,
+    auditWrites(workspace.jobs, auditId),
+    event,
+  );
+  workspace.audits[index] = step.audit;
+  workspace.jobs.push(...step.queue);
+  return workspace;
 }
 
 export function saveOfflineAnswer(
@@ -50,47 +73,40 @@ export function saveOfflineAnswer(
   itemId: string,
   value: string,
 ) {
-  return changeOfflineWorkspace(key, (current) => {
-    const workspace = required(current);
-    const audit = workspace.audits.find((entry) => entry.id === id);
-    if (!audit || audit.queued)
-      throw new Error("This audit has already been queued.");
-    audit.responses[itemId] = value;
-    return workspace;
-  });
+  return changeOfflineWorkspace(key, (current) =>
+    applyAuditEvent(required(current), id, { itemId, type: "answered", value }),
+  );
 }
 
-export function queueOfflineAudit(key: string, id: string) {
-  return changeOfflineWorkspace(key, (current) => {
-    const workspace = required(current);
-    const audit = workspace.audits.find((entry) => entry.id === id);
-    if (!audit || audit.queued) return workspace;
-    if (
-      progressFor(audit.template.definition, audit.responses).requiredLeft > 0
-    ) {
-      throw new Error("Complete every required item first.");
-    }
-    audit.queued = true;
-    workspace.jobs.push(
-      job(
-        {
-          id,
-          type: "audit",
-          projectId: audit.projectId,
-          templateId: audit.template.id,
-          templateVersion: audit.template.version,
-          startedAt: audit.startedAt,
-          completedAt: new Date().toISOString(),
-          responses: { ...audit.responses },
-        },
-        [],
-      ),
-    );
-    return workspace;
-  });
+/**
+ * Queues the answers saved on this device to sync as the server's
+ * in-progress audit, creating it there the first time.
+ */
+export function saveOfflineProgress(key: string, id: string) {
+  return changeOfflineWorkspace(key, (current) =>
+    applyAuditEvent(required(current), id, {
+      saveId: crypto.randomUUID(),
+      type: "progressSaved",
+    }),
+  );
 }
 
-/** Saves an issue raised on an audit's item, with its photos, on this device. */
+/** Seals the audit and queues its completion to sync. */
+export function completeOfflineAudit(key: string, id: string) {
+  return changeOfflineWorkspace(key, (current) =>
+    applyAuditEvent(required(current), id, {
+      completedAt: new Date().toISOString(),
+      saveId: crypto.randomUUID(),
+      type: "completed",
+    }),
+  );
+}
+
+/**
+ * Saves an issue raised on an audit's item, with its photos, on this device.
+ * The issue syncs onto the server's audit, so a draft's progress is saved to
+ * the server with it.
+ */
 export async function createOfflineIssue(
   key: string,
   input: IssueInput,
@@ -109,9 +125,9 @@ export async function createOfflineIssue(
   return changeOfflineWorkspace(
     key,
     (current) => {
-      const workspace = required(current);
-      if (!workspace.audits.some((audit) => audit.id === target.auditId))
-        throw new Error("The local audit is missing.");
+      const workspace = applyAuditEvent(required(current), target.auditId, {
+        type: "issueRaised",
+      });
       const operation = {
         ...input,
         ...target,
@@ -126,10 +142,10 @@ export async function createOfflineIssue(
           filename,
         })),
       });
-      workspace.jobs.push(job(operation, [target.auditId]));
+      workspace.jobs.push(pendingJob(operation, [target.auditId]));
       for (const image of images)
         workspace.jobs.push(
-          job(
+          pendingJob(
             {
               id: image.id,
               filename: image.filename,
@@ -143,20 +159,6 @@ export async function createOfflineIssue(
     },
     images,
   );
-}
-
-function job(
-  operation: OfflineJob["operation"],
-  dependsOn: string[],
-): OfflineJob {
-  return {
-    id: operation.id,
-    operation,
-    dependsOn,
-    status: "pending",
-    attempts: 0,
-    retryAt: 0,
-  };
 }
 
 export function retryOfflineWork(key: string) {

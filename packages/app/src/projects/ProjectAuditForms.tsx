@@ -17,6 +17,7 @@ import {
   TemplateCollections,
   TemplateViewSwitcher,
 } from "../audits/TemplateCollections";
+import { auditWrites, unsavedProgress } from "../offline/offlineAuditState";
 import { useDevice } from "../offline/offlineContext";
 import type { OfflineAudit, OfflineWorkspace } from "../offline/offlineStore";
 import { startOfflineAudit } from "../offline/offlineWork";
@@ -40,7 +41,8 @@ const formCopy = {
 /**
  * The forms a project uses, to start audits from, and the audits this device
  * started for it. Audits start on the device whether or not it is online,
- * and each syncs once it is completed and the device is online.
+ * and sync once their progress is saved or they are completed, whenever the
+ * device is online.
  */
 export function ProjectAuditForms({
   forms,
@@ -80,7 +82,7 @@ export function ProjectAuditForms({
             />
           </div>
         }
-        description="Audits start on this device and sync once completed, whenever it is online."
+        description="Audits start on this device. Save progress or complete one to sync it whenever this device is online."
         title="Audit forms"
       >
         {action.error && <Toast tone="danger">{action.error}</Toast>}
@@ -131,7 +133,7 @@ export function DeviceAudits({
           {countLabel(audits.length, "audit")}
         </span>
       }
-      description="Drafts stay here until completed. Completed audits sync when this device is online."
+      description="Drafts stay on this device until you save their progress, raise an issue, or complete them. Saved work syncs when this device is online."
       title="On this device"
     >
       {audits.length && workspace ? (
@@ -185,44 +187,72 @@ function DeviceAuditRow({
         {state.label}
       </Badge>
       <Button onClick={open} size="sm">
-        {state.synced ? "Open audit" : audit.queued ? "View" : "Continue"}
+        {state.synced
+          ? "Open audit"
+          : audit.status === "completed"
+            ? "View"
+            : "Continue"}
       </Button>
     </li>
   );
 }
 
 /**
- * Where a device audit is: a draft, waiting to sync, held back, or synced.
- * It is synced only once its issues and their photos are too, so the device
- * keeps showing it while any of its work is still here.
+ * Where a device audit is: a draft; in progress, with its progress waiting
+ * to sync or synced; completed and waiting to sync; held back; or synced.
+ * A completed audit is synced only once its issues and their photos are
+ * too, so the device keeps showing it while any of its work is still here.
  */
 function deviceAuditState(
   audit: OfflineAudit,
   workspace: OfflineWorkspace,
 ): { error?: string; label: string; synced: boolean; tone: BadgeTone } {
-  if (!audit.queued) return { label: "Draft", synced: false, tone: "neutral" };
-  const ids = new Set([audit.id]);
+  if (audit.status === "draft")
+    return { label: "Draft", synced: false, tone: "neutral" };
+  const writes = auditWrites(workspace.jobs, audit.id);
+  const left = unsyncedWork(audit, workspace, writes);
+  const error = left.find((job) => job.error)?.error;
+  const reason = error ? { error } : {};
+  if (left.some((job) => job.status === "blocked"))
+    return { ...reason, label: "Not synced", synced: false, tone: "danger" };
+  if (audit.status === "completed")
+    return left.length
+      ? {
+          ...reason,
+          label: writes.some((job) => job.status !== "synced")
+            ? "Waiting to sync"
+            : "Issues waiting to sync",
+          synced: false,
+          tone: "warning",
+        }
+      : { label: "Synced", synced: true, tone: "success" };
+  if (left.length)
+    return {
+      ...reason,
+      label: "Progress waiting to sync",
+      synced: false,
+      tone: "warning",
+    };
+  return unsavedProgress(audit, writes)
+    ? { label: "Changed since last sync", synced: false, tone: "neutral" }
+    : { label: "Progress synced", synced: false, tone: "info" };
+}
+
+/** The audit's writes, issues, and photos still to sync. */
+function unsyncedWork(
+  audit: OfflineAudit,
+  workspace: OfflineWorkspace,
+  writes: OfflineWorkspace["jobs"],
+) {
+  const ids = new Set(writes.map((job) => job.id));
   for (const issue of workspace.issues)
     if (issue.operation.auditId === audit.id) {
       ids.add(issue.operation.id);
       for (const image of issue.images) ids.add(image.id);
     }
-  const jobs = workspace.jobs.filter((job) => ids.has(job.id));
-  const left = jobs.filter((job) => job.status !== "synced");
-  const own = jobs.find((job) => job.id === audit.id);
-  if (own?.status === "synced" && !left.length)
-    return { label: "Synced", synced: true, tone: "success" };
-  const error = left.find((job) => job.error)?.error;
-  return {
-    ...(error ? { error } : {}),
-    label: left.some((job) => job.status === "blocked")
-      ? "Not synced"
-      : own?.status === "synced"
-        ? "Issues waiting to sync"
-        : "Waiting to sync",
-    synced: false,
-    tone: left.some((job) => job.status === "blocked") ? "danger" : "warning",
-  };
+  return workspace.jobs.filter(
+    (job) => ids.has(job.id) && job.status !== "synced",
+  );
 }
 
 /**

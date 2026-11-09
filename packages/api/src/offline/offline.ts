@@ -10,7 +10,7 @@ import type { ApiEnv } from "../auth/apiEnv";
 import type { IssueContext } from "../issues/issueRecords";
 import { activityBatch } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
-import { formerAssigneeError, offlineStatements } from "./offlineRecords";
+import { offlineWrites } from "./offlineRecords";
 import { readOfflineSync } from "./offlineSync";
 
 export const offline = new Hono<ApiEnv>();
@@ -76,51 +76,46 @@ offline.post("/operations", async (context) => {
     )
       .bind(scope.organizationId, scope.userId, operation.id)
       .first<{ digest: string }>();
-  const existing = await receipt();
-  if (existing) return replay(context, operation.id, digest, existing.digest);
-  const statements = await offlineStatements(context, operation);
-  if (typeof statements === "string")
-    return context.json({ error: statements }, 409);
+  const resourceId =
+    operation.type === "auditSave" ? operation.auditId : operation.id;
+  // A second tab, or a retry after a lost response, may commit this very
+  // operation at any point; its receipt answers before any refusal does.
+  const replayed = async () => {
+    const committed = await receipt();
+    return committed && replay(context, resourceId, digest, committed.digest);
+  };
+  const refuse = async (error: string) =>
+    (await replayed()) ?? context.json({ error }, 409);
+  const existing = await replayed();
+  if (existing) return existing;
+  const writes = await offlineWrites(context, operation);
+  if (typeof writes === "string") return refuse(writes);
   try {
-    // The receipt comes last and only with the record it reports, so an
-    // issue insert that skipped a former assignee commits nothing.
+    // The receipt comes last, written only on the condition that proves the
+    // writes before it applied, so a skipped write commits nothing.
     const results = await activityBatch(context.env.DB, context.get("apiKey"), [
-      ...statements,
+      ...writes.statements,
       context.env.DB.prepare(
         `INSERT INTO offline_operations (organization_id, user_id, id, digest, created_at)
-         SELECT ?, ?, ?, ?, ?
-         WHERE EXISTS (SELECT 1 FROM issues WHERE id = ? AND organization_id = ?)
-            OR EXISTS (SELECT 1 FROM audits WHERE id = ? AND organization_id = ?)`,
+         SELECT ?, ?, ?, ?, ? WHERE ${writes.applied.sql}`,
       ).bind(
         scope.organizationId,
         scope.userId,
         operation.id,
         digest,
         new Date().toISOString(),
-        operation.id,
-        scope.organizationId,
-        operation.id,
-        scope.organizationId,
+        ...writes.applied.bindings,
       ),
     ]);
-    if (!Number(results.at(-1)?.meta.changes))
-      return context.json({ error: formerAssigneeError }, 409);
+    if (!Number(results.at(-1)?.meta.changes)) return refuse(writes.rejected);
   } catch (cause) {
-    // A second tab or a response lost after commit is the same operation.
-    const committed = await receipt();
-    if (committed)
-      return replay(context, operation.id, digest, committed.digest);
-    const validation = await offlineStatements(context, operation);
-    if (typeof validation === "string")
-      return context.json({ error: validation }, 409);
+    const committed = await replayed();
+    if (committed) return committed;
+    const validation = await offlineWrites(context, operation);
+    if (typeof validation === "string") return refuse(validation);
     throw cause;
   }
-  return respond(
-    context,
-    offlineRoutes.apply,
-    { resourceId: operation.id },
-    201,
-  );
+  return respond(context, offlineRoutes.apply, { resourceId }, 201);
 });
 
 offline.put("/issues/:issueId/images/:imageId", async (context) => {

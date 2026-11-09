@@ -669,8 +669,9 @@ projects, the published forms turned on for them, and the organization's people
 online. There is no separate offline page: the Projects page shows a status
 line for this device's work, and each project's **Audit forms** tab lists its
 forms with **Start audit** and, under **On this device**, the audits started
-here for that project as drafts, waiting to sync, not synced (with the reason),
-or synced (opening the server audit).
+here for that project: drafts, in progress (progress waiting to sync, synced,
+or changed since the last sync), completed and waiting to sync, not synced
+(with the reason), or synced (opening the server audit).
 
 The device syncs its projects after each sign-in, when the app regains focus or
 the device reconnects, and every minute while online. `GET /api/offline/sync`
@@ -697,21 +698,41 @@ device is online means the API is unreachable, and sync keeps retrying.
 
 An audit started on the device keeps the form version it started from, so a
 form unpublished, edited, discarded, or turned off for the project after
-download does not strand it: the API accepts a completed audit against any
-version that was published until the form is purged. Answers save to the device
-as they are entered, and drafts survive reopening the app. **Complete audit**
-validates required answers and seals the audit for upload; drafts stay on the
-device. Raise issues from an audit's items. Each issue supports up to ten JPEG,
-PNG, GIF, or WebP photos of at most 10 MB, the same limits as online. A
-non-empty photo whose type the device cannot tell is kept, and the API checks
-its format when it syncs. Saving an issue stores its details, photos, and
-queued operations together.
+download does not strand it: the API accepts an audit against any version
+that was published until the form is purged. Answers save to the device as
+they are entered, and drafts survive reopening the app. A draft stays on the
+device until its progress is saved, an issue is raised on it, or it is
+completed.
+
+**Save progress** syncs the answers saved on the device so far: the first
+save puts the audit on the server as an in-progress audit that the
+organization can see, and each later save sends the answers again. Answering
+continues on the device in between, offline or not, and **Open synced
+audit** opens the server's copy once it is there. **Complete audit**
+validates required answers, seals the audit, and syncs its completion, putting
+it on the server first if it is not there yet. Raise issues from an audit's
+items, at any point: saving an issue saves the audit's progress to the server
+if it is not there yet, so the issue syncs onto it without waiting for
+completion. Each issue supports up to ten JPEG, PNG, GIF, or WebP photos of at
+most 10 MB, the same limits as online. A non-empty photo whose type the device
+cannot tell is kept, and the API checks its format when it syncs. Saving an
+issue stores its details, photos, and queued operations together.
+
+Each sync of an audit is an operation in `POST /api/offline/operations`:
+`auditStart` creates the audit in progress with its answers so far (revision
+1), and `auditSave` saves answers, completing the audit when it carries the
+device-reported start and completion times, only over the revision the
+device's previous write left. Any change made on the server meanwhile (an
+answer edited online, the audit completed or discarded there) makes the save
+stale: it is refused, the device keeps its answers and shows the reason, and
+the audit continues online. The save, its history, and its receipt commit
+together or not at all.
 
 Queued work is sent while the app is open and online: right away, on focus, on
 reconnecting, and on a 30-second timer. It creates the audit first, recorded
 against its project (`audits.project_id`; a project deleted since still takes
-it, and one outside the organization is refused),
-then its issues, then each issue's photos. **Retry sync** on the status line
+it, and one outside the organization is refused), then its saves in order,
+and its issues, then each issue's photos. **Retry sync** on the status line
 restarts held-back work; temporary failures back off to five minutes. Repeated
 requests carry the same IDs; the server commits a receipt with each mutation,
 including image activation, so a lost response does not duplicate records or
@@ -737,13 +758,14 @@ person left) stay under **Other audits on this device** on the Projects page,
 where they can still be finished and synced.
 
 Device-first projects are a deliberate clean break, made while the product is
-pre-release: the device store moved to IndexedDB version 2 without carrying
-version 1 data over, `/api/offline/forms` is gone, and the API accepts only
-audits that name their project. There are no compatibility paths for older
-clients.
+pre-release: the device store is at IndexedDB version 3 and carries no earlier
+version's data over (version 2 synced audits only once completed),
+`/api/offline/forms` is gone, and the API accepts only audits that name their
+project. There are no compatibility paths for older clients.
 
 Existing server audits, template editing, transaction issues, and edits to
-queued work require connectivity. Open a synced record to make further changes.
+queued issues require connectivity. Open a synced record to make further
+changes.
 Sync does not run while the app is closed. Local copies use the browser or
 WebView's IndexedDB storage, including photo bytes, and remain on the device
 after sync. Browser storage can be evicted; persistent storage is requested

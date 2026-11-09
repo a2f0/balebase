@@ -22,11 +22,11 @@ function Harness() {
   return null;
 }
 
-/** Storage that fails the answer writes, and the queueing, it is told to. */
+/** Storage that fails the answer writes, and the completion, it is told to. */
 async function mountAnswers(failures: Error[], queueFailure?: Error) {
   const queued: string[] = [];
   storage = {
-    queueAudit: async (_key, id) => {
+    completeAudit: async (_key, id) => {
       if (queueFailure) throw queueFailure;
       queued.push(id);
     },
@@ -34,6 +34,7 @@ async function mountAnswers(failures: Error[], queueFailure?: Error) {
       const failure = failures.shift();
       if (failure) throw failure;
     },
+    saveProgress: async () => {},
   };
   await mount(<Harness />);
   const answers = () => {
@@ -73,7 +74,7 @@ describe("offline audit answers", () => {
   it("keeps a failed completion's error after an answer saves", async () => {
     const { answers } = await mountAnswers([], new Error("Queue unavailable."));
     await act(async () => {
-      await answers().save(true);
+      await answers().save("completion");
     });
     expect(answers().error).toBe("Queue unavailable.");
     await answer(answers, "exit", "pass");
@@ -87,7 +88,7 @@ describe("offline audit answers", () => {
     );
     // The completion writes nothing, so the failing write is the answer's.
     await act(async () => {
-      await answers().save(true);
+      await answers().save("completion");
     });
     expect(answers().error).toBe("Queue unavailable.");
     await answer(answers, "exit", "fail");
@@ -104,7 +105,7 @@ describe("offline audit answers", () => {
     await answer(answers, "exit", "fail");
     // Retrying the draft fails to write it again.
     await act(async () => {
-      await answers().save(false);
+      await answers().save();
     });
     expect(answers().error).toBe("Storage full.");
     await answer(answers, "exit", "pass");
@@ -118,7 +119,7 @@ describe("offline audit answers", () => {
     );
     await answer(answers, "exit", "fail");
     await act(async () => {
-      await answers().save(true);
+      await answers().save("completion");
     });
     expect(answers().error).toBe("Required answers are missing.");
   });
