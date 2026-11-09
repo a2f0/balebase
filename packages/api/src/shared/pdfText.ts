@@ -73,7 +73,6 @@ function wrap(text: string, font: PDFFont, size: number, width: number) {
       continue;
     }
     if (line) lines.push(line);
-    line = "";
     let rest = word;
     while (font.widthOfTextAtSize(rest, size) > width) {
       let cut = rest.length - 1;

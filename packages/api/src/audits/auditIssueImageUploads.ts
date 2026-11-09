@@ -163,6 +163,7 @@ async function uploadReservedAuditIssueImage(
     }
     requestedFilename = upload.filename;
     validation = await validateImage(context.env.IMAGES, upload.bytes);
+    // biome-ignore lint/nursery/noUselessAssignment: drops the request's bytes (up to 10 MB) before the normalized image streams to storage.
     upload = undefined;
     if ("error" in validation) {
       await discardAuditIssueImageReservation(

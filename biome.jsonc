@@ -19,6 +19,10 @@
   },
   "linter": {
     "enabled": true,
+    // Biome does not detect bun:test, so opt in to its test rules.
+    "domains": {
+      "test": "recommended"
+    },
     "rules": {
       "preset": "recommended",
       "a11y": {
@@ -46,13 +50,44 @@
           }
         }
       },
+      "correctness": {
+        "noNestedComponentDefinitions": "error",
+        "noReactPropAssignments": "error",
+        "noUnusedInstantiation": "error"
+      },
+      // Bug-catching rules not yet stable. When a Biome upgrade promotes one,
+      // move it to the group the upgrade reports.
+      "nursery": {
+        "noAccidentalBitwiseOperators": "error",
+        "noBaseToString": "error",
+        "noBooleanSortComparator": "error",
+        "noDuplicateMapKeys": "error",
+        "noExtendNative": "error",
+        "noFloatingPromises": "error",
+        "noImpliedEval": "error",
+        "noInvalidThis": "error",
+        "noNegationInEqualityCheck": "error",
+        "noReturnInFinally": "error",
+        "noUnsafePlusOperands": "error",
+        "noUselessAssignment": "error",
+        "noXorAsExponentiation": "error",
+        "useExhaustiveSwitchCases": "error"
+      },
       "suspicious": {
+        "noConstantBinaryExpressions": "error",
         "noImportCycles": {
           "level": "error",
           "options": { "ignoreTypes": false }
-        }
+        },
+        "noJsxLeakedDollar": "error",
+        "noParametersOnlyUsedInRecursion": "error",
+        "noSkippedTests": "error",
+        "noUnassignedVariables": "error",
+        "noUnknownAttribute": "error",
+        "noUnusedExpressions": "error"
       },
       "style": {
+        "useThrowOnlyError": "error",
         "noRestrictedImports": {
           "level": "error",
           "options": {
