@@ -1,6 +1,7 @@
-import { Button, Card, Icon, PageSection, Toast } from "@balebase/ui/react";
-import { useCallback } from "react";
+import { Button, Card, PageSection, Toast } from "@balebase/ui/react";
+import { useCallback, useEffect } from "react";
 import { api } from "../shared/apiClient";
+import { ListRow } from "../shared/ListRow";
 import { countLabel, formatDate } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -11,14 +12,21 @@ import { projectPath } from "../workspace/workspacePaths";
  * managers can restore. Shown only while there are some.
  */
 export function DeletedProjects({
+  deletions,
   onNavigate,
 }: {
+  /** Counts projects deleted from the list above, each of which joins this. */
+  deletions: number;
   onNavigate: (pathname: string) => void;
 }) {
   const loaded = useLoad(
     useCallback(() => api.projects.listDeleted(), []),
     "Could not load deleted projects.",
   );
+  const { reload } = loaded;
+  useEffect(() => {
+    if (deletions) void reload();
+  }, [deletions, reload]);
   const action = useAction("Could not restore the project.");
   const listing = loaded.data;
   // A failed load says so, so deleted projects stay within reach.
@@ -26,7 +34,7 @@ export function DeletedProjects({
     return (
       <PageSection title="Deleted projects">
         <Toast tone="danger">{loaded.error}</Toast>
-        <Button icon="refresh" onClick={() => void loaded.reload()} size="sm">
+        <Button icon="refresh" onClick={() => void reload()} size="sm">
           Retry
         </Button>
       </PageSection>
@@ -51,30 +59,27 @@ export function DeletedProjects({
     >
       {action.error && <Toast tone="danger">{action.error}</Toast>}
       <Card flush>
-        <ul className="rowList projectList">
+        <ul className="rowList">
           {listing.projects.map((project) => (
-            <li className="row" key={project.id}>
-              <span className="iconTile">
-                <Icon name="trash" size={20} />
-              </span>
-              <span className="rowMain">
-                <span className="rowTitle truncate">{project.name}</span>
-                <span className="rowMeta truncate">
-                  Deleted {formatDate(project.deletedAt)}
-                  {project.deletedBy ? ` by ${project.deletedBy.name}` : ""}
-                </span>
-              </span>
-              {listing.canManage && (
-                <Button
-                  disabled={action.busy}
-                  icon="restore"
-                  onClick={() => void restore(project.id)}
-                  size="sm"
-                >
-                  Restore
-                </Button>
-              )}
-            </li>
+            <ListRow
+              icon="trash"
+              items={
+                listing.canManage
+                  ? [
+                      {
+                        disabled: action.busy,
+                        icon: "restore",
+                        id: "restore",
+                        label: "Restore",
+                        onSelect: () => void restore(project.id),
+                      },
+                    ]
+                  : []
+              }
+              key={project.id}
+              meta={`Deleted ${formatDate(project.deletedAt)}${project.deletedBy ? ` by ${project.deletedBy.name}` : ""}`}
+              title={project.name}
+            />
           ))}
         </ul>
       </Card>

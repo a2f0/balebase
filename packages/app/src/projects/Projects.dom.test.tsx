@@ -1,7 +1,11 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { productName } from "@balebase/ui/brand";
 import { DialogHost } from "@balebase/ui/react";
-import type { Project, ProjectForm } from "@balebase/validators/projects";
+import type {
+  Project,
+  ProjectForm,
+  ProjectSummary,
+} from "@balebase/validators/projects";
 import { DeviceContext, type DeviceState } from "../offline/offlineContext";
 import type { OfflineWorkspace } from "../offline/offlineStore";
 import { installDom } from "../testing/dom";
@@ -213,6 +217,16 @@ function collectionOf(container: HTMLElement, name: string) {
     ?.querySelector(".auditCollectionTitle")?.firstChild?.textContent;
 }
 
+/** Chooses `item` from the menu of the row titled `name`. */
+async function chooseFromRow(name: string, item: string) {
+  await click(`Actions for ${name}`);
+  await click(
+    [...document.querySelectorAll('[role="menuitem"]')].find(
+      (entry) => entry.textContent === item,
+    ),
+  );
+}
+
 describe("project detail", () => {
   it("shows members, audit forms, setup, and activity on separate tabs", async () => {
     const { writes } = stubApi(true);
@@ -285,7 +299,7 @@ describe("project detail", () => {
     await settle();
     expect(toggle(container, "Site walk")?.checked).toBe(false);
 
-    await click(queryButton("Remove Sam", container));
+    await chooseFromRow("Sam", "Remove from project");
     await settle();
     expect(writes).toEqual([
       "PUT /api/projects/project-1/members/sam",
@@ -540,10 +554,86 @@ describe("project detail", () => {
     expect(container.textContent).toContain("Deleted projects");
     expect(container.textContent).toContain("Old site");
     expect(container.textContent).toContain(`by ${owner.name}`);
-    await click(queryButton("Restore", container));
+    await chooseFromRow("Old site", "Restore");
     await settle();
     expect(requests).toContain("POST /api/projects/old-site/restore");
     expect(visited).toEqual(["/projects/old-site"]);
+  });
+
+  it("lets a manager edit and delete projects from their rows' menus", async () => {
+    const summary = (id: string, name: string): ProjectSummary => ({
+      createdAt: "2026-10-01T00:00:00.000Z",
+      description: "North wing",
+      formCount: 1,
+      id,
+      isMember: false,
+      memberCount: 2,
+      name,
+      revision: 3,
+      updatedAt: "2026-10-01T00:00:00.000Z",
+    });
+    let projects = [summary("site", "Site walk"), summary("clinic", "Clinic")];
+    const deleted: (ProjectSummary & { deletedAt: string })[] = [];
+    const changes: unknown[] = [];
+    respond(async (url, init) => {
+      const method = init?.method ?? "GET";
+      const id = url.pathname.split("/")[3];
+      if (method === "PATCH") {
+        const change = JSON.parse(String(init?.body)) as { name: string };
+        changes.push(change);
+        projects = projects.map((project) =>
+          project.id === id ? { ...project, name: change.name } : project,
+        );
+        return Response.json({ project: summary("site", change.name) });
+      }
+      if (method === "DELETE") {
+        const gone = projects.find((project) => project.id === id);
+        projects = projects.filter((project) => project !== gone);
+        if (gone)
+          deleted.push({ ...gone, deletedAt: "2026-10-20T00:00:00.000Z" });
+        return new Response(null, { status: 204 });
+      }
+      if (url.pathname === "/api/projects/deleted")
+        return Response.json({ canManage: true, projects: deleted });
+      return Response.json({ canManage: true, projects });
+    });
+    const { container } = await mount(
+      <>
+        <Projects onNavigate={() => {}} pathname="/projects" />
+        <DialogHost />
+      </>,
+    );
+    await settle();
+    /** The row titles under the section headed `heading`. */
+    const titles = (heading: string) =>
+      [
+        ...([...container.querySelectorAll("section")]
+          .find(
+            (section) =>
+              section.querySelector(".sectionTitle")?.textContent === heading,
+          )
+          ?.querySelectorAll(".rowTitle") ?? []),
+      ].map((title) => title.textContent);
+    expect(titles("All projects")).toEqual(["Site walk", "Clinic"]);
+    expect(titles("Deleted projects")).toEqual([]);
+
+    await chooseFromRow("Site walk", "Edit");
+    expect(queryButton("New project", container)).toBeNull();
+    await fill(container.querySelector("form input"), "Site survey");
+    await click(queryButton("Save changes", container));
+    await settle();
+    // Only the name changed, from the revision the list showed.
+    expect(changes).toEqual([{ expectedRevision: 3, name: "Site survey" }]);
+    expect(container.querySelector("form")).toBeNull();
+    expect(container.textContent).toContain("Project updated.");
+    expect(titles("All projects")).toEqual(["Site survey", "Clinic"]);
+
+    await chooseFromRow("Clinic", "Delete");
+    await click("Delete project");
+    await settle();
+    // The project leaves the list for Deleted projects.
+    expect(titles("All projects")).toEqual(["Site survey"]);
+    expect(titles("Deleted projects")).toEqual(["Clinic"]);
   });
 
   it("says when deleted projects could not load, and retries", async () => {

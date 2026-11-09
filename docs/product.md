@@ -435,7 +435,10 @@ on but are no longer listed, counted, or downloaded; publishing an unpublished
 form again restores it. Each project page has four tabs: **Members**, **Audit
 forms** (start audits from the forms turned on; see [Audits on this
 device](#audits-on-this-device)), **Project setup** (owners and admins turn
-published forms on and off), and **Activity**. Creating, editing,
+published forms on and off), and **Activity**. For owners and admins, each
+project on the Projects page has a menu (its menu button, or right-click) with
+**Edit** and **Delete**, each deleted project one with **Restore**, and each
+member on **Members** one with **Remove from project**. Creating, editing,
 deleting, and restoring a project, membership changes, and form changes are
 recorded in Activity, which keeps a deleted project's history. Migration
 `0078_create_projects.sql` adds the project tables, and

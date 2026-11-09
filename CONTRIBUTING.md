@@ -188,6 +188,10 @@ it.
 - Build paths with the `workspace/workspacePaths.ts` helpers, match a section
   with `isWithin`, read a route's record ID with `recordIdForPath`, and link
   with `AppLink` or `AppButtonLink` from `shared/AppLink.tsx`.
+- List records with `ListRow` from `shared/ListRow.tsx`: an icon, a one-line
+  title over its meta, any details, and the row's actions in a menu opened
+  from its menu button or by right-clicking the row; `open` makes the whole
+  row a link or button.
 - Format dates with `shared/labels.ts`, using `formatCalendarDate` for
   YYYY-MM-DD days, and roles with `hasRole` and `formatRoles` from
   `organizations/organizationState.ts`.

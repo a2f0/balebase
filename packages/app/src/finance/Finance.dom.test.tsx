@@ -415,7 +415,7 @@ describe("Finance filters", () => {
     );
     const payees = () =>
       [...container.querySelectorAll(".financePayee")].map((row) => [
-        row.querySelector(".financePayeeName")?.textContent,
+        row.querySelector(".rowTitle")?.textContent,
         row.querySelector(".rowMeta")?.textContent?.split(" · ")[0],
       ]);
     await mountFinance();

@@ -247,42 +247,15 @@
   color: var(--color-green-strong);
 }
 
-/*
- * A long payee name keeps its start and ends in an ellipsis instead of
- * widening its row; a button's centered inline-flex would clip both ends.
- */
-.financePayeeName {
-  display: block;
-  max-width: 100%;
-  text-align: start;
-  white-space: nowrap;
-}
-
 /* Keeps a payee's total at the right when a narrow row wraps it. */
 .financePayee .financeAmount {
   margin-inline-start: auto;
 }
 
 /*
- * A category's name, total, and menu stay on one line: the name gives way,
- * ending in an ellipsis, so the total never wraps under it.
+ * A category's total stays on its name's line, which gives way to it;
+ * several currencies wrap, one per line, rather than push the menu out.
  */
-.financeCategory {
-  flex-wrap: nowrap;
-}
-
-.financeCategory .rowMain {
-  flex-basis: 0;
-}
-
-.financeCategory .rowTitle {
-  display: block;
-  max-width: 100%;
-  text-align: start;
-  white-space: nowrap;
-}
-
-/* Several currencies wrap, one per line, rather than push the menu out. */
 .financeCategory .financeAmount {
   display: flex;
   flex: 0 1 auto;

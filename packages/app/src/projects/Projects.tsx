@@ -3,7 +3,6 @@ import {
   Button,
   Card,
   EmptyState,
-  Icon,
   LoadingState,
   Page,
   PageBody,
@@ -14,8 +13,8 @@ import {
 import type { NewProject, ProjectSummary } from "@balebase/validators/projects";
 import { useCallback, useState } from "react";
 import { useDevice } from "../offline/offlineContext";
-import { AppLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
+import { ListRow } from "../shared/ListRow";
 import { countLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
@@ -34,6 +33,7 @@ import { DeviceSyncStatus } from "./DeviceSyncStatus";
 import { OtherDeviceAudits } from "./ProjectAuditForms";
 import { ProjectDetailPage } from "./ProjectDetail";
 import { ProjectForm } from "./ProjectForm";
+import { confirmProjectDeletion, editedFields } from "./projectChanges";
 
 export function Projects({
   onNavigate,
@@ -56,6 +56,60 @@ export function Projects({
   );
 }
 
+/** The form open above the list: none, a new project, or an edit of one. */
+type ProjectListForm =
+  | { status: "closed" }
+  | { status: "adding" }
+  | { project: ProjectSummary; status: "editing" };
+
+/**
+ * The form open above the list, and the edits and deletions made from the
+ * list's rows, each of which reloads it. As on a project's page, a refused
+ * edit keeps its text, and reloading lets the next edit start from the latest
+ * revision.
+ */
+function useProjectListChanges(reload: () => Promise<boolean>) {
+  const action = useAction("Could not update the project.");
+  const [form, setForm] = useState<ProjectListForm>({ status: "closed" });
+  // Counts deletions, each of which Deleted projects reloads to list.
+  const [deletions, setDeletions] = useState(0);
+  const closeForm = () => setForm({ status: "closed" });
+
+  async function save(
+    project: ProjectSummary,
+    input: { description: string; name: string },
+  ) {
+    const saved = await action.run(async () => {
+      await api.projects.update(project.id, editedFields(project, input));
+      await reload();
+    }, "Project updated.");
+    if (saved) closeForm();
+    else void reload();
+    return saved;
+  }
+
+  async function remove(project: ProjectSummary) {
+    if (!(await confirmProjectDeletion(project))) return;
+    const deleted = await action.run(async () => {
+      await api.projects.delete(project.id);
+      await reload();
+    });
+    if (deleted) setDeletions((count) => count + 1);
+  }
+
+  return {
+    busy: action.busy,
+    closeForm,
+    deletions,
+    error: action.error,
+    form,
+    notice: action.notice,
+    remove,
+    save,
+    setForm,
+  };
+}
+
 function ProjectListPage({
   onNavigate,
 }: {
@@ -65,14 +119,15 @@ function ProjectListPage({
     useCallback(() => api.projects.list(), []),
     "Could not load projects.",
   );
-  const action = useAction("Could not create the project.");
-  const [adding, setAdding] = useState(false);
+  const creating = useAction("Could not create the project.");
+  const changes = useProjectListChanges(loaded.reload);
+  const { form, setForm } = changes;
   const listing = loaded.data;
-  const error = action.error ?? loaded.error;
+  const error = creating.error ?? changes.error ?? loaded.error;
   const { workspace } = useDevice();
 
   const add = (input: NewProject) =>
-    action.run(async () => {
+    creating.run(async () => {
       const created = await api.projects.create(input);
       onNavigate(projectPath(created.id));
     });
@@ -93,10 +148,10 @@ function ProjectListPage({
       <PageHeader
         actions={
           listing?.canManage &&
-          !adding && (
+          form.status === "closed" && (
             <Button
               icon="add"
-              onClick={() => setAdding(true)}
+              onClick={() => setForm({ status: "adding" })}
               variant="primary"
             >
               New project
@@ -110,6 +165,7 @@ function ProjectListPage({
       <PageBody>
         <DeviceSyncStatus />
         {error && <Toast tone="danger">{error}</Toast>}
+        {changes.notice && <Toast tone="success">{changes.notice}</Toast>}
         {!listing ? (
           !error && <LoadingState label="Loading projects…" />
         ) : (
@@ -120,8 +176,15 @@ function ProjectListPage({
                 projects.
               </Banner>
             )}
-            {adding && (
-              <ProjectForm onCancel={() => setAdding(false)} onSave={add} />
+            {form.status === "adding" && (
+              <ProjectForm onCancel={changes.closeForm} onSave={add} />
+            )}
+            {form.status === "editing" && (
+              <ProjectForm
+                initial={form.project}
+                onCancel={changes.closeForm}
+                onSave={(input) => changes.save(form.project, input)}
+              />
             )}
             <PageSection
               actions={
@@ -133,12 +196,19 @@ function ProjectListPage({
             >
               <ProjectList
                 canManage={listing.canManage}
-                onAdd={() => setAdding(true)}
+                // Row actions wait while a form is open or a change runs.
+                disabled={changes.busy || form.status !== "closed"}
+                onAdd={() => setForm({ status: "adding" })}
+                onDelete={(project) => void changes.remove(project)}
+                onEdit={(project) => setForm({ project, status: "editing" })}
                 onNavigate={onNavigate}
                 projects={listing.projects}
               />
             </PageSection>
-            <DeletedProjects onNavigate={onNavigate} />
+            <DeletedProjects
+              deletions={changes.deletions}
+              onNavigate={onNavigate}
+            />
             <OtherDeviceAudits onNavigate={onNavigate} />
           </>
         )}
@@ -149,12 +219,18 @@ function ProjectListPage({
 
 function ProjectList({
   canManage,
+  disabled,
   onAdd,
+  onDelete,
+  onEdit,
   onNavigate,
   projects,
 }: {
   canManage: boolean;
+  disabled: boolean;
   onAdd: () => void;
+  onDelete: (project: ProjectSummary) => void;
+  onEdit: (project: ProjectSummary) => void;
   onNavigate: (pathname: string) => void;
   projects: ProjectSummary[];
 }) {
@@ -177,27 +253,35 @@ function ProjectList({
     );
   return (
     <Card flush>
-      <ul className="rowList projectList">
+      <ul className="rowList">
         {projects.map((project) => (
-          <li key={project.id}>
-            <AppLink
-              className="row"
-              href={projectPath(project.id)}
-              onNavigate={onNavigate}
-            >
-              <span className="iconTile">
-                <Icon name="layers" size={20} />
-              </span>
-              <span className="rowMain">
-                <span className="rowTitle truncate">{project.name}</span>
-                <span className="rowMeta truncate">
-                  {countLabel(project.memberCount, "member")} ·{" "}
-                  {countLabel(project.formCount, "audit form")}
-                  {project.isMember ? " · You are a member" : ""}
-                </span>
-              </span>
-            </AppLink>
-          </li>
+          <ListRow
+            icon="layers"
+            items={
+              canManage
+                ? [
+                    {
+                      disabled,
+                      icon: "edit",
+                      id: "edit",
+                      label: "Edit",
+                      onSelect: () => onEdit(project),
+                    },
+                    {
+                      disabled,
+                      icon: "trash",
+                      id: "delete",
+                      label: "Delete",
+                      onSelect: () => onDelete(project),
+                    },
+                  ]
+                : []
+            }
+            key={project.id}
+            meta={`${countLabel(project.memberCount, "member")} · ${countLabel(project.formCount, "audit form")}${project.isMember ? " · You are a member" : ""}`}
+            open={{ href: projectPath(project.id), onNavigate }}
+            title={project.name}
+          />
         ))}
       </ul>
     </Card>

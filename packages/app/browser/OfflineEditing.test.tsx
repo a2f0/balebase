@@ -33,9 +33,9 @@ async function openDraft(page: Page) {
 
 /** Opens the seeded project from the device's project list. */
 async function openProject(page: Page) {
-  await page.waitForSelector("a.row");
+  await page.waitForSelector("a.rowTarget");
   await page.evaluate(() =>
-    [...document.querySelectorAll<HTMLAnchorElement>("a.row")]
+    [...document.querySelectorAll<HTMLAnchorElement>("a.rowTarget")]
       .find((link) => link.textContent?.includes("Site"))
       ?.click(),
   );
