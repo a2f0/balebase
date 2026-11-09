@@ -376,21 +376,20 @@ Inbox messages can be linked to library folders, equipment, and imported
 finance transactions. Links live in one polymorphic table,
 `inbound_email_links`, whose `target_type` is `library_folder`, `equipment`,
 or `finance_transaction`. A polymorphic reference cannot carry a foreign key,
-so database triggers remove links when their target is deleted, and purging
-an email cascades to its links. Email has three statuses: Inbox, Trash, and
-Archived. The message toolbar archives email or moves it to Trash; archived
-email leaves the Inbox but keeps its attachments and links, remains available
-from linked records, and can be moved back to Inbox. Linked email cannot be
-moved to Trash, including email with Finance links hidden from the current
-user. Email in Trash is eligible for removal by the on-request **Purge trashed
-email** maintenance job after 30 days and can be restored until it is purged.
-Legacy email
-already in Trash keeps its links but is hidden from
-linked records until restored. Links to
-transactions that Plaid has since removed are hidden. Creating, removing, or
-seeing transaction links requires the Finance capability. A folder lists its
-linked emails, and a transaction shows its linked emails in the Finance
-transaction list.
+so database triggers remove links when their target row is removed, and
+purging an email cascades to its links. Email has three statuses: Inbox,
+Trash, and Archived. The message toolbar archives email or moves it to Trash;
+archived email leaves the Inbox but keeps its attachments and links, remains
+available from linked records, and can be moved back to Inbox. Linked email
+cannot be moved to Trash, including email with Finance links hidden from the
+current user. Email in Trash is eligible for removal by the on-request **Purge
+trashed email** maintenance job after 30 days and can be restored until it is
+purged. Legacy email already in Trash keeps its links but is hidden from
+linked records until restored. Links to transactions that Plaid has since
+removed are hidden. Links to deleted equipment are hidden too, and do not keep
+an email out of Trash. Creating, removing, or seeing transaction links
+requires the Finance capability. A folder lists its linked emails, and a
+transaction shows its linked emails in the Finance transaction list.
 
 PDF and image attachments preview in the inbox. PDFs are rendered in the
 browser with [PDF.js](https://mozilla.github.io/pdf.js/), which loads on the
@@ -406,10 +405,16 @@ Each item can be assigned to one organization member at a time, and removing a
 member from the organization returns their equipment to unassigned, recorded
 in each item's history with the person who removed them (or who left). Every
 member can view equipment; organization owners and admins add, edit, assign,
-and delete it. Receipts and other inbox emails link to equipment the same way
-they link to folders, and any member can link or unlink them. Deleting an item
-records who held it and how many email links went, and each linked email's
-history shows its link ending with the deletion. The API owns the
+delete, and restore it. Receipts and other inbox emails link to equipment the
+same way they link to folders, and any member can link or unlink them.
+Deleting an item hides it: it keeps its assignee, email links, and history,
+and it is listed under **Deleted equipment** on the Equipment page, where
+owners and admins restore it as it was (`GET /api/equipment/deleted`,
+`POST /api/equipment/:id/restore`). While it is deleted its email links are
+hidden, so they neither list on their emails nor keep them out of Trash, and
+it takes no new links. Deleting and restoring record a snapshot of the item,
+including who held it, in its history. Migration
+`0097_soft_delete_equipment.sql` adds the soft delete. The API owns the
 list of equipment types, so adding one needs no migration; an item keeps its
 type if that type is later retired.
 

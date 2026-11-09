@@ -44,7 +44,7 @@ export function EquipmentActivityDetails({ event }: { event: ActivityEvent }) {
       </div>
     );
   }
-  // Added and deleted equipment carry a snapshot of the item.
+  // Added, deleted, and restored equipment carry a snapshot of the item.
   return (
     <div className="activityDetails">
       <p>
@@ -66,6 +66,7 @@ export function EquipmentActivityDetails({ event }: { event: ActivityEvent }) {
           )}
         </p>
       )}
+      {/* Only deletions recorded before they became restorable removed links. */}
       {typeof details.emailLinkCount === "number" && (
         <p>Email links removed: {details.emailLinkCount}</p>
       )}

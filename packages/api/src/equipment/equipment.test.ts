@@ -397,7 +397,7 @@ describe("equipment", () => {
         .status,
     ).toBe(404);
 
-    // Deletion is recorded once, and the history outlives the equipment.
+    // Deletion is recorded once, and the history outlives the listing.
     expect((await owner.json("DELETE", `/api/equipment/${id}`)).status).toBe(
       204,
     );
@@ -424,7 +424,6 @@ describe("equipment", () => {
         assignedTo: "owner-user",
         assigneeEmail: "owner-user@example.com",
         assigneeName: "owner-user",
-        emailLinkCount: 0,
         make: "Apple",
         model: "MacBook Air",
         purchaseDate: "2026-04-01",
@@ -495,9 +494,42 @@ describe("equipment", () => {
         .body.equipment[0]?.emailCount,
     ).toBe(1);
 
+    // Deleting the item hides its link: the email lists no link, can move to
+    // Trash, and cannot link to the item again until it is restored.
     await owner.json("DELETE", `/api/equipment/${id}`);
-    expect(database.query("SELECT id FROM inbound_email_links").all()).toEqual(
-      [],
+    const hidden = await member.json<{
+      email: { linkCount: number; links: unknown[] };
+    }>("GET", "/api/inbox/email-1?folder=archived");
+    expect(hidden.body.email).toMatchObject({ linkCount: 0, links: [] });
+    expect(
+      (
+        await member.json("POST", "/api/inbox/email-1/links", {
+          targetId: id,
+          targetType: "equipment",
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await owner.json<{ equipment: Equipment }>(
+          "POST",
+          `/api/equipment/${id}/restore`,
+        )
+      ).body.equipment.emailCount,
+    ).toBe(1);
+    expect(
+      (
+        await member.json<{ email: { linkCount: number } }>(
+          "GET",
+          "/api/inbox/email-1?folder=archived",
+        )
+      ).body.email.linkCount,
+    ).toBe(1);
+    // While the item is deleted its email can move to Trash, and the link
+    // stays for the restore.
+    await owner.json("DELETE", `/api/equipment/${id}`);
+    expect((await member.json("DELETE", "/api/inbox/email-1")).status).toBe(
+      200,
     );
 
     // Deletes that bypass the API, such as organization cascades, rely on the
@@ -511,15 +543,15 @@ describe("equipment", () => {
       )
       .run(timestamp);
     database.query("DELETE FROM equipment WHERE id = 'equipment-other'").run();
-    expect(database.query("SELECT id FROM inbound_email_links").all()).toEqual(
-      [],
-    );
+    expect(
+      database.query("SELECT target_id FROM inbound_email_links").all(),
+    ).toEqual([{ target_id: id }]);
   });
 });
 
-describe("equipment deletion history", () => {
-  it("keeps who held the item and ends each email link on its email", async () => {
-    const { as, database } = createFixture();
+describe("equipment deletion and restore", () => {
+  it("hides the item until a manager restores it as it was", async () => {
+    const { as } = createFixture();
     const owner = as("owner-user", "owner");
     const member = as("member-user", "member");
     const created = await owner.json<{ equipment: Equipment }>(
@@ -532,28 +564,96 @@ describe("equipment deletion history", () => {
       targetId: id,
       targetType: "equipment",
     });
-    await member.json("POST", "/api/inbox/email-1/links", {
-      targetId: "folder-1",
-      targetType: "library_folder",
-    });
-    // Equipment that predates its history: only the deletion keeps the holder.
-    database
-      .query("DELETE FROM activity_events WHERE action = 'equipment.created'")
-      .run();
 
+    expect((await member.json("DELETE", `/api/equipment/${id}`)).status).toBe(
+      403,
+    );
     expect((await owner.json("DELETE", `/api/equipment/${id}`)).status).toBe(
       204,
     );
-    // A second, racing delete finds nothing and records nothing.
+    // A second delete finds nothing and records nothing.
     expect((await owner.json("DELETE", `/api/equipment/${id}`)).status).toBe(
       404,
     );
-    const deleted = await owner.json<{ events: ActivityEvent[] }>(
+    expect(
+      (await member.json<{ equipment: Equipment[] }>("GET", "/api/equipment"))
+        .body.equipment,
+    ).toEqual([]);
+    for (const [method, path] of [
+      ["GET", `/api/equipment/${id}`],
+      ["GET", `/api/equipment/${id}/activity`],
+      ["PATCH", `/api/equipment/${id}`],
+    ] as const) {
+      expect((await owner.json(method, path, { model: "Hidden" })).status).toBe(
+        404,
+      );
+    }
+
+    const deleted = await member.json<{
+      canManage: boolean;
+      equipment: Array<
+        Equipment & { deletedAt: string; deletedBy: { id: string } | null }
+      >;
+    }>("GET", "/api/equipment/deleted");
+    expect(deleted.body).toMatchObject({
+      canManage: false,
+      equipment: [
+        {
+          assignee: { id: "member-user" },
+          deletedAt: expect.any(String),
+          deletedBy: { id: "owner-user", name: "owner-user" },
+          emailCount: 1,
+          id,
+          model: "MacBook Pro",
+        },
+      ],
+    });
+
+    for (const [requester, path, status] of [
+      [member, `/api/equipment/${id}/restore`, 403],
+      // Restoring an item that is not deleted, or another organization's.
+      [owner, "/api/equipment/equipment-other/restore", 404],
+    ] as const) {
+      expect((await requester.json("POST", path)).status).toBe(status);
+    }
+    const restored = await owner.json<{ equipment: Equipment }>(
+      "POST",
+      `/api/equipment/${id}/restore`,
+    );
+    expect(restored.status).toBe(200);
+    expect(restored.body.equipment).toMatchObject({
+      assignee: { id: "member-user" },
+      emailCount: 1,
+      id,
+    });
+    expect(
+      (await owner.json("POST", `/api/equipment/${id}/restore`)).status,
+    ).toBe(404);
+    expect(
+      (
+        await member.json<{ equipment: unknown[] }>(
+          "GET",
+          "/api/equipment/deleted",
+        )
+      ).body.equipment,
+    ).toEqual([]);
+
+    const snapshot = {
+      assignedTo: "member-user",
+      assigneeEmail: "member-user@example.com",
+      assigneeName: "member-user",
+      make: "Apple",
+      model: "MacBook Pro",
+      purchaseDate: "2026-03-01",
+      serialNumber: "C02XYZ",
+      type: "computer",
+    };
+    const history = await member.json<{ events: ActivityEvent[] }>(
       "GET",
-      "/api/activity?resourceType=equipment",
+      `/api/equipment/${id}/activity`,
     );
     expect(
-      deleted.body.events.map(({ action, actor, details, subject }) => ({
+      history.body.events.map(({ action, actor, details, subject }) => ({
         action,
         actor: actor.id,
         details,
@@ -561,30 +661,16 @@ describe("equipment deletion history", () => {
       })),
     ).toEqual([
       {
-        action: "equipment.deleted",
+        action: "equipment.restored",
         actor: "owner-user",
-        details: {
-          assignedTo: "member-user",
-          assigneeEmail: "member-user@example.com",
-          assigneeName: "member-user",
-          emailLinkCount: 1,
-          make: "Apple",
-          model: "MacBook Pro",
-          purchaseDate: "2026-03-01",
-          serialNumber: "C02XYZ",
-          type: "computer",
-        },
+        details: snapshot,
         subject: "equipment",
       },
       {
-        action: "inbox.email_unlinked",
+        action: "equipment.deleted",
         actor: "owner-user",
-        details: {
-          from: "orders@store.example",
-          subject: "Your laptop receipt",
-          via: "target_deleted",
-        },
-        subject: "inbound_email",
+        details: snapshot,
+        subject: "equipment",
       },
       {
         action: "inbox.email_linked",
@@ -595,19 +681,21 @@ describe("equipment deletion history", () => {
         },
         subject: "inbound_email",
       },
+      {
+        action: "equipment.created",
+        actor: "owner-user",
+        details: snapshot,
+        subject: "equipment",
+      },
     ]);
-    // The email's history shows the link ending; its folder link stays.
+    // The link never ended, so the email's history shows only its start.
     const emailHistory = await member.json<{ events: ActivityEvent[] }>(
       "GET",
       "/api/inbox/email-1/activity",
     );
     expect(
       emailHistory.body.events.map(({ action, root }) => [action, root.label]),
-    ).toEqual([
-      ["inbox.email_unlinked", "Apple MacBook Pro"],
-      ["inbox.email_linked", "Receipts"],
-      ["inbox.email_linked", "Apple MacBook Pro"],
-    ]);
+    ).toEqual([["inbox.email_linked", "Apple MacBook Pro"]]);
   });
 
   it("records an unassigned item's empty holder, and rolls back on failure", async () => {
@@ -634,27 +722,14 @@ describe("equipment deletion history", () => {
         assignedTo: null,
         assigneeEmail: null,
         assigneeName: null,
-        emailLinkCount: 0,
       }),
     ]);
-    expect(
-      database
-        .query(
-          "SELECT COUNT(*) AS count FROM activity_events WHERE action = 'inbox.email_unlinked'",
-        )
-        .get(),
-    ).toEqual({ count: 0 });
 
     const kept = await owner.json<{ equipment: Equipment }>(
       "POST",
       "/api/equipment",
       laptop,
     );
-    const id = kept.body.equipment.id;
-    await owner.json("POST", "/api/inbox/email-1/links", {
-      targetId: id,
-      targetType: "equipment",
-    });
     const events = () =>
       database.query("SELECT COUNT(*) AS count FROM activity_events").get();
     const before = events();
@@ -664,17 +739,23 @@ describe("equipment deletion history", () => {
          BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END`,
       )
       .run();
-    const failed = await owner.json("DELETE", `/api/equipment/${id}`);
-    expect(failed.status).toBe(500);
+    for (const [method, path] of [
+      ["DELETE", `/api/equipment/${kept.body.equipment.id}`],
+      ["POST", `/api/equipment/${unassigned.body.equipment.id}/restore`],
+    ] as const) {
+      expect((await owner.json(method, path)).status).toBe(500);
+    }
     expect(events()).toEqual(before);
     expect(
       database
-        .query("SELECT COUNT(*) AS count FROM equipment WHERE id = ?")
-        .get(id),
-    ).toEqual({ count: 1 });
-    expect(
-      database.query("SELECT COUNT(*) AS count FROM inbound_email_links").get(),
-    ).toEqual({ count: 1 });
+        .query("SELECT id, deleted_at FROM equipment ORDER BY created_at, id")
+        .all(),
+    ).toEqual(
+      expect.arrayContaining([
+        { deleted_at: null, id: kept.body.equipment.id },
+        { deleted_at: expect.any(String), id: unassigned.body.equipment.id },
+      ]),
+    );
   });
 });
 

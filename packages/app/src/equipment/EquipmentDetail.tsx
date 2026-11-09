@@ -296,9 +296,7 @@ function EquipmentDetails({
 function confirmEquipmentDeletion(item: EquipmentItem) {
   return confirmDialog({
     confirmLabel: "Delete equipment",
-    message: item.emailCount
-      ? `${countLabel(item.emailCount, "linked email")} will be unlinked but stay in the inbox.`
-      : undefined,
+    message: `An owner or admin can restore it from Deleted equipment${item.emailCount ? `, with its ${countLabel(item.emailCount, "linked email")}` : ""}.`,
     title: `Delete ${equipmentName(item)}?`,
     tone: "danger",
   });

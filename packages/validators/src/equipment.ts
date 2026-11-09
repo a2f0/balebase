@@ -67,6 +67,13 @@ export type EquipmentInput = FormInput<typeof EquipmentChangesSchema>;
 
 const EquipmentResponseSchema = z.object({ equipment: EquipmentItemSchema });
 
+/** A deleted item, hidden from the list until it is restored. */
+const DeletedEquipmentSchema = EquipmentItemSchema.extend({
+  deletedAt: z.string(),
+  deletedBy: PersonSchema.nullable(),
+});
+export type DeletedEquipment = z.infer<typeof DeletedEquipmentSchema>;
+
 export const equipmentRoutes = {
   list: route({
     method: "GET",
@@ -97,9 +104,27 @@ export const equipmentRoutes = {
     body: EquipmentChangesSchema,
     response: EquipmentResponseSchema,
   }),
+  /**
+   * Hides the item; its assignee, email links, and history stay, and
+   * restoring brings it back as it was.
+   */
   delete: route({
     method: "DELETE",
     path: "/api/equipment/:id",
     response: "empty",
+  }),
+  /** Deleted equipment, most recently deleted first. */
+  listDeleted: route({
+    method: "GET",
+    path: "/api/equipment/deleted",
+    response: z.object({
+      canManage: z.boolean(),
+      equipment: z.array(DeletedEquipmentSchema),
+    }),
+  }),
+  restore: route({
+    method: "POST",
+    path: "/api/equipment/:id/restore",
+    response: EquipmentResponseSchema,
   }),
 };

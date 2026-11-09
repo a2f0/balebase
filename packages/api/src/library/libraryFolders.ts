@@ -6,7 +6,7 @@ import { libraryFolderNameMaxLength } from "@balebase/validators/rules";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
 import {
-  deletedTargetLinkEvents,
+  deletedFolderLinkEvents,
   listLinkedEmails,
   toLinkedEmail,
 } from "../inbox/inboundEmailLinks";
@@ -168,11 +168,10 @@ libraryFolders.delete("/:id", async (context) => {
   const actorId = context.get("authSession").user.id;
   await activityBatch(context.env.DB, context.get("apiKey"), [
     unfiledFileEvents(context, id),
-    deletedTargetLinkEvents(context.env.DB, {
+    deletedFolderLinkEvents(context.env.DB, {
       actorId,
+      folderId: id,
       organizationId,
-      targetId: id,
-      targetType: "library_folder",
     }),
     folderEvent(context, id, {
       action: "library.folder_deleted",

@@ -148,12 +148,28 @@ export const workspaceTools: McpTool[] = [
     title: "Update equipment",
   },
   {
-    description: "Deletes an item of equipment and unlinks its emails.",
+    description:
+      "Deletes an item of equipment. It is hidden with its email links and history, and restore_equipment brings it back as it was.",
     descriptions: equipmentId,
     destructive: true,
     name: "delete_equipment",
     route: equipmentRoutes.delete,
     title: "Delete equipment",
+  },
+  {
+    description:
+      "Lists deleted equipment, most recently deleted first, with who deleted each item.",
+    name: "list_deleted_equipment",
+    route: equipmentRoutes.listDeleted,
+    title: "List deleted equipment",
+  },
+  {
+    description:
+      "Restores a deleted item of equipment with its assignee and email links.",
+    descriptions: { id: "Equipment id from list_deleted_equipment." },
+    name: "restore_equipment",
+    route: equipmentRoutes.restore,
+    title: "Restore equipment",
   },
   {
     description:

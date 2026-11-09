@@ -21,6 +21,7 @@ import {
   deleteEmailLink,
   emailLabel,
   listEmailLinks,
+  shownLink,
 } from "./inboundEmailLinks";
 
 const inbox = new Hono<ApiEnv>();
@@ -68,7 +69,8 @@ inbox.get("/", async (context) => {
             email.archived_at, email.deleted_at, email.deleted_by_user_id,
             (SELECT COUNT(*) FROM inbound_email_links AS link
              WHERE link.email_id = email.id
-               AND link.organization_id = email.organization_id) AS link_count,
+               AND link.organization_id = email.organization_id
+               AND ${shownLink}) AS link_count,
             deleted_by.name AS deleted_by_name,
             deleted_by.email AS deleted_by_email,
             COUNT(attachment.id) AS attachment_count
@@ -209,7 +211,7 @@ inbox.delete("/:id", async (context) => {
     when: `deleted_at IS NULL
        AND NOT EXISTS (
          SELECT 1 FROM inbound_email_links AS link
-         WHERE link.email_id = inbound_emails.id
+         WHERE link.email_id = inbound_emails.id AND ${shownLink}
        )`,
   });
   if (!result?.meta.changes) {
@@ -323,7 +325,8 @@ async function findEmail(
               email.archived_at, email.deleted_at, email.deleted_by_user_id,
               (SELECT COUNT(*) FROM inbound_email_links AS link
                WHERE link.email_id = email.id
-                 AND link.organization_id = email.organization_id) AS link_count,
+                 AND link.organization_id = email.organization_id
+                 AND ${shownLink}) AS link_count,
               deleted_by.name AS deleted_by_name,
               deleted_by.email AS deleted_by_email,
               COUNT(attachment.id) AS attachment_count
