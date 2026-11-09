@@ -2,10 +2,8 @@ import {
   Banner,
   Button,
   Card,
-  ContextMenu,
   confirmDialog,
   EmptyState,
-  Icon,
   LoadingState,
   Page,
   PageBody,
@@ -15,7 +13,6 @@ import {
 } from "@balebase/ui/react";
 import type { Business } from "@balebase/validators/businesses";
 import {
-  type ComponentProps,
   type FormEvent,
   useCallback,
   useEffect,
@@ -23,9 +20,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { AppLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
+import { ListRow, type ListRowItem } from "../shared/ListRow";
 import { countLabel, formatCalendarDate } from "../shared/labels";
 import { useFocusWhenFolded } from "../shared/useFocusWhenFolded";
 import { businessIdForPath, businessPath } from "../workspace/workspacePaths";
@@ -358,7 +355,6 @@ function BusinessRow({
   onUpdated: (business: Business) => void;
 }) {
   const [row, dispatch] = useReducer(businessRowTransition, initialBusinessRow);
-  const busy = row.status === "deleting";
 
   async function remove() {
     if (!(await confirmBusinessDeletion(business))) return;
@@ -386,72 +382,52 @@ function BusinessRow({
     );
   }
 
-  return (
-    <BusinessContextMenu business={business} onCopy={onCopy}>
-      {(targetProps) => (
-        <li className="row" {...targetProps}>
-          <BusinessSummary business={business} onNavigate={onNavigate} />
-          {canManage && (
-            <div className="rowActions businessRowActions">
-              <Button
-                disabled={busy}
-                icon="edit"
-                onClick={() => dispatch({ type: "editOpened" })}
-                size="sm"
-              >
-                Edit
-              </Button>
-              <Button
-                busy={busy}
-                icon="trash"
-                onClick={() => void remove()}
-                size="sm"
-                variant="danger"
-              >
-                {busy ? "Deleting…" : "Delete"}
-              </Button>
-            </div>
-          )}
-        </li>
-      )}
-    </BusinessContextMenu>
-  );
-}
-
-function BusinessContextMenu({
-  business,
-  children,
-  onCopy,
-}: {
-  business: Business;
-  children: ComponentProps<typeof ContextMenu>["children"];
-  onCopy: CopyIdentifier;
-}) {
-  return (
-    <ContextMenu
-      items={businessIdentifiers(business).map(({ id, identifier, value }) => ({
-        disabled: !value,
-        icon: "copy",
-        id: `copy-${id}`,
-        label: `Copy ${identifier}`,
-        onSelect: () => {
-          if (value) onCopy(identifier, value);
+  const changes: ListRowItem[] = canManage
+    ? [
+        {
+          icon: "edit",
+          id: "edit",
+          label: "Edit",
+          onSelect: () => dispatch({ type: "editOpened" }),
         },
-      }))}
-      label={`Actions for ${business.name}`}
-    >
-      {children}
-    </ContextMenu>
+        {
+          icon: "trash",
+          id: "delete",
+          label: "Delete",
+          onSelect: () => void remove(),
+        },
+      ]
+    : [];
+  return (
+    <ListRow
+      busy={row.status === "deleting"}
+      icon="businesses"
+      items={[...businessCopies(business, onCopy), ...changes]}
+      meta={<BusinessMeta business={business} />}
+      open={{ href: businessPath(business.id), onNavigate }}
+      title={business.name}
+    />
   );
 }
 
-function BusinessSummary({
-  business,
-  onNavigate,
-}: {
-  business: Business;
-  onNavigate: (pathname: string) => void;
-}) {
+/** Copies each of a business's identifiers; one it lacks is disabled. */
+function businessCopies(
+  business: Business,
+  onCopy: CopyIdentifier,
+): ListRowItem[] {
+  return businessIdentifiers(business).map(({ id, identifier, value }) => ({
+    disabled: !value,
+    icon: "copy",
+    id: `copy-${id}`,
+    label: `Copy ${identifier}`,
+    onSelect: () => {
+      if (value) onCopy(identifier, value);
+    },
+  }));
+}
+
+/** A business's identifiers and incorporation date, then its address. */
+function BusinessMeta({ business }: { business: Business }) {
   const facts = [
     business.ein ? `EIN ${formatEin(business.ein)}` : "EIN not provided",
   ];
@@ -463,20 +439,15 @@ function BusinessSummary({
   }
   const address = formatBusinessAddress(business);
   return (
-    <AppLink
-      className="businessSummary businessSummaryLink"
-      href={businessPath(business.id)}
-      onNavigate={onNavigate}
-    >
-      <span aria-hidden="true" className="businessMark">
-        <Icon name="businesses" size={18} />
-      </span>
-      <div className="rowMain">
-        <span className="rowTitle">{business.name}</span>
-        <span className="rowMeta tabular">{facts.join(" · ")}</span>
-        {address && <span className="rowMeta">{address}</span>}
-      </div>
-    </AppLink>
+    <>
+      <span className="tabular">{facts.join(" · ")}</span>
+      {address && (
+        <>
+          <br />
+          {address}
+        </>
+      )}
+    </>
   );
 }
 

@@ -238,6 +238,12 @@ describe("copying a business EIN", () => {
     expect(
       document.querySelector('[role="menu"]')?.getAttribute("aria-label"),
     ).toBe("Actions for Beta LLC");
+    // Read-only members can copy, but not edit or delete.
+    expect(
+      [...document.querySelectorAll('[role="menuitem"]')].map(
+        (entry) => entry.textContent,
+      ),
+    ).toEqual(["Copy EIN", "Copy DUNS number"]);
     await click(item);
     expect(copied).toEqual(["98-7654321"]);
   });
@@ -501,6 +507,16 @@ describe("deleting a business", () => {
     await click(choice);
   }
 
+  /** Opens Acme's menu from its menu button and chooses `label`. */
+  async function choose(label: string) {
+    await click(queryButton("Actions for Acme, Inc.", document));
+    await click(
+      [...document.querySelectorAll('[role="menuitem"]')].find(
+        (element) => element.textContent === label,
+      ),
+    );
+  }
+
   it("asks in the app's dialog, and deletes only once confirmed", async () => {
     const deletes: string[] = [];
     respond(async (url, init) => {
@@ -514,12 +530,17 @@ describe("deleting a business", () => {
       });
     });
     const view = await mountPage();
-    const remove = () =>
-      [...(view.row()?.querySelectorAll("button") ?? [])].find(
-        (element) => element.textContent?.trim() === "Delete",
-      );
-
-    await click(remove());
+    await click(queryButton("Actions for Acme, Inc.", document));
+    expect(
+      [...document.querySelectorAll('[role="menuitem"]')].map(
+        (entry) => entry.textContent,
+      ),
+    ).toEqual(["Copy EIN", "Copy DUNS number", "Edit", "Delete"]);
+    await click(
+      [...document.querySelectorAll('[role="menuitem"]')].find(
+        (element) => element.textContent === "Delete",
+      ),
+    );
     const dialog = document.querySelector("dialog[open]");
     expect(dialog?.textContent).toContain("Delete Acme, Inc.?");
     expect(dialog?.textContent).toContain("This can't be undone.");
@@ -528,7 +549,7 @@ describe("deleting a business", () => {
     expect(deletes).toEqual([]);
     expect(view.rows()).toBe(1);
 
-    await click(remove());
+    await choose("Delete");
     await answer("Delete business");
     expect(deletes).toEqual([expect.stringContaining("/api/businesses/b1")]);
     expect(view.rows()).toBe(0);
@@ -536,13 +557,11 @@ describe("deleting a business", () => {
   });
 
   it("locks the row while deleting, and reopens it after a failure", async () => {
-    let fail: () => void = () => {};
+    const failure = Promise.withResolvers<void>();
     respond(async (_url, init) => {
       if (init?.method === "DELETE") {
-        return new Promise<Response>((resolve) => {
-          fail = () =>
-            resolve(Response.json({ error: "Nope." }, { status: 500 }));
-        });
+        await failure.promise;
+        return Response.json({ error: "Nope." }, { status: 500 });
       }
       return Response.json({
         businesses: [business("b1", "Acme, Inc.")],
@@ -550,30 +569,32 @@ describe("deleting a business", () => {
       });
     });
     const view = await mountPage();
-    const named = (label: string) =>
-      [...(view.row()?.querySelectorAll("button") ?? [])].find(
-        (element) => element.textContent?.trim() === label,
-      );
+    const menu = () => queryButton("Actions for Acme, Inc.", view.row());
 
-    await click(named("Delete"));
+    await choose("Delete");
     await answer("Delete business");
-    expect(named("Deleting…")).toBeDefined();
-    expect(named("Edit")?.disabled).toBe(true);
-    await click(named("Edit"));
-    expect(view.row()?.querySelector("form")).toBeNull();
+    expect(menu()?.getAttribute("aria-busy")).toBe("true");
+    expect(menu()?.disabled).toBe(true);
+    // Nor does a right-click open the menu over the delete.
+    const event = new dom.MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => view.row()?.dispatchEvent(event as never));
+    expect(document.querySelector('[role="menu"]')).toBeNull();
 
-    await act(async () => fail());
+    await act(async () => failure.resolve());
     await settle();
     expect(view.rows()).toBe(1);
-    expect(named("Delete")).toBeDefined();
-    expect(named("Edit")?.disabled).toBe(false);
+    expect(view.text()).toContain("Nope.");
+    expect(menu()?.getAttribute("aria-busy")).toBeNull();
 
-    await click(named("Edit"));
+    await choose("Edit");
     expect(view.row()?.querySelector("form")?.getAttribute("aria-label")).toBe(
       "Edit Acme, Inc.",
     );
-    await click(named("Cancel"));
+    await click(queryButton("Cancel", view.row()));
     expect(view.row()?.querySelector("form")).toBeNull();
-    expect(named("Delete")).toBeDefined();
+    expect(menu()).not.toBeNull();
   });
 });

@@ -28,6 +28,7 @@ export type ListRowOpen =
  */
 export function ListRow({
   actionsRef,
+  busy = false,
   children,
   className,
   icon,
@@ -40,6 +41,11 @@ export function ListRow({
 }: {
   /** The menu button's container, for returning focus to the button. */
   actionsRef?: Ref<HTMLDivElement> | undefined;
+  /**
+   * An action is running, as while the row is deleted: the menu button shows
+   * it, and the menu stays closed.
+   */
+  busy?: boolean | undefined;
   /** Details after the title and meta, such as badges or amounts. */
   children?: ReactNode;
   className?: string | undefined;
@@ -55,7 +61,7 @@ export function ListRow({
 }) {
   const menuLabel = label ?? `Actions for ${title}`;
   return (
-    <ContextMenu items={items} label={menuLabel}>
+    <ContextMenu disabled={busy} items={items} label={menuLabel}>
       {(target, menuButton) => (
         <li
           className={cx(
@@ -78,7 +84,7 @@ export function ListRow({
           {children}
           {items.length > 0 && (
             <div className="rowActions" ref={actionsRef}>
-              <MenuButton {...menuButton} label={menuLabel} />
+              <MenuButton {...menuButton} busy={busy} label={menuLabel} />
             </div>
           )}
         </li>
