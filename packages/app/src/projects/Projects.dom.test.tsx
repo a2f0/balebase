@@ -227,6 +227,43 @@ async function chooseFromRow(name: string, item: string) {
   );
 }
 
+/** A project as the list shows it. */
+function listed(id: string, name: string): ProjectSummary {
+  return {
+    createdAt: "2026-10-01T00:00:00.000Z",
+    description: "North wing",
+    formCount: 1,
+    id,
+    isMember: false,
+    memberCount: 2,
+    name,
+    revision: 3,
+    updatedAt: "2026-10-01T00:00:00.000Z",
+  };
+}
+
+/** Mounts the project list beside the host its confirmations open in. */
+async function renderList() {
+  const { container } = await mount(
+    <>
+      <Projects onNavigate={() => {}} pathname="/projects" />
+      <DialogHost />
+    </>,
+  );
+  await settle();
+  return container;
+}
+
+/** The row titles under the section headed `heading`. */
+function rowTitles(container: HTMLElement, heading: string) {
+  const section = [...container.querySelectorAll("section")].find(
+    (entry) => entry.querySelector(".sectionTitle")?.textContent === heading,
+  );
+  return [...(section?.querySelectorAll(".rowTitle") ?? [])].map(
+    (title) => title.textContent,
+  );
+}
+
 describe("project detail", () => {
   it("shows members, audit forms, setup, and activity on separate tabs", async () => {
     const { writes } = stubApi(true);
@@ -561,18 +598,7 @@ describe("project detail", () => {
   });
 
   it("lets a manager edit and delete projects from their rows' menus", async () => {
-    const summary = (id: string, name: string): ProjectSummary => ({
-      createdAt: "2026-10-01T00:00:00.000Z",
-      description: "North wing",
-      formCount: 1,
-      id,
-      isMember: false,
-      memberCount: 2,
-      name,
-      revision: 3,
-      updatedAt: "2026-10-01T00:00:00.000Z",
-    });
-    let projects = [summary("site", "Site walk"), summary("clinic", "Clinic")];
+    let projects = [listed("site", "Site walk"), listed("clinic", "Clinic")];
     const deleted: (ProjectSummary & { deletedAt: string })[] = [];
     const changes: unknown[] = [];
     respond(async (url, init) => {
@@ -584,7 +610,7 @@ describe("project detail", () => {
         projects = projects.map((project) =>
           project.id === id ? { ...project, name: change.name } : project,
         );
-        return Response.json({ project: summary("site", change.name) });
+        return Response.json({ project: listed("site", change.name) });
       }
       if (method === "DELETE") {
         const gone = projects.find((project) => project.id === id);
@@ -597,25 +623,12 @@ describe("project detail", () => {
         return Response.json({ canManage: true, projects: deleted });
       return Response.json({ canManage: true, projects });
     });
-    const { container } = await mount(
-      <>
-        <Projects onNavigate={() => {}} pathname="/projects" />
-        <DialogHost />
-      </>,
-    );
-    await settle();
-    /** The row titles under the section headed `heading`. */
-    const titles = (heading: string) =>
-      [
-        ...([...container.querySelectorAll("section")]
-          .find(
-            (section) =>
-              section.querySelector(".sectionTitle")?.textContent === heading,
-          )
-          ?.querySelectorAll(".rowTitle") ?? []),
-      ].map((title) => title.textContent);
-    expect(titles("All projects")).toEqual(["Site walk", "Clinic"]);
-    expect(titles("Deleted projects")).toEqual([]);
+    const container = await renderList();
+    expect(rowTitles(container, "All projects")).toEqual([
+      "Site walk",
+      "Clinic",
+    ]);
+    expect(rowTitles(container, "Deleted projects")).toEqual([]);
 
     await chooseFromRow("Site walk", "Edit");
     expect(queryButton("New project", container)).toBeNull();
@@ -626,14 +639,77 @@ describe("project detail", () => {
     expect(changes).toEqual([{ expectedRevision: 3, name: "Site survey" }]);
     expect(container.querySelector("form")).toBeNull();
     expect(container.textContent).toContain("Project updated.");
-    expect(titles("All projects")).toEqual(["Site survey", "Clinic"]);
+    expect(rowTitles(container, "All projects")).toEqual([
+      "Site survey",
+      "Clinic",
+    ]);
 
     await chooseFromRow("Clinic", "Delete");
     await click("Delete project");
     await settle();
     // The project leaves the list for Deleted projects.
-    expect(titles("All projects")).toEqual(["Site survey"]);
-    expect(titles("Deleted projects")).toEqual(["Clinic"]);
+    expect(rowTitles(container, "All projects")).toEqual(["Site survey"]);
+    expect(rowTitles(container, "Deleted projects")).toEqual(["Clinic"]);
+  });
+
+  it("keeps a form opened after cancelling an edit that was still saving", async () => {
+    const save = Promise.withResolvers<void>();
+    respond(async (url, init) => {
+      if (init?.method === "PATCH") {
+        await save.promise;
+        return Response.json({ project: listed("site", "Site survey") });
+      }
+      if (url.pathname === "/api/projects/deleted")
+        return Response.json({ canManage: true, projects: [] });
+      return Response.json({
+        canManage: true,
+        projects: [listed("site", "Site walk")],
+      });
+    });
+    const container = await renderList();
+    await chooseFromRow("Site walk", "Edit");
+    await fill(container.querySelector("form input"), "Site survey");
+    await click(queryButton("Save changes", container));
+    await click(queryButton("Cancel", container));
+    await click(queryButton("New project", container));
+    save.resolve();
+    await settle();
+    // The earlier save lands without closing the new project's form.
+    expect(queryButton("Create project", container)).not.toBeNull();
+  });
+
+  it("says when Deleted projects cannot refresh after a deletion, and retries", async () => {
+    let projects = [listed("site", "Site walk")];
+    let deleted: ProjectSummary[] = [];
+    let failing = false;
+    respond(async (url, init) => {
+      if (init?.method === "DELETE") {
+        [deleted, projects, failing] = [projects, [], true];
+        return new Response(null, { status: 204 });
+      }
+      if (url.pathname === "/api/projects/deleted")
+        return failing
+          ? Response.json({ error: "Unavailable" }, { status: 503 })
+          : Response.json({
+              canManage: true,
+              projects: deleted.map((project) => ({
+                ...project,
+                deletedAt: "2026-10-20T00:00:00.000Z",
+              })),
+            });
+      return Response.json({ canManage: true, projects });
+    });
+    const container = await renderList();
+    await chooseFromRow("Site walk", "Delete");
+    await click("Delete project");
+    await settle();
+    // An earlier load found none, but the failed refresh still shows.
+    expect(container.textContent).toContain("Deleted projects");
+    expect(container.textContent).toContain("Unavailable");
+    failing = false;
+    await click(queryButton("Retry", container));
+    await settle();
+    expect(rowTitles(container, "Deleted projects")).toEqual(["Site walk"]);
   });
 
   it("says when deleted projects could not load, and retries", async () => {

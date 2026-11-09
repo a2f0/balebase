@@ -29,17 +29,20 @@ export function DeletedProjects({
   }, [deletions, reload]);
   const action = useAction("Could not restore the project.");
   const listing = loaded.data;
-  // A failed load says so, so deleted projects stay within reach.
-  if (!listing && loaded.error)
-    return (
-      <PageSection title="Deleted projects">
-        <Toast tone="danger">{loaded.error}</Toast>
-        <Button icon="refresh" onClick={() => void reload()} size="sm">
-          Retry
-        </Button>
-      </PageSection>
-    );
-  if (!listing?.projects.length) return null;
+  // A failed load or refresh says so, with a retry, so deleted projects stay
+  // within reach even when an earlier load found none.
+  const failure = loaded.error && (
+    <>
+      <Toast tone="danger">{loaded.error}</Toast>
+      <Button icon="refresh" onClick={() => void reload()} size="sm">
+        Retry
+      </Button>
+    </>
+  );
+  if (!listing?.projects.length)
+    return failure ? (
+      <PageSection title="Deleted projects">{failure}</PageSection>
+    ) : null;
 
   const restore = (id: string) =>
     action.run(async () => {
@@ -57,6 +60,7 @@ export function DeletedProjects({
       description="Their audits stay in Audits. Restoring a project brings back its members and forms."
       title="Deleted projects"
     >
+      {failure}
       {action.error && <Toast tone="danger">{action.error}</Toast>}
       <Card flush>
         <ul className="rowList">

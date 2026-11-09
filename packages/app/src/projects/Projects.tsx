@@ -11,7 +11,7 @@ import {
   Toast,
 } from "@balebase/ui/react";
 import type { NewProject, ProjectSummary } from "@balebase/validators/projects";
-import { useCallback, useState } from "react";
+import { useCallback, useReducer, useState } from "react";
 import { useDevice } from "../offline/offlineContext";
 import { api } from "../shared/apiClient";
 import { ListRow } from "../shared/ListRow";
@@ -34,6 +34,11 @@ import { OtherDeviceAudits } from "./ProjectAuditForms";
 import { ProjectDetailPage } from "./ProjectDetail";
 import { ProjectForm } from "./ProjectForm";
 import { confirmProjectDeletion, editedFields } from "./projectChanges";
+import {
+  closedProjectListForm,
+  type ProjectEditForm,
+  projectListFormTransition,
+} from "./projectListFormState";
 
 export function Projects({
   onNavigate,
@@ -56,12 +61,6 @@ export function Projects({
   );
 }
 
-/** The form open above the list: none, a new project, or an edit of one. */
-type ProjectListForm =
-  | { status: "closed" }
-  | { status: "adding" }
-  | { project: ProjectSummary; status: "editing" };
-
 /**
  * The form open above the list, and the edits and deletions made from the
  * list's rows, each of which reloads it. As on a project's page, a refused
@@ -70,20 +69,23 @@ type ProjectListForm =
  */
 function useProjectListChanges(reload: () => Promise<boolean>) {
   const action = useAction("Could not update the project.");
-  const [form, setForm] = useState<ProjectListForm>({ status: "closed" });
+  const [form, dispatch] = useReducer(
+    projectListFormTransition,
+    closedProjectListForm,
+  );
   // Counts deletions, each of which Deleted projects reloads to list.
   const [deletions, setDeletions] = useState(0);
-  const closeForm = () => setForm({ status: "closed" });
 
   async function save(
-    project: ProjectSummary,
+    edit: ProjectEditForm,
     input: { description: string; name: string },
   ) {
+    const { project } = edit;
     const saved = await action.run(async () => {
       await api.projects.update(project.id, editedFields(project, input));
       await reload();
     }, "Project updated.");
-    if (saved) closeForm();
+    if (saved) dispatch({ form: edit, type: "editSaved" });
     else void reload();
     return saved;
   }
@@ -99,14 +101,13 @@ function useProjectListChanges(reload: () => Promise<boolean>) {
 
   return {
     busy: action.busy,
-    closeForm,
     deletions,
+    dispatch,
     error: action.error,
     form,
     notice: action.notice,
     remove,
     save,
-    setForm,
   };
 }
 
@@ -121,7 +122,7 @@ function ProjectListPage({
   );
   const creating = useAction("Could not create the project.");
   const changes = useProjectListChanges(loaded.reload);
-  const { form, setForm } = changes;
+  const { dispatch, form } = changes;
   const listing = loaded.data;
   const error = creating.error ?? changes.error ?? loaded.error;
   const { workspace } = useDevice();
@@ -151,7 +152,7 @@ function ProjectListPage({
           form.status === "closed" && (
             <Button
               icon="add"
-              onClick={() => setForm({ status: "adding" })}
+              onClick={() => dispatch({ type: "addOpened" })}
               variant="primary"
             >
               New project
@@ -177,13 +178,16 @@ function ProjectListPage({
               </Banner>
             )}
             {form.status === "adding" && (
-              <ProjectForm onCancel={changes.closeForm} onSave={add} />
+              <ProjectForm
+                onCancel={() => dispatch({ type: "cancelled" })}
+                onSave={add}
+              />
             )}
             {form.status === "editing" && (
               <ProjectForm
                 initial={form.project}
-                onCancel={changes.closeForm}
-                onSave={(input) => changes.save(form.project, input)}
+                onCancel={() => dispatch({ type: "cancelled" })}
+                onSave={(input) => changes.save(form, input)}
               />
             )}
             <PageSection
@@ -198,9 +202,9 @@ function ProjectListPage({
                 canManage={listing.canManage}
                 // Row actions wait while a form is open or a change runs.
                 disabled={changes.busy || form.status !== "closed"}
-                onAdd={() => setForm({ status: "adding" })}
+                onAdd={() => dispatch({ type: "addOpened" })}
                 onDelete={(project) => void changes.remove(project)}
-                onEdit={(project) => setForm({ project, status: "editing" })}
+                onEdit={(project) => dispatch({ project, type: "editOpened" })}
                 onNavigate={onNavigate}
                 projects={listing.projects}
               />
