@@ -1,6 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, expect, it } from "bun:test";
-import type { OfflineOperation } from "@balebase/validators/offline";
+import {
+  type OfflineOperation,
+  OfflineOperationSchema,
+} from "@balebase/validators/offline";
 import { testBindings } from "../testing/bindings";
 import { queryHooks, toD1 } from "../testing/d1";
 import { createTestDatabase } from "../testing/database";
@@ -142,6 +145,38 @@ it("keeps no receipt when the audit changes between the check and the save", asy
       .all(),
   ).toEqual([]);
   expect(f.db.query("SELECT id FROM offline_operations").all()).toHaveLength(1);
+});
+
+it("replays a save another tab commits while this one is being checked", async () => {
+  const f = fixture();
+  const start = auditStart();
+  expect((await f.apply(start)).status).toBe(201);
+  const save = auditSave(start.id, 1);
+  const digest = new Bun.CryptoHasher("sha256")
+    .update(JSON.stringify(OfflineOperationSchema.parse(save)))
+    .digest("hex");
+  // The other tab commits right after this request finds no receipt, so
+  // the save's check sees the revision it left.
+  f.hooks.after(
+    "SELECT digest FROM offline_operations",
+    () => {
+      f.db
+        .query(
+          `UPDATE audits SET responses = '{"check":"pass"}', revision = 2 WHERE id = ?`,
+        )
+        .run(start.id);
+      f.db
+        .query(
+          "INSERT INTO offline_operations (organization_id, user_id, id, digest, created_at) VALUES (?, ?, ?, ?, '2026-10-02')",
+        )
+        .run(scope.organizationId, scope.userId, save.id, digest);
+    },
+    { method: "first" },
+  );
+  expect(await f.apply(save)).toMatchObject({
+    status: 200,
+    body: { resourceId: start.id },
+  });
 });
 
 it("requires the parent audit before its issue and does not duplicate issues on retry", async () => {

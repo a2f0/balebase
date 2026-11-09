@@ -78,10 +78,18 @@ offline.post("/operations", async (context) => {
       .first<{ digest: string }>();
   const resourceId =
     operation.type === "auditSave" ? operation.auditId : operation.id;
-  const existing = await receipt();
-  if (existing) return replay(context, resourceId, digest, existing.digest);
+  // A second tab, or a retry after a lost response, may commit this very
+  // operation at any point; its receipt answers before any refusal does.
+  const replayed = async () => {
+    const committed = await receipt();
+    return committed && replay(context, resourceId, digest, committed.digest);
+  };
+  const refuse = async (error: string) =>
+    (await replayed()) ?? context.json({ error }, 409);
+  const existing = await replayed();
+  if (existing) return existing;
   const writes = await offlineWrites(context, operation);
-  if (typeof writes === "string") return context.json({ error: writes }, 409);
+  if (typeof writes === "string") return refuse(writes);
   try {
     // The receipt comes last, written only on the condition that proves the
     // writes before it applied, so a skipped write commits nothing.
@@ -99,21 +107,12 @@ offline.post("/operations", async (context) => {
         ...writes.applied.bindings,
       ),
     ]);
-    if (!Number(results.at(-1)?.meta.changes)) {
-      // A save that found its audit already moved on may have been this very
-      // operation, committed by a second tab.
-      const committed = await receipt();
-      return committed
-        ? replay(context, resourceId, digest, committed.digest)
-        : context.json({ error: writes.rejected }, 409);
-    }
+    if (!Number(results.at(-1)?.meta.changes)) return refuse(writes.rejected);
   } catch (cause) {
-    // A second tab or a response lost after commit is the same operation.
-    const committed = await receipt();
-    if (committed) return replay(context, resourceId, digest, committed.digest);
+    const committed = await replayed();
+    if (committed) return committed;
     const validation = await offlineWrites(context, operation);
-    if (typeof validation === "string")
-      return context.json({ error: validation }, 409);
+    if (typeof validation === "string") return refuse(validation);
     throw cause;
   }
   return respond(context, offlineRoutes.apply, { resourceId }, 201);
