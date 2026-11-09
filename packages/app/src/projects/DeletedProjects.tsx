@@ -1,9 +1,10 @@
 import { Button, Card, PageSection, Toast } from "@balebase/ui/react";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { api } from "../shared/apiClient";
+import { errorMessage } from "../shared/errors";
 import { ListRow } from "../shared/ListRow";
 import { countLabel, formatDate } from "../shared/labels";
-import { useAction } from "../shared/useAction";
+import { initialRestore, restoreTransition } from "../shared/restoreState";
 import { useLoad } from "../shared/useLoad";
 import { projectPath } from "../workspace/workspacePaths";
 
@@ -27,7 +28,13 @@ export function DeletedProjects({
   useEffect(() => {
     if (deletions) void reload();
   }, [deletions, reload]);
-  const action = useAction("Could not restore the project.");
+  const [restore, dispatch] = useReducer(restoreTransition, initialRestore);
+  const requests = useRef(0);
+  // Entering `restored` opens the project. An unmounted section runs no
+  // effects, so a restore that finishes after the person left stays put.
+  useEffect(() => {
+    if (restore.status === "restored") onNavigate(projectPath(restore.id));
+  }, [restore, onNavigate]);
   const listing = loaded.data;
   // A failed load or refresh says so, with a retry, so deleted projects stay
   // within reach even when an earlier load found none.
@@ -44,11 +51,21 @@ export function DeletedProjects({
       <PageSection title="Deleted projects">{failure}</PageSection>
     ) : null;
 
-  const restore = (id: string) =>
-    action.run(async () => {
+  async function restoreProject(id: string) {
+    requests.current += 1;
+    const request = requests.current;
+    dispatch({ request, type: "restoreStarted" });
+    try {
       await api.projects.restore(id);
-      onNavigate(projectPath(id));
-    });
+      dispatch({ id, request, type: "restoreSucceeded" });
+    } catch (cause) {
+      dispatch({
+        error: errorMessage(cause, "Could not restore the project."),
+        request,
+        type: "restoreFailed",
+      });
+    }
+  }
 
   return (
     <PageSection
@@ -61,7 +78,9 @@ export function DeletedProjects({
       title="Deleted projects"
     >
       {failure}
-      {action.error && <Toast tone="danger">{action.error}</Toast>}
+      {restore.status === "failed" && (
+        <Toast tone="danger">{restore.error}</Toast>
+      )}
       <Card flush>
         <ul className="rowList">
           {listing.projects.map((project) => (
@@ -71,11 +90,13 @@ export function DeletedProjects({
                 listing.canManage
                   ? [
                       {
-                        disabled: action.busy,
+                        disabled:
+                          restore.status === "restoring" ||
+                          restore.status === "restored",
                         icon: "restore",
                         id: "restore",
                         label: "Restore",
-                        onSelect: () => void restore(project.id),
+                        onSelect: () => void restoreProject(project.id),
                       },
                     ]
                   : []
