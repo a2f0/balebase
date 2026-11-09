@@ -10,6 +10,14 @@ import type {
 import { apiUrl } from "../shared/config";
 
 /**
+ * Where an audit started on this device is: a `draft` only here,
+ * `inProgress` once its progress has been saved to the server (by queued
+ * writes that may not have synced yet), or `completed`: sealed, with its
+ * completion queued. `offlineAuditState.ts` moves it between them.
+ */
+export type OfflineAuditStatus = "draft" | "inProgress" | "completed";
+
+/**
  * An audit started on this device. It keeps the form version it was started
  * from, so it can be finished and synced after the form is unpublished,
  * edited, or turned off for its project.
@@ -20,7 +28,7 @@ export interface OfflineAudit {
   startedAt: string;
   template: AuditTemplate;
   responses: Record<string, string>;
-  queued: boolean;
+  status: OfflineAuditStatus;
 }
 
 interface OfflineIssue {
@@ -38,6 +46,21 @@ export interface OfflineJob {
   attempts: number;
   retryAt: number;
   error?: string;
+}
+
+/** A job for `operation`, sent once the jobs it depends on have synced. */
+export function pendingJob<Operation extends OfflineJob["operation"]>(
+  operation: Operation,
+  dependsOn: string[],
+): OfflineJob & { operation: Operation } {
+  return {
+    id: operation.id,
+    operation,
+    dependsOn,
+    status: "pending",
+    attempts: 0,
+    retryAt: 0,
+  };
 }
 
 /** Who offline work belongs to, and the organization it was prepared in. */
@@ -75,10 +98,11 @@ export function offlineScopeKey(scope: OfflineScope) {
 
 function database() {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open("balebase-offline", 2);
+    const request = indexedDB.open("balebase-offline", 3);
     request.onupgradeneeded = () => {
-      // Version 1 kept hand-downloaded forms without projects; its data is
-      // not carried over.
+      // Earlier versions are not carried over: version 1 kept hand-downloaded
+      // forms without projects, and version 2 synced audits only once
+      // completed.
       for (const name of Array.from(request.result.objectStoreNames))
         request.result.deleteObjectStore(name);
       request.result.createObjectStore("workspaces", { keyPath: "key" });

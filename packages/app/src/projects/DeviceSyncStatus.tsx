@@ -15,13 +15,17 @@ export function DeviceSyncStatus() {
   const problems = [
     ...new Set(waiting.flatMap((job) => (job.error ? [job.error] : []))),
   ];
-  const drafts = workspace.audits.filter((audit) => !audit.queued).length;
+  const open = workspace.audits.filter(
+    (audit) => audit.status !== "completed",
+  ).length;
   const parts = [
     online ? "Online" : "Offline",
     waiting.length
       ? `${countLabel(waiting.length, "item")} waiting to sync`
-      : "All completed work synced",
-    ...(drafts ? [`${countLabel(drafts, "draft")} on this device`] : []),
+      : "Nothing waiting to sync",
+    ...(open
+      ? [`${countLabel(open, "audit")} in progress on this device`]
+      : []),
   ];
   return (
     <Banner

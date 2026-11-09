@@ -27,45 +27,126 @@ afterEach(() => {
   for (const db of databases.splice(0)) db.close();
 });
 
-it("syncs the exact downloaded version once, including answer and completion history", async () => {
+it("starts the exact downloaded version once, then saves and completes it, with answer and completion history", async () => {
   const f = fixture();
-  const operation = audit();
-  const results = await Promise.all([f.apply(operation), f.apply(operation)]);
+  const start = { ...auditStart(), responses: { check: "fail" } };
+  const results = await Promise.all([f.apply(start), f.apply(start)]);
   expect(results.map((result) => result.status).sort()).toEqual([200, 201]);
-  expect(
-    f.db
-      .query(
-        "SELECT template_name, template_version, status, responses FROM audits",
-      )
-      .all(),
-  ).toEqual([
-    {
-      template_name: "Downloaded",
-      template_version: 1,
-      status: "completed",
-      responses: '{"check":"pass"}',
-    },
-  ]);
+  expect(f.audit(start.id)).toEqual({
+    template_name: "Downloaded",
+    template_version: 1,
+    status: "in_progress",
+    responses: '{"check":"fail"}',
+    revision: 1,
+  });
+  const save = auditSave(start.id, 1, { complete: true });
+  expect(await f.apply(save)).toMatchObject({
+    status: 201,
+    body: { resourceId: start.id },
+  });
+  expect(f.audit(start.id)).toMatchObject({
+    status: "completed",
+    responses: '{"check":"pass"}',
+    revision: 2,
+  });
   const events = f.db
     .query("SELECT action FROM activity_events WHERE root_id = ? ORDER BY id")
-    .all(operation.id);
+    .all(start.id);
   expect(events).toEqual([
     { action: "audit.started" },
     { action: "audit.answer_changed" },
+    { action: "audit.answer_changed" },
     { action: "audit.completed" },
+    { action: "audit.offline_synced" },
   ]);
-  expect((await f.apply(operation)).status).toBe(200);
+  expect((await f.apply(save)).status).toBe(200);
   expect(
-    (await f.apply({ ...operation, responses: { check: "fail" } })).status,
+    (await f.apply({ ...save, responses: { check: "fail" } })).status,
   ).toBe(409);
-  f.db.query("DELETE FROM audits WHERE id = ?").run(operation.id);
-  expect((await f.apply(operation)).status).toBe(200);
+  f.db.query("DELETE FROM audits WHERE id = ?").run(start.id);
+  expect((await f.apply(start)).status).toBe(200);
   expect(f.db.query("SELECT id FROM audits").all()).toEqual([]);
+});
+
+it("saves progress only over the device's last write, leaving server changes in place", async () => {
+  const f = fixture();
+  const start = auditStart();
+  expect((await f.apply(start)).status).toBe(201);
+  const first = auditSave(start.id, 1);
+  // Two tabs sending the same save apply it once.
+  const results = await Promise.all([f.apply(first), f.apply(first)]);
+  expect(results.map((result) => result.status).sort()).toEqual([200, 201]);
+  expect(f.audit(start.id)).toMatchObject({
+    status: "in_progress",
+    responses: '{"check":"pass"}',
+    revision: 2,
+  });
+  // A save from an older revision, an edit made online, and a completion
+  // made online each leave the server's copy alone.
+  expect(await f.apply(auditSave(start.id, 1))).toMatchObject({
+    status: 409,
+    body: { error: expect.stringContaining("changed on the server") },
+  });
+  f.db
+    .query(
+      `UPDATE audits SET responses = '{"check":"na"}', revision = 3 WHERE id = ?`,
+    )
+    .run(start.id);
+  expect((await f.apply(auditSave(start.id, 2))).status).toBe(409);
+  f.db
+    .query("UPDATE audits SET status = 'completed' WHERE id = ?")
+    .run(start.id);
+  expect((await f.apply(auditSave(start.id, 3))).status).toBe(409);
+  f.db
+    .query(
+      "UPDATE audits SET status = 'in_progress', deleted_at = '2026-10-02' WHERE id = ?",
+    )
+    .run(start.id);
+  expect(await f.apply(auditSave(start.id, 3))).toMatchObject({
+    status: 409,
+    body: { error: expect.stringContaining("discarded") },
+  });
+  expect(f.audit(start.id)).toMatchObject({
+    responses: '{"check":"na"}',
+    revision: 3,
+  });
+  expect(f.db.query("SELECT id FROM offline_operations").all()).toHaveLength(2);
+});
+
+it("keeps no receipt when the audit changes between the check and the save", async () => {
+  const f = fixture();
+  const start = auditStart();
+  expect((await f.apply(start)).status).toBe(201);
+  f.hooks.before(
+    "UPDATE audits SET responses = ?, status = ?",
+    () =>
+      f.db.exec(
+        `UPDATE audits SET responses = '{"check":"na"}', revision = revision + 1`,
+      ),
+    { method: "batch" },
+  );
+  const save = auditSave(start.id, 1, { complete: true });
+  expect(await f.apply(save)).toMatchObject({
+    status: 409,
+    body: { error: expect.stringContaining("changed on the server") },
+  });
+  expect(f.audit(start.id)).toMatchObject({
+    status: "in_progress",
+    responses: '{"check":"na"}',
+  });
+  expect(
+    f.db
+      .query(
+        "SELECT id FROM activity_events WHERE action = 'audit.offline_synced'",
+      )
+      .all(),
+  ).toEqual([]);
+  expect(f.db.query("SELECT id FROM offline_operations").all()).toHaveLength(1);
 });
 
 it("requires the parent audit before its issue and does not duplicate issues on retry", async () => {
   const f = fixture();
-  const parent = audit();
+  const parent = auditStart();
   const issue: OfflineOperation = {
     id: crypto.randomUUID(),
     type: "issue",
@@ -91,24 +172,35 @@ it("requires the parent audit before its issue and does not duplicate issues on 
 
 it("rejects wrong account and organization, invalid answers, and inaccessible templates without receipts", async () => {
   const f = fixture();
-  expect((await f.apply(audit(), { ...scope, userId: "user-2" })).status).toBe(
-    403,
-  );
   expect(
-    (await f.apply(audit(), { ...scope, organizationId: "org_user-2" })).status,
+    (await f.apply(auditStart(), { ...scope, userId: "user-2" })).status,
   ).toBe(403);
-  expect((await f.apply({ ...audit(), responses: {} })).status).toBe(409);
   expect(
-    (await f.apply({ ...audit(), responses: { check: "invalid" } })).status,
+    (await f.apply(auditStart(), { ...scope, organizationId: "org_user-2" }))
+      .status,
+  ).toBe(403);
+  expect(
+    (await f.apply({ ...auditStart(), responses: { check: "invalid" } }))
+      .status,
   ).toBe(409);
-  expect((await f.apply({ ...audit(), templateId: "missing" })).status).toBe(
-    409,
-  );
-  expect((await f.apply({ ...audit(), templateVersion: 300 })).status).toBe(
-    409,
-  );
+  expect(
+    (await f.apply({ ...auditStart(), templateId: "missing" })).status,
+  ).toBe(409);
+  expect(
+    (await f.apply({ ...auditStart(), templateVersion: 300 })).status,
+  ).toBe(409);
   expect(f.db.query("SELECT id FROM offline_operations").all()).toEqual([]);
   expect(f.db.query("SELECT id FROM audits").all()).toEqual([]);
+  // Progress saves need no answers; completion needs every required one.
+  const start = auditStart();
+  expect((await f.apply(start)).status).toBe(201);
+  const unanswered = auditSave(start.id, 1, { complete: true });
+  for (const responses of [{}, { check: "invalid" }])
+    expect((await f.apply({ ...unanswered, responses })).status).toBe(409);
+  expect(
+    (await f.apply({ ...auditSave(start.id, 1), responses: {} })).status,
+  ).toBe(201);
+  expect(f.db.query("SELECT id FROM offline_operations").all()).toHaveLength(2);
 });
 
 interface Synced {
@@ -243,12 +335,12 @@ it("records an audit against its project, even one deleted since, and refuses an
     VALUES ('deleted', 'org_user-1', 'Deleted', '2026-10-01', '2026-10-01', '2026-10-02'),
            ('elsewhere', 'org_user-2', 'Elsewhere', '2026-10-01', '2026-10-01', NULL);
   `);
-  const onProject = audit();
-  const deleted = { ...audit(), projectId: "deleted" };
+  const onProject = auditStart();
+  const deleted = { ...auditStart(), projectId: "deleted" };
   for (const operation of [onProject, deleted])
     expect((await f.apply(operation)).status).toBe(201);
   for (const projectId of ["elsewhere", "missing"])
-    expect((await f.apply({ ...audit(), projectId })).status).toBe(409);
+    expect((await f.apply({ ...auditStart(), projectId })).status).toBe(409);
   expect(
     f.db.query("SELECT id, project_id FROM audits ORDER BY project_id").all(),
   ).toEqual([
@@ -261,9 +353,9 @@ it("records an audit against its project, even one deleted since, and refuses an
 it("syncs work on a downloaded version after the form is unpublished or discarded", async () => {
   const f = fixture();
   f.publish("form", 3, "unpublished");
-  expect((await f.apply(audit())).status).toBe(201);
+  expect((await f.apply(auditStart())).status).toBe(201);
   f.publish("form", 4, "discarded");
-  expect((await f.apply(audit())).status).toBe(201);
+  expect((await f.apply(auditStart())).status).toBe(201);
   // A global form unpublished after download.
   f.db
     .query(
@@ -277,23 +369,32 @@ it("syncs work on a downloaded version after the form is unpublished or discarde
     .run(JSON.stringify(definition));
   f.publish("global-form", 2, "unpublished");
   expect(
-    (await f.apply({ ...audit(), templateId: "global-form" })).status,
+    (await f.apply({ ...auditStart(), templateId: "global-form" })).status,
   ).toBe(201);
   // A version that was never published was never downloaded.
-  expect((await f.apply({ ...audit(), templateVersion: 2 })).status).toBe(409);
+  expect((await f.apply({ ...auditStart(), templateVersion: 2 })).status).toBe(
+    409,
+  );
 });
 
 it("rolls back receipts and domain writes if history fails, then retries successfully", async () => {
   const f = fixture();
-  const operation = audit();
+  const start = auditStart();
+  expect((await f.apply(start)).status).toBe(201);
+  const save = auditSave(start.id, 1, { complete: true });
   f.db.exec(
     "CREATE TRIGGER fail_history BEFORE INSERT ON activity_events WHEN NEW.action = 'audit.completed' BEGIN SELECT RAISE(ABORT, 'history unavailable'); END",
   );
-  expect((await f.apply(operation)).status).toBe(500);
-  expect(f.db.query("SELECT id FROM audits").all()).toEqual([]);
-  expect(f.db.query("SELECT id FROM offline_operations").all()).toEqual([]);
+  expect((await f.apply(save)).status).toBe(500);
+  expect(f.audit(start.id)).toMatchObject({
+    status: "in_progress",
+    revision: 1,
+  });
+  expect(f.db.query("SELECT id FROM offline_operations").all()).toEqual([
+    { id: start.id },
+  ]);
   f.db.exec("DROP TRIGGER fail_history");
-  expect((await f.apply(operation)).status).toBe(201);
+  expect((await f.apply(save)).status).toBe(201);
 });
 
 it("creates standalone issues and rejects former assignees", async () => {
@@ -347,23 +448,21 @@ it("keeps no receipt when the assignee leaves before the issue is written", asyn
 
 it("keeps device-reported audit times separate from server history time", async () => {
   const f = fixture();
-  const operation = {
-    ...audit(),
-    startedAt: "2026-10-01T12:00:00.000Z",
-    completedAt: "2026-10-01T12:30:00.000Z",
-  };
-  expect((await f.apply(operation)).status).toBe(201);
+  const start = auditStart();
+  expect((await f.apply(start)).status).toBe(201);
+  const save = auditSave(start.id, 1, { complete: true });
+  expect((await f.apply(save)).status).toBe(201);
   const event = f.db
     .query(
       "SELECT details, occurred_at FROM activity_events WHERE action = 'audit.offline_synced'",
     )
     .get() as { details: string; occurred_at: string };
   expect(JSON.parse(event.details)).toEqual({
-    clientStartedAt: operation.startedAt,
-    clientCompletedAt: operation.completedAt,
+    clientStartedAt: save.completion?.startedAt,
+    clientCompletedAt: save.completion?.completedAt,
   });
-  expect(event.occurred_at).not.toBe(operation.completedAt);
-  expect((await f.apply(operation)).status).toBe(200);
+  expect(event.occurred_at).not.toBe(save.completion?.completedAt);
+  expect((await f.apply(save)).status).toBe(200);
   expect(
     f.db
       .query(
@@ -373,14 +472,37 @@ it("keeps device-reported audit times separate from server history time", async 
   ).toHaveLength(1);
 });
 
-function audit(): Extract<OfflineOperation, { type: "audit" }> {
+function auditStart(): Extract<OfflineOperation, { type: "auditStart" }> {
   return {
-    type: "audit",
+    type: "auditStart",
     id: crypto.randomUUID(),
     projectId: "audited",
     templateId: "form",
     templateVersion: 1,
+    responses: {},
+  };
+}
+
+/** A save of `{ check: "pass" }` over `expectedRevision`, completing it when asked. */
+function auditSave(
+  auditId: string,
+  expectedRevision: number,
+  { complete = false } = {},
+): Extract<OfflineOperation, { type: "auditSave" }> {
+  return {
+    type: "auditSave",
+    id: crypto.randomUUID(),
+    auditId,
+    expectedRevision,
     responses: { check: "pass" },
+    ...(complete
+      ? {
+          completion: {
+            startedAt: "2026-10-01T12:00:00.000Z",
+            completedAt: "2026-10-01T12:30:00.000Z",
+          },
+        }
+      : {}),
   };
 }
 
@@ -416,6 +538,12 @@ function fixture() {
     request,
     apply: (operation: OfflineOperation, identity = scope) =>
       request("POST", "/operations", { ...identity, operation }),
+    audit: (id: string) =>
+      db
+        .query(
+          "SELECT template_name, template_version, status, responses, revision FROM audits WHERE id = ?",
+        )
+        .get(id),
     /** Saves the form's next version (`version`, or the one after its current) with `status`. */
     publish(templateId: string, version: number, status: string) {
       const next =

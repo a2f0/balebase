@@ -200,6 +200,34 @@ function deviceWith(
   };
 }
 
+type Job = OfflineWorkspace["jobs"][number];
+
+/** A sync job in `status`: the audit `id`'s start, or else a photo. */
+function job(
+  id: string,
+  status: Job["status"],
+  { audit = false, error }: { audit?: boolean; error?: string } = {},
+): Job {
+  return {
+    attempts: 1,
+    dependsOn: [],
+    id,
+    operation: audit
+      ? {
+          id,
+          projectId: "project-1",
+          responses: {},
+          templateId: "walk",
+          templateVersion: 3,
+          type: "auditStart",
+        }
+      : { id, type: "image", filename: "", issueId: "" },
+    retryAt: 0,
+    status,
+    ...(error ? { error } : {}),
+  };
+}
+
 function toggle(container: HTMLElement, name: string) {
   return container.querySelector<HTMLInputElement>(
     `input[role="switch"][aria-label="Use ${name} in this project"]`,
@@ -387,37 +415,33 @@ describe("project detail", () => {
     stubApi(false);
     const [walk] = forms;
     if (!walk) throw new Error("Missing form.");
-    const started = (id: string, projectId: string, queued: boolean) => ({
+    const started = (
+      id: string,
+      projectId: string,
+      status: OfflineWorkspace["audits"][number]["status"],
+    ) => ({
       id,
       projectId,
-      queued,
       responses: {},
       startedAt: `2026-10-0${id.length}T00:00:00.000Z`,
-      template: walk,
-    });
-    const job = (
-      id: string,
-      status: OfflineWorkspace["jobs"][number]["status"],
-      error?: string,
-    ) => ({
-      attempts: 1,
-      dependsOn: [],
-      id,
-      operation: { id, type: "image" as const, filename: "", issueId: "" },
-      retryAt: 0,
       status,
-      ...(error ? { error } : {}),
+      template: walk,
     });
     const visited: string[] = [];
     const container = await render(
       deviceWith(
         [
-          started("d", "project-1", false),
-          started("ww", "project-1", true),
-          started("sss", "project-1", true),
-          started("other", "project-2", false),
+          started("d", "project-1", "draft"),
+          started("ww", "project-1", "completed"),
+          started("sss", "project-1", "completed"),
+          started("pppp", "project-1", "inProgress"),
+          started("other", "project-2", "draft"),
         ],
-        [job("ww", "blocked", "Form gone"), job("sss", "synced")],
+        [
+          job("ww", "blocked", { audit: true, error: "Form gone" }),
+          job("sss", "synced", { audit: true }),
+          job("pppp", "synced", { audit: true }),
+        ],
       ),
       (pathname) => visited.push(pathname),
     );
@@ -425,17 +449,21 @@ describe("project detail", () => {
     const rows = [...panel.querySelectorAll(".rowList .row")].map(
       (row) => row.textContent,
     );
-    expect(rows).toHaveLength(3);
-    expect(rows[0]).toContain("Synced");
-    expect(rows[1]).toContain("Not synced");
-    expect(rows[1]).toContain("Form gone");
-    expect(rows[2]).toContain("Draft");
-    for (const label of ["Open audit", "View", "Continue"])
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toContain("Progress synced");
+    expect(rows[1]).toContain("Synced");
+    expect(rows[2]).toContain("Not synced");
+    expect(rows[2]).toContain("Form gone");
+    expect(rows[3]).toContain("Draft");
+    for (const label of ["Open audit", "View"])
       await click(queryButton(label, panel));
+    for (const button of panel.querySelectorAll("button"))
+      if (button.textContent === "Continue") await click(button);
     await settle();
     expect(visited).toEqual([
       "/audits/runs/sss",
       "/projects/project-1/audits/ww",
+      "/projects/project-1/audits/pppp",
       "/projects/project-1/audits/d",
     ]);
   });
@@ -444,34 +472,21 @@ describe("project detail", () => {
     stubApi(false);
     const [walk] = forms;
     if (!walk) throw new Error("Missing form.");
-    const job = (
-      id: string,
-      status: OfflineWorkspace["jobs"][number]["status"],
-      error?: string,
-    ) => ({
-      attempts: 1,
-      dependsOn: [],
-      id,
-      operation: { id, type: "image" as const, filename: "", issueId: "" },
-      retryAt: 0,
-      status,
-      ...(error ? { error } : {}),
-    });
     const device = deviceWith(
       [
         {
           id: "audit",
           projectId: "project-1",
-          queued: true,
           responses: {},
           startedAt: "2026-10-01T00:00:00.000Z",
+          status: "completed",
           template: walk,
         },
       ],
       [
-        job("audit", "synced"),
+        job("audit", "synced", { audit: true }),
         job("issue", "synced"),
-        job("photo", "blocked", "Photo refused"),
+        job("photo", "blocked", { error: "Photo refused" }),
       ],
     );
     const workspace = device.workspace;
@@ -543,9 +558,9 @@ describe("project detail", () => {
       {
         id: "left-behind",
         projectId: "deleted-project",
-        queued: false,
         responses: {},
         startedAt: "2026-10-01T00:00:00.000Z",
+        status: "draft",
         template: walk,
       },
     ]);

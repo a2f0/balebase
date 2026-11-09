@@ -9,13 +9,21 @@ import {
 import { auditLimits } from "@balebase/validators/rules";
 import { useState } from "react";
 import { guardWorkspaceChange } from "../workspace/navigationGuard";
+import { auditRunPath } from "../workspace/workspacePaths";
 import { OfflineIssueCreator, OfflineIssueList } from "./OfflineIssues";
+import {
+  type AuditWriteJob,
+  auditWrites,
+  unsavedProgress,
+} from "./offlineAuditState";
 import type { OfflineAudit, OfflineWorkspace } from "./offlineStore";
 import { useOfflineAnswers } from "./useOfflineAnswers";
 
 /**
  * Answers an audit on this device, saving each answer here as it is given.
- * Completing it queues it to sync; issues raised on its items sync after it.
+ * Saving progress syncs the answers so far as an in-progress audit, and
+ * completing it queues its completion; issues raised on its items sync
+ * onto the server's audit.
  */
 export function OfflineAuditEditor({
   audit,
@@ -29,6 +37,8 @@ export function OfflineAuditEditor({
   const [issueItem, setIssueItem] = useState<string>();
   const { responses, pending, sealing, error, answer, save } =
     useOfflineAnswers(audit, workspace.key);
+  const writes = auditWrites(workspace.jobs, audit.id);
+  const completed = audit.status === "completed";
   return (
     <PageSection title={`Checklist · v${audit.template.version}`}>
       {error && (
@@ -36,8 +46,8 @@ export function OfflineAuditEditor({
           tone="danger"
           actions={
             <Button
-              disabled={pending > 0 || audit.queued}
-              onClick={() => void save(false)}
+              disabled={pending > 0 || completed}
+              onClick={() => void save()}
             >
               Retry saving draft
             </Button>
@@ -51,9 +61,7 @@ export function OfflineAuditEditor({
           ? "Saving on this device…"
           : error
             ? "Some changes have not been saved."
-            : audit.queued
-              ? "Completed. It syncs when this device is online; open the synced audit to make further changes."
-              : "Draft saved on this device"}
+            : syncStatus(audit, writes)}
       </p>
       {audit.template.definition.sections.map((section) => (
         <Card key={section.id} title={section.title}>
@@ -66,7 +74,7 @@ export function OfflineAuditEditor({
                   <textarea
                     className="textarea"
                     maxLength={auditLimits.answer}
-                    disabled={audit.queued || sealing}
+                    disabled={completed || sealing}
                     value={responses[item.id] ?? ""}
                     onChange={(event) =>
                       void answer(item.id, event.target.value)
@@ -74,7 +82,7 @@ export function OfflineAuditEditor({
                   />
                 ) : (
                   <Select
-                    disabled={audit.queued || sealing}
+                    disabled={completed || sealing}
                     value={responses[item.id] ?? ""}
                     onChange={(event) =>
                       void answer(item.id, event.target.value)
@@ -109,16 +117,34 @@ export function OfflineAuditEditor({
           ))}
         </Card>
       ))}
-      {!audit.queued && (
-        <Button
-          busy={pending > 0}
-          disabled={pending > 0}
-          variant="primary"
-          onClick={() => void save(true)}
-        >
-          Complete audit
-        </Button>
-      )}
+      <div className="cluster">
+        {!completed && (
+          <>
+            <Button
+              disabled={pending > 0}
+              onClick={() => void save("progress")}
+            >
+              Save progress
+            </Button>
+            <Button
+              busy={pending > 0}
+              disabled={pending > 0}
+              variant="primary"
+              onClick={() => void save("completion")}
+            >
+              Complete audit
+            </Button>
+          </>
+        )}
+        {writes[0]?.status === "synced" && (
+          <Button
+            variant="ghost"
+            onClick={() => onNavigate(auditRunPath(audit.id))}
+          >
+            Open synced audit
+          </Button>
+        )}
+      </div>
       <OfflineIssueList
         workspace={workspace}
         auditId={audit.id}
@@ -126,4 +152,25 @@ export function OfflineAuditEditor({
       />
     </PageSection>
   );
+}
+
+/** Where the audit's answers stand against the server's copy. */
+function syncStatus(audit: OfflineAudit, writes: AuditWriteJob[]) {
+  const blocked = writes.find((job) => job.status === "blocked");
+  const synced = writes.every((job) => job.status === "synced");
+  switch (audit.status) {
+    case "draft":
+      return "Draft saved on this device. Save progress to sync it before it is complete.";
+    case "inProgress":
+      if (blocked) return `Progress not synced. ${blocked.error ?? ""}`.trim();
+      if (unsavedProgress(audit, writes))
+        return "Saved on this device. Save progress to sync the latest answers.";
+      return synced
+        ? "Progress synced."
+        : "Progress saved. It syncs when this device is online.";
+    case "completed":
+      return synced
+        ? "Completed and synced. Open the synced audit to make further changes."
+        : "Completed. It syncs when this device is online; open the synced audit to make further changes.";
+  }
 }

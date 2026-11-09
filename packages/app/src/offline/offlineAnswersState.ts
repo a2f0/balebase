@@ -1,8 +1,9 @@
 /**
  * What went wrong saving an audit's answers on this device. A failed write
  * lasts until every answer is written, however that happens (answering again
- * or a retried save); a failed completion lasts until a save succeeds. A
- * failed write shows first: it is what the person can act on now.
+ * or a retried save); a failed request to sync (saving progress or
+ * completing) lasts until a save succeeds. A failed write shows first: it is
+ * what the person can act on now.
  */
 export interface OfflineAnswersState {
   queueError: string | undefined;
@@ -14,7 +15,7 @@ export type OfflineAnswersEvent =
   /** Every answer is written; nothing is left unsaved. */
   | { type: "allWritten" }
   | { message: string; type: "queueFailed" }
-  /** A save finished: every answer written and, if completing, queued. */
+  /** A save finished: every answer written and any sync it asked for queued. */
   | { type: "saved" };
 
 export const initialOfflineAnswers: OfflineAnswersState = {
