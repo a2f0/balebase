@@ -39,6 +39,16 @@ const endpoints = {
     path: "/api/equipment/:id",
     response: "empty",
   }),
+  listDeleted: endpoint<typeof equipmentRoutes.listDeleted>({
+    method: "GET",
+    path: "/api/equipment/deleted",
+    response: "json",
+  }),
+  restore: endpoint<typeof equipmentRoutes.restore>({
+    method: "POST",
+    path: "/api/equipment/:id/restore",
+    response: "json",
+  }),
 };
 
 export function equipmentApi(transport: Transport) {
@@ -70,8 +80,18 @@ export function equipmentApi(transport: Transport) {
       });
       return equipment;
     },
+    /** Hides the item until a manager restores it. */
     delete(id: string) {
       return transport.call(endpoints.delete, { params: { id } });
+    },
+    listDeleted() {
+      return transport.call(endpoints.listDeleted);
+    },
+    async restore(id: string) {
+      const { equipment } = await transport.call(endpoints.restore, {
+        params: { id },
+      });
+      return equipment;
     },
   };
 }

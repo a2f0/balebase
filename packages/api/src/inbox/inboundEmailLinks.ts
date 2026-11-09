@@ -53,26 +53,34 @@ function linkEventSql(where: string, extraDetails = "") {
 const linkEvent = linkEventSql("link.id = ? AND link.organization_id = ?");
 
 /**
- * Records the end of every email link to a folder or item of equipment that
- * the same batch deletes, one `inbox.email_unlinked` per link attributed to
- * the person deleting it, so each email's history shows its link ended. Put
- * it before the statements that remove the links and the record.
+ * Whether the `link` row is shown. A link to deleted equipment stays for a
+ * restore but is hidden until then, so it neither lists nor keeps its email
+ * out of Trash.
  */
-export function deletedTargetLinkEvents(
+export const shownLink = `NOT EXISTS (
+  SELECT 1 FROM equipment AS hidden
+  WHERE link.target_type = 'equipment' AND hidden.id = link.target_id
+    AND hidden.deleted_at IS NOT NULL)`;
+
+/**
+ * Records the end of every email link to a library folder that the same
+ * batch deletes, one `inbox.email_unlinked` per link attributed to the person
+ * deleting it, so each email's history shows its link ended. Put it before
+ * the statements that remove the links and the folder.
+ */
+export function deletedFolderLinkEvents(
   database: D1Database,
   input: {
     actorId: string;
+    folderId: string;
     organizationId: string;
-    targetId: string;
-    targetType: "equipment" | "library_folder";
   },
 ) {
   return database
     .prepare(
       linkEventSql(
-        `link.organization_id = ? AND link.target_type = ?
-           AND link.target_id = ?
-           AND COALESCE(folder.id, item.id) IS NOT NULL
+        `link.organization_id = ? AND link.target_type = 'library_folder'
+           AND link.target_id = ? AND folder.id IS NOT NULL
          ORDER BY link.created_at, link.rowid`,
         ", 'via', 'target_deleted'",
       ),
@@ -82,8 +90,7 @@ export function deletedTargetLinkEvents(
       new Date().toISOString(),
       input.actorId,
       input.organizationId,
-      input.targetType,
-      input.targetId,
+      input.folderId,
     );
 }
 
@@ -341,6 +348,7 @@ async function emailLinkRows(
          ON link.target_type = 'equipment'
         AND item.id = link.target_id
         AND item.organization_id = link.organization_id
+        AND item.deleted_at IS NULL
        LEFT JOIN plaid_transactions AS txn
          ON link.target_type = 'finance_transaction'
         AND txn.id = link.target_id
@@ -356,7 +364,8 @@ async function emailLinkRows(
 
 /** Each target type's existence check, bound to (target id, organization). */
 const targetQueries: Record<EmailLinkTargetType, string> = {
-  equipment: `SELECT 1 FROM equipment WHERE id = ? AND organization_id = ?`,
+  equipment: `SELECT 1 FROM equipment
+    WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`,
   finance_transaction: `SELECT 1 FROM plaid_transactions
     WHERE id = ? AND organization_id = ? AND source_status = 'active'`,
   library_folder: `SELECT 1 FROM library_folders

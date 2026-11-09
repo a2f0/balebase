@@ -25,6 +25,7 @@ import { countLabel } from "../shared/labels";
 import { useAction } from "../shared/useAction";
 import { useLoad } from "../shared/useLoad";
 import { equipmentIdForPath, equipmentPath } from "../workspace/workspacePaths";
+import { DeletedEquipment } from "./DeletedEquipment";
 import { Assignee } from "./EquipmentAssignee";
 import { EquipmentDetailPage } from "./EquipmentDetail";
 import { EquipmentForm } from "./EquipmentForm";
@@ -171,6 +172,7 @@ function EquipmentListPage({
                 onNavigate={onNavigate}
               />
             </PageSection>
+            <DeletedEquipment onNavigate={onNavigate} />
           </>
         )}
       </PageBody>

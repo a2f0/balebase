@@ -275,19 +275,23 @@ and the folder it left, never its body or attachments; restoring no longer
 erases who trashed it. Linking an email to a folder, equipment, or a
 transaction, and unlinking it, records an event on that record with the email as
 the subject, so a transaction's links need Finance access wherever they are
-read. Deleting a folder or equipment records an `inbox.email_unlinked` for
-each link it removes (`details.via = 'target_deleted'`), attributed to the
-person deleting it, so the email's history shows when and by whom the link
-ended. `equipment.deleted` also keeps who held the item (`assignedTo`,
-`assigneeName`, `assigneeEmail`) and its `emailLinkCount`. The **Purge trashed
-email** job (`purgeTrashedEmails`, run on request from **Root Admin → Jobs**;
-it replaced the `emails:purge` operator script) permanently deletes email that
-has been in Trash for 30 days. In the same transaction it records
-`inbox.email_purged` on the email, by the job, counting its attachments and
-folder and equipment links but naming no transaction, and
-`inbox.email_unlinked` (`details.via = 'email_purged'`) on each record a legacy
-trashed email was still linked to. Its raw message and attachments are removed
-by the deleted-file cleanup after that commits. When Plaid removes a
+read. Deleting a folder records an `inbox.email_unlinked` for each link it
+removes (`details.via = 'target_deleted'`), attributed to the person deleting
+it, so the email's history shows when and by whom the link ended; equipment
+deleted before it became restorable did the same. Deleting and restoring
+equipment record `equipment.deleted` and `equipment.restored`, each with a
+snapshot of the item that keeps who held it (`assignedTo`, `assigneeName`,
+`assigneeEmail`). Its email links stay, hidden while it is deleted, so neither
+records link events; earlier deletions also kept their `emailLinkCount`. The
+**Purge trashed email** job (`purgeTrashedEmails`, run on request from **Root
+Admin → Jobs**; it replaced the `emails:purge` operator script) permanently
+deletes email that has been in Trash for 30 days. In the same transaction it
+records `inbox.email_purged` on the email, by the job, counting its
+attachments and folder and equipment links but naming no transaction, and
+`inbox.email_unlinked` (`details.via = 'email_purged'`) on each record the
+email was still linked to: a legacy trashed email's links, and its hidden
+links to deleted equipment. Its raw message and attachments are removed by
+the deleted-file cleanup after that commits. When Plaid removes a
 transaction, its links are hidden with it, and kept, without an event. Inbound
 mail is a provider action with no user actor: the stored message and its raw
 `.eml` are its record.

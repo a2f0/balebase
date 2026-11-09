@@ -135,6 +135,7 @@ const actionLabels: Record<string, string> = {
   "equipment.assigned": "changed the equipment assignee",
   "equipment.created": "added equipment",
   "equipment.deleted": "deleted equipment",
+  "equipment.restored": "restored equipment",
   "equipment.updated": "edited equipment",
   "organization.group_created": "created a group",
   "organization.group_deleted": "deleted a group",
