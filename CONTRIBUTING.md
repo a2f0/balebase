@@ -395,6 +395,9 @@ as to `screens.ts`.
   `validators`; `app` on those; the shells (`app-web`, `app-capacitor`) on
   `app` and the leaf packages; and `api` and `website` on the leaf packages
   only.
+- Beyond its recommended set, Biome turns on bug-catching rules from
+  `biome.jsonc`, among them floating promises, non-exhaustive `switch`
+  statements, focused or skipped tests, and assignments nothing reads.
 - Test observable behavior and failure paths. Use the existing tests for
   mechanical moves; add coverage when behavior changes or a gap matters.
 - Treat [audit activity](docs/audit-activity.md) as part of a mutation's
