@@ -56,7 +56,7 @@ export interface OfflineAudit {
     job: string;
   }[];
   local: Record<string, LocalAnswer>;
-  /** Answers given here that a later answer given elsewhere replaced. */
+  /** Answers given here that the server did not keep. */
   replaced: Record<string, AnswerWrite>;
 }
 

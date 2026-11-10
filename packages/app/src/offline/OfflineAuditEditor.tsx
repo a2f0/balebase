@@ -185,7 +185,7 @@ function AnswerInput({
   );
 }
 
-/** This device's answer that a later one given elsewhere replaced, if any. */
+/** This device's answer the server did not keep, if any. */
 function ReplacedAnswer({
   answer,
   responseType,
@@ -200,8 +200,8 @@ function ReplacedAnswer({
       : answer.value;
   return (
     <p className="textSm">
-      Your answer “{label}” was replaced by a later one given elsewhere. Both
-      are in the audit's history.
+      Your answer “{label}” was not kept; the server kept the answer given
+      elsewhere. Both are in the audit's history.
     </p>
   );
 }

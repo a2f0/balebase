@@ -739,13 +739,12 @@ both answers with who gave each and when. Agreeing answers never collide, but
 the answer keeps the later time, so the outcome does not depend on the order
 answers arrive in. A cleared answer keeps its time, version, and who cleared
 it, so it collides the same way and an older answer cannot bring it back
-unnoticed. A completed audit keeps
-its answers, so each differing answer a device sends after completion is
-recorded as discarded. The device shows the kept answer
-and notes under the item that a later one replaced its own; answering the
-item again clears the note. Answer history is dated by the time each answer
-was given. Since device clocks are trusted, a device whose clock runs ahead
-wins collisions it should lose.
+unnoticed. A completed audit keeps its answers, so each differing answer a
+device sends after completion is recorded as discarded. The device shows the
+kept answer and notes under the item that the server did not keep its own;
+answering the item again clears the note. Answer history is dated by the
+time each answer was given. Since device clocks are trusted, a device whose
+clock runs ahead wins collisions it should lose.
 
 Each sync of an audit is an operation in `POST /api/offline/operations`:
 `auditStart` creates the audit in progress with its answers so far, and

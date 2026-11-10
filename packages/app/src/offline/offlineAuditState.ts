@@ -107,10 +107,12 @@ export function pushDue(audit: OfflineAudit, writes: AuditWriteJob[]) {
  *
  * Answers given here wait in `local` until a write carries them, then in
  * `sending` until the server confirms it. The server's copy replaces
- * `server` unless it is older than the one held. An answer the editor was
- * still writing when a completion made elsewhere sealed the audit is kept
- * and sent, so the server records it rather than the device losing it.
- * Completing throws while a required item is unanswered.
+ * `server` unless it is older than the one held. An answer older than one
+ * given here since, such as another tab retrying an earlier edit, is
+ * ignored. An answer the editor was still writing when a completion made
+ * elsewhere sealed the audit is kept and sent, so the server records it
+ * rather than the device losing it. Completing throws while a required item
+ * is unanswered.
  */
 export function offlineAuditTransition(
   audit: OfflineAudit,
@@ -119,19 +121,8 @@ export function offlineAuditTransition(
 ): OfflineAuditStep {
   const unchanged = { audit, queue: [] };
   switch (event.type) {
-    case "answered": {
-      const replaced = { ...audit.replaced };
-      delete replaced[event.itemId];
-      const answer = { at: event.at, base: event.base, value: event.value };
-      return {
-        audit: {
-          ...audit,
-          local: { ...audit.local, [event.itemId]: answer },
-          replaced,
-        },
-        queue: [],
-      };
-    }
+    case "answered":
+      return { audit: answer(audit, event), queue: [] };
     case "shared":
     case "issueRaised":
       return audit.status === "draft" ? start(audit) : unchanged;
@@ -173,6 +164,27 @@ export function offlineAuditTransition(
     default:
       return unknownEvent(event);
   }
+}
+
+/** Takes an answer given here, unless one given here since replaced it. */
+function answer(
+  audit: OfflineAudit,
+  event: Extract<OfflineAuditEvent, { type: "answered" }>,
+): OfflineAudit {
+  const newer = [audit.local, ...audit.sending.map((entry) => entry.answers)]
+    .map((answers) => answers[event.itemId])
+    .some((given) => given && Date.parse(given.at) > Date.parse(event.at));
+  if (newer) return audit;
+  const replaced = { ...audit.replaced };
+  delete replaced[event.itemId];
+  return {
+    ...audit,
+    local: {
+      ...audit.local,
+      [event.itemId]: { at: event.at, base: event.base, value: event.value },
+    },
+    replaced,
+  };
 }
 
 /**

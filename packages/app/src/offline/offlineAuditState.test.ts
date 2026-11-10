@@ -188,6 +188,38 @@ describe("answering", () => {
     });
   });
 
+  it.each<[string, OfflineAudit]>([
+    [
+      "unsent",
+      audit("inProgress", { local: { exit: local("pass", 6, null) } }),
+    ],
+    [
+      "still being sent",
+      audit("inProgress", {
+        sending: [
+          {
+            answers: { exit: local("pass", 6, null) },
+            completes: false,
+            job: "save",
+          },
+        ],
+      }),
+    ],
+  ])(
+    "ignores a retried answer older than one given here since, %s",
+    (_name, current) => {
+      // Another tab retries the answer it failed to write at minute 4.
+      const step = run(current, [job("audit", "synced")], {
+        at: at(4),
+        base: null,
+        itemId: "exit",
+        type: "answered",
+        value: "fail",
+      });
+      expect(step).toEqual({ audit: current, queue: [] });
+    },
+  );
+
   it("keeps an answer written after a completion made elsewhere, and sends it for the record", () => {
     const sealed = audit("completed", {
       server: { answers: {}, revision: 3, status: "completed" },
