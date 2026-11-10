@@ -255,31 +255,20 @@ it("records collisions with more distinct people than D1 binds parameters", asyn
     { times: Number.POSITIVE_INFINITY },
   );
   const items = Array.from({ length: 101 }, (_, index) => `item-${index}`);
-  f.db.exec(
-    "INSERT INTO audit_template_families (id, scope, organization_id, current_version, created_by, created_at, updated_at) VALUES ('wide', 'organization', 'org_user-1', 1, 'user-1', '2026-10-01', '2026-10-01')",
+  f.addForm(
+    "wide",
+    // A section holds at most 100 items.
+    [items.slice(0, 50), items.slice(50)].map((section, index) => ({
+      id: `section-${index}`,
+      title: "Wide",
+      items: section.map((id) => ({
+        id,
+        prompt: id,
+        required: false,
+        responseType: "text",
+      })),
+    })),
   );
-  f.db
-    .query(
-      "INSERT INTO audit_template_versions (id, template_id, version, name, description, definition, status, created_by, created_at) VALUES ('wide-1', 'wide', 1, 'Wide', '', ?, 'published', 'user-1', '2026-10-01')",
-    )
-    .run(
-      JSON.stringify({
-        version: 1,
-        // A section holds at most 100 items.
-        sections: [items.slice(0, 50), items.slice(50)].map(
-          (section, index) => ({
-            id: `section-${index}`,
-            title: "Wide",
-            items: section.map((id) => ({
-              id,
-              prompt: id,
-              required: false,
-              responseType: "text",
-            })),
-          }),
-        ),
-      }),
-    );
   const start = {
     ...auditStart(
       Object.fromEntries(
@@ -303,6 +292,54 @@ it("records collisions with more distinct people than D1 binds parameters", asyn
   expect((await f.apply(save)).status).toBe(201);
   expect(f.conflicts(start.id)).toHaveLength(101);
   expect(widest).toBeLessThanOrEqual(100);
+});
+
+it("merges and completes a form whose item IDs name inherited members", async () => {
+  const f = fixture();
+  f.addForm("inherited", [
+    {
+      id: "section",
+      title: "Site",
+      items: [
+        {
+          id: "constructor",
+          prompt: "Exit clear?",
+          required: true,
+          responseType: "check",
+        },
+        {
+          id: "toString",
+          prompt: "Notes",
+          required: false,
+          responseType: "text",
+        },
+      ],
+    },
+  ]);
+  const start = {
+    ...auditStart({ toString: { value: "Rail", at: at(1) } }),
+    templateId: "inherited",
+  };
+  expect((await f.apply(start)).status).toBe(201);
+  // The required item is still unanswered, so the completion does not apply.
+  const save = auditSave(
+    start.id,
+    { toString: { value: "Rail fixed", at: at(2), base: start.id } },
+    { complete: true },
+  );
+  expect((await f.apply(save)).status).toBe(201);
+  expect(f.audit(start.id)).toMatchObject({
+    responses: '{"toString":"Rail fixed"}',
+    status: "in_progress",
+  });
+  const done = auditSave(
+    start.id,
+    { constructor: { value: "pass", at: at(3), base: null } },
+    { complete: true },
+  );
+  expect((await f.apply(done)).status).toBe(201);
+  expect(f.audit(start.id)).toMatchObject({ status: "completed" });
+  expect(f.conflicts(start.id)).toEqual([]);
 });
 
 it("refuses a save to a discarded audit and keeps no receipt", async () => {
@@ -886,6 +923,15 @@ function fixture() {
           "SELECT status, responses, answer_meta, revision FROM audits WHERE id = ?",
         )
         .get(id),
+    /** Adds the organization's form `id`, with version 1 published. */
+    addForm(id: string, sections: unknown[]) {
+      db.query(
+        "INSERT INTO audit_template_families (id, scope, organization_id, current_version, created_by, created_at, updated_at) VALUES (?, 'organization', 'org_user-1', 1, 'user-1', '2026-10-01', '2026-10-01')",
+      ).run(id);
+      db.query(
+        "INSERT INTO audit_template_versions (id, template_id, version, name, description, definition, status, created_by, created_at) VALUES (?, ?, 1, ?, '', ?, 'published', 'user-1', '2026-10-01')",
+      ).run(`${id}-1`, id, id, JSON.stringify({ version: 1, sections }));
+    },
     /** Saves an answer as an online save by `by` at `when` would. */
     edit(id: string, itemId: string, value: string, when: string, by: string) {
       db.query(

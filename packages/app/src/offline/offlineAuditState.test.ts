@@ -590,4 +590,27 @@ describe("merging the server's copy", () => {
     });
     expect(step.audit.status).toBe(status);
   });
+
+  it.each<[string, OfflineAudit, OfflineAuditStatus]>([
+    [
+      "opens an audit sealed here when a newer copy shows it reopened",
+      audit("completed", {
+        server: { answers: {}, revision: 5, status: "completed" },
+      }),
+      "inProgress",
+    ],
+    [
+      "keeps it completed while its own completion is still on its way",
+      audit("completed", {
+        sending: [{ answers: {}, completes: true, job: "save" }],
+      }),
+      "completed",
+    ],
+  ])("%s", (_name, current, status) => {
+    const step = run(current, [job("audit", "synced")], {
+      state: state({ exit: stored("pass", 4) }, 6),
+      type: "pulled",
+    });
+    expect(step.audit.status).toBe(status);
+  });
 });

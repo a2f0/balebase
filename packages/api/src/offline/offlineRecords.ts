@@ -199,7 +199,9 @@ async function saveWrites(
   );
   // A required answer cleared elsewhere leaves the audit in progress.
   const completion =
-    !sealed && allRequiredAnswered(definition, answerValues(merged.answers))
+    operation.completion &&
+    !sealed &&
+    allRequiredAnswered(definition, answerValues(merged.answers))
       ? operation.completion
       : undefined;
   const now = new Date().toISOString();

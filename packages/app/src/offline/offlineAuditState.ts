@@ -96,11 +96,11 @@ export function pushDue(audit: OfflineAudit, writes: AuditWriteJob[]) {
 /**
  * Moves a device audit, given its queued writes:
  *
- * | status     | answered   | shared, issueRaised | pushed         | completed              | confirmed, pulled         |
- * | ---------- | ---------- | ------------------- | -------------- | ---------------------- | ------------------------- |
- * | draft      | draft      | inProgress, start   | ignored        | completed, start, save | ignored                   |
- * | inProgress | inProgress | ignored             | save, when due | completed, save        | completed if done there   |
- * | completed  | completed  | ignored             | save, when due | ignored                | inProgress if not applied |
+ * | status     | answered   | shared, issueRaised | pushed         | completed              | confirmed, pulled                  |
+ * | ---------- | ---------- | ------------------- | -------------- | ---------------------- | ---------------------------------- |
+ * | draft      | draft      | inProgress, start   | ignored        | completed, start, save | ignored                            |
+ * | inProgress | inProgress | ignored             | save, when due | completed, save        | completed if done there            |
+ * | completed  | completed  | ignored             | save, when due | ignored                | inProgress if not applied/reopened |
  *
  * Answers given here wait in `local` until a write carries them, then in
  * `sending` until the server confirms it. The server's copy replaces
@@ -277,10 +277,10 @@ function send(
 
 /**
  * Drops a confirmed write, noting each of its answers the newest server copy
- * held does not keep, unless a newer answer from here replaces it anyway. A
- * completion the newest copy does not show, because a required answer was
- * cleared elsewhere or the audit was reopened since, opens the audit here
- * again.
+ * held does not keep, unless a newer answer from here replaces it anyway.
+ * Its status then follows that copy (`pull`): a completion it does not show,
+ * because a required answer was cleared elsewhere or the audit was reopened
+ * since, opens the audit here again.
  */
 function confirm(
   audit: OfflineAudit,
@@ -305,10 +305,6 @@ function confirm(
     ...audit,
     replaced: { ...audit.replaced, ...Object.fromEntries(notes) },
     sending: audit.sending.filter((other) => other.job !== job),
-    status:
-      entry.completes && newest.status !== "completed"
-        ? "inProgress"
-        : audit.status,
   };
 }
 
@@ -316,9 +312,10 @@ function confirm(
  * Takes the server's copy unless it is older than the one held, then
  * follows the newest copy held: a completion made elsewhere seals the audit
  * here once nothing from here is still on its way (the server records any
- * answer from here it then discards). Reconciling against the copy held,
- * not the one arriving, lets a late confirmation seal an audit a newer copy
- * already showed completed.
+ * answer from here it then discards), and a copy showing the audit in
+ * progress again opens it here once no completion from here is still on its
+ * way. Reconciling against the copy held, not the one arriving, lets a late
+ * confirmation follow a newer copy already held.
  */
 function pull(
   audit: OfflineAudit,
@@ -333,12 +330,29 @@ function pull(
           revision: state.revision,
           status: state.status,
         };
-  const sealed =
-    server.status === "completed" &&
+  return { ...audit, server, status: followed(audit, writes, server.status) };
+}
+
+/** The status here once it follows the server's status `there`. */
+function followed(
+  audit: OfflineAudit,
+  writes: AuditWriteJob[],
+  there: OfflineAudit["server"]["status"],
+): OfflineAudit["status"] {
+  if (
     audit.status === "inProgress" &&
+    there === "completed" &&
     !unsyncedAnswers(audit) &&
-    writes.every((job) => job.status === "synced");
-  return { ...audit, server, status: sealed ? "completed" : audit.status };
+    writes.every((job) => job.status === "synced")
+  )
+    return "completed";
+  if (
+    audit.status === "completed" &&
+    there === "in_progress" &&
+    !audit.sending.some((entry) => entry.completes)
+  )
+    return "inProgress";
+  return audit.status;
 }
 
 function unknownEvent(event: never): never {

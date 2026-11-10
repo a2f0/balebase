@@ -25,13 +25,17 @@ export function parseResponses(value: unknown, definition: AuditDefinition) {
   return responses;
 }
 
+/** Whether every required item has an answer; item IDs are any text. */
 export function allRequiredAnswered(
   definition: AuditDefinition,
   responses: Record<string, string>,
 ) {
   return definition.sections.every((section) =>
     section.items.every(
-      (item) => !item.required || Boolean(responses[item.id]?.trim()),
+      (item) =>
+        !item.required ||
+        (Object.hasOwn(responses, item.id) &&
+          Boolean(responses[item.id]?.trim())),
     ),
   );
 }
