@@ -752,7 +752,8 @@ Each sync of an audit is an operation in `POST /api/offline/operations`:
 completing the audit when it carries the device-reported start and
 completion times and every required item is still answered after the merge.
 When a required answer was cleared elsewhere, the answers save, the audit
-stays in progress, and the device opens it again for that answer. Both
+stays in progress, and the device opens it again for that answer; it does
+the same when the newest copy it holds shows the audit reopened. Both
 operations answer with the server's copy, which
 `GET /api/offline/audits/:auditId` also serves. A merge commits with its
 history and receipt only over the revision it read; a write landing in

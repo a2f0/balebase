@@ -103,6 +103,17 @@ describe("offline audit answers", () => {
     expect(again).toMatchObject({ base: null, value: "pass" });
   });
 
+  it("bases answers to items named like inherited members on what was shown", async () => {
+    const { answers, written } = await mountAnswers([]);
+    await answer(answers, "constructor", "Rail");
+    await answer(answers, "toString", "Fixed");
+    expect(written).toEqual([
+      { at: expect.any(String), base: null, value: "Rail" },
+      { at: expect.any(String), base: null, value: "Fixed" },
+    ]);
+    expect(answers().error).toBeUndefined();
+  });
+
   it("clears a failed answer's error once it saves", async () => {
     const { answers } = await mountAnswers([new Error("Storage full.")]);
     await answer(answers, "exit", "fail");

@@ -511,6 +511,29 @@ describe("merging the server's copy", () => {
     expect(offlineAnswers(step.audit)).toEqual({});
   });
 
+  it("opens the audit again when a newer copy held shows it reopened after a late completion confirmation", () => {
+    // The copy at revision 6, reopened online, arrived before the
+    // confirmation of the completion it applied at revision 5.
+    const current = audit("completed", {
+      server: { answers: { exit: stored("pass", 1) }, revision: 6 },
+      sending: [{ answers: {}, completes: true, job: "save" }],
+    });
+    const step = run(
+      current,
+      [job("audit", "synced"), job("save", "synced", ["audit"])],
+      {
+        job: "save",
+        state: state({ exit: stored("pass", 1) }, 5, "completed"),
+        type: "confirmed",
+      },
+    );
+    expect(step.audit).toMatchObject({
+      sending: [],
+      server: { revision: 6, status: "in_progress" },
+      status: "inProgress",
+    });
+  });
+
   it("keeps the newer copy it holds over an older one", () => {
     const current = audit("inProgress", {
       server: { answers: { exit: stored("na", 7) }, revision: 4 },

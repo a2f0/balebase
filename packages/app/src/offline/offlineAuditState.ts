@@ -278,8 +278,9 @@ function send(
 /**
  * Drops a confirmed write, noting each of its answers the newest server copy
  * held does not keep, unless a newer answer from here replaces it anyway. A
- * completion the server did not apply, because a required answer was cleared
- * elsewhere, opens the audit here again.
+ * completion the newest copy does not show, because a required answer was
+ * cleared elsewhere or the audit was reopened since, opens the audit here
+ * again.
  */
 function confirm(
   audit: OfflineAudit,
@@ -293,12 +294,9 @@ function confirm(
     ...audit.sending.slice(index + 1).map((other) => other.answers),
     audit.local,
   ];
-  const newest =
-    state.revision < audit.server.revision
-      ? audit.server.answers
-      : state.answers;
+  const newest = state.revision < audit.server.revision ? audit.server : state;
   const notes = Object.entries(entry.answers).flatMap(([itemId, sent]) =>
-    own(newest, itemId)?.value !== sent.value &&
+    own(newest.answers, itemId)?.value !== sent.value &&
     !later.some((answers) => Object.hasOwn(answers, itemId))
       ? [[itemId, { at: sent.at, value: sent.value }]]
       : [],
@@ -308,7 +306,7 @@ function confirm(
     replaced: { ...audit.replaced, ...Object.fromEntries(notes) },
     sending: audit.sending.filter((other) => other.job !== job),
     status:
-      entry.completes && state.status !== "completed"
+      entry.completes && newest.status !== "completed"
         ? "inProgress"
         : audit.status,
   };
