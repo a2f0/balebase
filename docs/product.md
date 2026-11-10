@@ -731,8 +731,10 @@ one, the device's answer replaces it as an ordinary change. When someone else
 answered the item in between, the two collide: the later answer stays (the
 server's on a tie), and an `audit.answer_conflict_resolved` event records
 both answers with who gave each and when. Agreeing answers never collide. A
-completed audit keeps its answers, so each differing answer a device sends
-after completion is recorded as discarded. The device shows the kept answer
+cleared answer keeps its time and who cleared it, so it collides the same way
+and an older answer cannot bring it back unnoticed. A completed audit keeps
+its answers, so each differing answer a device sends after completion is
+recorded as discarded. The device shows the kept answer
 and notes under the item that a later one replaced its own; answering the
 item again clears the note. Answer history is dated by the time each answer
 was given. Since device clocks are trusted, a device whose clock runs ahead

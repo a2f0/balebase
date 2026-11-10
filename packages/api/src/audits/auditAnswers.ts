@@ -1,10 +1,14 @@
 import { isRecord } from "../shared/jsonInput";
 
-/** An audit's answer, with the time it was given and who gave it as recorded. */
+/**
+ * An audit's answer, with the time it was given and who gave it as recorded.
+ * A cleared answer keeps its time and author with a null value, so an older
+ * answer from a device cannot bring it back unnoticed.
+ */
 export interface StoredAnswer {
   at: string | null;
   by: string | null;
-  value: string;
+  value: string | null;
 }
 
 /** An answer a device gave at `at`, over the stored answer of time `base`. */
@@ -25,27 +29,31 @@ export interface AnswerConflict {
   kept: StoredAnswer | null;
 }
 
-/** The answers of an audit row, from its `responses` and `answer_meta`. */
+/**
+ * The answers of an audit row: each in `responses`, and each cleared one
+ * `answer_meta` still holds the time of.
+ */
 export function storedAnswers(row: {
   answer_meta: string;
   responses: string;
 }): Record<string, StoredAnswer> {
   const responses = JSON.parse(row.responses) as Record<string, string>;
-  const meta: unknown = JSON.parse(row.answer_meta);
-  return Object.fromEntries(
-    Object.entries(responses).map(([itemId, value]) => {
-      const entry = isRecord(meta) ? meta[itemId] : undefined;
-      const known = isRecord<"at" | "by">(entry) ? entry : undefined;
-      return [
-        itemId,
-        {
-          at: typeof known?.at === "string" ? known.at : null,
-          by: typeof known?.by === "string" ? known.by : null,
-          value,
-        },
-      ];
-    }),
-  );
+  const parsed: unknown = JSON.parse(row.answer_meta);
+  const meta = isRecord(parsed) ? parsed : {};
+  const answers: Record<string, StoredAnswer> = {};
+  for (const itemId of new Set([
+    ...Object.keys(responses),
+    ...Object.keys(meta),
+  ])) {
+    const entry = meta[itemId];
+    const known = isRecord<"at" | "by">(entry) ? entry : undefined;
+    answers[itemId] = {
+      at: typeof known?.at === "string" ? known.at : null,
+      by: typeof known?.by === "string" ? known.by : null,
+      value: responses[itemId] ?? null,
+    };
+  }
+  return answers;
 }
 
 /** The `responses` and `answer_meta` columns that store `answers`. */
@@ -62,28 +70,35 @@ export function answerColumns(answers: Record<string, StoredAnswer>) {
   };
 }
 
+/** The answers given, without cleared ones. */
 export function answerValues(answers: Record<string, StoredAnswer>) {
   return Object.fromEntries(
-    Object.entries(answers).map(([itemId, { value }]) => [itemId, value]),
+    Object.entries(answers).flatMap(([itemId, { value }]) =>
+      value === null ? [] : [[itemId, value]],
+    ),
   );
 }
 
 /**
  * The answers after a save of `responses`: each changed or new answer takes
- * the save's time and author, unchanged ones keep theirs, and absent ones
- * are gone.
+ * the save's time and author, unchanged ones keep theirs, and each one the
+ * save leaves out is cleared at the save's time.
  */
 export function savedAnswers(
   stored: Record<string, StoredAnswer>,
   responses: Record<string, string>,
   write: { at: string; by: string },
 ): Record<string, StoredAnswer> {
-  return Object.fromEntries(
-    Object.entries(responses).map(([itemId, value]) => {
-      const current = stored[itemId];
-      return [itemId, current?.value === value ? current : { ...write, value }];
-    }),
-  );
+  const answers: Record<string, StoredAnswer> = {};
+  for (const [itemId, value] of Object.entries(responses)) {
+    const current = stored[itemId];
+    answers[itemId] = current?.value === value ? current : { ...write, value };
+  }
+  for (const [itemId, current] of Object.entries(stored))
+    if (!(itemId in responses))
+      answers[itemId] =
+        current.value === null ? current : { ...write, value: null };
+  return answers;
 }
 
 /**

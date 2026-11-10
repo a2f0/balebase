@@ -104,12 +104,13 @@ export type OfflineSync = z.infer<typeof OfflineSyncSchema>;
 
 /**
  * The server's copy of an audit as a device merges it: its status and its
- * answers with the time each was given, as of `revision`.
+ * answers with the time each was given, as of `revision`. A cleared answer
+ * keeps its time with a null value.
  */
 const OfflineAuditStateSchema = z.object({
   answers: z.record(
     z.string(),
-    z.object({ at: z.string().nullable(), value: z.string() }),
+    z.object({ at: z.string().nullable(), value: z.string().nullable() }),
   ),
   deleted: z.boolean(),
   id: z.string(),

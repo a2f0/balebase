@@ -4,12 +4,14 @@ import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { offlineAnswers } from "../src/offline/offlineAuditState";
 import { DeviceContext } from "../src/offline/offlineContext";
+import { pullOfflineAudits } from "../src/offline/offlinePull";
 import {
   activateOfflineWorkspace,
   activeOfflineKey,
   changeOfflineWorkspace,
   emptyOfflineWorkspace,
   lockOfflineWorkspace,
+  offlineAccessEpoch,
   offlineImage,
   offlineScopeKey,
   readOfflineWorkspace,
@@ -146,6 +148,12 @@ const testApi = {
     })),
   retry: () => retryOfflineWork(key),
   sync: () => syncOfflineWorkspace(key),
+  /** Reads the server's copy of each shared audit, as a project sync does. */
+  pull: () =>
+    pullOfflineAudits(
+      { scope, user, organizationName: "Test team" },
+      offlineAccessEpoch(),
+    ),
   lock: lockOfflineWorkspace,
   activate: () => activateOfflineWorkspace(key),
   other: () =>

@@ -6,7 +6,8 @@ import {
 } from "../../../scripts/testing/chrome";
 import type {} from "./offlineFixture";
 
-it("persists audits and photos across reload, retries in dependency order, and isolates tabs and accounts", async () => {
+/** The fixture page's script, built as the app builds for browsers. */
+async function fixtureScript() {
   const build = await Bun.build({
     entrypoints: [new URL("./offlineFixture.tsx", import.meta.url).pathname],
     target: "browser",
@@ -16,7 +17,14 @@ it("persists audits and photos across reload, retries in dependency order, and i
     },
   });
   if (!build.success) throw new Error(build.logs.join("\n"));
-  const script = await build.outputs[0]?.text();
+  return build.outputs[0]?.text();
+}
+
+const fixturePage =
+  '<!doctype html><div id="root"></div><script type="module" src="/fixture.js"></script>';
+
+it("persists audits and photos across reload, retries in dependency order, and isolates tabs and accounts", async () => {
+  const script = await fixtureScript();
   const requests: string[] = [];
   const received = new Set<string>();
   let loseResponse = true;
@@ -58,10 +66,9 @@ it("persists audits and photos across reload, retries in dependency order, and i
         );
         return Response.json({ image: { id: "image" } });
       }
-      return new Response(
-        '<!doctype html><div id="root"></div><script type="module" src="/fixture.js"></script>',
-        { headers: { "content-type": "text/html" } },
-      );
+      return new Response(fixturePage, {
+        headers: { "content-type": "text/html" },
+      });
     },
   });
   let browser: Browser | undefined;
@@ -156,6 +163,126 @@ it("persists audits and photos across reload, retries in dependency order, and i
         images.every((image) => image.src.startsWith("blob:")),
       ),
     ).toBe(true);
+  } finally {
+    await closeChrome(browser);
+    await server.stop(true);
+  }
+}, 30_000);
+
+it("syncs a shared audit both ways: sends answers, takes each write's outcome, and reads changes made elsewhere", async () => {
+  const script = await fixtureScript();
+  const sent: { type: string; answers: Record<string, unknown> }[] = [];
+  // The server's copy; `keep` makes it keep its own answer to `check`, as a
+  // later answer given online would.
+  interface Answer {
+    at: string;
+    value: string;
+  }
+  const copy: {
+    answers: { [itemId: string]: Answer | undefined; check?: Answer };
+    revision: number;
+    status: string;
+  } = { answers: {}, revision: 0, status: "in_progress" };
+  let keep = false;
+  const state = (id: string) => ({ ...copy, deleted: false, id });
+  const server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    async fetch(request) {
+      const path = new URL(request.url).pathname;
+      if (path === "/fixture.js")
+        return new Response(script, {
+          headers: { "content-type": "text/javascript" },
+        });
+      if (path === "/api/offline/operations") {
+        const { operation } = (await request.json()) as {
+          operation: {
+            answers: Record<string, { at: string; value: string }>;
+            auditId?: string;
+            id: string;
+            type: string;
+          };
+        };
+        sent.push({ answers: operation.answers, type: operation.type });
+        for (const [itemId, { at, value }] of Object.entries(operation.answers))
+          if (!keep) copy.answers[itemId] = { at, value };
+        copy.revision += 1;
+        const auditId = operation.auditId ?? operation.id;
+        return Response.json({ audit: state(auditId), resourceId: auditId });
+      }
+      if (path.startsWith("/api/offline/audits/"))
+        return Response.json(state(path.split("/").at(-1) ?? ""));
+      return new Response(fixturePage, {
+        headers: { "content-type": "text/html" },
+      });
+    },
+  });
+  let browser: Browser | undefined;
+  try {
+    browser = await launch(chromeLaunchOptions({ protocolTimeout: 20_000 }));
+    const page = await browser.newPage();
+    await page.goto(server.url.href);
+    await page.waitForFunction(() => Boolean(window.offlineTest));
+    const id = await page.evaluate(() => window.offlineTest.seed());
+    const audit = async () =>
+      (await page.evaluate(() => window.offlineTest.read()))?.audits[0];
+    const answers = () =>
+      page.evaluate((auditId) => window.offlineTest.answers(auditId), id);
+    const answerAndSync = (value: string) =>
+      page.evaluate(
+        async (auditId, answer) => {
+          await window.offlineTest.answer(auditId, answer);
+          await window.offlineTest.sync();
+        },
+        id,
+        value,
+      );
+
+    // Sharing sends the draft's answers, and the server's copy confirms them.
+    await page.evaluate(async (auditId) => {
+      await window.offlineTest.answer(auditId, "pass");
+      await window.offlineTest.progress(auditId);
+      await window.offlineTest.sync();
+    }, id);
+    const passAt = copy.answers.check?.at;
+    expect(sent.map(({ type }) => type)).toEqual(["auditStart"]);
+    expect(await audit()).toMatchObject({
+      local: {},
+      sending: [],
+      server: { answers: { check: { value: "pass" } }, revision: 1 },
+      status: "inProgress",
+    });
+
+    // A later answer goes out by itself, over the answer it replaced.
+    await answerAndSync("fail");
+    expect(sent.at(-1)).toEqual({
+      answers: {
+        check: { at: expect.any(String), base: passAt, value: "fail" },
+      },
+      type: "auditSave",
+    });
+    expect(await audit()).toMatchObject({ local: {}, sending: [] });
+
+    // The server keeps a later answer given online; the device shows it and
+    // notes that it replaced this device's.
+    keep = true;
+    copy.answers.check = { at: "2099-01-01T00:00:00.000Z", value: "na" };
+    await answerAndSync("pass");
+    expect(await answers()).toEqual({ check: "na" });
+    expect((await audit())?.replaced).toEqual({
+      check: { at: expect.any(String), value: "pass" },
+    });
+
+    // Reading the server's copy brings in what changed elsewhere, and a
+    // completion made elsewhere seals the audit here.
+    copy.answers.check = { at: "2099-01-02T00:00:00.000Z", value: "fail" };
+    copy.revision += 1;
+    await page.evaluate(() => window.offlineTest.pull());
+    expect(await answers()).toEqual({ check: "fail" });
+    copy.status = "completed";
+    copy.revision += 1;
+    await page.evaluate(() => window.offlineTest.pull());
+    expect((await audit())?.status).toBe("completed");
   } finally {
     await closeChrome(browser);
     await server.stop(true);

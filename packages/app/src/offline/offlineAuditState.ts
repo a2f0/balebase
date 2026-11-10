@@ -46,7 +46,10 @@ export function auditWrites(jobs: OfflineJob[], auditId: string) {
   );
 }
 
-/** The answers shown: the server's, under those being sent, under newer ones. */
+/**
+ * The answers shown: the server's, under those being sent, under newer ones.
+ * An answer cleared on the server shows as unanswered.
+ */
 export function offlineAnswers(audit: OfflineAudit) {
   const answers: Record<string, string> = {};
   for (const layer of [
@@ -55,7 +58,8 @@ export function offlineAnswers(audit: OfflineAudit) {
     audit.local,
   ])
     for (const [itemId, { value }] of Object.entries(layer))
-      answers[itemId] = value;
+      if (value === null) delete answers[itemId];
+      else answers[itemId] = value;
   return answers;
 }
 

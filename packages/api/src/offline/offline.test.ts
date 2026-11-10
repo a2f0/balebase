@@ -165,6 +165,37 @@ it("merges answers last writer wins and records each collision with both answers
   ]);
 });
 
+it("keeps an answer cleared online over an older answer from a device", async () => {
+  const f = fixture();
+  const start = auditStart({ notes: { value: "Loose rail", at: at(1) } });
+  expect((await f.apply(start)).status).toBe(201);
+  f.clear(start.id, "notes", at(3), "user-2");
+  const save = auditSave(start.id, {
+    notes: { value: "Rail fixed", at: at(2), base: at(1) },
+  });
+  expect(await f.apply(save)).toMatchObject({
+    status: 201,
+    body: { audit: { answers: { notes: { at: at(3), value: null } } } },
+  });
+  expect(f.audit(start.id)).toMatchObject({ responses: "{}" });
+  expect(f.conflicts(start.id)).toEqual([
+    {
+      subject_id: "notes",
+      details: {
+        prompt: "Notes",
+        responseType: "text",
+        kept: { answeredAt: at(3), answeredBy: reviewer, value: null },
+        discarded: {
+          answeredAt: at(2),
+          answeredBy: inspector,
+          value: "Rail fixed",
+        },
+        reason: "later",
+      },
+    },
+  ]);
+});
+
 it("keeps a completed audit's answers and records the device's later ones as discarded", async () => {
   const f = fixture();
   const start = auditStart({ check: { value: "pass", at: at(1) } });
@@ -679,7 +710,8 @@ type Save = Extract<OfflineOperation, { type: "auditSave" }>;
 interface RecordedAnswer {
   answeredAt: string | null;
   answeredBy: { email: string; id: string; name: string } | null;
-  value: string;
+  /** Null for an answer that was cleared. */
+  value: string | null;
 }
 
 /** The details of an `audit.answer_conflict_resolved` event. */
@@ -770,6 +802,15 @@ function fixture() {
            revision = revision + 1, activity_actor_id = ?, updated_at = ?
          WHERE id = ?`,
       ).run(`$.${itemId}`, value, `$.${itemId}`, when, by, by, when, id);
+    },
+    /** Clears an answer as an online save by `by` at `when` would. */
+    clear(id: string, itemId: string, when: string, by: string) {
+      db.query(
+        `UPDATE audits SET responses = json_remove(responses, ?),
+           answer_meta = json_set(answer_meta, ?, json_object('at', ?, 'by', ?)),
+           revision = revision + 1, activity_actor_id = ?, updated_at = ?
+         WHERE id = ?`,
+      ).run(`$.${itemId}`, `$.${itemId}`, when, by, by, when, id);
     },
     /** The audit's resolved answer conflicts, oldest first. */
     conflicts(id: string) {

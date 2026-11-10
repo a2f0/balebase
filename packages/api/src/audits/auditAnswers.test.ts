@@ -18,6 +18,12 @@ const device = (value: string, minute: number): StoredAnswer => ({
   by: "device",
   value,
 });
+/** An answer cleared online at `minute`. */
+const cleared = (minute: number): StoredAnswer => ({
+  at: at(minute),
+  by: "online",
+  value: null,
+});
 const write = (
   value: string,
   minute: number,
@@ -58,6 +64,20 @@ describe("mergeAnswers", () => {
       write("pass", 5, 1),
       false,
       { kept: online("na", 7), conflict: true },
+    ],
+    [
+      "keeps an answer cleared after the one the device saw, recording the collision",
+      cleared(7),
+      write("pass", 5, 1),
+      false,
+      { kept: cleared(7), conflict: true },
+    ],
+    [
+      "replaces an answer cleared before the device's, recording the collision",
+      cleared(3),
+      write("pass", 5, 1),
+      false,
+      { kept: device("pass", 5), conflict: true },
     ],
     [
       "replaces an earlier answer given since, recording the collision",
@@ -113,8 +133,13 @@ describe("mergeAnswers", () => {
 });
 
 describe("savedAnswers", () => {
-  it("stamps changed and new answers with the save and keeps the rest", () => {
-    const stored = { check: online("pass", 1), notes: online("Rail", 1) };
+  it("stamps changed, new, and left-out answers with the save and keeps the rest", () => {
+    const stored = {
+      check: online("pass", 1),
+      notes: online("Rail", 1),
+      photo: online("Taken", 1),
+      gone: cleared(2),
+    };
     expect(
       savedAnswers(
         stored,
@@ -125,6 +150,9 @@ describe("savedAnswers", () => {
       check: online("pass", 1),
       notes: { at: at(9), by: "editor", value: "Rail fixed" },
       extra: { at: at(9), by: "editor", value: "New" },
+      // Cleared by this save, keeping when and by whom.
+      photo: { at: at(9), by: "editor", value: null },
+      gone: cleared(2),
     });
   });
 });
