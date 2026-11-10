@@ -241,6 +241,11 @@ class WorkspaceHistory {
   }
 }
 
+/** The workspace's position in this tab's history: which entry shows. */
+export function currentHistoryPosition() {
+  return historyPosition(window.history.state);
+}
+
 function historyPosition(state: unknown) {
   if (!state || typeof state !== "object") return undefined;
   const position = Reflect.get(state, positionKey);

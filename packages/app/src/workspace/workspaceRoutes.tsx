@@ -25,6 +25,7 @@ import {
 } from "../organizations/organizationState";
 import type { useOrganizationAccess } from "../organizations/useOrganizationAccess";
 import { Projects } from "../projects/Projects";
+import { KeptPage } from "./KeptPage";
 import type { WorkspacePage } from "./WorkspaceShell";
 import {
   adminOrganizationPath,
@@ -126,15 +127,25 @@ const routes: WorkspaceRoute[] = [
   {
     matches: within("/finance"),
     page: "finance",
-    render: ({ navigate, pathname, user, workspace }) =>
-      financeContent(
-        pathname,
-        navigate,
-        workspace.activeOrganizationId
-          ? { organizationId: workspace.activeOrganizationId, userId: user.id }
-          : undefined,
-        Boolean(user.financeOpensByPayee),
-      ),
+    render: ({ navigate, pathname, user, workspace }) => {
+      const scope = workspace.activeOrganizationId
+        ? { organizationId: workspace.activeOrganizationId, userId: user.id }
+        : undefined;
+      return (
+        <KeptPage
+          page={(path) => (
+            <Finance
+              onNavigate={navigate}
+              opensByPayee={Boolean(user.financeOpensByPayee)}
+              pathname={path}
+              scope={scope}
+            />
+          )}
+          pathname={pathname}
+          record={financeRecordPage(pathname, navigate, scope)}
+        />
+      );
+    },
   },
   {
     matches: within("/businesses"),
@@ -252,11 +263,11 @@ export function workspaceRoute(pathname: string) {
   return routes.find((route) => route.matches(pathname)) ?? libraryRoute;
 }
 
-function financeContent(
+/** The Finance record page a path names, if it names one. */
+function financeRecordPage(
   pathname: string,
   navigate: (path: string) => void,
   scope: CacheScope | undefined,
-  opensByPayee: boolean,
 ) {
   const accountId = recordIdForPath(pathname, "/finance/accounts");
   if (accountId)
@@ -288,12 +299,5 @@ function financeContent(
         scope={scope}
       />
     );
-  return (
-    <Finance
-      onNavigate={navigate}
-      opensByPayee={opensByPayee}
-      pathname={pathname}
-      scope={scope}
-    />
-  );
+  return undefined;
 }

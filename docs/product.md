@@ -900,6 +900,12 @@ under that name one category (or **Uncategorized**), as the bulk toolbar does,
 and **Create rule** adds the payee's categorization rule, optionally filling
 its existing uncategorized transactions.
 
+Browser Back (or Forward) from a transaction, account, or connection page
+returns to Finance as it was left: the same view, filters, rows shown, and
+scroll position. Finance stays loaded but hidden while the record shows and
+catches up once it returns. **All transactions** and other links to Finance
+open it afresh.
+
 The overview keeps every one of the organization's transactions on the device
 (IndexedDB, per person and organization) and catches up on each visit, after a
 bank sync finishes, and after categorizing. It downloads only what changed since
