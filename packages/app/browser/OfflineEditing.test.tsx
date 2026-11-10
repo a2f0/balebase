@@ -2,7 +2,12 @@ import { expect, it } from "bun:test";
 import { join } from "node:path";
 import type { Page } from "puppeteer-core";
 import type {} from "./offlineAppFixture";
-import { press, withOfflineBrowser } from "./offlineBrowser";
+import {
+  type AppliedOperation,
+  appliedReply,
+  press,
+  withOfflineBrowser,
+} from "./offlineBrowser";
 
 const user = {
   id: "user-1",
@@ -248,7 +253,6 @@ it("guards unsaved offline issue details and photos when toggling or leaving the
 
 it("lists this device's audits by sync state and opens a synced audit", async () => {
   let available = false;
-  let revision = 0;
   await withOfflineBrowser(
     async (page) => {
       const id = await page.evaluate(async () => {
@@ -308,21 +312,9 @@ it("lists this device's audits by sync state and opens a synced audit", async ()
       const path = new URL(request.url).pathname;
       if (path === "/api/offline/operations" && available) {
         const { operation } = (await request.json()) as {
-          operation: { auditId?: string; completion?: unknown; id: string };
+          operation: AppliedOperation;
         };
-        // Audit writes answer with the server's copy, as the API does.
-        const auditId = operation.auditId ?? operation.id;
-        revision += 1;
-        return Response.json({
-          audit: {
-            answers: {},
-            deleted: false,
-            id: auditId,
-            revision,
-            status: operation.completion ? "completed" : "in_progress",
-          },
-          resourceId: auditId,
-        });
+        return Response.json(appliedReply(operation));
       }
       return Response.json({ error: "Not available" }, { status: 503 });
     },
@@ -727,9 +719,9 @@ it("guards opening a synced issue without relying on browser beforeunload protec
       const path = new URL(request.url).pathname;
       if (path === "/api/offline/operations") {
         const { operation } = (await request.json()) as {
-          operation: { id: string };
+          operation: AppliedOperation;
         };
-        return Response.json({ resourceId: operation.id });
+        return Response.json(appliedReply(operation));
       }
       return Response.json({ image: { id: "image" } });
     },

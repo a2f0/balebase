@@ -4,6 +4,7 @@ import {
   chromeLaunchOptions,
   closeChrome,
 } from "../../../scripts/testing/chrome";
+import { type AppliedOperation, appliedReply } from "./offlineBrowser";
 import type {} from "./offlineFixture";
 
 /** The fixture page's script, built as the app builds for browsers. */
@@ -40,7 +41,7 @@ it("persists audits and photos across reload, retries in dependency order, and i
         });
       if (path === "/api/offline/operations") {
         const { operation } = (await request.json()) as {
-          operation: { type: string; id: string };
+          operation: AppliedOperation;
         };
         requests.push(operation.type);
         if (deny)
@@ -56,7 +57,7 @@ it("persists audits and photos across reload, retries in dependency order, and i
             { status: 503 },
           );
         }
-        return Response.json({ resourceId: operation.id });
+        return Response.json(appliedReply(operation));
       }
       if (path.includes("/images/")) {
         requests.push("image");
@@ -185,6 +186,8 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
     status: string;
   } = { answers: {}, revision: 0, status: "in_progress" };
   let keep = false;
+  // The audit is gone, though a write's receipt still replays.
+  let gone = false;
   const state = (id: string) => ({ ...copy, deleted: false, id });
   const server = Bun.serve({
     port: 0,
@@ -210,6 +213,7 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
             copy.answers[itemId] = { at, value, version: operation.id };
         copy.revision += 1;
         const auditId = operation.auditId ?? operation.id;
+        if (gone) return Response.json({ resourceId: auditId });
         return Response.json({ audit: state(auditId), resourceId: auditId });
       }
       if (path.startsWith("/api/offline/audits/"))
@@ -294,6 +298,19 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
     copy.revision += 1;
     await page.evaluate(() => window.offlineTest.pull());
     expect((await audit())?.status).toBe("completed");
+
+    // An answer still being written when it was sealed goes out anyway. A
+    // write whose receipt outlived its audit comes back without a copy: it
+    // stays unsynced with the reason, and its answer still shows.
+    gone = true;
+    await answerAndSync("na");
+    const held = await page.evaluate(() => window.offlineTest.read());
+    expect(held?.jobs.at(-1)).toMatchObject({
+      error:
+        "This audit is no longer on the server. Your local work has been kept.",
+      status: "blocked",
+    });
+    expect(await answers()).toEqual({ check: "na" });
   } finally {
     await closeChrome(browser);
     await server.stop(true);

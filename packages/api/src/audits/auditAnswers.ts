@@ -42,6 +42,14 @@ export interface AnswerConflict {
 }
 
 /**
+ * `record[key]` if `key` is its own property. Item IDs are any text, so IDs
+ * such as `constructor` must not find inherited members.
+ */
+function own<T>(record: Record<string, T>, key: string): T | undefined {
+  return Object.hasOwn(record, key) ? record[key] : undefined;
+}
+
+/**
  * The answers of an audit row: each in `responses`, and each cleared one
  * `answer_meta` still holds the time of.
  */
@@ -52,21 +60,20 @@ export function storedAnswers(row: {
   const responses = JSON.parse(row.responses) as Record<string, string>;
   const parsed: unknown = JSON.parse(row.answer_meta);
   const meta = isRecord(parsed) ? parsed : {};
-  const answers: Record<string, StoredAnswer> = {};
-  for (const itemId of new Set([
-    ...Object.keys(responses),
-    ...Object.keys(meta),
-  ])) {
-    const entry = meta[itemId];
-    const known = isRecord<"at" | "by" | "v">(entry) ? entry : undefined;
-    answers[itemId] = {
-      at: typeof known?.at === "string" ? known.at : null,
-      by: typeof known?.by === "string" ? known.by : null,
-      value: responses[itemId] ?? null,
-      version: typeof known?.v === "string" ? known.v : null,
-    };
-  }
-  return answers;
+  const itemIds = new Set([...Object.keys(responses), ...Object.keys(meta)]);
+  return Object.fromEntries(
+    [...itemIds].map((itemId) => {
+      const entry = own(meta, itemId);
+      const known = isRecord<"at" | "by" | "v">(entry) ? entry : undefined;
+      const answer: StoredAnswer = {
+        at: typeof known?.at === "string" ? known.at : null,
+        by: typeof known?.by === "string" ? known.by : null,
+        value: own(responses, itemId) ?? null,
+        version: typeof known?.v === "string" ? known.v : null,
+      };
+      return [itemId, answer];
+    }),
+  );
 }
 
 /** The `responses` and `answer_meta` columns that store `answers`. */
@@ -102,16 +109,21 @@ export function savedAnswers(
   responses: Record<string, string>,
   write: AnswerWrite,
 ): Record<string, StoredAnswer> {
-  const answers: Record<string, StoredAnswer> = {};
-  for (const [itemId, value] of Object.entries(responses)) {
-    const current = stored[itemId];
-    answers[itemId] = current?.value === value ? current : { ...write, value };
-  }
-  for (const [itemId, current] of Object.entries(stored))
-    if (!(itemId in responses))
-      answers[itemId] =
-        current.value === null ? current : { ...write, value: null };
-  return answers;
+  const given = Object.entries(responses).map(([itemId, value]) => {
+    const current = own(stored, itemId);
+    return [itemId, current?.value === value ? current : { ...write, value }];
+  });
+  const cleared = Object.entries(stored).flatMap(([itemId, current]) =>
+    Object.hasOwn(responses, itemId)
+      ? []
+      : [
+          [
+            itemId,
+            current.value === null ? current : { ...write, value: null },
+          ],
+        ],
+  );
+  return Object.fromEntries([...given, ...cleared]);
 }
 
 /**
@@ -132,11 +144,11 @@ export function mergeAnswers(
   write: Pick<AnswerWrite, "by" | "version">,
   sealed: boolean,
 ) {
-  const answers = { ...stored };
+  const answers = new Map(Object.entries(stored));
   const conflicts: AnswerConflict[] = [];
   let changed = false;
   for (const [itemId, answer] of Object.entries(incoming)) {
-    const current = stored[itemId];
+    const current = own(stored, itemId);
     const given: StoredAnswer = {
       at: answer.at,
       by: write.by,
@@ -147,7 +159,7 @@ export function mergeAnswers(
       !current?.at || Date.parse(answer.at) > Date.parse(current.at);
     if (current?.value === answer.value) {
       if (newer && !sealed) {
-        answers[itemId] = given;
+        answers.set(itemId, given);
         changed = true;
       }
       continue;
@@ -161,9 +173,9 @@ export function mergeAnswers(
       conflicts.push({ discarded: given, itemId, kept: current });
       continue;
     }
-    answers[itemId] = given;
+    answers.set(itemId, given);
     changed = true;
     if (concurrent) conflicts.push({ discarded: current, itemId, kept: given });
   }
-  return { answers, changed, conflicts };
+  return { answers: Object.fromEntries(answers), changed, conflicts };
 }

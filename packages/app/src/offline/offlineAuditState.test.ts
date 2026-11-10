@@ -169,6 +169,16 @@ describe("answering", () => {
     },
   );
 
+  it("bases an answer to an item named like an inherited member on nothing", () => {
+    const current = audit("inProgress", {
+      local: { exit: local("fail", 4, 1) },
+      sending: [
+        { answers: { exit: local("na", 3, 1) }, completes: false, job: "save" },
+      ],
+    });
+    expect(answerBase(current, "constructor")).toBeNull();
+  });
+
   it("records an answer with the base it was given over, whatever the server copy now holds", () => {
     // The server copy changed after the person saw the answer at minute 1.
     const current = audit("inProgress", {
@@ -462,15 +472,6 @@ describe("merging the server's copy", () => {
       },
     );
     expect(step.audit).toEqual({ ...current, sending: [] });
-  });
-
-  it("drops a write confirmed without a copy, its audit no longer on the server", () => {
-    const step = run(
-      sending,
-      [job("audit", "synced"), job("save", "synced", ["audit"])],
-      { job: "save", state: null, type: "confirmed" },
-    );
-    expect(step).toEqual({ audit: { ...sending, sending: [] }, queue: [] });
   });
 
   it("notes nothing replaced when a newer answer from here follows", () => {

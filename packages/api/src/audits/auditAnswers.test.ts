@@ -4,6 +4,7 @@ import {
   mergeAnswers,
   type StoredAnswer,
   savedAnswers,
+  storedAnswers,
 } from "./auditAnswers";
 
 const at = (minute: number) =>
@@ -180,5 +181,47 @@ describe("savedAnswers", () => {
       photo: { at: at(9), by: "editor", value: null, version: "edit" },
       gone: cleared(2),
     });
+  });
+});
+
+describe("item IDs that name inherited members", () => {
+  it("reads a cleared answer as unanswered", () => {
+    const meta = { constructor: { at: at(2), by: "online", v: "online@2" } };
+    expect(
+      storedAnswers({ answer_meta: JSON.stringify(meta), responses: "{}" }),
+    ).toEqual({ constructor: cleared(2) });
+  });
+
+  it("clears an answer a save leaves out", () => {
+    expect(
+      savedAnswers(
+        { constructor: online("pass", 1) },
+        {},
+        {
+          at: at(9),
+          by: "editor",
+          version: "edit",
+        },
+      ),
+    ).toEqual({
+      constructor: { at: at(9), by: "editor", value: null, version: "edit" },
+    });
+  });
+
+  it("applies a first answer without a collision", () => {
+    // A base the device never saw cannot collide with an inherited member.
+    // Parsed JSON, as a request body is, holds `__proto__` as its own key.
+    const incoming = JSON.parse(
+      JSON.stringify({ constructor: write("pass", 5, 1) }).replace(
+        "{",
+        `{"__proto__":${JSON.stringify(write("fail", 5, 1))},`,
+      ),
+    ) as Record<string, IncomingAnswer>;
+    const merged = mergeAnswers({}, incoming, save, false);
+    expect(merged.conflicts).toEqual([]);
+    expect(Object.entries(merged.answers)).toEqual([
+      ["__proto__", device("fail", 5)],
+      ["constructor", device("pass", 5)],
+    ]);
   });
 });

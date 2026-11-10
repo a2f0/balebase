@@ -124,39 +124,43 @@ async function recordResult(
     if (!workspace) throw new Error("Offline workspace is missing.");
     const job = workspace.jobs.find((entry) => entry.id === id);
     if (!job) return workspace;
-    if (cause === undefined) {
-      job.status = "synced";
-      delete job.error;
-      // The device takes the server's copy along with its write's outcome;
-      // an audit write answered without one finds its audit gone.
-      const auditId = writtenAudit(job.operation);
-      if (auditId && workspace.audits.some((entry) => entry.id === auditId))
-        return applyOfflineAuditEvent(workspace, auditId, {
-          job: job.id,
-          state: audit ?? null,
-          type: "confirmed",
-        });
-    } else {
-      job.attempts += 1;
-      const blocked =
-        cause instanceof ApiError &&
-        cause.status < 500 &&
-        ![408, 429].includes(cause.status);
-      job.status = blocked ? "blocked" : "pending";
-      job.retryAt =
-        Date.now() + Math.min(300_000, 1000 * 2 ** Math.min(job.attempts, 9));
-      job.error = errorMessage(
-        cause,
-        "Could not sync. Your work is saved on this device.",
-      );
+    if (cause !== undefined) {
+      recordFailure(job, cause);
+      return workspace;
     }
-    return workspace;
+    // A write's receipt can outlive its audit: the server then answers with
+    // no copy, and the write stays unsynced, keeping the answers it carries.
+    const { type } = job.operation;
+    if ((type === "auditStart" || type === "auditSave") && !audit) {
+      job.status = "blocked";
+      job.error =
+        "This audit is no longer on the server. Your local work has been kept.";
+      return workspace;
+    }
+    job.status = "synced";
+    delete job.error;
+    // The device takes the server's copy along with its write's outcome.
+    return audit && workspace.audits.some((entry) => entry.id === audit.id)
+      ? applyOfflineAuditEvent(workspace, audit.id, {
+          job: job.id,
+          state: audit,
+          type: "confirmed",
+        })
+      : workspace;
   });
 }
 
-/** The audit a write starts or saves, if it is an audit write. */
-function writtenAudit(operation: OfflineJob["operation"]) {
-  if (operation.type === "auditStart") return operation.id;
-  if (operation.type === "auditSave") return operation.auditId;
-  return undefined;
+function recordFailure(job: OfflineJob, cause: unknown) {
+  job.attempts += 1;
+  const blocked =
+    cause instanceof ApiError &&
+    cause.status < 500 &&
+    ![408, 429].includes(cause.status);
+  job.status = blocked ? "blocked" : "pending";
+  job.retryAt =
+    Date.now() + Math.min(300_000, 1000 * 2 ** Math.min(job.attempts, 9));
+  job.error = errorMessage(
+    cause,
+    "Could not sync. Your work is saved on this device.",
+  );
 }

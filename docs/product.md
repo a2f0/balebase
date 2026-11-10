@@ -758,7 +758,9 @@ operations answer with the server's copy, which
 history and receipt only over the revision it read; a write landing in
 between makes it merge again over the newer copy, and after three tries the
 device retries later. A discarded audit refuses saves; the device keeps its
-answers and shows the reason.
+answers and shows the reason. A write whose receipt outlived its audit
+replays without a copy; the device keeps that write unsynced, with its
+answers, and says the audit is no longer on the server.
 
 Queued work is sent while the app is open and online: right away, on focus, on
 reconnecting, and on a 30-second timer. It creates the audit first, recorded

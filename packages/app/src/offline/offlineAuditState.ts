@@ -36,11 +36,8 @@ export type OfflineAuditEvent =
   /** Send the answers given here since the last write. */
   | { saveId: string; type: "pushed" }
   | { completedAt: string; saveId: string; type: "completed" }
-  /**
-   * The server applied write `job`, answering with its copy of the audit, or
-   * with none when the audit is no longer on the server.
-   */
-  | { job: string; state: OfflineAuditState | null; type: "confirmed" }
+  /** The server applied write `job`, answering with its copy of the audit. */
+  | { job: string; state: OfflineAuditState; type: "confirmed" }
   /** The server's copy, read for what others changed. */
   | { state: OfflineAuditState; type: "pulled" };
 
@@ -64,16 +61,16 @@ export function auditWrites(jobs: OfflineJob[], auditId: string) {
  * An answer cleared on the server shows as unanswered.
  */
 export function offlineAnswers(audit: OfflineAudit) {
-  const answers: Record<string, string> = {};
+  const answers = new Map<string, string>();
   for (const layer of [
     audit.server.answers,
     ...audit.sending.map((entry) => entry.answers),
     audit.local,
   ])
     for (const [itemId, { value }] of Object.entries(layer))
-      if (value === null) delete answers[itemId];
-      else answers[itemId] = value;
-  return answers;
+      if (value === null) answers.delete(itemId);
+      else answers.set(itemId, value);
+  return Object.fromEntries(answers);
 }
 
 /** Whether answers given here have yet to reach the server. */
@@ -152,13 +149,15 @@ export function offlineAuditTransition(
         queue: [...begun.queue, ...sent.queue],
       };
     }
-    case "confirmed": {
-      const confirmed = confirm(audit, event.job, event.state);
+    case "confirmed":
       return {
-        audit: event.state ? pull(confirmed, writes, event.state) : confirmed,
+        audit: pull(
+          confirm(audit, event.job, event.state),
+          writes,
+          event.state,
+        ),
         queue: [],
       };
-    }
     case "pulled":
       return { audit: pull(audit, writes, event.state), queue: [] };
     default:
@@ -172,7 +171,7 @@ function answer(
   event: Extract<OfflineAuditEvent, { type: "answered" }>,
 ): OfflineAudit {
   const newer = [audit.local, ...audit.sending.map((entry) => entry.answers)]
-    .map((answers) => answers[event.itemId])
+    .map((answers) => own(answers, event.itemId))
     .some((given) => given && Date.parse(given.at) > Date.parse(event.at));
   if (newer) return audit;
   const replaced = { ...audit.replaced };
@@ -195,11 +194,19 @@ function answer(
  * read meanwhile cannot claim it was seen.
  */
 export function answerBase(audit: OfflineAudit, itemId: string) {
-  const local = audit.local[itemId];
+  const local = own(audit.local, itemId);
   if (local) return local.base;
   for (const entry of [...audit.sending].reverse())
-    if (itemId in entry.answers) return entry.job;
-  return audit.server.answers[itemId]?.version ?? null;
+    if (Object.hasOwn(entry.answers, itemId)) return entry.job;
+  return own(audit.server.answers, itemId)?.version ?? null;
+}
+
+/**
+ * `record[key]` if `key` is its own property. Item IDs are any text, so IDs
+ * such as `constructor` must not find inherited members.
+ */
+function own<T>(record: Record<string, T>, key: string): T | undefined {
+  return Object.hasOwn(record, key) ? record[key] : undefined;
 }
 
 /** Puts a draft on the server, in progress, under its own ID. */
@@ -272,19 +279,16 @@ function send(
  * Drops a confirmed write, noting each of its answers the newest server copy
  * held does not keep, unless a newer answer from here replaces it anyway. A
  * completion the server did not apply, because a required answer was cleared
- * elsewhere, opens the audit here again. With no copy, the audit is no
- * longer on the server, and its next write reports that.
+ * elsewhere, opens the audit here again.
  */
 function confirm(
   audit: OfflineAudit,
   job: string,
-  state: OfflineAuditState | null,
+  state: OfflineAuditState,
 ): OfflineAudit {
   const index = audit.sending.findIndex((entry) => entry.job === job);
   const entry = audit.sending[index];
   if (!entry) return audit;
-  const sending = audit.sending.filter((other) => other.job !== job);
-  if (!state) return { ...audit, sending };
   const later = [
     ...audit.sending.slice(index + 1).map((other) => other.answers),
     audit.local,
@@ -293,17 +297,16 @@ function confirm(
     state.revision < audit.server.revision
       ? audit.server.answers
       : state.answers;
-  const replaced = { ...audit.replaced };
-  for (const [itemId, sent] of Object.entries(entry.answers))
-    if (
-      newest[itemId]?.value !== sent.value &&
-      !later.some((answers) => itemId in answers)
-    )
-      replaced[itemId] = { at: sent.at, value: sent.value };
+  const notes = Object.entries(entry.answers).flatMap(([itemId, sent]) =>
+    own(newest, itemId)?.value !== sent.value &&
+    !later.some((answers) => Object.hasOwn(answers, itemId))
+      ? [[itemId, { at: sent.at, value: sent.value }]]
+      : [],
+  );
   return {
     ...audit,
-    replaced,
-    sending,
+    replaced: { ...audit.replaced, ...Object.fromEntries(notes) },
+    sending: audit.sending.filter((other) => other.job !== job),
     status:
       entry.completes && state.status !== "completed"
         ? "inProgress"
