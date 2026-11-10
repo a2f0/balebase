@@ -1,6 +1,7 @@
 import {
   Activity,
   type ReactNode,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -10,7 +11,7 @@ import {
   type KeptPageEvent,
   keptPageTransition,
 } from "./keptPageState";
-import { currentHistoryPosition } from "./navigationGuard";
+import { currentHistoryEntry } from "./navigationGuard";
 
 /**
  * A section's record page, shown over the page it was opened from. That page
@@ -20,10 +21,17 @@ import { currentHistoryPosition } from "./navigationGuard";
  * it runs no effects; showing again re-runs them, so it refreshes.
  */
 export function KeptPage({
+  discardWhen,
   page,
   pathname,
   record,
 }: {
+  /**
+   * Calls `discard` whenever the hidden page must not be shown again as it
+   * is, since its effects, which would handle that, do not run while it is
+   * hidden. Returns how to stop. Keep its identity (a `useCallback`).
+   */
+  discardWhen?: ((discard: () => void) => (() => void) | undefined) | undefined;
   /** The section's page for a path that names no record. */
   page: (pathname: string) => ReactNode;
   pathname: string;
@@ -32,11 +40,20 @@ export function KeptPage({
 }) {
   const event: KeptPageEvent =
     record === undefined
-      ? { entry: currentHistoryPosition(), pathname, type: "pageShown" }
+      ? { entry: currentHistoryEntry(), pathname, type: "pageShown" }
       : { type: "recordShown" };
   const [state, setState] = useState(initialKeptPage);
   const kept = keptPageTransition(state, event);
   if (kept !== state) setState(kept);
+  useEffect(
+    () =>
+      discardWhen?.(() =>
+        setState((current) =>
+          keptPageTransition(current, { type: "pageDiscarded" }),
+        ),
+      ),
+    [discardWhen],
+  );
   useKeptScroll(kept.status === "shown" ? kept.visit : undefined);
   return (
     <>

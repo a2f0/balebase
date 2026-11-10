@@ -4,6 +4,7 @@ import type {
   FinanceTransaction,
   FinanceTransactionChanges,
 } from "@balebase/validators/finance";
+import { apiUrl } from "../shared/config";
 import {
   type CacheScope,
   catchUpSavedTransactions,
@@ -12,6 +13,7 @@ import {
   clearScopeTransactions,
   clearUserTransactions,
   memoryTransactionStore,
+  onCleared,
   pullTransactions,
   SignedOut,
 } from "./transactionCache";
@@ -252,6 +254,25 @@ describe("pulling transactions", () => {
     expect(heard).toEqual([
       { except: undefined, organizationId: "org", userId: "person" },
       { except: ["org"], organizationId: undefined, userId: "person" },
+      { except: undefined, organizationId: undefined, userId: "person" },
+    ]);
+  });
+
+  it("tells this tab's listeners about clearings here and in other tabs", async () => {
+    const heard: unknown[] = [];
+    const fromOtherTab = Promise.withResolvers<void>();
+    const stop = onCleared(({ except, organizationId, userId }) => {
+      heard.push({ except, organizationId, userId });
+      if (organizationId === undefined) fromOtherTab.resolve();
+    });
+    await clearScopeTransactions(scope);
+    const otherTab = new BroadcastChannel("balebase-finance-cleared");
+    otherTab.postMessage({ apiUrl, source: "other-tab", userId: "person" });
+    await fromOtherTab.promise;
+    otherTab.close();
+    stop();
+    expect(heard).toEqual([
+      { except: undefined, organizationId: "org", userId: "person" },
       { except: undefined, organizationId: undefined, userId: "person" },
     ]);
   });

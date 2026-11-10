@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { useState } from "react";
+import { act, useState } from "react";
 import { installDom } from "../testing/dom";
 import { KeptPage } from "./KeptPage";
 
@@ -43,13 +43,18 @@ afterEach(() => {
 });
 
 /**
- * The section at `pathname`, shown by the history entry at `position` as the
+ * The section at `pathname`, shown by the history entry `entry` as the
  * workspace's navigation tags it; paths under /list/ name records.
  */
-function section(pathname: string, position: number) {
-  dom.history.replaceState({ workspacePosition: position }, "", pathname);
+function section(
+  pathname: string,
+  entry: string,
+  discardWhen?: (discard: () => void) => () => void,
+) {
+  dom.history.replaceState({ workspaceEntry: entry }, "", pathname);
   return (
     <KeptPage
+      discardWhen={discardWhen}
       page={(path) => <Counter pathname={path} />}
       pathname={pathname}
       record={
@@ -75,21 +80,21 @@ function scroll(top: number) {
 
 describe("KeptPage", () => {
   it("returns on Back to the page as it was left, scrolled where it was", async () => {
-    const view = await mount(section("/list", 1));
+    const view = await mount(section("/list", "a"));
     const counter = () => view.container.querySelector("button");
     await click(counter());
     await click(counter());
     scroll(900);
 
-    await view.render(section("/list/a", 2));
+    await view.render(section("/list/a", "b"));
     expect(view.container.textContent).toContain("Record /list/a");
     expect(counter()?.style.display).toBe("none");
     // The shorter record page clamps the scroll after the page is hidden.
     scroll(120);
-    await view.render(section("/list/b", 3));
-    await view.render(section("/list/a", 2));
+    await view.render(section("/list/b", "c"));
+    await view.render(section("/list/a", "b"));
 
-    await view.render(section("/list", 1));
+    await view.render(section("/list", "a"));
     expect(counter()?.style.display).toBe("");
     expect(counter()?.textContent).toBe("/list 2");
     expect(view.container.textContent).not.toContain("Record");
@@ -97,17 +102,39 @@ describe("KeptPage", () => {
   });
 
   it("starts the page afresh from a link, or when it opened at a record", async () => {
-    const view = await mount(section("/list/a", 1));
+    const view = await mount(section("/list/a", "a"));
     const counter = () => view.container.querySelector("button");
     expect(counter()).toBeNull();
     scroll(300);
-    await view.render(section("/list", 2));
+    await view.render(section("/list", "b"));
     expect(counter()?.textContent).toBe("/list 0");
     await click(counter());
 
     scroll(700);
-    await view.render(section("/list/a", 3));
-    await view.render(section("/list", 4));
+    await view.render(section("/list/a", "c"));
+    await view.render(section("/list", "d"));
+    expect(counter()?.textContent).toBe("/list 0");
+    expect(scrolledTo).toEqual([]);
+  });
+
+  it("drops the hidden page when told to, so Back starts it afresh", async () => {
+    let discard: () => void = () => undefined;
+    const discardWhen = (next: () => void) => {
+      discard = next;
+      return () => undefined;
+    };
+    const view = await mount(section("/list", "a", discardWhen));
+    const counter = () => view.container.querySelector("button");
+    await click(counter());
+    // The page on screen handles what it shows itself.
+    await act(async () => discard());
+    expect(counter()?.textContent).toBe("/list 1");
+    scroll(500);
+
+    await view.render(section("/list/a", "b", discardWhen));
+    await act(async () => discard());
+    expect(counter()).toBeNull();
+    await view.render(section("/list", "a", discardWhen));
     expect(counter()?.textContent).toBe("/list 0");
     expect(scrolledTo).toEqual([]);
   });

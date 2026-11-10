@@ -88,6 +88,23 @@ describe("workspace navigation", () => {
     navigation.dispose();
   });
 
+  it("names each entry for good, though Back and a new link reuse its position", async () => {
+    const browser = fakeBrowser();
+    const entry = () =>
+      Reflect.get(Object(browser.history.state), "workspaceEntry");
+    const navigation = createWorkspaceNavigation(browser, () => undefined);
+    const first = entry();
+    expect(first).toBeString();
+    navigation.navigate("/finance/transactions/a");
+    const record = entry();
+    browser.history.go(-1);
+    await nextTask();
+    expect(entry()).toBe(first);
+    navigation.navigate("/finance");
+    expect(new Set([first, record, entry()]).size).toBe(3);
+    navigation.dispose();
+  });
+
   it("follows a link approved while a Back is still being undone", async () => {
     const browser = fakeBrowser();
     const pages: string[] = [];

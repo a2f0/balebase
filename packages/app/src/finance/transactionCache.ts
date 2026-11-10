@@ -5,6 +5,7 @@ import type {
   FinanceTransactionChanges,
 } from "@balebase/validators/finance";
 import { apiUrl } from "../shared/config";
+import { randomId } from "../shared/randomId";
 import { savedSummary } from "./savedSummary";
 
 /** Whose transactions a device keeps: one person in one organization. */
@@ -101,16 +102,6 @@ export interface TransactionStore {
 }
 
 const databaseName = "balebase-finance";
-
-/**
- * A random ID. `crypto.randomUUID` exists only in secure contexts (not plain
- * HTTP on a local network), and this module loads with the app.
- */
-function randomId() {
-  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-}
 
 function scopeKey(scope: CacheScope) {
   return JSON.stringify([apiUrl, scope.userId, scope.organizationId]);
@@ -470,12 +461,16 @@ export interface Cleared {
 const clearedChannel = "balebase-finance-cleared";
 // Tabs ignore their own announcements: they handle those where they happen.
 const thisTab = randomId();
+/** This tab's listeners for clearings in any tab; see `onCleared`. */
+const clearedHere = new Set<(cleared: Cleared) => void>();
 
 /**
  * Tells other tabs a saved copy was cleared (access ended, a sign-out), so
- * they stop showing the transactions they read before.
+ * they stop showing the transactions they read before, and tells this tab's
+ * `onCleared` listeners.
  */
 function announceCleared(cleared: Cleared) {
+  for (const listener of [...clearedHere]) listener(cleared);
   if (typeof BroadcastChannel === "undefined") return;
   const channel = new BroadcastChannel(clearedChannel);
   channel.postMessage({ ...cleared, apiUrl, source: thisTab });
@@ -505,6 +500,20 @@ export function onClearedElsewhere(listener: (cleared: Cleared) => void) {
       listener(message);
   };
   return () => channel.close();
+}
+
+/**
+ * Calls `listener` when any tab, this one included, clears saved
+ * transactions; returns how to stop listening. For what this tab keeps but
+ * does not show, which no clearing can reach where it happens.
+ */
+export function onCleared(listener: (cleared: Cleared) => void) {
+  clearedHere.add(listener);
+  const stopElsewhere = onClearedElsewhere(listener);
+  return () => {
+    clearedHere.delete(listener);
+    stopElsewhere();
+  };
 }
 
 /**

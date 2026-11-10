@@ -15,7 +15,9 @@ import {
  * loads that depend on it must not repeat (and discard unsaved input) when
  * nothing changed.
  */
-function useCacheScope(scope: CacheScope | undefined): CacheScope | undefined {
+export function useCacheScope(
+  scope: CacheScope | undefined,
+): CacheScope | undefined {
   const organizationId = scope?.organizationId;
   const userId = scope?.userId;
   return useMemo(

@@ -904,7 +904,8 @@ Browser Back (or Forward) from a transaction, account, or connection page
 returns to Finance as it was left: the same view, filters, rows shown, and
 scroll position. Finance stays loaded but hidden while the record shows and
 catches up once it returns. **All transactions** and other links to Finance
-open it afresh.
+open it afresh, and so does Back once the saved transactions were cleared in
+the meantime (access ended or a sign-out, in any tab).
 
 The overview keeps every one of the organization's transactions on the device
 (IndexedDB, per person and organization) and catches up on each visit, after a

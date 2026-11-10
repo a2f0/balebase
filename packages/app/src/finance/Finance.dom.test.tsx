@@ -10,7 +10,9 @@ import { holdTimers, installDom } from "../testing/dom";
 import { IntersectionObserverFixture } from "../testing/intersectionObserver";
 import { transactionIssuePath } from "../workspace/workspacePaths";
 import { Finance } from "./Finance";
+import { FinanceSection } from "./FinanceSection";
 import { syncPollMs } from "./financeConnectionActions";
+import { clearScopeTransactions } from "./transactionCache";
 
 const {
   mount,
@@ -1161,6 +1163,40 @@ describe("Finance filters", () => {
     expect(container.textContent).not.toContain(
       "Showing transactions saved on this device",
     );
+  });
+
+  it("keeps Finance for Back from a record, unless its transactions were cleared meanwhile", async () => {
+    respond(() => Response.json(data));
+    const scope = { organizationId: "organization", userId: "person" };
+    // `entry` names the history entry, as the workspace's navigation does.
+    const section = (pathname: string, entry: string) => {
+      dom.history.replaceState({ workspaceEntry: entry }, "", pathname);
+      return (
+        <FinanceSection
+          navigate={() => undefined}
+          opensByPayee={false}
+          pathname={pathname}
+          record={pathname === "/finance" ? undefined : <p>Record</p>}
+          scope={scope}
+        />
+      );
+    };
+    try {
+      const view = await mount(section("/finance", "overview"));
+      container = view.container;
+      await click("By payee");
+      await view.render(section("/finance/transactions/Coffee", "record"));
+      await view.render(section("/finance", "overview"));
+      expect(button("By payee").getAttribute("aria-pressed")).toBe("true");
+
+      await view.render(section("/finance/transactions/Coffee", "record"));
+      // Access ended while the record showed, and its page cleared the copy.
+      await act(async () => clearScopeTransactions(scope));
+      await view.render(section("/finance", "overview"));
+      expect(button("By payee").getAttribute("aria-pressed")).toBe("false");
+    } finally {
+      dom.history.replaceState(null, "", "/finance");
+    }
   });
 
   it("stops showing transactions once the session belongs to another organization", async () => {

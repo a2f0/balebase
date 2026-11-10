@@ -10,9 +10,9 @@ import { Businesses } from "../businesses/Businesses";
 import { Contracts } from "../contracts/Contracts";
 import { MyDocuments } from "../employeeForms/MyDocuments";
 import { Equipment } from "../equipment/Equipment";
-import { Finance } from "../finance/Finance";
 import { FinanceAccountPage } from "../finance/FinanceAccountPage";
 import { FinanceConnectionPage } from "../finance/FinanceConnectionPage";
+import { FinanceSection } from "../finance/FinanceSection";
 import { FinanceTransactionPage } from "../finance/FinanceTransactionPage";
 import type { CacheScope } from "../finance/transactionCache";
 import { Inbox } from "../inbox/Inbox";
@@ -25,7 +25,6 @@ import {
 } from "../organizations/organizationState";
 import type { useOrganizationAccess } from "../organizations/useOrganizationAccess";
 import { Projects } from "../projects/Projects";
-import { KeptPage } from "./KeptPage";
 import type { WorkspacePage } from "./WorkspaceShell";
 import {
   adminOrganizationPath,
@@ -132,17 +131,12 @@ const routes: WorkspaceRoute[] = [
         ? { organizationId: workspace.activeOrganizationId, userId: user.id }
         : undefined;
       return (
-        <KeptPage
-          page={(path) => (
-            <Finance
-              onNavigate={navigate}
-              opensByPayee={Boolean(user.financeOpensByPayee)}
-              pathname={path}
-              scope={scope}
-            />
-          )}
+        <FinanceSection
+          navigate={navigate}
+          opensByPayee={Boolean(user.financeOpensByPayee)}
           pathname={pathname}
           record={financeRecordPage(pathname, navigate, scope)}
+          scope={scope}
         />
       );
     },
