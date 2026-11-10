@@ -2,13 +2,16 @@ import { DialogHost } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
+import { answerBase, offlineAnswers } from "../src/offline/offlineAuditState";
 import { DeviceContext } from "../src/offline/offlineContext";
+import { pullOfflineAudits } from "../src/offline/offlinePull";
 import {
   activateOfflineWorkspace,
   activeOfflineKey,
   changeOfflineWorkspace,
   emptyOfflineWorkspace,
   lockOfflineWorkspace,
+  offlineAccessEpoch,
   offlineImage,
   offlineScopeKey,
   readOfflineWorkspace,
@@ -110,8 +113,24 @@ const testApi = {
     return startOfflineAudit(key, template, project.id);
   },
   read: () => readOfflineWorkspace(key),
-  answer: (id: string, value: string) =>
-    saveOfflineAnswer(key, id, "check", value),
+  /** Answers the only item over the answer the audit shows now. */
+  answer: async (id: string, value: string) => {
+    const audit = (await readOfflineWorkspace(key))?.audits.find(
+      (entry) => entry.id === id,
+    );
+    return saveOfflineAnswer(key, id, "check", {
+      at: new Date().toISOString(),
+      base: audit ? answerBase(audit, "check") : null,
+      value,
+    });
+  },
+  /** The answers an audit shows. */
+  answers: async (id: string) => {
+    const audit = (await readOfflineWorkspace(key))?.audits.find(
+      (entry) => entry.id === id,
+    );
+    return audit && offlineAnswers(audit);
+  },
   progress: (id: string) => saveOfflineProgress(key, id),
   complete: (id: string) => completeOfflineAudit(key, id),
   /** Raises an issue, with one photo, on the audit's only item. */
@@ -138,6 +157,12 @@ const testApi = {
     })),
   retry: () => retryOfflineWork(key),
   sync: () => syncOfflineWorkspace(key),
+  /** Reads the server's copy of each shared audit, as a project sync does. */
+  pull: () =>
+    pullOfflineAudits(
+      { scope, user, organizationName: "Test team" },
+      offlineAccessEpoch(),
+    ),
   lock: lockOfflineWorkspace,
   activate: () => activateOfflineWorkspace(key),
   other: () =>

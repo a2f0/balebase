@@ -84,3 +84,42 @@ export async function press(page: Page, label: string) {
     label,
   );
 }
+
+let revision = 0;
+
+/** The parts of a sent operation a stub server replies from. */
+export interface AppliedOperation {
+  answers?: Record<string, { at: string; value: string }>;
+  auditId?: string;
+  completion?: unknown;
+  id: string;
+  type: string;
+}
+
+/**
+ * The API's reply to an operation it applied: an audit write answers with
+ * the server's copy, holding the answers it sent.
+ */
+export function appliedReply(operation: AppliedOperation) {
+  if (operation.type !== "auditStart" && operation.type !== "auditSave")
+    return { resourceId: operation.id };
+  const auditId = operation.auditId ?? operation.id;
+  revision += 1;
+  return {
+    audit: {
+      answers: Object.fromEntries(
+        Object.entries(operation.answers ?? {}).map(
+          ([itemId, { at, value }]) => [
+            itemId,
+            { at, value, version: operation.id },
+          ],
+        ),
+      ),
+      deleted: false,
+      id: auditId,
+      revision,
+      status: operation.completion ? "completed" : "in_progress",
+    },
+    resourceId: auditId,
+  };
+}

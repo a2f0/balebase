@@ -14,16 +14,29 @@ import { OfflineIssueCreator, OfflineIssueList } from "./OfflineIssues";
 import {
   type AuditWriteJob,
   auditWrites,
-  unsavedProgress,
+  own,
+  unsyncedAnswers,
 } from "./offlineAuditState";
-import type { OfflineAudit, OfflineWorkspace } from "./offlineStore";
+import type {
+  AnswerWrite,
+  OfflineAudit,
+  OfflineWorkspace,
+} from "./offlineStore";
 import { useOfflineAnswers } from "./useOfflineAnswers";
+
+const checkLabels: Record<string, string> = {
+  fail: "Fail",
+  na: "N/A",
+  pass: "Pass",
+};
 
 /**
  * Answers an audit on this device, saving each answer here as it is given.
- * Saving progress syncs the answers so far as an in-progress audit, and
- * completing it queues its completion; issues raised on its items sync
- * onto the server's audit.
+ * Saving a draft's progress shares it with the server as an in-progress
+ * audit; from then on its answers sync both ways while the device is online,
+ * the later answer winning where two people answered the same item.
+ * Completing it queues its completion; issues raised on its items sync onto
+ * the server's audit.
  */
 export function OfflineAuditEditor({
   audit,
@@ -45,10 +58,7 @@ export function OfflineAuditEditor({
         <Banner
           tone="danger"
           actions={
-            <Button
-              disabled={pending > 0 || completed}
-              onClick={() => void save()}
-            >
+            <Button disabled={pending > 0} onClick={() => void save()}>
               Retry saving draft
             </Button>
           }
@@ -70,33 +80,17 @@ export function OfflineAuditEditor({
               <Field
                 label={`${item.prompt}${item.required ? " (required)" : ""}`}
               >
-                {item.responseType === "text" ? (
-                  <textarea
-                    className="textarea"
-                    maxLength={auditLimits.answer}
-                    disabled={completed || sealing}
-                    value={responses[item.id] ?? ""}
-                    onChange={(event) =>
-                      void answer(item.id, event.target.value)
-                    }
-                  />
-                ) : (
-                  <Select
-                    disabled={completed || sealing}
-                    value={responses[item.id] ?? ""}
-                    onChange={(event) =>
-                      void answer(item.id, event.target.value)
-                    }
-                  >
-                    <option value="" disabled>
-                      Choose an answer
-                    </option>
-                    <option value="pass">Pass</option>
-                    <option value="fail">Fail</option>
-                    <option value="na">N/A</option>
-                  </Select>
-                )}
+                <AnswerInput
+                  disabled={completed || sealing}
+                  onAnswer={(value) => void answer(item.id, value)}
+                  responseType={item.responseType}
+                  value={own(responses, item.id) ?? ""}
+                />
               </Field>
+              <ReplacedAnswer
+                answer={own(audit.replaced, item.id)}
+                responseType={item.responseType}
+              />
               <Button
                 onClick={() =>
                   void guardWorkspaceChange(async () =>
@@ -120,12 +114,14 @@ export function OfflineAuditEditor({
       <div className="cluster">
         {!completed && (
           <>
-            <Button
-              disabled={pending > 0}
-              onClick={() => void save("progress")}
-            >
-              Save progress
-            </Button>
+            {audit.status === "draft" && (
+              <Button
+                disabled={pending > 0}
+                onClick={() => void save("progress")}
+              >
+                Save progress
+              </Button>
+            )}
             <Button
               busy={pending > 0}
               disabled={pending > 0}
@@ -154,20 +150,76 @@ export function OfflineAuditEditor({
   );
 }
 
+/** A text answer, or a pass, fail, or N/A choice. */
+function AnswerInput({
+  disabled,
+  onAnswer,
+  responseType,
+  value,
+}: {
+  disabled: boolean;
+  onAnswer: (value: string) => void;
+  responseType: string;
+  value: string;
+}) {
+  return responseType === "text" ? (
+    <textarea
+      className="textarea"
+      maxLength={auditLimits.answer}
+      disabled={disabled}
+      value={value}
+      onChange={(event) => onAnswer(event.target.value)}
+    />
+  ) : (
+    <Select
+      disabled={disabled}
+      value={value}
+      onChange={(event) => onAnswer(event.target.value)}
+    >
+      <option value="" disabled>
+        Choose an answer
+      </option>
+      <option value="pass">Pass</option>
+      <option value="fail">Fail</option>
+      <option value="na">N/A</option>
+    </Select>
+  );
+}
+
+/** This device's answer the server did not keep, if any. */
+function ReplacedAnswer({
+  answer,
+  responseType,
+}: {
+  answer: AnswerWrite | undefined;
+  responseType: string;
+}) {
+  if (!answer) return null;
+  const label =
+    responseType === "check"
+      ? (checkLabels[answer.value] ?? answer.value)
+      : answer.value;
+  return (
+    <p className="textSm">
+      Your answer “{label}” was not kept; the server kept the answer given
+      elsewhere. Both are in the audit's history.
+    </p>
+  );
+}
+
 /** Where the audit's answers stand against the server's copy. */
 function syncStatus(audit: OfflineAudit, writes: AuditWriteJob[]) {
   const blocked = writes.find((job) => job.status === "blocked");
-  const synced = writes.every((job) => job.status === "synced");
+  const synced =
+    !unsyncedAnswers(audit) && writes.every((job) => job.status === "synced");
   switch (audit.status) {
     case "draft":
-      return "Draft saved on this device. Save progress to sync it before it is complete.";
+      return "Draft saved on this device. Save progress to share it; its answers then sync both ways while this device is online.";
     case "inProgress":
-      if (blocked) return `Progress not synced. ${blocked.error ?? ""}`.trim();
-      if (unsavedProgress(audit, writes))
-        return "Saved on this device. Save progress to sync the latest answers.";
+      if (blocked) return `Not synced. ${blocked.error ?? ""}`.trim();
       return synced
-        ? "Progress synced."
-        : "Progress saved. It syncs when this device is online.";
+        ? "Synced with the server."
+        : "Saved on this device. Answers sync both ways while this device is online.";
     case "completed":
       return synced
         ? "Completed and synced. Open the synced audit to make further changes."

@@ -88,6 +88,7 @@ const actionLabels: Record<string, string> = {
   "api_key.created": "created an API key",
   "api_key.revoked": "revoked an API key",
   "audit.answer_changed": "changed an answer",
+  "audit.answer_conflict_resolved": "resolved an answer conflict",
   "business.created": "added a business",
   "business.deleted": "deleted a business",
   "business.restored": "restored a business",
@@ -389,6 +390,11 @@ function activitySummary(event: ActivityEvent) {
   if (event.action === "audit.answer_changed") {
     return `${textValue(details.prompt)} · ${answerLabel(details.before, details.responseType)} → ${answerLabel(details.after, details.responseType)}`;
   }
+  if (event.action === "audit.answer_conflict_resolved") {
+    const kept = recordedAnswer(details.kept);
+    const discarded = recordedAnswer(details.discarded);
+    return `${textValue(details.prompt)} · kept ${answerLabel(kept?.value, details.responseType)} over ${answerLabel(discarded?.value, details.responseType)}`;
+  }
   if (event.action.startsWith("audit.template_")) {
     return `Version ${textValue(details.version)}`;
   }
@@ -492,6 +498,8 @@ function ActivityDetails({ event }: { event: ActivityEvent }) {
       );
     case "finance.transaction_categorized":
       return <CategorizationDetails event={event} />;
+    case "audit.answer_conflict_resolved":
+      return <AnswerConflictDetails event={event} />;
     case "audit.answer_changed":
       return (
         <div className="activityDetails">
@@ -606,6 +614,56 @@ function MemberRoleDetails({ event }: { event: ActivityEvent }) {
 function twoFactorSummary({ details }: ActivityEvent) {
   const label = (required: unknown) => (required ? "Required" : "Not required");
   return `Two-factor: ${label(details.before)} → ${label(details.after)}`;
+}
+
+/** One answer of an answer conflict: its value, and when and by whom given. */
+interface RecordedAnswer {
+  at: string;
+  by: string;
+  value: unknown;
+}
+
+/** Reads a conflict's answer; null when the item stayed unanswered. */
+function recordedAnswer(recorded: unknown): RecordedAnswer | null {
+  if (typeof recorded !== "object" || recorded === null) return null;
+  const by =
+    "answeredBy" in recorded &&
+    typeof recorded.answeredBy === "object" &&
+    recorded.answeredBy !== null
+      ? recorded.answeredBy
+      : null;
+  return {
+    at: "answeredAt" in recorded ? textValue(recorded.answeredAt) : "",
+    by:
+      (by && "name" in by ? textValue(by.name) : "") ||
+      (by && "email" in by ? textValue(by.email) : ""),
+    value: "value" in recorded ? recorded.value : null,
+  };
+}
+
+/** Two answers to one item given without either seeing the other. */
+function AnswerConflictDetails({ event }: { event: ActivityEvent }) {
+  const { details } = event;
+  const line = (label: string, answer: RecordedAnswer | null) =>
+    [
+      `${label}: ${answerLabel(answer?.value, details.responseType)}`,
+      answer?.by,
+      answer?.at && formatDateTime(answer.at),
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  return (
+    <div className="activityDetails">
+      <p>{textValue(details.prompt)}</p>
+      <p>{line("Kept", recordedAnswer(details.kept))}</p>
+      <p>{line("Discarded", recordedAnswer(details.discarded))}</p>
+      <p>
+        {details.reason === "completed"
+          ? "The audit had already been completed."
+          : "The later answer was kept."}
+      </p>
+    </div>
+  );
 }
 
 function answerLabel(value: unknown, responseType: unknown) {

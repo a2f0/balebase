@@ -17,7 +17,7 @@ import {
   TemplateCollections,
   TemplateViewSwitcher,
 } from "../audits/TemplateCollections";
-import { auditWrites, unsavedProgress } from "../offline/offlineAuditState";
+import { auditWrites, unsyncedAnswers } from "../offline/offlineAuditState";
 import { useDevice } from "../offline/offlineContext";
 import type { OfflineAudit, OfflineWorkspace } from "../offline/offlineStore";
 import { startOfflineAudit } from "../offline/offlineWork";
@@ -82,7 +82,7 @@ export function ProjectAuditForms({
             />
           </div>
         }
-        description="Audits start on this device. Save progress or complete one to sync it whenever this device is online."
+        description="Audits start on this device. Once you save a draft's progress, its answers sync both ways whenever this device is online."
         title="Audit forms"
       >
         {action.error && <Toast tone="danger">{action.error}</Toast>}
@@ -133,7 +133,7 @@ export function DeviceAudits({
           {countLabel(audits.length, "audit")}
         </span>
       }
-      description="Drafts stay on this device until you save their progress, raise an issue, or complete them. Saved work syncs when this device is online."
+      description="Drafts stay on this device until you save their progress, raise an issue, or complete them. Shared audits sync both ways when this device is online."
       title="On this device"
     >
       {audits.length && workspace ? (
@@ -198,8 +198,8 @@ function DeviceAuditRow({
 }
 
 /**
- * Where a device audit is: a draft; in progress, with its progress waiting
- * to sync or synced; completed and waiting to sync; held back; or synced.
+ * Where a device audit is: a draft; in progress, with changes waiting to
+ * sync or up to date; completed and waiting to sync; held back; or synced.
  * A completed audit is synced only once its issues and their photos are
  * too, so the device keeps showing it while any of its work is still here.
  */
@@ -216,26 +216,26 @@ function deviceAuditState(
   if (left.some((job) => job.status === "blocked"))
     return { ...reason, label: "Not synced", synced: false, tone: "danger" };
   if (audit.status === "completed")
-    return left.length
+    return left.length || unsyncedAnswers(audit)
       ? {
           ...reason,
-          label: writes.some((job) => job.status !== "synced")
-            ? "Waiting to sync"
-            : "Issues waiting to sync",
+          label:
+            unsyncedAnswers(audit) ||
+            writes.some((job) => job.status !== "synced")
+              ? "Waiting to sync"
+              : "Issues waiting to sync",
           synced: false,
           tone: "warning",
         }
       : { label: "Synced", synced: true, tone: "success" };
-  if (left.length)
-    return {
-      ...reason,
-      label: "Progress waiting to sync",
-      synced: false,
-      tone: "warning",
-    };
-  return unsavedProgress(audit, writes)
-    ? { label: "Changed since last sync", synced: false, tone: "neutral" }
-    : { label: "Progress synced", synced: false, tone: "info" };
+  return left.length || unsyncedAnswers(audit)
+    ? {
+        ...reason,
+        label: "Changes waiting to sync",
+        synced: false,
+        tone: "warning",
+      }
+    : { label: "Up to date", synced: false, tone: "info" };
 }
 
 /** The audit's writes, issues, and photos still to sync. */

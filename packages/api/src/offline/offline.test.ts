@@ -22,152 +22,414 @@ const definition = {
       title: "Inspection",
       items: [
         { id: "check", prompt: "Safe?", required: true, responseType: "check" },
+        { id: "notes", prompt: "Notes", required: false, responseType: "text" },
       ],
     },
   ],
 };
+const inspector = {
+  email: "user-1@example.com",
+  id: "user-1",
+  name: "user-1",
+};
+const reviewer = { email: "user-2@example.com", id: "user-2", name: "user-2" };
+/** A UTC time on the test day, `minute` minutes past noon. */
+const at = (minute: number) =>
+  `2026-11-10T12:${String(minute).padStart(2, "0")}:00.000Z`;
+
 afterEach(() => {
   for (const db of databases.splice(0)) db.close();
 });
 
-it("starts the exact downloaded version once, then saves and completes it, with answer and completion history", async () => {
+it("starts the exact downloaded version once, then merges and completes it, recording each answer at its own time", async () => {
   const f = fixture();
-  const start = { ...auditStart(), responses: { check: "fail" } };
+  const start = auditStart({ check: { value: "fail", at: at(1) } });
   const results = await Promise.all([f.apply(start), f.apply(start)]);
   expect(results.map((result) => result.status).sort()).toEqual([200, 201]);
+  expect(results[0]?.body).toMatchObject({
+    resourceId: start.id,
+    audit: {
+      answers: { check: { at: at(1), value: "fail", version: start.id } },
+      revision: 1,
+      status: "in_progress",
+    },
+  });
   expect(f.audit(start.id)).toEqual({
-    template_name: "Downloaded",
-    template_version: 1,
-    status: "in_progress",
+    answer_meta: JSON.stringify({
+      check: { at: at(1), by: "user-1", v: start.id },
+    }),
     responses: '{"check":"fail"}',
     revision: 1,
+    status: "in_progress",
   });
-  const save = auditSave(start.id, 1, { complete: true });
+  const save = auditSave(
+    start.id,
+    { check: { value: "pass", at: at(5), base: start.id } },
+    { complete: true },
+  );
   expect(await f.apply(save)).toMatchObject({
     status: 201,
-    body: { resourceId: start.id },
+    body: {
+      resourceId: start.id,
+      audit: {
+        answers: { check: { at: at(5), value: "pass", version: save.id } },
+      },
+    },
   });
-  expect(f.audit(start.id)).toMatchObject({
-    status: "completed",
-    responses: '{"check":"pass"}',
-    revision: 2,
-  });
-  const events = f.db
-    .query("SELECT action FROM activity_events WHERE root_id = ? ORDER BY id")
-    .all(start.id);
-  expect(events).toEqual([
-    { action: "audit.started" },
-    { action: "audit.answer_changed" },
-    { action: "audit.answer_changed" },
-    { action: "audit.completed" },
-    { action: "audit.offline_synced" },
+  expect(f.audit(start.id)).toMatchObject({ status: "completed", revision: 2 });
+  const history = f.db
+    .query(
+      "SELECT action, occurred_at FROM activity_events WHERE root_id = ? ORDER BY id",
+    )
+    .all(start.id) as { action: string; occurred_at: string }[];
+  expect(
+    history.map(({ action, occurred_at }) =>
+      action === "audit.answer_changed" ? [action, occurred_at] : action,
+    ),
+  ).toEqual([
+    "audit.started",
+    ["audit.answer_changed", at(1)],
+    ["audit.answer_changed", at(5)],
+    "audit.completed",
+    "audit.offline_synced",
   ]);
   expect((await f.apply(save)).status).toBe(200);
   expect(
-    (await f.apply({ ...save, responses: { check: "fail" } })).status,
+    (
+      await f.apply({
+        ...save,
+        answers: { check: { value: "fail", at: at(5), base: start.id } },
+      })
+    ).status,
   ).toBe(409);
   f.db.query("DELETE FROM audits WHERE id = ?").run(start.id);
   expect((await f.apply(start)).status).toBe(200);
   expect(f.db.query("SELECT id FROM audits").all()).toEqual([]);
 });
 
-it("saves progress only over the device's last write, leaving server changes in place", async () => {
+it("merges answers last writer wins and records each collision with both answers", async () => {
   const f = fixture();
-  const start = auditStart();
+  const start = auditStart({
+    check: { value: "fail", at: at(1) },
+    notes: { value: "Loose rail", at: at(1) },
+  });
   expect((await f.apply(start)).status).toBe(201);
-  const first = auditSave(start.id, 1);
-  // Two tabs sending the same save apply it once.
+  // Online, someone answers the check after the device last synced.
+  f.edit(start.id, "check", "na", at(3), "user-2");
+  // The device's older answer to it loses; its note, which no one else
+  // changed, applies without a conflict. Two tabs sending it apply it once.
+  const first = auditSave(start.id, {
+    check: { value: "pass", at: at(2), base: start.id },
+    notes: { value: "Rail fixed", at: at(4), base: start.id },
+  });
   const results = await Promise.all([f.apply(first), f.apply(first)]);
   expect(results.map((result) => result.status).sort()).toEqual([200, 201]);
+  expect(results[0]?.body).toMatchObject({
+    audit: {
+      answers: {
+        check: { at: at(3), value: "na" },
+        notes: { at: at(4), value: "Rail fixed" },
+      },
+    },
+  });
+  // A later answer the device gave without seeing the online one wins.
+  const later = auditSave(start.id, {
+    check: { value: "fail", at: at(6), base: start.id },
+  });
+  expect((await f.apply(later)).status).toBe(201);
+  // One given over the answer it saw, its own last save, is an ordinary
+  // change.
+  const ordinary = auditSave(start.id, {
+    check: { value: "pass", at: at(7), base: later.id },
+  });
+  expect((await f.apply(ordinary)).status).toBe(201);
   expect(f.audit(start.id)).toMatchObject({
-    status: "in_progress",
+    responses: '{"check":"pass","notes":"Rail fixed"}',
+  });
+  expect(f.conflicts(start.id)).toEqual([
+    {
+      subject_id: "check",
+      details: {
+        prompt: "Safe?",
+        responseType: "check",
+        kept: { answeredAt: at(3), answeredBy: reviewer, value: "na" },
+        discarded: { answeredAt: at(2), answeredBy: inspector, value: "pass" },
+        reason: "later",
+      },
+    },
+    {
+      subject_id: "check",
+      details: {
+        prompt: "Safe?",
+        responseType: "check",
+        kept: { answeredAt: at(6), answeredBy: inspector, value: "fail" },
+        discarded: { answeredAt: at(3), answeredBy: reviewer, value: "na" },
+        reason: "later",
+      },
+    },
+  ]);
+});
+
+it("keeps an answer cleared online over an older answer from a device", async () => {
+  const f = fixture();
+  const start = auditStart({ notes: { value: "Loose rail", at: at(1) } });
+  expect((await f.apply(start)).status).toBe(201);
+  f.clear(start.id, "notes", at(3), "user-2");
+  const save = auditSave(start.id, {
+    notes: { value: "Rail fixed", at: at(2), base: start.id },
+  });
+  expect(await f.apply(save)).toMatchObject({
+    status: 201,
+    body: { audit: { answers: { notes: { at: at(3), value: null } } } },
+  });
+  expect(f.audit(start.id)).toMatchObject({ responses: "{}" });
+  expect(f.conflicts(start.id)).toEqual([
+    {
+      subject_id: "notes",
+      details: {
+        prompt: "Notes",
+        responseType: "text",
+        kept: { answeredAt: at(3), answeredBy: reviewer, value: null },
+        discarded: {
+          answeredAt: at(2),
+          answeredBy: inspector,
+          value: "Rail fixed",
+        },
+        reason: "later",
+      },
+    },
+  ]);
+});
+
+it("keeps a completed audit's answers and records the device's later ones as discarded", async () => {
+  const f = fixture();
+  const start = auditStart({ check: { value: "pass", at: at(1) } });
+  expect((await f.apply(start)).status).toBe(201);
+  f.db
+    .query(
+      "UPDATE audits SET status = 'completed', revision = revision + 1 WHERE id = ?",
+    )
+    .run(start.id);
+  const save = auditSave(
+    start.id,
+    {
+      check: { value: "fail", at: at(5), base: start.id },
+      notes: { value: "Too late", at: at(5), base: null },
+    },
+    { complete: true },
+  );
+  expect(await f.apply(save)).toMatchObject({
+    status: 201,
+    body: { audit: { status: "completed", revision: 2 } },
+  });
+  expect(f.audit(start.id)).toMatchObject({
     responses: '{"check":"pass"}',
     revision: 2,
   });
-  // A save from an older revision, an edit made online, and a completion
-  // made online each leave the server's copy alone.
-  expect(await f.apply(auditSave(start.id, 1))).toMatchObject({
-    status: 409,
-    body: { error: expect.stringContaining("changed on the server") },
+  expect(
+    f
+      .conflicts(start.id)
+      .map(({ details, subject_id }) => [
+        subject_id,
+        details.kept?.value ?? null,
+        details.discarded.value,
+        details.reason,
+      ]),
+  ).toEqual([
+    ["check", "pass", "fail", "completed"],
+    ["notes", null, "Too late", "completed"],
+  ]);
+  expect((await f.apply(save)).status).toBe(200);
+  expect(f.conflicts(start.id)).toHaveLength(2);
+});
+
+it("records collisions with more distinct people than D1 binds parameters", async () => {
+  const f = fixture();
+  // D1 refuses a statement with more than 100 bound parameters.
+  let widest = 0;
+  f.hooks.before(
+    () => true,
+    (event) => {
+      widest = Math.max(widest, event.values.length);
+    },
+    { times: Number.POSITIVE_INFINITY },
+  );
+  const items = Array.from({ length: 101 }, (_, index) => `item-${index}`);
+  f.addForm(
+    "wide",
+    // A section holds at most 100 items.
+    [items.slice(0, 50), items.slice(50)].map((section, index) => ({
+      id: `section-${index}`,
+      title: "Wide",
+      items: section.map((id) => ({
+        id,
+        prompt: id,
+        required: false,
+        responseType: "text",
+      })),
+    })),
+  );
+  const start = {
+    ...auditStart(
+      Object.fromEntries(
+        items.map((id) => [id, { value: "Device", at: at(1) }]),
+      ),
+    ),
+    templateId: "wide",
+  };
+  expect((await f.apply(start)).status).toBe(201);
+  // Each item is answered online by someone else after the device synced.
+  for (const [index, id] of items.entries()) {
+    seedAccount(f.db, { createdAt: "2026-10-01", id: `author-${index}` });
+    f.edit(start.id, id, "Online", at(3), `author-${index}`);
+  }
+  const save = auditSave(
+    start.id,
+    Object.fromEntries(
+      items.map((id) => [id, { value: "Later", at: at(2), base: start.id }]),
+    ),
+  );
+  expect((await f.apply(save)).status).toBe(201);
+  expect(f.conflicts(start.id)).toHaveLength(101);
+  expect(widest).toBeLessThanOrEqual(100);
+});
+
+it("merges and completes a form whose item IDs name inherited members", async () => {
+  const f = fixture();
+  f.addForm("inherited", [
+    {
+      id: "section",
+      title: "Site",
+      items: [
+        {
+          id: "constructor",
+          prompt: "Exit clear?",
+          required: true,
+          responseType: "check",
+        },
+        {
+          id: "toString",
+          prompt: "Notes",
+          required: false,
+          responseType: "text",
+        },
+      ],
+    },
+  ]);
+  const start = {
+    ...auditStart({ toString: { value: "Rail", at: at(1) } }),
+    templateId: "inherited",
+  };
+  expect((await f.apply(start)).status).toBe(201);
+  // The required item is still unanswered, so the completion does not apply.
+  const save = auditSave(
+    start.id,
+    { toString: { value: "Rail fixed", at: at(2), base: start.id } },
+    { complete: true },
+  );
+  expect((await f.apply(save)).status).toBe(201);
+  expect(f.audit(start.id)).toMatchObject({
+    responses: '{"toString":"Rail fixed"}',
+    status: "in_progress",
   });
+  const done = auditSave(
+    start.id,
+    { constructor: { value: "pass", at: at(3), base: null } },
+    { complete: true },
+  );
+  expect((await f.apply(done)).status).toBe(201);
+  expect(f.audit(start.id)).toMatchObject({ status: "completed" });
+  expect(f.conflicts(start.id)).toEqual([]);
+});
+
+it("refuses a save to a discarded audit and keeps no receipt", async () => {
+  const f = fixture();
+  const start = auditStart({ check: { value: "pass", at: at(1) } });
+  expect((await f.apply(start)).status).toBe(201);
   f.db
-    .query(
-      `UPDATE audits SET responses = '{"check":"na"}', revision = 3 WHERE id = ?`,
-    )
+    .query("UPDATE audits SET deleted_at = '2026-11-10' WHERE id = ?")
     .run(start.id);
-  expect((await f.apply(auditSave(start.id, 2))).status).toBe(409);
-  f.db
-    .query("UPDATE audits SET status = 'completed' WHERE id = ?")
-    .run(start.id);
-  expect((await f.apply(auditSave(start.id, 3))).status).toBe(409);
-  f.db
-    .query(
-      "UPDATE audits SET status = 'in_progress', deleted_at = '2026-10-02' WHERE id = ?",
-    )
-    .run(start.id);
-  expect(await f.apply(auditSave(start.id, 3))).toMatchObject({
+  const save = auditSave(start.id, {
+    check: { value: "fail", at: at(5), base: start.id },
+  });
+  expect(await f.apply(save)).toMatchObject({
     status: 409,
     body: { error: expect.stringContaining("discarded") },
   });
-  expect(f.audit(start.id)).toMatchObject({
-    responses: '{"check":"na"}',
-    revision: 3,
-  });
-  expect(f.db.query("SELECT id FROM offline_operations").all()).toHaveLength(2);
+  expect(f.db.query("SELECT id FROM offline_operations").all()).toEqual([
+    { id: start.id },
+  ]);
 });
 
-it("keeps no receipt when the audit changes between the check and the save", async () => {
+it("merges again over a write that lands between its read and its save", async () => {
   const f = fixture();
-  const start = auditStart();
+  const start = auditStart({ check: { value: "fail", at: at(1) } });
   expect((await f.apply(start)).status).toBe(201);
   f.hooks.before(
-    "UPDATE audits SET responses = ?, status = ?",
-    () =>
-      f.db.exec(
-        `UPDATE audits SET responses = '{"check":"na"}', revision = revision + 1`,
-      ),
+    /answer_meta = \?,\s+status = \?/,
+    () => f.edit(start.id, "check", "na", at(9), "user-2"),
     { method: "batch" },
   );
-  const save = auditSave(start.id, 1, { complete: true });
-  expect(await f.apply(save)).toMatchObject({
-    status: 409,
-    body: { error: expect.stringContaining("changed on the server") },
+  const save = auditSave(start.id, {
+    check: { value: "pass", at: at(5), base: start.id },
   });
-  expect(f.audit(start.id)).toMatchObject({
-    status: "in_progress",
-    responses: '{"check":"na"}',
+  // The first merge applies nothing; the second finds the newer answer,
+  // keeps it, and records the collision once.
+  expect(await f.apply(save)).toMatchObject({
+    status: 201,
+    body: { audit: { answers: { check: { at: at(9), value: "na" } } } },
   });
   expect(
-    f.db
-      .query(
-        "SELECT id FROM activity_events WHERE action = 'audit.offline_synced'",
-      )
-      .all(),
-  ).toEqual([]);
+    f
+      .conflicts(start.id)
+      .map(({ details }) => [details.kept?.value, details.discarded.value]),
+  ).toEqual([["na", "pass"]]);
+});
+
+it("leaves a merge to the device's next sync while the audit keeps changing", async () => {
+  const f = fixture();
+  const start = auditStart({ check: { value: "fail", at: at(1) } });
+  expect((await f.apply(start)).status).toBe(201);
+  let minute = 10;
+  f.hooks.before(
+    /answer_meta = \?,\s+status = \?/,
+    () => {
+      minute += 1;
+      f.edit(start.id, "check", "na", at(minute), "user-2");
+    },
+    { method: "batch", times: 3 },
+  );
+  const save = auditSave(start.id, {
+    check: { value: "pass", at: at(30), base: start.id },
+  });
+  expect(await f.apply(save)).toMatchObject({
+    status: 503,
+    body: { error: expect.stringContaining("try again") },
+  });
+  expect(f.conflicts(start.id)).toEqual([]);
   expect(f.db.query("SELECT id FROM offline_operations").all()).toHaveLength(1);
+  expect((await f.apply(save)).status).toBe(201);
+  expect(f.audit(start.id)).toMatchObject({ responses: '{"check":"pass"}' });
 });
 
 it("replays a save another tab commits while this one is being checked", async () => {
   const f = fixture();
-  const start = auditStart();
+  const start = auditStart({ check: { value: "fail", at: at(1) } });
   expect((await f.apply(start)).status).toBe(201);
-  const save = auditSave(start.id, 1);
+  const save = auditSave(start.id, {
+    check: { value: "pass", at: at(5), base: start.id },
+  });
   const digest = new Bun.CryptoHasher("sha256")
     .update(JSON.stringify(OfflineOperationSchema.parse(save)))
     .digest("hex");
-  // The other tab commits right after this request finds no receipt, so
-  // the save's check sees the revision it left.
+  // The other tab commits right after this request finds no receipt.
   f.hooks.after(
     "SELECT digest FROM offline_operations",
     () => {
+      f.edit(start.id, "check", "pass", at(5), "user-1");
       f.db
         .query(
-          `UPDATE audits SET responses = '{"check":"pass"}', revision = 2 WHERE id = ?`,
-        )
-        .run(start.id);
-      f.db
-        .query(
-          "INSERT INTO offline_operations (organization_id, user_id, id, digest, created_at) VALUES (?, ?, ?, ?, '2026-10-02')",
+          "INSERT INTO offline_operations (organization_id, user_id, id, digest, created_at) VALUES (?, ?, ?, ?, '2026-11-10')",
         )
         .run(scope.organizationId, scope.userId, save.id, digest);
     },
@@ -177,6 +439,32 @@ it("replays a save another tab commits while this one is being checked", async (
     status: 200,
     body: { resourceId: start.id },
   });
+});
+
+it("serves the device the server's copy of an audit it holds", async () => {
+  const f = fixture();
+  const start = auditStart({ check: { value: "fail", at: at(1) } });
+  expect((await f.apply(start)).status).toBe(201);
+  f.edit(start.id, "notes", "Checked online", at(3), "user-2");
+  const query = new URLSearchParams(scope);
+  expect(await f.request("GET", `/audits/${start.id}?${query}`)).toMatchObject({
+    status: 200,
+    body: {
+      answers: {
+        check: { at: at(1), value: "fail", version: start.id },
+        notes: { at: at(3), value: "Checked online" },
+      },
+      deleted: false,
+      id: start.id,
+      revision: 2,
+      status: "in_progress",
+    },
+  });
+  const other = new URLSearchParams({ ...scope, userId: "user-2" });
+  expect((await f.request("GET", `/audits/${start.id}?${other}`)).status).toBe(
+    403,
+  );
+  expect((await f.request("GET", `/audits/missing?${query}`)).status).toBe(404);
 });
 
 it("requires the parent audit before its issue and does not duplicate issues on retry", async () => {
@@ -195,7 +483,9 @@ it("requires the parent audit before its issue and does not duplicate issues on 
   expect((await f.apply(issue)).status).toBe(409);
   expect((await f.apply(parent)).status).toBe(201);
   expect((await f.apply(issue)).status).toBe(201);
-  expect((await f.apply(issue)).status).toBe(200);
+  expect(await f.apply(issue)).toEqual(
+    expect.objectContaining({ status: 200, body: { resourceId: issue.id } }),
+  );
   expect(f.db.query("SELECT title, target_id FROM issues").all()).toEqual([
     { title: "Loose rail", target_id: parent.id },
   ]);
@@ -215,7 +505,7 @@ it("rejects wrong account and organization, invalid answers, and inaccessible te
       .status,
   ).toBe(403);
   expect(
-    (await f.apply({ ...auditStart(), responses: { check: "invalid" } }))
+    (await f.apply(auditStart({ check: { value: "invalid", at: at(1) } })))
       .status,
   ).toBe(409);
   expect(
@@ -226,16 +516,43 @@ it("rejects wrong account and organization, invalid answers, and inaccessible te
   ).toBe(409);
   expect(f.db.query("SELECT id FROM offline_operations").all()).toEqual([]);
   expect(f.db.query("SELECT id FROM audits").all()).toEqual([]);
-  // Progress saves need no answers; completion needs every required one.
+  // Saves need valid answers.
   const start = auditStart();
   expect((await f.apply(start)).status).toBe(201);
-  const unanswered = auditSave(start.id, 1, { complete: true });
-  for (const responses of [{}, { check: "invalid" }])
-    expect((await f.apply({ ...unanswered, responses })).status).toBe(409);
+  const invalid = { check: { value: "invalid", at: at(2), base: null } };
+  expect((await f.apply(auditSave(start.id, invalid))).status).toBe(409);
+  expect(f.db.query("SELECT id FROM offline_operations").all()).toHaveLength(1);
+});
+
+it("saves a completion's answers but leaves the audit in progress when a required answer is cleared elsewhere", async () => {
+  const f = fixture();
+  const start = auditStart({ check: { value: "pass", at: at(1) } });
+  expect((await f.apply(start)).status).toBe(201);
+  f.clear(start.id, "check", at(3), "user-2");
+  const save = auditSave(
+    start.id,
+    {
+      check: { value: "pass", at: at(2), base: start.id },
+      notes: { value: "Done", at: at(2), base: null },
+    },
+    { complete: true },
+  );
+  expect(await f.apply(save)).toMatchObject({
+    status: 201,
+    body: {
+      audit: {
+        answers: { check: { value: null }, notes: { value: "Done" } },
+        status: "in_progress",
+      },
+    },
+  });
   expect(
-    (await f.apply({ ...auditSave(start.id, 1), responses: {} })).status,
-  ).toBe(201);
-  expect(f.db.query("SELECT id FROM offline_operations").all()).toHaveLength(2);
+    f.db
+      .query(
+        "SELECT action FROM activity_events WHERE root_id = ? AND action IN ('audit.completed', 'audit.offline_synced')",
+      )
+      .all(start.id),
+  ).toEqual([]);
 });
 
 interface Synced {
@@ -416,7 +733,11 @@ it("rolls back receipts and domain writes if history fails, then retries success
   const f = fixture();
   const start = auditStart();
   expect((await f.apply(start)).status).toBe(201);
-  const save = auditSave(start.id, 1, { complete: true });
+  const save = auditSave(
+    start.id,
+    { check: { value: "pass", at: at(5), base: null } },
+    { complete: true },
+  );
   f.db.exec(
     "CREATE TRIGGER fail_history BEFORE INSERT ON activity_events WHEN NEW.action = 'audit.completed' BEGIN SELECT RAISE(ABORT, 'history unavailable'); END",
   );
@@ -485,7 +806,11 @@ it("keeps device-reported audit times separate from server history time", async 
   const f = fixture();
   const start = auditStart();
   expect((await f.apply(start)).status).toBe(201);
-  const save = auditSave(start.id, 1, { complete: true });
+  const save = auditSave(
+    start.id,
+    { check: { value: "pass", at: at(5), base: null } },
+    { complete: true },
+  );
   expect((await f.apply(save)).status).toBe(201);
   const event = f.db
     .query(
@@ -507,34 +832,53 @@ it("keeps device-reported audit times separate from server history time", async 
   ).toHaveLength(1);
 });
 
-function auditStart(): Extract<OfflineOperation, { type: "auditStart" }> {
+type Start = Extract<OfflineOperation, { type: "auditStart" }>;
+type Save = Extract<OfflineOperation, { type: "auditSave" }>;
+
+/** An answer as a conflict event records it. */
+interface RecordedAnswer {
+  answeredAt: string | null;
+  answeredBy: { email: string; id: string; name: string } | null;
+  /** Null for an answer that was cleared. */
+  value: string | null;
+}
+
+/** The details of an `audit.answer_conflict_resolved` event. */
+interface ConflictDetails {
+  discarded: RecordedAnswer;
+  kept: RecordedAnswer | null;
+  prompt: string;
+  reason: string;
+  responseType: string;
+}
+
+function auditStart(answers: Start["answers"] = {}): Start {
   return {
     type: "auditStart",
     id: crypto.randomUUID(),
     projectId: "audited",
     templateId: "form",
     templateVersion: 1,
-    responses: {},
+    answers,
   };
 }
 
-/** A save of `{ check: "pass" }` over `expectedRevision`, completing it when asked. */
+/** A save of `answers`, completing the audit when asked. */
 function auditSave(
   auditId: string,
-  expectedRevision: number,
+  answers: Save["answers"],
   { complete = false } = {},
-): Extract<OfflineOperation, { type: "auditSave" }> {
+): Save {
   return {
     type: "auditSave",
     id: crypto.randomUUID(),
     auditId,
-    expectedRevision,
-    responses: { check: "pass" },
+    answers,
     ...(complete
       ? {
           completion: {
-            startedAt: "2026-10-01T12:00:00.000Z",
-            completedAt: "2026-10-01T12:30:00.000Z",
+            startedAt: "2026-11-10T11:00:00.000Z",
+            completedAt: "2026-11-10T12:30:00.000Z",
           },
         }
       : {}),
@@ -576,9 +920,67 @@ function fixture() {
     audit: (id: string) =>
       db
         .query(
-          "SELECT template_name, template_version, status, responses, revision FROM audits WHERE id = ?",
+          "SELECT status, responses, answer_meta, revision FROM audits WHERE id = ?",
         )
         .get(id),
+    /** Adds the organization's form `id`, with version 1 published. */
+    addForm(id: string, sections: unknown[]) {
+      db.query(
+        "INSERT INTO audit_template_families (id, scope, organization_id, current_version, created_by, created_at, updated_at) VALUES (?, 'organization', 'org_user-1', 1, 'user-1', '2026-10-01', '2026-10-01')",
+      ).run(id);
+      db.query(
+        "INSERT INTO audit_template_versions (id, template_id, version, name, description, definition, status, created_by, created_at) VALUES (?, ?, 1, ?, '', ?, 'published', 'user-1', '2026-10-01')",
+      ).run(`${id}-1`, id, id, JSON.stringify({ version: 1, sections }));
+    },
+    /** Saves an answer as an online save by `by` at `when` would. */
+    edit(id: string, itemId: string, value: string, when: string, by: string) {
+      db.query(
+        `UPDATE audits SET responses = json_set(responses, ?, ?),
+           answer_meta = json_set(answer_meta, ?, json_object('at', ?, 'by', ?, 'v', ?)),
+           revision = revision + 1, activity_actor_id = ?, updated_at = ?
+         WHERE id = ?`,
+      ).run(
+        `$.${itemId}`,
+        value,
+        `$.${itemId}`,
+        when,
+        by,
+        crypto.randomUUID(),
+        by,
+        when,
+        id,
+      );
+    },
+    /** Clears an answer as an online save by `by` at `when` would. */
+    clear(id: string, itemId: string, when: string, by: string) {
+      db.query(
+        `UPDATE audits SET responses = json_remove(responses, ?),
+           answer_meta = json_set(answer_meta, ?, json_object('at', ?, 'by', ?, 'v', ?)),
+           revision = revision + 1, activity_actor_id = ?, updated_at = ?
+         WHERE id = ?`,
+      ).run(
+        `$.${itemId}`,
+        `$.${itemId}`,
+        when,
+        by,
+        crypto.randomUUID(),
+        by,
+        when,
+        id,
+      );
+    },
+    /** The audit's resolved answer conflicts, oldest first. */
+    conflicts(id: string) {
+      const rows = db
+        .query(
+          "SELECT subject_id, details FROM activity_events WHERE root_id = ? AND action = 'audit.answer_conflict_resolved' ORDER BY id",
+        )
+        .all(id) as { details: string; subject_id: string }[];
+      return rows.map(({ details, subject_id }) => {
+        const recorded: ConflictDetails = JSON.parse(details);
+        return { details: recorded, subject_id };
+      });
+    },
     /** Saves the form's next version (`version`, or the one after its current) with `status`. */
     publish(templateId: string, version: number, status: string) {
       const next =

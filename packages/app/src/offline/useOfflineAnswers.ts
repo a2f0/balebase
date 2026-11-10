@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { errorMessage } from "../shared/errors";
 import { useUnsavedChanges } from "../workspace/unsavedChanges";
 import {
@@ -6,6 +6,7 @@ import {
   offlineAnswersError,
   offlineAnswersTransition,
 } from "./offlineAnswersState";
+import { answerBase, offlineAnswers } from "./offlineAuditState";
 import type { OfflineAudit } from "./offlineStore";
 import {
   completeOfflineAudit,
@@ -20,7 +21,7 @@ export interface OfflineAnswerStorage {
     key: string,
     auditId: string,
     itemId: string,
-    value: string,
+    answer: Edit,
   ) => Promise<unknown>;
   saveProgress: (key: string, auditId: string) => Promise<unknown>;
 }
@@ -35,6 +36,16 @@ const deviceStorage: OfflineAnswerStorage = {
 export type OfflineAuditSync = "progress" | "completion";
 
 /**
+ * An answer as given: when, over which server answer (`answerBase`), and
+ * what. A write retried later keeps all three.
+ */
+export interface Edit {
+  at: string;
+  base: string | null;
+  value: string;
+}
+
+/**
  * An audit's answers, each written to the device as it is given. What went
  * wrong is one machine (`offlineAnswersState.ts`): a failed write lasts until
  * every answer is written, a failed sync request until a save succeeds.
@@ -44,8 +55,11 @@ export function useOfflineAnswers(
   key: string,
   storage = deviceStorage,
 ) {
-  const [responses, setResponses] = useState(audit.responses);
-  const dirty = useRef<Record<string, { value: string }>>({});
+  const saved = useMemo(() => offlineAnswers(audit), [audit]);
+  const [responses, setResponses] = useState(saved);
+  // Each unwritten answer keeps the base it was given over. Item IDs are any
+  // text, so they key a Map rather than an object's inherited members.
+  const dirty = useRef(new Map<string, Edit>());
   const writes = useRef(Promise.resolve());
   const [pending, setPending] = useState(0);
   const [failures, report] = useReducer(
@@ -60,16 +74,16 @@ export function useOfflineAnswers(
   );
   useEffect(() => {
     setResponses({
-      ...audit.responses,
+      ...saved,
       ...Object.fromEntries(
-        Object.entries(dirty.current).map(([id, edit]) => [id, edit.value]),
+        [...dirty.current].map(([id, edit]) => [id, edit.value]),
       ),
     });
-  }, [audit.responses]);
-  function write(itemId: string, edit: { value: string }) {
+  }, [saved]);
+  function write(itemId: string, edit: Edit) {
     const result = writes.current.then(async () => {
       try {
-        await storage.saveAnswer(key, audit.id, itemId, edit.value);
+        await storage.saveAnswer(key, audit.id, itemId, edit);
       } catch (cause) {
         report({
           message: errorMessage(
@@ -80,17 +94,24 @@ export function useOfflineAnswers(
         });
         throw cause;
       }
-      if (dirty.current[itemId] === edit) delete dirty.current[itemId];
-      if (Object.keys(dirty.current).length === 0)
-        report({ type: "allWritten" });
+      if (dirty.current.get(itemId) === edit) dirty.current.delete(itemId);
+      if (dirty.current.size === 0) report({ type: "allWritten" });
     });
     // Preserve typing order within this tab, including after a failed write.
     writes.current = result.catch(() => undefined);
     return result;
   }
   async function answer(itemId: string, value: string) {
-    const edit = { value };
-    dirty.current[itemId] = edit;
+    // Given now, over what this render shows, not over what storage holds
+    // by the time the write runs. An answer replacing one not yet written
+    // keeps that one's base, which may be null.
+    const unwritten = dirty.current.get(itemId);
+    const edit: Edit = {
+      at: new Date().toISOString(),
+      base: unwritten ? unwritten.base : answerBase(audit, itemId),
+      value,
+    };
+    dirty.current.set(itemId, edit);
     setResponses((current) => ({ ...current, [itemId]: value }));
     setPending((count) => count + 1);
     try {
@@ -110,8 +131,7 @@ export function useOfflineAnswers(
     try {
       // Retry only unsaved edits. Already-saved answers may have been updated
       // by another tab; a sync takes the latest durable snapshot.
-      for (const [id, edit] of Object.entries(dirty.current))
-        await write(id, edit);
+      for (const [id, edit] of [...dirty.current]) await write(id, edit);
       written = true;
       if (sync === "progress") await storage.saveProgress(key, audit.id);
       if (sync === "completion") await storage.completeAudit(key, audit.id);

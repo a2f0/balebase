@@ -8,6 +8,8 @@ import type { Person } from "@balebase/validators/fields";
 import { storedDefinition } from "./auditTemplates";
 
 export interface AuditRow {
+  /** Each answer's time and author, by item ID; see `auditAnswers.ts`. */
+  answer_meta: string;
   completed_at: string | null;
   created_at: string;
   created_by_email: string;
@@ -32,7 +34,8 @@ export interface AuditRow {
   updated_at: string;
 }
 
-export interface AuditSummaryRow extends AuditRow {
+/** Audit lists read no answer times. */
+export interface AuditSummaryRow extends Omit<AuditRow, "answer_meta"> {
   issue_count: number;
 }
 
@@ -58,7 +61,8 @@ export function auditStatement(
   return database
     .prepare(
       `SELECT audit.id, audit.template_id, audit.template_family_id, audit.template_version,
-              audit.template_name, audit.definition, audit.responses, audit.status, audit.completed_at,
+              audit.template_name, audit.definition, audit.responses, audit.answer_meta,
+              audit.status, audit.completed_at,
               audit.created_at, audit.updated_at, audit.revision,
               creator.id AS created_by_id, creator.name AS created_by_name,
               creator.email AS created_by_email,
@@ -81,7 +85,9 @@ export function discardRejection(audit: AuditRow) {
 }
 
 /** The stored audit; the run page adds who last saved each answer. */
-export function toAudit(row: AuditRow): Omit<AuditRun, "answerActivity"> {
+export function toAudit(
+  row: Omit<AuditRow, "answer_meta">,
+): Omit<AuditRun, "answerActivity"> {
   return {
     completedAt: row.completed_at,
     createdAt: row.created_at,
@@ -110,7 +116,7 @@ export function toAudit(row: AuditRow): Omit<AuditRun, "answerActivity"> {
 }
 
 /** The discarding user, or null once that account has been deleted. */
-function deletedBy(row: AuditRow): Person | null {
+function deletedBy(row: Omit<AuditRow, "answer_meta">): Person | null {
   return row.deleted_by_id
     ? {
         email: row.deleted_by_email ?? "",

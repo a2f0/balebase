@@ -700,33 +700,70 @@ An audit started on the device keeps the form version it started from, so a
 form unpublished, edited, discarded, or turned off for the project after
 download does not strand it: the API accepts an audit against any version
 that was published until the form is purged. Answers save to the device as
-they are entered, and drafts survive reopening the app. A draft stays on the
-device until its progress is saved, an issue is raised on it, or it is
-completed.
+they are entered, each with the UTC time it was given, and drafts survive
+reopening the app. A draft stays on the device until its progress is saved,
+an issue is raised on it, or it is completed.
 
-**Save progress** syncs the answers saved on the device so far: the first
-save puts the audit on the server as an in-progress audit that the
-organization can see, and each later save sends the answers again. Answering
-continues on the device in between, offline or not, and **Open synced
-audit** opens the server's copy once it is there. **Complete audit**
-validates required answers, seals the audit, and syncs its completion, putting
-it on the server first if it is not there yet. Raise issues from an audit's
-items, at any point: saving an issue saves the audit's progress to the server
-if it is not there yet, so the issue syncs onto it without waiting for
-completion. Each issue supports up to ten JPEG, PNG, GIF, or WebP photos of at
-most 10 MB, the same limits as online. A non-empty photo whose type the device
-cannot tell is kept, and the API checks its format when it syncs. Saving an
-issue stores its details, photos, and queued operations together.
+**Save progress** shares a draft: it puts the audit on the server as an
+in-progress audit the organization can see. From then on its answers sync
+both ways while the device is online. Answers given on the device go out on
+the next sync, together, and the device reads the server's copy on every
+sync of its projects and with each confirmed write, so answers given online
+or on another device show here. Answering continues on the device
+throughout, offline or not, and **Open synced audit** opens the server's
+copy. **Complete audit** validates required answers, seals the audit, and
+syncs its completion, putting it on the server first if it is not there
+yet; an audit completed elsewhere is sealed on the device once nothing from
+it is still on its way, and an answer the device was still saving when it was
+sealed is sent anyway, so the server records it as discarded rather than the
+device dropping it. The device keeps reading completed audits too, so one
+reopened online opens on the device again once no completion from the device
+is still on its way. Raise issues from an audit's items, at any point:
+saving an issue shares a draft with the server, so the issue syncs onto it
+without waiting for completion. Each issue supports up to ten JPEG, PNG, GIF,
+or WebP photos of at most 10 MB, the same limits as online. A non-empty photo
+whose type the device cannot tell is kept, and the API checks its format when
+it syncs. Saving an issue stores its details, photos, and queued operations
+together.
+
+Answers merge last writer wins, per item, by the time each was given: the
+device's UTC clock for answers given on a device, the server's for answers
+saved online (`audits.answer_meta`, migration
+`0099_record_answer_times.sql`). Each stored answer also keeps the version of
+the write that set it: the operation ID for a device's write, a fresh ID for
+each online save. Each answer a device sends names the version of the server
+answer shown when it was given, captured at that moment, so two answers given
+in the same millisecond still tell apart. When the server's answer is still
+that one, the device's answer replaces it as an ordinary change. When someone
+else answered the item in between, the two collide: the later answer stays
+(the server's on a tie), and an `audit.answer_conflict_resolved` event records
+both answers with who gave each and when. Agreeing answers never collide, but
+the answer keeps the later time, so the outcome does not depend on the order
+answers arrive in. A cleared answer keeps its time, version, and who cleared
+it, so it collides the same way and an older answer cannot bring it back
+unnoticed. A completed audit keeps its answers, so each differing answer a
+device sends after completion is recorded as discarded. The device shows the
+kept answer and notes under the item that the server did not keep its own;
+answering the item again clears the note. Answer history is dated by the
+time each answer was given. Since device clocks are trusted, a device whose
+clock runs ahead wins collisions it should lose.
 
 Each sync of an audit is an operation in `POST /api/offline/operations`:
-`auditStart` creates the audit in progress with its answers so far (revision
-1), and `auditSave` saves answers, completing the audit when it carries the
-device-reported start and completion times, only over the revision the
-device's previous write left. Any change made on the server meanwhile (an
-answer edited online, the audit completed or discarded there) makes the save
-stale: it is refused, the device keeps its answers and shows the reason, and
-the audit continues online. The save, its history, and its receipt commit
-together or not at all.
+`auditStart` creates the audit in progress with its answers so far, and
+`auditSave` merges the answers given since the device's last write,
+completing the audit when it carries the device-reported start and
+completion times and every required item is still answered after the merge.
+When a required answer was cleared elsewhere, the answers save, the audit
+stays in progress, and the device opens it again for that answer; it does
+the same when the newest copy it holds shows the audit reopened. Both
+operations answer with the server's copy, which
+`GET /api/offline/audits/:auditId` also serves. A merge commits with its
+history and receipt only over the revision it read; a write landing in
+between makes it merge again over the newer copy, and after three tries the
+device retries later. A discarded audit refuses saves; the device keeps its
+answers and shows the reason. A write whose receipt outlived its audit
+replays without a copy; the device keeps that write unsynced, with its
+answers, and says the audit is no longer on the server.
 
 Queued work is sent while the app is open and online: right away, on focus, on
 reconnecting, and on a 30-second timer. It creates the audit first, recorded
@@ -736,9 +773,9 @@ and its issues, then each issue's photos. **Retry sync** on the status line
 restarts held-back work; temporary failures back off to five minutes. Repeated
 requests carry the same IDs; the server commits a receipt with each mutation,
 including image activation, so a lost response does not duplicate records or
-activity. The server stamps its own times, so audit lists and their cursors stay
-in server order; audit history separately records the device-reported start and
-completion times.
+activity. The server stamps its own times on audits, so audit lists and their
+cursors stay in server order; audit history separately records the
+device-reported start and completion times.
 
 Device data belongs to the original account, organization, and API
 environment. Sign-out or account and organization switching locks the local view
@@ -758,8 +795,7 @@ person left) stay under **Other audits on this device** on the Projects page,
 where they can still be finished and synced.
 
 Device-first projects are a deliberate clean break, made while the product is
-pre-release: the device store is at IndexedDB version 3 and carries no earlier
-version's data over (version 2 synced audits only once completed),
+pre-release: each new version of the device store starts empty,
 `/api/offline/forms` is gone, and the API accepts only audits that name their
 project. There are no compatibility paths for older clients.
 

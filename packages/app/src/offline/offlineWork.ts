@@ -41,15 +41,18 @@ export function startOfflineAudit(
       projectId,
       startedAt: new Date().toISOString(),
       template,
-      responses: {},
       status: "draft",
+      server: { answers: {}, revision: 0, status: "in_progress" },
+      sending: [],
+      local: {},
+      replaced: {},
     });
     return workspace;
   }).then(() => id);
 }
 
 /** Moves the audit by `event`, queueing the server writes it calls for. */
-function applyAuditEvent(
+export function applyOfflineAuditEvent(
   workspace: OfflineWorkspace,
   auditId: string,
   event: OfflineAuditEvent,
@@ -67,34 +70,40 @@ function applyAuditEvent(
   return workspace;
 }
 
+/**
+ * Saves an answer on this device, given at `at` over `base`: the version of
+ * the server answer shown when it was given (`answerBase`). Both are taken
+ * when the answer is given, so a write retried later keeps them.
+ */
 export function saveOfflineAnswer(
   key: string,
   id: string,
   itemId: string,
-  value: string,
+  answer: { at: string; base: string | null; value: string },
 ) {
   return changeOfflineWorkspace(key, (current) =>
-    applyAuditEvent(required(current), id, { itemId, type: "answered", value }),
+    applyOfflineAuditEvent(required(current), id, {
+      ...answer,
+      itemId,
+      type: "answered",
+    }),
   );
 }
 
 /**
- * Queues the answers saved on this device to sync as the server's
- * in-progress audit, creating it there the first time.
+ * Shares a draft with the server as an in-progress audit. From then on its
+ * answers sync both ways whenever the device is online.
  */
 export function saveOfflineProgress(key: string, id: string) {
   return changeOfflineWorkspace(key, (current) =>
-    applyAuditEvent(required(current), id, {
-      saveId: crypto.randomUUID(),
-      type: "progressSaved",
-    }),
+    applyOfflineAuditEvent(required(current), id, { type: "shared" }),
   );
 }
 
 /** Seals the audit and queues its completion to sync. */
 export function completeOfflineAudit(key: string, id: string) {
   return changeOfflineWorkspace(key, (current) =>
-    applyAuditEvent(required(current), id, {
+    applyOfflineAuditEvent(required(current), id, {
       completedAt: new Date().toISOString(),
       saveId: crypto.randomUUID(),
       type: "completed",
@@ -104,8 +113,8 @@ export function completeOfflineAudit(key: string, id: string) {
 
 /**
  * Saves an issue raised on an audit's item, with its photos, on this device.
- * The issue syncs onto the server's audit, so a draft's progress is saved to
- * the server with it.
+ * The issue syncs onto the server's audit, so a draft is shared with the
+ * server along with it.
  */
 export async function createOfflineIssue(
   key: string,
@@ -125,9 +134,11 @@ export async function createOfflineIssue(
   return changeOfflineWorkspace(
     key,
     (current) => {
-      const workspace = applyAuditEvent(required(current), target.auditId, {
-        type: "issueRaised",
-      });
+      const workspace = applyOfflineAuditEvent(
+        required(current),
+        target.auditId,
+        { type: "issueRaised" },
+      );
       const operation = {
         ...input,
         ...target,

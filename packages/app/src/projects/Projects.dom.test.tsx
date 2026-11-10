@@ -216,7 +216,7 @@ function job(
       ? {
           id,
           projectId: "project-1",
-          responses: {},
+          answers: {},
           templateId: "walk",
           templateVersion: 3,
           type: "auditStart",
@@ -227,6 +227,14 @@ function job(
     ...(error ? { error } : {}),
   };
 }
+
+/** No answers yet, here or on the server. */
+const unanswered = {
+  local: {},
+  replaced: {},
+  sending: [],
+  server: { answers: {}, revision: 0, status: "in_progress" as const },
+};
 
 function toggle(container: HTMLElement, name: string) {
   return container.querySelector<HTMLInputElement>(
@@ -422,7 +430,7 @@ describe("project detail", () => {
     ) => ({
       id,
       projectId,
-      responses: {},
+      ...unanswered,
       startedAt: `2026-10-0${id.length}T00:00:00.000Z`,
       status,
       template: walk,
@@ -450,7 +458,7 @@ describe("project detail", () => {
       (row) => row.textContent,
     );
     expect(rows).toHaveLength(4);
-    expect(rows[0]).toContain("Progress synced");
+    expect(rows[0]).toContain("Up to date");
     expect(rows[1]).toContain("Synced");
     expect(rows[2]).toContain("Not synced");
     expect(rows[2]).toContain("Form gone");
@@ -477,7 +485,7 @@ describe("project detail", () => {
         {
           id: "audit",
           projectId: "project-1",
-          responses: {},
+          ...unanswered,
           startedAt: "2026-10-01T00:00:00.000Z",
           status: "completed",
           template: walk,
@@ -558,7 +566,7 @@ describe("project detail", () => {
       {
         id: "left-behind",
         projectId: "deleted-project",
-        responses: {},
+        ...unanswered,
         startedAt: "2026-10-01T00:00:00.000Z",
         status: "draft",
         template: walk,

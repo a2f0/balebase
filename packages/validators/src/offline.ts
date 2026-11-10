@@ -11,10 +11,11 @@ export const OfflineScopeSchema = z.object({
 });
 export type OfflineScope = z.infer<typeof OfflineScopeSchema>;
 
-const OfflineResponsesSchema = z.record(
-  z.string().max(100),
-  z.string().max(2000),
-);
+/** An answer and the UTC time it was given on the device. */
+const OfflineAnswerSchema = z.object({
+  value: z.string().max(2000),
+  at: z.iso.datetime(),
+});
 
 // A receipt's digest is of the parsed operation, so a field's keys, order,
 // and normalization must not change between releases: a retry of work
@@ -22,7 +23,7 @@ const OfflineResponsesSchema = z.record(
 export const OfflineOperationSchema = z.discriminatedUnion("type", [
   /**
    * Puts an audit started on a device on the server, in progress, with its
-   * answers so far. Its ID is the audit's, and it leaves revision 1.
+   * answers so far. Its ID is the audit's.
    */
   z.object({
     id: z.uuid(),
@@ -31,19 +32,24 @@ export const OfflineOperationSchema = z.discriminatedUnion("type", [
     projectId: z.string().min(1).max(200),
     templateId: z.string().min(1).max(200),
     templateVersion: z.number().int().positive(),
-    responses: OfflineResponsesSchema,
+    answers: z.record(z.string().max(100), OfflineAnswerSchema),
   }),
   /**
-   * Saves a device audit's answers over the revision its last write left,
-   * and completes it when `completion` is given. Any other change to the
-   * audit since makes it stale.
+   * Merges the answers a device gave since its last write into the server's,
+   * last writer wins by each answer's time, and completes the audit when
+   * `completion` is given.
    */
   z.object({
     id: z.uuid(),
     type: z.literal("auditSave"),
     auditId: z.uuid(),
-    expectedRevision: z.number().int().positive(),
-    responses: OfflineResponsesSchema,
+    answers: z.record(
+      z.string().max(100),
+      OfflineAnswerSchema.extend({
+        /** The version of the server answer the device showed when it was given. */
+        base: z.string().min(1).max(200).nullable(),
+      }),
+    ),
     /** The device-reported times, kept apart from the server's own. */
     completion: z
       .object({ startedAt: z.iso.datetime(), completedAt: z.iso.datetime() })
@@ -96,6 +102,27 @@ const OfflineSyncSchema = z.discriminatedUnion("changed", [
 ]);
 export type OfflineSync = z.infer<typeof OfflineSyncSchema>;
 
+/**
+ * The server's copy of an audit as a device merges it: its status and its
+ * answers, each with the time it was given and the version of the write that
+ * set it, as of `revision`. A cleared answer keeps both with a null value.
+ */
+const OfflineAuditStateSchema = z.object({
+  answers: z.record(
+    z.string(),
+    z.object({
+      at: z.string().nullable(),
+      value: z.string().nullable(),
+      version: z.string().nullable(),
+    }),
+  ),
+  deleted: z.boolean(),
+  id: z.string(),
+  revision: z.number(),
+  status: z.enum(["completed", "in_progress"]),
+});
+export type OfflineAuditState = z.infer<typeof OfflineAuditStateSchema>;
+
 export const offlineRoutes = {
   images: route({
     method: "GET",
@@ -110,12 +137,23 @@ export const offlineRoutes = {
     query: OfflineSyncQuerySchema,
     response: OfflineSyncSchema,
   }),
+  /** The server's copy of an audit, for a device holding it. */
+  audit: route({
+    method: "GET",
+    path: "/api/offline/audits/:auditId",
+    query: OfflineScopeSchema,
+    response: OfflineAuditStateSchema,
+  }),
   apply: route({
     method: "POST",
     path: "/api/offline/operations",
     body: OfflineScopeSchema.extend({ operation: OfflineOperationSchema }),
-    /** The audit or issue the operation created or saved. */
-    response: z.object({ resourceId: z.string() }),
+    response: z.object({
+      /** The audit or issue the operation created or saved. */
+      resourceId: z.string(),
+      /** For an audit write, the audit as the server now has it. */
+      audit: OfflineAuditStateSchema.optional(),
+    }),
   }),
   uploadImage: route({
     method: "PUT",

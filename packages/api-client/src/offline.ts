@@ -22,6 +22,11 @@ const images = endpoint<typeof offlineRoutes.images>({
   path: "/api/offline/issues/:issueId/images",
   response: "json",
 });
+const audit = endpoint<typeof offlineRoutes.audit>({
+  method: "GET",
+  path: "/api/offline/audits/:auditId",
+  response: "json",
+});
 const uploadImage = endpoint<typeof offlineRoutes.uploadImage>({
   method: "PUT",
   path: "/api/offline/issues/:issueId/images/:imageId",
@@ -38,6 +43,9 @@ export function offlineApi(transport: Transport) {
       return transport.call(sync, {
         query: after === undefined ? scope : { ...scope, after },
       });
+    },
+    audit(scope: OfflineScope, auditId: string) {
+      return transport.call(audit, { params: { auditId }, query: scope });
     },
     apply(scope: OfflineScope, operation: OfflineOperation) {
       return transport.call(apply, { body: { ...scope, operation } });

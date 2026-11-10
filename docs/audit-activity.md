@@ -143,6 +143,18 @@ mode succeeded, since Plaid tells only the browser; it must consume a
 single-use update session the reporter opened for that connection
 (`finance_login_repair_sessions`).
 
+An audit answer's history is dated by when the answer was given, which for
+an answer given on a device is the device's UTC clock (`audits.answer_meta`,
+read by the audit update trigger). When a device's answer collides with one
+given elsewhere since it last synced, the merge keeps the later one and
+records `audit.answer_conflict_resolved` on the answer (subject
+`audit_answer`), in the same batch as the save: the prompt, the kept and
+discarded answers each with its value, time, and person, and the reason
+(`later`, or `completed` when the audit was already completed). A merge
+that a concurrent write leaves uncommitted records nothing, and the merge
+that follows records each collision once. See
+[Audits on this device](product.md#audits-on-this-device).
+
 ## Reading and retaining history
 
 `GET /api/activity` reads the active organization's events newest first, with

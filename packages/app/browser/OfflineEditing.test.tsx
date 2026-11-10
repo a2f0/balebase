@@ -2,7 +2,12 @@ import { expect, it } from "bun:test";
 import { join } from "node:path";
 import type { Page } from "puppeteer-core";
 import type {} from "./offlineAppFixture";
-import { press, withOfflineBrowser } from "./offlineBrowser";
+import {
+  type AppliedOperation,
+  appliedReply,
+  press,
+  withOfflineBrowser,
+} from "./offlineBrowser";
 
 const user = {
   id: "user-1",
@@ -69,13 +74,16 @@ it("completes the latest saved answers without overwriting another tab's edit", 
       { polling: 100 },
     );
     const saved = await page.evaluate(() => window.offlineTest.read());
-    expect(saved?.audits[0]?.responses).toEqual({ check: "fail" });
+    expect(
+      await page.evaluate((auditId) => window.offlineTest.answers(auditId), id),
+    ).toEqual({ check: "fail" });
+    // Completing a draft puts it on the server with the latest saved answer.
     const operation = saved?.jobs.find(
-      (job) => job.operation.type === "auditSave",
+      (job) => job.operation.type === "auditStart",
     )?.operation;
-    expect(operation?.type).toBe("auditSave");
-    if (operation?.type === "auditSave")
-      expect(operation.responses).toEqual({ check: "fail" });
+    expect(operation?.type === "auditStart" && operation.answers).toEqual({
+      check: { at: expect.any(String), value: "fail" },
+    });
     expect(await page.$eval("select", (field) => field.value)).toBe("fail");
   });
 }, 30_000);
@@ -273,7 +281,7 @@ it("lists this device's audits by sync state and opens a synced audit", async ()
       }, id);
       // The server is unavailable, so the saved progress waits.
       await page.waitForFunction(
-        () => document.body.textContent?.includes("Progress waiting to sync"),
+        () => document.body.textContent?.includes("Changes waiting to sync"),
         { polling: 100 },
       );
       expect(await status()).toBe(
@@ -304,9 +312,9 @@ it("lists this device's audits by sync state and opens a synced audit", async ()
       const path = new URL(request.url).pathname;
       if (path === "/api/offline/operations" && available) {
         const { operation } = (await request.json()) as {
-          operation: { id: string };
+          operation: AppliedOperation;
         };
-        return Response.json({ resourceId: operation.id });
+        return Response.json(appliedReply(operation));
       }
       return Response.json({ error: "Not available" }, { status: 503 });
     },
@@ -711,9 +719,9 @@ it("guards opening a synced issue without relying on browser beforeunload protec
       const path = new URL(request.url).pathname;
       if (path === "/api/offline/operations") {
         const { operation } = (await request.json()) as {
-          operation: { id: string };
+          operation: AppliedOperation;
         };
-        return Response.json({ resourceId: operation.id });
+        return Response.json(appliedReply(operation));
       }
       return Response.json({ image: { id: "image" } });
     },
