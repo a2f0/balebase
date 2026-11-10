@@ -73,6 +73,8 @@ const ActivityDetailsSchema = z
     deletedByEmail: detail,
     deletedByName: detail,
     description: detail,
+    /** An answer conflict's discarded answer: `{ value, answeredAt, answeredBy }`. */
+    discarded: detail,
     dueDate: detail,
     duns: detail,
     ein: detail,
@@ -96,6 +98,8 @@ const ActivityDetailsSchema = z
     inviterEmail: detail,
     inviterName: detail,
     issueCount: detail,
+    /** An answer conflict's kept answer, or null when the item stayed unanswered. */
+    kept: detail,
     kind: detail,
     make: detail,
     members: detail,

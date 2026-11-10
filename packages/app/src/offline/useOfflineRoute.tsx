@@ -8,7 +8,7 @@ import {
   signingTokenForPath,
 } from "../workspace/workspacePaths";
 import type { DeviceState } from "./offlineContext";
-import { pullOfflineWorkspace } from "./offlinePull";
+import { pullOfflineAudits, pullOfflineWorkspace } from "./offlinePull";
 import {
   activeOfflineKey,
   lockOfflineWorkspace,
@@ -138,12 +138,12 @@ function matchingWorkspace(
 }
 
 /**
- * Syncs the person's projects and forms to this device once sign-in confirms
- * their account and organization, then whenever the device reconnects or
- * the app regains focus, and every minute while online. Each confirmed
- * identity takes the access epoch once, when it appears: a sign-out or
- * account switch that starts later stops its sync before it unlocks the
- * device, and signing in again starts afresh.
+ * Syncs the person's projects and forms, and their shared audits, to this
+ * device once sign-in confirms their account and organization, then
+ * whenever the device reconnects or the app regains focus, and every minute
+ * while online. Each confirmed identity takes the access epoch once, when it
+ * appears: a sign-out or account switch that starts later stops its sync
+ * before it unlocks the device, and signing in again starts afresh.
  */
 function useDeviceSync(identity: OfflineIdentity | undefined, online: boolean) {
   const attempt = useRef<{ epoch: string; key: string; running: boolean }>(
@@ -161,6 +161,7 @@ function useDeviceSync(identity: OfflineIdentity | undefined, online: boolean) {
       if (current.running || !isOnline()) return;
       current.running = true;
       pullOfflineWorkspace(identity, current.epoch)
+        .then(() => pullOfflineAudits(identity, current.epoch))
         .catch((cause: unknown) =>
           console.warn("Could not sync projects to this device.", cause),
         )

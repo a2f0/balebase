@@ -15,13 +15,18 @@ export function DeviceSyncStatus() {
   const problems = [
     ...new Set(waiting.flatMap((job) => (job.error ? [job.error] : []))),
   ];
+  // Answers given to a shared audit wait here until the next sync sends them.
+  const unsent = workspace.audits.filter(
+    (audit) =>
+      audit.status === "inProgress" && Object.keys(audit.local).length > 0,
+  ).length;
   const open = workspace.audits.filter(
     (audit) => audit.status !== "completed",
   ).length;
   const parts = [
     online ? "Online" : "Offline",
-    waiting.length
-      ? `${countLabel(waiting.length, "item")} waiting to sync`
+    waiting.length + unsent
+      ? `${countLabel(waiting.length + unsent, "item")} waiting to sync`
       : "Nothing waiting to sync",
     ...(open
       ? [`${countLabel(open, "audit")} in progress on this device`]

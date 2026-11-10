@@ -69,13 +69,16 @@ it("completes the latest saved answers without overwriting another tab's edit", 
       { polling: 100 },
     );
     const saved = await page.evaluate(() => window.offlineTest.read());
-    expect(saved?.audits[0]?.responses).toEqual({ check: "fail" });
+    expect(
+      await page.evaluate((auditId) => window.offlineTest.answers(auditId), id),
+    ).toEqual({ check: "fail" });
+    // Completing a draft puts it on the server with the latest saved answer.
     const operation = saved?.jobs.find(
-      (job) => job.operation.type === "auditSave",
+      (job) => job.operation.type === "auditStart",
     )?.operation;
-    expect(operation?.type).toBe("auditSave");
-    if (operation?.type === "auditSave")
-      expect(operation.responses).toEqual({ check: "fail" });
+    expect(operation?.type === "auditStart" && operation.answers).toEqual({
+      check: { at: expect.any(String), value: "fail" },
+    });
     expect(await page.$eval("select", (field) => field.value)).toBe("fail");
   });
 }, 30_000);
@@ -273,7 +276,7 @@ it("lists this device's audits by sync state and opens a synced audit", async ()
       }, id);
       // The server is unavailable, so the saved progress waits.
       await page.waitForFunction(
-        () => document.body.textContent?.includes("Progress waiting to sync"),
+        () => document.body.textContent?.includes("Changes waiting to sync"),
         { polling: 100 },
       );
       expect(await status()).toBe(

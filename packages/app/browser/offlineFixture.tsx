@@ -2,6 +2,7 @@ import { DialogHost } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
+import { offlineAnswers } from "../src/offline/offlineAuditState";
 import { DeviceContext } from "../src/offline/offlineContext";
 import {
   activateOfflineWorkspace,
@@ -112,6 +113,13 @@ const testApi = {
   read: () => readOfflineWorkspace(key),
   answer: (id: string, value: string) =>
     saveOfflineAnswer(key, id, "check", value),
+  /** The answers an audit shows. */
+  answers: async (id: string) => {
+    const audit = (await readOfflineWorkspace(key))?.audits.find(
+      (entry) => entry.id === id,
+    );
+    return audit && offlineAnswers(audit);
+  },
   progress: (id: string) => saveOfflineProgress(key, id),
   complete: (id: string) => completeOfflineAudit(key, id),
   /** Raises an issue, with one photo, on the audit's only item. */

@@ -33,6 +33,7 @@ import {
   encodeCursor,
 } from "../shared/cursorPagination";
 import { readBody, readQuery, respond } from "../shared/respond";
+import { answerColumns, savedAnswers, storedAnswers } from "./auditAnswers";
 import { allRequiredAnswered, parseResponses } from "./auditDefinition";
 import {
   type AuditIssueImageRow,
@@ -501,17 +502,23 @@ audits.patch("/runs/:id", async (context) => {
     return context.json({ error: "Complete every required item first." }, 400);
   }
   const now = new Date().toISOString();
+  const userId = context.get("authSession").user.id;
+  // Answers this save changes take its time, so devices merge against it.
+  const saved = answerColumns(
+    savedAnswers(storedAnswers(audit), responses, { at: now, by: userId }),
+  );
   const update = context.env.DB.prepare(
-    `UPDATE audits SET responses = ?, status = ?, completed_at = ?, updated_at = ?,
-                       activity_actor_id = ?, revision = revision + 1
+    `UPDATE audits SET responses = ?, answer_meta = ?, status = ?, completed_at = ?,
+                       updated_at = ?, activity_actor_id = ?, revision = revision + 1
      WHERE revision = ? AND id = ? AND organization_id = ?
        AND deleted_at IS NULL`,
   ).bind(
-    JSON.stringify(responses),
+    saved.responses,
+    saved.answerMeta,
     status,
     status === "completed" ? (audit.completed_at ?? now) : null,
     now,
-    context.get("authSession").user.id,
+    userId,
     audit.revision,
     audit.id,
     organizationId,

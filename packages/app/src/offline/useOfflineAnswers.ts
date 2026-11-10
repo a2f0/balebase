@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { errorMessage } from "../shared/errors";
 import { useUnsavedChanges } from "../workspace/unsavedChanges";
 import {
@@ -6,6 +6,7 @@ import {
   offlineAnswersError,
   offlineAnswersTransition,
 } from "./offlineAnswersState";
+import { offlineAnswers } from "./offlineAuditState";
 import type { OfflineAudit } from "./offlineStore";
 import {
   completeOfflineAudit,
@@ -44,7 +45,8 @@ export function useOfflineAnswers(
   key: string,
   storage = deviceStorage,
 ) {
-  const [responses, setResponses] = useState(audit.responses);
+  const saved = useMemo(() => offlineAnswers(audit), [audit]);
+  const [responses, setResponses] = useState(saved);
   const dirty = useRef<Record<string, { value: string }>>({});
   const writes = useRef(Promise.resolve());
   const [pending, setPending] = useState(0);
@@ -60,12 +62,12 @@ export function useOfflineAnswers(
   );
   useEffect(() => {
     setResponses({
-      ...audit.responses,
+      ...saved,
       ...Object.fromEntries(
         Object.entries(dirty.current).map(([id, edit]) => [id, edit.value]),
       ),
     });
-  }, [audit.responses]);
+  }, [saved]);
   function write(itemId: string, edit: { value: string }) {
     const result = writes.current.then(async () => {
       try {

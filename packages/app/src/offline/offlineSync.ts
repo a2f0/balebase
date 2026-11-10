@@ -1,7 +1,9 @@
 import { ApiError } from "@balebase/api-client";
+import type { OfflineAuditState } from "@balebase/validators/offline";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import { isOnline } from "../shared/network";
+import { auditWrites, pushDue } from "./offlineAuditState";
 import {
   activeOfflineKey,
   changeOfflineWorkspace,
@@ -10,6 +12,7 @@ import {
   offlineImage,
   readOfflineWorkspace,
 } from "./offlineStore";
+import { applyOfflineAuditEvent } from "./offlineWork";
 
 function readyOfflineJob(workspace: OfflineWorkspace, now: number) {
   return workspace.jobs.find(
@@ -41,34 +44,65 @@ export async function syncOfflineWorkspace(key: string): Promise<boolean> {
       while (isOnline() && activeOfflineKey() === key) {
         const workspace = await readOfflineWorkspace(key);
         if (!workspace) return true;
+        if (await queueDuePush(key, workspace)) continue;
         const job = readyOfflineJob(workspace, Date.now());
-        if (!job) return true;
-        try {
-          await send(workspace, job);
-          await recordResult(key, job.id);
-        } catch (cause) {
-          await recordResult(key, job.id, cause);
-          // Connectivity and auth affect every job. A content rejection only
-          // blocks its dependents; unrelated work can continue.
-          if (
-            !(cause instanceof ApiError) ||
-            [401, 403, 408, 429].includes(cause.status) ||
-            cause.status >= 500
-          )
-            return true;
-        }
+        if (!job || !(await syncJob(key, workspace, job))) return true;
       }
       return true;
     },
   );
 }
 
-async function send(workspace: OfflineWorkspace, job: OfflineJob) {
-  const operation = job.operation;
-  if (operation.type !== "image") {
-    await api.offline.apply(workspace.scope, operation);
-    return;
+/** Sends one job and records the result; resolves whether others may follow. */
+async function syncJob(
+  key: string,
+  workspace: OfflineWorkspace,
+  job: OfflineJob,
+) {
+  try {
+    const audit = await send(workspace, job);
+    await recordResult(key, job.id, undefined, audit);
+    return true;
+  } catch (cause) {
+    await recordResult(key, job.id, cause);
+    // Connectivity and auth affect every job. A content rejection only
+    // blocks its dependents; unrelated work can continue.
+    return (
+      cause instanceof ApiError &&
+      ![401, 403, 408, 429].includes(cause.status) &&
+      cause.status < 500
+    );
   }
+}
+
+/**
+ * Puts the answers given since a shared audit's last write into one save,
+ * made here so no save is in flight while it takes them. Resolves whether
+ * an audit had any due.
+ */
+async function queueDuePush(key: string, workspace: OfflineWorkspace) {
+  const due = workspace.audits.find((audit) =>
+    pushDue(audit, auditWrites(workspace.jobs, audit.id)),
+  );
+  if (!due) return false;
+  await changeOfflineWorkspace(key, (current) => {
+    if (!current) throw new Error("Offline workspace is missing.");
+    return applyOfflineAuditEvent(current, due.id, {
+      saveId: crypto.randomUUID(),
+      type: "pushed",
+    });
+  });
+  return true;
+}
+
+/** Sends a job; an audit write resolves the server's copy of the audit. */
+async function send(
+  workspace: OfflineWorkspace,
+  job: OfflineJob,
+): Promise<OfflineAuditState | undefined> {
+  const operation = job.operation;
+  if (operation.type !== "image")
+    return (await api.offline.apply(workspace.scope, operation)).audit;
   const blob = await offlineImage(workspace.key, operation.id);
   const file = new File([blob], operation.filename, { type: blob.type });
   await api.offline.uploadImage(
@@ -77,9 +111,15 @@ async function send(workspace: OfflineWorkspace, job: OfflineJob) {
     operation.id,
     file,
   );
+  return undefined;
 }
 
-async function recordResult(key: string, id: string, cause?: unknown) {
+async function recordResult(
+  key: string,
+  id: string,
+  cause?: unknown,
+  audit?: OfflineAuditState,
+) {
   await changeOfflineWorkspace(key, (workspace) => {
     if (!workspace) throw new Error("Offline workspace is missing.");
     const job = workspace.jobs.find((entry) => entry.id === id);
@@ -87,6 +127,13 @@ async function recordResult(key: string, id: string, cause?: unknown) {
     if (cause === undefined) {
       job.status = "synced";
       delete job.error;
+      // The device takes the server's copy along with its write's outcome.
+      if (audit && workspace.audits.some((entry) => entry.id === audit.id))
+        return applyOfflineAuditEvent(workspace, audit.id, {
+          job: job.id,
+          state: audit,
+          type: "confirmed",
+        });
     } else {
       job.attempts += 1;
       const blocked =

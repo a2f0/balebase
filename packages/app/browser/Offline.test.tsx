@@ -77,8 +77,7 @@ it("persists audits and photos across reload, retries in dependency order, and i
       await window.offlineTest.issue(id);
     }, auditId);
     expect(
-      (await page.evaluate(() => window.offlineTest.read()))?.audits[0]
-        ?.responses,
+      await page.evaluate((id) => window.offlineTest.answers(id), auditId),
     ).toEqual({ check: "fail" });
     await page.evaluate(() => window.offlineTest.sync());
     expect(requests).toEqual([]);
@@ -87,7 +86,9 @@ it("persists audits and photos across reload, retries in dependency order, and i
     await page.waitForFunction(() => Boolean(window.offlineTest));
     const restored = await page.evaluate(() => window.offlineTest.read());
     expect(restored?.issues).toHaveLength(1);
-    expect(restored?.audits[0]?.responses).toEqual({ check: "fail" });
+    expect(
+      await page.evaluate((id) => window.offlineTest.answers(id), auditId),
+    ).toEqual({ check: "fail" });
     const imageId = restored?.issues[0]?.images[0]?.id;
     if (!imageId) throw new Error("Image was not persisted");
     expect(

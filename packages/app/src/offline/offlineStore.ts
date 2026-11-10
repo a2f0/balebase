@@ -2,6 +2,7 @@ import type { AuditTemplate } from "@balebase/validators/audits";
 import type { Person } from "@balebase/validators/fields";
 
 import type {
+  OfflineAuditState,
   OfflineOperation,
   OfflineProject,
   OfflineScope,
@@ -11,24 +12,47 @@ import { apiUrl } from "../shared/config";
 
 /**
  * Where an audit started on this device is: a `draft` only here,
- * `inProgress` once its progress has been saved to the server (by queued
- * writes that may not have synced yet), or `completed`: sealed, with its
- * completion queued. `offlineAuditState.ts` moves it between them.
+ * `inProgress` once shared with the server (by writes that may not have
+ * synced yet), or `completed`: sealed, here or on the server.
+ * `offlineAuditState.ts` moves it between them.
  */
 export type OfflineAuditStatus = "draft" | "inProgress" | "completed";
+
+/** An answer and the UTC time it was given. */
+export interface AnswerWrite {
+  at: string;
+  value: string;
+}
+
+/**
+ * An answer given on this device, and `base`: the time of the server's
+ * answer it was given over (null when the server had none), which tells the
+ * server whether someone else answered in between.
+ */
+export interface LocalAnswer extends AnswerWrite {
+  base: string | null;
+}
 
 /**
  * An audit started on this device. It keeps the form version it was started
  * from, so it can be finished and synced after the form is unpublished,
  * edited, or turned off for its project.
+ *
+ * Its answers are three layers, later over earlier: `server`, the server's
+ * answers as last read; `sending`, those in writes the server has not
+ * confirmed yet; and `local`, those no write carries yet.
  */
 export interface OfflineAudit {
   id: string;
   projectId: string;
   startedAt: string;
   template: AuditTemplate;
-  responses: Record<string, string>;
   status: OfflineAuditStatus;
+  server: Pick<OfflineAuditState, "answers" | "revision">;
+  sending: { answers: Record<string, LocalAnswer>; job: string }[];
+  local: Record<string, LocalAnswer>;
+  /** Answers given here that a later answer given elsewhere replaced. */
+  replaced: Record<string, AnswerWrite>;
 }
 
 interface OfflineIssue {
@@ -98,11 +122,9 @@ export function offlineScopeKey(scope: OfflineScope) {
 
 function database() {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open("balebase-offline", 3);
+    const request = indexedDB.open("balebase-offline", 4);
     request.onupgradeneeded = () => {
-      // Earlier versions are not carried over: version 1 kept hand-downloaded
-      // forms without projects, and version 2 synced audits only once
-      // completed.
+      // Each version starts empty; nothing from an earlier one is kept.
       for (const name of Array.from(request.result.objectStoreNames))
         request.result.deleteObjectStore(name);
       request.result.createObjectStore("workspaces", { keyPath: "key" });

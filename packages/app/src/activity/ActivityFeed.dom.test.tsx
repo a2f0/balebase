@@ -626,6 +626,72 @@ describe("activity feed, mounted", () => {
     expect(navigations).toEqual(["/equipment/laptop%2F1"]);
   });
 
+  it("shows both answers of a resolved answer conflict and why one stayed", async () => {
+    interface Answer {
+      answeredAt: string;
+      answeredBy: { email: string; id: string; name: string };
+      value: string;
+    }
+    const answer = (value: string, name: string, at: string): Answer => ({
+      answeredAt: at,
+      answeredBy: { email: `${name}@example.com`, id: name, name },
+      value,
+    });
+    const conflict = (
+      id: number,
+      kept: Answer | null,
+      discarded: Answer,
+      reason: string,
+    ): ActivityEvent => ({
+      ...event(id, ""),
+      action: "audit.answer_conflict_resolved",
+      details: {
+        discarded,
+        kept,
+        prompt: "Exits clear",
+        reason,
+        responseType: "check",
+      },
+    });
+    respond(async () =>
+      Response.json({
+        events: [
+          conflict(
+            71,
+            answer("na", "Rae", "2026-11-10T12:03:00.000Z"),
+            answer("pass", "Sam", "2026-11-10T12:02:00.000Z"),
+            "later",
+          ),
+          conflict(
+            70,
+            null,
+            answer("fail", "Sam", "2026-11-10T12:09:00.000Z"),
+            "completed",
+          ),
+        ],
+        nextCursor: null,
+      }),
+    );
+    ({ container } = await mount(<Activity onNavigate={() => undefined} />));
+    await settle();
+    expect(
+      [...container.querySelectorAll("summary")].map(
+        (summary) => summary.textContent,
+      ),
+    ).toEqual([
+      "Exits clear · kept N/A over Pass",
+      "Exits clear · kept Unanswered over Fail",
+    ]);
+    const [later, completed] = [...container.querySelectorAll("details")].map(
+      (details) => details.textContent ?? "",
+    );
+    expect(later).toContain("Kept: N/A · Rae");
+    expect(later).toContain("Discarded: Pass · Sam");
+    expect(later).toContain("The later answer was kept.");
+    expect(completed).toContain("Kept: Unanswered");
+    expect(completed).toContain("The audit had already been completed.");
+  });
+
   it("shows who held deleted equipment when its deletion recorded them", async () => {
     const [legacy] = equipmentEvents();
     if (!legacy) throw new Error("Expected a deletion event.");

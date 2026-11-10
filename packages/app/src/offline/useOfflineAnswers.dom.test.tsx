@@ -11,7 +11,12 @@ const { mount, settle } = installDom({
   url: "http://localhost:5173/offline",
 });
 
-const audit = { id: "audit-1", responses: {} } as unknown as OfflineAudit;
+const audit = {
+  id: "audit-1",
+  local: {},
+  sending: [],
+  server: { answers: {}, revision: 0 },
+} as unknown as OfflineAudit;
 
 let latest: ReturnType<typeof useOfflineAnswers> | undefined;
 let storage: OfflineAnswerStorage | undefined;

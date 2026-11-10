@@ -1,4 +1,7 @@
-import type { OfflineOperation } from "@balebase/validators/offline";
+import type {
+  OfflineAuditState,
+  OfflineOperation,
+} from "@balebase/validators/offline";
 import { progressFor } from "../audits/auditProgress";
 import { type OfflineAudit, type OfflineJob, pendingJob } from "./offlineStore";
 
@@ -15,12 +18,18 @@ export type AuditWriteJob = OfflineJob & { operation: AuditWrite };
  * times, so the transition stays pure.
  */
 export type OfflineAuditEvent =
-  | { itemId: string; type: "answered"; value: string }
-  /** Save the answers so far to the server, as an in-progress audit. */
-  | { saveId: string; type: "progressSaved" }
+  | { at: string; itemId: string; type: "answered"; value: string }
+  /** Share a draft with the server, as an in-progress audit. */
+  | { type: "shared" }
   /** An issue was raised on one of its items; the issue needs it on the server. */
   | { type: "issueRaised" }
-  | { completedAt: string; saveId: string; type: "completed" };
+  /** Send the answers given here since the last write. */
+  | { saveId: string; type: "pushed" }
+  | { completedAt: string; saveId: string; type: "completed" }
+  /** The server applied write `job`, answering with its copy of the audit. */
+  | { job: string; state: OfflineAuditState; type: "confirmed" }
+  /** The server's copy, read for what others changed. */
+  | { state: OfflineAuditState; type: "pulled" };
 
 /** The audit after an event, and the server writes the event queues. */
 export interface OfflineAuditStep {
@@ -28,11 +37,7 @@ export interface OfflineAuditStep {
   queue: AuditWriteJob[];
 }
 
-/**
- * The audit's queued server writes, oldest first: its start, then each save.
- * Each raises the server's revision by one, so a save expects as many
- * writes before it.
- */
+/** The audit's queued server writes, oldest first: its start, then each save. */
 export function auditWrites(jobs: OfflineJob[], auditId: string) {
   return jobs.filter(
     (job): job is AuditWriteJob =>
@@ -41,27 +46,51 @@ export function auditWrites(jobs: OfflineJob[], auditId: string) {
   );
 }
 
-/** Whether the answers differ from those the last server write carries. */
-export function unsavedProgress(audit: OfflineAudit, writes: AuditWriteJob[]) {
-  const last = writes.at(-1)?.operation.responses;
-  if (!last) return true;
-  const keys = Object.keys(audit.responses);
+/** The answers shown: the server's, under those being sent, under newer ones. */
+export function offlineAnswers(audit: OfflineAudit) {
+  const answers: Record<string, string> = {};
+  for (const layer of [
+    audit.server.answers,
+    ...audit.sending.map((entry) => entry.answers),
+    audit.local,
+  ])
+    for (const [itemId, { value }] of Object.entries(layer))
+      answers[itemId] = value;
+  return answers;
+}
+
+/** Whether answers given here have yet to reach the server. */
+export function unsyncedAnswers(audit: OfflineAudit) {
+  return Object.keys(audit.local).length > 0 || audit.sending.length > 0;
+}
+
+/**
+ * Whether answers given here are due to be sent: the audit is shared, every
+ * write before has synced (one save at a time keeps answers coalesced), and
+ * there is something to send.
+ */
+export function pushDue(audit: OfflineAudit, writes: AuditWriteJob[]) {
   return (
-    keys.length !== Object.keys(last).length ||
-    keys.some((key) => audit.responses[key] !== last[key])
+    audit.status === "inProgress" &&
+    Object.keys(audit.local).length > 0 &&
+    writes.length > 0 &&
+    writes.every((job) => job.status === "synced")
   );
 }
 
 /**
  * Moves a device audit, given its queued writes:
  *
- * | status     | answered   | progressSaved          | issueRaised         | completed              |
- * | ---------- | ---------- | ---------------------- | ------------------- | ---------------------- |
- * | draft      | draft      | inProgress, start      | inProgress, start   | completed, start, save |
- * | inProgress | inProgress | save, if answers moved | ignored             | completed, save        |
- * | completed  | throws     | ignored                | ignored             | ignored                |
+ * | status     | answered   | shared, issueRaised | pushed         | completed              | confirmed, pulled         |
+ * | ---------- | ---------- | ------------------- | -------------- | ---------------------- | ------------------------- |
+ * | draft      | draft      | inProgress, start   | ignored        | completed, start, save | ignored                   |
+ * | inProgress | inProgress | ignored             | save, when due | completed, save        | completed if done there   |
+ * | completed  | throws     | ignored             | ignored        | ignored                | completed                 |
  *
- * Completing throws while a required item is unanswered.
+ * Answers given here wait in `local` until a write carries them, then in
+ * `sending` until the server confirms it. The server's copy replaces
+ * `server` unless it is older than the one held. Completing throws while a
+ * required item is unanswered.
  */
 export function offlineAuditTransition(
   audit: OfflineAudit,
@@ -70,50 +99,94 @@ export function offlineAuditTransition(
 ): OfflineAuditStep {
   const unchanged = { audit, queue: [] };
   switch (event.type) {
-    case "answered":
+    case "answered": {
       if (audit.status === "completed")
         throw new Error("This audit has been completed.");
+      const replaced = { ...audit.replaced };
+      delete replaced[event.itemId];
+      const answer = {
+        at: event.at,
+        base: baseOf(audit, event.itemId),
+        value: event.value,
+      };
       return {
         audit: {
           ...audit,
-          responses: { ...audit.responses, [event.itemId]: event.value },
+          local: { ...audit.local, [event.itemId]: answer },
+          replaced,
         },
         queue: [],
       };
+    }
+    case "shared":
     case "issueRaised":
       return audit.status === "draft" ? start(audit) : unchanged;
-    case "progressSaved":
-      if (audit.status === "draft") return start(audit);
-      return audit.status === "inProgress" && unsavedProgress(audit, writes)
-        ? { audit, queue: [save(audit, writes, event.saveId)] }
+    case "pushed":
+      return pushDue(audit, writes)
+        ? send(audit, writes, event.saveId)
         : unchanged;
     case "completed": {
       if (audit.status === "completed") return unchanged;
       if (
-        progressFor(audit.template.definition, audit.responses).requiredLeft > 0
+        progressFor(audit.template.definition, offlineAnswers(audit))
+          .requiredLeft > 0
       )
         throw new Error("Complete every required item first.");
-      const begun = audit.status === "draft" ? start(audit).queue : [];
+      const begun = audit.status === "draft" ? start(audit) : unchanged;
+      const sent = send(
+        begun.audit,
+        [...writes, ...begun.queue],
+        event.saveId,
+        {
+          startedAt: audit.startedAt,
+          completedAt: event.completedAt,
+        },
+      );
       return {
-        audit: { ...audit, status: "completed" },
-        queue: [
-          ...begun,
-          save(audit, [...writes, ...begun], event.saveId, {
-            startedAt: audit.startedAt,
-            completedAt: event.completedAt,
-          }),
-        ],
+        audit: { ...sent.audit, status: "completed" },
+        queue: [...begun.queue, ...sent.queue],
       };
     }
+    case "confirmed":
+      return {
+        audit: pull(
+          confirm(audit, event.job, event.state),
+          writes,
+          event.state,
+        ),
+        queue: [],
+      };
+    case "pulled":
+      return { audit: pull(audit, writes, event.state), queue: [] };
     default:
       return unknownEvent(event);
   }
 }
 
+/**
+ * The time of the server answer an answer to `itemId` is given over: the one
+ * shown, unless that is itself an unsent answer from here, which keeps the
+ * base it was given over.
+ */
+function baseOf(audit: OfflineAudit, itemId: string) {
+  const local = audit.local[itemId];
+  if (local) return local.base;
+  for (const entry of [...audit.sending].reverse()) {
+    const sent = entry.answers[itemId];
+    if (sent) return sent.at;
+  }
+  return audit.server.answers[itemId]?.at ?? null;
+}
+
 /** Puts a draft on the server, in progress, under its own ID. */
 function start(audit: OfflineAudit): OfflineAuditStep {
   return {
-    audit: { ...audit, status: "inProgress" },
+    audit: {
+      ...audit,
+      local: {},
+      sending: [...audit.sending, { answers: audit.local, job: audit.id }],
+      status: "inProgress",
+    },
     queue: [
       pendingJob(
         {
@@ -122,7 +195,12 @@ function start(audit: OfflineAudit): OfflineAuditStep {
           projectId: audit.projectId,
           templateId: audit.template.id,
           templateVersion: audit.template.version,
-          responses: { ...audit.responses },
+          answers: Object.fromEntries(
+            Object.entries(audit.local).map(([itemId, { at, value }]) => [
+              itemId,
+              { at, value },
+            ]),
+          ),
         },
         [],
       ),
@@ -130,26 +208,88 @@ function start(audit: OfflineAudit): OfflineAuditStep {
   };
 }
 
-/** Saves the answers over the revision the audit's last write leaves. */
-function save(
+/** Sends the answers given here since the last write, after that write. */
+function send(
   audit: OfflineAudit,
   writes: AuditWriteJob[],
   id: string,
   completion?: { completedAt: string; startedAt: string },
-): AuditWriteJob {
+): OfflineAuditStep {
   const last = writes.at(-1);
   if (!last) throw new Error("This audit is not on the server yet.");
-  return pendingJob(
-    {
-      id,
-      type: "auditSave",
-      auditId: audit.id,
-      expectedRevision: writes.length,
-      responses: { ...audit.responses },
-      ...(completion ? { completion } : {}),
+  return {
+    audit: {
+      ...audit,
+      local: {},
+      sending: [...audit.sending, { answers: audit.local, job: id }],
     },
-    [last.id],
-  );
+    queue: [
+      pendingJob(
+        {
+          id,
+          type: "auditSave",
+          auditId: audit.id,
+          answers: audit.local,
+          ...(completion ? { completion } : {}),
+        },
+        [last.id],
+      ),
+    ],
+  };
+}
+
+/**
+ * Drops a confirmed write, noting each of its answers the server did not
+ * keep, unless a newer answer from here replaces it anyway.
+ */
+function confirm(
+  audit: OfflineAudit,
+  job: string,
+  state: OfflineAuditState,
+): OfflineAudit {
+  const index = audit.sending.findIndex((entry) => entry.job === job);
+  const entry = audit.sending[index];
+  if (!entry) return audit;
+  const later = [
+    ...audit.sending.slice(index + 1).map((other) => other.answers),
+    audit.local,
+  ];
+  const replaced = { ...audit.replaced };
+  for (const [itemId, sent] of Object.entries(entry.answers))
+    if (
+      state.answers[itemId]?.value !== sent.value &&
+      !later.some((answers) => itemId in answers)
+    )
+      replaced[itemId] = { at: sent.at, value: sent.value };
+  return {
+    ...audit,
+    replaced,
+    sending: audit.sending.filter((other) => other.job !== job),
+  };
+}
+
+/**
+ * Takes the server's copy unless it is older than the one held. A
+ * completion made elsewhere seals the audit here once nothing from here is
+ * still on its way; the server records any answer from here it then
+ * discards.
+ */
+function pull(
+  audit: OfflineAudit,
+  writes: AuditWriteJob[],
+  state: OfflineAuditState,
+): OfflineAudit {
+  if (state.revision < audit.server.revision) return audit;
+  const sealed =
+    state.status === "completed" &&
+    audit.status === "inProgress" &&
+    !unsyncedAnswers(audit) &&
+    writes.every((job) => job.status === "synced");
+  return {
+    ...audit,
+    server: { answers: state.answers, revision: state.revision },
+    status: sealed ? "completed" : audit.status,
+  };
 }
 
 function unknownEvent(event: never): never {
