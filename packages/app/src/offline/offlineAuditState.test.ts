@@ -8,6 +8,7 @@ import {
   type OfflineAuditStep,
   offlineAnswers,
   offlineAuditTransition,
+  own,
 } from "./offlineAuditState";
 import type {
   LocalAnswer,
@@ -177,6 +178,14 @@ describe("answering", () => {
       ],
     });
     expect(answerBase(current, "constructor")).toBeNull();
+  });
+
+  it("shows no answer and no replaced note for an item named like an inherited member", () => {
+    const current = audit("inProgress", {
+      replaced: { exit: { at: at(1), value: "fail" } },
+    });
+    expect(own(offlineAnswers(current), "constructor")).toBeUndefined();
+    expect(own(current.replaced, "constructor")).toBeUndefined();
   });
 
   it("records an answer with the base it was given over, whatever the server copy now holds", () => {

@@ -205,7 +205,7 @@ export function answerBase(audit: OfflineAudit, itemId: string) {
  * `record[key]` if `key` is its own property. Item IDs are any text, so IDs
  * such as `constructor` must not find inherited members.
  */
-function own<T>(record: Record<string, T>, key: string): T | undefined {
+export function own<T>(record: Record<string, T>, key: string): T | undefined {
   return Object.hasOwn(record, key) ? record[key] : undefined;
 }
 

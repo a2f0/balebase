@@ -14,6 +14,7 @@ import { OfflineIssueCreator, OfflineIssueList } from "./OfflineIssues";
 import {
   type AuditWriteJob,
   auditWrites,
+  own,
   unsyncedAnswers,
 } from "./offlineAuditState";
 import type {
@@ -83,11 +84,11 @@ export function OfflineAuditEditor({
                   disabled={completed || sealing}
                   onAnswer={(value) => void answer(item.id, value)}
                   responseType={item.responseType}
-                  value={responses[item.id] ?? ""}
+                  value={own(responses, item.id) ?? ""}
                 />
               </Field>
               <ReplacedAnswer
-                answer={audit.replaced[item.id]}
+                answer={own(audit.replaced, item.id)}
                 responseType={item.responseType}
               />
               <Button
