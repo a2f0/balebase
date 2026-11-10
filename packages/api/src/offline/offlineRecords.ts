@@ -358,6 +358,10 @@ async function conflictEvents(
     );
 }
 
+/**
+ * The people who gave the answers of a merge, by ID. Their IDs bind as one
+ * JSON array, so any number stays within D1's bound parameter limit.
+ */
 async function findPeople(
   database: D1Database,
   ids: (string | null | undefined)[],
@@ -367,9 +371,9 @@ async function findPeople(
   const { results } = await database
     .prepare(
       `SELECT id, name, email FROM user
-       WHERE id IN (${unique.map(() => "?").join(", ")})`,
+       WHERE id IN (SELECT value FROM json_each(?))`,
     )
-    .bind(...unique)
+    .bind(JSON.stringify(unique))
     .all<Person>();
   return new Map(results.map((person) => [person.id, { ...person }]));
 }

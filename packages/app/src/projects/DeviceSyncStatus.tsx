@@ -17,8 +17,7 @@ export function DeviceSyncStatus() {
   ];
   // Answers given to a shared audit wait here until the next sync sends them.
   const unsent = workspace.audits.filter(
-    (audit) =>
-      audit.status === "inProgress" && Object.keys(audit.local).length > 0,
+    (audit) => audit.status !== "draft" && Object.keys(audit.local).length > 0,
   ).length;
   const open = workspace.audits.filter(
     (audit) => audit.status !== "completed",

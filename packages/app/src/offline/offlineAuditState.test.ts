@@ -181,16 +181,33 @@ describe("answering", () => {
     });
   });
 
-  it("refuses an answer to a completed audit", () => {
-    expect(() =>
-      run(audit("completed"), [], {
-        at: at(5),
-        base: null,
-        itemId: "exit",
-        type: "answered",
-        value: "pass",
-      }),
-    ).toThrow("This audit has been completed.");
+  it("keeps an answer written after a completion made elsewhere, and sends it for the record", () => {
+    const sealed = audit("completed", {
+      server: { answers: {}, revision: 3, status: "completed" },
+    });
+    const answered = run(sealed, [job("audit", "synced")], {
+      at: at(5),
+      base: null,
+      itemId: "exit",
+      type: "answered",
+      value: "pass",
+    });
+    expect(answered.audit).toMatchObject({
+      local: { exit: local("pass", 5, null) },
+      status: "completed",
+    });
+    const sent = run(answered.audit, [job("audit", "synced")], {
+      saveId: "save",
+      type: "pushed",
+    });
+    expect(sent.queue.map(({ operation }) => operation)).toEqual([
+      {
+        answers: { exit: local("pass", 5, null) },
+        auditId: "audit",
+        id: "save",
+        type: "auditSave",
+      },
+    ]);
   });
 });
 

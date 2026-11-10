@@ -216,12 +216,14 @@ function deviceAuditState(
   if (left.some((job) => job.status === "blocked"))
     return { ...reason, label: "Not synced", synced: false, tone: "danger" };
   if (audit.status === "completed")
-    return left.length
+    return left.length || unsyncedAnswers(audit)
       ? {
           ...reason,
-          label: writes.some((job) => job.status !== "synced")
-            ? "Waiting to sync"
-            : "Issues waiting to sync",
+          label:
+            unsyncedAnswers(audit) ||
+            writes.some((job) => job.status !== "synced")
+              ? "Waiting to sync"
+              : "Issues waiting to sync",
           synced: false,
           tone: "warning",
         }

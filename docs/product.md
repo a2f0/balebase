@@ -714,7 +714,9 @@ throughout, offline or not, and **Open synced audit** opens the server's
 copy. **Complete audit** validates required answers, seals the audit, and
 syncs its completion, putting it on the server first if it is not there
 yet; an audit completed elsewhere is sealed on the device once nothing from
-it is still on its way. Raise issues from an audit's items, at any point:
+it is still on its way, and an answer the device was still saving when it was
+sealed is sent anyway, so the server records it as discarded rather than the
+device dropping it. Raise issues from an audit's items, at any point:
 saving an issue shares a draft with the server, so the issue syncs onto it
 without waiting for completion. Each issue supports up to ten JPEG, PNG, GIF,
 or WebP photos of at most 10 MB, the same limits as online. A non-empty photo

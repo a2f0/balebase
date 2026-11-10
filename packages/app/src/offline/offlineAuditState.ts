@@ -81,11 +81,12 @@ export function unsyncedAnswers(audit: OfflineAudit) {
 /**
  * Whether answers given here are due to be sent: the audit is shared, every
  * write before has synced (one save at a time keeps answers coalesced), and
- * there is something to send.
+ * there is something to send. A completed audit still sends answers written
+ * after it was sealed, which the server records as discarded.
  */
 export function pushDue(audit: OfflineAudit, writes: AuditWriteJob[]) {
   return (
-    audit.status === "inProgress" &&
+    audit.status !== "draft" &&
     Object.keys(audit.local).length > 0 &&
     writes.length > 0 &&
     writes.every((job) => job.status === "synced")
@@ -99,12 +100,14 @@ export function pushDue(audit: OfflineAudit, writes: AuditWriteJob[]) {
  * | ---------- | ---------- | ------------------- | -------------- | ---------------------- | ------------------------- |
  * | draft      | draft      | inProgress, start   | ignored        | completed, start, save | ignored                   |
  * | inProgress | inProgress | ignored             | save, when due | completed, save        | completed if done there   |
- * | completed  | throws     | ignored             | ignored        | ignored                | inProgress if not applied |
+ * | completed  | completed  | ignored             | save, when due | ignored                | inProgress if not applied |
  *
  * Answers given here wait in `local` until a write carries them, then in
  * `sending` until the server confirms it. The server's copy replaces
- * `server` unless it is older than the one held. Completing throws while a
- * required item is unanswered.
+ * `server` unless it is older than the one held. An answer the editor was
+ * still writing when a completion made elsewhere sealed the audit is kept
+ * and sent, so the server records it rather than the device losing it.
+ * Completing throws while a required item is unanswered.
  */
 export function offlineAuditTransition(
   audit: OfflineAudit,
@@ -114,8 +117,6 @@ export function offlineAuditTransition(
   const unchanged = { audit, queue: [] };
   switch (event.type) {
     case "answered": {
-      if (audit.status === "completed")
-        throw new Error("This audit has been completed.");
       const replaced = { ...audit.replaced };
       delete replaced[event.itemId];
       const answer = { at: event.at, base: event.base, value: event.value };

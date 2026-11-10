@@ -248,6 +248,7 @@ it("guards unsaved offline issue details and photos when toggling or leaving the
 
 it("lists this device's audits by sync state and opens a synced audit", async () => {
   let available = false;
+  let revision = 0;
   await withOfflineBrowser(
     async (page) => {
       const id = await page.evaluate(async () => {
@@ -307,9 +308,21 @@ it("lists this device's audits by sync state and opens a synced audit", async ()
       const path = new URL(request.url).pathname;
       if (path === "/api/offline/operations" && available) {
         const { operation } = (await request.json()) as {
-          operation: { id: string };
+          operation: { auditId?: string; completion?: unknown; id: string };
         };
-        return Response.json({ resourceId: operation.id });
+        // Audit writes answer with the server's copy, as the API does.
+        const auditId = operation.auditId ?? operation.id;
+        revision += 1;
+        return Response.json({
+          audit: {
+            answers: {},
+            deleted: false,
+            id: auditId,
+            revision,
+            status: operation.completion ? "completed" : "in_progress",
+          },
+          resourceId: auditId,
+        });
       }
       return Response.json({ error: "Not available" }, { status: 503 });
     },

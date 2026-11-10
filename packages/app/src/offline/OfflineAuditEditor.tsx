@@ -57,10 +57,7 @@ export function OfflineAuditEditor({
         <Banner
           tone="danger"
           actions={
-            <Button
-              disabled={pending > 0 || completed}
-              onClick={() => void save()}
-            >
+            <Button disabled={pending > 0} onClick={() => void save()}>
               Retry saving draft
             </Button>
           }

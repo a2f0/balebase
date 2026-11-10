@@ -238,6 +238,68 @@ it("keeps a completed audit's answers and records the device's later ones as dis
   expect(f.conflicts(start.id)).toHaveLength(2);
 });
 
+it("records collisions with more distinct people than D1 binds parameters", async () => {
+  const f = fixture();
+  // D1 refuses a statement with more than 100 bound parameters.
+  let widest = 0;
+  f.hooks.before(
+    () => true,
+    (event) => {
+      widest = Math.max(widest, event.values.length);
+    },
+    { times: Number.POSITIVE_INFINITY },
+  );
+  const items = Array.from({ length: 101 }, (_, index) => `item-${index}`);
+  f.db.exec(
+    "INSERT INTO audit_template_families (id, scope, organization_id, current_version, created_by, created_at, updated_at) VALUES ('wide', 'organization', 'org_user-1', 1, 'user-1', '2026-10-01', '2026-10-01')",
+  );
+  f.db
+    .query(
+      "INSERT INTO audit_template_versions (id, template_id, version, name, description, definition, status, created_by, created_at) VALUES ('wide-1', 'wide', 1, 'Wide', '', ?, 'published', 'user-1', '2026-10-01')",
+    )
+    .run(
+      JSON.stringify({
+        version: 1,
+        // A section holds at most 100 items.
+        sections: [items.slice(0, 50), items.slice(50)].map(
+          (section, index) => ({
+            id: `section-${index}`,
+            title: "Wide",
+            items: section.map((id) => ({
+              id,
+              prompt: id,
+              required: false,
+              responseType: "text",
+            })),
+          }),
+        ),
+      }),
+    );
+  const start = {
+    ...auditStart(
+      Object.fromEntries(
+        items.map((id) => [id, { value: "Device", at: at(1) }]),
+      ),
+    ),
+    templateId: "wide",
+  };
+  expect((await f.apply(start)).status).toBe(201);
+  // Each item is answered online by someone else after the device synced.
+  for (const [index, id] of items.entries()) {
+    seedAccount(f.db, { createdAt: "2026-10-01", id: `author-${index}` });
+    f.edit(start.id, id, "Online", at(3), `author-${index}`);
+  }
+  const save = auditSave(
+    start.id,
+    Object.fromEntries(
+      items.map((id) => [id, { value: "Later", at: at(2), base: at(1) }]),
+    ),
+  );
+  expect((await f.apply(save)).status).toBe(201);
+  expect(f.conflicts(start.id)).toHaveLength(101);
+  expect(widest).toBeLessThanOrEqual(100);
+});
+
 it("refuses a save to a discarded audit and keeps no receipt", async () => {
   const f = fixture();
   const start = auditStart({ check: { value: "pass", at: at(1) } });
