@@ -90,9 +90,11 @@ function useCachedLoad(
   const [data, setData] = useState<FinanceData>();
   const requestId = useRef(0);
   const loaded = useRef(false);
-  // Whether transactions were ever shown: Categories and Connections load
-  // without them, so the overview's first visit after them still loads.
-  const loadedTransactions = useRef(false);
+  // Whether what shows has transactions, a saved copy's included: Categories
+  // and Connections load without them, so the overview's first visit after
+  // them still loads. A load started again before the first one finished
+  // (Finance hidden beneath a record page, then shown) keeps them on screen.
+  const transactionsShown = useRef(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string>();
@@ -106,15 +108,16 @@ function useCachedLoad(
   }, []);
   const forget = useCallback(() => {
     loaded.current = false;
-    loadedTransactions.current = false;
+    transactionsShown.current = false;
     setData(undefined);
     setSavedCopy(undefined);
   }, []);
   const load = useCallback(async () => {
     const id = ++requestId.current;
     const current = () => id === requestId.current;
-    const first =
-      !loaded.current || (keepTransactions && !loadedTransactions.current);
+    const first = keepTransactions
+      ? !transactionsShown.current
+      : !loaded.current;
     setLoading(first);
     setRefreshing(!first);
     setLoadError(undefined);
@@ -123,6 +126,7 @@ function useCachedLoad(
       const saved = await savedFinance(store.value, store.scope);
       if (saved && current()) {
         setData(saved);
+        transactionsShown.current = true;
         setLoading(false);
         setRefreshing(true);
       }
@@ -142,9 +146,9 @@ function useCachedLoad(
       );
       if (!current()) return;
       loaded.current = true;
-      // A load for another page leaves no transactions to show.
-      loadedTransactions.current = keepTransactions;
       setData(next.data);
+      // A load for another page leaves no transactions to show.
+      transactionsShown.current = keepTransactions;
       setSavedCopy(next.savedAt);
       settle();
     } catch (cause) {

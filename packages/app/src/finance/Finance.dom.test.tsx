@@ -1167,7 +1167,7 @@ describe("Finance filters", () => {
 
   /**
    * Finance's section at `pathname`, shown by the history entry `entry` as
-   * the workspace's navigation tags it; other paths name a record.
+   * the workspace's navigation tags it; transaction paths name a record.
    */
   const scope = { organizationId: "organization", userId: "person" };
   function section(pathname: string, entry: string) {
@@ -1177,7 +1177,11 @@ describe("Finance filters", () => {
         navigate={() => undefined}
         opensByPayee={false}
         pathname={pathname}
-        record={pathname === "/finance" ? undefined : <p>Record</p>}
+        record={
+          pathname.startsWith("/finance/transactions/") ? (
+            <p>Record</p>
+          ) : undefined
+        }
         scope={scope}
       />
     );
@@ -1198,6 +1202,43 @@ describe("Finance filters", () => {
       await act(async () => clearScopeTransactions(scope));
       await view.render(section("/finance", "overview"));
       expect(button("By payee").getAttribute("aria-pressed")).toBe("false");
+    } finally {
+      dom.history.replaceState(null, "", "/finance");
+    }
+  });
+
+  it("keeps the saved copy's rows on Back while Finance's first refresh waits", async () => {
+    let held: Promise<void> | undefined;
+    respond(async (url) => {
+      if (isFeed(url)) await held;
+      return Response.json(data);
+    });
+    try {
+      const view = await mount(section("/finance", "overview"));
+      container = view.container;
+      await view.render(section("/finance/categories", "categories"));
+      const download = Promise.withResolvers<void>();
+      held = download.promise;
+      // The saved copy shows while the overview's refresh stalls.
+      await view.render(section("/finance", "stalled"));
+      expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+      await view.render(section("/finance/transactions/Coffee", "record"));
+
+      // Shown again, Finance loads again. Its rows stay throughout, even for
+      // a moment: the page Back returns to must keep its height.
+      const removed: string[] = [];
+      const observer = new dom.MutationObserver((records) => {
+        for (const { removedNodes } of records)
+          for (const node of removedNodes) removed.push(node.textContent ?? "");
+      });
+      observer.observe(container as never, { childList: true, subtree: true });
+      await view.render(section("/finance", "stalled"));
+      await act(async () => undefined);
+      observer.disconnect();
+      expect(removed.filter((text) => text.includes("Coffee"))).toEqual([]);
+      expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+      await act(async () => download.resolve());
+      expect(rowNames()).toEqual(["Coffee", "Supplies"]);
     } finally {
       dom.history.replaceState(null, "", "/finance");
     }
