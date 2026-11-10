@@ -57,12 +57,13 @@ export async function pullOfflineWorkspace(
 }
 
 /**
- * Brings this device's shared, in-progress audits up to date with the
- * server's copies, so answers given elsewhere, and a completion made
- * elsewhere, show here. Each copy is merged in its own transaction and only
- * when newer than the one held (`offlineAuditState.ts`), so a write's
- * confirmation that landed meanwhile is never undone. An audit gone from
- * the server is left as it is; its next write says why.
+ * Brings this device's shared audits, in progress or completed, up to date
+ * with the server's copies, so answers given elsewhere, a completion made
+ * elsewhere, and a reopening made online show here. Each copy is merged in
+ * its own transaction and only when newer than the one held
+ * (`offlineAuditState.ts`), so a write's confirmation that landed meanwhile
+ * is never undone. An audit gone from the server is left as it is; its next
+ * write says why.
  */
 export async function pullOfflineAudits(
   identity: OfflineIdentity,
@@ -72,11 +73,7 @@ export async function pullOfflineAudits(
   const workspace = await readOfflineWorkspace(key);
   if (!workspace) return;
   for (const audit of workspace.audits) {
-    if (
-      audit.status !== "inProgress" ||
-      auditWrites(workspace.jobs, audit.id)[0]?.status !== "synced"
-    )
-      continue;
+    if (auditWrites(workspace.jobs, audit.id)[0]?.status !== "synced") continue;
     let state: OfflineAuditState;
     try {
       state = await api.offline.audit(identity.scope, audit.id);

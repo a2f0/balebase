@@ -298,9 +298,13 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
     copy.revision += 1;
     await page.evaluate(() => window.offlineTest.pull());
     expect((await audit())?.status).toBe("completed");
+    // Reopening it online opens it here again on the next read.
+    copy.status = "in_progress";
+    copy.revision += 1;
+    await page.evaluate(() => window.offlineTest.pull());
+    expect((await audit())?.status).toBe("inProgress");
 
-    // An answer still being written when it was sealed goes out anyway. A
-    // write whose receipt outlived its audit comes back without a copy: it
+    // A write whose receipt outlived its audit comes back without a copy: it
     // stays unsynced with the reason, and its answer still shows.
     gone = true;
     await answerAndSync("na");
