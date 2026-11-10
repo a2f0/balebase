@@ -49,27 +49,31 @@ it("starts the exact downloaded version once, then merges and completes it, reco
   expect(results[0]?.body).toMatchObject({
     resourceId: start.id,
     audit: {
-      answers: { check: { at: at(1), value: "fail" } },
+      answers: { check: { at: at(1), value: "fail", version: start.id } },
       revision: 1,
       status: "in_progress",
     },
   });
   expect(f.audit(start.id)).toEqual({
-    answer_meta: JSON.stringify({ check: { at: at(1), by: "user-1" } }),
+    answer_meta: JSON.stringify({
+      check: { at: at(1), by: "user-1", v: start.id },
+    }),
     responses: '{"check":"fail"}',
     revision: 1,
     status: "in_progress",
   });
   const save = auditSave(
     start.id,
-    { check: { value: "pass", at: at(5), base: at(1) } },
+    { check: { value: "pass", at: at(5), base: start.id } },
     { complete: true },
   );
   expect(await f.apply(save)).toMatchObject({
     status: 201,
     body: {
       resourceId: start.id,
-      audit: { answers: { check: { at: at(5), value: "pass" } } },
+      audit: {
+        answers: { check: { at: at(5), value: "pass", version: save.id } },
+      },
     },
   });
   expect(f.audit(start.id)).toMatchObject({ status: "completed", revision: 2 });
@@ -94,7 +98,7 @@ it("starts the exact downloaded version once, then merges and completes it, reco
     (
       await f.apply({
         ...save,
-        answers: { check: { value: "fail", at: at(5), base: at(1) } },
+        answers: { check: { value: "fail", at: at(5), base: start.id } },
       })
     ).status,
   ).toBe(409);
@@ -115,8 +119,8 @@ it("merges answers last writer wins and records each collision with both answers
   // The device's older answer to it loses; its note, which no one else
   // changed, applies without a conflict. Two tabs sending it apply it once.
   const first = auditSave(start.id, {
-    check: { value: "pass", at: at(2), base: at(1) },
-    notes: { value: "Rail fixed", at: at(4), base: at(1) },
+    check: { value: "pass", at: at(2), base: start.id },
+    notes: { value: "Rail fixed", at: at(4), base: start.id },
   });
   const results = await Promise.all([f.apply(first), f.apply(first)]);
   expect(results.map((result) => result.status).sort()).toEqual([200, 201]);
@@ -130,12 +134,13 @@ it("merges answers last writer wins and records each collision with both answers
   });
   // A later answer the device gave without seeing the online one wins.
   const later = auditSave(start.id, {
-    check: { value: "fail", at: at(6), base: at(1) },
+    check: { value: "fail", at: at(6), base: start.id },
   });
   expect((await f.apply(later)).status).toBe(201);
-  // One given over the answer it saw is an ordinary change.
+  // One given over the answer it saw, its own last save, is an ordinary
+  // change.
   const ordinary = auditSave(start.id, {
-    check: { value: "pass", at: at(7), base: at(6) },
+    check: { value: "pass", at: at(7), base: later.id },
   });
   expect((await f.apply(ordinary)).status).toBe(201);
   expect(f.audit(start.id)).toMatchObject({
@@ -171,7 +176,7 @@ it("keeps an answer cleared online over an older answer from a device", async ()
   expect((await f.apply(start)).status).toBe(201);
   f.clear(start.id, "notes", at(3), "user-2");
   const save = auditSave(start.id, {
-    notes: { value: "Rail fixed", at: at(2), base: at(1) },
+    notes: { value: "Rail fixed", at: at(2), base: start.id },
   });
   expect(await f.apply(save)).toMatchObject({
     status: 201,
@@ -208,7 +213,7 @@ it("keeps a completed audit's answers and records the device's later ones as dis
   const save = auditSave(
     start.id,
     {
-      check: { value: "fail", at: at(5), base: at(1) },
+      check: { value: "fail", at: at(5), base: start.id },
       notes: { value: "Too late", at: at(5), base: null },
     },
     { complete: true },
@@ -292,7 +297,7 @@ it("records collisions with more distinct people than D1 binds parameters", asyn
   const save = auditSave(
     start.id,
     Object.fromEntries(
-      items.map((id) => [id, { value: "Later", at: at(2), base: at(1) }]),
+      items.map((id) => [id, { value: "Later", at: at(2), base: start.id }]),
     ),
   );
   expect((await f.apply(save)).status).toBe(201);
@@ -308,7 +313,7 @@ it("refuses a save to a discarded audit and keeps no receipt", async () => {
     .query("UPDATE audits SET deleted_at = '2026-11-10' WHERE id = ?")
     .run(start.id);
   const save = auditSave(start.id, {
-    check: { value: "fail", at: at(5), base: at(1) },
+    check: { value: "fail", at: at(5), base: start.id },
   });
   expect(await f.apply(save)).toMatchObject({
     status: 409,
@@ -329,7 +334,7 @@ it("merges again over a write that lands between its read and its save", async (
     { method: "batch" },
   );
   const save = auditSave(start.id, {
-    check: { value: "pass", at: at(5), base: at(1) },
+    check: { value: "pass", at: at(5), base: start.id },
   });
   // The first merge applies nothing; the second finds the newer answer,
   // keeps it, and records the collision once.
@@ -358,7 +363,7 @@ it("leaves a merge to the device's next sync while the audit keeps changing", as
     { method: "batch", times: 3 },
   );
   const save = auditSave(start.id, {
-    check: { value: "pass", at: at(30), base: at(1) },
+    check: { value: "pass", at: at(30), base: start.id },
   });
   expect(await f.apply(save)).toMatchObject({
     status: 503,
@@ -375,7 +380,7 @@ it("replays a save another tab commits while this one is being checked", async (
   const start = auditStart({ check: { value: "fail", at: at(1) } });
   expect((await f.apply(start)).status).toBe(201);
   const save = auditSave(start.id, {
-    check: { value: "pass", at: at(5), base: at(1) },
+    check: { value: "pass", at: at(5), base: start.id },
   });
   const digest = new Bun.CryptoHasher("sha256")
     .update(JSON.stringify(OfflineOperationSchema.parse(save)))
@@ -409,7 +414,7 @@ it("serves the device the server's copy of an audit it holds", async () => {
     status: 200,
     body: {
       answers: {
-        check: { at: at(1), value: "fail" },
+        check: { at: at(1), value: "fail", version: start.id },
         notes: { at: at(3), value: "Checked online" },
       },
       deleted: false,
@@ -490,7 +495,7 @@ it("saves a completion's answers but leaves the audit in progress when a require
   const save = auditSave(
     start.id,
     {
-      check: { value: "pass", at: at(2), base: at(1) },
+      check: { value: "pass", at: at(2), base: start.id },
       notes: { value: "Done", at: at(2), base: null },
     },
     { complete: true },
@@ -885,19 +890,38 @@ function fixture() {
     edit(id: string, itemId: string, value: string, when: string, by: string) {
       db.query(
         `UPDATE audits SET responses = json_set(responses, ?, ?),
-           answer_meta = json_set(answer_meta, ?, json_object('at', ?, 'by', ?)),
+           answer_meta = json_set(answer_meta, ?, json_object('at', ?, 'by', ?, 'v', ?)),
            revision = revision + 1, activity_actor_id = ?, updated_at = ?
          WHERE id = ?`,
-      ).run(`$.${itemId}`, value, `$.${itemId}`, when, by, by, when, id);
+      ).run(
+        `$.${itemId}`,
+        value,
+        `$.${itemId}`,
+        when,
+        by,
+        crypto.randomUUID(),
+        by,
+        when,
+        id,
+      );
     },
     /** Clears an answer as an online save by `by` at `when` would. */
     clear(id: string, itemId: string, when: string, by: string) {
       db.query(
         `UPDATE audits SET responses = json_remove(responses, ?),
-           answer_meta = json_set(answer_meta, ?, json_object('at', ?, 'by', ?)),
+           answer_meta = json_set(answer_meta, ?, json_object('at', ?, 'by', ?, 'v', ?)),
            revision = revision + 1, activity_actor_id = ?, updated_at = ?
          WHERE id = ?`,
-      ).run(`$.${itemId}`, `$.${itemId}`, when, by, by, when, id);
+      ).run(
+        `$.${itemId}`,
+        `$.${itemId}`,
+        when,
+        by,
+        crypto.randomUUID(),
+        by,
+        when,
+        id,
+      );
     },
     /** The audit's resolved answer conflicts, oldest first. */
     conflicts(id: string) {

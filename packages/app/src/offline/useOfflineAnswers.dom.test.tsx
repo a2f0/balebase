@@ -80,7 +80,13 @@ describe("offline audit answers", () => {
       show?.({
         ...audit,
         server: {
-          answers: { exit: { at: "2026-11-10T12:09:00.000Z", value: "na" } },
+          answers: {
+            exit: {
+              at: "2026-11-10T12:09:00.000Z",
+              value: "na",
+              version: "online-save",
+            },
+          },
           revision: 2,
           status: "in_progress",
         },

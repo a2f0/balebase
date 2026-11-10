@@ -127,11 +127,13 @@ async function recordResult(
     if (cause === undefined) {
       job.status = "synced";
       delete job.error;
-      // The device takes the server's copy along with its write's outcome.
-      if (audit && workspace.audits.some((entry) => entry.id === audit.id))
-        return applyOfflineAuditEvent(workspace, audit.id, {
+      // The device takes the server's copy along with its write's outcome;
+      // an audit write answered without one finds its audit gone.
+      const auditId = writtenAudit(job.operation);
+      if (auditId && workspace.audits.some((entry) => entry.id === auditId))
+        return applyOfflineAuditEvent(workspace, auditId, {
           job: job.id,
-          state: audit,
+          state: audit ?? null,
           type: "confirmed",
         });
     } else {
@@ -150,4 +152,11 @@ async function recordResult(
     }
     return workspace;
   });
+}
+
+/** The audit a write starts or saves, if it is an audit write. */
+function writtenAudit(operation: OfflineJob["operation"]) {
+  if (operation.type === "auditStart") return operation.id;
+  if (operation.type === "auditSave") return operation.auditId;
+  return undefined;
 }

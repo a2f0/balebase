@@ -45,13 +45,20 @@ const template = {
 
 const at = (minute: number) =>
   `2026-11-10T12:${String(minute).padStart(2, "0")}:00.000Z`;
+/** A server answer given at `minute` by a write of version `v<minute>`. */
+const stored = (value: string | null, minute: number) => ({
+  at: at(minute),
+  value,
+  version: `v${minute}`,
+});
+/** An answer given here at `minute` over the server answer of `base`. */
 const local = (
   value: string,
   minute: number,
   base: number | null,
 ): LocalAnswer => ({
   at: at(minute),
-  base: base === null ? null : at(base),
+  base: base === null ? null : `v${base}`,
   value,
 });
 
@@ -125,21 +132,21 @@ describe("answering", () => {
     [
       "the server's answer",
       audit("inProgress", {
-        server: { answers: { exit: { at: at(2), value: "na" } }, revision: 3 },
+        server: { answers: { exit: stored("na", 2) }, revision: 3 },
       }),
-      at(2),
+      "v2",
     ],
     [
       "a cleared answer",
       audit("inProgress", {
-        server: { answers: { exit: { at: at(2), value: null } }, revision: 3 },
+        server: { answers: { exit: stored(null, 2) }, revision: 3 },
       }),
-      at(2),
+      "v2",
     ],
     [
-      "an answer still being sent",
+      "an answer still being sent, which its write's ID versions",
       audit("inProgress", {
-        server: { answers: { exit: { at: at(2), value: "na" } }, revision: 3 },
+        server: { answers: { exit: stored("na", 2) }, revision: 3 },
         sending: [
           {
             answers: { exit: local("fail", 3, 2) },
@@ -148,12 +155,12 @@ describe("answering", () => {
           },
         ],
       }),
-      at(3),
+      "save-1",
     ],
     [
       "an unsent answer, keeping its base",
       audit("inProgress", { local: { exit: local("fail", 4, 1) } }),
-      at(1),
+      "v1",
     ],
   ])(
     "bases an answer given over %s on what was shown",
@@ -166,11 +173,11 @@ describe("answering", () => {
     // The server copy changed after the person saw the answer at minute 1.
     const current = audit("inProgress", {
       replaced: { exit: { at: at(1), value: "fail" } },
-      server: { answers: { exit: { at: at(4), value: "na" } }, revision: 4 },
+      server: { answers: { exit: stored("na", 4) }, revision: 4 },
     });
     const step = run(current, [], {
       at: at(5),
-      base: at(1),
+      base: "v1",
       itemId: "exit",
       type: "answered",
       value: "pass",
@@ -342,7 +349,7 @@ describe("completing", () => {
 
   it("completes a shared audit answered on the server, sending what is left", () => {
     const current = audit("inProgress", {
-      server: { answers: { exit: { at: at(2), value: "pass" } }, revision: 2 },
+      server: { answers: { exit: stored("pass", 2) }, revision: 2 },
       local: { notes: local("Clear", 6, null) },
     });
     const step = run(current, [job("audit", "synced")], completed);
@@ -382,18 +389,12 @@ describe("completing", () => {
 describe("merging the server's copy", () => {
   const sent = { exit: local("pass", 5, 1), notes: local("Clear", 5, null) };
   const sending = audit("inProgress", {
-    server: { answers: { exit: { at: at(1), value: "fail" } }, revision: 1 },
+    server: { answers: { exit: stored("fail", 1) }, revision: 1 },
     sending: [{ answers: sent, completes: false, job: "save" }],
   });
 
   it("drops a confirmed write and notes each of its answers a later one replaced", () => {
-    const copy = state(
-      {
-        exit: { at: at(7), value: "na" },
-        notes: { at: at(5), value: "Clear" },
-      },
-      3,
-    );
+    const copy = state({ exit: stored("na", 7), notes: stored("Clear", 5) }, 3);
     const step = run(
       sending,
       [job("audit", "synced"), job("save", "synced", ["audit"])],
@@ -408,6 +409,38 @@ describe("merging the server's copy", () => {
     expect(offlineAnswers(step.audit)).toEqual({ exit: "na", notes: "Clear" });
   });
 
+  it("notes nothing replaced that a newer copy held shows kept", () => {
+    // The copy at revision 4 arrived first and shows the sent answers kept;
+    // the confirmation's older copy predates them.
+    const current = {
+      ...sending,
+      server: {
+        answers: { exit: stored("pass", 5), notes: stored("Clear", 5) },
+        revision: 4,
+        status: "in_progress" as const,
+      },
+    };
+    const step = run(
+      current,
+      [job("audit", "synced"), job("save", "synced", ["audit"])],
+      {
+        job: "save",
+        state: state({ exit: stored("fail", 1) }, 3),
+        type: "confirmed",
+      },
+    );
+    expect(step.audit).toEqual({ ...current, sending: [] });
+  });
+
+  it("drops a write confirmed without a copy, its audit no longer on the server", () => {
+    const step = run(
+      sending,
+      [job("audit", "synced"), job("save", "synced", ["audit"])],
+      { job: "save", state: null, type: "confirmed" },
+    );
+    expect(step).toEqual({ audit: { ...sending, sending: [] }, queue: [] });
+  });
+
   it("notes nothing replaced when a newer answer from here follows", () => {
     const current = { ...sending, local: { exit: local("fail", 8, 5) } };
     const step = run(
@@ -415,13 +448,7 @@ describe("merging the server's copy", () => {
       [job("audit", "synced"), job("save", "synced", ["audit"])],
       {
         job: "save",
-        state: state(
-          {
-            exit: { at: at(7), value: "na" },
-            notes: { at: at(5), value: "Clear" },
-          },
-          3,
-        ),
+        state: state({ exit: stored("na", 7), notes: stored("Clear", 5) }, 3),
         type: "confirmed",
       },
     );
@@ -434,7 +461,7 @@ describe("merging the server's copy", () => {
 
   it("opens the audit again when the server did not apply its completion", () => {
     const current = audit("completed", {
-      server: { answers: { exit: { at: at(1), value: "pass" } }, revision: 2 },
+      server: { answers: { exit: stored("pass", 1) }, revision: 2 },
       sending: [{ answers: {}, completes: true, job: "save" }],
     });
     const step = run(
@@ -443,7 +470,7 @@ describe("merging the server's copy", () => {
       {
         job: "save",
         // A required answer was cleared online after the device's.
-        state: state({ exit: { at: at(7), value: null } }, 3),
+        state: state({ exit: stored(null, 7) }, 3),
         type: "confirmed",
       },
     );
@@ -453,10 +480,10 @@ describe("merging the server's copy", () => {
 
   it("keeps the newer copy it holds over an older one", () => {
     const current = audit("inProgress", {
-      server: { answers: { exit: { at: at(7), value: "na" } }, revision: 4 },
+      server: { answers: { exit: stored("na", 7) }, revision: 4 },
     });
     const step = run(current, [job("audit", "synced")], {
-      state: state({ exit: { at: at(1), value: "fail" } }, 2),
+      state: state({ exit: stored("fail", 1) }, 2),
       type: "pulled",
     });
     expect(step.audit).toEqual(current);
@@ -482,17 +509,11 @@ describe("merging the server's copy", () => {
 
   it("shows answers given elsewhere under those still to send", () => {
     const current = audit("inProgress", {
-      server: { answers: { exit: { at: at(1), value: "fail" } }, revision: 1 },
+      server: { answers: { exit: stored("fail", 1) }, revision: 1 },
       local: { notes: local("Clear", 6, null) },
     });
     const step = run(current, [job("audit", "synced")], {
-      state: state(
-        {
-          exit: { at: at(4), value: "na" },
-          notes: { at: at(4), value: "Elsewhere" },
-        },
-        2,
-      ),
+      state: state({ exit: stored("na", 4), notes: stored("Elsewhere", 4) }, 2),
       type: "pulled",
     });
     expect(offlineAnswers(step.audit)).toEqual({ exit: "na", notes: "Clear" });
@@ -508,7 +529,7 @@ describe("merging the server's copy", () => {
     ],
   ])("%s", (_name, current, status) => {
     const step = run(current, [job("audit", "synced")], {
-      state: state({ exit: { at: at(4), value: "pass" } }, 5, "completed"),
+      state: state({ exit: stored("pass", 4) }, 5, "completed"),
       type: "pulled",
     });
     expect(step.audit.status).toBe(status);

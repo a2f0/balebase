@@ -727,16 +727,19 @@ together.
 Answers merge last writer wins, per item, by the time each was given: the
 device's UTC clock for answers given on a device, the server's for answers
 saved online (`audits.answer_meta`, migration
-`0099_record_answer_times.sql`). Each answer a device sends names the time of
-the server answer shown when it was given, captured at that moment. When the
-server's answer is still that one, the device's answer replaces it as an
-ordinary change. When someone else answered the item in between, the two
-collide: the later answer stays (the server's on a tie), and an
-`audit.answer_conflict_resolved` event records both answers with who gave
-each and when. Agreeing answers never collide, but the answer keeps the later
-time, so the outcome does not depend on the order answers arrive in. A
-cleared answer keeps its time and who cleared it, so it collides the same way
-and an older answer cannot bring it back unnoticed. A completed audit keeps
+`0099_record_answer_times.sql`). Each stored answer also keeps the version of
+the write that set it: the operation ID for a device's write, a fresh ID for
+each online save. Each answer a device sends names the version of the server
+answer shown when it was given, captured at that moment, so two answers given
+in the same millisecond still tell apart. When the server's answer is still
+that one, the device's answer replaces it as an ordinary change. When someone
+else answered the item in between, the two collide: the later answer stays
+(the server's on a tie), and an `audit.answer_conflict_resolved` event records
+both answers with who gave each and when. Agreeing answers never collide, but
+the answer keeps the later time, so the outcome does not depend on the order
+answers arrive in. A cleared answer keeps its time, version, and who cleared
+it, so it collides the same way and an older answer cannot bring it back
+unnoticed. A completed audit keeps
 its answers, so each differing answer a device sends after completion is
 recorded as discarded. The device shows the kept answer
 and notes under the item that a later one replaced its own; answering the

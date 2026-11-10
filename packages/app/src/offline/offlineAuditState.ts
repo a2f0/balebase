@@ -19,8 +19,8 @@ export type AuditWriteJob = OfflineJob & { operation: AuditWrite };
  */
 export type OfflineAuditEvent =
   /**
-   * An answer given at `at` over the server answer of time `base`: the one
-   * shown when it was given (`answerBase`).
+   * An answer given at `at` over the server answer of version `base`: the
+   * one shown when it was given (`answerBase`).
    */
   | {
       at: string;
@@ -36,8 +36,11 @@ export type OfflineAuditEvent =
   /** Send the answers given here since the last write. */
   | { saveId: string; type: "pushed" }
   | { completedAt: string; saveId: string; type: "completed" }
-  /** The server applied write `job`, answering with its copy of the audit. */
-  | { job: string; state: OfflineAuditState; type: "confirmed" }
+  /**
+   * The server applied write `job`, answering with its copy of the audit, or
+   * with none when the audit is no longer on the server.
+   */
+  | { job: string; state: OfflineAuditState | null; type: "confirmed" }
   /** The server's copy, read for what others changed. */
   | { state: OfflineAuditState; type: "pulled" };
 
@@ -158,15 +161,13 @@ export function offlineAuditTransition(
         queue: [...begun.queue, ...sent.queue],
       };
     }
-    case "confirmed":
+    case "confirmed": {
+      const confirmed = confirm(audit, event.job, event.state);
       return {
-        audit: pull(
-          confirm(audit, event.job, event.state),
-          writes,
-          event.state,
-        ),
+        audit: event.state ? pull(confirmed, writes, event.state) : confirmed,
         queue: [],
       };
+    }
     case "pulled":
       return { audit: pull(audit, writes, event.state), queue: [] };
     default:
@@ -175,19 +176,18 @@ export function offlineAuditTransition(
 }
 
 /**
- * The time of the server answer an answer to `itemId` is given over: the one
- * shown, unless that is itself an unsent answer from here, which keeps the
+ * The version of the server answer an answer to `itemId` is given over: the
+ * one shown, unless that is itself an answer from here, whose write's ID
+ * names the version it becomes, or one no write carries yet, which keeps the
  * base it was given over. Taken when the answer is given, so a server copy
  * read meanwhile cannot claim it was seen.
  */
 export function answerBase(audit: OfflineAudit, itemId: string) {
   const local = audit.local[itemId];
   if (local) return local.base;
-  for (const entry of [...audit.sending].reverse()) {
-    const sent = entry.answers[itemId];
-    if (sent) return sent.at;
-  }
-  return audit.server.answers[itemId]?.at ?? null;
+  for (const entry of [...audit.sending].reverse())
+    if (itemId in entry.answers) return entry.job;
+  return audit.server.answers[itemId]?.version ?? null;
 }
 
 /** Puts a draft on the server, in progress, under its own ID. */
@@ -257,34 +257,41 @@ function send(
 }
 
 /**
- * Drops a confirmed write, noting each of its answers the server did not
- * keep, unless a newer answer from here replaces it anyway. A completion the
- * server did not apply, because a required answer was cleared elsewhere,
- * opens the audit here again.
+ * Drops a confirmed write, noting each of its answers the newest server copy
+ * held does not keep, unless a newer answer from here replaces it anyway. A
+ * completion the server did not apply, because a required answer was cleared
+ * elsewhere, opens the audit here again. With no copy, the audit is no
+ * longer on the server, and its next write reports that.
  */
 function confirm(
   audit: OfflineAudit,
   job: string,
-  state: OfflineAuditState,
+  state: OfflineAuditState | null,
 ): OfflineAudit {
   const index = audit.sending.findIndex((entry) => entry.job === job);
   const entry = audit.sending[index];
   if (!entry) return audit;
+  const sending = audit.sending.filter((other) => other.job !== job);
+  if (!state) return { ...audit, sending };
   const later = [
     ...audit.sending.slice(index + 1).map((other) => other.answers),
     audit.local,
   ];
+  const newest =
+    state.revision < audit.server.revision
+      ? audit.server.answers
+      : state.answers;
   const replaced = { ...audit.replaced };
   for (const [itemId, sent] of Object.entries(entry.answers))
     if (
-      state.answers[itemId]?.value !== sent.value &&
+      newest[itemId]?.value !== sent.value &&
       !later.some((answers) => itemId in answers)
     )
       replaced[itemId] = { at: sent.at, value: sent.value };
   return {
     ...audit,
     replaced,
-    sending: audit.sending.filter((other) => other.job !== job),
+    sending,
     status:
       entry.completes && state.status !== "completed"
         ? "inProgress"

@@ -177,6 +177,7 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
   interface Answer {
     at: string;
     value: string;
+    version: string;
   }
   const copy: {
     answers: { [itemId: string]: Answer | undefined; check?: Answer };
@@ -205,7 +206,8 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
         };
         sent.push({ answers: operation.answers, type: operation.type });
         for (const [itemId, { at, value }] of Object.entries(operation.answers))
-          if (!keep) copy.answers[itemId] = { at, value };
+          if (!keep)
+            copy.answers[itemId] = { at, value, version: operation.id };
         copy.revision += 1;
         const auditId = operation.auditId ?? operation.id;
         return Response.json({ audit: state(auditId), resourceId: auditId });
@@ -244,7 +246,8 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
       await window.offlineTest.progress(auditId);
       await window.offlineTest.sync();
     }, id);
-    const passAt = copy.answers.check?.at;
+    // The start's answers take its ID, the audit's, as their version.
+    expect(copy.answers.check?.version).toBe(id);
     expect(sent.map(({ type }) => type)).toEqual(["auditStart"]);
     expect(await audit()).toMatchObject({
       local: {},
@@ -257,7 +260,7 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
     await answerAndSync("fail");
     expect(sent.at(-1)).toEqual({
       answers: {
-        check: { at: expect.any(String), base: passAt, value: "fail" },
+        check: { at: expect.any(String), base: id, value: "fail" },
       },
       type: "auditSave",
     });
@@ -266,7 +269,11 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
     // The server keeps a later answer given online; the device shows it and
     // notes that it replaced this device's.
     keep = true;
-    copy.answers.check = { at: "2099-01-01T00:00:00.000Z", value: "na" };
+    copy.answers.check = {
+      at: "2099-01-01T00:00:00.000Z",
+      value: "na",
+      version: "online-1",
+    };
     await answerAndSync("pass");
     expect(await answers()).toEqual({ check: "na" });
     expect((await audit())?.replaced).toEqual({
@@ -275,7 +282,11 @@ it("syncs a shared audit both ways: sends answers, takes each write's outcome, a
 
     // Reading the server's copy brings in what changed elsewhere, and a
     // completion made elsewhere seals the audit here.
-    copy.answers.check = { at: "2099-01-02T00:00:00.000Z", value: "fail" };
+    copy.answers.check = {
+      at: "2099-01-02T00:00:00.000Z",
+      value: "fail",
+      version: "online-2",
+    };
     copy.revision += 1;
     await page.evaluate(() => window.offlineTest.pull());
     expect(await answers()).toEqual({ check: "fail" });

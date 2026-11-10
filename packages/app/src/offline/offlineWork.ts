@@ -71,9 +71,9 @@ export function applyOfflineAuditEvent(
 }
 
 /**
- * Saves an answer on this device, given at `at` over `base`: the time of the
- * server answer shown when it was given (`answerBase`). Both are taken when
- * the answer is given, so a write retried later keeps them.
+ * Saves an answer on this device, given at `at` over `base`: the version of
+ * the server answer shown when it was given (`answerBase`). Both are taken
+ * when the answer is given, so a write retried later keeps them.
  */
 export function saveOfflineAnswer(
   key: string,

@@ -46,8 +46,8 @@ export const OfflineOperationSchema = z.discriminatedUnion("type", [
     answers: z.record(
       z.string().max(100),
       OfflineAnswerSchema.extend({
-        /** The time of the server answer the device showed when it was given. */
-        base: z.iso.datetime().nullable(),
+        /** The version of the server answer the device showed when it was given. */
+        base: z.string().min(1).max(200).nullable(),
       }),
     ),
     /** The device-reported times, kept apart from the server's own. */
@@ -104,13 +104,17 @@ export type OfflineSync = z.infer<typeof OfflineSyncSchema>;
 
 /**
  * The server's copy of an audit as a device merges it: its status and its
- * answers with the time each was given, as of `revision`. A cleared answer
- * keeps its time with a null value.
+ * answers, each with the time it was given and the version of the write that
+ * set it, as of `revision`. A cleared answer keeps both with a null value.
  */
 const OfflineAuditStateSchema = z.object({
   answers: z.record(
     z.string(),
-    z.object({ at: z.string().nullable(), value: z.string().nullable() }),
+    z.object({
+      at: z.string().nullable(),
+      value: z.string().nullable(),
+      version: z.string().nullable(),
+    }),
   ),
   deleted: z.boolean(),
   id: z.string(),

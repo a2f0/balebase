@@ -100,10 +100,11 @@ async function startWrites(
   if (!project)
     return "This audit's project is not in this organization. Your local work has been kept.";
   const userId = context.get("authSession").user.id;
+  // The start is the write that sets each answer it carries.
   const answers = Object.fromEntries(
     Object.entries(operation.answers).map(([itemId, { at, value }]) => [
       itemId,
-      { at, by: userId, value },
+      { at, by: userId, value, version: operation.id },
     ]),
   );
   if (
@@ -193,7 +194,7 @@ async function saveWrites(
   const merged = mergeAnswers(
     storedAnswers(audit),
     operation.answers,
-    userId,
+    { by: userId, version: operation.id },
     sealed,
   );
   // A required answer cleared elsewhere leaves the audit in progress.
@@ -295,10 +296,9 @@ export async function readAuditState(
   if (!row) return null;
   return {
     answers: Object.fromEntries(
-      Object.entries(storedAnswers(row)).map(([itemId, { at, value }]) => [
-        itemId,
-        { at, value },
-      ]),
+      Object.entries(storedAnswers(row)).map(
+        ([itemId, { at, value, version }]) => [itemId, { at, value, version }],
+      ),
     ),
     deleted: row.deleted_at !== null,
     id: row.id,

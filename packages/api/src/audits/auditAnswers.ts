@@ -1,17 +1,29 @@
 import { isRecord } from "../shared/jsonInput";
 
 /**
- * An audit's answer, with the time it was given and who gave it as recorded.
- * A cleared answer keeps its time and author with a null value, so an older
- * answer from a device cannot bring it back unnoticed.
+ * An audit's answer, with the time it was given, who gave it, and the
+ * version that identifies the write that set it, as recorded. A cleared
+ * answer keeps all three with a null value, so an older answer from a device
+ * cannot bring it back unnoticed.
  */
 export interface StoredAnswer {
   at: string | null;
   by: string | null;
   value: string | null;
+  version: string | null;
 }
 
-/** An answer a device gave at `at`, over the stored answer of time `base`. */
+/** A write that sets answers: when, by whom, and its unique version. */
+export interface AnswerWrite {
+  at: string;
+  by: string;
+  version: string;
+}
+
+/**
+ * An answer a device gave at `at`, over the stored answer of version `base`,
+ * the one it showed.
+ */
 export interface IncomingAnswer {
   at: string;
   base: string | null;
@@ -20,8 +32,8 @@ export interface IncomingAnswer {
 
 /**
  * Two answers to one item given without either knowing of the other. The
- * later stays; the other is recorded. `kept` is null when the item stays
- * unanswered.
+ * later stays; the other is recorded. A kept answer that is null, or has a
+ * null value, leaves the item unanswered.
  */
 export interface AnswerConflict {
   discarded: StoredAnswer;
@@ -46,11 +58,12 @@ export function storedAnswers(row: {
     ...Object.keys(meta),
   ])) {
     const entry = meta[itemId];
-    const known = isRecord<"at" | "by">(entry) ? entry : undefined;
+    const known = isRecord<"at" | "by" | "v">(entry) ? entry : undefined;
     answers[itemId] = {
       at: typeof known?.at === "string" ? known.at : null,
       by: typeof known?.by === "string" ? known.by : null,
       value: responses[itemId] ?? null,
+      version: typeof known?.v === "string" ? known.v : null,
     };
   }
   return answers;
@@ -61,8 +74,8 @@ export function answerColumns(answers: Record<string, StoredAnswer>) {
   return {
     answerMeta: JSON.stringify(
       Object.fromEntries(
-        Object.entries(answers).flatMap(([itemId, { at, by }]) =>
-          at && by ? [[itemId, { at, by }]] : [],
+        Object.entries(answers).flatMap(([itemId, { at, by, version }]) =>
+          at && by && version ? [[itemId, { at, by, v: version }]] : [],
         ),
       ),
     ),
@@ -81,13 +94,13 @@ export function answerValues(answers: Record<string, StoredAnswer>) {
 
 /**
  * The answers after a save of `responses`: each changed or new answer takes
- * the save's time and author, unchanged ones keep theirs, and each one the
- * save leaves out is cleared at the save's time.
+ * the save's time, author, and version, unchanged ones keep theirs, and each
+ * one the save leaves out is cleared by the save.
  */
 export function savedAnswers(
   stored: Record<string, StoredAnswer>,
   responses: Record<string, string>,
-  write: { at: string; by: string },
+  write: AnswerWrite,
 ): Record<string, StoredAnswer> {
   const answers: Record<string, StoredAnswer> = {};
   for (const [itemId, value] of Object.entries(responses)) {
@@ -102,31 +115,37 @@ export function savedAnswers(
 }
 
 /**
- * Merges a device's answers into the stored ones, last writer wins by the
- * time each answer was given.
+ * Merges a device's answers, each set by write `version`, into the stored
+ * ones, last writer wins by the time each answer was given.
  *
- * An answer given over the stored answer the device last saw replaces it.
- * One given over an older answer collides with the answer given since: the
- * later of the two stays (the stored one on a tie), and the pair is a
- * conflict. Agreeing answers never conflict, but the answer keeps the later
- * time, so the outcome does not depend on the order answers arrive in. A
- * sealed (completed) audit keeps every answer, so each differing answer is a
- * conflict it discards.
+ * An answer given over the stored answer the device last saw (its `base` is
+ * that answer's version) replaces it. One given over another answer collides
+ * with the answer given since: the later of the two stays (the stored one on
+ * a tie), and the pair is a conflict. Agreeing answers never conflict, but
+ * the answer keeps the later time, so the outcome does not depend on the
+ * order answers arrive in. A sealed (completed) audit keeps every answer, so
+ * each differing answer is a conflict it discards.
  */
 export function mergeAnswers(
   stored: Record<string, StoredAnswer>,
   incoming: Record<string, IncomingAnswer>,
-  by: string,
+  write: Pick<AnswerWrite, "by" | "version">,
   sealed: boolean,
 ) {
   const answers = { ...stored };
   const conflicts: AnswerConflict[] = [];
   let changed = false;
-  for (const [itemId, write] of Object.entries(incoming)) {
+  for (const [itemId, answer] of Object.entries(incoming)) {
     const current = stored[itemId];
-    const given: StoredAnswer = { at: write.at, by, value: write.value };
-    const newer = !current?.at || Date.parse(write.at) > Date.parse(current.at);
-    if (current?.value === write.value) {
+    const given: StoredAnswer = {
+      at: answer.at,
+      by: write.by,
+      value: answer.value,
+      version: write.version,
+    };
+    const newer =
+      !current?.at || Date.parse(answer.at) > Date.parse(current.at);
+    if (current?.value === answer.value) {
       if (newer && !sealed) {
         answers[itemId] = given;
         changed = true;
@@ -137,7 +156,7 @@ export function mergeAnswers(
       conflicts.push({ discarded: given, itemId, kept: current ?? null });
       continue;
     }
-    const concurrent = current !== undefined && current.at !== write.base;
+    const concurrent = current !== undefined && current.version !== answer.base;
     if (concurrent && !newer) {
       conflicts.push({ discarded: given, itemId, kept: current });
       continue;

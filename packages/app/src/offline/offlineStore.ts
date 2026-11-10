@@ -25,7 +25,7 @@ export interface AnswerWrite {
 }
 
 /**
- * An answer given on this device, and `base`: the time of the server's
+ * An answer given on this device, and `base`: the version of the server's
  * answer it was given over (null when the server had none), which tells the
  * server whether someone else answered in between.
  */

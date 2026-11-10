@@ -503,9 +503,14 @@ audits.patch("/runs/:id", async (context) => {
   }
   const now = new Date().toISOString();
   const userId = context.get("authSession").user.id;
-  // Answers this save changes take its time, so devices merge against it.
+  // Answers this save changes take its time and a version of their own, so
+  // devices merge against it.
   const saved = answerColumns(
-    savedAnswers(storedAnswers(audit), responses, { at: now, by: userId }),
+    savedAnswers(storedAnswers(audit), responses, {
+      at: now,
+      by: userId,
+      version: crypto.randomUUID(),
+    }),
   );
   const update = context.env.DB.prepare(
     `UPDATE audits SET responses = ?, answer_meta = ?, status = ?, completed_at = ?,

@@ -8,31 +8,36 @@ import {
 
 const at = (minute: number) =>
   `2026-11-10T12:${String(minute).padStart(2, "0")}:00.000Z`;
+/** An answer saved online at `minute`, by a save of its own. */
 const online = (value: string, minute: number): StoredAnswer => ({
   at: at(minute),
   by: "online",
   value,
+  version: `online@${minute}`,
 });
+/** An answer the device's save sets, given at `minute`. */
 const device = (value: string, minute: number): StoredAnswer => ({
   at: at(minute),
   by: "device",
   value,
+  version: "device-save",
 });
 /** An answer cleared online at `minute`. */
 const cleared = (minute: number): StoredAnswer => ({
-  at: at(minute),
-  by: "online",
+  ...online("", minute),
   value: null,
 });
+/** A device answer given at `minute` over the online answer of `base`. */
 const write = (
   value: string,
   minute: number,
   base: number | null,
 ): IncomingAnswer => ({
   at: at(minute),
-  base: base === null ? null : at(base),
+  base: base === null ? null : `online@${base}`,
   value,
 });
+const save = { by: "device", version: "device-save" };
 
 describe("mergeAnswers", () => {
   it.each<
@@ -50,6 +55,13 @@ describe("mergeAnswers", () => {
       write("pass", 5, 1),
       false,
       { kept: device("pass", 5), conflict: false },
+    ],
+    [
+      "detects an answer given since at the same time as the one it saw",
+      { ...online("na", 1), version: "another-save" },
+      write("pass", 5, 1),
+      false,
+      { kept: device("pass", 5), conflict: true },
     ],
     [
       "applies a first answer",
@@ -118,7 +130,7 @@ describe("mergeAnswers", () => {
     const merged = mergeAnswers(
       stored ? { check: stored } : {},
       { check: incoming },
-      "device",
+      save,
       sealed,
     );
     expect(merged.answers).toEqual(
@@ -141,12 +153,7 @@ describe("merging in either order", () => {
   ])("keeps the latest answer with %s", (_name, writes) => {
     let stored: Record<string, StoredAnswer> = { check: online("pass", 5) };
     for (const incoming of writes)
-      stored = mergeAnswers(
-        stored,
-        { check: incoming },
-        "device",
-        false,
-      ).answers;
+      stored = mergeAnswers(stored, { check: incoming }, save, false).answers;
     expect(stored).toEqual({ check: device("pass", 7) });
   });
 });
@@ -163,14 +170,14 @@ describe("savedAnswers", () => {
       savedAnswers(
         stored,
         { check: "pass", notes: "Rail fixed", extra: "New" },
-        { at: at(9), by: "editor" },
+        { at: at(9), by: "editor", version: "edit" },
       ),
     ).toEqual({
       check: online("pass", 1),
-      notes: { at: at(9), by: "editor", value: "Rail fixed" },
-      extra: { at: at(9), by: "editor", value: "New" },
-      // Cleared by this save, keeping when and by whom.
-      photo: { at: at(9), by: "editor", value: null },
+      notes: { at: at(9), by: "editor", value: "Rail fixed", version: "edit" },
+      extra: { at: at(9), by: "editor", value: "New", version: "edit" },
+      // Cleared by this save, keeping when, by whom, and which save.
+      photo: { at: at(9), by: "editor", value: null, version: "edit" },
       gone: cleared(2),
     });
   });
