@@ -55,11 +55,16 @@ const local = (
   value,
 });
 
+/** An audit in `status` with the given layers; the server copy is in progress. */
 function audit(
   status: OfflineAuditStatus,
-  layers: Partial<
-    Pick<OfflineAudit, "local" | "replaced" | "sending" | "server">
-  > = {},
+  {
+    server = { answers: {}, revision: 0 },
+    ...layers
+  }: Partial<Pick<OfflineAudit, "local" | "replaced" | "sending">> & {
+    server?: Omit<OfflineAudit["server"], "status"> &
+      Partial<Pick<OfflineAudit["server"], "status">>;
+  } = {},
 ): OfflineAudit {
   return {
     id: "audit",
@@ -67,11 +72,11 @@ function audit(
     startedAt: at(0),
     status,
     template,
-    server: { answers: {}, revision: 0 },
     sending: [],
     local: {},
     replaced: {},
     ...layers,
+    server: { status: "in_progress", ...server },
   };
 }
 
@@ -381,7 +386,7 @@ describe("merging the server's copy", () => {
       ...sending,
       replaced: { exit: { at: at(5), value: "pass" } },
       sending: [],
-      server: { answers: copy.answers, revision: 3 },
+      server: { answers: copy.answers, revision: 3, status: "in_progress" },
     });
     expect(offlineAnswers(step.audit)).toEqual({ exit: "na", notes: "Clear" });
   });
@@ -437,7 +442,25 @@ describe("merging the server's copy", () => {
       state: state({ exit: { at: at(1), value: "fail" } }, 2),
       type: "pulled",
     });
-    expect(step.audit).toBe(current);
+    expect(step.audit).toEqual(current);
+  });
+
+  it("seals an audit when a late confirmation follows a newer copy that showed it completed", () => {
+    // The copy at revision 5 arrived while the save was still on its way.
+    const current = audit("inProgress", {
+      server: { answers: {}, revision: 5, status: "completed" },
+      sending: [{ answers: {}, completes: false, job: "save" }],
+    });
+    const step = run(
+      current,
+      [job("audit", "synced"), job("save", "synced", ["audit"])],
+      { job: "save", state: state({}, 4), type: "confirmed" },
+    );
+    expect(step.audit).toMatchObject({
+      sending: [],
+      server: { revision: 5 },
+      status: "completed",
+    });
   });
 
   it("shows answers given elsewhere under those still to send", () => {

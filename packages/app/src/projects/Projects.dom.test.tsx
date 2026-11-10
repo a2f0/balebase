@@ -233,7 +233,7 @@ const unanswered = {
   local: {},
   replaced: {},
   sending: [],
-  server: { answers: {}, revision: 0 },
+  server: { answers: {}, revision: 0, status: "in_progress" as const },
 };
 
 function toggle(container: HTMLElement, name: string) {

@@ -292,27 +292,32 @@ function confirm(
 }
 
 /**
- * Takes the server's copy unless it is older than the one held. A
- * completion made elsewhere seals the audit here once nothing from here is
- * still on its way; the server records any answer from here it then
- * discards.
+ * Takes the server's copy unless it is older than the one held, then
+ * follows the newest copy held: a completion made elsewhere seals the audit
+ * here once nothing from here is still on its way (the server records any
+ * answer from here it then discards). Reconciling against the copy held,
+ * not the one arriving, lets a late confirmation seal an audit a newer copy
+ * already showed completed.
  */
 function pull(
   audit: OfflineAudit,
   writes: AuditWriteJob[],
   state: OfflineAuditState,
 ): OfflineAudit {
-  if (state.revision < audit.server.revision) return audit;
+  const server =
+    state.revision < audit.server.revision
+      ? audit.server
+      : {
+          answers: state.answers,
+          revision: state.revision,
+          status: state.status,
+        };
   const sealed =
-    state.status === "completed" &&
+    server.status === "completed" &&
     audit.status === "inProgress" &&
     !unsyncedAnswers(audit) &&
     writes.every((job) => job.status === "synced");
-  return {
-    ...audit,
-    server: { answers: state.answers, revision: state.revision },
-    status: sealed ? "completed" : audit.status,
-  };
+  return { ...audit, server, status: sealed ? "completed" : audit.status };
 }
 
 function unknownEvent(event: never): never {

@@ -118,13 +118,11 @@ const testApi = {
     const audit = (await readOfflineWorkspace(key))?.audits.find(
       (entry) => entry.id === id,
     );
-    return saveOfflineAnswer(
-      key,
-      id,
-      "check",
+    return saveOfflineAnswer(key, id, "check", {
+      at: new Date().toISOString(),
+      base: audit ? answerBase(audit, "check") : null,
       value,
-      audit ? answerBase(audit, "check") : null,
-    );
+    });
   },
   /** The answers an audit shows. */
   answers: async (id: string) => {

@@ -48,7 +48,7 @@ export interface OfflineAudit {
   startedAt: string;
   template: AuditTemplate;
   status: OfflineAuditStatus;
-  server: Pick<OfflineAuditState, "answers" | "revision">;
+  server: Pick<OfflineAuditState, "answers" | "revision" | "status">;
   /** Writes the server has not confirmed yet; `completes` marks a completion. */
   sending: {
     answers: Record<string, LocalAnswer>;

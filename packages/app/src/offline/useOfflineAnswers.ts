@@ -21,8 +21,7 @@ export interface OfflineAnswerStorage {
     key: string,
     auditId: string,
     itemId: string,
-    value: string,
-    base: string | null,
+    answer: Edit,
   ) => Promise<unknown>;
   saveProgress: (key: string, auditId: string) => Promise<unknown>;
 }
@@ -36,8 +35,12 @@ const deviceStorage: OfflineAnswerStorage = {
 /** What a save queues to sync after writing every answer to the device. */
 export type OfflineAuditSync = "progress" | "completion";
 
-/** An answer not yet written, with the base it was given over. */
-interface Edit {
+/**
+ * An answer as given: when, over which server answer (`answerBase`), and
+ * what. A write retried later keeps all three.
+ */
+export interface Edit {
+  at: string;
   base: string | null;
   value: string;
 }
@@ -79,7 +82,7 @@ export function useOfflineAnswers(
   function write(itemId: string, edit: Edit) {
     const result = writes.current.then(async () => {
       try {
-        await storage.saveAnswer(key, audit.id, itemId, edit.value, edit.base);
+        await storage.saveAnswer(key, audit.id, itemId, edit);
       } catch (cause) {
         report({
           message: errorMessage(
@@ -99,10 +102,13 @@ export function useOfflineAnswers(
     return result;
   }
   async function answer(itemId: string, value: string) {
-    // The base is what this render shows, not what storage holds by the
-    // time the write runs.
-    const edit = {
-      base: dirty.current[itemId]?.base ?? answerBase(audit, itemId),
+    // Given now, over what this render shows, not over what storage holds
+    // by the time the write runs. An answer replacing one not yet written
+    // keeps that one's base, which may be null.
+    const unwritten = dirty.current[itemId];
+    const edit: Edit = {
+      at: new Date().toISOString(),
+      base: unwritten ? unwritten.base : answerBase(audit, itemId),
       value,
     };
     dirty.current[itemId] = edit;

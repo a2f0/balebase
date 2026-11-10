@@ -42,7 +42,7 @@ export function startOfflineAudit(
       startedAt: new Date().toISOString(),
       template,
       status: "draft",
-      server: { answers: {}, revision: 0 },
+      server: { answers: {}, revision: 0, status: "in_progress" },
       sending: [],
       local: {},
       replaced: {},
@@ -71,24 +71,21 @@ export function applyOfflineAuditEvent(
 }
 
 /**
- * Saves an answer on this device with the time it was given and `base`, the
- * time of the server answer shown when it was given (`answerBase`).
+ * Saves an answer on this device, given at `at` over `base`: the time of the
+ * server answer shown when it was given (`answerBase`). Both are taken when
+ * the answer is given, so a write retried later keeps them.
  */
 export function saveOfflineAnswer(
   key: string,
   id: string,
   itemId: string,
-  value: string,
-  base: string | null,
+  answer: { at: string; base: string | null; value: string },
 ) {
-  const at = new Date().toISOString();
   return changeOfflineWorkspace(key, (current) =>
     applyOfflineAuditEvent(required(current), id, {
-      at,
-      base,
+      ...answer,
       itemId,
       type: "answered",
-      value,
     }),
   );
 }
