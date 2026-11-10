@@ -1165,22 +1165,26 @@ describe("Finance filters", () => {
     );
   });
 
+  /**
+   * Finance's section at `pathname`, shown by the history entry `entry` as
+   * the workspace's navigation tags it; other paths name a record.
+   */
+  const scope = { organizationId: "organization", userId: "person" };
+  function section(pathname: string, entry: string) {
+    dom.history.replaceState({ workspaceEntry: entry }, "", pathname);
+    return (
+      <FinanceSection
+        navigate={() => undefined}
+        opensByPayee={false}
+        pathname={pathname}
+        record={pathname === "/finance" ? undefined : <p>Record</p>}
+        scope={scope}
+      />
+    );
+  }
+
   it("keeps Finance for Back from a record, unless its transactions were cleared meanwhile", async () => {
     respond(() => Response.json(data));
-    const scope = { organizationId: "organization", userId: "person" };
-    // `entry` names the history entry, as the workspace's navigation does.
-    const section = (pathname: string, entry: string) => {
-      dom.history.replaceState({ workspaceEntry: entry }, "", pathname);
-      return (
-        <FinanceSection
-          navigate={() => undefined}
-          opensByPayee={false}
-          pathname={pathname}
-          record={pathname === "/finance" ? undefined : <p>Record</p>}
-          scope={scope}
-        />
-      );
-    };
     try {
       const view = await mount(section("/finance", "overview"));
       container = view.container;
@@ -1192,6 +1196,34 @@ describe("Finance filters", () => {
       await view.render(section("/finance/transactions/Coffee", "record"));
       // Access ended while the record showed, and its page cleared the copy.
       await act(async () => clearScopeTransactions(scope));
+      await view.render(section("/finance", "overview"));
+      expect(button("By payee").getAttribute("aria-pressed")).toBe("false");
+    } finally {
+      dom.history.replaceState(null, "", "/finance");
+    }
+  });
+
+  it("discards a hidden Finance whose own load is refused after it hid", async () => {
+    const feed = Promise.withResolvers<void>();
+    respond(async (url) => {
+      if (!isFeed(url)) return Response.json(data);
+      await feed.promise;
+      return Response.json(
+        { error: "Finance access required." },
+        { status: 403 },
+      );
+    });
+    try {
+      const view = await mount(section("/finance", "overview"));
+      container = view.container;
+      await click("By payee");
+      await view.render(section("/finance/transactions/Coffee", "record"));
+      // Hidden, Finance ignores its load, but the refusal clears the copy
+      // this tab keeps in memory (no IndexedDB here).
+      await act(async () => {
+        feed.resolve();
+        await Bun.sleep(5);
+      });
       await view.render(section("/finance", "overview"));
       expect(button("By payee").getAttribute("aria-pressed")).toBe("false");
     } finally {

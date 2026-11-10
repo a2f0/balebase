@@ -189,6 +189,8 @@ export function memoryTransactionStore(): TransactionStore {
     async clear(scope) {
       scopes.delete(scopeKey(scope));
       epochs.set(scopeKey(scope), Number(epochOf(scope)) + 1);
+      // Only this tab kept the copy, but what it hides may still show it.
+      tellThisTab(scope);
     },
   };
 }
@@ -466,15 +468,20 @@ const clearedHere = new Set<(cleared: Cleared) => void>();
 
 /**
  * Tells other tabs a saved copy was cleared (access ended, a sign-out), so
- * they stop showing the transactions they read before, and tells this tab's
- * `onCleared` listeners.
+ * they stop showing the transactions they read before, and this tab too.
  */
 function announceCleared(cleared: Cleared) {
-  for (const listener of [...clearedHere]) listener(cleared);
+  tellThisTab(cleared);
   if (typeof BroadcastChannel === "undefined") return;
   const channel = new BroadcastChannel(clearedChannel);
   channel.postMessage({ ...cleared, apiUrl, source: thisTab });
   channel.close();
+}
+
+/** Tells this tab's `onCleared` listeners of a clearing here. */
+function tellThisTab({ except, organizationId, userId }: Cleared) {
+  for (const listener of [...clearedHere])
+    listener({ except, organizationId, userId });
 }
 
 /** Whether a clearing announced elsewhere covers `scope`. */

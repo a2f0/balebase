@@ -266,6 +266,11 @@ describe("pulling transactions", () => {
       if (organizationId === undefined) fromOtherTab.resolve();
     });
     await clearScopeTransactions(scope);
+    // A copy only this tab keeps, without IndexedDB.
+    await memoryTransactionStore().clear({
+      ...scope,
+      organizationId: "memory",
+    });
     const otherTab = new BroadcastChannel("balebase-finance-cleared");
     otherTab.postMessage({ apiUrl, source: "other-tab", userId: "person" });
     await fromOtherTab.promise;
@@ -273,6 +278,7 @@ describe("pulling transactions", () => {
     stop();
     expect(heard).toEqual([
       { except: undefined, organizationId: "org", userId: "person" },
+      { except: undefined, organizationId: "memory", userId: "person" },
       { except: undefined, organizationId: undefined, userId: "person" },
     ]);
   });
