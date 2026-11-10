@@ -132,6 +132,25 @@ describe("mergeAnswers", () => {
   });
 });
 
+describe("merging in either order", () => {
+  const agreeing = write("pass", 7, 5);
+  const differing = write("fail", 6, 1);
+  it.each([
+    ["the agreeing answer first", [agreeing, differing]],
+    ["the differing answer first", [differing, agreeing]],
+  ])("keeps the latest answer with %s", (_name, writes) => {
+    let stored: Record<string, StoredAnswer> = { check: online("pass", 5) };
+    for (const incoming of writes)
+      stored = mergeAnswers(
+        stored,
+        { check: incoming },
+        "device",
+        false,
+      ).answers;
+    expect(stored).toEqual({ check: device("pass", 7) });
+  });
+});
+
 describe("savedAnswers", () => {
   it("stamps changed, new, and left-out answers with the save and keeps the rest", () => {
     const stored = {

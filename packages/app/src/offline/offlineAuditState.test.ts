@@ -3,6 +3,7 @@ import type { AuditTemplate } from "@balebase/validators/audits";
 import type { OfflineAuditState } from "@balebase/validators/offline";
 import {
   type AuditWriteJob,
+  answerBase,
   type OfflineAuditEvent,
   type OfflineAuditStep,
   offlineAnswers,
@@ -114,61 +115,72 @@ const run = (
 ) => offlineAuditTransition(current, writes, event);
 
 describe("answering", () => {
-  it.each<[string, OfflineAudit, LocalAnswer]>([
-    ["over nothing", audit("draft"), local("pass", 5, null)],
+  it.each<[string, OfflineAudit, string | null]>([
+    ["nothing", audit("draft"), null],
     [
-      "over the server's answer",
+      "the server's answer",
       audit("inProgress", {
         server: { answers: { exit: { at: at(2), value: "na" } }, revision: 3 },
       }),
-      local("pass", 5, 2),
+      at(2),
     ],
     [
-      "over an answer still being sent",
+      "a cleared answer",
+      audit("inProgress", {
+        server: { answers: { exit: { at: at(2), value: null } }, revision: 3 },
+      }),
+      at(2),
+    ],
+    [
+      "an answer still being sent",
       audit("inProgress", {
         server: { answers: { exit: { at: at(2), value: "na" } }, revision: 3 },
-        sending: [{ answers: { exit: local("fail", 3, 2) }, job: "save-1" }],
+        sending: [
+          {
+            answers: { exit: local("fail", 3, 2) },
+            completes: false,
+            job: "save-1",
+          },
+        ],
       }),
-      local("pass", 5, 3),
+      at(3),
     ],
     [
-      "over an unsent answer, keeping its base",
+      "an unsent answer, keeping its base",
       audit("inProgress", { local: { exit: local("fail", 4, 1) } }),
-      local("pass", 5, 1),
+      at(1),
     ],
   ])(
-    "records an answer given %s with what it was given over",
-    (_name, current, expected) => {
-      const step = run(current, [], {
-        at: at(5),
-        itemId: "exit",
-        type: "answered",
-        value: "pass",
-      });
-      expect(step).toEqual({
-        audit: { ...current, local: { ...current.local, exit: expected } },
-        queue: [],
-      });
+    "bases an answer given over %s on what was shown",
+    (_name, current, base) => {
+      expect(answerBase(current, "exit")).toBe(base);
     },
   );
 
-  it("clears the note that a later answer replaced this one", () => {
+  it("records an answer with the base it was given over, whatever the server copy now holds", () => {
+    // The server copy changed after the person saw the answer at minute 1.
     const current = audit("inProgress", {
       replaced: { exit: { at: at(1), value: "fail" } },
+      server: { answers: { exit: { at: at(4), value: "na" } }, revision: 4 },
     });
     const step = run(current, [], {
       at: at(5),
+      base: at(1),
       itemId: "exit",
       type: "answered",
       value: "pass",
     });
-    expect(step.audit.replaced).toEqual({});
+    expect(step).toEqual({
+      audit: { ...current, local: { exit: local("pass", 5, 1) }, replaced: {} },
+      queue: [],
+    });
   });
 
   it("refuses an answer to a completed audit", () => {
     expect(() =>
       run(audit("completed"), [], {
         at: at(5),
+        base: null,
         itemId: "exit",
         type: "answered",
         value: "pass",
@@ -183,7 +195,7 @@ describe("sharing and sending", () => {
     audit: {
       ...draft,
       local: {},
-      sending: [{ answers: draft.local, job: "audit" }],
+      sending: [{ answers: draft.local, completes: false, job: "audit" }],
       status: "inProgress",
     },
     queue: [
@@ -250,7 +262,7 @@ describe("sharing and sending", () => {
       audit: {
         ...current,
         local: {},
-        sending: [{ answers: current.local, job: "save" }],
+        sending: [{ answers: current.local, completes: false, job: "save" }],
       },
       queue: [
         {
@@ -349,7 +361,7 @@ describe("merging the server's copy", () => {
   const sent = { exit: local("pass", 5, 1), notes: local("Clear", 5, null) };
   const sending = audit("inProgress", {
     server: { answers: { exit: { at: at(1), value: "fail" } }, revision: 1 },
-    sending: [{ answers: sent, job: "save" }],
+    sending: [{ answers: sent, completes: false, job: "save" }],
   });
 
   it("drops a confirmed write and notes each of its answers a later one replaced", () => {
@@ -396,6 +408,25 @@ describe("merging the server's copy", () => {
       exit: "fail",
       notes: "Clear",
     });
+  });
+
+  it("opens the audit again when the server did not apply its completion", () => {
+    const current = audit("completed", {
+      server: { answers: { exit: { at: at(1), value: "pass" } }, revision: 2 },
+      sending: [{ answers: {}, completes: true, job: "save" }],
+    });
+    const step = run(
+      current,
+      [job("audit", "synced"), job("save", "synced", ["audit"])],
+      {
+        job: "save",
+        // A required answer was cleared online after the device's.
+        state: state({ exit: { at: at(7), value: null } }, 3),
+        type: "confirmed",
+      },
+    );
+    expect(step.audit).toMatchObject({ sending: [], status: "inProgress" });
+    expect(offlineAnswers(step.audit)).toEqual({});
   });
 
   it("keeps the newer copy it holds over an older one", () => {

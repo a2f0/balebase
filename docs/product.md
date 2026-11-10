@@ -726,11 +726,13 @@ Answers merge last writer wins, per item, by the time each was given: the
 device's UTC clock for answers given on a device, the server's for answers
 saved online (`audits.answer_meta`, migration
 `0099_record_answer_times.sql`). Each answer a device sends names the time of
-the server answer it was given over. When the server's answer is still that
-one, the device's answer replaces it as an ordinary change. When someone else
-answered the item in between, the two collide: the later answer stays (the
-server's on a tie), and an `audit.answer_conflict_resolved` event records
-both answers with who gave each and when. Agreeing answers never collide. A
+the server answer shown when it was given, captured at that moment. When the
+server's answer is still that one, the device's answer replaces it as an
+ordinary change. When someone else answered the item in between, the two
+collide: the later answer stays (the server's on a tie), and an
+`audit.answer_conflict_resolved` event records both answers with who gave
+each and when. Agreeing answers never collide, but the answer keeps the later
+time, so the outcome does not depend on the order answers arrive in. A
 cleared answer keeps its time and who cleared it, so it collides the same way
 and an older answer cannot bring it back unnoticed. A completed audit keeps
 its answers, so each differing answer a device sends after completion is
@@ -744,7 +746,10 @@ Each sync of an audit is an operation in `POST /api/offline/operations`:
 `auditStart` creates the audit in progress with its answers so far, and
 `auditSave` merges the answers given since the device's last write,
 completing the audit when it carries the device-reported start and
-completion times. Both answer with the server's copy, which
+completion times and every required item is still answered after the merge.
+When a required answer was cleared elsewhere, the answers save, the audit
+stays in progress, and the device opens it again for that answer. Both
+operations answer with the server's copy, which
 `GET /api/offline/audits/:auditId` also serves. A merge commits with its
 history and receipt only over the revision it read; a write landing in
 between makes it merge again over the newer copy, and after three tries the

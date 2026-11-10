@@ -6,7 +6,7 @@ import {
   offlineAnswersError,
   offlineAnswersTransition,
 } from "./offlineAnswersState";
-import { offlineAnswers } from "./offlineAuditState";
+import { answerBase, offlineAnswers } from "./offlineAuditState";
 import type { OfflineAudit } from "./offlineStore";
 import {
   completeOfflineAudit,
@@ -22,6 +22,7 @@ export interface OfflineAnswerStorage {
     auditId: string,
     itemId: string,
     value: string,
+    base: string | null,
   ) => Promise<unknown>;
   saveProgress: (key: string, auditId: string) => Promise<unknown>;
 }
@@ -35,6 +36,12 @@ const deviceStorage: OfflineAnswerStorage = {
 /** What a save queues to sync after writing every answer to the device. */
 export type OfflineAuditSync = "progress" | "completion";
 
+/** An answer not yet written, with the base it was given over. */
+interface Edit {
+  base: string | null;
+  value: string;
+}
+
 /**
  * An audit's answers, each written to the device as it is given. What went
  * wrong is one machine (`offlineAnswersState.ts`): a failed write lasts until
@@ -47,7 +54,8 @@ export function useOfflineAnswers(
 ) {
   const saved = useMemo(() => offlineAnswers(audit), [audit]);
   const [responses, setResponses] = useState(saved);
-  const dirty = useRef<Record<string, { value: string }>>({});
+  // Each unwritten answer keeps the base it was given over.
+  const dirty = useRef<Record<string, Edit>>({});
   const writes = useRef(Promise.resolve());
   const [pending, setPending] = useState(0);
   const [failures, report] = useReducer(
@@ -68,10 +76,10 @@ export function useOfflineAnswers(
       ),
     });
   }, [saved]);
-  function write(itemId: string, edit: { value: string }) {
+  function write(itemId: string, edit: Edit) {
     const result = writes.current.then(async () => {
       try {
-        await storage.saveAnswer(key, audit.id, itemId, edit.value);
+        await storage.saveAnswer(key, audit.id, itemId, edit.value, edit.base);
       } catch (cause) {
         report({
           message: errorMessage(
@@ -91,7 +99,12 @@ export function useOfflineAnswers(
     return result;
   }
   async function answer(itemId: string, value: string) {
-    const edit = { value };
+    // The base is what this render shows, not what storage holds by the
+    // time the write runs.
+    const edit = {
+      base: dirty.current[itemId]?.base ?? answerBase(audit, itemId),
+      value,
+    };
     dirty.current[itemId] = edit;
     setResponses((current) => ({ ...current, [itemId]: value }));
     setPending((count) => count + 1);

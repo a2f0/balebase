@@ -70,17 +70,22 @@ export function applyOfflineAuditEvent(
   return workspace;
 }
 
-/** Saves an answer on this device with the time it was given. */
+/**
+ * Saves an answer on this device with the time it was given and `base`, the
+ * time of the server answer shown when it was given (`answerBase`).
+ */
 export function saveOfflineAnswer(
   key: string,
   id: string,
   itemId: string,
   value: string,
+  base: string | null,
 ) {
   const at = new Date().toISOString();
   return changeOfflineWorkspace(key, (current) =>
     applyOfflineAuditEvent(required(current), id, {
       at,
+      base,
       itemId,
       type: "answered",
       value,

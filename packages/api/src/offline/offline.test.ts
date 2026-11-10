@@ -412,18 +412,43 @@ it("rejects wrong account and organization, invalid answers, and inaccessible te
   ).toBe(409);
   expect(f.db.query("SELECT id FROM offline_operations").all()).toEqual([]);
   expect(f.db.query("SELECT id FROM audits").all()).toEqual([]);
-  // Saves need valid answers; completion needs every required one.
+  // Saves need valid answers.
   const start = auditStart();
   expect((await f.apply(start)).status).toBe(201);
   const invalid = { check: { value: "invalid", at: at(2), base: null } };
-  const notes = { notes: { value: "Later", at: at(2), base: null } };
-  for (const save of [
-    auditSave(start.id, invalid),
-    auditSave(start.id, notes, { complete: true }),
-  ])
-    expect((await f.apply(save)).status).toBe(409);
-  expect((await f.apply(auditSave(start.id, notes))).status).toBe(201);
-  expect(f.db.query("SELECT id FROM offline_operations").all()).toHaveLength(2);
+  expect((await f.apply(auditSave(start.id, invalid))).status).toBe(409);
+  expect(f.db.query("SELECT id FROM offline_operations").all()).toHaveLength(1);
+});
+
+it("saves a completion's answers but leaves the audit in progress when a required answer is cleared elsewhere", async () => {
+  const f = fixture();
+  const start = auditStart({ check: { value: "pass", at: at(1) } });
+  expect((await f.apply(start)).status).toBe(201);
+  f.clear(start.id, "check", at(3), "user-2");
+  const save = auditSave(
+    start.id,
+    {
+      check: { value: "pass", at: at(2), base: at(1) },
+      notes: { value: "Done", at: at(2), base: null },
+    },
+    { complete: true },
+  );
+  expect(await f.apply(save)).toMatchObject({
+    status: 201,
+    body: {
+      audit: {
+        answers: { check: { value: null }, notes: { value: "Done" } },
+        status: "in_progress",
+      },
+    },
+  });
+  expect(
+    f.db
+      .query(
+        "SELECT action FROM activity_events WHERE root_id = ? AND action IN ('audit.completed', 'audit.offline_synced')",
+      )
+      .all(start.id),
+  ).toEqual([]);
 });
 
 interface Synced {

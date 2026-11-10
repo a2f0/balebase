@@ -49,7 +49,12 @@ export interface OfflineAudit {
   template: AuditTemplate;
   status: OfflineAuditStatus;
   server: Pick<OfflineAuditState, "answers" | "revision">;
-  sending: { answers: Record<string, LocalAnswer>; job: string }[];
+  /** Writes the server has not confirmed yet; `completes` marks a completion. */
+  sending: {
+    answers: Record<string, LocalAnswer>;
+    completes: boolean;
+    job: string;
+  }[];
   local: Record<string, LocalAnswer>;
   /** Answers given here that a later answer given elsewhere replaced. */
   replaced: Record<string, AnswerWrite>;

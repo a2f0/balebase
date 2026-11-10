@@ -156,10 +156,12 @@ async function startWrites(
 
 /**
  * Merges a device's answers into the audit, last writer wins by the time
- * each answer was given (`mergeAnswers`), and completes it when asked. Each
- * conflict the merge resolved is recorded with both answers. A completed
- * audit keeps its answers, so every differing answer is recorded as
- * discarded; a discarded audit takes nothing.
+ * each answer was given (`mergeAnswers`), and completes it when asked and
+ * every required item is answered after the merge; otherwise the answers
+ * save and the audit stays in progress, which the device takes back up.
+ * Each conflict the merge resolved is recorded with both answers. A
+ * completed audit keeps its answers, so every differing answer is recorded
+ * as discarded; a discarded audit takes nothing.
  *
  * The writes hold only over the revision the merge read: a write landing in
  * between leaves them unapplied, and the merge runs again over it.
@@ -194,12 +196,11 @@ async function saveWrites(
     userId,
     sealed,
   );
-  const completion = sealed ? undefined : operation.completion;
-  if (
-    completion &&
-    !allRequiredAnswered(definition, answerValues(merged.answers))
-  )
-    return "Complete every required item with a valid answer before syncing.";
+  // A required answer cleared elsewhere leaves the audit in progress.
+  const completion =
+    !sealed && allRequiredAnswered(definition, answerValues(merged.answers))
+      ? operation.completion
+      : undefined;
   const now = new Date().toISOString();
   const conflicts = await conflictEvents(
     context,

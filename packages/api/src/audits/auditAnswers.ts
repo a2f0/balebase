@@ -108,8 +108,10 @@ export function savedAnswers(
  * An answer given over the stored answer the device last saw replaces it.
  * One given over an older answer collides with the answer given since: the
  * later of the two stays (the stored one on a tie), and the pair is a
- * conflict. Agreeing answers never conflict. A sealed (completed) audit
- * keeps every answer, so each differing answer is a conflict it discards.
+ * conflict. Agreeing answers never conflict, but the answer keeps the later
+ * time, so the outcome does not depend on the order answers arrive in. A
+ * sealed (completed) audit keeps every answer, so each differing answer is a
+ * conflict it discards.
  */
 export function mergeAnswers(
   stored: Record<string, StoredAnswer>,
@@ -123,17 +125,20 @@ export function mergeAnswers(
   for (const [itemId, write] of Object.entries(incoming)) {
     const current = stored[itemId];
     const given: StoredAnswer = { at: write.at, by, value: write.value };
-    if (current?.value === write.value) continue;
+    const newer = !current?.at || Date.parse(write.at) > Date.parse(current.at);
+    if (current?.value === write.value) {
+      if (newer && !sealed) {
+        answers[itemId] = given;
+        changed = true;
+      }
+      continue;
+    }
     if (sealed) {
       conflicts.push({ discarded: given, itemId, kept: current ?? null });
       continue;
     }
     const concurrent = current !== undefined && current.at !== write.base;
-    if (
-      concurrent &&
-      current.at !== null &&
-      Date.parse(current.at) >= Date.parse(write.at)
-    ) {
+    if (concurrent && !newer) {
       conflicts.push({ discarded: given, itemId, kept: current });
       continue;
     }

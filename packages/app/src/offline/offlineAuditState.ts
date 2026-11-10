@@ -18,7 +18,17 @@ export type AuditWriteJob = OfflineJob & { operation: AuditWrite };
  * times, so the transition stays pure.
  */
 export type OfflineAuditEvent =
-  | { at: string; itemId: string; type: "answered"; value: string }
+  /**
+   * An answer given at `at` over the server answer of time `base`: the one
+   * shown when it was given (`answerBase`).
+   */
+  | {
+      at: string;
+      base: string | null;
+      itemId: string;
+      type: "answered";
+      value: string;
+    }
   /** Share a draft with the server, as an in-progress audit. */
   | { type: "shared" }
   /** An issue was raised on one of its items; the issue needs it on the server. */
@@ -89,7 +99,7 @@ export function pushDue(audit: OfflineAudit, writes: AuditWriteJob[]) {
  * | ---------- | ---------- | ------------------- | -------------- | ---------------------- | ------------------------- |
  * | draft      | draft      | inProgress, start   | ignored        | completed, start, save | ignored                   |
  * | inProgress | inProgress | ignored             | save, when due | completed, save        | completed if done there   |
- * | completed  | throws     | ignored             | ignored        | ignored                | completed                 |
+ * | completed  | throws     | ignored             | ignored        | ignored                | inProgress if not applied |
  *
  * Answers given here wait in `local` until a write carries them, then in
  * `sending` until the server confirms it. The server's copy replaces
@@ -108,11 +118,7 @@ export function offlineAuditTransition(
         throw new Error("This audit has been completed.");
       const replaced = { ...audit.replaced };
       delete replaced[event.itemId];
-      const answer = {
-        at: event.at,
-        base: baseOf(audit, event.itemId),
-        value: event.value,
-      };
+      const answer = { at: event.at, base: event.base, value: event.value };
       return {
         audit: {
           ...audit,
@@ -170,9 +176,10 @@ export function offlineAuditTransition(
 /**
  * The time of the server answer an answer to `itemId` is given over: the one
  * shown, unless that is itself an unsent answer from here, which keeps the
- * base it was given over.
+ * base it was given over. Taken when the answer is given, so a server copy
+ * read meanwhile cannot claim it was seen.
  */
-function baseOf(audit: OfflineAudit, itemId: string) {
+export function answerBase(audit: OfflineAudit, itemId: string) {
   const local = audit.local[itemId];
   if (local) return local.base;
   for (const entry of [...audit.sending].reverse()) {
@@ -188,7 +195,10 @@ function start(audit: OfflineAudit): OfflineAuditStep {
     audit: {
       ...audit,
       local: {},
-      sending: [...audit.sending, { answers: audit.local, job: audit.id }],
+      sending: [
+        ...audit.sending,
+        { answers: audit.local, completes: false, job: audit.id },
+      ],
       status: "inProgress",
     },
     queue: [
@@ -225,7 +235,10 @@ function send(
     audit: {
       ...audit,
       local: {},
-      sending: [...audit.sending, { answers: audit.local, job: id }],
+      sending: [
+        ...audit.sending,
+        { answers: audit.local, completes: completion !== undefined, job: id },
+      ],
     },
     queue: [
       pendingJob(
@@ -244,7 +257,9 @@ function send(
 
 /**
  * Drops a confirmed write, noting each of its answers the server did not
- * keep, unless a newer answer from here replaces it anyway.
+ * keep, unless a newer answer from here replaces it anyway. A completion the
+ * server did not apply, because a required answer was cleared elsewhere,
+ * opens the audit here again.
  */
 function confirm(
   audit: OfflineAudit,
@@ -269,6 +284,10 @@ function confirm(
     ...audit,
     replaced,
     sending: audit.sending.filter((other) => other.job !== job),
+    status:
+      entry.completes && state.status !== "completed"
+        ? "inProgress"
+        : audit.status,
   };
 }
 

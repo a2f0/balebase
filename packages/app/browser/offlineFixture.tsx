@@ -2,7 +2,7 @@ import { DialogHost } from "@balebase/ui/react";
 import type { AuditTemplate } from "@balebase/validators/audits";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { offlineAnswers } from "../src/offline/offlineAuditState";
+import { answerBase, offlineAnswers } from "../src/offline/offlineAuditState";
 import { DeviceContext } from "../src/offline/offlineContext";
 import { pullOfflineAudits } from "../src/offline/offlinePull";
 import {
@@ -113,8 +113,19 @@ const testApi = {
     return startOfflineAudit(key, template, project.id);
   },
   read: () => readOfflineWorkspace(key),
-  answer: (id: string, value: string) =>
-    saveOfflineAnswer(key, id, "check", value),
+  /** Answers the only item over the answer the audit shows now. */
+  answer: async (id: string, value: string) => {
+    const audit = (await readOfflineWorkspace(key))?.audits.find(
+      (entry) => entry.id === id,
+    );
+    return saveOfflineAnswer(
+      key,
+      id,
+      "check",
+      value,
+      audit ? answerBase(audit, "check") : null,
+    );
+  },
   /** The answers an audit shows. */
   answers: async (id: string) => {
     const audit = (await readOfflineWorkspace(key))?.audits.find(
