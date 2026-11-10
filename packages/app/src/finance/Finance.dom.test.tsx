@@ -10,7 +10,9 @@ import { holdTimers, installDom } from "../testing/dom";
 import { IntersectionObserverFixture } from "../testing/intersectionObserver";
 import { transactionIssuePath } from "../workspace/workspacePaths";
 import { Finance } from "./Finance";
+import { FinanceSection } from "./FinanceSection";
 import { syncPollMs } from "./financeConnectionActions";
+import { clearScopeTransactions } from "./transactionCache";
 
 const {
   mount,
@@ -1161,6 +1163,113 @@ describe("Finance filters", () => {
     expect(container.textContent).not.toContain(
       "Showing transactions saved on this device",
     );
+  });
+
+  /**
+   * Finance's section at `pathname`, shown by the history entry `entry` as
+   * the workspace's navigation tags it; transaction paths name a record.
+   */
+  const scope = { organizationId: "organization", userId: "person" };
+  function section(pathname: string, entry: string) {
+    dom.history.replaceState({ workspaceEntry: entry }, "", pathname);
+    return (
+      <FinanceSection
+        navigate={() => undefined}
+        opensByPayee={false}
+        pathname={pathname}
+        record={
+          pathname.startsWith("/finance/transactions/") ? (
+            <p>Record</p>
+          ) : undefined
+        }
+        scope={scope}
+      />
+    );
+  }
+
+  it("keeps Finance for Back from a record, unless its transactions were cleared meanwhile", async () => {
+    respond(() => Response.json(data));
+    try {
+      const view = await mount(section("/finance", "overview"));
+      container = view.container;
+      await click("By payee");
+      await view.render(section("/finance/transactions/Coffee", "record"));
+      await view.render(section("/finance", "overview"));
+      expect(button("By payee").getAttribute("aria-pressed")).toBe("true");
+
+      await view.render(section("/finance/transactions/Coffee", "record"));
+      // Access ended while the record showed, and its page cleared the copy.
+      await act(async () => clearScopeTransactions(scope));
+      await view.render(section("/finance", "overview"));
+      expect(button("By payee").getAttribute("aria-pressed")).toBe("false");
+    } finally {
+      dom.history.replaceState(null, "", "/finance");
+    }
+  });
+
+  it("keeps the saved copy's rows on Back while Finance's first refresh waits", async () => {
+    let held: Promise<void> | undefined;
+    respond(async (url) => {
+      if (isFeed(url)) await held;
+      return Response.json(data);
+    });
+    try {
+      const view = await mount(section("/finance", "overview"));
+      container = view.container;
+      await view.render(section("/finance/categories", "categories"));
+      const download = Promise.withResolvers<void>();
+      held = download.promise;
+      // The saved copy shows while the overview's refresh stalls.
+      await view.render(section("/finance", "stalled"));
+      expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+      await view.render(section("/finance/transactions/Coffee", "record"));
+
+      // Shown again, Finance loads again. Its rows stay throughout, even for
+      // a moment: the page Back returns to must keep its height.
+      const removed: string[] = [];
+      const observer = new dom.MutationObserver((records) => {
+        for (const { removedNodes } of records)
+          for (const node of removedNodes) removed.push(node.textContent ?? "");
+      });
+      observer.observe(container as never, { childList: true, subtree: true });
+      await view.render(section("/finance", "stalled"));
+      await act(async () => undefined);
+      observer.disconnect();
+      expect(removed.filter((text) => text.includes("Coffee"))).toEqual([]);
+      expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+      await act(async () => download.resolve());
+      expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    } finally {
+      dom.history.replaceState(null, "", "/finance");
+    }
+  });
+
+  it("discards a hidden Finance whose own load is refused after it hid", async () => {
+    const feed = Promise.withResolvers<void>();
+    respond(async (url) => {
+      if (!isFeed(url)) return Response.json(data);
+      await feed.promise;
+      return Response.json(
+        { error: "Finance access required." },
+        { status: 403 },
+      );
+    });
+    try {
+      const view = await mount(section("/finance", "overview"));
+      container = view.container;
+      await click("By payee");
+      await view.render(section("/finance/transactions/Coffee", "record"));
+      // Hidden, Finance ignores its load, but the refusal clears the copy
+      // this tab keeps in memory (no IndexedDB here).
+      await act(async () => {
+        feed.resolve();
+        await Bun.sleep(5);
+      });
+      await view.render(section("/finance", "overview"));
+      expect(button("By payee").getAttribute("aria-pressed")).toBe("false");
+    } finally {
+      dom.history.replaceState(null, "", "/finance");
+    }
   });
 
   it("stops showing transactions once the session belongs to another organization", async () => {

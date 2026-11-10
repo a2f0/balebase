@@ -58,7 +58,7 @@ export function financeRows(pageSize: number) {
  * its fixture serves the summary and a change feed (in pages of 100, to
  * download in parts), and the page grows as it scrolls.
  */
-function financeResponse(url: URL, total: number) {
+export function financeResponse(url: URL, total: number) {
   if (!url.pathname.endsWith("/transactions/changes"))
     return Response.json({
       accounts: [],

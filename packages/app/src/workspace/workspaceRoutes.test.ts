@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { isValidElement, type ReactElement } from "react";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { Audits } from "../audits/Audits";
 import { MyDocuments } from "../employeeForms/MyDocuments";
-import { Finance } from "../finance/Finance";
 import { FinanceAccountPage } from "../finance/FinanceAccountPage";
 import { FinanceConnectionPage } from "../finance/FinanceConnectionPage";
+import { FinanceSection } from "../finance/FinanceSection";
 import { FinanceTransactionPage } from "../finance/FinanceTransactionPage";
 import { Issues } from "../issues/Issues";
 import { workspaceRoute } from "./workspaceRoutes";
@@ -29,16 +29,36 @@ function rendered(pathname: string) {
   return workspaceRoute(pathname).render(context);
 }
 
-function element(pathname: string) {
-  const node = rendered(pathname);
+type PageProps = {
+  id?: string;
+  onNavigate?: unknown;
+  organization?: unknown;
+  pathname?: string;
+  scope?: unknown;
+};
+
+function asElement(node: ReactNode, pathname: string) {
   if (!isValidElement(node)) throw new Error(`${pathname} rendered no element`);
-  return node as ReactElement<{
-    id?: string;
-    onNavigate?: unknown;
-    organization?: unknown;
-    pathname?: string;
-    scope?: unknown;
-  }>;
+  return node as ReactElement<PageProps>;
+}
+
+function element(pathname: string) {
+  return asElement(rendered(pathname), pathname);
+}
+
+/** The Finance section a path shows, with the record page it names. */
+function finance(pathname: string) {
+  const node = element(pathname) as ReactElement<
+    PageProps & { record: ReactNode }
+  >;
+  expect(node.type).toBe(FinanceSection);
+  expect(node.props.pathname).toBe(pathname);
+  // Saved transactions belong to this person in the active organization.
+  expect(node.props.scope).toEqual({
+    organizationId: "org-2",
+    userId: "user-1",
+  });
+  return node.props.record;
 }
 
 describe("workspace routes", () => {
@@ -95,7 +115,7 @@ describe("workspace routes", () => {
       ["/finance/transactions/t-1/", FinanceTransactionPage, "t-1"],
     ] as const;
     for (const [pathname, page, id] of pages) {
-      const node = element(pathname);
+      const node = asElement(finance(pathname), pathname);
       expect(node.type).toBe(page);
       expect(node.props.id).toBe(id);
       expect(node.props.onNavigate).toBe(navigate);
@@ -108,21 +128,14 @@ describe("workspace routes", () => {
     }
   });
 
-  it("shows the finance overview for finance paths that name no record", () => {
+  it("shows Finance's own page for finance paths that name no record", () => {
     for (const pathname of [
       "/finance",
       "/finance/reports",
       "/finance/accounts",
       "/finance/accounts/a/b",
     ]) {
-      const node = element(pathname);
-      expect(node.type).toBe(Finance);
-      expect(node.props.pathname).toBe(pathname);
-      // Saved transactions belong to this person in the active organization.
-      expect(node.props.scope).toEqual({
-        organizationId: "org-2",
-        userId: "user-1",
-      });
+      expect(finance(pathname)).toBeUndefined();
     }
   });
 

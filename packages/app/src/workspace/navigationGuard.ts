@@ -1,7 +1,11 @@
 import { dismissDialogs } from "@balebase/ui/react";
 import { useEffect, useRef } from "react";
+import { randomId } from "../shared/randomId";
 
 const positionKey = "workspacePosition";
+/** Names an entry for good: positions are reused once Back and a new page
+ * replace the entries after them. */
+const entryKey = "workspaceEntry";
 
 type NavigationGuard = () => boolean | Promise<boolean>;
 const guards = new Set<NavigationGuard>();
@@ -105,10 +109,7 @@ class WorkspaceHistory {
     this.#onNavigated = onNavigated;
     const { history } = browser;
     this.#position = historyPosition(history.state) ?? 0;
-    history.replaceState(
-      { ...history.state, [positionKey]: this.#position },
-      "",
-    );
+    history.replaceState(tagged(history.state, this.#position), "");
   }
 
   pop(next: number | undefined) {
@@ -217,17 +218,14 @@ class WorkspaceHistory {
     const { history, location } = this.#browser;
     this.#position = next ?? this.#position - distance;
     if (next === undefined)
-      history.replaceState(
-        { ...history.state, [positionKey]: this.#position },
-        "",
-      );
+      history.replaceState(tagged(history.state, this.#position), "");
     this.#show(location.pathname);
   }
 
   #push(destination: URL) {
     this.#position += 1;
     this.#browser.history.pushState(
-      { [positionKey]: this.#position },
+      { [entryKey]: randomId(), [positionKey]: this.#position },
       "",
       `${destination.pathname}${destination.search}${destination.hash}`,
     );
@@ -239,6 +237,35 @@ class WorkspaceHistory {
     dismissDialogs();
     this.#onNavigated(pathname);
   }
+}
+
+/**
+ * The ID of the history entry that shows, given to it on first read: the
+ * workspace tags its entries only once it listens, after the first render,
+ * and entries from before IDs existed have none.
+ */
+export function currentHistoryEntry() {
+  const { history } = window;
+  const entry = historyEntry(history.state);
+  if (entry !== undefined) return entry;
+  const next = tagged(history.state);
+  history.replaceState(next, "");
+  return next[entryKey];
+}
+
+/** `state` with an entry ID if it had none, and `position` if given. */
+function tagged(state: unknown, position?: number) {
+  return {
+    ...(state && typeof state === "object" ? state : {}),
+    [entryKey]: historyEntry(state) ?? randomId(),
+    ...(position === undefined ? {} : { [positionKey]: position }),
+  };
+}
+
+function historyEntry(state: unknown) {
+  if (!state || typeof state !== "object") return undefined;
+  const entry = Reflect.get(state, entryKey);
+  return typeof entry === "string" ? entry : undefined;
 }
 
 function historyPosition(state: unknown) {

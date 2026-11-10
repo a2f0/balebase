@@ -10,9 +10,9 @@ import { Businesses } from "../businesses/Businesses";
 import { Contracts } from "../contracts/Contracts";
 import { MyDocuments } from "../employeeForms/MyDocuments";
 import { Equipment } from "../equipment/Equipment";
-import { Finance } from "../finance/Finance";
 import { FinanceAccountPage } from "../finance/FinanceAccountPage";
 import { FinanceConnectionPage } from "../finance/FinanceConnectionPage";
+import { FinanceSection } from "../finance/FinanceSection";
 import { FinanceTransactionPage } from "../finance/FinanceTransactionPage";
 import type { CacheScope } from "../finance/transactionCache";
 import { Inbox } from "../inbox/Inbox";
@@ -126,15 +126,20 @@ const routes: WorkspaceRoute[] = [
   {
     matches: within("/finance"),
     page: "finance",
-    render: ({ navigate, pathname, user, workspace }) =>
-      financeContent(
-        pathname,
-        navigate,
-        workspace.activeOrganizationId
-          ? { organizationId: workspace.activeOrganizationId, userId: user.id }
-          : undefined,
-        Boolean(user.financeOpensByPayee),
-      ),
+    render: ({ navigate, pathname, user, workspace }) => {
+      const scope = workspace.activeOrganizationId
+        ? { organizationId: workspace.activeOrganizationId, userId: user.id }
+        : undefined;
+      return (
+        <FinanceSection
+          navigate={navigate}
+          opensByPayee={Boolean(user.financeOpensByPayee)}
+          pathname={pathname}
+          record={financeRecordPage(pathname, navigate, scope)}
+          scope={scope}
+        />
+      );
+    },
   },
   {
     matches: within("/businesses"),
@@ -252,11 +257,11 @@ export function workspaceRoute(pathname: string) {
   return routes.find((route) => route.matches(pathname)) ?? libraryRoute;
 }
 
-function financeContent(
+/** The Finance record page a path names, if it names one. */
+function financeRecordPage(
   pathname: string,
   navigate: (path: string) => void,
   scope: CacheScope | undefined,
-  opensByPayee: boolean,
 ) {
   const accountId = recordIdForPath(pathname, "/finance/accounts");
   if (accountId)
@@ -288,12 +293,5 @@ function financeContent(
         scope={scope}
       />
     );
-  return (
-    <Finance
-      onNavigate={navigate}
-      opensByPayee={opensByPayee}
-      pathname={pathname}
-      scope={scope}
-    />
-  );
+  return undefined;
 }
