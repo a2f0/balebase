@@ -84,6 +84,7 @@ export function FinanceTransactionPage({
                   categories={data.categories}
                   busy={busy}
                   onNavigate={onNavigate}
+                  onOpen={() => sections.select("source")}
                   onAnnotate={annotate}
                   onCategorize={categorize}
                   selectedTransactionId={expanded}

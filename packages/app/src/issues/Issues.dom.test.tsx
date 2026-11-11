@@ -277,6 +277,57 @@ describe("workspace issues, mounted", () => {
     expect(paths).toEqual(["/issues/new/transactions/old-txn"]);
   });
 
+  it("opens source data from the transaction name without navigating or reloading", async () => {
+    const paths: string[] = [];
+    const requests: string[] = [];
+    respond((url) => {
+      requests.push(url.pathname + url.search);
+      if (url.pathname === "/api/issues")
+        return Response.json({ issues: [issue], nextCursor: null });
+      return baseResponse(url);
+    });
+    await show(
+      <FinanceTransactionPage
+        id="old-txn"
+        onNavigate={(path) => paths.push(path)}
+      />,
+    );
+    const selectedTab = () =>
+      container.querySelector('[role="tab"][aria-selected="true"]')
+        ?.textContent;
+    const visiblePanel = () =>
+      container.querySelector('[role="tabpanel"]:not([hidden])');
+    expect(selectedTab()).toBe("Issues");
+    const initialRequests = [...requests];
+
+    await click(container.querySelector(".financeTransactionName"));
+    expect(selectedTab()).toBe("Source data");
+    expect(visiblePanel()?.textContent).toContain("plaid-old-txn");
+    expect(visiblePanel()?.textContent).not.toContain("Duplicate charge");
+    expect(container.querySelector(".financeTransactionName")?.tagName).toBe(
+      "BUTTON",
+    );
+    expect(paths).toEqual([]);
+    expect(requests).toEqual(initialRequests);
+
+    await click(container.querySelector(".financeTransactionName"));
+    expect(selectedTab()).toBe("Source data");
+    await click("Activity");
+    expect(selectedTab()).toBe("Activity");
+    await click(container.querySelector(".financeTransactionName"));
+    expect(selectedTab()).toBe("Source data");
+    expect(paths).toEqual([]);
+    expect(requests).toEqual(initialRequests);
+
+    // The row's other actions still navigate rather than selecting a tab.
+    await click("Actions for Coffee");
+    const raiseIssue = [...document.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent?.includes("Raise issue"),
+    );
+    await click(raiseIssue);
+    expect(paths).toEqual(["/issues/new/transactions/old-txn"]);
+  });
+
   it("clears a transaction's page when a save finds access gone", async () => {
     respond((url, init) => {
       if (init?.method === "PUT")

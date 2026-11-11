@@ -393,17 +393,19 @@ function TransactionContent({
   );
 }
 
+interface TransactionRowProps extends AnnotationHandlers {
+  /** Opens the row in place; otherwise its name links to the transaction. */
+  onOpen?: (() => void) | undefined;
+  /** The row's checkbox, in lists that select rows for bulk changes. */
+  select?: RowSelect | undefined;
+  transaction: FinanceTransaction;
+}
+
 /**
  * A transaction row. Its menu, from the menu button or a right-click anywhere
  * on the row, annotates it, raises an issue, or lists its name's transactions.
  */
-export function FinanceTransactionRow(
-  props: AnnotationHandlers & {
-    /** The row's checkbox, in lists that select rows for bulk changes. */
-    select?: RowSelect | undefined;
-    transaction: FinanceTransaction;
-  },
-) {
+export function FinanceTransactionRow(props: TransactionRowProps) {
   const title = transactionTitle(props.transaction);
   const label = `Actions for ${title}`;
   return (
@@ -481,16 +483,15 @@ function TransactionRowContent({
   onAnnotate,
   onCategorize,
   onNavigate,
+  onOpen,
   onSelectAnnotation,
   select,
   selectedTransactionId,
   target,
   transaction,
-}: AnnotationHandlers & {
+}: TransactionRowProps & {
   menuButton: ReactNode;
-  select?: RowSelect | undefined;
   target: Parameters<ComponentProps<typeof ContextMenu>["children"]>[0];
-  transaction: FinanceTransaction;
 }) {
   const expanded = selectedTransactionId === transaction.id;
   const title = transactionTitle(transaction);
@@ -514,13 +515,11 @@ function TransactionRowContent({
         })}
       </time>
       <div className="rowMain financeTransactionMain">
-        <AppLink
-          className="rowTitle financeTransactionName"
-          href={financeTransactionPath(transaction.id)}
+        <TransactionName
           onNavigate={onNavigate}
-        >
-          {title}
-        </AppLink>
+          onOpen={onOpen}
+          transaction={transaction}
+        />
         <span className="rowMeta financeTransactionMeta">
           {transactionMeta(transaction)}
         </span>
@@ -578,6 +577,28 @@ function TransactionRowContent({
         />
       )}
     </li>
+  );
+}
+
+function TransactionName({
+  onNavigate,
+  onOpen,
+  transaction,
+}: Pick<TransactionRowProps, "onNavigate" | "onOpen" | "transaction">) {
+  const className = "rowTitle financeTransactionName";
+  const title = transactionTitle(transaction);
+  return onOpen ? (
+    <Button className={className} onClick={onOpen} variant="link">
+      {title}
+    </Button>
+  ) : (
+    <AppLink
+      className={className}
+      href={financeTransactionPath(transaction.id)}
+      onNavigate={onNavigate}
+    >
+      {title}
+    </AppLink>
   );
 }
 

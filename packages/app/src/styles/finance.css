@@ -139,6 +139,23 @@
   white-space: nowrap;
 }
 
+/* An in-page name action keeps the link's typography and visible start. */
+button.financeTransactionName {
+  display: block;
+  max-width: 100%;
+  line-height: inherit;
+  text-align: start;
+  white-space: normal;
+  user-select: text;
+}
+
+/* Reserve a full touch target without overlapping the row's metadata. */
+@media (pointer: coarse) {
+  button.financeTransactionName {
+    min-height: var(--touch-target);
+  }
+}
+
 /* Inbox emails, such as receipts, linked to the transaction. */
 .financeTransactionEmails {
   display: flex;
