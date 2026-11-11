@@ -139,6 +139,13 @@
   white-space: nowrap;
 }
 
+/* An in-page name action keeps the link's alignment and visible start. */
+button.financeTransactionName {
+  display: block;
+  max-width: 100%;
+  text-align: start;
+}
+
 /* Inbox emails, such as receipts, linked to the transaction. */
 .financeTransactionEmails {
   display: flex;
