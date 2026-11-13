@@ -551,3 +551,103 @@ html:has(.signingShell) {
   min-width: 0;
   padding: var(--space-3);
 }
+
+/* Written contracts keep source editing separate from the exact saved PDF. */
+.contractAuthoringLayout {
+  display: grid;
+  grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-5);
+}
+
+.contractAuthoringSettings {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.contractAuthoringRole {
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.contractAuthoringInsert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.contractAuthoringToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.contractVisualEditor {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.contractVisualContent {
+  min-height: 22rem;
+  padding: var(--space-5);
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
+.contractVisualContent > * + * {
+  margin-top: var(--space-3);
+}
+
+.contractVisualContent ul {
+  list-style: disc;
+  padding-left: var(--space-6);
+}
+
+.contractVisualContent ol {
+  list-style: decimal;
+  padding-left: var(--space-6);
+}
+
+.contractFieldChip,
+.contractValueChip {
+  display: inline;
+  padding: 0.15em 0.4em;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  box-decoration-break: clone;
+}
+
+.contractFieldChip {
+  border-style: dashed;
+}
+
+.contractMarkdownSource {
+  min-height: 26rem;
+  font-family: monospace;
+  tab-size: 2;
+}
+
+.contractAuthoringReview {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+@media (max-width: 960px) {
+  .contractAuthoringLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

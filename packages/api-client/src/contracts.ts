@@ -1,3 +1,4 @@
+import type { ContractAuthoringInput } from "@balebase/validators/contractAuthoring";
 import type {
   ContractDraftInput,
   contractsRoutes,
@@ -15,6 +16,18 @@ const endpoints = {
     method: "POST",
     path: "/api/contracts",
     body: "form",
+    response: "json",
+  }),
+  createAuthored: endpoint<typeof contractsRoutes.createAuthored>({
+    method: "POST",
+    path: "/api/contracts/authored",
+    body: "json",
+    response: "json",
+  }),
+  saveAuthored: endpoint<typeof contractsRoutes.saveAuthored>({
+    method: "PUT",
+    path: "/api/contracts/:id/authored",
+    body: "json",
     response: "json",
   }),
   get: endpoint<typeof contractsRoutes.get>({
@@ -66,6 +79,22 @@ export function contractsApi(transport: Transport) {
   // so a save fired while leaving the editor can't be overtaken or read stale.
   const draftSaves = new Map<string, Promise<unknown>>();
   return {
+    async createAuthored(input: ContractAuthoringInput) {
+      return (await transport.call(endpoints.createAuthored, { body: input }))
+        .contract;
+    },
+    async saveAuthored(
+      id: string,
+      input: ContractAuthoringInput,
+      expectedRevision: number,
+    ) {
+      return (
+        await transport.call(endpoints.saveAuthored, {
+          params: { id },
+          body: { ...input, expectedRevision },
+        })
+      ).contract;
+    },
     async list() {
       return (await transport.call(endpoints.list)).contracts;
     },
@@ -97,9 +126,13 @@ export function contractsApi(transport: Transport) {
       saving.then(settle, settle);
       return saving.then(({ contract }) => contract);
     },
-    async send(id: string) {
-      return (await transport.call(endpoints.send, { params: { id } }))
-        .contract;
+    async send(id: string, expectedRevision?: number) {
+      return (
+        await transport.call(endpoints.send, {
+          params: { id },
+          query: expectedRevision === undefined ? {} : { expectedRevision },
+        })
+      ).contract;
     },
     /** Emails everyone whose turn it is again. */
     remind(id: string) {

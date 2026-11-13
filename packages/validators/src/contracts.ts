@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ContractAuthoringSchema } from "./contractAuthoring";
 import { calendarDate, optionalText, requiredText } from "./fields";
 import { route } from "./route";
 import { contractLimits } from "./rules";
@@ -107,6 +108,10 @@ const ContractEventSchema = z.object({
 export type ContractEvent = z.infer<typeof ContractEventSchema>;
 
 const ContractDetailSchema = z.object({
+  /** Present only for contracts written in the Markdown/visual editor. */
+  authoring: ContractAuthoringSchema.safeExtend({
+    revision: z.int().min(0),
+  }).optional(),
   completedAt: z.string().nullable(),
   createdAt: z.string(),
   createdByName: z.string().nullable(),
@@ -364,6 +369,20 @@ export const contractsRoutes = {
     body: "form",
     response: ChangedContractSchema,
   }),
+  createAuthored: route({
+    method: "POST",
+    path: "/api/contracts/authored",
+    body: ContractAuthoringSchema,
+    response: ChangedContractSchema,
+  }),
+  saveAuthored: route({
+    method: "PUT",
+    path: "/api/contracts/:id/authored",
+    body: ContractAuthoringSchema.safeExtend({
+      expectedRevision: z.int().min(0),
+    }),
+    response: ChangedContractSchema,
+  }),
   get: route({
     method: "GET",
     path: "/api/contracts/:id",
@@ -388,6 +407,9 @@ export const contractsRoutes = {
   send: route({
     method: "POST",
     path: "/api/contracts/:id/send",
+    query: z.object({
+      expectedRevision: z.coerce.number().int().min(0).optional(),
+    }),
     response: ChangedContractSchema,
   }),
   remind: route({

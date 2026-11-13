@@ -53,7 +53,7 @@ export const contractTools: McpTool[] = [
   },
   {
     description:
-      "Replaces a draft contract's title, message, signers, and fields. Only drafts can be edited. Upload new PDFs in the app.",
+      "Replaces an uploaded-PDF draft's title, message, signers, and fields. Written contracts must be edited in the app's Markdown/visual editor.",
     descriptions: {
       ...contractId,
       dueDate: "Due date as YYYY-MM-DD, or null.",
@@ -78,7 +78,11 @@ export const contractTools: McpTool[] = [
   {
     description:
       "Sends a draft contract for signature and emails the first signers. Every signer needs a name, valid email, and a signature field.",
-    descriptions: contractId,
+    descriptions: {
+      ...contractId,
+      expectedRevision:
+        "Required for written contracts: authoring.revision from get_contract, after reviewing that saved PDF. Refuses to send a different revision.",
+    },
     name: "send_contract",
     openWorld: true,
     route: contractsRoutes.send,

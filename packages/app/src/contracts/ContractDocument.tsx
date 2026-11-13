@@ -4,12 +4,13 @@ import type {
   PDFDocumentProxy,
   RenderTask,
 } from "pdfjs-dist";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useReducer, useRef, useState } from "react";
 import {
   isRenderCancellation,
   openPdf,
   renderPdfPage,
 } from "../shared/pdfDocument";
+import { contractPdfReducer } from "./contractPdfState";
 
 /** A page's size in PDF points as displayed, after any /Rotate. */
 export interface PageSize {
@@ -30,20 +31,30 @@ interface LoadedPdf {
 export function ContractPages({
   load,
   renderOverlay,
+  onPageRendered,
+  onFailed,
 }: {
   load: () => Promise<ArrayBuffer>;
   renderOverlay: (page: PageSize) => ReactNode;
+  onPageRendered?: (pageNumber: number) => void;
+  onFailed?: () => void;
 }) {
-  const pdf = useContractPdf(load);
-  if (pdf.failed) {
+  const { pdf, fail } = useContractPdf(load);
+  const failureCallback = useRef(onFailed);
+  failureCallback.current = onFailed;
+  useEffect(() => {
+    if (pdf.status === "failed") failureCallback.current?.();
+  }, [pdf]);
+  if (pdf.status === "failed") {
     return (
       <p className="contractPagesMessage">
         This document could not be displayed.
       </p>
     );
   }
-  if (!pdf.loaded) return <LoadingState label="Opening document…" />;
-  const { document, pages } = pdf.loaded;
+  if (pdf.status !== "loaded")
+    return <LoadingState label="Opening document…" />;
+  const { document, pages } = pdf.document;
   return (
     <div className="contractPages">
       {pages.map((page) => (
@@ -54,7 +65,12 @@ export function ContractPages({
           key={page.number}
           style={{ aspectRatio: `${page.width} / ${page.height}` }}
         >
-          <LazyPageCanvas document={document} pageNumber={page.number} />
+          <LazyPageCanvas
+            document={document}
+            pageNumber={page.number}
+            onRendered={onPageRendered}
+            onFailed={fail}
+          />
           <div className="contractPageOverlay">{renderOverlay(page)}</div>
         </section>
       ))}
@@ -63,23 +79,29 @@ export function ContractPages({
 }
 
 function useContractPdf(load: () => Promise<ArrayBuffer>) {
-  const [state, setState] = useState<{ failed?: boolean; loaded?: LoadedPdf }>(
-    {},
-  );
+  const [state, dispatch] = useReducer(contractPdfReducer<LoadedPdf>, {
+    status: "loading",
+    request: 0,
+  });
+  const requests = useRef(0);
   // The loader changes identity on every render; load once per mount.
   const loader = useRef(load);
   useEffect(() => {
+    const request = ++requests.current;
+    dispatch({ type: "start", request });
     let active = true;
     let task: PDFDocumentLoadingTask | undefined;
-    loader
-      .current()
-      .then(openPdf)
+    Promise.resolve()
+      .then(() => loader.current())
+      .then((bytes) => (active ? openPdf(bytes) : undefined))
       .then((started) => {
+        if (!started) return undefined;
         task = started;
         if (!active) void started.destroy();
         return started.promise;
       })
       .then(async (document) => {
+        if (!active || !document) return;
         const pages: PageSize[] = [];
         for (let number = 1; number <= document.numPages; number += 1) {
           const viewport = (await document.getPage(number)).getViewport({
@@ -91,17 +113,26 @@ function useContractPdf(load: () => Promise<ArrayBuffer>) {
             width: viewport.width,
           });
         }
-        if (active) setState({ loaded: { document, pages } });
+        if (active) {
+          dispatch({
+            type: "loaded",
+            request,
+            document: { document, pages },
+          });
+        }
       })
       .catch(() => {
-        if (active) setState({ failed: true });
+        if (active) dispatch({ type: "failed", request });
       });
     return () => {
       active = false;
       void task?.destroy();
     };
   }, []);
-  return state;
+  return {
+    pdf: state,
+    fail: () => dispatch({ type: "failed", request: state.request }),
+  };
 }
 
 /** The widest a page renders in device pixels, to bound canvas memory. */
@@ -114,12 +145,18 @@ const maxCanvasPixels = 2000;
 function LazyPageCanvas({
   document,
   pageNumber,
+  onRendered,
+  onFailed,
 }: {
   document: PDFDocumentProxy;
   pageNumber: number;
+  onRendered: ((pageNumber: number) => void) | undefined;
+  onFailed: () => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
+  const callbacks = useRef({ onRendered, onFailed });
+  callbacks.current = { onRendered, onFailed };
   useEffect(() => {
     const element = canvas.current;
     if (!element) return;
@@ -154,8 +191,14 @@ function LazyPageCanvas({
         if (!active) started.cancel();
         return started.promise;
       })
+      .then(() => {
+        if (active) callbacks.current.onRendered?.(pageNumber);
+      })
       .catch((error: unknown) => {
-        if (!isRenderCancellation(error)) console.error(error);
+        if (active && !isRenderCancellation(error)) {
+          console.error(error);
+          callbacks.current.onFailed();
+        }
       });
     return () => {
       active = false;

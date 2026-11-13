@@ -212,7 +212,9 @@ export function describeContractEvent(
     case "created_from_template":
       return `${actor} created it from ${event.detail ?? "a template"}`;
     case "created":
-      return `${actor} uploaded the document`;
+      return `${actor} created the contract`;
+    case "source_saved":
+      return `${actor} revised the authored document`;
     case "sent":
       return `${actor} sent it for signature`;
     case "notified":
