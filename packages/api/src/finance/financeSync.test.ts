@@ -374,26 +374,28 @@ describe("durable finance sync", () => {
       "/sync-jobs",
       "POST",
     );
-    let finish: (() => void) | undefined;
-    const waiting = new Promise<void>((resolve) => {
-      finish = resolve;
-    });
+    const entered = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
     let calls = 0;
     const plaid: PlaidRequest = async <T>() => {
       calls++;
-      await waiting;
+      entered.resolve();
+      await finish.promise;
       return transactionPage() as T;
     };
     const running = fixture.deliver(job.id, plaid);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await fixture.deliver(job.id, plaid);
-    expect(calls).toBe(1);
-    expect((await fixture.request("", "DELETE")).status).toBe(409);
-    expect(
-      (await fixture.request<{ id: string }>("/sync-jobs", "POST")).body.id,
-    ).toBe(job.id);
-    finish?.();
-    await running;
+    await entered.promise;
+    try {
+      await fixture.deliver(job.id, plaid);
+      expect(calls).toBe(1);
+      expect((await fixture.request("", "DELETE")).status).toBe(409);
+      expect(
+        (await fixture.request<{ id: string }>("/sync-jobs", "POST")).body.id,
+      ).toBe(job.id);
+    } finally {
+      finish.resolve();
+      await running;
+    }
     expect((await fixture.request("", "DELETE")).status).toBe(204);
     expect((await fixture.request("/sync-jobs", "POST")).status).toBe(404);
     expect(
