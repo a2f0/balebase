@@ -197,6 +197,8 @@ function AuthoredPdfPreview({
   // stable while review and send transition without changing the document.
   const load = useCallback(() => Promise.resolve(bytes.slice(0)), [bytes]);
   const renderedPages = useRef(new Set<number>());
+  // A later send has its own request; PDF failures cannot replace its outcome.
+  const previewRequest = useRef(request).current;
   const onPageRendered = (pageNumber: number) => {
     if (
       recordRenderedPage(
@@ -205,7 +207,7 @@ function AuthoredPdfPreview({
         contract.document.pageCount,
       )
     ) {
-      dispatch({ request, type: "displayed" });
+      dispatch({ request: previewRequest, type: "displayed" });
     }
   };
   return (
@@ -214,7 +216,7 @@ function AuthoredPdfPreview({
       onPageRendered={onPageRendered}
       onFailed={() =>
         dispatch({
-          request,
+          request: previewRequest,
           type: "failed",
           message:
             "The saved PDF could not be displayed. Try reviewing it again.",
