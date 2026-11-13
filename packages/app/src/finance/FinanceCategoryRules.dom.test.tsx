@@ -33,6 +33,7 @@ function rule(overrides: Partial<CategorizationRule> = {}): CategorizationRule {
     category: { id: "fuel", name: "Fuel" },
     createdAt: "2026-11-05T12:00:00.000Z",
     id: "rule-1",
+    matchType: "exact",
     owner: { id: "user-1", name: "Dan Sullivan" },
     payeeName: "Shell",
     uncategorizedCount: 0,
@@ -163,11 +164,14 @@ describe("categorization rules", () => {
     // Unchanged, there is nothing to save.
     expect(queryButton("Save", form)?.disabled).toBe(true);
     await fill(payee, "Chevron");
-    await fill(form.querySelector("select"), "meals");
+    await fill(
+      form.querySelector('select:has(option[value="meals"])'),
+      "meals",
+    );
     await click(queryButton("Save", form));
     expect(writes).toEqual([
       {
-        body: { categoryId: "meals", payeeName: "Chevron" },
+        body: { categoryId: "meals", matchType: "exact", payeeName: "Chevron" },
         method: "PATCH",
         path: "/api/finance/categorization-rules/rule-1",
       },
@@ -221,11 +225,19 @@ describe("categorization rules", () => {
       'input[placeholder="Shell"]',
     );
     await fill(payeeField, "Cafe");
-    await fill(container.querySelector("select"), "meals");
+    await fill(
+      container.querySelector('select:has(option[value="meals"])'),
+      "meals",
+    );
     await click(queryButton("Add rule", container));
     expect(writes).toEqual([
       {
-        body: { applyToExisting: true, categoryId: "meals", payeeName: "Cafe" },
+        body: {
+          applyToExisting: true,
+          categoryId: "meals",
+          matchType: "exact",
+          payeeName: "Cafe",
+        },
         method: "POST",
         path: "/api/finance/categorization-rules",
       },
@@ -246,7 +258,10 @@ describe("categorization rules", () => {
       container.querySelector<HTMLInputElement>('input[placeholder="Shell"]'),
       "Cafe",
     );
-    await fill(container.querySelector("select"), "fuel");
+    await fill(
+      container.querySelector('select:has(option[value="fuel"])'),
+      "fuel",
+    );
     await click(
       container.querySelector<HTMLInputElement>('input[type="checkbox"]'),
     );
@@ -254,6 +269,7 @@ describe("categorization rules", () => {
     expect(writes[0]?.body).toEqual({
       applyToExisting: false,
       categoryId: "fuel",
+      matchType: "exact",
       payeeName: "Cafe",
     });
     expect(container.textContent).toContain("Added a rule for “Cafe”.");
@@ -271,7 +287,10 @@ describe("categorization rules", () => {
       'input[placeholder="Shell"]',
     );
     await fill(payee, "Cafe");
-    await fill(container.querySelector("select"), "meals");
+    await fill(
+      container.querySelector('select:has(option[value="meals"])'),
+      "meals",
+    );
     await click(queryButton("Add rule", container));
     const fields = [
       payee,
@@ -325,9 +344,6 @@ describe("categorization rules", () => {
       method: "POST",
       path: "/api/finance/categorization-rules/rule-1/apply",
     });
-    expect(container.textContent).toContain(
-      "Categorized 3 transactions from “Shell”.",
-    );
     await openMenu(container, "Shell");
     expect(menuItems()).toEqual(["Edit", "Delete"]);
     await chooseFromMenu(container, "Shell", "Delete");

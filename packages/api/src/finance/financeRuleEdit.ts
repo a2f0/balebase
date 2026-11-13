@@ -5,7 +5,7 @@ import type { FinanceContext } from "./financeContext";
 import { readRules, ruleNotFound, toRule } from "./financeRuleRows";
 
 /**
- * Changes a rule's payee or category. Transactions it already categorized
+ * Changes a rule's payee, match mode or category. Transactions it already categorized
  * keep their category, and nothing is categorized now: the rule list shows
  * the new payee's uncategorized transactions, which applying the rule fills.
  * One event, under the new category, names both the old and new rule.
@@ -14,7 +14,7 @@ export async function updateRule(context: FinanceContext) {
   const input = await readBody(
     context,
     financeRoutes.updateCategorizationRule,
-    "A payee name and a category are required.",
+    "A payee name, a match type, and a category are required.",
   );
   if (input instanceof Response) return input;
   const id = context.req.param("id") ?? "";
@@ -43,6 +43,8 @@ export async function updateRule(context: FinanceContext) {
                 actor.email, ?6,
                 json_object('payeeName', ?4, 'categoryId', category.id,
                   'categoryName', category.name,
+                  'matchType', ?7,
+                  'previousMatchType', rule.match_type,
                   'previousPayeeName', rule.payee_name,
                   'previousCategoryName', previous.name)
          FROM finance_categorization_rules AS rule
@@ -51,7 +53,8 @@ export async function updateRule(context: FinanceContext) {
          JOIN finance_expense_categories AS category
          JOIN user AS actor ON actor.id = ?5
          WHERE ${allowed}
-           AND (rule.payee_name <> ?4 OR rule.expense_category_id <> ?3)`,
+           AND (rule.payee_name <> ?4 OR rule.expense_category_id <> ?3
+                OR rule.match_type <> ?7)`,
       )
       .bind(
         id,
@@ -60,16 +63,24 @@ export async function updateRule(context: FinanceContext) {
         input.payeeName,
         actor.userId,
         new Date().toISOString(),
+        input.matchType,
       ),
     database
       .prepare(
         `UPDATE finance_categorization_rules AS rule
-         SET payee_name = ?4, expense_category_id = ?3
+         SET payee_name = ?4, expense_category_id = ?3,
+             match_type = ?5
          WHERE rule.id = ?1 AND rule.organization_id = ?2
            AND EXISTS (SELECT 1 FROM finance_expense_categories AS category
                        WHERE ${allowed})`,
       )
-      .bind(id, organizationId, input.categoryId, input.payeeName),
+      .bind(
+        id,
+        organizationId,
+        input.categoryId,
+        input.payeeName,
+        input.matchType,
+      ),
   ]);
   if (!results.at(-1)?.meta.changes) return refusedUpdate(context, id, input);
   const rule = (await readRules(database, organizationId, id)).results[0];

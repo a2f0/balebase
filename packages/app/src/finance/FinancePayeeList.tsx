@@ -84,7 +84,8 @@ export function FinancePayeeList({
     return onCreateRule({
       applyToExisting: input.applyToExisting,
       categoryId: input.categoryId,
-      payeeName: payee,
+      matchType: input.matchType,
+      payeeName: input.payeeName,
     });
   }
   return (
@@ -159,7 +160,13 @@ function PayeeRow({
     );
   }
   const start = (action: PayeeForm["action"]) =>
-    onForm({ action, applyToExisting: true, categoryId: "" });
+    onForm({
+      action,
+      applyToExisting: true,
+      categoryId: "",
+      matchType: "exact",
+      payeeName: payee.name,
+    });
   // Both actions give a category, so they wait for one to exist.
   const items: ListRowItem[] = categories.length
     ? [
@@ -170,7 +177,7 @@ function PayeeRow({
           label: `Categorize ${countLabel(payee.count, "transaction")}…`,
           onSelect: () => start("categorize"),
         },
-        // A rule matches the name exactly, within the API's length limit.
+        // Start with the displayed name, within the API's length limit.
         ruleNameFits(payee.name)
           ? {
               disabled: busy,

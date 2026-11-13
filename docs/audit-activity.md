@@ -123,14 +123,17 @@ or a failed provider request, records nothing:
 - `finance.transaction_categorized` by **Balebase rules** (system source
   `categorizationRule`, root and subject the transaction) records a
   categorization rule giving a newly imported transaction its category. The
-  details name the rule (`ruleId`, `rulePayeeName`), and the cause is the same
-  `plaid_sync_page`. Only a transaction stored for the first time counts,
-  in the batch that inserts it; a replayed page finds it stored and records
-  nothing. The annotation it writes has no creator or editor, since no person
-  acted. A person applying a rule to existing transactions is recorded as
-  that person instead, each transaction's event still naming the rule
-  (`ruleId`, `rulePayeeName`), so its history shows the rule either way.
-  Migration `0095` named the rule on such events recorded before it.
+  details name the rule (`ruleId`, `rulePayeeName`, `ruleMatchType`), and the
+  cause is the same `plaid_sync_page`. Only a transaction stored for the first
+  time counts, in the batch that inserts it; a replayed page finds it stored
+  and records nothing. The annotation it writes has no creator or editor,
+  since no person acted. A person applying a rule to existing transactions is
+  recorded as that person instead, each transaction's event still naming the rule
+  (`ruleId`, `rulePayeeName`, `ruleMatchType`), so its history shows the rule
+  either way. Migration `0095` named the rule on such events recorded before
+  it. Events predating match types mean exact matches. Rule creation,
+  application, and deletion retain `matchType`; edits retain both `matchType`
+  and `previousMatchType` alongside the payee text and category.
 
 Billing events are for owners and admins and bank connection events need
 Finance capability, as for people's own events.

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { FinanceRuleMatchType } from "@balebase/validators/rules";
 import {
   createCategory,
   createFixture,
@@ -11,6 +12,7 @@ type Fixture = Awaited<ReturnType<typeof createFixture>>;
 interface Rule {
   category: { id: string; name: string };
   id: string;
+  matchType: FinanceRuleMatchType;
   payeeName: string;
   uncategorizedCount: number;
 }
@@ -33,6 +35,7 @@ async function ruleFixture() {
       await request<{ rule: Rule }>("/categorization-rules", "POST", {
         applyToExisting: false,
         categoryId,
+        matchType: "exact",
         payeeName,
       })
     ).body.rule;
@@ -40,7 +43,7 @@ async function ruleFixture() {
     request<{ error?: string; rule: Rule }>(
       `/categorization-rules/${id}`,
       "PATCH",
-      { categoryId, payeeName },
+      { categoryId, matchType: "exact", payeeName },
     );
   return { create, fixture, fuel, ids, request, travel, update };
 }
@@ -83,8 +86,10 @@ describe("editing categorization rules", () => {
         details: {
           categoryId: travel,
           categoryName: "Travel",
+          matchType: "exact",
           payeeName: "Chevron",
           previousCategoryName: "Fuel",
+          previousMatchType: "exact",
           previousPayeeName: "Shell",
         },
         root_id: travel,

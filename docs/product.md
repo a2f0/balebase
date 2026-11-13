@@ -1004,31 +1004,39 @@ free-text category overrides were converted into categories by migration
 `0034`.
 
 Categorization rules, on Finance's **Rules** tab at `/finance/rules`,
-give one payee's transactions an expense category. A rule names a payee
-exactly as transactions show it (the merchant's name, else the bank's
-description, as **Show only** matches it) and a category; each payee has at
-most one rule, so at most one rule matches a transaction. A transaction row's
-menu offers **Create rule** once the organization has a category, which opens
-the Rules tab with its name filled in. Rules fill only
+give matching transactions an expense category. A rule names payee text, a
+**Match type** (**Exact match**, **Starts with**, or **Contains**), and a
+category. It compares the name transactions show (the merchant's name, else
+the bank's description). All three modes are case-sensitive and literal:
+spaces matter, and `%` and `_` are not wildcards. Existing rules and new
+forms default to **Exact match**. Each organization keeps at most one rule
+for the same payee text, regardless of match type. A transaction row's menu
+offers **Create rule** once the organization has a category, opening the
+Rules tab with its name filled in; the by-payee form also offers the match
+type. Rules fill only
 transactions without a category and never change one someone chose. When a
-Plaid sync imports a new transaction whose payee has a rule, the transaction
-takes that category, recorded as Balebase's (**Balebase rules**) with the
-rule named. Creating a rule can also fill the payee's existing uncategorized
-transactions, and **Categorize** in a rule's menu does so later; those are
+Plaid sync imports a new transaction, matching rules are ranked by **Exact
+match**, then **Starts with**, then **Contains**. Within a mode, longer
+patterns win, then the oldest rule, then its ID. Only the winning rule gives
+the transaction its category, recorded as Balebase's (**Balebase rules**)
+with the rule and match type named. Creating a rule can also fill existing
+uncategorized transactions matching that rule, and **Categorize** in its menu
+does so later regardless of other rules' precedence; those are
 recorded as the person's, each transaction with its own category event. A
 rule's menu (its menu button or a right-click) also offers **Edit**, which
-changes its payee or category in place
+changes its payee text, match type, or category in place
 (`PATCH /api/finance/categorization-rules/:id`). Editing categorizes nothing:
 transactions it already filled keep their category, and the row then counts
-the new payee's uncategorized transactions for **Categorize**. Creating,
-editing (with the previous payee and category), applying (with how many it
-filled), and deleting rules appear under **Expense categories** in Activity.
+the newly matching uncategorized transactions for **Categorize**. Creating,
+editing (with the previous text, match type, and category), applying (with how
+many it filled), and deleting rules appear under **Expense categories** in
+Activity. Creating or editing a rule through the API requires `matchType`.
 Deleting a category deletes its rules, each recorded; transactions a rule
 categorized keep their category when the rule goes. An organization keeps up
 to 500 rules. Each rule names the person who created it (migration `0095`
 took earlier rules' creators from their creation events), shown on its row.
 A transaction's own Activity shows a rule's categorization, whether an import
-or a person applying the rule made it, as **By the rule for “Payee”**.
+or a person applying the rule made it, with its payee text and match type.
 
 When a connection stops syncing with an error, such as Plaid's
 `ITEM_LOGIN_REQUIRED` after a bank password or MFA change, **Update login** on

@@ -150,7 +150,13 @@ it("wraps a long payee name in an open payee form on a phone", async () => {
             <PayeeActionForm
               busy={false}
               categories={categories}
-              form={{ action, applyToExisting: true, categoryId: "" }}
+              form={{
+                action,
+                applyToExisting: true,
+                categoryId: "",
+                matchType: "exact",
+                payeeName: name,
+              }}
               key={action}
               onCancel={() => undefined}
               onChange={() => undefined}
