@@ -3,6 +3,7 @@ import type {
   financeRoutes,
   PlaidLinkDiagnostics,
 } from "@balebase/validators/finance";
+import type { FinanceRuleMatchType } from "@balebase/validators/rules";
 import { endpoint } from "./endpoint";
 import type { Transport } from "./transport";
 
@@ -354,26 +355,31 @@ function financeCategoryApi(transport: Transport) {
     categorizationRules() {
       return transport.call(endpoints.listCategorizationRules);
     },
-    /** A payee's rule; `applyToExisting` also fills its uncategorized transactions. */
+    /** A payee match; `applyToExisting` also fills matching uncategorized transactions. */
     createCategorizationRule(input: {
       applyToExisting: boolean;
       categoryId: string;
+      matchType: FinanceRuleMatchType;
       payeeName: string;
     }) {
       return transport.call(endpoints.createCategorizationRule, {
         body: input,
       });
     },
-    /** Fills the rule's payee's uncategorized transactions. */
+    /** Fills the rule's matching uncategorized transactions. */
     applyCategorizationRule(id: string) {
       return transport.call(endpoints.applyCategorizationRule, {
         params: { id },
       });
     },
-    /** Changes a rule's payee or category; it categorizes nothing itself. */
+    /** Changes a rule's match or category; it categorizes nothing itself. */
     updateCategorizationRule(
       id: string,
-      input: { categoryId: string; payeeName: string },
+      input: {
+        categoryId: string;
+        matchType: FinanceRuleMatchType;
+        payeeName: string;
+      },
     ) {
       return transport.call(endpoints.updateCategorizationRule, {
         body: input,

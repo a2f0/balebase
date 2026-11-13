@@ -40,6 +40,13 @@ export const apiKeyExpirationDays = [30, 90, 365] as const;
 
 export const apiKeyNameMaxLength = 100;
 
+export const financeRuleMatchTypes = [
+  "exact",
+  "startsWith",
+  "contains",
+] as const;
+export type FinanceRuleMatchType = (typeof financeRuleMatchTypes)[number];
+
 export const financeLimits = {
   annotationLabel: 50,
   annotationLabels: 12,

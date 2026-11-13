@@ -53,3 +53,57 @@ it("rebuilds annotations with optional editors, keeping rows, indexes, and trigg
       .get(),
   ).toEqual({ created_by: null, updated_by: null });
 });
+
+/** Removable once production has applied 0100: exercises pre-mode rule rows. */
+it("adds exact matching to existing rules without changing their unique payees", () => {
+  const database = createTestDatabase({ before: "0100", foreignKeys: false });
+  database.exec(`
+    INSERT INTO finance_categorization_rules
+      (id, organization_id, payee_name, expense_category_id, created_at)
+    VALUES ('old-rule', 'org', 'Shell', 'fuel', '2026-01-01');`);
+  const indexes = database.query(
+    `SELECT name, sql FROM sqlite_master
+     WHERE type = 'index' AND tbl_name = 'finance_categorization_rules'
+     ORDER BY name`,
+  );
+  const before = indexes.all();
+
+  applyMigrations(database, { from: "0100" });
+
+  expect(indexes.all()).toEqual(before);
+  expect(
+    database
+      .query("SELECT * FROM finance_categorization_rules WHERE id = 'old-rule'")
+      .get(),
+  ).toEqual({
+    created_at: "2026-01-01",
+    created_by: null,
+    expense_category_id: "fuel",
+    id: "old-rule",
+    match_type: "exact",
+    organization_id: "org",
+    payee_name: "Shell",
+  });
+  const insert = database.query(
+    `INSERT INTO finance_categorization_rules
+       (id, organization_id, payee_name, expense_category_id, created_at, match_type)
+     VALUES (?, 'org', ?, 'fuel', '2026', ?)`,
+  );
+  for (const matchType of ["exact", "startsWith", "contains"]) {
+    insert.run(matchType, matchType, matchType);
+  }
+  expect(() => insert.run("duplicate", "Shell", "contains")).toThrow();
+  expect(() => insert.run("invalid", "Other", "endsWith")).toThrow();
+  expect(() => insert.run("null", "Other", null)).toThrow();
+  database.exec(`
+    INSERT INTO finance_categorization_rules
+      (id, organization_id, payee_name, expense_category_id, created_at)
+    VALUES ('schema-default', 'org', 'Cafe', 'meals', '2026');`);
+  expect(
+    database
+      .query(
+        "SELECT match_type FROM finance_categorization_rules WHERE id = 'schema-default'",
+      )
+      .get(),
+  ).toEqual({ match_type: "exact" });
+});

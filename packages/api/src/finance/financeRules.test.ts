@@ -1,4 +1,5 @@
 import { describe, expect, it, setSystemTime } from "bun:test";
+import type { FinanceRuleMatchType } from "@balebase/validators/rules";
 import {
   createCategory,
   createFixture,
@@ -11,6 +12,7 @@ type Fixture = Awaited<ReturnType<typeof createFixture>>;
 interface Rule {
   category: { id: string; name: string };
   id: string;
+  matchType: FinanceRuleMatchType;
   owner: { id: string; name: string } | null;
   payeeName: string;
   uncategorizedCount: number;
@@ -39,7 +41,12 @@ async function shellFixture() {
 
 function createRule(
   fixture: Fixture,
-  body: { applyToExisting: boolean; categoryId: string; payeeName: string },
+  body: {
+    applyToExisting: boolean;
+    categoryId: string;
+    matchType: FinanceRuleMatchType;
+    payeeName: string;
+  },
 ) {
   return jsonRequest<{ applied: number; rule: Rule }>(
     fixture.app,
@@ -101,6 +108,7 @@ describe("categorization rules", () => {
     const created = await createRule(fixture, {
       applyToExisting: false,
       categoryId: fuel,
+      matchType: "exact" as const,
       payeeName: "Shell",
     });
     expect(created.status).toBe(201);
@@ -108,6 +116,7 @@ describe("categorization rules", () => {
       applied: 0,
       rule: {
         category: { id: fuel, name: "Fuel" },
+        matchType: "exact",
         payeeName: "Shell",
         uncategorizedCount: 4,
       },
@@ -116,7 +125,12 @@ describe("categorization rules", () => {
     expect(events(fixture, "finance.categorization_rule_created")).toEqual([
       expect.objectContaining({
         actor_user_id: "user-1",
-        details: { categoryId: fuel, categoryName: "Fuel", payeeName: "Shell" },
+        details: {
+          categoryId: fuel,
+          categoryName: "Fuel",
+          matchType: "exact",
+          payeeName: "Shell",
+        },
         root_id: fuel,
         root_type: "finance_category",
         subject_id: created.body.rule.id,
@@ -162,6 +176,7 @@ describe("categorization rules", () => {
     const created = await createRule(fixture, {
       applyToExisting: true,
       categoryId: fuel,
+      matchType: "exact" as const,
       payeeName: "Shell",
     });
     expect(created.status).toBe(201);
@@ -192,6 +207,7 @@ describe("categorization rules", () => {
           categoryId: fuel,
           categoryName: "Fuel",
           count: 3,
+          matchType: "exact",
           payeeName: "Shell",
         },
         subject_id: created.body.rule.id,
@@ -209,6 +225,7 @@ describe("categorization rules", () => {
         before: null,
         beforeName: null,
         ruleId: created.body.rule.id,
+        ruleMatchType: "exact",
         rulePayeeName: "Shell",
       }),
     );
@@ -253,6 +270,7 @@ describe("categorization rules", () => {
       const created = await createRule(fixture, {
         applyToExisting: false,
         categoryId: fuel,
+        matchType: "exact" as const,
         payeeName: "Shell",
       });
       const apply = () =>
@@ -283,6 +301,7 @@ describe("categorization rules", () => {
     const created = await createRule(fixture, {
       applyToExisting: false,
       categoryId: fuel,
+      matchType: "exact" as const,
       payeeName: "Shell",
     });
     const apply = (id: string) =>
@@ -312,6 +331,7 @@ describe("categorization rules", () => {
     const rule = {
       applyToExisting: false,
       categoryId: fuel,
+      matchType: "exact" as const,
       payeeName: "Shell",
     };
     expect((await createRule(fixture, rule)).status).toBe(201);
@@ -407,6 +427,7 @@ describe("categorization rules", () => {
         await createRule(fixture, {
           applyToExisting: true,
           categoryId: "foreign-category",
+          matchType: "exact" as const,
           payeeName: "Shell",
         })
       ).status,
@@ -416,6 +437,7 @@ describe("categorization rules", () => {
         await createRule(fixture, {
           applyToExisting: false,
           categoryId: fuel,
+          matchType: "exact" as const,
           payeeName: "Shell",
         })
       ).status,
@@ -427,11 +449,13 @@ describe("categorization rules", () => {
     const shell = await createRule(fixture, {
       applyToExisting: false,
       categoryId: fuel,
+      matchType: "exact" as const,
       payeeName: "Shell",
     });
     await createRule(fixture, {
       applyToExisting: false,
       categoryId: meals,
+      matchType: "exact" as const,
       payeeName: "Cafe",
     });
     const remove = (path: string) =>
@@ -455,13 +479,19 @@ describe("categorization rules", () => {
     ).toEqual([
       [
         "user-1",
-        { categoryId: fuel, categoryName: "Fuel", payeeName: "Shell" },
+        {
+          categoryId: fuel,
+          categoryName: "Fuel",
+          matchType: "exact",
+          payeeName: "Shell",
+        },
       ],
       [
         "user-1",
         {
           categoryId: meals,
           categoryName: "Meals",
+          matchType: "exact",
           payeeName: "Cafe",
           reason: "category_deleted",
         },
@@ -479,6 +509,7 @@ describe("categorization rules", () => {
     const created = await createRule(fixture, {
       applyToExisting: true,
       categoryId: fuel,
+      matchType: "exact" as const,
       payeeName: "Shell",
     });
     expect(created.status).toBe(500);
@@ -535,6 +566,7 @@ describe("categorization rules on import", () => {
     const rule = await createRule(fixture, {
       applyToExisting: false,
       categoryId: meals,
+      matchType: "exact" as const,
       payeeName: "Test Cafe",
     });
     const connectionId = await connect(fixture);
@@ -557,6 +589,7 @@ describe("categorization rules on import", () => {
           before: null,
           beforeName: null,
           ruleId: rule.body.rule.id,
+          ruleMatchType: "exact",
           rulePayeeName: "Test Cafe",
         },
         root_type: "finance_transaction",
@@ -576,6 +609,7 @@ describe("categorization rules on import", () => {
     await createRule(fixture, {
       applyToExisting: false,
       categoryId: meals,
+      matchType: "exact" as const,
       payeeName: "Test Cafe",
     });
     // Plaid sends the transaction as added again (a replayed page).
@@ -591,6 +625,7 @@ describe("categorization rules on import", () => {
     await createRule(fixture, {
       applyToExisting: false,
       categoryId: meals,
+      matchType: "exact" as const,
       payeeName: "Test Cafe",
     });
     fixture.database.exec(`CREATE TRIGGER fail_activity
@@ -637,6 +672,7 @@ describe("categorization rules on import", () => {
     await createRule(fixture, {
       applyToExisting: false,
       categoryId: meals,
+      matchType: "exact" as const,
       payeeName: "Test Cafe",
     });
     // Plaid sends the transaction as added again (a replayed page).

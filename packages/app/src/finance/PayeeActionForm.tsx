@@ -1,8 +1,13 @@
 import { Button, Field, Select } from "@balebase/ui/react";
 import type { ExpenseCategory } from "@balebase/validators/finance";
+import {
+  type FinanceRuleMatchType,
+  financeLimits,
+} from "@balebase/validators/rules";
 import { useEffect, useRef } from "react";
 import { countLabel } from "../shared/labels";
 import type { PayeeGroup } from "./payeeGroups";
+import { RuleMatchTypeField } from "./RuleMatchTypeField";
 
 /**
  * An open payee form and what it holds. It lives with the payee list, not
@@ -14,6 +19,8 @@ export interface PayeeForm {
   applyToExisting: boolean;
   /** A category's ID, `uncategorizedValue` (categorize only), or "". */
   categoryId: string;
+  matchType: FinanceRuleMatchType;
+  payeeName: string;
 }
 
 /** The select's value for clearing the category. */
@@ -62,10 +69,31 @@ export function PayeeActionForm({
           onSubmit();
         }}
       >
+        {rule && (
+          <>
+            <Field label="Payee name">
+              <input
+                className="input inputSm"
+                disabled={busy}
+                maxLength={financeLimits.payeeName}
+                onChange={(event) =>
+                  onChange({ ...form, payeeName: event.target.value })
+                }
+                required
+                value={form.payeeName}
+              />
+            </Field>
+            <RuleMatchTypeField
+              busy={busy}
+              onChange={(matchType) => onChange({ ...form, matchType })}
+              value={form.matchType}
+            />
+          </>
+        )}
         <Field
           label={
             rule
-              ? `Rule for “${payee.name}”: category`
+              ? "Category for matching transactions"
               : `Category for ${countLabel(payee.count, "transaction")} from “${payee.name}”`
           }
         >
@@ -97,7 +125,7 @@ export function PayeeActionForm({
               }
               type="checkbox"
             />
-            Also categorize this payee's existing uncategorized transactions
+            Also categorize existing uncategorized matching transactions
           </label>
         )}
         <div className="rowActions">
@@ -106,7 +134,7 @@ export function PayeeActionForm({
           </Button>
           <Button
             busy={busy}
-            disabled={!form.categoryId}
+            disabled={!form.categoryId || (rule && !form.payeeName)}
             size="sm"
             type="submit"
             variant="primary"

@@ -502,6 +502,7 @@ describe("Finance filters", () => {
               category: { id: "meals", name: "Meals" },
               createdAt: "2026-11-06T12:00:00.000Z",
               id: "rule-1",
+              matchType: "exact",
               owner: null,
               payeeName: "Shell",
               uncategorizedCount: 0,
@@ -518,7 +519,9 @@ describe("Finance filters", () => {
     await openRowMenu(payee);
     await choose(label);
     const form = container.querySelector("form.financePayeeAction");
-    const select = form?.querySelector("select");
+    const select = form?.querySelector<HTMLSelectElement>(
+      'select:has(option[value="meals"])',
+    );
     if (!form || !select) throw new Error("No payee form");
     return { form, select };
   }
@@ -671,6 +674,7 @@ describe("Finance filters", () => {
         body: {
           applyToExisting: true,
           categoryId: "meals",
+          matchType: "exact",
           payeeName: "Shell",
         },
         method: "POST",
@@ -730,6 +734,7 @@ describe("Finance filters", () => {
       category: { id: "meals", name: "Meals" },
       createdAt: "2026-11-06T12:00:00.000Z",
       id: "rule-1",
+      matchType: "exact",
       owner: null,
       payeeName: "Shell",
       uncategorizedCount: 0,
@@ -1074,6 +1079,7 @@ describe("Finance filters", () => {
               category: { id: "meals", name: "Meals" },
               createdAt: "2026-11-06T12:00:00.000Z",
               id: "rule-1",
+              matchType: "exact",
               payeeName: "Coffee",
               owner: null,
               uncategorizedCount: 0,

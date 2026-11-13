@@ -13,7 +13,10 @@ import type {
   CategorizationRule,
   ExpenseCategory,
 } from "@balebase/validators/finance";
-import { financeLimits } from "@balebase/validators/rules";
+import {
+  type FinanceRuleMatchType,
+  financeLimits,
+} from "@balebase/validators/rules";
 import {
   type FormEvent,
   useCallback,
@@ -27,12 +30,12 @@ import { countLabel } from "../shared/labels";
 import { useLoad } from "../shared/useLoad";
 import { rulesChanged } from "./financeRuleAction";
 import type { RunChange } from "./financeSave";
+import { RuleMatchTypeField, ruleMatchTypeLabels } from "./RuleMatchTypeField";
 import { refused } from "./transactionCache";
 
 /**
- * Categorization rules: each gives one payee's transactions (those shown
- * under exactly its name) an expense category when they are imported, and
- * can fill the payee's existing uncategorized transactions.
+ * Categorization rules match displayed payee names to an expense category
+ * on import and can fill existing uncategorized matching transactions.
  */
 export function FinanceCategoryRules({
   busy,
@@ -94,7 +97,7 @@ export function FinanceCategoryRules({
             </span>
           ) : undefined
         }
-        description="New transactions from a payee get its rule's category when they are imported. Rules fill only uncategorized transactions; they never change a category someone chose."
+        description="Rules match displayed payee names using case-sensitive, literal text (no wildcards) and fill only uncategorized transactions. On import, exact matches win, then starts with, then contains; ties use longest text, oldest rule, then rule ID."
         title="Categorization rules"
       >
         {rules.error && (
@@ -166,19 +169,21 @@ function AddRuleForm({
 }) {
   const [requested] = useState(requestedPayee);
   const [payeeName, setPayeeName] = useState(requested);
+  const [matchType, setMatchType] = useState<FinanceRuleMatchType>("exact");
   const [categoryId, setCategoryId] = useState("");
   const [applyToExisting, setApplyToExisting] = useState(true);
   // The fields hold still while any change saves, and a save clears only
   // the values it sent.
-  const current = useRef({ categoryId, payeeName });
-  current.current = { categoryId, payeeName };
+  const current = useRef({ categoryId, matchType, payeeName });
+  current.current = { categoryId, matchType, payeeName };
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const sent = { categoryId, payeeName };
+    const sent = { categoryId, matchType, payeeName };
     const saved = await run(async () => {
       const { applied } = await api.finance.createCategorizationRule({
         applyToExisting,
         categoryId,
+        matchType,
         payeeName,
       });
       return applyToExisting
@@ -189,15 +194,17 @@ function AddRuleForm({
     if (
       saved &&
       now.payeeName === sent.payeeName &&
+      now.matchType === sent.matchType &&
       now.categoryId === sent.categoryId
     ) {
       setPayeeName("");
       setCategoryId("");
+      setMatchType("exact");
     }
   }
   return (
     <Card
-      description="Use the payee's name exactly as transactions show it, such as Shell. Choose Create rule on a transaction to start from its name."
+      description="Enter the payee text to match and choose a match type. Only one rule can use the same text. Choose Create rule on a transaction to start from its name."
       footer={
         <Button
           busy={busy}
@@ -224,6 +231,11 @@ function AddRuleForm({
             value={payeeName}
           />
         </Field>
+        <RuleMatchTypeField
+          busy={busy}
+          onChange={setMatchType}
+          value={matchType}
+        />
         <Field label="Category">
           <Select
             // Arriving from a transaction, the payee is filled in already.
@@ -249,7 +261,7 @@ function AddRuleForm({
           onChange={(event) => setApplyToExisting(event.target.checked)}
           type="checkbox"
         />
-        Also categorize this payee's existing uncategorized transactions
+        Also categorize existing uncategorized matching transactions
       </label>
     </Card>
   );
@@ -293,7 +305,7 @@ function RuleList({
 
 /**
  * A rule. Its menu, from the menu button or a right-click anywhere on the
- * row, edits it, fills its payee's uncategorized transactions, or deletes it.
+ * row, edits it, fills matching uncategorized transactions, or deletes it.
  */
 function RuleRow({
   busy,
@@ -333,13 +345,13 @@ function RuleRow({
   const apply = () =>
     run(async () => {
       const { applied } = await api.finance.applyCategorizationRule(rule.id);
-      return `Categorized ${countLabel(applied, "transaction")} from “${rule.payeeName}”.`;
+      return `Categorized ${countLabel(applied, "transaction")} matching “${rule.payeeName}”.`;
     });
   async function remove() {
     const confirmed = await confirmDialog({
       confirmLabel: "Delete rule",
       message:
-        "Transactions it already categorized keep their category; new ones from this payee stay uncategorized.",
+        "Transactions it already categorized keep their category; this rule will no longer categorize matching transactions.",
       title: `Delete the rule for “${rule.payeeName}”?`,
       tone: "danger",
     });
@@ -381,7 +393,7 @@ function RuleRow({
       label={`Actions for the rule for ${rule.payeeName}`}
       meta={
         <>
-          {rule.category.name}
+          {ruleMatchTypeLabels[rule.matchType]} · {rule.category.name}
           {rule.uncategorizedCount > 0 &&
             ` · ${countLabel(rule.uncategorizedCount, "uncategorized transaction")}`}
           {rule.owner && ` · Created by ${rule.owner.name}`}
@@ -393,8 +405,8 @@ function RuleRow({
 }
 
 /**
- * Edits a rule's payee and category in place. Saving categorizes nothing:
- * the row then shows the new payee's uncategorized transactions to fill.
+ * Edits a rule's payee text, match type, and category. Saving categorizes
+ * nothing; the row then shows matching uncategorized transactions to fill.
  */
 function EditRuleRow({
   busy,
@@ -410,6 +422,7 @@ function EditRuleRow({
   run: RunChange;
 }) {
   const [payeeName, setPayeeName] = useState(rule.payeeName);
+  const [matchType, setMatchType] = useState(rule.matchType);
   const [categoryId, setCategoryId] = useState(rule.category.id);
   const input = useRef<HTMLInputElement>(null);
   // A save finishing after this form closed (the rules went with access, or
@@ -425,12 +438,15 @@ function EditRuleRow({
     };
   }, []);
   const unchanged =
-    payeeName === rule.payeeName && categoryId === rule.category.id;
+    payeeName === rule.payeeName &&
+    matchType === rule.matchType &&
+    categoryId === rule.category.id;
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const saved = await run(async () => {
       await api.finance.updateCategorizationRule(rule.id, {
         categoryId,
+        matchType,
         payeeName,
       });
       return `Saved the rule for “${payeeName}”.`;
@@ -455,6 +471,11 @@ function EditRuleRow({
             value={payeeName}
           />
         </Field>
+        <RuleMatchTypeField
+          busy={busy}
+          onChange={setMatchType}
+          value={matchType}
+        />
         <Field label="Category">
           <Select
             disabled={busy}

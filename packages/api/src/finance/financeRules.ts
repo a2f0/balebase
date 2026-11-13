@@ -12,16 +12,18 @@ import {
 import type { FinanceContext } from "./financeContext";
 import { updateRule } from "./financeRuleEdit";
 import {
+  importedRuleId,
   payee,
   readRules,
+  ruleMatches,
   ruleNotFound,
   toRule,
   uncategorized,
 } from "./financeRuleRows";
 
 /**
- * Categorization rules: a payee's transactions (those shown under exactly
- * the rule's payee name) get the rule's expense category. Rules fill only
+ * Categorization rules: transactions whose displayed payee matches the
+ * rule's literal payee text get the rule's expense category. Rules fill only
  * transactions without a category, never replacing one someone chose: on
  * import, as Balebase's work, and on request, as the requester's.
  */
@@ -44,7 +46,7 @@ async function createRule(context: FinanceContext) {
   const input = await readBody(
     context,
     financeRoutes.createCategorizationRule,
-    "A payee name, a category, and applyToExisting are required.",
+    "A payee name, a match type, a category, and applyToExisting are required.",
   );
   if (input instanceof Response) return input;
   const database = context.env.DB;
@@ -59,8 +61,8 @@ async function createRule(context: FinanceContext) {
       .prepare(
         `INSERT OR IGNORE INTO finance_categorization_rules
            (id, organization_id, payee_name, expense_category_id, created_at,
-            created_by)
-         SELECT ?, category.organization_id, ?, category.id, ?, ?
+            created_by, match_type)
+         SELECT ?, category.organization_id, ?, category.id, ?, ?, ?
          FROM finance_expense_categories AS category
          WHERE category.id = ? AND category.organization_id = ?
            AND (SELECT COUNT(*) FROM finance_categorization_rules
@@ -71,6 +73,7 @@ async function createRule(context: FinanceContext) {
         input.payeeName,
         now,
         actor.userId,
+        input.matchType,
         input.categoryId,
         organizationId,
         organizationId,
@@ -79,6 +82,7 @@ async function createRule(context: FinanceContext) {
     ruleEvent(database, actor.userId, now, id, {
       action: "finance.categorization_rule_created",
       details: `json_object('payeeName', rule.payee_name,
+        'matchType', rule.match_type,
         'categoryId', category.id, 'categoryName', category.name)`,
       organizationId,
     }),
@@ -178,6 +182,7 @@ function applyStatements(
     ruleEvent(database, userId, now, id, {
       action: "finance.categorization_rule_applied",
       details: `json_object('payeeName', rule.payee_name,
+        'matchType', rule.match_type,
         'categoryId', category.id, 'categoryName', category.name,
         'count', (SELECT COUNT(*) ${uncategorized}))`,
       organizationId,
@@ -194,7 +199,7 @@ function applyStatements(
          JOIN plaid_transactions AS txn
            ON txn.organization_id = rule.organization_id
           AND txn.source_status = 'active'
-          AND ${payee} = rule.payee_name
+          AND ${ruleMatches}
          WHERE rule.id = ?3 AND rule.organization_id = ?4
          ON CONFLICT(transaction_id) DO UPDATE SET
            expense_category_id = excluded.expense_category_id,
@@ -211,14 +216,15 @@ function applyStatements(
       .prepare(
         `UPDATE activity_events
          SET details = json_set(activity_events.details, '$.ruleId', rule.id,
-                                '$.rulePayeeName', rule.payee_name)
+                                '$.rulePayeeName', rule.payee_name,
+                                '$.ruleMatchType', rule.match_type)
          FROM finance_categorization_rules AS rule
          WHERE rule.id = ?3 AND rule.organization_id = ?4
            AND activity_events.root_type = 'finance_transaction'
            AND activity_events.root_id IN (
              SELECT txn.id FROM plaid_transactions AS txn
              WHERE txn.organization_id = rule.organization_id
-               AND ${payee} = rule.payee_name)
+               AND ${ruleMatches})
            AND activity_events.organization_id = rule.organization_id
            AND activity_events.action = 'finance.transaction_categorized'
            AND activity_events.actor_user_id = ?1
@@ -259,6 +265,7 @@ async function deleteRule(context: FinanceContext) {
     ruleEvent(database, actor.userId, new Date().toISOString(), id, {
       action: "finance.categorization_rule_deleted",
       details: `json_object('payeeName', rule.payee_name,
+        'matchType', rule.match_type,
         'categoryId', category.id, 'categoryName', category.name)`,
       organizationId,
     }),
@@ -334,6 +341,7 @@ export function deleteCategoryRulesStatements(
                 category.name, 'finance_categorization_rule', rule.id,
                 'finance.categorization_rule_deleted', actor.id, actor.name,
                 actor.email, ?, json_object('payeeName', rule.payee_name,
+                  'matchType', rule.match_type,
                   'categoryId', category.id, 'categoryName', category.name,
                   'reason', 'category_deleted')
          FROM finance_categorization_rules AS rule
@@ -377,8 +385,7 @@ export function applyRulesToImported(
                 rule.expense_category_id, NULL, NULL, ?1, ?1
          FROM plaid_transactions AS txn
          JOIN finance_categorization_rules AS rule
-           ON rule.organization_id = txn.organization_id
-          AND rule.payee_name = ${payee}
+           ON rule.id = ${importedRuleId}
          WHERE txn.organization_id = ?2
            AND txn.id IN (SELECT value FROM json_each(?3))
            AND txn.source_status = 'active'
@@ -399,7 +406,8 @@ export function applyRulesToImported(
                      'finance.transaction_categorized' AS action,
                      json_object('before', NULL, 'beforeName', NULL,
                        'after', category.id, 'afterName', category.name,
-                       'ruleId', rule.id, 'rulePayeeName', rule.payee_name)
+                       'ruleId', rule.id, 'rulePayeeName', rule.payee_name,
+                       'ruleMatchType', rule.match_type)
                        AS details
               FROM finance_transaction_annotations AS annotation
               JOIN plaid_transactions AS txn
@@ -407,8 +415,7 @@ export function applyRulesToImported(
               JOIN finance_expense_categories AS category
                 ON category.id = annotation.expense_category_id
               JOIN finance_categorization_rules AS rule
-                ON rule.organization_id = txn.organization_id
-               AND rule.payee_name = ${payee}
+                ON rule.id = ${importedRuleId}
               WHERE annotation.organization_id = ?
                 AND annotation.transaction_id IN (SELECT value FROM json_each(?))
                 AND annotation.updated_by IS NULL

@@ -47,15 +47,31 @@ interface ConnectionState {
   status?: unknown;
 }
 
-/** "Shell → Fuel" for a categorization rule's payee and category. */
-function ruleSummary(details: ActivityEvent["details"]) {
-  return `${textValue(details.payeeName)} → ${textValue(details.categoryName)}`;
+function ruleMatchLabel(value: unknown) {
+  switch (value) {
+    case "startsWith":
+      return "Starts with";
+    case "contains":
+      return "Contains";
+    default:
+      // Events before match types were introduced always meant exact matches.
+      return "Exact match";
+  }
+}
+
+/** The recorded match, pattern, and category, including a rule's former values. */
+function ruleSummary(
+  matchType: unknown,
+  payeeName: unknown,
+  categoryName: unknown,
+) {
+  return `${ruleMatchLabel(matchType)}: ${textValue(payeeName)} → ${textValue(categoryName)}`;
 }
 
 /** The rule that categorized a transaction, when one did. */
 export function categorizedByRule({ details }: ActivityEvent) {
   return details.ruleId
-    ? `By the rule for “${textValue(details.rulePayeeName)}”`
+    ? `By the rule for “${textValue(details.rulePayeeName)}” · ${ruleMatchLabel(details.ruleMatchType)}`
     : "";
 }
 
@@ -116,14 +132,15 @@ const summaries: Partial<Record<string, (event: ActivityEvent) => string>> = {
   "finance.categories_defaults_added": ({ details }) =>
     Array.isArray(details.names) ? details.names.map(textValue).join(", ") : "",
   "finance.categorization_rule_applied": ({ details }) =>
-    `${ruleSummary(details)} · ${count(details.count, "transaction")}`,
-  "finance.categorization_rule_created": ({ details }) => ruleSummary(details),
+    `${ruleSummary(details.matchType, details.payeeName, details.categoryName)} · ${count(details.count, "transaction")}`,
+  "finance.categorization_rule_created": ({ details }) =>
+    ruleSummary(details.matchType, details.payeeName, details.categoryName),
   "finance.categorization_rule_deleted": ({ details }) =>
     details.reason === "category_deleted"
-      ? `${ruleSummary(details)} · With its category`
-      : ruleSummary(details),
+      ? `${ruleSummary(details.matchType, details.payeeName, details.categoryName)} · With its category`
+      : ruleSummary(details.matchType, details.payeeName, details.categoryName),
   "finance.categorization_rule_updated": ({ details }) =>
-    `${textValue(details.previousPayeeName)} → ${textValue(details.previousCategoryName)} changed to ${ruleSummary(details)}`,
+    `${ruleSummary(details.previousMatchType, details.previousPayeeName, details.previousCategoryName)} changed to ${ruleSummary(details.matchType, details.payeeName, details.categoryName)}`,
   "finance.category_created": ({ details }) => textValue(details.name),
   "finance.category_deleted": ({ details }) =>
     `${textValue(details.name)} · ${count(details.transactionCount, "transaction")} left uncategorized`,

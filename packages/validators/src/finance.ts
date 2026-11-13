@@ -9,7 +9,7 @@ import {
 } from "./fields";
 import { LinkedEmailSchema } from "./inbox";
 import { route } from "./route";
-import { financeLimits } from "./rules";
+import { financeLimits, financeRuleMatchTypes } from "./rules";
 
 const FinanceSyncStatusSchema = z.enum([
   "queued",
@@ -352,14 +352,15 @@ const CategoriesResponseSchema = z.object({
 const payeeNameRule = `Payee names need 1 to ${financeLimits.payeeName} characters.`;
 
 /**
- * Gives a payee's transactions an expense category: those shown under exactly
- * `payeeName` (the merchant, else the bank's description). Rules only fill
- * uncategorized transactions.
+ * Gives matching displayed payees an expense category (the merchant, else
+ * the bank's description). Matching is literal and case-sensitive; rules
+ * only fill uncategorized transactions.
  */
 const CategorizationRuleSchema = z.object({
   category: z.object({ id: z.string(), name: z.string() }),
   createdAt: z.string(),
   id: z.string(),
+  matchType: z.enum(financeRuleMatchTypes),
   /** Who created the rule; null once that account is deleted. */
   owner: z.object({ id: z.string(), name: z.string() }).nullable(),
   payeeName: z.string(),
@@ -373,25 +374,30 @@ const CreateCategorizationRuleSchema = z.object(
     /** Also fill the payee's existing uncategorized transactions. */
     applyToExisting: z.boolean(),
     categoryId: RecordIdSchema,
-    // Matched exactly, as rows show it, so it is neither trimmed nor folded.
+    matchType: z.enum(financeRuleMatchTypes),
+    // Matched literally, as rows show it, so it is neither trimmed nor folded.
     payeeName: z
       .string({ error: payeeNameRule })
       .min(1, payeeNameRule)
       .max(financeLimits.payeeName, payeeNameRule),
   },
-  { error: "A payee name, a category, and applyToExisting are required." },
+  {
+    error:
+      "A payee name, a match type, a category, and applyToExisting are required.",
+  },
 );
 
-/** A rule's new payee and category; editing categorizes nothing by itself. */
+/** A rule's new match and category; editing categorizes nothing by itself. */
 const UpdateCategorizationRuleSchema = z.object(
   {
     categoryId: RecordIdSchema,
+    matchType: z.enum(financeRuleMatchTypes),
     payeeName: z
       .string({ error: payeeNameRule })
       .min(1, payeeNameRule)
       .max(financeLimits.payeeName, payeeNameRule),
   },
-  { error: "A payee name and a category are required." },
+  { error: "A payee name, a match type, and a category are required." },
 );
 
 /** How many existing transactions a rule categorized. */

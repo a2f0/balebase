@@ -1,3 +1,4 @@
+import type { FinanceRuleMatchType } from "@balebase/validators/rules";
 import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
 
@@ -5,6 +6,7 @@ import { countLabel } from "../shared/labels";
 interface NewRule {
   applyToExisting: boolean;
   categoryId: string;
+  matchType: FinanceRuleMatchType;
   payeeName: string;
 }
 
