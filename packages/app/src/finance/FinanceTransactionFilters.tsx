@@ -1,9 +1,7 @@
 import type { FinanceFilters } from "@balebase/api-client";
 import { Button } from "@balebase/ui/react";
 import type { ExpenseCategory } from "@balebase/validators/finance";
-import type { ReactNode } from "react";
 import { FinancePeriodFilter } from "./FinancePeriodFilter";
-import { initialFilters } from "./useFinanceData";
 
 /** Whether any filter narrows the transaction list. */
 export function hasTransactionFilters(filters: FinanceFilters) {
@@ -18,15 +16,16 @@ export function hasTransactionFilters(filters: FinanceFilters) {
 
 export function FinanceTransactionFilters({
   categories,
-  children,
   filters,
   onChange,
+  onClear,
+  searchActive,
 }: {
   categories: ExpenseCategory[];
-  /** Controls shown before the filters, such as the view switch. */
-  children?: ReactNode;
   filters: FinanceFilters;
   onChange: (filters: FinanceFilters) => void;
+  onClear: () => void;
+  searchActive: boolean;
 }) {
   const categoryName = filters.categorySlug
     ? (categories.find(({ slug }) => slug === filters.categorySlug)?.name ??
@@ -34,7 +33,6 @@ export function FinanceTransactionFilters({
     : undefined;
   return (
     <div className="financeTransactionFilters">
-      {children}
       <FinancePeriodFilter
         onChange={(year) => onChange({ ...filters, year })}
         year={filters.year}
@@ -75,13 +73,8 @@ export function FinanceTransactionFilters({
       >
         Uncategorized expenses
       </Button>
-      {hasTransactionFilters(filters) && (
-        <Button
-          icon="close"
-          onClick={() => onChange(initialFilters)}
-          size="sm"
-          variant="ghost"
-        >
+      {(hasTransactionFilters(filters) || searchActive) && (
+        <Button icon="close" onClick={onClear} size="sm" variant="ghost">
           Clear filters
         </Button>
       )}

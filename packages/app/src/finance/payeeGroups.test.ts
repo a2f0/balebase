@@ -67,4 +67,100 @@ describe("payee groups", () => {
       total: null,
     });
   });
+
+  it("sorts payees case-insensitively in both directions with deterministic case ties", () => {
+    const rows = [
+      transaction("a", { name: "beta" }),
+      transaction("b", { name: "alpha" }),
+      transaction("c", { name: "éclair" }),
+      transaction("d", { name: "ALPHA" }),
+      transaction("e", { name: "ÉCLAIR" }),
+      transaction("f", { name: "beta" }),
+    ];
+    expect(groupByPayee(rows, "payee").map(({ name }) => name)).toEqual([
+      "ALPHA",
+      "alpha",
+      "beta",
+      "ÉCLAIR",
+      "éclair",
+    ]);
+    expect(groupByPayee(rows, "-payee").map(({ name }) => name)).toEqual([
+      "éclair",
+      "ÉCLAIR",
+      "beta",
+      "alpha",
+      "ALPHA",
+    ]);
+  });
+
+  it("sorts complete signed net totals, comparing currencies numerically and leaving mixed totals last", () => {
+    const rows = [
+      transaction("a", { name: "Expense A", amount: 20 }),
+      transaction("b", { name: "Expense B", amount: 30 }),
+      transaction("c", { name: "Refund", amount: -5 }),
+      transaction("d", { name: "Zero", amount: 5 }),
+      transaction("e", { name: "Mixed Z", amount: 1000 }),
+      transaction("f", { name: "Mixed A", amount: -1000 }),
+      transaction("g", { name: "Euro", amount: 35, currencyCode: "EUR" }),
+      transaction("h", { name: "Tie", amount: 30 }),
+      transaction("i", { name: "Expense A", amount: 20 }),
+      transaction("j", { name: "Refund", amount: -10 }),
+      transaction("k", { name: "Zero", amount: -5 }),
+      transaction("l", {
+        name: "Mixed Z",
+        amount: 1000,
+        currencyCode: "CAD",
+      }),
+      transaction("m", {
+        name: "Mixed A",
+        amount: -1000,
+        currencyCode: "EUR",
+      }),
+    ];
+    expect(
+      groupByPayee(rows, "total").map(({ name, total }) => [name, total]),
+    ).toEqual([
+      ["Expense A", -40],
+      ["Euro", -35],
+      ["Expense B", -30],
+      ["Tie", -30],
+      ["Zero", 0],
+      ["Refund", 15],
+      ["Mixed A", null],
+      ["Mixed Z", null],
+    ]);
+    expect(
+      groupByPayee(rows, "-total").map(({ name, total }) => [name, total]),
+    ).toEqual([
+      ["Refund", 15],
+      ["Zero", 0],
+      ["Expense B", -30],
+      ["Tie", -30],
+      ["Euro", -35],
+      ["Expense A", -40],
+      ["Mixed A", null],
+      ["Mixed Z", null],
+    ]);
+  });
+
+  it("does not mutate input rows or their order for any sort", () => {
+    const rows = [
+      transaction("a", { name: "Shop", amount: 5 }),
+      transaction("b", { name: "Bank" }),
+      transaction("c", { name: "Shop", amount: -2 }),
+    ];
+    const original = [...rows];
+    for (const row of rows) Object.freeze(row);
+    Object.freeze(rows);
+    for (const sort of [
+      "count",
+      "payee",
+      "-payee",
+      "total",
+      "-total",
+    ] as const) {
+      groupByPayee(rows, sort);
+    }
+    expect(rows).toEqual(original);
+  });
 });

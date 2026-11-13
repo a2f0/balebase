@@ -25,6 +25,7 @@ import {
   type ComponentProps,
   type FormEvent,
   type ReactNode,
+  useMemo,
   useState,
 } from "react";
 import { AppLink } from "../shared/AppLink";
@@ -40,8 +41,8 @@ import {
   FinancePayeeList,
   ruleNameFits,
   type TransactionView,
-  TransactionViewSwitch,
 } from "./FinancePayeeList";
+import { FinanceTransactionControls } from "./FinanceTransactionControls";
 import {
   FinanceTransactionFilters,
   hasTransactionFilters,
@@ -55,7 +56,18 @@ import {
 import { FinanceTransactionTotals } from "./FinanceTransactionTotals";
 import { formatMoney } from "./financeFormat";
 import type { CreateRule } from "./financeRuleAction";
-import { groupByPayee, type PayeeGroup, transactionTitle } from "./payeeGroups";
+import {
+  searchTransactions,
+  sortTransactions,
+  type TransactionSort,
+} from "./financeTransactions";
+import {
+  groupByPayee,
+  type PayeeGroup,
+  type PayeeSort,
+  transactionTitle,
+} from "./payeeGroups";
+import { initialFilters } from "./useFinanceData";
 
 interface AnnotationHandlers {
   busy: boolean;
@@ -81,21 +93,7 @@ type CategorizeMany = (
   categoryId: string | null,
 ) => Promise<boolean>;
 
-export function FinanceTransactionHistory({
-  accountName,
-  onClearFilter,
-  filters,
-  initialView = "list",
-  onFiltersChange,
-  loadError,
-  loadingLabel,
-  matching,
-  onCategorizeMany,
-  onLoadMore,
-  onReload,
-  visible,
-  ...handlers
-}: Omit<AnnotationHandlers, "onFilterByName"> & {
+type HistoryProps = Omit<AnnotationHandlers, "onFilterByName"> & {
   accountName: string | undefined;
   /** How the list starts: as transactions, or grouped by payee (Account). */
   initialView?: TransactionView;
@@ -114,53 +112,148 @@ export function FinanceTransactionHistory({
   onReload: () => Promise<void>;
   /** Creates a payee's categorization rule; resolves whether it saved. */
   onCreateRule: CreateRule;
-}) {
-  const [view, setView] = useState<TransactionView>(initialView);
-  const transactions = matching?.slice(0, visible);
-  // Payees group everything the filters match, not only the rows shown.
-  const payees =
-    view === "payees" && matching ? groupByPayee(matching) : undefined;
-  const listed = payees ?? matching;
-  // Names the view and filters too: InfiniteScroll asks once per cursor, and
-  // the same count under another view or filters is a new place.
-  const nextCursor =
-    listed && listed.length > visible
-      ? `${view}:${JSON.stringify(filters)}#${visible}`
-      : null;
-  // Any change to the filters (toolbar, account cards, Back) starts afresh.
-  const selection = useTransactionSelection(
-    transactions,
-    JSON.stringify(filters),
-  );
+};
+
+export function FinanceTransactionHistory(props: HistoryProps) {
+  const listing = useTransactionListing(props);
   return (
     <PageSection
       actions={
         <TransactionSummary
-          accountName={accountName}
-          label={summaryLabel(matching, payees, visible)}
-          matching={matching}
-          onClearFilter={onClearFilter}
+          accountName={props.accountName}
+          label={summaryLabel(listing.matching, listing.payees, props.visible)}
+          matching={listing.matching}
+          onClearFilter={props.onClearFilter}
         />
       }
       title="Transactions"
     >
+      <FinanceTransactionControls
+        onSearchChange={listing.changeSearch}
+        onSortChange={listing.changeSort}
+        onViewChange={listing.setView}
+        search={listing.search}
+        sort={listing.sort}
+        view={listing.view}
+      />
       <FinanceTransactionFilters
-        categories={handlers.categories}
-        filters={filters}
-        onChange={onFiltersChange}
-      >
-        <TransactionViewSwitch onChange={setView} view={view} />
-      </FinanceTransactionFilters>
+        categories={props.categories}
+        filters={props.filters}
+        onChange={props.onFiltersChange}
+        onClear={listing.clearFilters}
+        searchActive={listing.search.length > 0}
+      />
       <CategoryFilterNotice
-        categories={handlers.categories}
-        filters={filters}
-        loaded={Boolean(matching)}
-        onNavigate={handlers.onNavigate}
+        categories={props.categories}
+        filters={props.filters}
+        loaded={Boolean(listing.matching)}
+        onNavigate={props.onNavigate}
       />
       <CategorySetupBanner
-        onNavigate={handlers.onNavigate}
-        shown={Boolean(matching?.length) && !handlers.categories.length}
+        onNavigate={props.onNavigate}
+        shown={Boolean(listing.matching?.length) && !props.categories.length}
       />
+      <TransactionResults {...props} listing={listing} />
+    </PageSection>
+  );
+}
+
+interface TransactionListing {
+  matching: FinanceTransaction[] | undefined;
+  payees: PayeeGroup[] | undefined;
+  transactions: FinanceTransaction[] | undefined;
+  selection: TransactionSelection;
+  search: string;
+  sort: TransactionSort | PayeeSort;
+  view: TransactionView;
+  nextCursor: string | null;
+  setView: (view: TransactionView) => void;
+  changeSearch: (search: string) => void;
+  changeSort: (sort: TransactionSort | PayeeSort) => void;
+  clearFilters: () => void;
+}
+
+/** Search and order the whole cached result before paging either view. */
+function useTransactionListing({
+  filters,
+  initialView = "list",
+  matching: unsearched,
+  onFiltersChange,
+  visible,
+}: HistoryProps): TransactionListing {
+  const [view, setView] = useState<TransactionView>(initialView);
+  const [search, setSearch] = useState("");
+  const [listSort, setListSort] = useState<TransactionSort>("newest");
+  const [payeeSort, setPayeeSort] = useState<PayeeSort>("count");
+  const matching = useMemo(
+    () => unsearched && searchTransactions(unsearched, search),
+    [unsearched, search],
+  );
+  const ordered = useMemo(
+    () =>
+      view === "list" && matching
+        ? listSort === "newest"
+          ? matching
+          : sortTransactions(matching, listSort)
+        : undefined,
+    [matching, listSort, view],
+  );
+  const payees = useMemo(
+    () =>
+      view === "payees" && matching
+        ? groupByPayee(matching, payeeSort)
+        : undefined,
+    [matching, payeeSort, view],
+  );
+  const transactions = ordered?.slice(0, visible);
+  const sort = view === "payees" ? payeeSort : listSort;
+  const identity = JSON.stringify([view, filters, search, sort]);
+  const listed = payees ?? ordered;
+  const selection = useTransactionSelection(transactions, identity);
+  return {
+    matching,
+    payees,
+    transactions,
+    selection,
+    search,
+    sort,
+    view,
+    setView,
+    nextCursor:
+      listed && listed.length > visible ? `${identity}#${visible}` : null,
+    clearFilters() {
+      setSearch("");
+      onFiltersChange(initialFilters);
+    },
+    changeSearch(value: string) {
+      setSearch(value);
+      onFiltersChange(filters);
+    },
+    changeSort(value: TransactionSort | PayeeSort) {
+      if (view === "payees") setPayeeSort(value as PayeeSort);
+      else setListSort(value as TransactionSort);
+      onFiltersChange(filters);
+    },
+  };
+}
+
+/** Keeps payee actions mounted while their filtered rows change or disappear. */
+function TransactionResults({
+  filters,
+  loadError,
+  listing,
+  loadingLabel,
+  onCategorizeMany,
+  onFiltersChange,
+  onLoadMore,
+  onReload,
+  visible,
+  ...handlers
+}: HistoryProps & { listing: TransactionListing }) {
+  const { matching, payees, transactions, selection, nextCursor, view } =
+    listing;
+  return (
+    <>
       {loadError && (
         <Banner
           tone="danger"
@@ -173,15 +266,13 @@ export function FinanceTransactionHistory({
           {loadError}
         </Banner>
       )}
-      {/* Kept while the payee view shows, even empty: a payee's open form
-          outlives its row leaving the list as it saves. */}
       {payees && (
         <FinancePayeeList
           {...handlers}
           matching={matching ?? []}
           onCategorizeMany={onCategorizeMany}
           onSelect={(name) => {
-            setView("list");
+            listing.setView("list");
             onFiltersChange({ ...filters, name });
           }}
           payees={payees.slice(0, visible)}
@@ -189,12 +280,12 @@ export function FinanceTransactionHistory({
       )}
       {(!loadError || matching) && !payees?.length && (
         <TransactionContent
-          filtered={hasTransactionFilters(filters)}
+          filtered={hasTransactionFilters(filters) || listing.search.length > 0}
           loadingLabel={loadingLabel}
           onCategorizeMany={onCategorizeMany}
           onFilterByName={(name) => onFiltersChange({ ...filters, name })}
           selection={selection}
-          transactions={transactions}
+          transactions={view === "payees" ? matching : transactions}
           {...handlers}
         />
       )}
@@ -209,7 +300,7 @@ export function FinanceTransactionHistory({
           {view === "payees" ? "Load more payees" : "Load more transactions"}
         </InfiniteScroll>
       )}
-    </PageSection>
+    </>
   );
 }
 

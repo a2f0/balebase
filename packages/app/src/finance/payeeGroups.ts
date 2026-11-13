@@ -1,5 +1,7 @@
 import type { FinanceTransaction } from "@balebase/validators/finance";
 
+export type PayeeSort = "count" | "payee" | "-payee" | "total" | "-total";
+
 /** The name a row shows, and the one the same-name filter matches. */
 export function transactionTitle(transaction: FinanceTransaction) {
   return transaction.merchantName ?? transaction.name;
@@ -18,10 +20,16 @@ export interface PayeeGroup {
 
 /**
  * Groups transactions by the name rows show (the merchant, else the bank's
- * description), most transactions first, then by name.
+ * description). By default, most transactions first, then by name.
  */
-export function groupByPayee(transactions: FinanceTransaction[]) {
-  const groups = new Map<string, PayeeGroup & { mixed: boolean }>();
+export function groupByPayee(
+  transactions: FinanceTransaction[],
+  sort: PayeeSort = "count",
+) {
+  const groups = new Map<
+    string,
+    PayeeGroup & { mixed: boolean; sortName: string }
+  >();
   for (const transaction of transactions) {
     const name = transactionTitle(transaction);
     const group = groups.get(name);
@@ -32,6 +40,7 @@ export function groupByPayee(transactions: FinanceTransaction[]) {
         latestDate: transaction.transactionDate,
         mixed: false,
         name,
+        sortName: sort === "count" ? name : name.toLowerCase(),
         pending: transaction.pending ? 1 : 0,
         total: -transaction.amount,
       });
@@ -44,17 +53,31 @@ export function groupByPayee(transactions: FinanceTransaction[]) {
     group.mixed ||= transaction.currencyCode !== group.currencyCode;
     group.total = (group.total ?? 0) - transaction.amount;
   }
+  for (const group of groups.values()) {
+    if (group.mixed) {
+      group.currencyCode = null;
+      group.total = null;
+    } else {
+      group.total = roundCents(group.total ?? 0);
+    }
+  }
   return [...groups.values()]
-    .map(
-      ({ mixed, ...group }): PayeeGroup =>
-        mixed
-          ? { ...group, currencyCode: null, total: null }
-          : { ...group, total: roundCents(group.total ?? 0) },
-    )
-    .sort(
-      (a, b) =>
-        b.count - a.count || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
-    );
+    .sort((a, b) => {
+      const byExactName = compareNames(a.name, b.name);
+      if (sort === "count") return b.count - a.count || byExactName;
+      const byName = compareNames(a.sortName, b.sortName) || byExactName;
+      if (sort === "payee") return byName;
+      if (sort === "-payee") return -byName;
+      if (a.total === null) return b.total === null ? byName : 1;
+      if (b.total === null) return -1;
+      const byTotal = a.total - b.total;
+      return (sort === "total" ? byTotal : -byTotal) || byName;
+    })
+    .map(({ mixed: _mixed, sortName: _sortName, ...group }) => group);
+}
+
+function compareNames(a: string, b: string) {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /**
