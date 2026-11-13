@@ -1,5 +1,5 @@
 import type { ContractDetail } from "@balebase/validators/contracts";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { api } from "../shared/apiClient";
 import {
   type AuthoringEvent,
@@ -12,13 +12,22 @@ export function useAuthoringRequests(
   state: AuthoringState,
   dispatch: (event: AuthoringEvent) => void,
 ) {
+  const pending = useRef<{
+    state: AuthoringRequestState;
+    promise: Promise<AuthoringEvent>;
+  } | null>(null);
   useEffect(() => {
     if (!authoringBusy(state)) return;
+    // Replayed effects resubscribe to the same work, including its completion.
+    // State identity, not the request number, distinguishes save from preview.
+    if (pending.current?.state !== state) {
+      pending.current = { state, promise: performRequest(state) };
+    }
     let active = true;
     const send = (event: AuthoringEvent) => {
       if (active) dispatch(event);
     };
-    void performRequest(state).then(send, (cause: unknown) =>
+    void pending.current.promise.then(send, (cause: unknown) =>
       send({
         message:
           cause instanceof Error

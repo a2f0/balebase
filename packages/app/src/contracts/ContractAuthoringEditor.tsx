@@ -18,6 +18,7 @@ import {
   authoringReducer,
 } from "./contractAuthoringState";
 import { confirmContractDeletion, fieldTypeLabel } from "./contractFields";
+import { recordRenderedPage } from "./contractPdfState";
 
 export function ContractAuthoringEditor({
   contract,
@@ -43,10 +44,12 @@ export function ContractAuthoringEditor({
     "Your written contract changes have not been saved. Leaving during a request may leave its outcome unknown.",
   );
   useAuthoringRequests(state, dispatch);
+  const notifications = useRef({ onChanged, onDeleted });
+  notifications.current = { onChanged, onDeleted };
   useEffect(() => {
-    if (state.status === "sent") onChanged(state.result);
-    if (state.status === "deleted") onDeleted();
-  }, [onChanged, onDeleted, state]);
+    if (state.status === "sent") notifications.current.onChanged(state.result);
+    if (state.status === "deleted") notifications.current.onDeleted();
+  }, [state]);
   const request = (type: "save" | "preview" | "send" | "delete") =>
     dispatch({ request: ++requests.current, type });
   const preview = "bytes" in state;
@@ -86,8 +89,9 @@ export function ContractAuthoringEditor({
         <section aria-label="Exact PDF preview" className="stack stackMd">
           <h2>Saved PDF · revision {state.saved.authoring.revision}</h2>
           <p className="contractHint">
-            This is the saved document signers will receive. Review every page
-            and signer field before sending.
+            This is the saved document signers will receive. Scroll through and
+            review every page and signer field before sending. Review becomes
+            available after every page has rendered.
           </p>
           <AuthoredPdfPreview
             key={`${state.saved.id}:${state.saved.authoring.revision}`}
@@ -192,19 +196,32 @@ function AuthoredPdfPreview({
   // PDF.js may transfer its buffer. Keep the saved bytes and loader identity
   // stable while review and send transition without changing the document.
   const load = useCallback(() => Promise.resolve(bytes.slice(0)), [bytes]);
-  const onDisplayed = useCallback(
-    () => dispatch({ request, type: "displayed" }),
-    [dispatch, request],
-  );
+  const renderedPages = useRef(new Set<number>());
+  const onPageRendered = (pageNumber: number) => {
+    if (
+      recordRenderedPage(
+        renderedPages.current,
+        pageNumber,
+        contract.document.pageCount,
+      )
+    ) {
+      dispatch({ request, type: "displayed" });
+    }
+  };
   return (
     <ContractPages
       load={load}
+      onPageRendered={onPageRendered}
+      onFailed={() =>
+        dispatch({
+          request,
+          type: "failed",
+          message:
+            "The saved PDF could not be displayed. Try reviewing it again.",
+        })
+      }
       renderOverlay={(page) => (
-        <AuthoredPreviewFields
-          contract={contract}
-          page={page}
-          onDisplayed={onDisplayed}
-        />
+        <AuthoredPreviewFields contract={contract} page={page} />
       )}
     />
   );
@@ -213,15 +230,10 @@ function AuthoredPdfPreview({
 function AuthoredPreviewFields({
   contract,
   page,
-  onDisplayed,
 }: {
   contract: ContractDetail;
   page: PageSize;
-  onDisplayed: () => void;
 }) {
-  useEffect(() => {
-    onDisplayed();
-  }, [onDisplayed]);
   return (
     <>
       {contract.fields
