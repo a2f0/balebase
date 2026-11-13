@@ -29,6 +29,7 @@ import {
 import { OrganizationApiKeys } from "./OrganizationApiKeys";
 import { OrganizationAccessSettings } from "./OrganizationGroups";
 import { OrganizationMemberDetail } from "./OrganizationMemberDetail";
+import { OrganizationPaidFeatures } from "./OrganizationPaidFeatures";
 import { OrganizationPeople } from "./OrganizationPeople";
 import {
   canDeleteOrganization,
@@ -194,6 +195,7 @@ function OrganizationSettingsPageContent({
     <OrganizationGeneral
       accessError={accessError}
       memberRole={memberRole}
+      onAccessChanged={onAccessChanged}
       onWorkspaceChanged={onWorkspaceChanged}
       onNavigate={onNavigate}
       organization={organization}
@@ -251,6 +253,7 @@ function OrganizationSettingsNavigation({
 function OrganizationGeneral({
   accessError,
   memberRole,
+  onAccessChanged,
   onWorkspaceChanged,
   onNavigate,
   organization,
@@ -259,6 +262,7 @@ function OrganizationGeneral({
 }: {
   accessError: string | undefined;
   memberRole: string | undefined;
+  onAccessChanged: () => Promise<void>;
   onWorkspaceChanged: () => Promise<void>;
   onNavigate: (pathname: string) => void;
   organization: WorkspaceOrganization;
@@ -298,6 +302,11 @@ function OrganizationGeneral({
         onSave={actions.save}
         organization={organization}
         saving={actions.action === "save"}
+      />
+      <OrganizationPaidFeatures
+        canManage={canManageOrganization(memberRole)}
+        key={organization.id}
+        onAccessChanged={onAccessChanged}
       />
       <div className="stack">
         <LeaveOrganizationCard

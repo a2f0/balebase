@@ -17,6 +17,7 @@ import {
   isUsStateCode,
 } from "@balebase/validators/rules";
 import { type FormEvent, useCallback, useState } from "react";
+import { usePaidFeaturesEnabled } from "../organizations/PaidFeatures";
 import { AppLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
 import { formatCalendarDate, formatDate } from "../shared/labels";
@@ -54,6 +55,7 @@ export function RequirementDraftEditor({
   disabled: boolean;
   onChange: (drafts: RequirementDraft[]) => void;
 }) {
+  const paidFeaturesEnabled = usePaidFeaturesEnabled();
   const [optionIndex, setOptionIndex] = useState(0);
   const [dueDate, setDueDate] = useState("");
   const [customTitle, setCustomTitle] = useState("");
@@ -62,6 +64,7 @@ export function RequirementDraftEditor({
     const title =
       selected.title === "Other form" ? customTitle.trim() : selected.title;
     if (
+      (selected.kind === "background_check" && !paidFeaturesEnabled) ||
       !title ||
       !dueDate ||
       drafts.length >= employeeRequirementLimits.requirements
@@ -83,7 +86,13 @@ export function RequirementDraftEditor({
             value={optionIndex}
           >
             {options.map((option, index) => (
-              <option key={`${option.kind}-${option.title}`} value={index}>
+              <option
+                disabled={
+                  option.kind === "background_check" && !paidFeaturesEnabled
+                }
+                key={`${option.kind}-${option.title}`}
+                value={index}
+              >
                 {option.title}
               </option>
             ))}
@@ -112,6 +121,7 @@ export function RequirementDraftEditor({
         <Button
           disabled={
             disabled ||
+            (selected.kind === "background_check" && !paidFeaturesEnabled) ||
             !dueDate ||
             (selected.title === "Other form" && !customTitle.trim()) ||
             drafts.length >= employeeRequirementLimits.requirements
@@ -242,10 +252,15 @@ function RequirementAssignmentForm({
   busy: boolean;
   memberId: string;
 }) {
+  const paidFeaturesEnabled = usePaidFeaturesEnabled();
   const [drafts, setDrafts] = useState<RequirementDraft[]>([]);
+  const canSend =
+    drafts.length > 0 &&
+    (paidFeaturesEnabled ||
+      drafts.every(({ kind }) => kind !== "background_check"));
   function assign(event: FormEvent) {
     event.preventDefault();
-    if (!drafts.length) return;
+    if (!canSend) return;
     void action(async () => {
       await api.employeeForms.create({ memberId }, drafts);
       setDrafts([]);
@@ -259,12 +274,7 @@ function RequirementAssignmentForm({
         disabled={busy}
         onChange={setDrafts}
       />
-      <Button
-        busy={busy}
-        disabled={!drafts.length}
-        type="submit"
-        variant="primary"
-      >
+      <Button busy={busy} disabled={!canSend} type="submit" variant="primary">
         Send requests
       </Button>
     </form>
@@ -478,6 +488,7 @@ function CheckrControl({
   busy: boolean;
   requirement: EmployeeRequirement;
 }) {
+  const paidFeaturesEnabled = usePaidFeaturesEnabled();
   const status = requirement.checkrReportStatus;
   if (status && !isClosedReportStatus(status)) {
     return (
@@ -491,6 +502,12 @@ function CheckrControl({
   // Checkr orders only background checks now; a hosted credit report that was
   // canceled is tracked by hand.
   if (requirement.kind !== "background_check") return null;
+  if (!paidFeaturesEnabled)
+    return (
+      <span className="rowMeta">
+        Paid features are disabled for this organization.
+      </span>
+    );
   // A submission Checkr did not finish resumes when the person submits again.
   if (requirement.checkrSubmitting) {
     return (

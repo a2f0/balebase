@@ -4,6 +4,7 @@ import type {
   EmployeeRequirementKind,
 } from "@balebase/validators/employeeForms";
 import { type ReactNode, useCallback, useRef } from "react";
+import { usePaidFeaturesEnabled } from "../organizations/PaidFeatures";
 import { AppButtonLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
 import { useAction } from "../shared/useAction";
@@ -105,25 +106,13 @@ export function MyRequirementActions({
   onNavigate: (pathname: string) => void;
   requirement: EmployeeRequirement;
 }) {
-  const controls: ReactNode[] = [];
-  if (requirement.canSubmitCheckr || requirement.checkrReportStatus) {
-    const path = myDocumentsPath(requirement.id);
-    controls.push(
-      <AppButtonLink
-        href={path}
-        key="screening"
-        onNavigate={onNavigate}
-        size="sm"
-        variant="primary"
-      >
-        {!requirement.canSubmitCheckr
-          ? "View screening status"
-          : requirement.checkrSubmitting
-            ? "Finish background check"
-            : "Start background check"}
-      </AppButtonLink>,
-    );
-  }
+  const controls: ReactNode[] = [
+    <OwnScreeningControl
+      key="screening"
+      onNavigate={onNavigate}
+      requirement={requirement}
+    />,
+  ];
   if (requirement.kind === "form" && requirement.status !== "complete") {
     controls.push(
       <UploadButton
@@ -183,6 +172,49 @@ export function MyRequirementActions({
     );
   }
   return <>{controls}</>;
+}
+
+function OwnScreeningControl({
+  onNavigate,
+  requirement,
+}: {
+  onNavigate: (pathname: string) => void;
+  requirement: EmployeeRequirement;
+}) {
+  const paidFeaturesEnabled = usePaidFeaturesEnabled();
+  if (
+    !paidFeaturesEnabled &&
+    requirement.kind === "background_check" &&
+    !requirement.checkrReportStatus
+  ) {
+    return (
+      <span className="muted">
+        Paid features are disabled for this organization.
+      </span>
+    );
+  }
+  if (
+    !(paidFeaturesEnabled && requirement.canSubmitCheckr) &&
+    !requirement.checkrReportStatus
+  ) {
+    return null;
+  }
+  const label =
+    !paidFeaturesEnabled || !requirement.canSubmitCheckr
+      ? "View screening status"
+      : requirement.checkrSubmitting
+        ? "Finish background check"
+        : "Start background check";
+  return (
+    <AppButtonLink
+      href={myDocumentsPath(requirement.id)}
+      onNavigate={onNavigate}
+      size="sm"
+      variant="primary"
+    >
+      {label}
+    </AppButtonLink>
+  );
 }
 
 function UploadButton({

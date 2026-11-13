@@ -26,7 +26,11 @@ import { useOfflineSlot } from "./offline/offlineSlot";
 import { useOfflineRoute } from "./offline/useOfflineRoute";
 import { useLinkedOrganization } from "./organizations/linkedOrganization";
 import { OrganizationGate } from "./organizations/OrganizationGate";
-import { hasRole } from "./organizations/organizationState";
+import {
+  canManageOrganization,
+  hasRole,
+} from "./organizations/organizationState";
+import { PaidFeaturesContext } from "./organizations/PaidFeatures";
 import { useOrganizationAccess } from "./organizations/useOrganizationAccess";
 import { authClient } from "./shared/authClient";
 import { authCallbackUrl } from "./shared/config";
@@ -329,33 +333,35 @@ function AuthenticatedWorkspace({
       organizations={workspace.organizations}
       user={session.user}
     >
-      {/* Device pages check their own access. */}
-      {offlinePage ?? (
-        <OrganizationGate
-          access={access}
-          navigate={navigate}
-          pathname={pathname}
-          signOut={guardWorkspaceChange(accounts.signOutActiveAccount)}
-        >
-          {showContent ? (
-            route.render({
-              access,
-              addAccount,
-              library,
-              navigate,
-              onSecurityChanged: async () => {
-                await onSessionChanged();
-                await access.refresh();
-              },
-              pathname,
-              user: session.user,
-              workspace,
-            })
-          ) : (
-            <NoOrganization />
-          )}
-        </OrganizationGate>
-      )}
+      <PaidFeaturesContext value={access.paidFeaturesEnabled}>
+        {/* Device pages check their own access. */}
+        {offlinePage ?? (
+          <OrganizationGate
+            access={access}
+            navigate={navigate}
+            pathname={pathname}
+            signOut={guardWorkspaceChange(accounts.signOutActiveAccount)}
+          >
+            {showContent ? (
+              route.render({
+                access,
+                addAccount,
+                library,
+                navigate,
+                onSecurityChanged: async () => {
+                  await onSessionChanged();
+                  await access.refresh();
+                },
+                pathname,
+                user: session.user,
+                workspace,
+              })
+            ) : (
+              <NoOrganization />
+            )}
+          </OrganizationGate>
+        )}
+      </PaidFeaturesContext>
     </WorkspaceShell>
   );
 }
@@ -381,6 +387,18 @@ function blockedWorkspaceContent(
     !access.seatRequirement &&
     !access.can("finance")
   ) {
+    if (access.confirmed && !access.paidFeaturesEnabled) {
+      const canManage = canManageOrganization(access.memberRole);
+      return (
+        <FatalState
+          action={
+            canManage ? "Open organization settings" : "Return to your library"
+          }
+          message="Paid features are disabled for this organization. An owner or admin can enable them in Organization settings."
+          onAction={() => navigate(canManage ? "/organization" : "/")}
+        />
+      );
+    }
     return <FeatureAccessDenied onNavigate={() => navigate("/")} />;
   }
   return undefined;

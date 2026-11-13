@@ -125,6 +125,26 @@ function events(): ActivityEvent[] {
 }
 
 describe("organization membership activity", () => {
+  it("shows the paid feature setting change", async () => {
+    respond(() =>
+      Response.json({
+        events: [
+          activity(
+            1,
+            "organization.paid_features_changed",
+            { id: "org-1", label: "Acme", type: "organization" },
+            { before: true, after: false },
+          ),
+        ],
+        nextCursor: null,
+      }),
+    );
+    const { container } = await mount(<ActivityFeed onNavigate={() => {}} />);
+    await settle();
+    expect(container.textContent).toContain("changed paid features");
+    expect(container.textContent).toContain("Paid features: On → Off");
+  });
+
   it("shows joins, removals, invitations and organization changes", async () => {
     respond(async () => Response.json({ events: events(), nextCursor: null }));
     const navigations: string[] = [];

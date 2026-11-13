@@ -14,6 +14,7 @@ export const organizationActionLabels: Record<string, string> = {
   "organization.member_joined": "joined the organization",
   "organization.member_left": "left the organization",
   "organization.member_removed": "removed a member",
+  "organization.paid_features_changed": "changed paid features",
   "organization.restored": "restored the organization",
   "organization.updated": "changed the organization",
 };
@@ -45,6 +46,8 @@ export function organizationActivitySummary(event: ActivityEvent) {
         .join(" · ");
     case "organization.updated":
       return changes(details.changes).join(" · ") || "No changes";
+    case "organization.paid_features_changed":
+      return `Paid features: ${details.before === true ? "On" : "Off"} → ${details.after === true ? "On" : "Off"}`;
     case "organization.deletion_requested":
       return `${viaLabel(details.via)} · Pending invitations canceled: ${textValue(details.canceledInvitations) || "0"}${canceledSubscriptions(details.canceledSubscriptionIds)}`;
     case "organization.purged":

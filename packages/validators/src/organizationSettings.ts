@@ -40,7 +40,23 @@ export type OrganizationPeopleData = z.infer<
   typeof OrganizationPeopleDataSchema
 >;
 
+const OrganizationSettingsSchema = z.object({
+  paidFeaturesEnabled: z.boolean(),
+});
+export type OrganizationSettings = z.infer<typeof OrganizationSettingsSchema>;
+
 export const organizationSettingsRoutes = {
+  current: route({
+    method: "GET",
+    path: "/api/organization-settings/current",
+    response: OrganizationSettingsSchema,
+  }),
+  updateCurrent: route({
+    method: "PATCH",
+    path: "/api/organization-settings/current",
+    body: OrganizationSettingsSchema,
+    response: OrganizationSettingsSchema,
+  }),
   organizations: route({
     method: "GET",
     path: "/api/organization-settings/organizations",

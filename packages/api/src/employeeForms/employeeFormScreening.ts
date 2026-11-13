@@ -5,6 +5,7 @@ import {
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
 import { requireManager } from "../organizations/organizationMembers";
+import { requirePaidFeature } from "../organizations/paidFeatureAccess";
 import { requestActor } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import { storedDownload } from "../shared/storage";
@@ -36,6 +37,19 @@ import { parseScreeningSubmission } from "./screeningSubmission";
 
 /** Requesting, submitting, refreshing, and reading Checkr screenings. */
 export const employeeFormScreening = new Hono<ApiEnv>();
+
+employeeFormScreening.use(
+  "/:id/checkr/request",
+  requirePaidFeature("backgroundChecks"),
+);
+employeeFormScreening.use(
+  "/:id/checkr/form",
+  requirePaidFeature("backgroundChecks"),
+);
+employeeFormScreening.use(
+  "/:id/checkr/submit",
+  requirePaidFeature("backgroundChecks"),
+);
 
 employeeFormScreening.post(
   "/:id/checkr/request",

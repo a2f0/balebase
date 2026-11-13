@@ -12,6 +12,31 @@ import { organizationSettings } from "./organizationSettings";
 const organizationId = "org_owner-user";
 
 describe("organization groups", () => {
+  it("hides paid Finance access without deleting grants and restores it when enabled", async () => {
+    const fixture = createFixture();
+    const owner = groupsApp(fixture.bindings, "owner-user");
+    fixture.database
+      .query("UPDATE organization SET paid_features_enabled = 0 WHERE id = ?")
+      .run(organizationId);
+    expect((await owner<AccessListing>("GET", "/access")).body).toMatchObject({
+      capabilities: [],
+      paidFeaturesEnabled: false,
+    });
+    expect((await financeRequest(fixture.bindings, "owner-user")).status).toBe(
+      403,
+    );
+    fixture.database
+      .query("UPDATE organization SET paid_features_enabled = 1 WHERE id = ?")
+      .run(organizationId);
+    expect((await owner<AccessListing>("GET", "/access")).body).toMatchObject({
+      capabilities: ["finance"],
+      paidFeaturesEnabled: true,
+    });
+    expect((await financeRequest(fixture.bindings, "owner-user")).status).toBe(
+      200,
+    );
+  });
+
   it("lets organization managers grant and revoke Finance access", async () => {
     const fixture = createFixture();
     const owner = groupsApp(fixture.bindings, "owner-user");
@@ -299,6 +324,7 @@ interface AccessListing {
   capabilities: string[];
   memberRole: string;
   ownerCount: number;
+  paidFeaturesEnabled: boolean;
 }
 
 interface MemberListing {

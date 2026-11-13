@@ -2,8 +2,8 @@ import type { Database } from "bun:sqlite";
 import { describe, expect, it, setSystemTime } from "bun:test";
 import { echoCancellation } from "../testing/billingFixture";
 import { testBindings } from "../testing/bindings";
-import { toD1 } from "../testing/d1";
-import { createTestDatabase } from "../testing/database";
+import { queryHooks, toD1 } from "../testing/d1";
+import { applyMigrations, createTestDatabase } from "../testing/database";
 import { withFetch } from "../testing/http";
 import { insertBilling, seedAccount, seedMember } from "../testing/seed";
 import { testApp } from "../testing/session";
@@ -12,6 +12,140 @@ import { organizationSettings } from "./organizationSettings";
 const targetOrganizationId = "org_owner-user";
 const fallbackOrganizationId = "org_member-user";
 const proPriceId = "price_pro_test";
+
+describe("organization paid features", () => {
+  it("rolls back the setting if recording its activity fails", async () => {
+    const fixture = createFixture();
+    fixture.database.exec(`CREATE TRIGGER reject_paid_settings_activity
+      BEFORE INSERT ON activity_events
+      WHEN NEW.action = 'organization.paid_features_changed'
+      BEGIN SELECT RAISE(ABORT, 'activity unavailable'); END;`);
+    const response = await fixture
+      .app("owner-user", "owner")
+      .request("/current", {
+        body: JSON.stringify({ paidFeaturesEnabled: false }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+    expect(response.status).toBe(500);
+    expect(
+      fixture.database
+        .query("SELECT paid_features_enabled FROM organization WHERE id = ?")
+        .get(targetOrganizationId),
+    ).toEqual({ paid_features_enabled: 1 });
+    expect(lifecycleEvents(fixture.database)).toEqual([]);
+  });
+
+  it("enables existing organizations when migrating", () => {
+    const database = createTestDatabase({ before: "0101" });
+    seedAccount(database, { id: "existing-owner" });
+    applyMigrations(database, { from: "0101" });
+    expect(
+      database
+        .query(
+          "SELECT paid_features_enabled FROM organization WHERE id = 'org_existing-owner'",
+        )
+        .get(),
+    ).toEqual({ paid_features_enabled: 1 });
+  });
+
+  it("defaults enabled, lets owners and admins change it, and records only changes", async () => {
+    const fixture = createFixture();
+    insertPaidBilling(fixture.database, targetOrganizationId);
+    const owner = fixture.app("owner-user", "owner");
+    const update = (enabled: boolean, app = owner) =>
+      app.request("/current", {
+        body: JSON.stringify({ paidFeaturesEnabled: enabled }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+    expect(await (await owner.request("/current")).json()).toEqual({
+      paidFeaturesEnabled: true,
+    });
+    expect((await update(false)).status).toBe(200);
+    expect((await update(false)).status).toBe(200);
+    expect(
+      await (
+        await fixture.app("member-user", "member").request("/current")
+      ).json(),
+    ).toEqual({
+      paidFeaturesEnabled: false,
+    });
+    fixture.database
+      .query("UPDATE member SET role = 'admin' WHERE id = 'target-member'")
+      .run();
+    expect(
+      (await update(true, fixture.app("member-user", "admin"))).status,
+    ).toBe(200);
+    expect(await (await owner.request("/current")).json()).toEqual({
+      paidFeaturesEnabled: true,
+    });
+    expect(lifecycleEvents(fixture.database)).toMatchObject([
+      {
+        action: "organization.paid_features_changed",
+        actor_user_id: "owner-user",
+        details: { before: true, after: false },
+      },
+      {
+        action: "organization.paid_features_changed",
+        actor_user_id: "member-user",
+        details: { before: false, after: true },
+      },
+    ]);
+    expect(
+      fixture.database
+        .query("SELECT paid_features_enabled FROM organization WHERE id = ?")
+        .get(fallbackOrganizationId),
+    ).toEqual({ paid_features_enabled: 1 });
+    expect(
+      fixture.database
+        .query(
+          "SELECT stripe_status, stripe_subscription_id FROM organization_billing WHERE organization_id = ?",
+        )
+        .get(targetOrganizationId),
+    ).toEqual({
+      stripe_status: "active",
+      stripe_subscription_id: "sub_test",
+    });
+  });
+
+  it("refuses members, forged manager roles, and a manager demoted during the write", async () => {
+    const fixture = createFixture();
+    const patch = {
+      body: JSON.stringify({ paidFeaturesEnabled: false }),
+      headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+    };
+    for (const role of ["member", "admin"]) {
+      expect(
+        (await fixture.app("member-user", role).request("/current", patch))
+          .status,
+      ).toBe(403);
+    }
+    fixture.hooks.before(
+      "UPDATE organization SET paid_features_enabled",
+      () => {
+        fixture.database
+          .query(
+            "UPDATE member SET role = 'member' WHERE organizationId = ? AND userId = 'owner-user'",
+          )
+          .run(targetOrganizationId);
+      },
+    );
+    expect(
+      (await fixture.app("owner-user", "owner").request("/current", patch))
+        .status,
+    ).toBe(403);
+    expect(
+      await (
+        await fixture.app("member-user", "member").request("/current")
+      ).json(),
+    ).toEqual({
+      paidFeaturesEnabled: true,
+    });
+    expect(lifecycleEvents(fixture.database)).toEqual([]);
+  });
+});
 
 describe("organization deletion", () => {
   it("only lets an organization owner delete the organization", async () => {
@@ -579,8 +713,9 @@ function createFixture() {
     );
   insertSession(database, "owner-user", targetOrganizationId);
   insertSession(database, "member-user", targetOrganizationId);
+  const hooks = queryHooks();
   const bindings = testBindings({
-    DB: toD1(database),
+    DB: toD1(database, hooks),
     STRIPE_PRO_PRICE_ID: proPriceId,
     STRIPE_SECRET_KEY: "sk_live_test",
   });
@@ -596,6 +731,7 @@ function createFixture() {
       };
     },
     database,
+    hooks,
   };
 }
 

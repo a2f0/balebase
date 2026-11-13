@@ -3,6 +3,7 @@ import type { FinanceTransactionChanges } from "@balebase/validators/finance";
 import { jobRunDetail } from "../jobs/jobHistory";
 import { scheduleJobs } from "../jobs/jobScheduler";
 import { consumeJobs as consumeFinanceSync } from "../jobs/jobWorker";
+import { organizationSettings } from "../organizations/organizationSettings";
 import { findActivity } from "../shared/activity";
 import {
   createFixture,
@@ -10,6 +11,8 @@ import {
   testApp,
   transactionPage,
 } from "../testing/financeFixture";
+import { requester } from "../testing/http";
+import { testApp as sessionApp } from "../testing/session";
 import type { Bindings } from "../types";
 import {
   PlaidApiError,
@@ -65,6 +68,121 @@ async function queuedFixture() {
 }
 
 describe("durable finance sync", () => {
+  it("rejects disabled Finance before provider calls, cancels queued work, and resumes after re-enabling", async () => {
+    const fixture = await queuedFixture();
+    await fixture.request("/sync-settings", "PATCH", { dailySync: true });
+    const queued = await fixture.request<{ id: string }>("/sync-jobs", "POST");
+    const settings = sessionApp(
+      { "/api/organization-settings": organizationSettings },
+      {
+        organizationId: "org_user-1",
+        organizationRole: "owner",
+        userId: "user-1",
+      },
+    );
+    const changeSettings = requester(settings, fixture.bindings);
+    expect(
+      (
+        await changeSettings("PATCH", "/api/organization-settings/current", {
+          paidFeaturesEnabled: false,
+        })
+      ).status,
+    ).toBe(200);
+    let providerCalls = 0;
+    const provider: PlaidRequest = async () => {
+      providerCalls++;
+      throw new Error("Disabled paid features must not call Plaid");
+    };
+    const app = testApp("org_user-1", provider);
+    for (const [path, method, body] of [
+      ["/", "GET", undefined],
+      ["/link-token", "POST", {}],
+      ["/exchange", "POST", { publicToken: "public-sandbox-test" }],
+      [`/connections/${fixture.id}/sync-jobs`, "POST", undefined],
+    ] as const) {
+      expect(
+        (await jsonRequest(app, fixture.bindings, path, method, body)).status,
+      ).toBe(403);
+    }
+    await fixture.deliver(queued.body.id, provider);
+    expect(
+      fixture.database
+        .query("SELECT status FROM job_runs WHERE id = ?")
+        .get(queued.body.id),
+    ).toEqual({ status: "cancelled" });
+    fixture.messages.length = 0;
+    await scheduleJobs(fixture.bindings);
+    expect(fixture.messages).toEqual([]);
+    expect(providerCalls).toBe(0);
+    expect(
+      fixture.database
+        .query("SELECT status, daily_sync FROM plaid_items WHERE id = ?")
+        .get(fixture.id),
+    ).toEqual({ status: "active", daily_sync: 1 });
+    expect(
+      (
+        await changeSettings("PATCH", "/api/organization-settings/current", {
+          paidFeaturesEnabled: true,
+        })
+      ).status,
+    ).toBe(200);
+    await scheduleJobs(fixture.bindings);
+    const resumed = fixture.messages[0];
+    if (!resumed) throw new Error("Expected resumed daily sync");
+    await fixture.deliver(resumed.jobId);
+    expect(
+      fixture.database
+        .query("SELECT status FROM job_runs WHERE id = ?")
+        .get(resumed.jobId),
+    ).toEqual({ status: "succeeded" });
+  });
+
+  it("cancels disabled bank outbox jobs without dispatching them", async () => {
+    const fixture = await queuedFixture();
+    const queued = await fixture.request<{ id: string }>("/sync-jobs", "POST");
+    fixture.database
+      .query(
+        "UPDATE organization SET paid_features_enabled = 0 WHERE id = 'org_user-1'",
+      )
+      .run();
+    fixture.messages.length = 0;
+    await scheduleJobs(fixture.bindings);
+    expect(fixture.messages).toEqual([]);
+    expect(
+      fixture.database
+        .query("SELECT status FROM job_runs WHERE id = ?")
+        .get(queued.body.id),
+    ).toEqual({ status: "cancelled" });
+  });
+
+  it("checks the organization again before each provider page", async () => {
+    const fixture = await queuedFixture();
+    const queued = await fixture.request<{ id: string }>("/sync-jobs", "POST");
+    let calls = 0;
+    const provider: PlaidRequest = async <T>() => {
+      calls++;
+      fixture.database
+        .query(
+          "UPDATE organization SET paid_features_enabled = 0 WHERE id = 'org_user-1'",
+        )
+        .run();
+      return { ...transactionPage(), has_more: true } as T;
+    };
+    await fixture.deliver(queued.body.id, provider);
+    await fixture.deliver(queued.body.id, provider);
+    expect(calls).toBe(1);
+    expect(
+      fixture.database
+        .query("SELECT status FROM job_runs WHERE id = ?")
+        .get(queued.body.id),
+    ).toEqual({ status: "cancelled" });
+    expect(
+      fixture.database
+        .query("SELECT count(*) AS count FROM plaid_transactions")
+        .get(),
+    ).toEqual({ count: 1 });
+  });
+
   it("accepts a manual job before any Plaid work, deduplicates clicks, and finishes without another browser request", async () => {
     const fixture = await queuedFixture();
     const first = await fixture.request<{ id: string; status: string }>(
@@ -77,7 +195,7 @@ describe("durable finance sync", () => {
       connection: { syncJob: { id: first.body.id, status: "queued" } },
     });
     const foreign = await jsonRequest(
-      testApp("org-other", fixture.requestPlaid),
+      testApp("organization-2", fixture.requestPlaid),
       fixture.bindings,
       `/connections/${fixture.id}/sync-status`,
       "GET",
@@ -161,7 +279,7 @@ describe("durable finance sync", () => {
       )
       .all();
     expect(rows).toEqual([{ daily_sync: 1, actor_user_id: "user-1" }]);
-    const other = testApp("other-org", fixture.requestPlaid);
+    const other = testApp("organization-2", fixture.requestPlaid);
     for (const [path, method, body] of [
       ["sync-settings", "PATCH", { dailySync: false }],
       ["sync-jobs", "POST", undefined],
@@ -256,26 +374,28 @@ describe("durable finance sync", () => {
       "/sync-jobs",
       "POST",
     );
-    let finish: (() => void) | undefined;
-    const waiting = new Promise<void>((resolve) => {
-      finish = resolve;
-    });
+    const entered = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
     let calls = 0;
     const plaid: PlaidRequest = async <T>() => {
       calls++;
-      await waiting;
+      entered.resolve();
+      await finish.promise;
       return transactionPage() as T;
     };
     const running = fixture.deliver(job.id, plaid);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await fixture.deliver(job.id, plaid);
-    expect(calls).toBe(1);
-    expect((await fixture.request("", "DELETE")).status).toBe(409);
-    expect(
-      (await fixture.request<{ id: string }>("/sync-jobs", "POST")).body.id,
-    ).toBe(job.id);
-    finish?.();
-    await running;
+    await entered.promise;
+    try {
+      await fixture.deliver(job.id, plaid);
+      expect(calls).toBe(1);
+      expect((await fixture.request("", "DELETE")).status).toBe(409);
+      expect(
+        (await fixture.request<{ id: string }>("/sync-jobs", "POST")).body.id,
+      ).toBe(job.id);
+    } finally {
+      finish.resolve();
+      await running;
+    }
     expect((await fixture.request("", "DELETE")).status).toBe(204);
     expect((await fixture.request("/sync-jobs", "POST")).status).toBe(404);
     expect(
