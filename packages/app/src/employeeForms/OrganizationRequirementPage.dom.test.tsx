@@ -205,27 +205,30 @@ describe("a manager's request page", () => {
     expect(changes).toEqual([]);
   });
 
-  it("shows the report and its result once Checkr finishes", async () => {
-    stubApi([
-      requirement({
-        checkrAvailable: true,
-        checkrReportStatus: "complete",
-        checkrResult: "consider",
-        checkrWorkLocation: { city: "Austin", state: "TX" },
-        completedAt: "2026-10-07T11:09:40.000Z",
-        hasCheckrConsent: true,
-        status: "complete",
-      }),
-    ]);
-    await render(() => {}, true, false);
-    expect(container.textContent).toContain("Work locationAustin, TX");
-    expect(container.textContent).toContain("Report statuscomplete");
-    expect(container.textContent).toContain("Checkr result: Consider");
-    expect(container.textContent).toContain("Signed authorization");
-    expect(card("Next step").textContent).toContain(
-      "Review the report in Checkr before making a decision.",
-    );
-  });
+  it.each([true, false])(
+    "shows completed reports with paid features enabled: %s",
+    async (paidFeaturesEnabled) => {
+      stubApi([
+        requirement({
+          checkrAvailable: true,
+          checkrReportStatus: "complete",
+          checkrResult: "consider",
+          checkrWorkLocation: { city: "Austin", state: "TX" },
+          completedAt: "2026-10-07T11:09:40.000Z",
+          hasCheckrConsent: true,
+          status: "complete",
+        }),
+      ]);
+      await render(() => {}, true, paidFeaturesEnabled);
+      expect(container.textContent).toContain("Work locationAustin, TX");
+      expect(container.textContent).toContain("Report statuscomplete");
+      expect(container.textContent).toContain("Checkr result: Consider");
+      expect(container.textContent).toContain("Signed authorization");
+      expect(card("Next step").textContent).toContain(
+        "Review the report in Checkr before making a decision.",
+      );
+    },
+  );
 
   it("shows the request's own history and refreshes it after a change", async () => {
     const reads: string[] = [];

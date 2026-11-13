@@ -503,6 +503,8 @@ async function uploadConsent(
   consent: { id: string; pdf: Uint8Array },
   fence: AttemptFence,
 ) {
+  // This early read avoids uploading after a disable. markAttempt remains the
+  // authoritative fence before recording consent and ordering the report.
   if (!(await paidFeaturesEnabled(env.DB, subject.organizationId))) {
     throw new AttemptChanged();
   }

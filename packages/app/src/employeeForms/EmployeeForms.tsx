@@ -499,15 +499,15 @@ function CheckrControl({
       />
     );
   }
+  // Checkr orders only background checks now; a hosted credit report that was
+  // canceled is tracked by hand.
+  if (requirement.kind !== "background_check") return null;
   if (!paidFeaturesEnabled)
     return (
       <span className="rowMeta">
         Paid features are disabled for this organization.
       </span>
     );
-  // Checkr orders only background checks now; a hosted credit report that was
-  // canceled is tracked by hand.
-  if (requirement.kind !== "background_check") return null;
   // A submission Checkr did not finish resumes when the person submits again.
   if (requirement.checkrSubmitting) {
     return (

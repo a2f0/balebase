@@ -100,6 +100,29 @@ describe("organization paid features", () => {
     expect(refreshes).toBe(0);
   });
 
+  it("keeps a successful save when refreshing workspace access fails", async () => {
+    let enabled = true;
+    respond((_url, init) => {
+      if (init?.method === "PATCH") {
+        enabled = JSON.parse(String(init.body)).paidFeaturesEnabled;
+      }
+      return Response.json({ paidFeaturesEnabled: enabled });
+    });
+    const view = await mount(
+      <OrganizationPaidFeatures
+        canManage={true}
+        onAccessChanged={async () => {
+          throw new Error("Access unavailable");
+        }}
+      />,
+    );
+    await click(toggle(view.container));
+    expect(enabled).toBe(false);
+    expect(toggle(view.container).checked).toBe(false);
+    expect(view.container.textContent).toContain("Paid features saved");
+    expect(view.container.textContent).toContain("Reload the page");
+  });
+
   it("shows members the saved setting without permitting changes", async () => {
     const methods: string[] = [];
     respond((_url, init) => {

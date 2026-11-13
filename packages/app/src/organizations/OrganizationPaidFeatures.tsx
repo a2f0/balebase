@@ -35,7 +35,14 @@ export function OrganizationPaidFeatures({
       });
       if (!active.current) return;
       loaded.setData(settings);
-      await onAccessChanged();
+      try {
+        await onAccessChanged();
+      } catch (cause) {
+        throw new Error(
+          "Paid features saved, but workspace access could not refresh. Reload the page.",
+          { cause },
+        );
+      }
     });
     saving.current = false;
   }

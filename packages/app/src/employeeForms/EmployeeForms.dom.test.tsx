@@ -41,10 +41,13 @@ function screening(
   };
 }
 
-async function render(requirements: EmployeeRequirement[]) {
+async function render(
+  requirements: EmployeeRequirement[],
+  paidFeaturesEnabled = true,
+) {
   respond(async () => Response.json({ requirements }));
   ({ container } = await mount(
-    <PaidFeaturesContext value={true}>
+    <PaidFeaturesContext value={paidFeaturesEnabled}>
       <EmployeeForms
         onNavigate={() => {}}
         scope={{ kind: "member", memberId: "member" }}
@@ -120,6 +123,24 @@ describe("requesting forms on a member's page", () => {
 });
 
 describe("Checkr screening results", () => {
+  it("keeps manual credit tracking available when paid features are disabled", async () => {
+    await render(
+      [
+        screening({
+          kind: "credit_check",
+          title: "Credit check",
+          checkrAvailable: false,
+          checkrReportStatus: "canceled",
+          status: "pending",
+        }),
+      ],
+      false,
+    );
+    const credit = item("Credit check");
+    expect(credit.querySelector("select")?.disabled).toBe(false);
+    expect(credit.textContent).not.toContain("Paid features are disabled");
+  });
+
   it("shows the result, completion date, and review guidance", async () => {
     await render([
       screening({

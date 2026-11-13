@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import {
   checkrResponses,
   checkrWebhook,
@@ -63,6 +64,21 @@ describe("Checkr screening", () => {
       .run(orgId);
     const checkr = mockCheckr(checkrResponses);
     try {
+      for (const [user, role] of [
+        ["owner", "owner"],
+        ["employee", "member"],
+      ] as const) {
+        const listed = await fixture.app(user, role).request("/");
+        const body = (await listed.json()) as {
+          requirements: EmployeeRequirement[];
+        };
+        expect(
+          body.requirements.find(({ id }) => id === waiting),
+        ).toMatchObject({
+          checkrAvailable: false,
+          canSubmitCheckr: false,
+        });
+      }
       expect(
         (
           await fixture
@@ -98,6 +114,13 @@ describe("Checkr screening", () => {
       fixture.database
         .query("UPDATE organization SET paid_features_enabled = 1 WHERE id = ?")
         .run(orgId);
+      const restored = await fixture.app("employee", "member").request("/");
+      const restoredBody = (await restored.json()) as {
+        requirements: EmployeeRequirement[];
+      };
+      expect(
+        restoredBody.requirements.find(({ id }) => id === waiting),
+      ).toMatchObject({ checkrAvailable: true, canSubmitCheckr: true });
       expect(
         (await submitScreening(fixture, waiting, homerSubmission())).status,
       ).toBe(200);

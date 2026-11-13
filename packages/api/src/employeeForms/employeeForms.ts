@@ -9,6 +9,7 @@ import {
   requireManager,
   stillManages,
 } from "../organizations/organizationMembers";
+import { paidFeaturesEnabled } from "../organizations/paidFeatureAccess";
 import { activityBatch, findActivity, requestActor } from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import { respondToUnexpectedError } from "../shared/unexpectedError";
@@ -66,9 +67,10 @@ employeeForms.get("/", async (context) => {
         : [userId, organizationId, userId]),
     )
     .all<RequirementRow>();
+  const paidEnabled = await paidFeaturesEnabled(context.env.DB, organizationId);
   return respond(context, employeeFormsRoutes.list, {
     requirements: result.results.map((row) =>
-      toRequirement(row, manager, context.env),
+      toRequirement(row, manager, context.env, paidEnabled),
     ),
   });
 });

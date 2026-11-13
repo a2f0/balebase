@@ -294,10 +294,11 @@ starting Finance group as built in.
 switch for owners and admins. It applies to everyone in that organization,
 across devices, separately from personal account preferences. Background checks
 and Finance are listed in the shared `paidFeatures` constant in
-`packages/validators/src/rules.ts`. Migration
-`0101_organization_paid_features.sql` defaults the setting to enabled, preserving
-existing access. Members can read it; only an organization's owner or admin can
-change it through `PATCH /api/organization-settings/current`. The matching
+`packages/validators/src/rules.ts`. Apply migration
+`0101_organization_paid_features.sql` before deploying the API. It defaults the
+setting to enabled, preserving existing access. Members can read it; only an
+organization's owner or admin can change it through
+`PATCH /api/organization-settings/current`. The matching
 `GET` returns the saved setting.
 
 Turning it off hides Finance and blocks its API access, including finance-linked
@@ -307,6 +308,10 @@ group memberships, and subscriptions are retained; disabling features does not
 cancel billing or refund charges. Provider callbacks can still finish reports
 already ordered. Ordinary employee documents and manually tracked credit checks
 remain available. Re-enabling restores access subject to the usual permissions.
+The API can still create requirement records for manual tracking: assigning a
+requirement does not order a paid report. The app hides new background-check
+assignments while paid features are disabled; Checkr ordering is blocked for
+every client.
 Changes record the actor and previous and new setting in organization Activity.
 
 Authentication needs a strong `BETTER_AUTH_SECRET` in the ignored
