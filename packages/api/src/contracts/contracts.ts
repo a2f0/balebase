@@ -1,3 +1,4 @@
+import { ContractAuthoringSchema } from "@balebase/validators/contractAuthoring";
 import {
   type ContractDetail,
   type ContractEvent,
@@ -10,7 +11,7 @@ import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
 import { activityBatch, requestActor } from "../shared/activity";
 import { normalizeFilename } from "../shared/filenames";
-import { readBody, respond } from "../shared/respond";
+import { readBody, readQuery, respond } from "../shared/respond";
 import {
   readBoundedForm,
   storedDownload,
@@ -18,6 +19,7 @@ import {
   uploadExpired,
   uploadStillQueued,
 } from "../shared/storage";
+import { registerAuthoredContracts } from "./contractAuthoring";
 import {
   draftStatements,
   fieldsOnDocument,
@@ -70,6 +72,7 @@ interface SummaryRow {
 const contracts = new Hono<ApiEnv>();
 
 contracts.route("/templates", contractTemplates);
+registerAuthoredContracts(contracts, detailFor);
 
 contracts.get("/", async (context) => {
   const result = await context.env.DB.prepare(
@@ -230,6 +233,11 @@ contracts.put("/:id/draft", async (context) => {
   );
   if (!contract) return contractNotFound(context);
   if (contract.status !== "draft") return notDraft(context);
+  if (contract.authoring_json)
+    return context.json(
+      { error: "Edit this contract in its Markdown/visual editor." },
+      409,
+    );
   const draft = await readBody(
     context,
     contractsRoutes.saveDraft,
@@ -258,6 +266,17 @@ contracts.post("/:id/send", async (context) => {
   );
   if (!contract) return contractNotFound(context);
   if (contract.status !== "draft") return notDraft(context);
+  const query = readQuery(
+    context,
+    contractsRoutes.send,
+    "Choose a valid document revision.",
+  );
+  if (query instanceof Response) return query;
+  if (contract.authoring_json && query.expectedRevision !== contract.revision)
+    return context.json(
+      { error: "Review the latest saved PDF before sending." },
+      409,
+    );
   const [recipients, fields] = await Promise.all([
     listRecipients(database, contract.id),
     listFields(database, contract.id),
@@ -581,6 +600,16 @@ async function detailFor(
       .first<{ created_by_name: string | null; sent_by_name: string | null }>(),
   ]);
   return {
+    ...(contract.authoring_json
+      ? {
+          authoring: {
+            ...ContractAuthoringSchema.parse(
+              JSON.parse(contract.authoring_json),
+            ),
+            revision: contract.revision,
+          },
+        }
+      : {}),
     completedAt: contract.completed_at,
     createdAt: contract.created_at,
     createdByName: people?.created_by_name ?? null,
@@ -637,7 +666,10 @@ async function pdfResponse(
   const download = await storedDownload(context.env.STORAGE, key, {
     fallbackFilename: "contract.pdf",
     filename,
-    headers: { "content-type": "application/pdf" },
+    headers: {
+      "content-type": "application/pdf",
+      "cache-control": "private, no-store",
+    },
   });
   return (
     download ?? context.json({ error: "The document file is missing." }, 404)

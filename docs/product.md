@@ -467,12 +467,13 @@ deleting a project row except through its organization's purge.
 
 ## Contracts and e-signature
 
-The organization-scoped Contracts page at `/contracts` sends PDFs for
-signature. Any member uploads a PDF (up to 10 MB), adds signers, and places
-signature, initials, date signed, full name, and text fields on its pages.
-Drafts save automatically as they are edited, and sending checks that every
-signer has a name, a valid email, and a signature field. Signers sign in any
-order or one after another; a sequential signer is emailed only once everyone
+The organization-scoped Contracts page at `/contracts` accepts uploaded PDFs
+and written contracts. Any member uploads a PDF (up to 10 MB), adds signers,
+and places signature, initials, date signed, full name, and text fields on
+its pages. Uploaded-PDF drafts save automatically as they are edited. Sending
+checks that every signer has a name, a valid email, and a signature field.
+Signers sign in any order or one after another; a sequential signer is emailed
+only once everyone
 before them has signed. A contract can carry a due date, after which it is
 flagged overdue but stays signable, and a reminder interval. The hourly cron
 re-emails signers who have not signed once the interval has passed since their
@@ -485,6 +486,62 @@ contract's status, document hashes, and signer, signed, and decline details;
 a template's page lists its own history, and a contract's own history
 names the API key and channel behind changes made through a key. Migration
 `0084_attribute_contract_events.sql` adds that key attribution.
+
+### Written contracts
+
+**New written contract** opens a visual editor with a **Markdown** source
+mode. Both modes preserve signer-field IDs and formatting: paragraphs,
+headings, bold, italic, hard line breaks, and flat numbered or bulleted lists.
+Links, images, tables, nested lists, code, and raw HTML are refused rather than
+silently discarded. The editor never executes document content.
+
+Signer role keys, such as `client`, connect fields to names and email
+addresses. `:value[client.name]` and `:value[client.email]` resolve from that
+role; other keys resolve from the editor's **Merge values**. Merge values are
+literal text, not more Markdown, and are resolved before sending. Renaming
+or removing a role requires updating its document references.
+
+```markdown
+# Service agreement
+
+Services for :value[client.name] at :value[project.site].
+
+Initial here: :initials{#scope-initials role="client"}
+
+::signature{#client-signature role="client"}
+
+Name: :name{#client-name role="client"}
+
+Signed on: :signed-date{#client-date role="client"}
+
+Title: :text{#client-title role="client" label="Title" required="false"}
+```
+
+Fields need unique IDs and an assigned role. Only text fields can be optional.
+**Save and preview** saves the source, role assignments, and values together
+with a generated PDF and its field positions. Written drafts save manually,
+can be reopened from Contracts, and warn before leaving with unsaved changes.
+Invalid source remains in the editor for correction and cannot be saved.
+
+The preview displays the exact saved PDF. Authors confirm they reviewed its
+pages and signer assignments before sending; any edit invalidates that review.
+Concurrent saves and sends require the expected revision. Sent documents keep
+their source and PDF frozen, and completion stamps that PDF rather than
+rendering Markdown again. Draft revisions appear in the contract's history.
+
+The first format is version 1, limited to 50,000 source characters, 200 fields,
+100 pages, and 100 explicit merge values of up to 2,000 characters each.
+Generated documents use US Letter pages and standard Helvetica fonts;
+unsupported authoring characters are rejected instead of replaced.
+PDF uploads and PDF-based reusable templates remain available.
+
+The API creates written drafts with `POST /api/contracts/authored` and updates
+them with `PUT /api/contracts/:id/authored`, including `expectedRevision`.
+Sending a written draft requires `expectedRevision` in the send route's query.
+Migration `0102_contract_authoring.sql` stores authored snapshots and queues
+replaced draft PDFs for the existing file cleanup.
+
+### PDF templates
 
 Contract templates at `/contracts/templates` keep a PDF and placed fields
 without assigning actual people. Fields belong to named signer roles such as

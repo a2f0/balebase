@@ -487,6 +487,8 @@ export function describeEvent(
       return `Created by ${actor} from ${event.detail ?? "a template"}`;
     case "created":
       return `Created by ${actor}`;
+    case "source_saved":
+      return `Authored document revised by ${actor}`;
     case "sent":
       return `Sent for signature by ${actor}`;
     case "notified":

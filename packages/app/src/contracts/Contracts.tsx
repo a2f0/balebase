@@ -26,6 +26,7 @@ import {
   contractTemplatePath,
   isWithin,
 } from "../workspace/workspacePaths";
+import { ContractAuthoringEditor } from "./ContractAuthoringEditor";
 import { ContractEditor } from "./ContractEditor";
 import { ContractStatusBadge, ContractSummary } from "./ContractSummary";
 import { ContractTemplates } from "./ContractTemplates";
@@ -68,6 +69,7 @@ function useContractList(onNavigate: (pathname: string) => void) {
   return {
     contracts: list.data,
     error: uploader.error ?? list.error,
+    reload: list.reload,
     upload,
     uploading: uploader.busy,
   };
@@ -78,13 +80,36 @@ function ContractListPage({
 }: {
   onNavigate: (pathname: string) => void;
 }) {
-  const { contracts, error, upload, uploading } = useContractList(onNavigate);
+  const { contracts, error, reload, upload, uploading } =
+    useContractList(onNavigate);
+  const [writing, setWriting] = useState(false);
   const [filter, setFilter] = useState<ContractFilter>("all");
   const fileInput = useRef<HTMLInputElement>(null);
   const choose = () => fileInput.current?.click();
   const visible = (contracts ?? []).filter(({ status }) =>
     matchesFilter(status, filter),
   );
+  if (writing)
+    return (
+      <Page className="contractPageLayout">
+        <PageHeader eyebrow="Draft contract" title="New written contract" />
+        <PageBody>
+          <ContractAuthoringEditor
+            onChanged={(contract) => {
+              if (contract) onNavigate(contractPath(contract.id));
+            }}
+            onClose={() => {
+              setWriting(false);
+              void reload();
+            }}
+            onDeleted={() => {
+              setWriting(false);
+              void reload();
+            }}
+          />
+        </PageBody>
+      </Page>
+    );
   return (
     <Page>
       <PageHeader
@@ -92,6 +117,9 @@ function ContractListPage({
           <>
             <Button onClick={() => onNavigate(contractTemplatePath())}>
               Templates
+            </Button>
+            <Button disabled={uploading} onClick={() => setWriting(true)}>
+              New written contract
             </Button>
             <Button
               busy={uploading}
@@ -258,11 +286,19 @@ function ContractPage({
         {!contract ? (
           !error && <LoadingState label="Loading contract…" />
         ) : contract.status === "draft" ? (
-          <ContractEditor
-            contract={contract}
-            onChanged={setContract}
-            onDeleted={() => onNavigate(contractPath())}
-          />
+          contract.authoring ? (
+            <ContractAuthoringEditor
+              contract={contract}
+              onChanged={setContract}
+              onDeleted={() => onNavigate(contractPath())}
+            />
+          ) : (
+            <ContractEditor
+              contract={contract}
+              onChanged={setContract}
+              onDeleted={() => onNavigate(contractPath())}
+            />
+          )
         ) : (
           <ContractSummary
             contract={contract}

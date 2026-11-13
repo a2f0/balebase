@@ -21,12 +21,15 @@ export function draftStatements(
   contract: Pick<ContractRow, "id" | "organization_id">,
   draft: ContractDraft,
   now: string,
+  documentKey?: string,
 ) {
   const recipientIds = new Map(
     draft.recipients.map((recipient) => [recipient.key, crypto.randomUUID()]),
   );
+  const documentGuard = documentKey ? " AND document_object_key = ?" : "";
+  const documentBindings = documentKey ? [documentKey] : [];
   const stillDraft = `EXISTS (
-    SELECT 1 FROM contracts WHERE id = ? AND status = 'draft'
+    SELECT 1 FROM contracts WHERE id = ? AND status = 'draft'${documentGuard}
   )`;
   return [
     database
@@ -35,7 +38,7 @@ export function draftStatements(
          SET title = ?, message = ?, signing_order = ?, due_date = ?,
              reminder_interval_days = ?, updated_at = ?,
              revision = revision + 1
-         WHERE id = ? AND organization_id = ? AND status = 'draft'`,
+         WHERE id = ? AND organization_id = ? AND status = 'draft'${documentGuard}`,
       )
       .bind(
         draft.title,
@@ -46,18 +49,19 @@ export function draftStatements(
         now,
         contract.id,
         contract.organization_id,
+        ...documentBindings,
       ),
     database
       .prepare(
         `DELETE FROM contract_fields WHERE contract_id = ? AND ${stillDraft}`,
       )
-      .bind(contract.id, contract.id),
+      .bind(contract.id, contract.id, ...documentBindings),
     database
       .prepare(
         `DELETE FROM contract_recipients
          WHERE contract_id = ? AND ${stillDraft}`,
       )
-      .bind(contract.id, contract.id),
+      .bind(contract.id, contract.id, ...documentBindings),
     ...draft.recipients.map((recipient) =>
       database
         .prepare(
@@ -75,6 +79,7 @@ export function draftStatements(
           draft.signingOrder === "parallel" ? 1 : recipient.routingOrder,
           now,
           contract.id,
+          ...documentBindings,
         ),
     ),
     ...draft.fields.map((field) =>
@@ -98,6 +103,7 @@ export function draftStatements(
           field.required ? 1 : 0,
           field.label,
           contract.id,
+          ...documentBindings,
         ),
     ),
   ];

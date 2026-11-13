@@ -14,6 +14,7 @@ import {
 import type { ContractMail } from "./contractMail";
 
 export interface ContractRow {
+  authoring_json: string | null;
   completed_at: string | null;
   created_at: string;
   created_by: string | null;
@@ -111,7 +112,8 @@ const contractColumns = `id, organization_id, title, message, status, signing_or
   due_date, reminder_interval_days, document_object_key, document_filename,
   document_size, document_sha256, document_page_count, final_object_key,
   final_sha256, created_by, sent_by, created_at, updated_at, sent_at,
-  completed_at, voided_at, void_reason, revision, template_name, template_version`;
+  completed_at, voided_at, void_reason, revision, template_name, template_version,
+  authoring_json`;
 
 export function findContract(
   database: D1Database,
