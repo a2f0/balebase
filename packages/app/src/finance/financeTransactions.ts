@@ -3,6 +3,42 @@ import type {
   ExpenseCategory,
   FinanceTransaction,
 } from "@balebase/validators/finance";
+import { transactionTitle } from "./payeeGroups";
+
+export type TransactionSort = "newest" | "payee" | "-payee";
+
+/** Search the displayed payee and original bank description literally. */
+export function searchTransactions(
+  transactions: FinanceTransaction[],
+  search: string,
+): FinanceTransaction[] {
+  if (!search) return transactions;
+  const query = search.toLowerCase();
+  return transactions.filter(
+    (transaction) =>
+      transaction.name.toLowerCase().includes(query) ||
+      Boolean(transaction.merchantName?.toLowerCase().includes(query)),
+  );
+}
+
+/** Sort cached rows without changing their source order. */
+export function sortTransactions(
+  transactions: FinanceTransaction[],
+  sort: TransactionSort,
+): FinanceTransaction[] {
+  if (sort === "newest") return [...transactions].sort(newestFirst);
+  const direction = sort === "payee" ? 1 : -1;
+  return transactions
+    .map((transaction) => ({
+      transaction,
+      name: transactionTitle(transaction).toLowerCase(),
+    }))
+    .sort((a, b) => {
+      const byName = a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+      return direction * byName || newestFirst(a.transaction, b.transaction);
+    })
+    .map(({ transaction }) => transaction);
+}
 
 /** Ordinary clicks focus one account; Shift toggles it within the selection. */
 export function selectFinanceAccount(

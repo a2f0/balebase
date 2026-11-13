@@ -575,6 +575,30 @@ button.financeTransactionName {
   overflow-wrap: anywhere;
 }
 
+/* Search and view-specific ordering wrap without widening a narrow page. */
+.financeTransactionControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: var(--space-3);
+}
+
+.financeTransactionSearch {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.financeTransactionSort {
+  flex: 0 1 14rem;
+  min-width: 0;
+}
+
+.financeTransactionControls .input,
+.financeTransactionControls .select {
+  width: 100%;
+  min-width: 0;
+}
+
 /* Compact filters wrap alongside the period selector on narrow screens. */
 .financeTransactionFilters {
   display: flex;

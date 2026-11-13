@@ -188,6 +188,33 @@ function moneyTotals() {
     (amount) => amount.textContent,
   );
 }
+async function searchHistory(value: string) {
+  const input = container.querySelector<HTMLInputElement>(
+    'input[type="search"]',
+  );
+  if (!input) throw new Error("Missing transaction search");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      dom.HTMLInputElement.prototype,
+      "value",
+    )?.set?.call(input, value);
+    input.dispatchEvent(
+      new dom.Event("input", { bubbles: true }) as unknown as Event,
+    );
+  });
+}
+async function sortHistory(value: string) {
+  const select = container.querySelector<HTMLSelectElement>(
+    ".financeTransactionSort select",
+  );
+  if (!select) throw new Error("Missing transaction sort");
+  await act(async () => {
+    select.value = value;
+    select.dispatchEvent(
+      new dom.Event("change", { bubbles: true }) as unknown as Event,
+    );
+  });
+}
 /** Opens a transaction row's menu from its menu button. */
 async function openRowMenu(name: string) {
   const trigger = container.querySelector<HTMLButtonElement>(
@@ -339,6 +366,149 @@ describe("Finance filters", () => {
     await click("All time");
     expect(rowNames()).toHaveLength(250);
     expect(requests).toBe(2);
+  });
+
+  it("searches beyond the first page and resets paging and selection for local preferences", async () => {
+    const names = ["Alpha", "Beta"].flatMap((payee) =>
+      Array.from(
+        { length: 300 },
+        (_, index) => `${payee} ${String(index).padStart(3, "0")}`,
+      ),
+    );
+    let requests = 0;
+    respond(() => {
+      requests++;
+      return Response.json({ ...data, transactions: dated(names) });
+    });
+    await mountFinance();
+    expect(rowNames()).not.toContain("Beta 150");
+    await searchHistory("beta");
+    expect(rowNames()).toHaveLength(250);
+    expect(rowNames()[0]).toBe("Beta 000");
+    expect(moneyTotals()).toEqual(["$0.00", "$3,000.00"]);
+    const selectMiddle = async () => {
+      const checkbox = container.querySelector<HTMLInputElement>(
+        '[aria-label="Select Beta 150"]',
+      );
+      if (!checkbox) throw new Error("Missing middle transaction");
+      await act(async () => checkbox.click());
+      expect(checkbox.checked).toBe(true);
+    };
+    await selectMiddle();
+    await act(async () => IntersectionObserverFixture.intersect());
+    expect(rowNames()).toHaveLength(300);
+    await sortHistory("-payee");
+    expect(rowNames()).toHaveLength(250);
+    expect(rowNames()[0]).toBe("Beta 299");
+    expect(
+      container.querySelectorAll(".financeTransaction input:checked"),
+    ).toHaveLength(0);
+    await act(async () => IntersectionObserverFixture.intersect());
+    expect(rowNames()).toHaveLength(300);
+    await selectMiddle();
+    await searchHistory("BETA");
+    expect(rowNames()).toHaveLength(250);
+    expect(
+      container.querySelectorAll(".financeTransaction input:checked"),
+    ).toHaveLength(0);
+    await act(async () => IntersectionObserverFixture.intersect());
+    expect(rowNames()).toHaveLength(300);
+    await click("Clear filters");
+    expect(rowNames()).toHaveLength(250);
+    expect(container.textContent).toContain("250 of 600 shown");
+    expect(moneyTotals()).toEqual(["$0.00", "$6,000.00"]);
+    await sortHistory("newest");
+    expect(rowNames()[0]).toBe("Alpha 000");
+    expect(requests).toBe(2);
+  });
+
+  it("orders searched payee totals and retains each view's sort through drilldown", async () => {
+    respond(() =>
+      Response.json({
+        ...data,
+        transactions: [
+          transaction("BANK Alpha", { merchantName: "Alpha", amount: 40 }),
+          transaction("Other Alpha", { merchantName: "Alpha", amount: 500 }),
+          transaction("Bank Middle", { merchantName: "Middle", amount: 100 }),
+          transaction("bank Zulu", { merchantName: "Zulu", amount: -20 }),
+        ],
+      }),
+    );
+    const payeeNames = () =>
+      [...container.querySelectorAll(".financePayee .rowTitle")].map(
+        (row) => row.textContent,
+      );
+    await mountFinance();
+    await searchHistory("bank");
+    await sortHistory("-payee");
+    expect(rowNames()).toEqual(["Zulu", "Middle", "Alpha"]);
+    await click("By payee");
+    expect(payeeNames()).toEqual(["Alpha", "Middle", "Zulu"]);
+    expect(container.textContent).toContain("3 payees · 3 transactions");
+    expect(moneyTotals()).toEqual(["$20.00", "$140.00"]);
+    await sortHistory("total");
+    expect(payeeNames()).toEqual(["Middle", "Alpha", "Zulu"]);
+    await sortHistory("-total");
+    expect(payeeNames()).toEqual(["Zulu", "Alpha", "Middle"]);
+    await sortHistory("-payee");
+    expect(payeeNames()).toEqual(["Zulu", "Middle", "Alpha"]);
+    await sortHistory("payee");
+    expect(payeeNames()).toEqual(["Alpha", "Middle", "Zulu"]);
+    await click("Transactions");
+    expect(rowNames()).toEqual(["Zulu", "Middle", "Alpha"]);
+    await sortHistory("payee");
+    expect(rowNames()).toEqual(["Alpha", "Middle", "Zulu"]);
+    await click("By payee");
+    expect(payeeNames()).toEqual(["Alpha", "Middle", "Zulu"]);
+    const alpha = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Show transactions for Alpha"]',
+    );
+    if (!alpha) throw new Error("Missing Alpha payee");
+    await act(async () => alpha.click());
+    expect(rowNames()).toEqual(["Alpha"]);
+    expect(moneyTotals()).toEqual(["$0.00", "$40.00"]);
+    await click("Name: Alpha");
+    expect(rowNames()).toEqual(["Alpha", "Middle", "Zulu"]);
+    await searchHistory("absent");
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).toContain(
+      "No transactions match these filters",
+    );
+    await click("Clear filters");
+    expect(rowNames()).toHaveLength(4);
+  });
+
+  it("composes substring search with category, account, and year filters", async () => {
+    respond(() =>
+      Response.json({
+        ...data,
+        transactions: [
+          transaction("Coffee now", { expenseCategoryId: "meals" }),
+          transaction("Coffee old", {
+            expenseCategoryId: "meals",
+            transactionDate: `${year - 1}-01-01`,
+          }),
+          transaction("Coffee savings", {
+            accountId: "savings",
+            expenseCategoryId: "meals",
+          }),
+          transaction("Coffee uncategorized"),
+          transaction("Tea", { expenseCategoryId: "meals" }),
+        ],
+      }),
+    );
+    await mountFinance("/finance/expenses/category/meals");
+    await searchHistory("COFF");
+    expect(rowNames()).toHaveLength(3);
+    await click("Checking");
+    expect(rowNames().sort()).toEqual(["Coffee now", "Coffee old"]);
+    await click("Current year");
+    expect(rowNames()).toEqual(["Coffee now"]);
+    expect(moneyTotals()).toEqual(["$0.00", "$10.00"]);
+    await click("Clear filters");
+    expect(rowNames()).toHaveLength(5);
+    expect(currentPath).toBe("/finance");
+    expect(moneyTotals()).toEqual(["$0.00", "$50.00"]);
   });
 
   it("keeps currencies separate and includes pending rows in money in and out", async () => {

@@ -913,6 +913,15 @@ all imported history. Scrolling near the end shows the next 250 matches,
 keeping earlier rows and annotation forms visible. **Load more transactions**
 also shows them by hand; changing filters starts a fresh list.
 
+**Search transactions** matches a literal substring of the payee or original
+bank description, ignoring case. It combines with the other filters in both
+views, including when the matching transaction is beyond the visible rows.
+Both views offer **Payee: A to Z** and **Payee: Z to A** ordering; the
+transaction list defaults to **Newest first**. Search and sorting run locally
+over the whole cached result before paging. Changing either starts at the
+first page and clears bulk selection. **Clear filters** also clears search,
+but keeps each view's chosen sort.
+
 **Money in** and **Money out**, above the list at the right, total every
 transaction the selected filters match, including rows not yet shown. They
 stay the same when switching between transactions and payees. Incoming and
@@ -926,22 +935,29 @@ have loaded.
 **By payee**, beside **Transactions** in the toolbar, groups every transaction
 the filters match (not only the rows shown) by the same name **Show only**
 uses. Each payee shows its count, latest date, pending count, and total (or
-"Several currencies"), most transactions first, so the uncategorized filter
-and **By payee** together count each payee's uncategorized expenses. Selecting
-anywhere on a payee's row returns to the list filtered to that name, keeping
-the other filters. Once the organization has a category, a payee's menu (its
+"Several currencies"), most transactions first by default, so the
+uncategorized filter and **By payee** together count each payee's uncategorized
+expenses. Selecting anywhere on a payee's row returns to the list filtered to
+that name, keeping the search and other filters. Once the organization has a
+category, a payee's menu (its
 menu button or a right-click) opens a form in the row, without leaving the
 view: **Categorize N transactions** gives every transaction the filters match
 under that name one category (or **Uncategorized**), as the bulk toolbar does,
 and **Create rule** adds the payee's categorization rule, optionally filling
 its existing uncategorized transactions.
 
+**By payee** also offers **Total: low to high** and **Total: high to low**.
+These order the displayed net totals: spending is negative and refunds are
+positive. Totals use every matching transaction, not just the visible rows.
+Mixed-currency payees have no numeric total and stay last in either direction;
+other totals are compared numerically without currency conversion.
+
 Browser Back (or Forward) from a transaction, account, or connection page
-returns to Finance as it was left: the same view, filters, rows shown, and
-scroll position. Finance stays loaded but hidden while the record shows and
-catches up once it returns. **All transactions** and other links to Finance
-open it afresh, and so does Back once the saved transactions were cleared in
-the meantime (access ended or a sign-out, in any tab).
+returns to Finance as it was left: the same view, search, sorts, filters, rows
+shown, and scroll position. Finance stays loaded but hidden while the record
+shows and catches up once it returns. **All transactions** and other links to
+Finance open it afresh, and so does Back once the saved transactions were
+cleared in the meantime (access ended or a sign-out, in any tab).
 
 The overview keeps every one of the organization's transactions on the device
 (IndexedDB, per person and organization) and catches up on each visit, after a
