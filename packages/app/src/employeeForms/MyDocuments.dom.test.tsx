@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { act } from "react";
+import { PaidFeaturesContext } from "../organizations/PaidFeatures";
 import { installDom } from "../testing/dom";
 import { MyDocuments } from "./MyDocuments";
 
@@ -95,13 +96,16 @@ function stubApi(requirements: EmployeeRequirement[]) {
 async function render(
   pathname = "/me",
   onNavigate: (pathname: string) => void = () => {},
+  paidFeaturesEnabled = true,
 ) {
   ({ container } = await mount(
-    <MyDocuments
-      onNavigate={onNavigate}
-      organization={{ id: "org", name: "Acme" }}
-      pathname={pathname}
-    />,
+    <PaidFeaturesContext value={paidFeaturesEnabled}>
+      <MyDocuments
+        onNavigate={onNavigate}
+        organization={{ id: "org", name: "Acme" }}
+        pathname={pathname}
+      />
+    </PaidFeaturesContext>,
   ));
 }
 
@@ -182,6 +186,22 @@ describe("My documents", () => {
       ),
     );
     expect(paths).toEqual(["/me/screening/check"]);
+  });
+
+  it("blocks new screening while retaining documents and existing report links", async () => {
+    stubApi(requests);
+    await render("/me", () => {}, false);
+    expect(container.textContent).not.toContain("Start background check");
+    expect(container.textContent).toContain("Upload file");
+    expect(container.textContent).toContain("View screening status");
+  });
+
+  it("keeps a disabled screening deep link read-only", async () => {
+    const calls = stubApi(requests);
+    await render("/me/screening/check", () => {}, false);
+    expect(container.textContent).toContain("Paid features are disabled");
+    expect(container.querySelector("form")).toBeNull();
+    expect(calls.every(({ url }) => !url.includes("/checkr/form"))).toBe(true);
   });
 
   it("uploads a requested form", async () => {

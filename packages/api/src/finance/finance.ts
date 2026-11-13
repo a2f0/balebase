@@ -7,6 +7,7 @@ import {
 import { Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
 import { listLinkedEmails, toLinkedEmail } from "../inbox/inboundEmailLinks";
+import { requirePaidFeature } from "../organizations/paidFeatureAccess";
 import {
   activityBatch,
   activityStatement,
@@ -98,6 +99,7 @@ interface ExchangeResponse {
 
 export function createFinanceRouter(requestPlaid: PlaidRequest = plaidRequest) {
   const finance = new Hono<ApiEnv>();
+  finance.use("*", requirePaidFeature("finance"));
 
   finance.get("/", async (context) => financeListing(context));
   finance.post("/link-token", async (context) =>

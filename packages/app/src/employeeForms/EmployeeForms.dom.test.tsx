@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { act } from "react";
+import { PaidFeaturesContext } from "../organizations/PaidFeatures";
 import { installDom } from "../testing/dom";
-import { EmployeeForms } from "./EmployeeForms";
+import { EmployeeForms, RequirementDraftEditor } from "./EmployeeForms";
 
 const { button, fill, mount, respond } = installDom({
   url: "http://localhost:5173/organization/people",
@@ -40,13 +41,18 @@ function screening(
   };
 }
 
-async function render(requirements: EmployeeRequirement[]) {
+async function render(
+  requirements: EmployeeRequirement[],
+  paidFeaturesEnabled = true,
+) {
   respond(async () => Response.json({ requirements }));
   ({ container } = await mount(
-    <EmployeeForms
-      onNavigate={() => {}}
-      scope={{ kind: "member", memberId: "member" }}
-    />,
+    <PaidFeaturesContext value={paidFeaturesEnabled}>
+      <EmployeeForms
+        onNavigate={() => {}}
+        scope={{ kind: "member", memberId: "member" }}
+      />
+    </PaidFeaturesContext>,
   ));
 }
 
@@ -82,10 +88,12 @@ describe("requesting forms on a member's page", () => {
       });
     });
     ({ container } = await mount(
-      <EmployeeForms
-        onNavigate={() => {}}
-        scope={{ kind: "member", memberId: "member" }}
-      />,
+      <PaidFeaturesContext value={true}>
+        <EmployeeForms
+          onNavigate={() => {}}
+          scope={{ kind: "member", memberId: "member" }}
+        />
+      </PaidFeaturesContext>,
     ));
     expect(item("Own check")).toBeTruthy();
     expect(container.textContent).not.toContain("Their check");
@@ -115,6 +123,24 @@ describe("requesting forms on a member's page", () => {
 });
 
 describe("Checkr screening results", () => {
+  it("keeps manual credit tracking available when paid features are disabled", async () => {
+    await render(
+      [
+        screening({
+          kind: "credit_check",
+          title: "Credit check",
+          checkrAvailable: false,
+          checkrReportStatus: "canceled",
+          status: "pending",
+        }),
+      ],
+      false,
+    );
+    const credit = item("Credit check");
+    expect(credit.querySelector("select")?.disabled).toBe(false);
+    expect(credit.textContent).not.toContain("Paid features are disabled");
+  });
+
   it("shows the result, completion date, and review guidance", async () => {
     await render([
       screening({
@@ -242,10 +268,12 @@ describe("requesting a Checkr background check", () => {
       });
     });
     ({ container } = await mount(
-      <EmployeeForms
-        onNavigate={() => {}}
-        scope={{ kind: "member", memberId: "member" }}
-      />,
+      <PaidFeaturesContext value={true}>
+        <EmployeeForms
+          onNavigate={() => {}}
+          scope={{ kind: "member", memberId: "member" }}
+        />
+      </PaidFeaturesContext>,
     ));
     const check = item("Background check");
     expect(badgeText(check)).toBe("Not requested");
@@ -276,5 +304,28 @@ describe("requesting a Checkr background check", () => {
         '[aria-label="Work state for Background check"]',
       )?.value,
     ).toBe("TX");
+  });
+});
+
+describe("paid requirement choices", () => {
+  it("fails closed for background checks without blocking ordinary or manual credit forms", async () => {
+    const { container } = await mount(
+      <RequirementDraftEditor
+        drafts={[]}
+        disabled={false}
+        onChange={() => {}}
+      />,
+    );
+    const options = [...container.querySelectorAll("option")];
+    expect(
+      options.find((option) => option.textContent === "Background check")
+        ?.disabled,
+    ).toBe(true);
+    expect(
+      options.find((option) => option.textContent === "Credit check")?.disabled,
+    ).toBe(false);
+    expect(
+      options.find((option) => option.textContent === "W-4")?.disabled,
+    ).toBe(false);
   });
 });

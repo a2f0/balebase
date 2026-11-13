@@ -79,6 +79,7 @@ function serveApi(seatCode: "SEAT_UNAVAILABLE" | "UPGRADE_REQUIRED") {
             capabilities: [],
             memberRole: "owner",
             ownerCount: 2,
+            paidFeaturesEnabled: true,
           })
         : Response.json(
             {

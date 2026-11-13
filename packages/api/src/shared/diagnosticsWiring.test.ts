@@ -13,6 +13,10 @@ test("production Worker entrypoints report failures without changing their behav
       fixture,
       `
       import { expect, mock, test } from "bun:test";
+      import { createTestDatabase } from ${JSON.stringify(resolve(import.meta.dir, "../testing/database.ts"))};
+      import { toD1 } from ${JSON.stringify(resolve(import.meta.dir, "../testing/d1.ts"))};
+      import { seedOrganization } from ${JSON.stringify(resolve(import.meta.dir, "../testing/seed.ts"))};
+      import { testBindings } from ${JSON.stringify(resolve(import.meta.dir, "../testing/bindings.ts"))};
       const reports = [];
       const maintenance = await import(${JSON.stringify(resolve(import.meta.dir, "../jobs/maintenance.ts"))});
       const requestError = new TypeError("request failure");
@@ -37,6 +41,8 @@ test("production Worker entrypoints report failures without changing their behav
         const { Hono } = await import("hono");
         const { createFinanceRouter } = await import(${JSON.stringify(resolve(import.meta.dir, "../finance/finance.ts"))});
         const { employeeForms } = await import(${JSON.stringify(resolve(import.meta.dir, "../employeeForms/employeeForms.ts"))});
+        const financeDatabase = createTestDatabase();
+        seedOrganization(financeDatabase, { id: "org-1" });
         const plaidError = new TypeError("Plaid transport failure");
         const databaseError = new Error("database unavailable");
         const routes = new Hono();
@@ -49,7 +55,7 @@ test("production Worker entrypoints report failures without changing their behav
         routes.route("/finance", createFinanceRouter(async () => { throw plaidError; }));
         routes.route("/employee-forms", employeeForms);
         const cases = [
-          [new Request("https://example.com/finance/link-token", { method: "POST" }), { PLAID_TOKEN_ENCRYPTION_KEY: "key" }, plaidError],
+          [new Request("https://example.com/finance/link-token", { method: "POST" }), testBindings({ DB: toD1(financeDatabase), PLAID_TOKEN_ENCRYPTION_KEY: "key" }), plaidError],
           [new Request("https://example.com/employee-forms"), { DB: { prepare() { throw databaseError; } } }, databaseError],
         ];
         for (const [request, env, error] of cases) {

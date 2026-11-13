@@ -15,6 +15,7 @@ import {
   formatRoles,
   type OrganizationInvitationRole,
 } from "./organizationState";
+import { usePaidFeaturesEnabled } from "./PaidFeatures";
 
 export function InviteMemberForm({
   memberRole,
@@ -60,7 +61,7 @@ export function InviteMemberForm({
           )}
           <Button
             busy={form.busy}
-            disabled={!form.email.trim()}
+            disabled={!form.email.trim() || !form.canSendRequirements}
             icon="mail"
             type="submit"
             variant="primary"
@@ -110,16 +111,20 @@ function useInviteSubmission({
   onSuccess: (message: string) => void;
   organizationId: string;
 }) {
+  const paidFeaturesEnabled = usePaidFeaturesEnabled();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<OrganizationInvitationRole>("member");
   const { busy, failure, run } = useAction("Could not send this invitation.");
   const [requirements, setRequirements] = useState<RequirementDraft[]>([]);
   const [retry, setRetry] = useState<{ email: string; invitationId: string }>();
+  const canSendRequirements =
+    paidFeaturesEnabled ||
+    requirements.every(({ kind }) => kind !== "background_check");
 
   async function invite(event: FormEvent) {
     event.preventDefault();
     const invitedEmail = email.trim().toLowerCase();
-    if (!invitedEmail) return;
+    if (!invitedEmail || !canSendRequirements) return;
     setRetry(undefined);
     onSubmitting();
     await run(async () => {
@@ -148,7 +153,7 @@ function useInviteSubmission({
   }
 
   async function retryRequests() {
-    if (!retry) return;
+    if (!retry || !canSendRequirements) return;
     await run(async () => {
       await api.employeeForms.create(
         { invitationId: retry.invitationId },
@@ -163,6 +168,7 @@ function useInviteSubmission({
 
   return {
     busy,
+    canSendRequirements,
     email,
     error: failure,
     invite,
@@ -191,7 +197,7 @@ function InviteError({
       actions={
         <Button
           busy={form.busy}
-          disabled={!form.requirements.length}
+          disabled={!form.requirements.length || !form.canSendRequirements}
           onClick={() => void form.retryRequests()}
           size="sm"
         >

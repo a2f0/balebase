@@ -4,7 +4,11 @@ import {
 } from "@balebase/validators/organizationSettings";
 import { Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
-import { activityBatch, requestActor } from "../shared/activity";
+import {
+  activityBatch,
+  insertActivity,
+  requestActor,
+} from "../shared/activity";
 import { readBody, respond } from "../shared/respond";
 import { deleteBilledOrganization } from "./organizationDeletion";
 import {
@@ -14,6 +18,7 @@ import {
   requireManager,
   stillManages,
 } from "./organizationMembers";
+import { paidFeaturesEnabled } from "./paidFeatureAccess";
 
 interface OrganizationRow {
   id: string;
@@ -21,6 +26,79 @@ interface OrganizationRow {
 }
 
 const organizationSettings = new Hono<ApiEnv>();
+
+organizationSettings.get("/current", async (context) =>
+  respond(context, organizationSettingsRoutes.current, {
+    paidFeaturesEnabled: await paidFeaturesEnabled(
+      context.env.DB,
+      context.get("organizationId"),
+    ),
+  }),
+);
+
+organizationSettings.patch("/current", requireManager(), async (context) => {
+  const body = await readBody(
+    context,
+    organizationSettingsRoutes.updateCurrent,
+    "A paid features enabled boolean is required.",
+  );
+  if (body instanceof Response) return body;
+  const organizationId = context.get("organizationId");
+  const actor = requestActor(context);
+  const manages = stillManages(organizationId, actor.userId);
+  const enabled = body.paidFeaturesEnabled ? 1 : 0;
+  const database = context.env.DB;
+  const [, updated] = await activityBatch(database, actor.apiKey, [
+    database
+      .prepare(
+        `${insertActivity}
+       SELECT organization.id, 'organization', organization.id, organization.name,
+              'organization', organization.id, 'organization.paid_features_changed',
+              actor.id, actor.name, actor.email, ?,
+              json_object('before', json(CASE WHEN paid_features_enabled
+                THEN 'true' ELSE 'false' END), 'after', json(?))
+       FROM organization JOIN user AS actor ON actor.id = ?
+       WHERE organization.id = ? AND paid_features_enabled <> ? AND ${manages.sql}`,
+      )
+      .bind(
+        new Date().toISOString(),
+        enabled ? "true" : "false",
+        actor.userId,
+        organizationId,
+        enabled,
+        ...manages.bindings,
+      ),
+    database
+      .prepare(
+        `UPDATE organization SET paid_features_enabled = ?
+       WHERE id = ? AND ${manages.sql}`,
+      )
+      .bind(enabled, organizationId, ...manages.bindings),
+    database
+      .prepare(
+        `UPDATE job_runs SET status = 'cancelled', finished_at = ?, lease_until = NULL
+       WHERE organization_id = ? AND job_id = 'syncFinanceConnection'
+         AND (status = 'queued' OR (status = 'running' AND lease_until <= ?))
+         AND EXISTS (SELECT 1 FROM organization
+           WHERE id = ? AND paid_features_enabled = 0)
+         AND ${manages.sql}`,
+      )
+      .bind(
+        new Date().toISOString(),
+        organizationId,
+        new Date().toISOString(),
+        organizationId,
+        ...manages.bindings,
+      ),
+  ]);
+  if (!updated?.meta.changes) {
+    return context.json(
+      { error: "Organization manager access required." },
+      403,
+    );
+  }
+  return respond(context, organizationSettingsRoutes.updateCurrent, body);
+});
 
 organizationSettings.get("/organizations", async (context) => {
   const userId = context.get("authSession").user.id;

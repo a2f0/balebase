@@ -14,6 +14,15 @@ function Probe() {
   return null;
 }
 
+function FinanceNavigation() {
+  access = useOrganizationAccess("person", "org");
+  return access.can("finance") ? (
+    <a href="/finance">Finance</a>
+  ) : (
+    <p>Finance unavailable</p>
+  );
+}
+
 describe("organization access", () => {
   it("confirms the server's answer, refusals included, but never a failure to read it", async () => {
     respond(() => Response.json({ error: "Unavailable." }, { status: 503 }));
@@ -29,12 +38,15 @@ describe("organization access", () => {
         capabilities: ["finance"],
         memberRole: "member",
         ownerCount: 1,
+        paidFeaturesEnabled: true,
       });
     });
     seen.length = 0;
-    const retry = act(async () => access?.refresh());
-    await act(async () => answer.resolve());
-    await retry;
+    await act(async () => {
+      const retry = access?.refresh();
+      answer.resolve();
+      await retry;
+    });
     expect(seen.filter(({ can, confirmed }) => confirmed && !can)).toEqual([]);
     expect(access?.confirmed).toBe(true);
     expect(access?.can("finance")).toBe(true);
@@ -44,5 +56,26 @@ describe("organization access", () => {
     await act(async () => access?.refresh());
     expect(access?.confirmed).toBe(true);
     expect(access?.can("finance")).toBe(false);
+  });
+
+  it("gates Finance by both the paid setting and existing group permissions", async () => {
+    let paidFeaturesEnabled = false;
+    let capabilities: string[] = ["finance"];
+    respond(() =>
+      Response.json({
+        capabilities,
+        memberRole: "owner",
+        ownerCount: 1,
+        paidFeaturesEnabled,
+      }),
+    );
+    const view = await mount(<FinanceNavigation />);
+    expect(view.container.textContent).toBe("Finance unavailable");
+    paidFeaturesEnabled = true;
+    await act(async () => access?.refresh());
+    expect(view.container.querySelector("a")?.textContent).toBe("Finance");
+    capabilities = [];
+    await act(async () => access?.refresh());
+    expect(view.container.textContent).toBe("Finance unavailable");
   });
 });

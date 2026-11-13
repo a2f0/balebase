@@ -66,6 +66,13 @@ export const financeLimits = {
 /** What membership in a group can grant. */
 export const organizationCapabilities = ["finance"] as const;
 
+/** Features controlled together by the organization's paid-features setting. */
+export const paidFeatures = {
+  backgroundChecks: "Background checks",
+  finance: "Finance",
+} as const;
+export type PaidFeature = keyof typeof paidFeatures;
+
 export const groupLimits = { members: 100, name: 100 } as const;
 
 export const libraryFolderNameMaxLength = 80;

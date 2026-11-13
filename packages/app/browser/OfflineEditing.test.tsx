@@ -178,6 +178,7 @@ for (const path of ["/projects/project-1", "/"]) {
             capabilities: [],
             memberRole: "owner",
             ownerCount: 1,
+            paidFeaturesEnabled: true,
           });
         }
         // Nothing changed on the server: the device keeps what it holds.
@@ -392,6 +393,7 @@ for (const { path, kind } of [
             capabilities: [],
             memberRole: "owner",
             ownerCount: 1,
+            paidFeaturesEnabled: true,
           });
         if (pathname.startsWith("/api/offline/"))
           return Response.json({ error: "Offline fixture" }, { status: 503 });
@@ -456,6 +458,7 @@ it("opens a device audit in the workspace shell without remounting through cover
           capabilities: [],
           memberRole: "owner",
           ownerCount: 1,
+          paidFeaturesEnabled: true,
         });
       if (pathname.startsWith("/api/offline/"))
         return Response.json({ error: "Offline fixture" }, { status: 503 });
@@ -505,6 +508,7 @@ it("keeps a signed-in project page and its typing when coverage drops", async ()
           capabilities: [],
           memberRole: "owner",
           ownerCount: 1,
+          paidFeaturesEnabled: true,
         });
       if (pathname === "/api/projects" || pathname === "/api/projects/deleted")
         return Response.json({ canManage: true, projects: [] });
@@ -647,6 +651,7 @@ it("does not unlock cached work when a device sync finishes during a pending sig
           capabilities: [],
           memberRole: "owner",
           ownerCount: 1,
+          paidFeaturesEnabled: true,
         });
       if (path === "/api/offline/sync") {
         await held;

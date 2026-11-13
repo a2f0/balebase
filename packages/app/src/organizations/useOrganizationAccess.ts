@@ -20,6 +20,7 @@ interface AccessState {
   memberRole: string;
   organizationId: string;
   ownerCount: number;
+  paidFeaturesEnabled: boolean;
   userId: string;
 }
 
@@ -57,6 +58,7 @@ export function useOrganizationAccess(
         memberRole: result.memberRole,
         organizationId,
         ownerCount: result.ownerCount,
+        paidFeaturesEnabled: result.paidFeaturesEnabled,
         userId,
       });
     } catch (cause) {
@@ -77,6 +79,7 @@ export function useOrganizationAccess(
         memberRole: "",
         organizationId,
         ownerCount: 0,
+        paidFeaturesEnabled: false,
         userId,
       });
     }
@@ -99,7 +102,8 @@ export function useOrganizationAccess(
       : undefined;
   return {
     can: (capability: OrganizationCapability) =>
-      current?.capabilities.includes(capability) ?? false,
+      (capability !== "finance" || current?.paidFeaturesEnabled === true) &&
+      (current?.capabilities.includes(capability) ?? false),
     // Pending only until this user and organization first resolve; later
     // refreshes keep the current screen instead of blanking the workspace.
     isPending: Boolean(userId && organizationId && !current),
@@ -108,6 +112,7 @@ export function useOrganizationAccess(
     loadError,
     memberRole: current?.memberRole || undefined,
     ownerCount: current?.ownerCount ?? 0,
+    paidFeaturesEnabled: current?.paidFeaturesEnabled === true,
     refresh,
     seatRequirement: currentRequirement?.seat,
     twoFactorRequirement: currentRequirement?.twoFactor,

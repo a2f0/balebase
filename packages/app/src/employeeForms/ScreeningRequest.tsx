@@ -9,6 +9,7 @@ import {
 } from "@balebase/ui/react";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { useCallback } from "react";
+import { usePaidFeaturesEnabled } from "../organizations/PaidFeatures";
 import { AppButtonLink } from "../shared/AppLink";
 import { api } from "../shared/apiClient";
 import { formatDate } from "../shared/labels";
@@ -30,6 +31,7 @@ export function ScreeningRequest({
   organizationName: string;
   requirementId: string;
 }) {
+  const paidFeaturesEnabled = usePaidFeaturesEnabled();
   const loaded = useLoad(
     useCallback(async () => {
       const { requirements } = await api.employeeForms.list({ own: true });
@@ -58,7 +60,7 @@ export function ScreeningRequest({
     ) : (
       <LoadingState label="Loading background check…" />
     );
-  if (requirement.canSubmitCheckr)
+  if (paidFeaturesEnabled && requirement.canSubmitCheckr)
     return (
       <ScreeningForm
         back={back}
@@ -94,6 +96,12 @@ export function ScreeningRequest({
         }
       >
         {error && <Toast tone="danger">{error}</Toast>}
+        {!paidFeaturesEnabled && !requirement.checkrReportStatus && (
+          <Banner>
+            Paid features are disabled for this organization. Contact an owner
+            or admin to enable them.
+          </Banner>
+        )}
         <Badge tone={badge.tone}>
           {requirement.checkrReportStatus === "complete"
             ? "Report ready"

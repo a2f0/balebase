@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { act } from "react";
+import { PaidFeaturesContext } from "../organizations/PaidFeatures";
 import { installDom } from "../testing/dom";
 import { OrganizationRequirementPage } from "./OrganizationRequirementPage";
 
@@ -96,13 +97,16 @@ function stubApi(requirements: EmployeeRequirement[], reads: string[] = []) {
 async function render(
   onNavigate: (pathname: string) => void = () => {},
   canManage = true,
+  paidFeaturesEnabled = true,
 ) {
   ({ container } = await mount(
-    <OrganizationRequirementPage
-      canManage={canManage}
-      onNavigate={onNavigate}
-      requirementId="check"
-    />,
+    <PaidFeaturesContext value={paidFeaturesEnabled}>
+      <OrganizationRequirementPage
+        canManage={canManage}
+        onNavigate={onNavigate}
+        requirementId="check"
+      />
+    </PaidFeaturesContext>,
   ));
 }
 
@@ -188,27 +192,43 @@ describe("a manager's request page", () => {
     );
   });
 
-  it("shows the report and its result once Checkr finishes", async () => {
-    stubApi([
-      requirement({
-        checkrAvailable: true,
-        checkrReportStatus: "complete",
-        checkrResult: "consider",
-        checkrWorkLocation: { city: "Austin", state: "TX" },
-        completedAt: "2026-10-07T11:09:40.000Z",
-        hasCheckrConsent: true,
-        status: "complete",
-      }),
-    ]);
-    await render();
-    expect(container.textContent).toContain("Work locationAustin, TX");
-    expect(container.textContent).toContain("Report statuscomplete");
-    expect(container.textContent).toContain("Checkr result: Consider");
-    expect(container.textContent).toContain("Signed authorization");
-    expect(card("Next step").textContent).toContain(
-      "Review the report in Checkr before making a decision.",
-    );
+  it("does not offer a new provider request when paid features are disabled", async () => {
+    const changes = stubApi([requirement({ checkrAvailable: true })]);
+    await render(() => {}, true, false);
+    expect(
+      [...container.querySelectorAll("button")].some(
+        (control) => control.textContent === "Request background check",
+      ),
+    ).toBe(false);
+    expect(card("Next step").textContent).toContain("Enable paid features");
+    expect(container.textContent).toContain("Paid features are disabled");
+    expect(changes).toEqual([]);
   });
+
+  it.each([true, false])(
+    "shows completed reports with paid features enabled: %s",
+    async (paidFeaturesEnabled) => {
+      stubApi([
+        requirement({
+          checkrAvailable: true,
+          checkrReportStatus: "complete",
+          checkrResult: "consider",
+          checkrWorkLocation: { city: "Austin", state: "TX" },
+          completedAt: "2026-10-07T11:09:40.000Z",
+          hasCheckrConsent: true,
+          status: "complete",
+        }),
+      ]);
+      await render(() => {}, true, paidFeaturesEnabled);
+      expect(container.textContent).toContain("Work locationAustin, TX");
+      expect(container.textContent).toContain("Report statuscomplete");
+      expect(container.textContent).toContain("Checkr result: Consider");
+      expect(container.textContent).toContain("Signed authorization");
+      expect(card("Next step").textContent).toContain(
+        "Review the report in Checkr before making a decision.",
+      );
+    },
+  );
 
   it("shows the request's own history and refreshes it after a change", async () => {
     const reads: string[] = [];

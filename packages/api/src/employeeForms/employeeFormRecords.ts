@@ -44,6 +44,7 @@ export function toRequirement(
   row: RequirementRow,
   manager: boolean,
   env: Bindings,
+  paidEnabled: boolean,
 ): EmployeeRequirement {
   return {
     id: row.id,
@@ -62,11 +63,13 @@ export function toRequirement(
     targetName: row.target_name,
     completedAt: row.completed_at,
     checkrAvailable:
+      paidEnabled &&
       Boolean(row.member_id || row.invitation_status === "pending") &&
       checkrConfigured(env, row.kind),
     // Requested and waiting for the person to submit their details.
     checkrRequested: awaitingDetails(row),
     canSubmitCheckr:
+      paidEnabled &&
       Boolean(row.is_subject) &&
       awaitingDetails(row) &&
       checkrConfigured(env, row.kind),

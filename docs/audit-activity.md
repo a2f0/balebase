@@ -219,6 +219,14 @@ reconstruct unknown editors, previous values, or timestamps from current state.
 
 ## Organization membership
 
+Organization owners and admins change the shared paid-features preference through
+`PATCH /api/organization-settings/current`. An actual change records
+`organization.paid_features_changed` with boolean `details.before` and
+`details.after`, rooted on the organization. The guarded update and event share
+one transaction and retain the requesting actor; setting the current value again
+records nothing. Members read these events in the organization's Activity feed,
+and organization purge removes them with its other history.
+
 Better Auth's organization endpoints carry the request's actor into the write
 they make (`auth/organizationActivity.ts`), so the triggers of migrations 0057,
 0083 and 0085 record each change atomically with it: creating an organization

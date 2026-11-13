@@ -1,8 +1,22 @@
-import type { organizationSettingsRoutes } from "@balebase/validators/organizationSettings";
+import type {
+  OrganizationSettings,
+  organizationSettingsRoutes,
+} from "@balebase/validators/organizationSettings";
 import { endpoint } from "./endpoint";
 import type { Transport } from "./transport";
 
 const endpoints = {
+  current: endpoint<typeof organizationSettingsRoutes.current>({
+    method: "GET",
+    path: "/api/organization-settings/current",
+    response: "json",
+  }),
+  updateCurrent: endpoint<typeof organizationSettingsRoutes.updateCurrent>({
+    method: "PATCH",
+    path: "/api/organization-settings/current",
+    body: "json",
+    response: "json",
+  }),
   organizations: endpoint<typeof organizationSettingsRoutes.organizations>({
     method: "GET",
     path: "/api/organization-settings/organizations",
@@ -30,6 +44,12 @@ const endpoints = {
 
 export function organizationSettingsApi(transport: Transport) {
   return {
+    current() {
+      return transport.call(endpoints.current);
+    },
+    updateCurrent(settings: OrganizationSettings) {
+      return transport.call(endpoints.updateCurrent, { body: settings });
+    },
     /** The organizations the signed-in user belongs to, oldest first. */
     async organizations() {
       const body = await transport.call(endpoints.organizations);

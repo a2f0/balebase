@@ -57,6 +57,7 @@ export const organizationGroupsRoutes = {
       capabilities: z.array(OrganizationCapabilitySchema),
       memberRole: z.string(),
       ownerCount: z.number(),
+      paidFeaturesEnabled: z.boolean(),
     }),
   }),
   list: route({
