@@ -1,12 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import {
   checkrResponses,
+  checkrWebhook,
   configureCheckr,
   createFixture,
   createRequirement,
   homerSubmission,
   jsonPost,
   mockCheckr,
+  orderedScreening,
   orgId,
   requestedScreening,
   submitScreening,
@@ -17,6 +19,128 @@ import {
 } from "./screeningDisclosures";
 
 describe("Checkr screening", () => {
+  it("lets provider callbacks finish existing reports while paid features are disabled", async () => {
+    const fixture = await createFixture();
+    const id = await orderedScreening(fixture);
+    fixture.database
+      .query("UPDATE organization SET paid_features_enabled = 0 WHERE id = ?")
+      .run(orgId);
+    const checkr = mockCheckr(checkrResponses);
+    try {
+      const response = await checkrWebhook(fixture.bindings, {
+        id: "paid-disabled-report-event",
+        type: "report.completed",
+        data: {
+          object: {
+            id: "report-1",
+            object: "report",
+            candidate_id: "candidate-1",
+          },
+        },
+      });
+      expect(response.status).toBe(200);
+      expect(
+        fixture.database
+          .query(
+            "SELECT status, checkr_result FROM employee_requirements WHERE id = ?",
+          )
+          .get(id),
+      ).toEqual({ status: "complete", checkr_result: "clear" });
+      expect(checkr.calls.map((call) => call.url)).toEqual([
+        "/reports/report-1",
+      ]);
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("refuses new paid screening requests and submissions, retains reports, and resumes when enabled", async () => {
+    const fixture = await createFixture();
+    const waiting = await requestedScreening(fixture);
+    const running = await orderedScreening(fixture);
+    fixture.database
+      .query("UPDATE organization SET paid_features_enabled = 0 WHERE id = ?")
+      .run(orgId);
+    const checkr = mockCheckr(checkrResponses);
+    try {
+      expect(
+        (
+          await fixture
+            .app("owner", "owner")
+            .request(`/${waiting}/checkr/request`, jsonPost({ state: "CA" }))
+        ).status,
+      ).toBe(403);
+      expect(
+        (
+          await fixture
+            .app("employee", "member")
+            .request(`/${waiting}/checkr/form`)
+        ).status,
+      ).toBe(403);
+      expect(
+        (await submitScreening(fixture, waiting, homerSubmission())).status,
+      ).toBe(403);
+      expect(checkr.calls).toEqual([]);
+      expect(
+        (
+          await fixture
+            .app("owner", "owner")
+            .request(`/${running}/checkr/refresh`, { method: "POST" })
+        ).status,
+      ).toBe(200);
+      expect(
+        fixture.database
+          .query(
+            "SELECT checkr_result, status FROM employee_requirements WHERE id = ?",
+          )
+          .get(running),
+      ).toEqual({ checkr_result: "clear", status: "complete" });
+      fixture.database
+        .query("UPDATE organization SET paid_features_enabled = 1 WHERE id = ?")
+        .run(orgId);
+      expect(
+        (await submitScreening(fixture, waiting, homerSubmission())).status,
+      ).toBe(200);
+      expect(
+        checkr.calls.some(
+          (call) => call.method === "POST" && call.url === "/reports",
+        ),
+      ).toBe(true);
+    } finally {
+      checkr.restore();
+    }
+  });
+
+  it("does not order a report when paid features are disabled during submission", async () => {
+    const fixture = await createFixture();
+    const id = await requestedScreening(fixture);
+    const checkr = mockCheckr((call) => {
+      if (call.url === "/candidates") {
+        fixture.database
+          .query(
+            "UPDATE organization SET paid_features_enabled = 0 WHERE id = ?",
+          )
+          .run(orgId);
+      }
+      return checkrResponses(call);
+    });
+    try {
+      expect(
+        (await submitScreening(fixture, id, homerSubmission())).status,
+      ).toBe(409);
+      expect(checkr.calls.map((call) => call.url)).toEqual(["/candidates"]);
+      expect(
+        fixture.database
+          .query(
+            "SELECT checkr_report_id FROM employee_requirements WHERE id = ?",
+          )
+          .get(id),
+      ).toEqual({ checkr_report_id: null });
+    } finally {
+      checkr.restore();
+    }
+  });
+
   it("requests a background check at a work location and emails the person", async () => {
     const fixture = await createFixture();
     configureCheckr(fixture);

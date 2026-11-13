@@ -22,7 +22,8 @@ export async function runSyncPage(
   const item = await env.DB.prepare(`SELECT item.* FROM plaid_items item
     JOIN organization org ON org.id = item.organization_id
     WHERE item.id = ? AND item.organization_id = ?
-      AND item.status IN ('active', 'error') AND org.deletedAt IS NULL`)
+      AND item.status IN ('active', 'error') AND org.deletedAt IS NULL
+      AND org.paid_features_enabled = 1`)
     .bind(job.connection_id, job.organization_id)
     .first<PlaidItemRow>();
   if (!item) {

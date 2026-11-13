@@ -11,6 +11,7 @@ import {
 } from "@balebase/ui/react";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { ActivityFeed } from "../activity/ActivityFeed";
+import { usePaidFeaturesEnabled } from "../organizations/PaidFeatures";
 import { AppButtonLink, AppLink } from "../shared/AppLink";
 import { formatCalendarDate, formatDate } from "../shared/labels";
 import {
@@ -23,7 +24,11 @@ import {
   useManagedRequirements,
 } from "./EmployeeForms";
 import { requirementKinds } from "./myRequirementParts";
-import { managerNextStep, requirementBadge } from "./requirementStatus";
+import {
+  isClosedReportStatus,
+  managerNextStep,
+  requirementBadge,
+} from "./requirementStatus";
 
 /**
  * A manager's page for one requested form or check: who it's for, where it
@@ -135,6 +140,13 @@ function RequirementSections({
     { id: "activity", label: "Activity" },
   ]);
   const badge = requirementBadge(requirement);
+  const paidFeaturesEnabled = usePaidFeaturesEnabled();
+  const backgroundCheckDisabled =
+    !paidFeaturesEnabled &&
+    requirement.kind === "background_check" &&
+    requirement.status !== "complete" &&
+    (!requirement.checkrReportStatus ||
+      isClosedReportStatus(requirement.checkrReportStatus));
   return (
     <>
       <SectionTabs label="Request sections">{sections.tabs}</SectionTabs>
@@ -158,7 +170,11 @@ function RequirementSections({
             )}
           </Card>
           <Card title="Next step">
-            <p>{managerNextStep(requirement)}</p>
+            <p>
+              {backgroundCheckDisabled
+                ? "Enable paid features in Organization settings before requesting or submitting this background check."
+                : managerNextStep(requirement)}
+            </p>
             <RequirementActions
               action={action}
               busy={busy}

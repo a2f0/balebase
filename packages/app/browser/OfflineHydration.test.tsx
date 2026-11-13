@@ -77,6 +77,7 @@ function fakeApi(projects = [site]) {
         capabilities: [],
         memberRole: "member",
         ownerCount: 1,
+        paidFeaturesEnabled: true,
       });
     if (path === "/api/offline/sync") {
       const after = url.searchParams.get("after");

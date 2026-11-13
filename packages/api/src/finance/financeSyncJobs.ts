@@ -81,6 +81,7 @@ export async function enqueueSync(
       SELECT ?, 'syncFinanceConnection', item.id, item.organization_id, ?, ?, item.cursor, item.cursor, ?, ?
       FROM plaid_items item JOIN organization org ON org.id = item.organization_id
       WHERE item.id = ? AND item.organization_id = ? AND org.deletedAt IS NULL
+        AND org.paid_features_enabled = 1
         AND item.status IN ('active', 'error')
         AND (? = 'manual' OR item.daily_sync = 1)`).bind(
       id,
@@ -151,6 +152,7 @@ export async function scheduleFinanceSync(
     JOIN organization org ON org.id = item.organization_id
     WHERE item.daily_sync = 1 AND item.status IN ('active', 'error')
       AND org.deletedAt IS NULL
+      AND org.paid_features_enabled = 1
       AND (item.last_daily_sync_date IS NULL OR item.last_daily_sync_date < ?)
       AND NOT EXISTS (SELECT 1 FROM job_runs job WHERE job.connection_id = item.id
         AND job.status IN ('queued', 'running'))

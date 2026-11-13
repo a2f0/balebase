@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { EmployeeRequirement } from "@balebase/validators/employeeForms";
 import { act } from "react";
+import { PaidFeaturesContext } from "../organizations/PaidFeatures";
 import { installDom } from "../testing/dom";
 import { OrganizationRequirementPage } from "./OrganizationRequirementPage";
 
@@ -96,13 +97,16 @@ function stubApi(requirements: EmployeeRequirement[], reads: string[] = []) {
 async function render(
   onNavigate: (pathname: string) => void = () => {},
   canManage = true,
+  paidFeaturesEnabled = true,
 ) {
   ({ container } = await mount(
-    <OrganizationRequirementPage
-      canManage={canManage}
-      onNavigate={onNavigate}
-      requirementId="check"
-    />,
+    <PaidFeaturesContext value={paidFeaturesEnabled}>
+      <OrganizationRequirementPage
+        canManage={canManage}
+        onNavigate={onNavigate}
+        requirementId="check"
+      />
+    </PaidFeaturesContext>,
   ));
 }
 
@@ -188,6 +192,19 @@ describe("a manager's request page", () => {
     );
   });
 
+  it("does not offer a new provider request when paid features are disabled", async () => {
+    const changes = stubApi([requirement({ checkrAvailable: true })]);
+    await render(() => {}, true, false);
+    expect(
+      [...container.querySelectorAll("button")].some(
+        (control) => control.textContent === "Request background check",
+      ),
+    ).toBe(false);
+    expect(card("Next step").textContent).toContain("Enable paid features");
+    expect(container.textContent).toContain("Paid features are disabled");
+    expect(changes).toEqual([]);
+  });
+
   it("shows the report and its result once Checkr finishes", async () => {
     stubApi([
       requirement({
@@ -200,7 +217,7 @@ describe("a manager's request page", () => {
         status: "complete",
       }),
     ]);
-    await render();
+    await render(() => {}, true, false);
     expect(container.textContent).toContain("Work locationAustin, TX");
     expect(container.textContent).toContain("Report statuscomplete");
     expect(container.textContent).toContain("Checkr result: Consider");

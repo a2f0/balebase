@@ -23,6 +23,7 @@ import {
   requireManager,
   stillManages,
 } from "./organizationMembers";
+import { paidFeaturesEnabled } from "./paidFeatureAccess";
 
 const invalidGroup =
   "A valid group name, members, and capabilities are required.";
@@ -59,18 +60,20 @@ const organizationGroups = new Hono<ApiEnv>();
 
 organizationGroups.get("/access", async (context) => {
   const organizationId = context.get("organizationId");
-  const [capabilities, ownerCount] = await Promise.all([
+  const [capabilities, ownerCount, enabled] = await Promise.all([
     listUserCapabilities(
       context.env.DB,
       organizationId,
       context.get("authSession").user.id,
     ),
     countOrganizationOwners(context.env.DB, organizationId),
+    paidFeaturesEnabled(context.env.DB, organizationId),
   ]);
   return respond(context, organizationGroupsRoutes.access, {
     capabilities,
     memberRole: context.get("organizationRole"),
     ownerCount,
+    paidFeaturesEnabled: enabled,
   });
 });
 
@@ -270,7 +273,10 @@ async function listUserCapabilities(
        JOIN "team" ON "team"."id" = access.team_id
        JOIN "teamMember" ON "teamMember"."teamId" = "team"."id"
        WHERE access.organization_id = ? AND "team"."organizationId" = ?
-         AND "teamMember"."userId" = ?`,
+         AND "teamMember"."userId" = ?
+         AND (access.capability <> 'finance' OR EXISTS (
+           SELECT 1 FROM organization WHERE id = access.organization_id
+             AND paid_features_enabled = 1))`,
     )
     .bind(organizationId, organizationId, userId)
     .all<{ capability: OrganizationCapability }>();
@@ -292,6 +298,9 @@ export async function userHasCapability(
          JOIN "teamMember" ON "teamMember"."teamId" = "team"."id"
          WHERE access.organization_id = ? AND access.capability = ?
            AND "team"."organizationId" = ? AND "teamMember"."userId" = ?
+           AND (access.capability <> 'finance' OR EXISTS (
+             SELECT 1 FROM organization WHERE id = access.organization_id
+               AND paid_features_enabled = 1))
          LIMIT 1`,
       )
       .bind(organizationId, capability, organizationId, userId)

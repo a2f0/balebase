@@ -278,7 +278,8 @@ members at `/organization`. Groups use Better Auth teams underneath and can
 grant application capabilities. Every organization starts with a Finance group
 containing its initial owner, and with no other group: Better Auth's default
 team is turned off. Finance navigation and every `/api/finance` request
-require membership in a group with the Finance capability.
+require membership in a group with the Finance capability and enabled paid
+features for the organization.
 
 **Organization → Access** lists groups as compact rows; each opens a group
 page (`/organization/access/groups/<id>`) with **Members**, **Access** (name
@@ -288,6 +289,25 @@ and the **Admins** group lists every owner and admin, follows member roles, is
 read-only, and shows role changes as its history. Apply migration
 `0089_mark_built_in_groups.sql` before deploying; it marks each organization's
 starting Finance group as built in.
+
+**Organization → General → Paid features** has one **Enable paid features**
+switch for owners and admins. It applies to everyone in that organization,
+across devices, separately from personal account preferences. Background checks
+and Finance are listed in the shared `paidFeatures` constant in
+`packages/validators/src/rules.ts`. Migration
+`0101_organization_paid_features.sql` defaults the setting to enabled, preserving
+existing access. Members can read it; only an organization's owner or admin can
+change it through `PATCH /api/organization-settings/current`. The matching
+`GET` returns the saved setting.
+
+Turning it off hides Finance and blocks its API access, including finance-linked
+data in other features. It prevents new Checkr background-check requests and
+submissions and stops new bank sync work. Existing records, bank connections,
+group memberships, and subscriptions are retained; disabling features does not
+cancel billing or refund charges. Provider callbacks can still finish reports
+already ordered. Ordinary employee documents and manually tracked credit checks
+remain available. Re-enabling restores access subject to the usual permissions.
+Changes record the actor and previous and new setting in organization Activity.
 
 Authentication needs a strong `BETTER_AUTH_SECRET` in the ignored
 `.secrets/prod/app.env`. Production password reset additionally requires

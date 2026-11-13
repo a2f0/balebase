@@ -93,6 +93,17 @@ export function claimJob(database: D1Database, id: string) {
 
 export async function recoverJobs(env: Bindings, timestamp = Date.now()) {
   const now = new Date(timestamp).toISOString();
+  // Disabled organizations retain connections and data, but waiting bank work
+  // is cancelled rather than retried. A live provider page may finish.
+  await env.DB.prepare(`UPDATE job_runs
+    SET status = 'cancelled', finished_at = ?, lease_until = NULL
+    WHERE job_id = 'syncFinanceConnection'
+      AND (status = 'queued' OR (status = 'running' AND lease_until <= ?))
+      AND EXISTS (SELECT 1 FROM organization
+        WHERE organization.id = job_runs.organization_id
+          AND paid_features_enabled = 0)`)
+    .bind(now, now)
+    .run();
   // Maintenance may have sent mail before interruption. Never replay it blindly.
   const interrupted =
     await env.DB.prepare(`UPDATE job_runs SET status = 'failed', finished_at = ?, lease_until = NULL,

@@ -1,4 +1,5 @@
 import { stillManages } from "../organizations/organizationMembers";
+import { paidFeaturesEnabled } from "../organizations/paidFeatureAccess";
 import { type ActivityActor, activityBatch } from "../shared/activity";
 import { trackedPut } from "../shared/storage";
 import type { SystemActor } from "../shared/systemActivity";
@@ -46,6 +47,9 @@ export async function requestCheckrScreening(
          AND checkr_starting_at IS NULL AND checkr_start_nonce IS NULL
          AND (checkr_report_id IS NULL OR
               checkr_report_status IN ('canceled', 'partially_canceled'))
+         AND EXISTS (SELECT 1 FROM organization
+           WHERE organization.id = employee_requirements.organization_id
+             AND paid_features_enabled = 1)
          AND ${manages.sql}`,
   };
   const [, updated] = await activityBatch(database, actor.apiKey, [
@@ -499,6 +503,9 @@ async function uploadConsent(
   consent: { id: string; pdf: Uint8Array },
   fence: AttemptFence,
 ) {
+  if (!(await paidFeaturesEnabled(env.DB, subject.organizationId))) {
+    throw new AttemptChanged();
+  }
   await uploadCheckrConsent(
     env,
     candidateId,
@@ -571,6 +578,9 @@ async function markAttempt(
            updated_at = ?
        WHERE id = ? AND organization_id = ? AND checkr_start_nonce = ?
          AND checkr_start_lease = ?
+         AND (? = 0 OR EXISTS (SELECT 1 FROM organization
+           WHERE organization.id = employee_requirements.organization_id
+             AND paid_features_enabled = 1))
          AND (? IS NULL OR EXISTS (
            SELECT 1 FROM member
            WHERE member.id = employee_requirements.member_id
@@ -588,6 +598,7 @@ async function markAttempt(
       scope.organizationId,
       fence.nonce,
       fence.lease,
+      step.digest !== undefined || step.requestedAt !== undefined ? 1 : 0,
       step.memberUserId ?? null,
       step.memberUserId ?? null,
     )
@@ -615,6 +626,9 @@ async function claimSubmission(
          AND checkr_requested_at = ? AND checkr_report_id IS NULL
          AND status <> 'complete'
          AND (checkr_starting_at IS NULL OR checkr_starting_at < ?)
+         AND EXISTS (SELECT 1 FROM organization
+           WHERE organization.id = employee_requirements.organization_id
+             AND paid_features_enabled = 1)
          AND EXISTS (
            SELECT 1 FROM member
            WHERE member.id = employee_requirements.member_id
