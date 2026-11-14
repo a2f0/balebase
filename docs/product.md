@@ -583,7 +583,8 @@ template. Unsaved contract edits are included without saving or navigating
 away from the original contract.
 
 New templates start as **drafts**. Owners and admins can **Publish** or
-**Unpublish** them. **Save version** and publication changes append immutable
+**Unpublish** the latest version. To promote older content, first save it as a
+new version. **Save version** and publication changes append immutable
 versions; ordinary saves retain the latest publication status, so editing a
 published template produces another published version. You can select an
 older version, use it, or edit it to create the next version. Concurrent saves

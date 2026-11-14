@@ -109,10 +109,16 @@ function TemplateList({
       <PageHeader
         actions={
           <>
-            <Button disabled={busy} onClick={writeTemplate}>
+            <Button busy={writer.busy} disabled={busy} onClick={writeTemplate}>
               New written template
             </Button>
-            <Button busy={busy} icon="add" onClick={choose} variant="primary">
+            <Button
+              busy={uploader.busy}
+              disabled={busy}
+              icon="add"
+              onClick={choose}
+              variant="primary"
+            >
               New PDF template
             </Button>
           </>
@@ -398,6 +404,8 @@ function useTemplatePage(id: string, onNavigate: (pathname: string) => void) {
     versionLoad.start(() => api.contractTemplates.get(id, version));
   }
   function saved(value: ContractTemplate) {
+    versionLoad.reset();
+    deletion.setError(undefined);
     setData(
       (current) =>
         current && {
@@ -410,6 +418,7 @@ function useTemplatePage(id: string, onNavigate: (pathname: string) => void) {
   }
   async function remove() {
     if (!(await confirmTemplateDeletion())) return;
+    versionLoad.reset();
     await deletion.run(async () => {
       await api.contractTemplates.delete(id);
       if (mounted.current) onNavigate(contractTemplatePath());

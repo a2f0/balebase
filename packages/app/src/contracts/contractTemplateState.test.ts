@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { newAuthoredDraft } from "./contractAuthoringState";
 import { writtenTemplateInput } from "./contractTemplateAuthoring";
 import {
+  type TemplateRequestEvent,
   type TemplateRequestState,
   templateRequestReducer,
 } from "./contractTemplateState";
@@ -10,93 +11,81 @@ const run = async () => "saved";
 const idle: TemplateRequestState<string> = { status: "idle" };
 
 describe("template request lifecycle", () => {
-  it("accepts one request and ignores a duplicate start", () => {
-    const pending = templateRequestReducer(idle, {
-      type: "start",
-      request: 1,
-      run,
-    });
-    expect(pending.status).toBe("pending");
-    expect(
-      templateRequestReducer(pending, { type: "start", request: 2, run }),
-    ).toBe(pending);
-  });
-
-  it("ignores completion A after reset and start B", () => {
-    const first = templateRequestReducer(idle, {
-      type: "start",
-      request: 1,
-      run,
-    });
-    const reset = templateRequestReducer(first, { type: "reset" });
-    const second = templateRequestReducer(reset, {
-      type: "start",
-      request: 2,
-      run,
-    });
-    expect(
-      templateRequestReducer(second, {
-        type: "succeeded",
-        request: 1,
-        result: "old",
-      }),
-    ).toBe(second);
-    expect(
-      templateRequestReducer(second, {
-        type: "failed",
-        request: 1,
-        error: "old error",
-      }),
-    ).toBe(second);
-    expect(
-      templateRequestReducer(second, {
-        type: "succeeded",
-        request: 2,
-        result: "new",
-      }),
-    ).toEqual({ status: "succeeded", request: 2, result: "new" });
-  });
-
-  it("can retry a failure and rejects a replayed failure after success", () => {
-    const first = templateRequestReducer(idle, {
-      type: "start",
-      request: 1,
-      run,
-    });
-    const failure = templateRequestReducer(first, {
-      type: "failed",
-      request: 1,
-      error: "Conflict; edits kept",
-    });
-    expect(failure).toEqual({
-      status: "failed",
-      request: 1,
-      error: "Conflict; edits kept",
-    });
-    const retry = templateRequestReducer(failure, {
-      type: "start",
-      request: 2,
-      run,
-    });
-    const success = templateRequestReducer(retry, {
-      type: "succeeded",
-      request: 2,
-      result: "saved",
-    });
-    expect(
-      templateRequestReducer(success, {
-        type: "failed",
-        request: 2,
-        error: "late",
-      }),
-    ).toBe(success);
-    expect(
-      templateRequestReducer(idle, {
-        type: "succeeded",
-        request: 1,
-        result: "late",
-      }),
-    ).toBe(idle);
+  const first = { status: "pending", request: 1, run } as const;
+  const second = { status: "pending", request: 2, run } as const;
+  const failure = {
+    status: "failed",
+    request: 1,
+    error: "Conflict; edits kept",
+  } as const;
+  const success = { status: "succeeded", request: 2, result: "saved" } as const;
+  const cases: [
+    string,
+    TemplateRequestState<string>,
+    TemplateRequestEvent<string>,
+    TemplateRequestState<string>,
+  ][] = [
+    ["starts from idle", idle, { type: "start", request: 1, run }, first],
+    [
+      "ignores duplicate starts",
+      first,
+      { type: "start", request: 2, run },
+      first,
+    ],
+    ["resets an active request", first, { type: "reset" }, idle],
+    [
+      "ignores success after reset",
+      idle,
+      { type: "succeeded", request: 1, result: "late" },
+      idle,
+    ],
+    [
+      "ignores failure after reset",
+      idle,
+      { type: "failed", request: 1, error: "late" },
+      idle,
+    ],
+    [
+      "ignores stale success during a new request",
+      second,
+      { type: "succeeded", request: 1, result: "old" },
+      second,
+    ],
+    [
+      "ignores stale failure during a new request",
+      second,
+      { type: "failed", request: 1, error: "old" },
+      second,
+    ],
+    [
+      "accepts the current success",
+      second,
+      { type: "succeeded", request: 2, result: "saved" },
+      success,
+    ],
+    [
+      "keeps the current failure",
+      first,
+      { type: "failed", request: 1, error: "Conflict; edits kept" },
+      failure,
+    ],
+    [
+      "retries after failure",
+      failure,
+      { type: "start", request: 2, run },
+      second,
+    ],
+    [
+      "ignores replayed failure after success",
+      success,
+      { type: "failed", request: 2, error: "late" },
+      success,
+    ],
+    ["clears a failure", failure, { type: "reset" }, idle],
+    ["resets a completed request", success, { type: "reset" }, idle],
+  ];
+  it.each(cases)("%s", (_name, state, event, expected) => {
+    expect(templateRequestReducer(state, event)).toEqual(expected);
   });
 });
 
@@ -126,7 +115,7 @@ describe("written contract conversion", () => {
       "project.title": "Literal **not markdown**",
     });
     expect(input.definition.roles).toEqual([
-      { key: "client", label: "client", routingOrder: 2 },
+      { key: "client", label: "Client", routingOrder: 2 },
     ]);
     expect(input.definition.fields).toEqual([]);
     expect(input).not.toHaveProperty("dueDate");

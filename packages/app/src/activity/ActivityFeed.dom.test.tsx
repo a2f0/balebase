@@ -235,6 +235,18 @@ describe("activity feed, mounted", () => {
       Response.json({
         events: [
           record(
+            10,
+            "contract_template.unpublished",
+            { id: "t2", label: "Offer letter", type: "contract_template" },
+            { version: 4 },
+          ),
+          record(
+            9,
+            "contract_template.published",
+            { id: "t2", label: "Offer letter", type: "contract_template" },
+            { version: 3 },
+          ),
+          record(
             8,
             "contract_template.version_saved",
             { id: "t2", label: "Offer letter", type: "contract_template" },
@@ -302,8 +314,10 @@ describe("activity feed, mounted", () => {
         (heading) => heading.textContent,
       ),
     ).toEqual([
+      "Sam via Assistant (MCP) unpublished a contract template · Offer letter",
+      "Sam via Assistant (MCP) published a contract template · Offer letter",
       "Sam via Assistant (MCP) saved a contract template version · Offer letter",
-      "Sam via Assistant (MCP) uploaded a contract template · Offer",
+      "Sam via Assistant (MCP) created a contract template · Offer",
       "Sam via Assistant (MCP) deleted a contract · Lease",
       "Sam via Assistant (MCP) voided a contract · Lease",
       "Sam via Assistant (MCP) sent a contract for signature · Lease",
@@ -316,6 +330,8 @@ describe("activity feed, mounted", () => {
         (summary) => summary.textContent,
       ),
     ).toEqual([
+      "Version 4",
+      "Version 3",
       "Version 2 from v1 · Renamed from Offer · 2 roles · 5 fields",
       "Version 1 · 2 pages",
       "Was Declined · 1 of 2 signers signed",
@@ -331,6 +347,8 @@ describe("activity feed, mounted", () => {
         link.getAttribute("aria-label"),
       ),
     ).toEqual([
+      "Open template: Offer letter",
+      "Open template: Offer letter",
       "Open template: Offer letter",
       "Open template: Offer",
       "Open contract: Lease",

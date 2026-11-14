@@ -87,8 +87,9 @@ export function ContractTemplateEditor({
           >
             Save version {editor.currentVersion + 1}
           </Button>
-          {canPublish && (
+          {canPublish && template.version === editor.currentVersion && (
             <Button
+              busy={editor.busy}
               onClick={() =>
                 editor.save(
                   editor.currentStatus === "published"
@@ -221,6 +222,7 @@ function useTemplateEditor(
     refresher.start(() => api.contractTemplates.get(template.id));
   }
   async function removeRole(key: string) {
+    if (busy) return;
     const count = draft.fields.filter(
       (field) => field.recipientKey === key,
     ).length;

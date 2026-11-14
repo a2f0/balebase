@@ -309,9 +309,6 @@ describe("contract templates, mounted", () => {
     );
     expect(button("Save version 4", container).disabled).toBe(true);
     // The template's history is read on opening and again after the save.
-    expect(container.textContent).toContain(
-      "Owner uploaded a contract template",
-    );
     expect(activityReads).toEqual([
       "http://localhost:8787/api/contracts/templates/t1/activity",
       "http://localhost:8787/api/contracts/templates/t1/activity",
@@ -321,13 +318,20 @@ describe("contract templates, mounted", () => {
   it("uses a selected older version and maps its role once", async () => {
     const posts = stubApi();
     const navigations: string[] = [];
-    const container = await mountContracts(undefined, (path) =>
-      navigations.push(path),
+    const container = await mountContracts(
+      undefined,
+      (path) => navigations.push(path),
+      true,
     );
     await change(field(container, "Version"), "1");
     expect(container.querySelector("h1")?.textContent).toBe(
       "Original agreement",
     );
+    expect(
+      [...container.querySelectorAll("button")].some((item) =>
+        ["Publish", "Unpublish"].includes(item.textContent?.trim() ?? ""),
+      ),
+    ).toBe(false);
     await click(button("Use this version", container));
     await change(field(container, "Employee name"), "Sam Signer");
     await change(field(container, "Employee email"), "sam@example.com");
@@ -569,7 +573,7 @@ describe("written templates, mounted", () => {
     expect(posts[0]?.url).toEndWith("/templates/authored");
     expect(posts[0]?.body.authoring?.source).toBe(newAuthoredDraft().source);
     expect(posts[0]?.body.definition?.roles).toEqual([
-      { key: "client", label: "client", routingOrder: 1 },
+      { key: "client", label: "Client", routingOrder: 1 },
     ]);
     expect(navigations).toEqual(["/contracts/templates/t1"]);
   });
@@ -702,10 +706,10 @@ describe("written templates, mounted", () => {
     });
   });
 
-  it("preserves dirty source when selecting another version fails", async () => {
+  it("preserves source after a failed version load and clears the error on save", async () => {
     const { promise: versionResponse, resolve: finish } =
       Promise.withResolvers<Response>();
-    stubApi({ detail: writtenTemplate(), versionResponse });
+    const posts = stubApi({ detail: writtenTemplate(), versionResponse });
     const container = await mountContracts();
     await click(button("Markdown", container));
     const source = `${writtenTemplate().authoring?.source}\nUnsaved source.\n`;
@@ -720,6 +724,11 @@ describe("written templates, mounted", () => {
     expect(container.textContent).toContain("Version unavailable");
     expect(field(container, "Markdown source").value).toBe(source);
     expect(await decide(canNavigate, "Keep editing")).toBe(false);
+    await click(button("Save version 3", container));
+    await settle();
+    expect(posts[0]?.body.authoring?.source).toBe(source);
+    expect(container.textContent).not.toContain("Version unavailable");
+    expect(container.textContent).toContain("Version 3 saved");
   });
 
   it("saves unsaved written source as a template without clearing the contract guard", async () => {

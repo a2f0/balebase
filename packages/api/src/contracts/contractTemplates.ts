@@ -682,6 +682,11 @@ async function prepareTemplateContract(
   source: VersionRow,
   body: ReturnType<typeof contractTemplatesRoutes.createContract.body.parse>,
 ) {
+  if (!source.authoring_json && body.values && Object.keys(body.values).length)
+    return context.json(
+      { error: "Merge values are only supported by written templates." },
+      400,
+    );
   const definition = JSON.parse(source.definition_json) as TemplateDefinition;
   const draft = mappedDraft(
     body,

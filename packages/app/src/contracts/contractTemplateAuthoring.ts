@@ -27,7 +27,9 @@ export function writtenTemplateInput(
       fields: [],
       roles: draft.recipients.map(({ key, routingOrder }) => ({
         key,
-        label: key,
+        label: key
+          .replace(/[-_]/g, " ")
+          .replace(/\b[a-z]/g, (letter) => letter.toUpperCase()),
         routingOrder,
       })),
       message: draft.message,

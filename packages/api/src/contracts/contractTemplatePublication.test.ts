@@ -41,6 +41,25 @@ describe("contract template publication", () => {
     });
   });
 
+  it("rejects merge values for a PDF template instead of silently discarding them", async () => {
+    const fixture = createFixture();
+    const first = await uploadTemplate(fixture);
+    const path = `/api/contracts/templates/${first.id}`;
+    const published = await fixture.json("POST", `${path}/versions`, {
+      ...templateVersion(first),
+      status: "published",
+    });
+    expect(published.status).toBe(201);
+    const result = await fixture.json("POST", `${path}/contracts`, {
+      ...roleMapping(2),
+      values: { "project.site": "West atrium" },
+    });
+    expect(result.status).toBe(400);
+    expect(
+      fixture.database.query("SELECT count(*) AS count FROM contracts").get(),
+    ).toEqual({ count: 0 });
+  });
+
   it("requires current and selected publication, preserving immutable history and member saves", async () => {
     const fixture = createFixture();
     const first = await uploadTemplate(fixture);

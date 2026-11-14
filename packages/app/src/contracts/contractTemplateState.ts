@@ -90,10 +90,12 @@ export function useTemplateRequest<T>(onSuccess?: (result: T) => void) {
   const start = useCallback((run: () => Promise<T>) => {
     dispatch({ type: "start", request: ++sequence.current, run });
   }, []);
+  const reset = useCallback(() => dispatch({ type: "reset" }), []);
   return {
     state,
     busy: state.status === "pending",
     error: state.status === "failed" ? state.error : undefined,
     start,
+    reset,
   };
 }
