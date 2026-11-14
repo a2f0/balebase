@@ -517,7 +517,10 @@ describe("contracts", () => {
     expect(signed.body.completed).toBe(true);
     const template = await uploadTemplate(fixture);
     const path = `/api/contracts/templates/${template.id}`;
-    await fixture.json("POST", `${path}/versions`, templateVersion(template));
+    await fixture.json("POST", `${path}/versions`, {
+      ...templateVersion(template),
+      status: "published",
+    });
     const copied = await fixture.json(
       "POST",
       `${path}/contracts`,

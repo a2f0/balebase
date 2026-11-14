@@ -151,8 +151,12 @@ const routes: WorkspaceRoute[] = [
   {
     matches: within("/contracts"),
     page: "contracts",
-    render: ({ navigate, pathname }) => (
-      <Contracts onNavigate={navigate} pathname={pathname} />
+    render: ({ access, navigate, pathname }) => (
+      <Contracts
+        canPublish={canManageOrganization(access.memberRole)}
+        onNavigate={navigate}
+        pathname={pathname}
+      />
     ),
   },
   {

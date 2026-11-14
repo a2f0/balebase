@@ -35,6 +35,32 @@ const requirementId = {
   id: "Requirement id from list_employee_requirements.",
 };
 
+const templateDefinition = {
+  definition: "Signer roles, fields, and sending defaults for the new version.",
+  "definition.fields":
+    "PDF field positions, owned by a role. For written templates, pass an empty array; positions are generated from Markdown.",
+  ...placedField("definition.fields", "roleKey", "role"),
+  "definition.message": "Default message to signers.",
+  "definition.reminderIntervalDays": reminderIntervalDays,
+  "definition.roles": "Signer roles, such as Employee and Company.",
+  "definition.roles.key":
+    "Unique role key; fields and merge values refer to it.",
+  "definition.roles.label": "Role name, unique in the template.",
+  "definition.roles.routingOrder": "Signing step for sequential use.",
+  "definition.signingOrder": signingOrder,
+  description: "Template description; may be empty.",
+  name: "Template name.",
+};
+const templateAuthoring = {
+  authoring:
+    "Written template source and literal merge defaults. Omit for PDF templates. Never include actual signer identities.",
+  "authoring.formatVersion": "Markdown format version: 1.",
+  "authoring.source":
+    "Markdown with signer-role directives and :value[key] interpolation; no HTML, images, links, tables, nested lists, or code.",
+  "authoring.values":
+    "Literal default merge values. Signer role.name and role.email values come from the people assigned when using the template.",
+};
+
 export const contractTools: McpTool[] = [
   {
     description:
@@ -120,14 +146,15 @@ export const contractTools: McpTool[] = [
     title: "Delete contract",
   },
   {
-    description: "Lists reusable contract templates.",
+    description:
+      "Lists reusable PDF and written contract templates with publication status.",
     name: "list_contract_templates",
     route: contractTemplatesRoutes.list,
     title: "List contract templates",
   },
   {
     description:
-      "Gets a contract template version: its signer roles, placed fields, message, and signing order.",
+      "Gets a contract template version: signer roles, placed fields, written source when present, sending defaults, and selected/current publication status.",
     descriptions: {
       ...templateId,
       version: "Version to read; defaults to the current one.",
@@ -135,6 +162,14 @@ export const contractTools: McpTool[] = [
     name: "get_contract_template",
     route: contractTemplatesRoutes.get,
     title: "Get contract template",
+  },
+  {
+    description:
+      "Creates a draft written contract template with Markdown source, signer roles, and merge defaults. Publish a version before creating contracts from it.",
+    descriptions: { ...templateDefinition, ...templateAuthoring },
+    name: "create_written_contract_template",
+    route: contractTemplatesRoutes.createAuthored,
+    title: "Create written contract template",
   },
   {
     description: "Lists a contract template's versions, newest first.",
@@ -153,26 +188,17 @@ export const contractTools: McpTool[] = [
   },
   {
     description:
-      "Saves a new version of a contract template. Earlier versions and contracts made from them do not change.",
+      "Saves an immutable template version. Omitted status preserves publication; publishing and unpublishing require an organization manager. Earlier versions and existing contracts do not change.",
     descriptions: {
       ...templateId,
-      definition:
-        "Signer roles, fields, and sending defaults for the new version.",
-      "definition.fields":
-        "Every field, owned by a role. x + width and y + height must not exceed 1.",
-      ...placedField("definition.fields", "roleKey", "role"),
-      "definition.message": "Default message to signers.",
-      "definition.reminderIntervalDays": reminderIntervalDays,
-      "definition.roles": "Signer roles, such as Employee and Company.",
-      "definition.roles.key": "Unique role key; fields refer to it.",
-      "definition.roles.label": "Role name, unique in the template.",
-      "definition.roles.routingOrder": "Signing step for sequential use.",
-      "definition.signingOrder": signingOrder,
-      description: "Template description; may be empty.",
+      ...templateDefinition,
+      ...templateAuthoring,
       expectedCurrentVersion:
         "currentVersion from get_contract_template; rejected if a newer version exists.",
-      name: "Template name.",
-      sourceVersion: "Version whose PDF the new version reuses.",
+      sourceVersion:
+        "Version whose content the edit builds on; PDF templates reuse its document.",
+      status:
+        "published to publish, unpublished to unpublish a published template; omit for an ordinary save preserving current publication.",
     },
     name: "save_contract_template_version",
     route: contractTemplatesRoutes.saveVersion,
@@ -180,7 +206,7 @@ export const contractTools: McpTool[] = [
   },
   {
     description:
-      "Creates a draft contract from a template version with people assigned to its roles. Review it, then call send_contract.",
+      "Creates a draft from a published version of a currently published template with people assigned to its roles. Written templates generate a fresh PDF using merge values. Review that saved PDF, then call send_contract with its authoring revision.",
     descriptions: {
       ...templateId,
       dueDate: "Due date as YYYY-MM-DD, or null.",
@@ -189,7 +215,9 @@ export const contractTools: McpTool[] = [
       "recipients.name": "Full name.",
       "recipients.roleKey": "Role key from get_contract_template.",
       title: "Contract title; defaults to the template name.",
-      version: "Template version to use.",
+      version: "Published template version to use.",
+      values:
+        "Per-contract literal merge values overriding the written template defaults.",
     },
     name: "create_contract_from_template",
     route: contractTemplatesRoutes.createContract,

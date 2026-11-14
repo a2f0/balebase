@@ -39,12 +39,20 @@ import {
 export function Contracts({
   onNavigate,
   pathname,
+  canPublish = false,
 }: {
   onNavigate: (pathname: string) => void;
   pathname: string;
+  canPublish?: boolean;
 }) {
   if (isWithin(pathname, contractTemplatePath()))
-    return <ContractTemplates onNavigate={onNavigate} pathname={pathname} />;
+    return (
+      <ContractTemplates
+        canPublish={canPublish}
+        onNavigate={onNavigate}
+        pathname={pathname}
+      />
+    );
   const contractId = contractIdForPath(pathname);
   // Keyed so each page starts fresh and ignores the other's late responses.
   return contractId ? (

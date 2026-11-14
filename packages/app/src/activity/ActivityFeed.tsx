@@ -125,7 +125,7 @@ const actionLabels: Record<string, string> = {
   "contract.deleted": "deleted a contract",
   "contract.sent": "sent a contract for signature",
   "contract.voided": "voided a contract",
-  "contract_template.created": "uploaded a contract template",
+  "contract_template.created": "created a contract template",
   "contract_template.deleted": "deleted a contract template",
   "contract_template.version_saved": "saved a contract template version",
   "employee_requirement.assigned": "requested a form or check",

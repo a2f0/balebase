@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { expect } from "bun:test";
-import type { TemplateDefinition } from "@balebase/validators/contractTemplates";
+import type { ContractTemplate } from "@balebase/validators/contractTemplates";
 import { Hono } from "hono";
 import { degrees, PDFDocument } from "pdf-lib";
 import { activity } from "../activity/activity";
@@ -11,7 +11,7 @@ import { memoryStorage, testBindings } from "./bindings";
 import { queryHooks, toD1 } from "./d1";
 import { createTestDatabase } from "./database";
 import { requester } from "./http";
-import { seedOrganization, seedUser } from "./seed";
+import { seedMember, seedOrganization, seedUser } from "./seed";
 import { type ApiTestEnv, withTestSession } from "./session";
 
 export const timestamp = "2026-09-20T12:00:00.000Z";
@@ -109,8 +109,7 @@ export function draft(overrides: Record<string, unknown> = {}) {
   };
 }
 
-export function createFixture() {
-  const database = createTestDatabase();
+export function createFixture(database = createTestDatabase()) {
   seed(database);
   const emails: SentEmail[] = [];
   const storage = {
@@ -152,7 +151,7 @@ export function createFixture() {
     userId: string,
     organizationId: string,
     apiKey?: ApiKeyPrincipal,
-  ) => contractClient(bindings, userId, organizationId, apiKey);
+  ) => contractClient(database, bindings, userId, organizationId, apiKey);
   const owner = as("owner-user", "org-1");
   return {
     ...owner,
@@ -181,16 +180,24 @@ export function createFixture() {
 }
 
 function contractClient(
+  database: Database,
   bindings: ReturnType<typeof testBindings>,
   userId: string,
   organizationId: string,
   apiKey?: ApiKeyPrincipal,
 ) {
-  const signedIn = withTestSession({
+  const signedIn = withTestSession(() => ({
     organizationId,
-    organizationRole: "member",
+    organizationRole:
+      (
+        database
+          .query(
+            "SELECT role FROM member WHERE organizationId = ? AND userId = ?",
+          )
+          .get(organizationId, userId) as { role: string } | null
+      )?.role ?? "member",
     userId,
-  });
+  }));
   const session = async (
     context: Parameters<typeof signedIn>[0],
     next: () => Promise<void>,
@@ -223,6 +230,7 @@ function contractClient(
 function seed(database: Database) {
   for (const [id, name, email] of [
     ["owner-user", "Olivia Owner", "owner@example.com"],
+    ["member-user", "Mina Member", "member@example.com"],
     ["other-user", "Oscar Other", "other@example.com"],
   ] as const)
     seedUser(database, { createdAt: timestamp, email, id, name });
@@ -231,6 +239,12 @@ function seed(database: Database) {
     ["org-2", "Other Co"],
   ] as const)
     seedOrganization(database, { createdAt: timestamp, id, name });
+  for (const [userId, organizationId, role] of [
+    ["owner-user", "org-1", "owner"],
+    ["member-user", "org-1", "member"],
+    ["other-user", "org-2", "owner"],
+  ] as const)
+    seedMember(database, { organizationId, userId, role });
 }
 
 export async function samplePdf() {
@@ -240,14 +254,7 @@ export async function samplePdf() {
   return document.save();
 }
 
-export interface Template {
-  currentVersion: number;
-  definition: TemplateDefinition;
-  document: { pageCount: number; sha256: string };
-  id: string;
-  name: string;
-  version: number;
-}
+export type Template = ContractTemplate;
 
 export async function uploadTemplate(
   fixture: Awaited<ReturnType<typeof createFixture>>,
@@ -262,7 +269,9 @@ export async function uploadTemplate(
   return ((await response.json()) as { template: Template }).template;
 }
 
-export function templateVersion(template: Template) {
+export function templateVersion(
+  template: Pick<Template, "currentVersion" | "version">,
+) {
   return {
     definition: {
       fields: draft().fields.map(({ recipientKey, ...field }) => ({

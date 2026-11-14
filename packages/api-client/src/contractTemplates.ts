@@ -1,5 +1,6 @@
 import type {
   ContractTemplate,
+  CreateAuthoredTemplateInput,
   contractTemplatesRoutes,
   TemplateContractInput,
   TemplateVersionInput,
@@ -17,6 +18,12 @@ const endpoints = {
     method: "POST",
     path: "/api/contracts/templates",
     body: "form",
+    response: "json",
+  }),
+  createAuthored: endpoint<typeof contractTemplatesRoutes.createAuthored>({
+    method: "POST",
+    path: "/api/contracts/templates/authored",
+    body: "json",
     response: "json",
   }),
   get: endpoint<typeof contractTemplatesRoutes.get>({
@@ -68,6 +75,10 @@ export function contractTemplatesApi(transport: Transport) {
       const body = new FormData();
       body.set("file", file);
       return (await transport.call(endpoints.upload, { body })).template;
+    },
+    async createAuthored(input: CreateAuthoredTemplateInput) {
+      return (await transport.call(endpoints.createAuthored, { body: input }))
+        .template;
     },
     /** A version of the template; the latest without one. */
     async get(id: string, version?: number) {

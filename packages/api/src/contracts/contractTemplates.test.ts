@@ -17,7 +17,7 @@ describe("contract templates", () => {
     const saved = await fixture.json<{ template: Template }>(
       "POST",
       `${path}/versions`,
-      templateVersion(first),
+      { ...templateVersion(first), status: "published" },
     );
     expect(saved.status).toBe(201);
     const second = saved.body.template;
@@ -203,9 +203,14 @@ describe("contract templates", () => {
           })
         ).body,
       ).toEqual({ error });
-    expect((await fixture.json("POST", `${path}/versions`, input)).status).toBe(
-      201,
-    );
+    expect(
+      (
+        await fixture.json("POST", `${path}/versions`, {
+          ...input,
+          status: "published",
+        })
+      ).status,
+    ).toBe(201);
     const mapping = roleMapping(2);
     const [employee, company] = mapping.recipients;
     for (const [recipients, error] of [
@@ -297,7 +302,10 @@ describe("contract templates", () => {
     const fixture = createFixture();
     const template = await uploadTemplate(fixture);
     const path = `/api/contracts/templates/${template.id}`;
-    await fixture.json("POST", `${path}/versions`, templateVersion(template));
+    await fixture.json("POST", `${path}/versions`, {
+      ...templateVersion(template),
+      status: "published",
+    });
     // Fail inside the batch, after the contract row is written, so only a
     // rollback leaves no contract behind.
     fixture.database.exec(`CREATE TEMP TRIGGER fail_contract_fields

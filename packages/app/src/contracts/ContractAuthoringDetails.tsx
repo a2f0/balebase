@@ -235,17 +235,23 @@ function AuthoringRecipientRow({
   );
 }
 
-function AuthoringValues({ draft, onChange }: DetailsProps) {
+export function AuthoringValues({
+  draft,
+  onChange,
+  templateDefaults = false,
+}: DetailsProps & { templateDefaults?: boolean }) {
   const [key, setKey] = useState("");
   const validKey = /^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z][A-Za-z0-9_-]*)*$/.test(
     key,
   );
   return (
-    <Card title="Merge values">
+    <Card title={templateDefaults ? "Merge defaults" : "Merge values"}>
       <div className="stack stackMd">
         <p className="contractHint">
           Signer role.name and role.email resolve automatically. Add other
           plain-text values here. Values are never treated as Markdown.
+          {templateDefaults &&
+            " Defaults are copied into new contracts and can be changed for each use. Values without defaults can be filled in when creating a contract."}
         </p>
         {Object.entries(draft.values).map(([name, value]) => (
           <div className="stack stackSm" key={name}>

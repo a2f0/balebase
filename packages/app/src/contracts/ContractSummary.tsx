@@ -25,6 +25,7 @@ import {
   recipientTone,
   reminderOptions,
 } from "./contractFields";
+import { SaveWrittenTemplate } from "./SaveWrittenTemplate";
 
 /** A contract that has been sent: its progress, actions, and history. */
 export function ContractSummary({
@@ -45,6 +46,12 @@ export function ContractSummary({
       <div className="contractSummaryGrid">
         <div className="stack">
           <SummaryActions actions={actions} contract={contract} />
+          {contract.authoring && (
+            <SaveWrittenTemplate
+              draft={contract.authoring}
+              disabled={actions.busy}
+            />
+          )}
           <Signers contract={contract} />
           <Activity contract={contract} />
         </div>

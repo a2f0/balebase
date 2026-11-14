@@ -1,10 +1,108 @@
+import {
+  type ContractAuthoringInput,
+  ContractAuthoringSchema,
+} from "@balebase/validators/contractAuthoring";
+import { ContractMarkdownError } from "@balebase/validators/contractMarkdown";
 import { contractsRoutes } from "@balebase/validators/contracts";
 import type {
   contractTemplatesRoutes,
   TemplateDefinition,
 } from "@balebase/validators/contractTemplates";
 import type { z } from "zod";
+import { normalizeFilename } from "../shared/filenames";
 import { fieldsOnDocument, offPageError, validEmail } from "./contractDraft";
+import { renderContractMarkdown } from "./contractMarkdownPdf";
+import { sha256Hex } from "./contractPdf";
+
+/** One transition table, applied to the latest version, never the edited source. */
+export function templatePublication(
+  current: "draft" | "published" | "unpublished",
+  requested: "published" | "unpublished" | undefined,
+) {
+  const status = requested ?? current;
+  if (status === current)
+    return { status, action: "contract_template.version_saved" } as const;
+  switch (current) {
+    case "draft":
+      return status === "published"
+        ? ({ status, action: "contract_template.published" } as const)
+        : null;
+    case "published":
+      return { status, action: "contract_template.unpublished" } as const;
+    case "unpublished":
+      return { status, action: "contract_template.published" } as const;
+  }
+}
+
+/** Preview-only stand-ins never enter either the template or a contract snapshot. */
+export async function templatePreview(
+  input: z.output<typeof contractTemplatesRoutes.createAuthored.body>,
+) {
+  const rendered = await renderTemplateContract(
+    {
+      ...input.authoring,
+      ...input.definition,
+      dueDate: null,
+      recipients: input.definition.roles.map(
+        ({ key, label, routingOrder }) => ({
+          key,
+          name: label,
+          email: `[${label} email]`,
+          routingOrder,
+        }),
+      ),
+      title: input.name,
+    },
+    "placeholder",
+  );
+  return {
+    document: rendered.document,
+    definition: {
+      ...input.definition,
+      fields: rendered.draft.fields.map(({ recipientKey, ...field }) => ({
+        ...field,
+        roleKey: recipientKey,
+      })),
+    },
+  };
+}
+
+/** The source snapshot, PDF and placements are validated and generated together. */
+export async function renderTemplateContract(
+  input: ContractAuthoringInput,
+  missingValues: "reject" | "placeholder" = "reject",
+) {
+  const checked = ContractAuthoringSchema.safeParse(input);
+  if (!checked.success)
+    throw new ContractMarkdownError(
+      checked.error.issues[0]?.message ??
+        "The contract authoring input is invalid.",
+    );
+  const authoring = checked.data;
+  const rendered = await renderContractMarkdown(authoring, missingValues);
+  if (rendered.bytes.byteLength > 10 * 1024 * 1024)
+    throw new ContractMarkdownError(
+      "Contract templates must be 10 MB or smaller.",
+    );
+  const draft = contractsRoutes.saveDraft.body.safeParse({
+    ...authoring,
+    fields: rendered.fields,
+  });
+  if (!draft.success)
+    throw new ContractMarkdownError(
+      draft.error.issues[0]?.message ?? "The generated fields are invalid.",
+    );
+  return {
+    authoring,
+    draft: draft.data,
+    document: {
+      bytes: rendered.bytes,
+      filename: normalizeFilename(`${authoring.title}.pdf`, "contract.pdf"),
+      pageCount: rendered.pageCount,
+      sha256: await sha256Hex(rendered.bytes),
+    },
+  };
+}
 
 /**
  * Maps each role once; every field follows its role into the new draft,

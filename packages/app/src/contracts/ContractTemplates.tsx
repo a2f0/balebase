@@ -39,17 +39,27 @@ import {
 } from "../workspace/workspacePaths";
 import { ContractTemplateEditor } from "./ContractTemplateEditor";
 import { ContractTemplateMapping } from "./ContractTemplateMapping";
+import { newAuthoredDraft } from "./contractAuthoringState";
+import { writtenTemplateInput } from "./contractTemplateAuthoring";
+import { useTemplateRequest } from "./contractTemplateState";
 
 export function ContractTemplates({
   pathname,
   onNavigate,
+  canPublish = false,
 }: {
   pathname: string;
   onNavigate: (pathname: string) => void;
+  canPublish?: boolean;
 }) {
   const id = contractTemplateIdForPath(pathname);
   return id ? (
-    <TemplatePage id={id} key={id} onNavigate={onNavigate} />
+    <TemplatePage
+      canPublish={canPublish}
+      id={id}
+      key={id}
+      onNavigate={onNavigate}
+    />
   ) : (
     <TemplateList onNavigate={onNavigate} />
   );
@@ -66,8 +76,20 @@ function TemplateList({
   );
   const templates = list.data;
   const uploader = useAction("Could not upload the template.");
-  const error = uploader.error ?? list.error;
-  const busy = uploader.busy;
+  const writer = useTemplateRequest<ContractTemplate>((template) =>
+    onNavigate(contractTemplatePath(template.id)),
+  );
+  const error = writer.error ?? uploader.error ?? list.error;
+  const busy = writer.busy || uploader.busy;
+  function writeTemplate() {
+    writer.start(async () => {
+      const created = await api.contractTemplates.createAuthored(
+        writtenTemplateInput(newAuthoredDraft(), "Untitled template"),
+      );
+      if (!created) throw new Error("Contract template not found.");
+      return created;
+    });
+  }
   const fileInput = useRef<HTMLInputElement>(null);
   const uploading = useRef(false);
   const mounted = useMounted();
@@ -86,9 +108,20 @@ function TemplateList({
     <Page>
       <PageHeader
         actions={
-          <Button busy={busy} icon="add" onClick={choose} variant="primary">
-            New template
-          </Button>
+          <>
+            <Button busy={writer.busy} disabled={busy} onClick={writeTemplate}>
+              New written template
+            </Button>
+            <Button
+              busy={uploader.busy}
+              disabled={busy}
+              icon="add"
+              onClick={choose}
+              variant="primary"
+            >
+              New PDF template
+            </Button>
+          </>
         }
         back={
           <Button
@@ -166,7 +199,9 @@ function TemplateRows({
                   <span className="rowTitle truncate">{template.name}</span>
                   <span className="rowMeta truncate">
                     {template.description || "Reusable contract"} · v
-                    {template.currentVersion}
+                    {template.currentVersion} ·{" "}
+                    {template.format === "markdown" ? "Written" : "PDF"} ·{" "}
+                    {template.status}
                   </span>
                 </span>
                 <Icon name="chevronRight" size={16} />
@@ -182,9 +217,11 @@ function TemplateRows({
 function TemplatePage({
   id,
   onNavigate,
+  canPublish,
 }: {
   id: string;
   onNavigate: (pathname: string) => void;
+  canPublish: boolean;
 }) {
   const { page, sections } = useTemplateSections(id, onNavigate);
   const { template, error, notice, setNotice, loading } = page;
@@ -210,7 +247,7 @@ function TemplatePage({
         tabsLabel="Template sections"
         eyebrow={
           template
-            ? `Contract template · v${template.version}`
+            ? `${template.authoring ? "Written" : "PDF"} template · v${template.version} · ${template.status} · Latest: ${template.currentStatus}`
             : "Contract template"
         }
         title={template?.name ?? (error ? "Template unavailable" : "Loading…")}
@@ -234,11 +271,17 @@ function TemplatePage({
             {notice}
           </Toast>
         )}
-        {!template || loading
+        {loading && <LoadingState label="Loading template version…" />}
+        {!template
           ? !error && <LoadingState label="Loading template…" />
           : sections.panel(
               "template",
-              <TemplateWork id={id} onNavigate={onNavigate} page={page} />,
+              <TemplateWork
+                canPublish={canPublish}
+                id={id}
+                onNavigate={onNavigate}
+                page={page}
+              />,
             )}
         {template &&
           sections.panel(
@@ -258,10 +301,12 @@ function TemplateWork({
   id,
   onNavigate,
   page,
+  canPublish,
 }: {
   id: string;
   onNavigate: (pathname: string) => void;
   page: TemplatePageState;
+  canPublish: boolean;
 }) {
   const {
     deleting,
@@ -284,8 +329,9 @@ function TemplateWork({
     />
   ) : (
     <ContractTemplateEditor
+      canPublish={canPublish}
       dirty={dirty}
-      disabled={deleting}
+      disabled={deleting || page.loading}
       key={`${id}:${template.version}`}
       onBusyChange={setWorking}
       onDirtyChange={setDirty}
@@ -344,22 +390,22 @@ function useTemplatePage(id: string, onNavigate: (pathname: string) => void) {
   const [dirty, setDirty] = useState(false);
   const [mapping, setMapping] = useState(false);
   const [working, setWorking] = useState(false);
-  const versionLoad = useAction("Could not load the template version.");
+  const versionLoad = useTemplateRequest<ContractTemplate>((template) => {
+    setData((current) => current && { ...current, template });
+    setDirty(false);
+    setMapping(false);
+  });
   const deletion = useAction("Could not delete the template.");
   const mounted = useMounted();
-  const showTemplate = (template: ContractTemplate) =>
-    setData((current) => current && { ...current, template });
   const discard = async () => !dirty || (await confirmDiscardChanges());
   async function selectVersion(version: number) {
     if (!(await discard())) return;
     deletion.setError(undefined);
-    await versionLoad.run(async () => {
-      showTemplate(await api.contractTemplates.get(id, version));
-      setDirty(false);
-      setMapping(false);
-    });
+    versionLoad.start(() => api.contractTemplates.get(id, version));
   }
   function saved(value: ContractTemplate) {
+    versionLoad.reset();
+    deletion.setError(undefined);
     setData(
       (current) =>
         current && {
@@ -372,7 +418,7 @@ function useTemplatePage(id: string, onNavigate: (pathname: string) => void) {
   }
   async function remove() {
     if (!(await confirmTemplateDeletion())) return;
-    versionLoad.setError(undefined);
+    versionLoad.reset();
     await deletion.run(async () => {
       await api.contractTemplates.delete(id);
       if (mounted.current) onNavigate(contractTemplatePath());
@@ -424,7 +470,7 @@ function TemplateActions({ page }: { page: TemplatePageState }) {
         >
           {versions.map((version) => (
             <option key={version.version} value={version.version}>
-              v{version.version}
+              v{version.version} · {version.status}
               {version.version === template.currentVersion ? " · Latest" : ""} ·{" "}
               {formatDate(version.createdAt)}
             </option>
@@ -432,7 +478,14 @@ function TemplateActions({ page }: { page: TemplatePageState }) {
         </Select>
       </Field>
       <Button
-        disabled={loading || deleting || mapping || working}
+        disabled={
+          loading ||
+          deleting ||
+          mapping ||
+          working ||
+          template.status !== "published" ||
+          template.currentStatus !== "published"
+        }
         onClick={async () => {
           if (await discard()) {
             setDirty(false);
@@ -443,6 +496,13 @@ function TemplateActions({ page }: { page: TemplatePageState }) {
       >
         Use this version
       </Button>
+      {(template.status !== "published" ||
+        template.currentStatus !== "published") && (
+        <span className="contractHint">
+          Publish the latest template and select a published version to create
+          contracts.
+        </span>
+      )}
       <Button
         busy={deleting}
         disabled={loading || working}
@@ -471,5 +531,6 @@ function versionSummary(template: ContractTemplate): TemplateVersion {
     createdByName: template.createdByName,
     name: template.name,
     version: template.version,
+    status: template.status,
   };
 }

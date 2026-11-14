@@ -30,6 +30,8 @@ const contractStatuses: Record<string, string> = {
 export const contractActionLabels: Record<string, string> = {
   "contract.completed": "completed a contract",
   "contract.declined": "recorded a signer's decline",
+  "contract_template.published": "published a contract template",
+  "contract_template.unpublished": "unpublished a contract template",
   "employee_requirement.screening_report_adopted":
     "adopted a background check report",
   "employee_requirement.screening_submitted": "submitted a background check",
@@ -95,6 +97,9 @@ export function contractActivitySummary({ action, details }: ActivityEvent) {
         .join(" · ");
     case "contract_template.created":
       return `Version 1 · ${count(details.pageCount, "page", "pages")}`;
+    case "contract_template.published":
+    case "contract_template.unpublished":
+      return `Version ${textValue(details.version)}`;
     case "contract_template.version_saved":
       return [
         `Version ${textValue(details.version)} from v${textValue(details.sourceVersion)}`,

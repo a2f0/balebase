@@ -34,6 +34,7 @@ class ContractMarkdownRenderer {
     private readonly authoring: ContractAuthoringInput,
     private readonly fonts: ContractMarkdownFonts,
     private readonly layout: ContractMarkdownLayout,
+    private readonly missingValues: "reject" | "placeholder",
   ) {
     this.roles = new Map(
       authoring.recipients.map((recipient) => [recipient.key, recipient]),
@@ -69,6 +70,7 @@ class ContractMarkdownRenderer {
       value = this.authoring.values[key];
     }
     if (value === undefined || !value.trim()) {
+      if (this.missingValues === "placeholder") return `[${key}]`;
       throw new ContractMarkdownError(
         `Supply a non-empty merge value for "${key}".`,
       );
@@ -141,6 +143,7 @@ class ContractMarkdownRenderer {
 /** The returned boxes and PDF are produced together, never by a second renderer. */
 export async function renderContractMarkdown(
   input: ContractAuthoringInput,
+  missingValues: "reject" | "placeholder" = "reject",
 ): Promise<RenderedContractMarkdown> {
   const checked = ContractAuthoringSchema.safeParse(input);
   if (!checked.success) {
@@ -161,7 +164,12 @@ export async function renderContractMarkdown(
   ]);
   const fonts: ContractMarkdownFonts = { regular, bold, italic, boldItalic };
   const layout = new ContractMarkdownLayout(document, fonts);
-  const renderer = new ContractMarkdownRenderer(authoring, fonts, layout);
+  const renderer = new ContractMarkdownRenderer(
+    authoring,
+    fonts,
+    layout,
+    missingValues,
+  );
   for (const block of content.content) renderer.block(block);
   return {
     bytes: await document.save(),

@@ -1,12 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
 import type { ContractTemplate } from "@balebase/validators/contractTemplates";
-import { act, useState } from "react";
+import { act, StrictMode, useEffect, useState } from "react";
 import { installDom } from "../testing/dom";
 import {
   canNavigate,
   guardWorkspaceChange,
 } from "../workspace/navigationGuard";
+import { ContractAuthoringEditor } from "./ContractAuthoringEditor";
 import {
   EditorOverlay,
   FieldHelp,
@@ -15,7 +16,10 @@ import {
   useContractFieldEditor,
 } from "./ContractFieldEditor";
 import { Contracts } from "./Contracts";
+import { newAuthoredDraft } from "./contractAuthoringState";
 import type { DraftInput } from "./contractFields";
+import { templateValueKeys } from "./contractTemplateAuthoring";
+import { useTemplateRequest } from "./contractTemplateState";
 
 const {
   button,
@@ -30,6 +34,9 @@ const {
 
 function template(version = 2): ContractTemplate {
   return {
+    authoring: null,
+    currentStatus: "published",
+    status: "published",
     createdAt: "2026-10-01T12:00:00.000Z",
     createdByName: "Owner",
     currentVersion: 2,
@@ -74,6 +81,9 @@ interface TemplatePost {
   expectedCurrentVersion?: number;
   name?: string;
   sourceVersion?: number;
+  authoring?: ContractTemplate["authoring"];
+  status?: "published" | "unpublished";
+  values?: Record<string, string>;
 }
 
 /** Each read of the template's history, in order. */
@@ -85,9 +95,13 @@ function stubApi(
     createResponse?: Promise<Response>;
     uploadResponse?: Promise<Response>;
     deleteResponse?: Promise<Response>;
+    detail?: ContractTemplate;
+    versionResponse?: Promise<Response>;
   } = {},
 ) {
   const posts: Array<{ body: TemplatePost; url: string }> = [];
+  const detail = (version = 2) =>
+    options.detail ? { ...options.detail, version } : template(version);
   activityReads.length = 0;
   respond(async ({ href: url }, init) => {
     if (url.includes("/activity")) {
@@ -127,6 +141,21 @@ function stubApi(
     if (init?.method === "POST") {
       const body = JSON.parse(String(init.body)) as TemplatePost;
       posts.push({ body, url });
+      if (url.endsWith("/authored"))
+        return Response.json(
+          {
+            template: {
+              ...detail(1),
+              authoring: body.authoring,
+              definition: body.definition,
+              name: body.name,
+              currentVersion: 1,
+              currentStatus: "draft",
+              status: "draft",
+            },
+          },
+          { status: 201 },
+        );
       if (url.endsWith("/versions"))
         return options.conflict
           ? Response.json(
@@ -139,10 +168,13 @@ function stubApi(
           : Response.json(
               {
                 template: {
-                  ...template(3),
-                  currentVersion: 3,
+                  ...detail((body.expectedCurrentVersion ?? 2) + 1),
+                  currentVersion: (body.expectedCurrentVersion ?? 2) + 1,
                   definition: body.definition,
                   name: body.name,
+                  authoring: body.authoring ?? detail().authoring,
+                  status: body.status ?? detail().currentStatus,
+                  currentStatus: body.status ?? detail().currentStatus,
                 },
               },
               { status: 201 },
@@ -160,14 +192,23 @@ function stubApi(
           createdByName: "Owner",
           name: template(version).name,
           version,
+          status: detail(version).status,
         })),
       });
     if (url.endsWith("/templates"))
       return Response.json({
-        templates: [{ ...template(), updatedAt: template().createdAt }],
+        templates: [
+          {
+            ...detail(),
+            format: detail().authoring ? "markdown" : "pdf",
+            updatedAt: template().createdAt,
+          },
+        ],
       });
+    if (url.includes("version=1") && options.versionResponse)
+      return options.versionResponse;
     return Response.json({
-      template: template(url.includes("version=1") ? 1 : 2),
+      template: detail(url.includes("version=1") ? 1 : 2),
     });
   });
   return posts;
@@ -176,10 +217,15 @@ function stubApi(
 async function mountContracts(
   pathname = "/contracts/templates/t1",
   onNavigate: (path: string) => void = () => {},
+  canPublish = false,
 ) {
   const { container } = await mount(
     <>
-      <Contracts onNavigate={onNavigate} pathname={pathname} />
+      <Contracts
+        canPublish={canPublish}
+        onNavigate={onNavigate}
+        pathname={pathname}
+      />
       <DialogHost />
     </>,
   );
@@ -263,9 +309,6 @@ describe("contract templates, mounted", () => {
     );
     expect(button("Save version 4", container).disabled).toBe(true);
     // The template's history is read on opening and again after the save.
-    expect(container.textContent).toContain(
-      "Owner uploaded a contract template",
-    );
     expect(activityReads).toEqual([
       "http://localhost:8787/api/contracts/templates/t1/activity",
       "http://localhost:8787/api/contracts/templates/t1/activity",
@@ -275,13 +318,20 @@ describe("contract templates, mounted", () => {
   it("uses a selected older version and maps its role once", async () => {
     const posts = stubApi();
     const navigations: string[] = [];
-    const container = await mountContracts(undefined, (path) =>
-      navigations.push(path),
+    const container = await mountContracts(
+      undefined,
+      (path) => navigations.push(path),
+      true,
     );
     await change(field(container, "Version"), "1");
     expect(container.querySelector("h1")?.textContent).toBe(
       "Original agreement",
     );
+    expect(
+      [...container.querySelectorAll("button")].some((item) =>
+        ["Publish", "Unpublish"].includes(item.textContent?.trim() ?? ""),
+      ),
+    ).toBe(false);
     await click(button("Use this version", container));
     await change(field(container, "Employee name"), "Sam Signer");
     await change(field(container, "Employee email"), "sam@example.com");
@@ -498,3 +548,255 @@ it("shares keyboard placement, movement, and removal with the draft editor", asy
 function fire(element: Element | null, event: unknown) {
   return element?.dispatchEvent(event as Event);
 }
+
+function writtenTemplate(): ContractTemplate {
+  return {
+    ...template(),
+    authoring: {
+      formatVersion: 1,
+      source:
+        '# Offer\n\n:value[employee.name] :value[project.title] :value[project.fee]\n\n:signature{#sign role="employee"}\n',
+      values: { "project.title": "Default project" },
+    },
+  };
+}
+
+describe("written templates, mounted", () => {
+  it("creates a draft written template from the list", async () => {
+    const posts = stubApi();
+    const navigations: string[] = [];
+    const container = await mountContracts("/contracts/templates", (path) =>
+      navigations.push(path),
+    );
+    await click(button("New written template", container));
+    await settle();
+    expect(posts[0]?.url).toEndWith("/templates/authored");
+    expect(posts[0]?.body.authoring?.source).toBe(newAuthoredDraft().source);
+    expect(posts[0]?.body.definition?.roles).toEqual([
+      { key: "client", label: "Client", routingOrder: 1 },
+    ]);
+    expect(navigations).toEqual(["/contracts/templates/t1"]);
+  });
+
+  it("publishes the edited Markdown and role labels as an immutable new version", async () => {
+    const detail = {
+      ...writtenTemplate(),
+      status: "draft" as const,
+      currentStatus: "draft" as const,
+    };
+    const posts = stubApi({ detail });
+    const container = await mountContracts(undefined, undefined, true);
+    expect(button("Use this version", container).disabled).toBe(true);
+    await click(button("Markdown", container));
+    const source = `${detail.authoring?.source}\nCurrent editor changes.\n`;
+    await change(field(container, "Markdown source"), source);
+    await change(field(container, "Role 1"), "Worker");
+    await click(button("Publish", container));
+    await settle();
+    expect(posts[0]?.body).toMatchObject({
+      status: "published",
+      expectedCurrentVersion: 2,
+      sourceVersion: 2,
+      authoring: { source },
+      definition: {
+        fields: [],
+        roles: [{ key: "employee", label: "Worker", routingOrder: 1 }],
+      },
+    });
+    expect(button("Use this version", container).disabled).toBe(false);
+    expect(button("Unpublish", container)).toBeTruthy();
+    expect(container.textContent).toContain(
+      "Saving creates a new published version",
+    );
+  });
+
+  it("keeps member saves published without exposing publication controls", async () => {
+    const posts = stubApi({ detail: writtenTemplate() });
+    const container = await mountContracts();
+    expect(
+      [...container.querySelectorAll("button")].some((item) =>
+        ["Publish", "Unpublish"].includes(item.textContent?.trim() ?? ""),
+      ),
+    ).toBe(false);
+    await change(field(container, "Template name"), "Updated written template");
+    await click(button("Save version 3", container));
+    await settle();
+    expect(posts[0]?.body.authoring?.source).toBe(
+      writtenTemplate().authoring?.source,
+    );
+    expect(button("Use this version", container).disabled).toBe(false);
+  });
+
+  it("unpublishes current editor contents and blocks further creation", async () => {
+    const posts = stubApi({ detail: writtenTemplate() });
+    const container = await mountContracts(undefined, undefined, true);
+    await change(field(container, "Template name"), "Retired agreement");
+    await click(button("Unpublish", container));
+    await settle();
+    expect(posts[0]?.body).toMatchObject({
+      status: "unpublished",
+      name: "Retired agreement",
+    });
+    expect(button("Use this version", container).disabled).toBe(true);
+    expect(button("Publish", container)).toBeTruthy();
+  });
+
+  it("requires both selected and latest versions to be published", async () => {
+    for (const statuses of [
+      { status: "published", currentStatus: "unpublished" },
+      { status: "draft", currentStatus: "published" },
+    ] as const) {
+      stubApi({ detail: { ...writtenTemplate(), ...statuses } });
+      const container = await mountContracts();
+      expect(button("Use this version", container).disabled).toBe(true);
+    }
+  });
+
+  it("maps old published versions and per-use values without changing defaults", async () => {
+    const detail = writtenTemplate();
+    const posts = stubApi({ detail });
+    const container = await mountContracts();
+    expect(templateValueKeys(detail)).toEqual(["project.title", "project.fee"]);
+    await change(field(container, "Version"), "1");
+    await click(button("Use this version", container));
+    expect(field(container, "project.title").value).toBe("Default project");
+    await change(field(container, "project.title"), "Specific project");
+    await change(field(container, "project.fee"), "$100");
+    await change(field(container, "Employee name"), "Sam");
+    await change(field(container, "Employee email"), "sam@example.com");
+    await act(async () => {
+      fire(
+        container.querySelector("form"),
+        new dom.Event("submit", { bubbles: true, cancelable: true }),
+      );
+    });
+    await settle();
+    expect(posts[0]?.body).toMatchObject({
+      version: 1,
+      values: { "project.title": "Specific project", "project.fee": "$100" },
+    });
+    expect(detail.authoring?.values).toEqual({
+      "project.title": "Default project",
+    });
+  });
+
+  it("refreshes a conflict's expected version without discarding Markdown", async () => {
+    const options = { conflict: true, detail: writtenTemplate() };
+    const posts = stubApi(options);
+    const container = await mountContracts();
+    await click(button("Markdown", container));
+    const source = `${options.detail.authoring?.source}\nKeep these local edits.\n`;
+    await change(field(container, "Markdown source"), source);
+    await click(button("Save version 3", container));
+    await settle();
+    expect(field(container, "Markdown source").value).toBe(source);
+    options.conflict = false;
+    options.detail = { ...options.detail, currentVersion: 4 };
+    await click(
+      button("Refresh latest version information, keep my edits", container),
+    );
+    await settle();
+    expect(field(container, "Markdown source").value).toBe(source);
+    await click(button("Save version 5", container));
+    await settle();
+    expect(posts[1]?.body).toMatchObject({
+      expectedCurrentVersion: 4,
+      sourceVersion: 2,
+      authoring: { source },
+    });
+  });
+
+  it("preserves source after a failed version load and clears the error on save", async () => {
+    const { promise: versionResponse, resolve: finish } =
+      Promise.withResolvers<Response>();
+    const posts = stubApi({ detail: writtenTemplate(), versionResponse });
+    const container = await mountContracts();
+    await click(button("Markdown", container));
+    const source = `${writtenTemplate().authoring?.source}\nUnsaved source.\n`;
+    await change(field(container, "Markdown source"), source);
+    await change(field(container, "Version"), "1");
+    await answer("Discard changes");
+    expect(field(container, "Markdown source").value).toBe(source);
+    await act(async () => {
+      finish(Response.json({ error: "Version unavailable" }, { status: 503 }));
+    });
+    await settle();
+    expect(container.textContent).toContain("Version unavailable");
+    expect(field(container, "Markdown source").value).toBe(source);
+    expect(await decide(canNavigate, "Keep editing")).toBe(false);
+    await click(button("Save version 3", container));
+    await settle();
+    expect(posts[0]?.body.authoring?.source).toBe(source);
+    expect(container.textContent).not.toContain("Version unavailable");
+    expect(container.textContent).toContain("Version 3 saved");
+  });
+
+  it("saves unsaved written source as a template without clearing the contract guard", async () => {
+    const posts = stubApi();
+    const { container } = await mount(
+      <>
+        <ContractAuthoringEditor onChanged={() => {}} onDeleted={() => {}} />
+        <DialogHost />
+      </>,
+    );
+    await settle();
+    await click(button("Markdown", container));
+    const source = `${newAuthoredDraft().source}\nUnsaved contract text.\n`;
+    await change(field(container, "Markdown source"), source);
+    await click(button("Save as template", container));
+    await settle();
+    const dialog = document.querySelector("dialog[open]") as HTMLElement;
+    await change(field(dialog, "Template name"), "Copied agreement");
+    await click(button("Create template", dialog));
+    await settle();
+    expect(posts[0]?.body.authoring?.source).toBe(source);
+    expect(posts[0]?.body).not.toHaveProperty("dueDate");
+    expect(posts[0]?.body).not.toHaveProperty("recipients");
+    expect(field(container, "Markdown source").value).toBe(source);
+    expect(
+      container.querySelector("a[target=_blank]")?.getAttribute("href"),
+    ).toBe("/contracts/templates/t1");
+    expect(await decide(canNavigate, "Keep editing")).toBe(false);
+  });
+});
+
+function TemplateRequestHarness({
+  run,
+  finished,
+}: {
+  run: () => Promise<string>;
+  finished: (result: string) => void;
+}) {
+  const request = useTemplateRequest(finished);
+  const start = request.start;
+  useEffect(() => {
+    start(run);
+  }, [run, start]);
+  return <output>{request.state.status}</output>;
+}
+
+it("replayed template effects submit once and late completion cannot notify after leaving", async () => {
+  let calls = 0;
+  const { promise: pending, resolve: finish } = Promise.withResolvers<string>();
+  const run = () => {
+    calls += 1;
+    return pending;
+  };
+  const completed: string[] = [];
+  await mount(
+    <StrictMode>
+      <TemplateRequestHarness
+        run={run}
+        finished={(value) => completed.push(value)}
+      />
+    </StrictMode>,
+  );
+  await settle();
+  expect(calls).toBe(1);
+  await render(<p>Different page</p>);
+  await act(async () => {
+    finish("late result");
+  });
+  await settle();
+  expect(completed).toEqual([]);
+});
