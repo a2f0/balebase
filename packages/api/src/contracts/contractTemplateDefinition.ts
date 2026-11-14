@@ -2,10 +2,7 @@ import {
   type ContractAuthoringInput,
   ContractAuthoringSchema,
 } from "@balebase/validators/contractAuthoring";
-import {
-  ContractMarkdownError,
-  parseContractMarkdown,
-} from "@balebase/validators/contractMarkdown";
+import { ContractMarkdownError } from "@balebase/validators/contractMarkdown";
 import { contractsRoutes } from "@balebase/validators/contracts";
 import type {
   contractTemplatesRoutes,
@@ -41,39 +38,23 @@ export function templatePublication(
 export async function templatePreview(
   input: z.output<typeof contractTemplatesRoutes.createAuthored.body>,
 ) {
-  const identities = new Set(
-    input.definition.roles.flatMap(({ key }) => [
-      `${key}.name`,
-      `${key}.email`,
-    ]),
+  const rendered = await renderTemplateContract(
+    {
+      ...input.authoring,
+      ...input.definition,
+      dueDate: null,
+      recipients: input.definition.roles.map(
+        ({ key, label, routingOrder }) => ({
+          key,
+          name: label,
+          email: `[${label} email]`,
+          routingOrder,
+        }),
+      ),
+      title: input.name,
+    },
+    "placeholder",
   );
-  const values = { ...input.authoring.values };
-  const content = parseContractMarkdown(input.authoring.source);
-  for (const block of content.content) {
-    const paragraphs =
-      block.type === "bulletList" || block.type === "orderedList"
-        ? block.content.flatMap((item) => item.content)
-        : [block];
-    for (const paragraph of paragraphs) {
-      for (const node of paragraph.content ?? []) {
-        if (node.type === "contractValue")
-          fillPreviewValue(values, identities, node.attrs.key);
-      }
-    }
-  }
-  const rendered = await renderTemplateContract({
-    ...input.authoring,
-    ...input.definition,
-    dueDate: null,
-    recipients: input.definition.roles.map(({ key, label, routingOrder }) => ({
-      key,
-      name: label,
-      email: `[${label} email]`,
-      routingOrder,
-    })),
-    title: input.name,
-    values,
-  });
   return {
     document: rendered.document,
     definition: {
@@ -86,20 +67,11 @@ export async function templatePreview(
   };
 }
 
-function fillPreviewValue(
-  values: Record<string, string>,
-  identities: ReadonlySet<string>,
-  key: string,
-) {
-  if (
-    !identities.has(key) &&
-    (!Object.hasOwn(values, key) || !values[key]?.trim())
-  )
-    values[key] = `[${key}]`;
-}
-
 /** The source snapshot, PDF and placements are validated and generated together. */
-export async function renderTemplateContract(input: ContractAuthoringInput) {
+export async function renderTemplateContract(
+  input: ContractAuthoringInput,
+  missingValues: "reject" | "placeholder" = "reject",
+) {
   const checked = ContractAuthoringSchema.safeParse(input);
   if (!checked.success)
     throw new ContractMarkdownError(
@@ -107,7 +79,7 @@ export async function renderTemplateContract(input: ContractAuthoringInput) {
         "The contract authoring input is invalid.",
     );
   const authoring = checked.data;
-  const rendered = await renderContractMarkdown(authoring);
+  const rendered = await renderContractMarkdown(authoring, missingValues);
   if (rendered.bytes.byteLength > 10 * 1024 * 1024)
     throw new ContractMarkdownError(
       "Contract templates must be 10 MB or smaller.",

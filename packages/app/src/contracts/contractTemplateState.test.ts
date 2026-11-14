@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { contractTemplatesRoutes } from "@balebase/validators/contractTemplates";
 import { newAuthoredDraft } from "./contractAuthoringState";
 import { writtenTemplateInput } from "./contractTemplateAuthoring";
 import {
@@ -123,5 +124,33 @@ describe("written contract conversion", () => {
     expect(JSON.stringify(input)).not.toContain("Private Name");
     expect(JSON.stringify(input)).not.toContain("private@example.com");
     expect(draft).toEqual(original);
+  });
+
+  it("keeps normalized role labels unique without changing their source keys", () => {
+    const keys = ["client_a", "client-a", "Client_A", "CLIENT-A", "client__a"];
+    const draft = {
+      ...newAuthoredDraft(),
+      source: keys
+        .map((key, index) => `:signature{#signature-${index} role="${key}"}`)
+        .join("\n\n"),
+      recipients: keys.map((key, index) => ({
+        key,
+        name: `Private signer ${index}`,
+        email: `private${index}@example.com`,
+        routingOrder: index + 1,
+      })),
+    };
+    const input = writtenTemplateInput(draft);
+    const checked = contractTemplatesRoutes.createAuthored.body.parse(input);
+    expect(checked.definition.roles.map((role) => role.key)).toEqual(keys);
+    expect(checked.definition.roles.map((role) => role.label)).toEqual([
+      "Client A",
+      "Client A (2)",
+      "Client A (3)",
+      "CLIENT A (4)",
+      "Client A (5)",
+    ]);
+    expect(JSON.stringify(checked)).not.toContain("Private signer");
+    expect(JSON.stringify(checked)).not.toContain("@example.com");
   });
 });

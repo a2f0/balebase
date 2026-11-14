@@ -13,6 +13,7 @@ export function writtenTemplateInput(
   const identityKeys = new Set(
     draft.recipients.flatMap(({ key }) => [`${key}.name`, `${key}.email`]),
   );
+  const labels = new Set<string>();
   return {
     name,
     description: "",
@@ -25,13 +26,14 @@ export function writtenTemplateInput(
     },
     definition: {
       fields: [],
-      roles: draft.recipients.map(({ key, routingOrder }) => ({
-        key,
-        label: key
-          .replace(/[-_]/g, " ")
-          .replace(/\b[a-z]/g, (letter) => letter.toUpperCase()),
-        routingOrder,
-      })),
+      roles: draft.recipients.map(({ key, routingOrder }, index) => {
+        let label = key
+          .replace(/[-_]+/g, " ")
+          .replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+        if (labels.has(label.toLowerCase())) label += ` (${index + 1})`;
+        labels.add(label.toLowerCase());
+        return { key, label, routingOrder };
+      }),
       message: draft.message,
       reminderIntervalDays: draft.reminderIntervalDays,
       signingOrder: draft.signingOrder,

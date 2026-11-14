@@ -146,6 +146,55 @@ describe("authored contract templates", () => {
     expect((await outsider.json("GET", fixture.path)).status).toBe(404);
   });
 
+  it("keeps preview placeholders outside the saved merge-value limit", async () => {
+    const fixture = createFixture();
+    const authoring = {
+      ...input.authoring,
+      values: Object.fromEntries(
+        Array.from({ length: 100 }, (_, index) => [
+          `unused.value${index}`,
+          "Default",
+        ]),
+      ),
+    };
+    const created = await fixture.json<{ template: Template }>(
+      "POST",
+      "/api/contracts/templates/authored",
+      { ...input, authoring },
+    );
+    expect(created.status).toBe(201);
+    const template = created.body.template;
+    const path = `/api/contracts/templates/${template.id}`;
+    expect(template.authoring).toEqual(authoring);
+    expect(await pdfText(await fixture.request(`${path}/document`))).toContain(
+      "[project.site]",
+    );
+    const published = await fixture.json<{ template: Template }>(
+      "POST",
+      `${path}/versions`,
+      {
+        authoring,
+        definition: template.definition,
+        description: template.description,
+        name: template.name,
+        expectedCurrentVersion: 1,
+        sourceVersion: 1,
+        status: "published",
+      },
+    );
+    expect(published.status).toBe(201);
+    expect(published.body.template.authoring).toEqual(authoring);
+    const contract = await fixture.json<{ error: string }>(
+      "POST",
+      `${path}/contracts`,
+      { ...mapping, version: 2 },
+    );
+    expect(contract.status).toBe(400);
+    expect(contract.body.error).toContain(
+      'Supply a non-empty merge value for "project.site"',
+    );
+  });
+
   it("instantiates the selected snapshot with per-use values, then edits and sends its own reviewed revision", async () => {
     const fixture = await authoredFixture();
     const published = await fixture.save(fixture.template, {
