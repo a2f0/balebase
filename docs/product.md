@@ -505,8 +505,8 @@ re-emails signers who have not signed once the interval has passed since their
 last email, and **Send reminder** emails them immediately, at most once an
 hour. A sent contract can be voided, which invalidates its signing links;
 drafts, completed, declined, and voided contracts can be deleted. Creating,
-sending, voiding, and deleting a contract, and uploading, saving a version
-of, and deleting a template, appear in Activity, which keeps a deleted
+sending, voiding, and deleting a contract, and creating, versioning, publishing,
+unpublishing, and deleting a template, appear in Activity, which keeps a deleted
 contract's status, document hashes, and signer, signed, and decline details;
 a template's page lists its own history, and a contract's own history
 names the API key and channel behind changes made through a key. Migration
@@ -558,7 +558,7 @@ The first format is version 1, limited to 50,000 source characters, 200 fields,
 100 pages, and 100 explicit merge values of up to 2,000 characters each.
 Generated documents use US Letter pages and standard Helvetica fonts;
 unsupported authoring characters are rejected instead of replaced.
-PDF uploads and PDF-based reusable templates remain available.
+PDF uploads remain available alongside written contracts.
 
 The API creates written drafts with `POST /api/contracts/authored` and updates
 them with `PUT /api/contracts/:id/authored`, including `expectedRevision`.
@@ -566,19 +566,46 @@ Sending a written draft requires `expectedRevision` in the send route's query.
 Migration `0102_contract_authoring.sql` stores authored snapshots and queues
 replaced draft PDFs for the existing file cleanup.
 
-### PDF templates
+### Contract templates
 
-Contract templates at `/contracts/templates` keep a PDF and placed fields
-without assigning actual people. Fields belong to named signer roles such as
-Employee or Company. **Save version** appends an immutable version; you can
-select and use older versions, or edit one to create the next version. **Use
-this version** maps each role to a person's name and email, creates a draft
-with all fields already assigned, and lets you review it before sending.
-The draft owns its own PDF, recipients, and fields and records the source
-version, so changing or deleting the template does not change existing
-contracts. Deleting a template or purging its organization queues its shared
-PDF for cleanup. Migration `0050_create_contract_templates.sql` adds the
-versioned template records and contract provenance.
+Contract templates at `/contracts/templates` support uploaded PDFs and written
+Markdown documents without assigning actual people. Fields belong to named
+signer roles such as Employee or Company. **New written template** uses the
+same visual and Markdown editor as written contracts, with reusable merge-value
+defaults. Its saved sample PDF uses role labels and bracketed placeholders for
+missing values; those placeholders are not stored as defaults.
+
+**Save as template** also copies a written contract's current text, role keys,
+merge values, message, and reminder settings into a new draft template. It
+does not copy recipient identities or the due date. Text and explicit values
+can still contain sensitive information; review them before sharing the
+template. Unsaved contract edits are included without saving or navigating
+away from the original contract.
+
+New templates start as **drafts**. Owners and admins can **Publish** or
+**Unpublish** them. **Save version** and publication changes append immutable
+versions; ordinary saves retain the latest publication status, so editing a
+published template produces another published version. You can select an
+older version, use it, or edit it to create the next version. Concurrent saves
+must match the current version.
+
+**Use this version** requires both the selected version and the template's
+latest version to be published. Map each role to a person's name and email,
+and override written-template merge defaults for this contract only. The
+server generates a fresh PDF and signer fields from the selected Markdown,
+actual recipients, and values. Review the saved draft before sending.
+Unpublishing blocks new contracts from all versions, but does not change
+existing contracts.
+
+Each draft owns its PDF, recipients, fields, authored snapshot where present,
+and source-version provenance. Changing or deleting a template does not change
+existing contracts. Deleting a template or purging its organization queues all
+of its version PDFs for cleanup. Migration `0050_create_contract_templates.sql`
+adds versioned templates and provenance; `0103_contract_template_authoring.sql`
+adds written snapshots and publication status, retaining existing PDF templates
+as published. Written templates are created through
+`POST /api/contracts/templates/authored`; the existing version and
+create-contract routes also support written templates.
 
 Signers need no account. Each receives a link to `/sign/<token>` from
 `security@auth.balebase.com`, with the sender's address as reply-to. The token

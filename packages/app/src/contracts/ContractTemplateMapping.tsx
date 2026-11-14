@@ -1,11 +1,12 @@
 import { Button, Card, Field, Toast } from "@balebase/ui/react";
 import type { ContractTemplate } from "@balebase/validators/contractTemplates";
 import { contractLimits } from "@balebase/validators/rules";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../shared/apiClient";
-import { useAction } from "../shared/useAction";
 import { boxStyle, ContractPages } from "./ContractDocument";
 import { fieldTypeLabel, localDate, recipientTone } from "./contractFields";
+import { templateValueKeys } from "./contractTemplateAuthoring";
+import { useTemplateRequest } from "./contractTemplateState";
 
 export function ContractTemplateMapping({
   template,
@@ -71,6 +72,14 @@ function useRoleMapping(
 ) {
   const [title, setTitle] = useState(template.name);
   const [dueDate, setDueDate] = useState("");
+  const [values, setValues] = useState(() =>
+    Object.fromEntries(
+      templateValueKeys(template).map((key) => [
+        key,
+        template.authoring?.values[key] ?? "",
+      ]),
+    ),
+  );
   const [recipients, setRecipients] = useState(() =>
     template.definition.roles.map((role) => ({
       email: "",
@@ -78,35 +87,32 @@ function useRoleMapping(
       roleKey: role.key,
     })),
   );
-  const creator = useAction("Could not create the contract.");
-  const creating = useRef(false);
-  const mounted = useRef(true);
+  const creator = useTemplateRequest<string>(onCreated);
+  const busy = creator.busy || creator.state.status === "succeeded";
   useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-  async function create() {
-    if (creating.current) return;
-    creating.current = true;
-    onBusyChange(true);
-    const created = await creator.run(async () => {
-      const id = await api.contractTemplates.createContract(template.id, {
+    onBusyChange(busy);
+  }, [busy, onBusyChange]);
+  function create() {
+    if (
+      busy ||
+      template.status !== "published" ||
+      template.currentStatus !== "published"
+    )
+      return;
+    creator.start(() =>
+      api.contractTemplates.createContract(template.id, {
         dueDate: dueDate || null,
         recipients,
         title,
         version: template.version,
-      });
-      if (mounted.current) onCreated(id);
-    });
-    // A created contract keeps the page busy while it opens.
-    if (created) return;
-    creating.current = false;
-    onBusyChange(false);
+        ...(template.authoring ? { values } : {}),
+      }),
+    );
   }
   return {
-    busy: creator.busy,
+    busy,
+    values,
+    setValues,
     create,
     dueDate,
     error: creator.error,
@@ -163,7 +169,35 @@ function MappingForm({
       {template.definition.roles.map((role) => (
         <MappingRole mapping={mapping} key={role.key} role={role} />
       ))}
-      <Button busy={busy} type="submit" variant="primary">
+      {Object.entries(mapping.values).map(([key, value]) => (
+        <Field
+          key={key}
+          label={key}
+          hint="Used only in this contract; the template default stays unchanged."
+        >
+          <textarea
+            className="textarea"
+            disabled={busy}
+            maxLength={2000}
+            value={value}
+            onChange={(event) =>
+              mapping.setValues((current) => ({
+                ...current,
+                [key]: event.target.value,
+              }))
+            }
+          />
+        </Field>
+      ))}
+      <Button
+        busy={busy}
+        disabled={
+          template.status !== "published" ||
+          template.currentStatus !== "published"
+        }
+        type="submit"
+        variant="primary"
+      >
         Create contract
       </Button>
       <Button disabled={busy} onClick={onCancel} type="button" variant="ghost">

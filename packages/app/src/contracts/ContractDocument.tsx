@@ -35,7 +35,7 @@ export function ContractPages({
   onFailed,
 }: {
   load: () => Promise<ArrayBuffer>;
-  renderOverlay: (page: PageSize) => ReactNode;
+  renderOverlay?: (page: PageSize) => ReactNode;
   onPageRendered?: (pageNumber: number) => void;
   onFailed?: () => void;
 }) {
@@ -71,7 +71,9 @@ export function ContractPages({
             onRendered={onPageRendered}
             onFailed={fail}
           />
-          <div className="contractPageOverlay">{renderOverlay(page)}</div>
+          {renderOverlay && (
+            <div className="contractPageOverlay">{renderOverlay(page)}</div>
+          )}
         </section>
       ))}
     </div>

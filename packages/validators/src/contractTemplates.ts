@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ActivityPageSchema, ActivityQuerySchema } from "./activity";
+import { ContractAuthoringSchema } from "./contractAuthoring";
 import {
   ContractDocumentSchema,
   ContractTitleSchema,
@@ -37,11 +38,23 @@ const TemplateDefinitionSchema = z.object({
 });
 export type TemplateDefinition = z.infer<typeof TemplateDefinitionSchema>;
 
+const TemplateStatusSchema = z.enum(["draft", "published", "unpublished"]);
+const ContractTemplateAuthoringSchema = z.object({
+  formatVersion: ContractAuthoringSchema.shape.formatVersion,
+  source: ContractAuthoringSchema.shape.source,
+  values: ContractAuthoringSchema.shape.values,
+});
+export type ContractTemplateAuthoring = z.infer<
+  typeof ContractTemplateAuthoringSchema
+>;
+
 const ContractTemplateSummarySchema = z.object({
   currentVersion: z.number(),
   description: z.string(),
+  format: z.enum(["pdf", "markdown"]),
   id: z.string(),
   name: z.string(),
+  status: TemplateStatusSchema,
   updatedAt: z.string(),
 });
 export type ContractTemplateSummary = z.infer<
@@ -50,16 +63,19 @@ export type ContractTemplateSummary = z.infer<
 
 /** One version of a template; versions never change once saved. */
 const ContractTemplateSchema = z.object({
+  authoring: ContractTemplateAuthoringSchema.nullable(),
   createdAt: z.string(),
   createdByName: z.string().nullable(),
   /** The family's latest version, which a save must build on. */
   currentVersion: z.number(),
+  currentStatus: TemplateStatusSchema,
   definition: TemplateDefinitionSchema,
   description: z.string(),
   document: ContractDocumentSchema,
   /** The template family's id, shared by all of its versions. */
   id: z.string(),
   name: z.string(),
+  status: TemplateStatusSchema,
   version: z.number(),
 });
 export type ContractTemplate = z.infer<typeof ContractTemplateSchema>;
@@ -68,6 +84,7 @@ const TemplateVersionSchema = z.object({
   createdAt: z.string(),
   createdByName: z.string().nullable(),
   name: z.string(),
+  status: TemplateStatusSchema,
   version: z.number(),
 });
 export type TemplateVersion = z.infer<typeof TemplateVersionSchema>;
@@ -93,6 +110,8 @@ const VersionQuerySchema = z.object({
  */
 const TemplateVersionBodySchema = z.object(
   {
+    authoring: ContractTemplateAuthoringSchema.nullish(),
+    status: z.enum(["published", "unpublished"]).optional(),
     /** The latest version the save builds on; a newer one refuses it. */
     expectedCurrentVersion: VersionNumberSchema,
     /** The version whose document the new version keeps. */
@@ -157,7 +176,16 @@ const TemplateVersionBodySchema = z.object(
 );
 export type TemplateVersionInput = Pick<
   z.input<typeof TemplateVersionBodySchema>,
-  "definition" | "description" | "name"
+  "authoring" | "definition" | "description" | "name" | "status"
+>;
+
+const AuthoredTemplateBodySchema = TemplateVersionBodySchema.omit({
+  expectedCurrentVersion: true,
+  sourceVersion: true,
+  status: true,
+}).extend({ authoring: ContractTemplateAuthoringSchema });
+export type CreateAuthoredTemplateInput = z.input<
+  typeof AuthoredTemplateBodySchema
 >;
 
 /**
@@ -167,6 +195,7 @@ export type TemplateVersionInput = Pick<
 const TemplateContractBodySchema = z.object(
   {
     version: VersionNumberSchema,
+    values: ContractAuthoringSchema.shape.values.optional(),
     dueDate: z.string({ error: "The due date is invalid." }).nullish(),
     /** One person for each of the version's roles. */
     recipients: z.array(
@@ -204,6 +233,12 @@ export const contractTemplatesRoutes = {
     method: "POST",
     path: "/api/contracts/templates",
     body: "form",
+    response: ChangedTemplateSchema,
+  }),
+  createAuthored: route({
+    method: "POST",
+    path: "/api/contracts/templates/authored",
+    body: AuthoredTemplateBodySchema,
     response: ChangedTemplateSchema,
   }),
   get: route({

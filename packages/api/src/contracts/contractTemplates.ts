@@ -1,5 +1,7 @@
+import { ContractMarkdownError } from "@balebase/validators/contractMarkdown";
 import {
   type ContractTemplate,
+  type ContractTemplateAuthoring,
   type ContractTemplateSummary,
   contractTemplatesRoutes,
   type TemplateDefinition,
@@ -7,6 +9,7 @@ import {
 } from "@balebase/validators/contractTemplates";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
+import { canManage, stillManages } from "../organizations/organizationMembers";
 import {
   activityBatch,
   findActivity,
@@ -33,13 +36,25 @@ import {
   contractExists,
   eventStatement,
 } from "./contractRecords";
-import { mappedDraft } from "./contractTemplateDefinition";
+import {
+  mappedDraft,
+  renderTemplateContract,
+  templatePreview,
+  templatePublication,
+} from "./contractTemplateDefinition";
+import {
+  templateActivityStatement,
+  templateContractInsert,
+  writeTemplateVersion,
+} from "./contractTemplateWrites";
 
 type TemplateContext = Context<ApiEnv>;
 interface VersionRow {
+  authoring_json: string | null;
   created_at: string;
   created_by_name: string | null;
   current_version: number;
+  current_status: ContractTemplate["status"];
   definition_json: string;
   description: string;
   document_filename: string;
@@ -49,6 +64,7 @@ interface VersionRow {
   document_size: number;
   id: string;
   name: string;
+  status: ContractTemplate["status"];
   template_id: string;
   version: number;
 }
@@ -65,7 +81,8 @@ const documentTooLarge = "Contract templates must be 10 MB or smaller.";
 
 contractTemplates.get("/", async (context) => {
   const result = await context.env.DB.prepare(
-    `SELECT family.id, version.name, version.description,
+    `SELECT family.id, version.name, version.description, version.status,
+            CASE WHEN version.authoring_json IS NULL THEN 'pdf' ELSE 'markdown' END AS format,
             family.current_version AS currentVersion, family.updated_at AS updatedAt
      FROM contract_templates AS family
      JOIN contract_template_versions AS version
@@ -88,11 +105,6 @@ contractTemplates.post("/", async (context) => {
       : await readDocument(form?.get("file"));
   if (typeof document === "string")
     return context.json({ error: document }, 400);
-  const organizationId = context.get("organizationId");
-  const id = crypto.randomUUID();
-  const versionId = crypto.randomUUID();
-  const now = new Date().toISOString();
-  const objectKey = `organizations/${organizationId}/contract-templates/${id}/${versionId}.pdf`;
   const definition: TemplateDefinition = {
     fields: [],
     message: "",
@@ -100,6 +112,65 @@ contractTemplates.post("/", async (context) => {
     roles: [{ key: crypto.randomUUID(), label: "Signer", routingOrder: 1 }],
     signingOrder: "parallel",
   };
+  const template = await createTemplate(
+    context,
+    {
+      authoring: null,
+      definition,
+      description: "",
+      name:
+        document.filename.replace(/\.pdf$/i, "").slice(0, 200) ||
+        "Contract template",
+    },
+    document,
+  );
+  if (template instanceof Response) return template;
+  return respond(context, contractTemplatesRoutes.upload, { template }, 201);
+});
+
+contractTemplates.post("/authored", async (context) => {
+  const input = await readBody(
+    context,
+    contractTemplatesRoutes.createAuthored,
+    "The authored template is invalid.",
+  );
+  if (input instanceof Response) return input;
+  try {
+    const preview = await templatePreview(input);
+    const template = await createTemplate(
+      context,
+      { ...input, definition: preview.definition },
+      preview.document,
+    );
+    if (template instanceof Response) return template;
+    return respond(
+      context,
+      contractTemplatesRoutes.createAuthored,
+      { template },
+      201,
+    );
+  } catch (cause) {
+    if (cause instanceof ContractMarkdownError)
+      return context.json({ error: cause.message }, 400);
+    throw cause;
+  }
+});
+
+async function createTemplate(
+  context: TemplateContext,
+  input: {
+    authoring: ContractTemplateAuthoring | null;
+    definition: TemplateDefinition;
+    description: string;
+    name: string;
+  },
+  document: DocumentInput,
+) {
+  const organizationId = context.get("organizationId");
+  const id = crypto.randomUUID();
+  const versionId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const objectKey = `organizations/${organizationId}/contract-templates/${id}/${versionId}.pdf`;
   await trackedPut(
     context.env,
     {
@@ -123,16 +194,18 @@ contractTemplates.post("/", async (context) => {
       ).bind(id, organizationId, now, now, objectKey),
       context.env.DB.prepare(
         `INSERT INTO contract_template_versions
-          (id, template_id, version, name, definition_json, document_object_key,
-           document_filename, document_size, document_sha256, document_page_count, created_by, created_at)
-         SELECT ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          (id, template_id, version, name, description, definition_json, authoring_json,
+           status, document_object_key, document_filename, document_size, document_sha256,
+           document_page_count, created_by, created_at)
+         SELECT ?, ?, 1, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?
          WHERE EXISTS (SELECT 1 FROM contract_templates WHERE id = ?)`,
       ).bind(
         versionId,
         id,
-        document.filename.replace(/\.pdf$/i, "").slice(0, 200) ||
-          "Contract template",
-        JSON.stringify(definition),
+        input.name,
+        input.description,
+        JSON.stringify(input.definition),
+        input.authoring ? JSON.stringify(input.authoring) : null,
         objectKey,
         document.filename,
         document.bytes.byteLength,
@@ -163,13 +236,8 @@ contractTemplates.post("/", async (context) => {
     return context.json({ error: uploadExpired }, 409);
   }
   const template = await findVersion(context, id);
-  return respond(
-    context,
-    contractTemplatesRoutes.upload,
-    { template: template && toDetail(template) },
-    201,
-  );
-});
+  return template && toDetail(template);
+}
 
 contractTemplates.get("/:id", async (context) => {
   const query = readQuery(
@@ -193,7 +261,7 @@ contractTemplates.get("/:id/versions", async (context) => {
   if (!(await findVersion(context, context.req.param("id"))))
     return notFound(context);
   const result = await context.env.DB.prepare(
-    `SELECT version.version, version.name, version.created_at AS createdAt,
+    `SELECT version.version, version.name, version.status, version.created_at AS createdAt,
             creator.name AS createdByName
      FROM contract_template_versions AS version
      JOIN contract_templates AS family ON family.id = version.template_id
@@ -265,76 +333,72 @@ contractTemplates.post("/:id/versions", async (context) => {
     sourceVersion,
   );
   if (!source) return notFound(context);
-  if (!fieldsOnDocument(input.definition.fields, source.document_page_count))
-    return context.json({ error: offPageError }, 400);
-  const now = new Date().toISOString();
-  const organizationId = context.get("organizationId");
-  const actor = requestActor(context);
-  const versionId = crypto.randomUUID();
-  const saved = await activityBatch(context.env.DB, actor.apiKey, [
-    context.env.DB.prepare(
-      `INSERT INTO contract_template_versions
-        (id, template_id, version, name, description, definition_json, document_object_key,
-         document_filename, document_size, document_sha256, document_page_count, created_by, created_at)
-       SELECT ?, family.id, ?, ?, ?, ?, source.document_object_key,
-         source.document_filename, source.document_size, source.document_sha256, source.document_page_count, ?, ?
-       FROM contract_templates AS family
-       JOIN contract_template_versions AS source ON source.template_id = family.id AND source.version = ?
-       WHERE family.id = ? AND family.organization_id = ? AND family.current_version = ?`,
-    ).bind(
-      versionId,
-      expected + 1,
-      input.name,
-      input.description,
-      JSON.stringify(input.definition),
-      actor.userId,
-      now,
-      sourceVersion,
-      source.template_id,
-      organizationId,
-      expected,
-    ),
-    context.env.DB.prepare(
-      `UPDATE contract_templates SET current_version = ?, updated_at = ?
-       WHERE id = ? AND organization_id = ? AND current_version = ?`,
-    ).bind(expected + 1, now, source.template_id, organizationId, expected),
-    // Only the version this request inserted, so a stale save records nothing.
-    templateActivityStatement(
-      context.env.DB,
-      {
-        action: "contract_template.version_saved",
-        actorId: actor.userId,
-        details: `json_object('name', version.name, 'version', version.version,
-          'sourceVersion', ?, 'previousName', (SELECT previous.name
-            FROM contract_template_versions AS previous
-            WHERE previous.template_id = contract_templates.id
-              AND previous.version = ?),
-          'documentSha256', version.document_sha256,
-          'roleCount', json_array_length(version.definition_json, '$.roles'),
-          'fieldCount', json_array_length(version.definition_json, '$.fields'),
-          'signingOrder', json_extract(version.definition_json, '$.signingOrder'))`,
-        detailBindings: [sourceVersion, expected],
-        id: source.template_id,
-        occurredAt: now,
-        organizationId,
-        version: expected + 1,
-      },
-      { bindings: [versionId], sql: "version.id = ?" },
-    ),
-  ]);
-  if (!saved[0]?.meta.changes)
+  if (source.current_version !== expected) return changed(context);
+  const publication = templatePublication(source.current_status, input.status);
+  if (!publication)
     return context.json(
-      {
-        error:
-          "This template changed. Reload the latest version before saving your changes.",
-      },
+      { error: "Only published templates can be unpublished." },
       409,
     );
+  const changesPublication = publication.status !== source.current_status;
+  if (changesPublication && !canManage(context))
+    return publicationDenied(context);
+  if (Boolean(source.authoring_json) !== Boolean(input.authoring))
+    return context.json(
+      {
+        error: source.authoring_json
+          ? "Markdown templates require their authoring source."
+          : "PDF templates cannot be changed into Markdown templates.",
+      },
+      400,
+    );
+  const now = new Date().toISOString();
+  const organizationId = context.get("organizationId");
+  const manager = stillManages(
+    organizationId,
+    context.get("authSession").user.id,
+  );
+  const versionId = crypto.randomUUID();
+  const prepared = await prepareVersionDocument(
+    context,
+    source,
+    versionId,
+    input,
+  );
+  if (prepared instanceof Response) return prepared;
+  const { uploadedKey } = prepared;
+  let saved: D1Result[];
+  try {
+    saved = await writeTemplateVersion(context, {
+      ...prepared,
+      templateId: source.template_id,
+      versionId,
+      now,
+      input,
+      publication,
+    });
+  } catch (cause) {
+    if (uploadedKey) await context.env.STORAGE.delete(uploadedKey);
+    throw cause;
+  }
+  if (!saved[0]?.meta.changes) {
+    if (uploadedKey) await context.env.STORAGE.delete(uploadedKey);
+    if (
+      changesPublication &&
+      !(await context.env.DB.prepare(`SELECT 1 WHERE ${manager.sql}`)
+        .bind(...manager.bindings)
+        .first())
+    )
+      return publicationDenied(context);
+    return changed(context);
+  }
   const created = await findVersion(context, source.template_id, expected + 1);
   return respond(
     context,
     contractTemplatesRoutes.saveVersion,
-    { template: created && toDetail(created) },
+    {
+      template: created && toDetail(created),
+    },
     201,
   );
 });
@@ -352,17 +416,11 @@ contractTemplates.post("/:id/contracts", async (context) => {
     body.version,
   );
   if (!source) return notFound(context);
-  const definition = JSON.parse(source.definition_json) as TemplateDefinition;
-  const draft = mappedDraft(
-    body,
-    source.name,
-    definition,
-    source.document_page_count,
-  );
-  if (typeof draft === "string") return context.json({ error: draft }, 400);
-  const object = await context.env.STORAGE.get(source.document_object_key);
-  if (!object)
-    return context.json({ error: "The template document is missing." }, 404);
+  if (source.status !== "published" || source.current_status !== "published")
+    return notPublished(context);
+  const prepared = await prepareTemplateContract(context, source, body);
+  if (prepared instanceof Response) return prepared;
+  const { draft, authoring, document } = prepared;
   const organizationId = context.get("organizationId");
   const id = crypto.randomUUID();
   const objectKey = `organizations/${organizationId}/contracts/${id}/original.pdf`;
@@ -370,7 +428,7 @@ contractTemplates.post("/:id/contracts", async (context) => {
   await trackedPut(
     context.env,
     { cleanupId: `contract-upload:${id}`, key: objectKey, organizationId },
-    await object.arrayBuffer(),
+    document.bytes,
     {
       customMetadata: { contractId: id, organizationId },
       httpMetadata: { contentType: "application/pdf" },
@@ -379,31 +437,21 @@ contractTemplates.post("/:id/contracts", async (context) => {
   const actor = requestActor(context);
   try {
     const result = await activityBatch(context.env.DB, actor.apiKey, [
-      context.env.DB.prepare(
-        `INSERT INTO contracts
-          (id, organization_id, title, document_object_key, document_filename, document_size,
-           document_sha256, document_page_count, created_by, created_at, updated_at,
-           template_version_id, template_name, template_version)
-         SELECT ?, ?, ?, ?, document_filename, document_size, document_sha256,
-           document_page_count, ?, ?, ?, id, name, version
-         FROM contract_template_versions
-         WHERE id = ? AND ${uploadStillQueued}`,
-      ).bind(
+      templateContractInsert(context, {
         id,
-        organizationId,
-        draft.title,
         objectKey,
-        context.get("authSession").user.id,
         now,
-        now,
-        source.id,
-        objectKey,
-      ),
+        sourceId: source.id,
+        title: draft.title,
+        authoring,
+        document,
+      }),
       ...draftStatements(
         context.env.DB,
         { id, organization_id: organizationId },
         draft,
         now,
+        objectKey,
       ),
       eventStatement(
         context.env.DB,
@@ -420,7 +468,9 @@ contractTemplates.post("/:id/contracts", async (context) => {
     ]);
     if (!result[0]?.meta.changes) {
       await context.env.STORAGE.delete(objectKey);
-      return notFound(context);
+      return (await findVersion(context, source.template_id))
+        ? notPublished(context)
+        : notFound(context);
     }
   } catch (cause) {
     await context.env.STORAGE.delete(objectKey);
@@ -472,60 +522,14 @@ contractTemplates.delete("/:id", async (context) => {
   return context.body(null, 204);
 });
 
-/**
- * Shared activity about a template, read inside the batch from one of its
- * versions, which `details` and `condition` name `version`. Records nothing
- * unless that version exists and matches `condition`. Never the PDF or
- * field values.
- */
-function templateActivityStatement(
-  database: D1Database,
-  input: {
-    action: string;
-    actorId: string;
-    details: string;
-    detailBindings?: (string | number | null)[];
-    id: string;
-    occurredAt: string;
-    organizationId: string;
-    version: number;
-  },
-  condition: { bindings: (string | number | null)[]; sql: string } = {
-    bindings: [],
-    sql: "1 = 1",
-  },
-) {
-  const version = `FROM contract_template_versions AS version
-    WHERE version.template_id = contract_templates.id
-      AND version.version = ${Math.trunc(input.version)}`;
-  return rowActivityStatement(
-    database,
-    {
-      action: input.action,
-      actorId: input.actorId,
-      details: {
-        bindings: input.detailBindings ?? [],
-        sql: `(SELECT ${input.details} ${version})`,
-      },
-      id: input.id,
-      label: `COALESCE((SELECT version.name ${version}), 'Contract template')`,
-      occurredAt: input.occurredAt,
-      organizationId: input.organizationId,
-      rootType: "contract_template",
-      table: "contract_templates",
-    },
-    {
-      bindings: condition.bindings,
-      sql: `EXISTS (SELECT 1 ${version} AND (${condition.sql}))`,
-    },
-  );
-}
-
 function findVersion(context: TemplateContext, id: string, version?: number) {
   return context.env.DB.prepare(
-    `SELECT version.*, family.current_version, creator.name AS created_by_name
+    `SELECT version.*, family.current_version, current.status AS current_status,
+            creator.name AS created_by_name
      FROM contract_templates AS family
      JOIN contract_template_versions AS version ON version.template_id = family.id
+     JOIN contract_template_versions AS current
+       ON current.template_id = family.id AND current.version = family.current_version
      LEFT JOIN user AS creator ON creator.id = version.created_by
      WHERE family.id = ? AND family.organization_id = ?
        AND version.version = COALESCE(?, family.current_version)`,
@@ -536,9 +540,13 @@ function findVersion(context: TemplateContext, id: string, version?: number) {
 
 function toDetail(row: VersionRow): ContractTemplate {
   return {
+    authoring: row.authoring_json
+      ? (JSON.parse(row.authoring_json) as ContractTemplateAuthoring)
+      : null,
     createdAt: row.created_at,
     createdByName: row.created_by_name,
     currentVersion: row.current_version,
+    currentStatus: row.current_status,
     definition: JSON.parse(row.definition_json) as TemplateDefinition,
     description: row.description,
     document: {
@@ -549,6 +557,7 @@ function toDetail(row: VersionRow): ContractTemplate {
     },
     id: row.template_id,
     name: row.name,
+    status: row.status,
     version: row.version,
   };
 }
@@ -576,3 +585,143 @@ function notFound(context: TemplateContext) {
 }
 
 export { contractTemplates };
+
+function changed(context: TemplateContext) {
+  return context.json(
+    {
+      error:
+        "This template changed. Reload the latest version before saving your changes.",
+    },
+    409,
+  );
+}
+
+function publicationDenied(context: TemplateContext) {
+  return context.json(
+    {
+      error: "Only organization managers can publish or unpublish templates.",
+    },
+    403,
+  );
+}
+
+function notPublished(context: TemplateContext) {
+  return context.json(
+    {
+      error: "Choose a published version of a currently published template.",
+    },
+    409,
+  );
+}
+
+type VersionInput = ReturnType<
+  typeof contractTemplatesRoutes.saveVersion.body.parse
+>;
+
+async function prepareVersionDocument(
+  context: TemplateContext,
+  source: VersionRow,
+  versionId: string,
+  input: VersionInput,
+) {
+  if (!input.authoring) {
+    if (!fieldsOnDocument(input.definition.fields, source.document_page_count))
+      return context.json({ error: offPageError }, 400);
+    return {
+      definition: input.definition,
+      document: {
+        key: source.document_object_key,
+        filename: source.document_filename,
+        size: source.document_size,
+        sha256: source.document_sha256,
+        pageCount: source.document_page_count,
+      },
+      uploadedKey: undefined,
+    };
+  }
+  try {
+    const preview = await templatePreview({
+      ...input,
+      authoring: input.authoring,
+    });
+    const organizationId = context.get("organizationId");
+    const key = `organizations/${organizationId}/contract-templates/${source.template_id}/${versionId}.pdf`;
+    await trackedPut(
+      context.env,
+      {
+        cleanupId: `contract-template-upload:${versionId}`,
+        key,
+        organizationId,
+      },
+      preview.document.bytes,
+      {
+        customMetadata: { organizationId },
+        httpMetadata: { contentType: "application/pdf" },
+      },
+    );
+    return {
+      definition: preview.definition,
+      document: {
+        key,
+        filename: preview.document.filename,
+        size: preview.document.bytes.byteLength,
+        sha256: preview.document.sha256,
+        pageCount: preview.document.pageCount,
+      },
+      uploadedKey: key,
+    };
+  } catch (cause) {
+    if (cause instanceof ContractMarkdownError)
+      return context.json({ error: cause.message }, 400);
+    throw cause;
+  }
+}
+
+async function prepareTemplateContract(
+  context: TemplateContext,
+  source: VersionRow,
+  body: ReturnType<typeof contractTemplatesRoutes.createContract.body.parse>,
+) {
+  const definition = JSON.parse(source.definition_json) as TemplateDefinition;
+  const draft = mappedDraft(
+    body,
+    source.name,
+    definition,
+    source.document_page_count,
+  );
+  if (typeof draft === "string") return context.json({ error: draft }, 400);
+  if (source.authoring_json) {
+    const authoring = JSON.parse(
+      source.authoring_json,
+    ) as ContractTemplateAuthoring;
+    try {
+      return await renderTemplateContract({
+        ...authoring,
+        title: draft.title,
+        message: draft.message,
+        dueDate: draft.dueDate,
+        recipients: draft.recipients,
+        reminderIntervalDays: draft.reminderIntervalDays,
+        signingOrder: draft.signingOrder,
+        values: { ...authoring.values, ...body.values },
+      });
+    } catch (cause) {
+      if (cause instanceof ContractMarkdownError)
+        return context.json({ error: cause.message }, 400);
+      throw cause;
+    }
+  }
+  const object = await context.env.STORAGE.get(source.document_object_key);
+  if (!object)
+    return context.json({ error: "The template document is missing." }, 404);
+  return {
+    authoring: null,
+    draft,
+    document: {
+      bytes: new Uint8Array(await object.arrayBuffer()),
+      filename: source.document_filename,
+      pageCount: source.document_page_count,
+      sha256: source.document_sha256,
+    },
+  };
+}

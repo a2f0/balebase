@@ -11,11 +11,12 @@ import type {
   TemplateDefinition,
 } from "@balebase/validators/contractTemplates";
 import { contractLimits } from "@balebase/validators/rules";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../shared/apiClient";
 import { countLabel } from "../shared/labels";
-import { useAction } from "../shared/useAction";
 import { useUnsavedChanges } from "../workspace/unsavedChanges";
+import { ContractAuthoringContent } from "./ContractAuthoringContent";
+import { AuthoringValues } from "./ContractAuthoringDetails";
 import { ContractPages } from "./ContractDocument";
 import {
   EditorOverlay,
@@ -25,6 +26,7 @@ import {
   useContractFieldEditor,
 } from "./ContractFieldEditor";
 import { type DraftInput, reminderOptions } from "./contractFields";
+import { useTemplateRequest } from "./contractTemplateState";
 
 export function ContractTemplateEditor({
   template,
@@ -33,6 +35,7 @@ export function ContractTemplateEditor({
   onDirtyChange,
   onBusyChange,
   disabled = false,
+  canPublish = false,
 }: {
   template: ContractTemplate;
   onSaved: (template: ContractTemplate) => void;
@@ -41,6 +44,7 @@ export function ContractTemplateEditor({
   onDirtyChange: (dirty: boolean) => void;
   onBusyChange: (busy: boolean) => void;
   disabled?: boolean;
+  canPublish?: boolean;
 }) {
   const editor = useTemplateEditor(template, onSaved, {
     dirty,
@@ -55,35 +59,98 @@ export function ContractTemplateEditor({
     >
       <legend className="srOnly">Template editor</legend>
       <div className="contractEditor">
-        <FieldHelp />
+        {!template.authoring && <FieldHelp />}
         <aside className="contractEditorPanel">
           {editor.error && <Toast tone="danger">{editor.error}</Toast>}
           <TemplateDetails editor={editor} />
           <TemplateRoles editor={editor} />
-          <FieldToolbox editor={editor} />
-          <SelectedField editor={editor} />
+          {!template.authoring && <FieldToolbox editor={editor} />}
+          {!template.authoring && <SelectedField editor={editor} />}
+          {editor.authoringDraft && (
+            <AuthoringValues
+              draft={editor.authoringDraft}
+              templateDefaults
+              onChange={(value) =>
+                editor.setAuthoring({
+                  formatVersion: 1,
+                  source: value.source,
+                  values: value.values,
+                })
+              }
+            />
+          )}
           <Button
             busy={editor.busy}
             disabled={!editor.dirty}
             onClick={() => void editor.save()}
             variant="primary"
           >
-            Save version {template.currentVersion + 1}
+            Save version {editor.currentVersion + 1}
           </Button>
+          {canPublish && (
+            <Button
+              onClick={() =>
+                editor.save(
+                  editor.currentStatus === "published"
+                    ? "unpublished"
+                    : "published",
+                )
+              }
+            >
+              {editor.currentStatus === "published" ? "Unpublish" : "Publish"}
+            </Button>
+          )}
+          {editor.error && (
+            <Button onClick={editor.refresh}>
+              Refresh latest version information, keep my edits
+            </Button>
+          )}
           <p className="contractHint">
-            Saving creates a new version. Version {template.version} stays
-            available.
+            Saving creates a new {editor.currentStatus} version. Version{" "}
+            {template.version} stays unchanged. Publication changes include the
+            current editor contents.
           </p>
         </aside>
         <div className="contractEditorDocument">
-          <ContractPages
-            load={() =>
-              api.contractTemplates.loadDocument(template.id, template.version)
-            }
-            renderOverlay={(page) => (
-              <EditorOverlay editor={editor} page={page} />
-            )}
-          />
+          {editor.authoringDraft ? (
+            <Card title="Written template">
+              <ContractAuthoringContent
+                draft={editor.authoringDraft}
+                disabled={editor.busy || disabled}
+                onChange={(source) =>
+                  editor.setAuthoring({
+                    formatVersion: 1,
+                    source,
+                    values: editor.authoringDraft?.values ?? {},
+                  })
+                }
+              />
+              <p className="contractHint">
+                Save a version to update its sample PDF. Unassigned roles use
+                role labels; missing defaults appear as bracketed keys.
+              </p>
+              <ContractPages
+                load={() =>
+                  api.contractTemplates.loadDocument(
+                    template.id,
+                    template.version,
+                  )
+                }
+              />
+            </Card>
+          ) : (
+            <ContractPages
+              load={() =>
+                api.contractTemplates.loadDocument(
+                  template.id,
+                  template.version,
+                )
+              }
+              renderOverlay={(page) => (
+                <EditorOverlay editor={editor} page={page} />
+              )}
+            />
+          )}
         </div>
       </div>
     </fieldset>
@@ -108,47 +175,59 @@ function useTemplateEditor(
   },
 ) {
   const [draft, setDraft] = useState(() => draftFrom(template));
+  const [roleIds, setRoleIds] = useState(() =>
+    template.definition.roles.map(() => crypto.randomUUID()),
+  );
   const [description, setDescription] = useState(template.description);
-  const saver = useAction("Could not save the template.");
-  const saving = useRef(false);
+  const [authoring, setAuthoringValue] = useState(template.authoring);
+  const [latest, setLatest] = useState(template);
+  const saver = useTemplateRequest<ContractTemplate>((saved) => {
+    onDirtyChange(false);
+    onSaved(saved);
+  });
+  const refresher = useTemplateRequest<ContractTemplate>(setLatest);
+  const busy = saver.busy || refresher.busy;
+  useEffect(() => {
+    onBusyChange(busy);
+  }, [busy, onBusyChange]);
   const update = useCallback(
     (change: (draft: DraftInput) => DraftInput) => {
-      if (saving.current) return;
+      if (busy) return;
       setDraft(change);
       onDirtyChange(true);
     },
-    [onDirtyChange],
+    [busy, onDirtyChange],
   );
   const editor = useContractFieldEditor(
     draft,
     update,
     template.document.pageCount,
   );
-  useUnsavedChanges(dirty && !disabled);
+  useUnsavedChanges((dirty || busy) && !disabled);
 
-  async function save() {
-    if (saving.current) return;
-    saving.current = true;
-    onBusyChange(true);
-    await saver.run(async () => {
-      const definition = definitionFrom(draft);
-      const saved = await api.contractTemplates.saveVersion(template, {
-        definition,
+  function save(status?: "published" | "unpublished") {
+    if (busy) return;
+    saver.start(async () => {
+      return saveTemplateVersion(template, latest.currentVersion, {
+        draft,
+        authoring,
         description,
-        name: draft.title,
+        status,
       });
-      if (!saved) throw new Error("Contract template not found.");
-      onDirtyChange(false);
-      onSaved(saved);
     });
-    saving.current = false;
-    onBusyChange(false);
+  }
+  function refresh() {
+    if (busy) return;
+    refresher.start(() => api.contractTemplates.get(template.id));
   }
   async function removeRole(key: string) {
     const count = draft.fields.filter(
       (field) => field.recipientKey === key,
     ).length;
     if (count && !(await confirmRoleRemoval(count))) return;
+    setRoleIds((current) =>
+      current.filter((_, index) => draft.recipients[index]?.key !== key),
+    );
     update((current) => ({
       ...current,
       recipients: current.recipients.filter((role) => role.key !== key),
@@ -158,16 +237,77 @@ function useTemplateEditor(
 
   return {
     ...editor,
-    busy: saver.busy,
+    roleIds,
+    addRole: () => {
+      if (busy) return;
+      setRoleIds((current) => [...current, crypto.randomUUID()]);
+      update(appendTemplateRole);
+    },
+    busy,
+    authoringDraft: authoring ? { ...draft, ...authoring } : null,
+    setAuthoring: (value: NonNullable<ContractTemplate["authoring"]>) => {
+      if (busy) return;
+      setAuthoringValue(value);
+      onDirtyChange(true);
+    },
+    refresh,
+    currentVersion: latest.currentVersion,
+    currentStatus: latest.currentStatus,
     description,
     dirty,
-    error: saver.error,
+    error: refresher.error ?? saver.error,
     removeRole,
     save,
     setDescription: (value: string) => {
       setDescription(value);
       onDirtyChange(true);
     },
+  };
+}
+
+async function saveTemplateVersion(
+  template: ContractTemplate,
+  currentVersion: number,
+  input: {
+    draft: DraftInput;
+    authoring: ContractTemplate["authoring"];
+    description: string;
+    status: "published" | "unpublished" | undefined;
+  },
+) {
+  const { draft, authoring, description, status } = input;
+  const definition = definitionFrom(draft);
+  if (authoring) definition.fields = [];
+  const saved = await api.contractTemplates.saveVersion(
+    { ...template, currentVersion },
+    {
+      definition,
+      description,
+      name: draft.title,
+      ...(authoring ? { authoring } : {}),
+      ...(status ? { status } : {}),
+    },
+  );
+  if (!saved) throw new Error("Contract template not found.");
+  return saved;
+}
+
+function appendTemplateRole(current: DraftInput): DraftInput {
+  return {
+    ...current,
+    recipients: [
+      ...current.recipients,
+      {
+        email: "",
+        key: nextRoleKey(current),
+        name: `Role ${current.recipients.length + 1}`,
+        routingOrder: Math.min(
+          20,
+          Math.max(0, ...current.recipients.map((role) => role.routingOrder)) +
+            1,
+        ),
+      },
+    ],
   };
 }
 
@@ -267,26 +407,7 @@ function TemplateRoles({ editor }: { editor: Editor }) {
         <Button
           disabled={draft.recipients.length >= contractLimits.signers}
           icon="add"
-          onClick={() =>
-            update((current) => ({
-              ...current,
-              recipients: [
-                ...current.recipients,
-                {
-                  email: "",
-                  key: crypto.randomUUID(),
-                  name: `Role ${current.recipients.length + 1}`,
-                  routingOrder: Math.min(
-                    20,
-                    Math.max(
-                      0,
-                      ...current.recipients.map((role) => role.routingOrder),
-                    ) + 1,
-                  ),
-                },
-              ],
-            }))
-          }
+          onClick={editor.addRole}
           size="sm"
           variant="ghost"
         >
@@ -318,7 +439,7 @@ function TemplateRoles({ editor }: { editor: Editor }) {
           <TemplateRoleRow
             editor={editor}
             index={index}
-            key={role.key}
+            key={editor.roleIds[index]}
             role={role}
           />
         ))}
@@ -338,7 +459,7 @@ function TemplateRoleRow({
 }) {
   const { draft, update, removeRole } = editor;
   return (
-    <div className="stack stackSm" key={role.key}>
+    <div className="stack stackSm">
       <Field label={`Role ${index + 1}`}>
         <input
           className="input"
@@ -356,6 +477,28 @@ function TemplateRoleRow({
           value={role.name}
         />
       </Field>
+      {editor.authoringDraft && (
+        <Field
+          label={`Role ${index + 1} key`}
+          hint="Update matching field and value references in Markdown when changing this key."
+        >
+          <input
+            className="input"
+            maxLength={100}
+            value={role.key}
+            onChange={(event) =>
+              update((current) => ({
+                ...current,
+                recipients: current.recipients.map((item, position) =>
+                  position === index
+                    ? { ...item, key: event.target.value }
+                    : item,
+                ),
+              }))
+            }
+          />
+        </Field>
+      )}
       {draft.signingOrder === "sequential" && (
         <Field label={`${role.name || "Role"} signs in position`}>
           <input
@@ -412,6 +555,13 @@ function draftFrom(template: ContractTemplate): DraftInput {
     signingOrder: template.definition.signingOrder,
     title: template.name,
   };
+}
+
+function nextRoleKey(draft: DraftInput) {
+  let number = draft.recipients.length + 1;
+  while (draft.recipients.some(({ key }) => key === `signer${number}`))
+    number += 1;
+  return `signer${number}`;
 }
 
 function confirmRoleRemoval(fieldCount: number) {

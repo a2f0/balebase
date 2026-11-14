@@ -19,6 +19,7 @@ import {
 } from "./contractAuthoringState";
 import { confirmContractDeletion, fieldTypeLabel } from "./contractFields";
 import { recordRenderedPage } from "./contractPdfState";
+import { SaveWrittenTemplate } from "./SaveWrittenTemplate";
 
 export function ContractAuthoringEditor({
   contract,
@@ -77,6 +78,7 @@ export function ContractAuthoringEditor({
         </Card>
       </div>
       <AuthoringActions state={state} request={request} onClose={onClose} />
+      <SaveWrittenTemplate draft={state.draft} disabled={busy} />
       <p className="contractHint" role="status">
         {dirty
           ? "Unsaved changes. Save and review the generated PDF before sending."

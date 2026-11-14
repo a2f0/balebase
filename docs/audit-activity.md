@@ -379,14 +379,17 @@ signer count and the original and signed documents' hashes). Both outlive the
 contract until the organization is purged. Draft autosaves are not recorded;
 `contract.sent` captures the configuration that was sent.
 
-Uploading a contract template records `contract_template.created` (name,
-page count, and document hash), and each saved version records
+Creating a PDF or written contract template records `contract_template.created`
+(name, page count, and document hash), and each ordinary saved version records
 `contract_template.version_saved` (version, the version it was edited from,
-the previous name, role and field counts, signing order, and document hash),
-both under the save's own guard, so a stale save records nothing. Field
-values, messages, and the PDF stay out. Deleting a template records
-`contract_template.deleted` with its current version and version count; these
-events outlive the template until the organization is purged.
+the previous name, role and field counts, signing order, and document hash).
+Publication changes record `contract_template.published` or
+`contract_template.unpublished` with the new immutable version. These writes
+share the version save's guard, so a stale or unauthorized publication change
+records nothing. Field values, merge defaults, Markdown source, messages, and
+the PDF stay out. Deleting a template records `contract_template.deleted` with
+its current version and version count; these events outlive the template until
+the organization is purged.
 
 Requested forms and checks record assignment, due date and status changes
 (old and new values; a status set by hand is always a manager's), deletion
