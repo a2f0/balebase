@@ -573,9 +573,12 @@ bun run mobile:upload:android           # or mobile:upload:android:staging
 ```
 
 The release rolls out to every internal tester; testers must be on the app's
-internal testing list in Play Console. Promote a build to closed, open, or
-production tracks in Play Console. If an upload key is lost or leaked,
-request an upload key reset in Play Console under App integrity.
+internal testing list in Play Console. Each tier's website links its Google
+Play badge to that app's internal testing opt-in link (`storeListings` in
+`packages/website/src/site.ts`), and its App Store badge to the app's App Store
+record, which stays empty until Apple approves the app. Promote a build to
+closed, open, or production tracks in Play Console. If an upload key is lost or
+leaked, request an upload key reset in Play Console under App integrity.
 
 ### TestFlight
 
@@ -646,10 +649,11 @@ Before wider TestFlight or Play distribution:
    distribution before submission; this shell does not add native purchases or
    native Plaid SDK integration. Audit the candidate with the
    [readiness lanes and skill](readiness.md) and record the result in its PR.
-4. When a store approves the production app, set `listed: true` on its entry
-   in `storeListings` (`packages/website/src/site.ts`), add the platform to
-   `operatingSystem` in `homeStructuredData` (`packages/website/src/search.ts`),
-   and deploy the website, so the home page's badge links to the listing.
+4. When a store approves the production app, set its production URL in
+   `storeListings` (`packages/website/src/site.ts`) to the public listing
+   (`https://play.google.com/store/apps/details?id=com.balebase.app` on Google
+   Play), add the platform to `operatingSystem` in `homeStructuredData`
+   (`packages/website/src/search.ts`), and deploy the website.
 
 No automatic mobile deployment is configured.
 See [Capacitor's environment setup](https://capacitorjs.com/docs/getting-started/environment-setup)

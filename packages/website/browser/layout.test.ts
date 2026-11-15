@@ -9,7 +9,7 @@ import {
   chromeLaunchOptions,
   closeChrome,
 } from "../../../scripts/testing/chrome";
-import { storeBadgeHref, storeListings } from "../src/site";
+import { storeListings } from "../src/site";
 
 const siteRoot = fileURLToPath(new URL("..", import.meta.url));
 const pages = [
@@ -188,7 +188,7 @@ it("shows each store badge with its listing link and no tagline", async () => {
       id: listing.id,
       alt: listing.label,
       loaded: true,
-      href: storeBadgeHref(listing),
+      href: listing.urls.production,
     })),
   );
   const text = await page.$eval(".storeBadges", (badges) =>
