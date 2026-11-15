@@ -3,7 +3,10 @@
 Read the selected runtime from [`.mise.toml`](../.mise.toml), `packageManager`
 in [`package.json`](../package.json), and CI. The `engines` field declares the
 supported minimum; preserve it unless a migration needs a higher floor.
-Bun owns `bun.lock`.
+Bun owns `bun.lock`. `mise.lock` is committed; regenerate it with `mise lock`
+whenever `.mise.toml` changes. CI's mise-action `version` must read the
+lockfile format (format 4 needs mise 2026.11.1 or later), so move that pin
+before the lock's format changes.
 Preserve exact direct dependency pins and keep React, React DOM, their types,
 and the UI peer versions aligned. Run package executables with `bunx --bun` so
 their Node shebangs do not select another runtime. CI rejects direct Node, npm,
