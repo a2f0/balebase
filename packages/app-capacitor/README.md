@@ -115,6 +115,17 @@ the hosted app. See
 [mobile builds and release setup](../../docs/operations.md#mobile-builds-and-release-setup)
 for the remaining store setup.
 
+The Android app targets Android 17 and declares no
+[local network permission](https://developer.android.com/privacy-and-security/local-network-permission),
+so on Android 17 it cannot reach the local network: a live-reload server at a
+LAN address, or at the emulator's `10.0.2.2`, times out. Serve live reload over
+loopback instead; `--forwardPorts` runs `adb reverse` for the port:
+
+```sh
+bun run mobile:run:android --target <emulator-or-device-id> \
+  --live-reload --host localhost --port <port> --forwardPorts <port>:<port>
+```
+
 ## Releases
 
 The Fastlane lanes live in `fastlane/`: `lanes/ios.rb`, `lanes/android.rb`,

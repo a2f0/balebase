@@ -69,7 +69,16 @@ See the [catalog][permission-catalog] and [cleanup guards][cleanup-guards].
 
 Treat Capacitor, its Android libraries, the Android Gradle plugin, and Gradle as
 one compatibility group. AndroidX Core 1.19 requires compile SDK 37 and AGP 9.1
-or later; the app's target SDK and minimum Android version are separate policies.
+or later. The app targets SDK 37 (Android 17); its minimum Android version is a
+separate policy. Review the [Android 17 behavior changes][android-17] when the
+shell or its plugins change: the app declares no
+[local network permission][android-local-network], so it reaches only internet
+hosts, and [certificate transparency][android-ct] is on by default for its TLS.
+Instrumentation tests on API 37 need Espresso 3.7.0 or later, which supports the
+[lock-free `MessageQueue`][android-messagequeue].
+Gradle 10 removes the implicit parent-project property lookup that Capacitor
+8.6's plugin build scripts use to read `variables.gradle`; Gradle 9.9 reports it
+as [deprecated][gradle-parent-lookup].
 Run mobile sync, an Android debug build and unsigned release bundle, and an
 unsigned iOS simulator build before shipping native dependency changes.
 Use the [validation-only Gradle init script][unsigned-gradle] to set release
@@ -186,6 +195,11 @@ or active constraints into this guide.
 [permission-catalog]: https://github.com/a2f0/agent-tool/blob/b1b9d0419233082bb5f4946566c2e84605ae42f3/src/permissions/catalog.ts
 [cleanup-guards]: https://github.com/a2f0/agent-tool/blob/b1b9d0419233082bb5f4946566c2e84605ae42f3/src/workflows/repository.ts
 [unsigned-gradle]: ../packages/app-capacitor/android/unsigned-validation.init.gradle
+[android-17]: https://developer.android.com/about/versions/17/behavior-changes-17
+[android-local-network]: https://developer.android.com/privacy-and-security/local-network-permission
+[android-ct]: https://developer.android.com/privacy-and-security/security-config#CertificateTransparencySummary
+[android-messagequeue]: https://developer.android.com/about/versions/17/changes/messagequeue
+[gradle-parent-lookup]: https://docs.gradle.org/9.9.1/userguide/upgrading_version_9.html#deprecated_implicit_lookup_in_parent_projects
 [typescript]: https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html
 [astro]: https://docs.astro.build/en/guides/upgrade-to/v7/
 [astro-advisory]: https://github.com/withastro/astro/security/advisories/GHSA-26w7-cxv4-gfx2
