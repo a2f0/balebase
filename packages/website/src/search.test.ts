@@ -13,6 +13,7 @@ import {
   scriptJson,
   searchFiles,
 } from "./search";
+import { storeListings } from "./site";
 
 test("production noindexes only pages kept out of search; staging noindexes all", () => {
   expect(robotsMeta("production", true)).toBeNull();
@@ -213,5 +214,18 @@ describe("built tiers", () => {
     );
     expect(read("staging", "robots.txt")).not.toContain("Sitemap");
     expect(existsSync(join(out("staging"), "sitemap.xml"))).toBe(false);
+  });
+
+  test("each tier's store badges link that tier's apps", () => {
+    for (const [tier, other] of [
+      ["production", "staging"],
+      ["staging", "production"],
+    ] as const) {
+      const home = read(tier, "index.html");
+      for (const listing of storeListings) {
+        expect(home).toContain(`href="${listing.urls[tier]}"`);
+        expect(home).not.toContain(listing.urls[other]);
+      }
+    }
   });
 });

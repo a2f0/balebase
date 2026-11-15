@@ -1,40 +1,36 @@
 ---
 /*
- * The App Store and Google Play badges. Each links to its listing once the
- * store has approved the app (`listed` in site.ts).
+ * The App Store and Google Play badges, each linking to the build tier's app
+ * (`storeListings` in site.ts).
  * Keep the publishers' vector artwork intact:
  * https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg
  * https://partnermarketinghub.withgoogle.com/brands/google-play/google-play/lockups-icons-badges/?folder=86718
  * Google asset: GetItOnGooglePlay_Badge_Web_color_English.svg
  */
-import { storeBadgeHref, storeListings } from "../site";
+import { releaseTier } from "@balebase/diagnostics/config";
+import { storeListings } from "../site";
+
+const tier = releaseTier(
+  "PUBLIC_RELEASE_TIER",
+  import.meta.env.PUBLIC_RELEASE_TIER,
+);
 ---
 
 <div class="storeBadges">
   <ul class="cluster storeBadgeList">
     {
-      storeListings.map((listing) => {
-        const href = storeBadgeHref(listing);
-        const image = (
-          <img
-            alt={listing.label}
-            height={listing.badge.height}
-            src={listing.badge.src}
-            width={listing.badge.width}
-          />
-        );
-        return (
-          <li data-store={listing.id}>
-            {href === null ? (
-              <span class="storeBadge">{image}</span>
-            ) : (
-              <a class="storeBadge" href={href}>
-                {image}
-              </a>
-            )}
-          </li>
-        );
-      })
+      storeListings.map((listing) => (
+        <li data-store={listing.id}>
+          <a class="storeBadge" href={listing.urls[tier]}>
+            <img
+              alt={listing.label}
+              height={listing.badge.height}
+              src={listing.badge.src}
+              width={listing.badge.width}
+            />
+          </a>
+        </li>
+      ))
     }
   </ul>
 </div>
