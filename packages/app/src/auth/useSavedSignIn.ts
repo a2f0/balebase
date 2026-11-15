@@ -1,38 +1,62 @@
-import { type FormEvent, useEffect, useEffectEvent, useRef } from "react";
+import {
+  type FormEvent,
+  type RefObject,
+  useEffect,
+  useEffectEvent,
+  useRef,
+} from "react";
 import { nativeHost, type SavedSignIn } from "../host";
+import {
+  initialSavedSignInOffer,
+  type SavedSignInOfferEvent,
+  type SavedSignInOfferState,
+  savedSignInOfferTransition,
+} from "./savedSignInOfferState";
 
 /**
  * Keeps autofill provenance only for this form's lifetime, never in storage.
  * Where the shell can offer saved sign-ins itself (Android), offers them once,
- * when `offer` first holds, and fills the form with the one chosen.
+ * when sign-in first shows, and fills the form with the one chosen
+ * (savedSignInOfferState.ts).
  */
 export function useSavedSignIn(
-  offer: boolean,
+  signInShown: boolean,
   fill: (credential: SavedSignIn) => void,
 ) {
   const saved = useRef<SavedSignIn | undefined>(undefined);
-  // Set before the request starts, so StrictMode's effect replay asks once.
-  const offered = useRef(false);
-  const chosen = useEffectEvent((credential: SavedSignIn) => {
-    saved.current = credential;
-    fill(credential);
-  });
+  // A ref, not state: nothing renders from it, and StrictMode's effect replay
+  // must find the request the first run started rather than ask again. An
+  // answer after unmounting fills nothing, so unmounting needs no event.
+  const offer = useRef(initialSavedSignInOffer);
+  const requests = useRef(0);
+  const answered = useEffectEvent(
+    (request: number, credential: SavedSignIn | undefined) => {
+      if (!send(offer, { type: "answered", request }) || !credential) return;
+      saved.current = credential;
+      fill(credential);
+    },
+  );
   useEffect(() => {
     const choose = nativeHost()?.chooseSavedSignIn;
-    if (!offer || !choose || offered.current) return;
-    offered.current = true;
+    if (!signInShown || !choose) return;
+    requests.current += 1;
+    const request = requests.current;
+    if (!send(offer, { type: "signInShown", request })) return;
     choose().then(
-      (credential) => {
-        if (credential) chosen(credential);
-      },
-      () => {
-        // The offer is optional: the person can still type their sign-in.
-      },
+      (credential) => answered(request, credential),
+      // The offer is optional: the person can still type their sign-in.
+      () => answered(request, undefined),
     );
-  }, [offer]);
+  }, [signInShown]);
   return {
+    /** Stops a pending offer from filling the form the person moved on from. */
+    abandonOffer: () => {
+      send(offer, { type: "abandoned" });
+    },
+    /** The form changed modes: forgets provenance and abandons the offer. */
     clear: () => {
       saved.current = undefined;
+      send(offer, { type: "abandoned" });
     },
     onInput(event: FormEvent<HTMLFormElement>) {
       const input = event.target;
@@ -76,4 +100,14 @@ export function useSavedSignIn(
       }
     },
   };
+}
+
+/** Applies `event` to the offer; true when it changed the offer's state. */
+function send(
+  offer: RefObject<SavedSignInOfferState>,
+  event: SavedSignInOfferEvent,
+) {
+  const previous = offer.current;
+  offer.current = savedSignInOfferTransition(previous, event);
+  return offer.current !== previous;
 }

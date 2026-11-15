@@ -166,6 +166,7 @@ function useAuthPageState({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setNotice(undefined);
+    savedSignIn.abandonOffer();
     const needsSave =
       mode !== "sign-in" ||
       !savedSignIn.isSaved(event.currentTarget, email, password);

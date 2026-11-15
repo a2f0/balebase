@@ -425,4 +425,49 @@ describe("saving passwords in the native app", () => {
       expect(container.textContent).not.toContain("No credential provider");
     });
   }
+
+  /** Renders sign-in whose saved sign-in offer answers only when told to. */
+  async function renderPendingOffer(answer: (path: string) => Response) {
+    const pending = { requests: 0, choose: (_: SavedSignIn) => {} };
+    await renderNativeSignIn(answer, undefined, () => {
+      const { promise, resolve } = Promise.withResolvers<
+        SavedSignIn | undefined
+      >();
+      pending.requests += 1;
+      pending.choose = resolve;
+      return promise;
+    });
+    return pending;
+  }
+  const savedElsewhere = {
+    username: "saved@example.com",
+    password: "a saved password",
+  };
+
+  it("ignores a saved sign-in chosen after leaving sign-in", async () => {
+    const pending = await renderPendingOffer(() =>
+      Response.json({ token: "token", user: {} }),
+    );
+    await fill({ 'input[name="email"]': credentials.email });
+    await click("Forgot password?");
+    await act(async () => pending.choose(savedElsewhere));
+    expect(value("email")).toBe(credentials.email);
+    await click("Back to sign in");
+    await settle();
+    expect(value("password")).toBe("");
+    expect(pending.requests).toBe(1);
+  });
+
+  it("keeps the typed sign-in when a saved one is chosen after submitting", async () => {
+    const pending = await renderPendingOffer((path) =>
+      path.endsWith("/sign-in/email")
+        ? Response.json({ twoFactorRedirect: true })
+        : Response.json({ token: "token", user: {} }),
+    );
+    await signIn();
+    await act(async () => pending.choose(savedElsewhere));
+    await submit({ "#two-factor-code": "123456" });
+    expect(authenticated).toBe(1);
+    expect(offered).toEqual([[credentials.email, credentials.password]]);
+  });
 });

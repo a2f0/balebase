@@ -32,7 +32,9 @@ registers the plugin itself, since it lives in the app rather than a package.
   shows, the plugin's `choose` asks Credential Manager for the app's saved
   passwords, and the account chosen fills the email and password. With none
   saved, no sheet appears; dismissing it leaves the form to type in, and it
-  is not offered again until the sign-in page next opens.
+  is not offered again until the sign-in page next opens. An account chosen
+  after leaving or submitting the sign-in form is ignored
+  (`packages/app/src/auth/savedSignInOfferState.ts`).
 - iOS: `PasswordManagerPlugin.swift`, registered in `MainViewController`, asks
   the system to save it for the domain that `App.entitlements` names
   (`webcredentials:$(WEB_CREDENTIALS_DOMAIN)`: `app.balebase.com`, or
