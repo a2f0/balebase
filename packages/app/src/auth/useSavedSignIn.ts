@@ -25,12 +25,21 @@ export function useSavedSignIn(
 ) {
   const saved = useRef<SavedSignIn | undefined>(undefined);
   // A ref, not state: nothing renders from it, and StrictMode's effect replay
-  // must find the request the first run started rather than ask again. An
-  // answer after unmounting fills nothing, so unmounting needs no event.
+  // must find the request the first run started rather than ask again.
   const offer = useRef(initialSavedSignInOffer);
   const requests = useRef(0);
+  // Cleared on unmount and set again by StrictMode's replay, so only a page
+  // that is gone drops its answer.
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const answered = useEffectEvent(
     (request: number, credential: SavedSignIn | undefined) => {
+      if (!mounted.current) return;
       if (!send(offer, { type: "answered", request }) || !credential) return;
       saved.current = credential;
       fill(credential);
