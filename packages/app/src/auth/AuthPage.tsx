@@ -141,7 +141,10 @@ function useAuthPageState({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const savedSignIn = useSavedSignIn();
+  const savedSignIn = useSavedSignIn(mode === "sign-in", (credential) => {
+    setEmail(credential.username);
+    setPassword(credential.password);
+  });
   const [passwordNeedsSaving, setPasswordNeedsSaving] = useState(true);
   const [confirmation, setConfirmation] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);

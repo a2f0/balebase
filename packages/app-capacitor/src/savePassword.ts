@@ -1,6 +1,9 @@
+import type { SavedSignIn } from "@balebase/app/host";
 import { registerPlugin } from "@capacitor/core";
 
 interface PasswordManagerPlugin {
+  /** Android only; resolves without a credential when none is chosen. */
+  choose(): Promise<{ credential?: SavedSignIn }>;
   save(options: {
     domain: string;
     password: string;
@@ -22,9 +25,20 @@ const passwordManager =
  */
 export function nativePasswordSaver(
   appUrl: string,
-  plugin: PasswordManagerPlugin = passwordManager,
+  plugin: Pick<PasswordManagerPlugin, "save"> = passwordManager,
 ) {
   const domain = new URL(appUrl).hostname;
   return (username: string, password: string) =>
     plugin.save({ domain, password, username });
+}
+
+/**
+ * Offers the passwords Android's Credential Manager saved for the app, which
+ * the WebView's autofill does not suggest. iOS keyboard AutoFill already offers
+ * them through the webcredentials association.
+ */
+export async function chooseNativeSavedSignIn(
+  plugin: Pick<PasswordManagerPlugin, "choose"> = passwordManager,
+) {
+  return (await plugin.choose()).credential;
 }

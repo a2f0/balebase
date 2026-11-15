@@ -3,9 +3,10 @@
 The native iOS and Android shell for Balebase. It renders the shared
 application from `packages/app` with a native host: requests carry the
 WebView's origin marker, emailed links open the hosted app, downloads go to
-the system share sheet, and sign-ins offer to save the password. Native
-releases require iOS 18 or later and Android 12 (API 31) or later; the iOS
-floor also covers the embedded PDF viewer's browser APIs.
+the system share sheet, and sign-ins offer to save the password (and, on
+Android, offer saved ones back). Native releases require iOS 18 or later and
+Android 12 (API 31) or later; the iOS floor also covers the embedded PDF
+viewer's browser APIs.
 
 On Android, the page draws under the system bars when the WebView reports
 safe-area insets (WebView 140 and later). Layouts pad themselves with the
@@ -25,7 +26,13 @@ registers the plugin itself, since it lives in the app rather than a package.
 
 - Android: `PasswordManagerPlugin.java`, registered in `MainActivity`, asks
   Credential Manager to save the password for the app. Play services provides
-  Credential Manager before Android 14.
+  Credential Manager before Android 14. The WebView's autofill does not
+  suggest passwords saved this way: its fill requests name the page's
+  `https://localhost` origin, not the app. So when the sign-in form first
+  shows, the plugin's `choose` asks Credential Manager for the app's saved
+  passwords, and the account chosen fills the email and password. With none
+  saved, no sheet appears; dismissing it leaves the form to type in, and it
+  is not offered again until the sign-in page next opens.
 - iOS: `PasswordManagerPlugin.swift`, registered in `MainViewController`, asks
   the system to save it for the domain that `App.entitlements` names
   (`webcredentials:$(WEB_CREDENTIALS_DOMAIN)`: `app.balebase.com`, or

@@ -1,11 +1,35 @@
-import { type FormEvent, useRef } from "react";
-import { nativeHost } from "../host";
+import { type FormEvent, useEffect, useEffectEvent, useRef } from "react";
+import { nativeHost, type SavedSignIn } from "../host";
 
-/** Keeps autofill provenance only for this form's lifetime, never in storage. */
-export function useSavedSignIn() {
-  const saved = useRef<{ username: string; password: string } | undefined>(
-    undefined,
-  );
+/**
+ * Keeps autofill provenance only for this form's lifetime, never in storage.
+ * Where the shell can offer saved sign-ins itself (Android), offers them once,
+ * when `offer` first holds, and fills the form with the one chosen.
+ */
+export function useSavedSignIn(
+  offer: boolean,
+  fill: (credential: SavedSignIn) => void,
+) {
+  const saved = useRef<SavedSignIn | undefined>(undefined);
+  // Set before the request starts, so StrictMode's effect replay asks once.
+  const offered = useRef(false);
+  const chosen = useEffectEvent((credential: SavedSignIn) => {
+    saved.current = credential;
+    fill(credential);
+  });
+  useEffect(() => {
+    const choose = nativeHost()?.chooseSavedSignIn;
+    if (!offer || !choose || offered.current) return;
+    offered.current = true;
+    choose().then(
+      (credential) => {
+        if (credential) chosen(credential);
+      },
+      () => {
+        // The offer is optional: the person can still type their sign-in.
+      },
+    );
+  }, [offer]);
   return {
     clear: () => {
       saved.current = undefined;
