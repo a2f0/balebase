@@ -46,24 +46,12 @@ public class PasswordManagerPlugin extends Plugin {
                 new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
                     @Override
                     public void onResult(GetCredentialResponse response) {
-                        Credential credential = response.getCredential();
-                        JSObject result = new JSObject();
-                        if (credential instanceof PasswordCredential) {
-                            PasswordCredential password = (PasswordCredential) credential;
-                            JSObject chosen = new JSObject();
-                            chosen.put("username", password.getId());
-                            chosen.put("password", password.getPassword());
-                            result.put("credential", chosen);
-                        }
-                        call.resolve(result);
+                        call.resolve(chosenSignIn(response.getCredential()));
                     }
 
                     @Override
                     public void onError(GetCredentialException error) {
-                        if (
-                            error instanceof NoCredentialException ||
-                            error instanceof GetCredentialCancellationException
-                        ) {
+                        if (choseNothing(error)) {
                             call.resolve(new JSObject());
                             return;
                         }
@@ -72,6 +60,24 @@ public class PasswordManagerPlugin extends Plugin {
                 }
             )
         );
+    }
+
+    /** `choose`'s result: `{ credential: { username, password } }`, or empty. */
+    static JSObject chosenSignIn(Credential credential) {
+        JSObject result = new JSObject();
+        if (credential instanceof PasswordCredential) {
+            PasswordCredential password = (PasswordCredential) credential;
+            JSObject chosen = new JSObject();
+            chosen.put("username", password.getId());
+            chosen.put("password", password.getPassword());
+            result.put("credential", chosen);
+        }
+        return result;
+    }
+
+    /** Nothing saved, or the sheet dismissed: no choice, not a failure. */
+    static boolean choseNothing(GetCredentialException error) {
+        return error instanceof NoCredentialException || error instanceof GetCredentialCancellationException;
     }
 
     @PluginMethod
