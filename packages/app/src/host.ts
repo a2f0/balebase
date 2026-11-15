@@ -33,6 +33,16 @@ export interface NativeHost {
    * the form submits through native HTTP and the page never navigates.
    */
   savePassword(username: string, password: string): Promise<void>;
+  /**
+   * Offers the system's saved sign-ins, where the WebView's autofill misses
+   * them; undefined when the person chooses none or none is saved.
+   */
+  chooseSavedSignIn?: (() => Promise<SavedSignIn | undefined>) | undefined;
+}
+
+export interface SavedSignIn {
+  username: string;
+  password: string;
 }
 
 /**

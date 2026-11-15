@@ -10,6 +10,7 @@ import {
 import { Capacitor } from "@capacitor/core";
 import { capacitorHost } from "./host";
 import { saveNativeFile } from "./saveFile";
+import { chooseNativeSavedSignIn } from "./savePassword";
 
 let native: Mock<typeof Capacitor.isNativePlatform>;
 let platform: Mock<typeof Capacitor.getPlatform>;
@@ -38,6 +39,10 @@ describe("Capacitor host", () => {
       expect(host?.appUrl).toBe("https://app.test");
       expect(host?.saveFile).toBe(saveNativeFile);
       expect(host?.savePassword).toBeFunction();
+      // iOS keyboard AutoFill offers saved passwords; Android's WebView does not.
+      expect(host?.chooseSavedSignIn).toBe(
+        os === "android" ? chooseNativeSavedSignIn : undefined,
+      );
       return host?.origin;
     });
     expect(capacitorHost("https://app.test").network?.getOnline()).toBe(true);

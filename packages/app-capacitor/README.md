@@ -3,9 +3,10 @@
 The native iOS and Android shell for Balebase. It renders the shared
 application from `packages/app` with a native host: requests carry the
 WebView's origin marker, emailed links open the hosted app, downloads go to
-the system share sheet, and sign-ins offer to save the password. Native
-releases require iOS 18 or later and Android 12 (API 31) or later; the iOS
-floor also covers the embedded PDF viewer's browser APIs.
+the system share sheet, and sign-ins offer to save the password (and, on
+Android, offer saved ones back). Native releases require iOS 18 or later and
+Android 12 (API 31) or later; the iOS floor also covers the embedded PDF
+viewer's browser APIs.
 
 On Android, the page draws under the system bars when the WebView reports
 safe-area insets (WebView 140 and later). Layouts pad themselves with the
@@ -25,7 +26,15 @@ registers the plugin itself, since it lives in the app rather than a package.
 
 - Android: `PasswordManagerPlugin.java`, registered in `MainActivity`, asks
   Credential Manager to save the password for the app. Play services provides
-  Credential Manager before Android 14.
+  Credential Manager before Android 14. The WebView's autofill does not
+  suggest passwords saved this way: its fill requests name the page's
+  `https://localhost` origin, not the app. So when the sign-in form first
+  shows, the plugin's `choose` asks Credential Manager for the app's saved
+  passwords, and the account chosen fills the email and password. With none
+  saved, no sheet appears; dismissing it leaves the form to type in, and it
+  is not offered again until the sign-in page next opens. An account chosen
+  after leaving or submitting the sign-in form is ignored
+  (`packages/app/src/auth/savedSignInOfferState.ts`).
 - iOS: `PasswordManagerPlugin.swift`, registered in `MainViewController`, asks
   the system to save it for the domain that `App.entitlements` names
   (`webcredentials:$(WEB_CREDENTIALS_DOMAIN)`: `app.balebase.com`, or
@@ -285,6 +294,8 @@ page asks to draw under the system bars and that the WebView ends at the
 keyboard. On WebView 140 and later, Capacitor leaves the bars and cutouts to
 the page's safe-area padding; older WebViews keep the page clear of them, and
 the test checks that the bars' icons contrast with the window background
-behind them. CI has no emulator, so run these after changing how the native
-shell handles insets. Set `ANDROID_SERIAL` when more than one device is
-attached.
+behind them. `PasswordManagerPluginTest` checks what the plugin's `choose`
+hands the page: a chosen password, nothing for other credentials, and no
+failure when nothing was saved or the sheet was dismissed. CI has no emulator,
+so run these after changing how the native shell handles insets or saved
+passwords. Set `ANDROID_SERIAL` when more than one device is attached.

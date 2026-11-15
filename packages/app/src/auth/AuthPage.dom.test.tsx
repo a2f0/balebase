@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { act } from "react";
-import { configureHost } from "../host";
+import { act, StrictMode } from "react";
+import { configureHost, type NativeHost, type SavedSignIn } from "../host";
 import { installDom } from "../testing/dom";
 import { AuthPage } from "./AuthPage";
 
@@ -140,26 +140,31 @@ describe("saving passwords in the native app", () => {
     savePassword = async (username: string, password: string) => {
       offered.push([username, password]);
     },
+    chooseSavedSignIn?: NativeHost["chooseSavedSignIn"],
   ) {
     offered = [];
     authenticated = 0;
     configureHost({
       native: {
         appUrl: "https://app.test",
+        chooseSavedSignIn,
         origin: "https://localhost",
         saveFile: async () => true,
         savePassword,
       },
     });
     respond(async (url) => answer(url.pathname));
+    // Production renders in StrictMode, which replays mount effects.
     ({ container } = await mount(
-      <AuthPage
-        initialMode="sign-in"
-        onAuthenticated={async () => {
-          authenticated += 1;
-        }}
-        onLeaveReset={async () => {}}
-      />,
+      <StrictMode>
+        <AuthPage
+          initialMode="sign-in"
+          onAuthenticated={async () => {
+            authenticated += 1;
+          }}
+          onLeaveReset={async () => {}}
+        />
+      </StrictMode>,
     ));
   }
 
@@ -358,5 +363,111 @@ describe("saving passwords in the native app", () => {
     await signIn();
     expect(authenticated).toBe(1);
     expect(container.textContent).not.toContain("No password manager");
+  });
+
+  const value = (name: string) =>
+    container.querySelector<HTMLInputElement>(`input[name="${name}"]`)?.value;
+  const settle = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+  it("fills a chosen saved sign-in without offering to save it again", async () => {
+    let requests = 0;
+    await renderNativeSignIn(
+      () => Response.json({ token: "token", user: {} }),
+      undefined,
+      async () => {
+        requests += 1;
+        return { username: credentials.email, password: credentials.password };
+      },
+    );
+    await settle();
+    expect(requests).toBe(1);
+    expect([value("email"), value("password")]).toEqual([
+      credentials.email,
+      credentials.password,
+    ]);
+    await submit();
+    expect(authenticated).toBe(1);
+    expect(offered).toEqual([]);
+  });
+
+  const unanswered: Array<[string, () => Promise<SavedSignIn | undefined>]> = [
+    ["none is chosen", async () => undefined],
+    [
+      "the password manager fails",
+      async () => {
+        throw new Error("No credential provider");
+      },
+    ],
+  ];
+  for (const [outcome, choose] of unanswered) {
+    it(`asks once and signs in by typing when ${outcome}`, async () => {
+      let requests = 0;
+      await renderNativeSignIn(
+        () => Response.json({ token: "token", user: {} }),
+        undefined,
+        () => {
+          requests += 1;
+          return choose();
+        },
+      );
+      await settle();
+      expect(value("password")).toBe("");
+      await click("Forgot password?");
+      await click("Back to sign in");
+      await settle();
+      expect(requests).toBe(1);
+      await signIn();
+      expect(authenticated).toBe(1);
+      expect(offered).toEqual([[credentials.email, credentials.password]]);
+      expect(container.textContent).not.toContain("No credential provider");
+    });
+  }
+
+  /** Renders sign-in whose saved sign-in offer answers only when told to. */
+  async function renderPendingOffer(answer: (path: string) => Response) {
+    const pending = { requests: 0, choose: (_: SavedSignIn) => {} };
+    await renderNativeSignIn(answer, undefined, () => {
+      const { promise, resolve } = Promise.withResolvers<
+        SavedSignIn | undefined
+      >();
+      pending.requests += 1;
+      pending.choose = resolve;
+      return promise;
+    });
+    return pending;
+  }
+  const savedElsewhere = {
+    username: "saved@example.com",
+    password: "a saved password",
+  };
+
+  it("ignores a saved sign-in chosen after leaving sign-in", async () => {
+    const pending = await renderPendingOffer(() =>
+      Response.json({ token: "token", user: {} }),
+    );
+    await fill({ 'input[name="email"]': credentials.email });
+    await click("Forgot password?");
+    await act(async () => pending.choose(savedElsewhere));
+    expect(value("email")).toBe(credentials.email);
+    await click("Back to sign in");
+    await settle();
+    expect(value("password")).toBe("");
+    expect(pending.requests).toBe(1);
+  });
+
+  it("keeps the typed sign-in when a saved one is chosen after submitting", async () => {
+    const pending = await renderPendingOffer((path) =>
+      path.endsWith("/sign-in/email")
+        ? Response.json({ twoFactorRedirect: true })
+        : Response.json({ token: "token", user: {} }),
+    );
+    await signIn();
+    await act(async () => pending.choose(savedElsewhere));
+    await submit({ "#two-factor-code": "123456" });
+    expect(authenticated).toBe(1);
+    expect(offered).toEqual([[credentials.email, credentials.password]]);
   });
 });

@@ -620,9 +620,10 @@ TestFlight.
 
 ### Saved passwords
 
-Native sign-ins offer to save the password; the
+Native sign-ins offer to save the password, and on Android the sign-in form
+offers saved ones back through Credential Manager; the
 [shell README](../packages/app-capacitor/README.md#saved-passwords) explains how.
-On iOS, this works only if the domain confirms the app. Each App ID
+On iOS, saving works only if the domain confirms the app. Each App ID
 (`com.balebase.app` and `com.balebase.staging.app`) needs the Associated Domains
 capability, and its `match AppStore` profile must be regenerated after that
 capability changes (`ios:profiles force:true`). The tier's app frontend must
