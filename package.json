@@ -67,6 +67,7 @@
     "test:deploy": "bash scripts/testing/testDeployStaging.sh && bun test scripts/testing/stagingFrontends.test.ts scripts/testing/verifyDeployment.test.ts",
     "test:docs": "bun test scripts/testing/docScripts.test.ts scripts/testing/auditUsage.test.ts",
     "test:env": "bash scripts/testing/testCloudflareEnv.sh",
+    "test:hooks": "bun test scripts/testing/prePush.test.ts",
     "test:images": "bun test scripts/testing/brandImages.test.ts",
     "test:markdownlint": "bun test scripts/testing/markdownlintConfig.test.ts",
     "test:scope": "bun test scripts/testing/scope.test.ts scripts/testing/scope",
