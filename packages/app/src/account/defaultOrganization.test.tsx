@@ -45,6 +45,7 @@ describe("account settings", () => {
       <AccountSettings
         defaultOrganizationId={null}
         financeOpensByPayee={false}
+        financeOpensPeriod="allTime"
         financeOpensUncategorized={false}
         onNavigate={() => undefined}
         onSessionChanged={async () => undefined}

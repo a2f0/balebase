@@ -4,6 +4,7 @@ import type {
   FinanceData,
   FinanceTransaction,
 } from "@balebase/validators/finance";
+import type { FinancePeriod } from "@balebase/validators/rules";
 import { act } from "react";
 import { apiUrl } from "../shared/config";
 import { holdTimers, installDom } from "../testing/dom";
@@ -136,7 +137,11 @@ afterEach(() => {
 });
 
 /** Renders Finance at a path; the result navigates as Back or a link would. */
-async function mountFinance(pathname = "/finance", opensByPayee = false) {
+async function mountFinance(
+  pathname = "/finance",
+  opensByPayee = false,
+  opensPeriod: FinancePeriod = "allTime",
+) {
   const page = (path: string) => {
     currentPath = path;
     return (
@@ -144,6 +149,7 @@ async function mountFinance(pathname = "/finance", opensByPayee = false) {
         <Finance
           onNavigate={navigate}
           opensByPayee={opensByPayee}
+          opensPeriod={opensPeriod}
           pathname={path}
         />
         <DialogHost />
@@ -640,6 +646,34 @@ describe("Finance filters", () => {
     // The person can still switch to the list.
     await click("Transactions");
     expect(button("By payee").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("opens on the period the person chose", async () => {
+    respond(() =>
+      Response.json({
+        ...data,
+        transactions: [
+          ...data.transactions,
+          transaction("Old", { transactionDate: `${year - 1}-06-01` }),
+        ],
+      }),
+    );
+    // Whichever page Finance opens on, as Categories' counts share the period.
+    const navigate = await mountFinance(
+      "/finance/categories",
+      false,
+      "previousYear",
+    );
+    expect(button("Previous year").getAttribute("aria-pressed")).toBe("true");
+    await navigate("/finance");
+    expect(button("Previous year").getAttribute("aria-pressed")).toBe("true");
+    expect(rowNames()).toEqual(["Old"]);
+    // The person can still choose another period on the page.
+    await click("Current year");
+    expect(rowNames()).toEqual(["Coffee", "Supplies"]);
+    await click("Clear filters");
+    expect(button("All time").getAttribute("aria-pressed")).toBe("true");
+    expect(rowNames()).toHaveLength(3);
   });
 
   /** Shell three times (one already Meals) and Olive Garden, with writes. */
@@ -1352,6 +1386,7 @@ describe("Finance filters", () => {
       <FinanceSection
         navigate={() => undefined}
         opensByPayee={false}
+        opensPeriod="allTime"
         pathname={pathname}
         record={
           pathname.startsWith("/finance/transactions/") ? (

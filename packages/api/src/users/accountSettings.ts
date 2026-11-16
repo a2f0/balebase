@@ -76,6 +76,24 @@ accountSettings.patch("/finance-view", async (context) => {
   });
 });
 
+// Likewise: the period Finance's transactions open on.
+accountSettings.patch("/finance-period", async (context) => {
+  const body = await readBody(
+    context,
+    accountSettingsRoutes.updateFinancePeriod,
+    "Choose the period Finance's transactions open on.",
+  );
+  if (body instanceof Response) return body;
+  await context.env.DB.prepare(
+    `UPDATE "user" SET "financeOpensPeriod" = ? WHERE "id" = ?`,
+  )
+    .bind(body.period, context.get("authSession").user.id)
+    .run();
+  return respond(context, accountSettingsRoutes.updateFinancePeriod, {
+    period: body.period,
+  });
+});
+
 // Triggers record these when Better Auth changes the person's two-factor
 // setting, authenticator, backup codes, password, name or picture (migrations
 // 0082 and 0085). Only the person reads them here; root admins read them in D1.

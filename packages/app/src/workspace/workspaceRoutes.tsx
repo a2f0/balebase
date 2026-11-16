@@ -14,6 +14,7 @@ import { FinanceAccountPage } from "../finance/FinanceAccountPage";
 import { FinanceConnectionPage } from "../finance/FinanceConnectionPage";
 import { FinanceSection } from "../finance/FinanceSection";
 import { FinanceTransactionPage } from "../finance/FinanceTransactionPage";
+import { financePeriodOf } from "../finance/financePeriod";
 import type { CacheScope } from "../finance/transactionCache";
 import { Inbox } from "../inbox/Inbox";
 import { Issues } from "../issues/Issues";
@@ -46,6 +47,7 @@ interface RouteContext {
     id: string;
     defaultOrganizationId?: string | null | undefined;
     financeOpensByPayee?: boolean | null | undefined;
+    financeOpensPeriod?: string | null | undefined;
     financeOpensUncategorized?: boolean | null | undefined;
     twoFactorEnabled?: boolean | null | undefined;
   };
@@ -134,6 +136,7 @@ const routes: WorkspaceRoute[] = [
         <FinanceSection
           navigate={navigate}
           opensByPayee={Boolean(user.financeOpensByPayee)}
+          opensPeriod={financePeriodOf(user.financeOpensPeriod)}
           pathname={pathname}
           record={financeRecordPage(pathname, navigate, scope)}
           scope={scope}
@@ -210,6 +213,7 @@ const routes: WorkspaceRoute[] = [
       <AccountSettings
         defaultOrganizationId={user.defaultOrganizationId}
         financeOpensByPayee={Boolean(user.financeOpensByPayee)}
+        financeOpensPeriod={financePeriodOf(user.financeOpensPeriod)}
         financeOpensUncategorized={Boolean(user.financeOpensUncategorized)}
         onNavigate={navigate}
         onSessionChanged={onSecurityChanged}

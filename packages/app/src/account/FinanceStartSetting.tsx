@@ -1,5 +1,7 @@
-import { Card, Toast } from "@balebase/ui/react";
+import { Card, Field, Select, Toast } from "@balebase/ui/react";
+import { type FinancePeriod, financePeriods } from "@balebase/validators/rules";
 import { useEffect, useReducer, useRef } from "react";
+import { financePeriodLabels, financePeriodOf } from "../finance/financePeriod";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";
 import {
@@ -10,16 +12,19 @@ import {
 
 /**
  * Where Finance starts: the sidebar's Finance can open on uncategorized
- * expenses rather than every transaction, and its transactions grouped by
- * payee rather than as a list. The two combine. Each is saved to the account,
- * so it follows the person to every device.
+ * expenses rather than every transaction, its transactions grouped by payee
+ * rather than as a list, and on a period: the current or previous calendar
+ * year, or all time. They combine. Each is saved to the account, so it
+ * follows the person to every device.
  */
 export function FinanceStartSetting({
   opensByPayee,
+  opensPeriod,
   opensUncategorized,
   onSessionChanged,
 }: {
   opensByPayee: boolean;
+  opensPeriod: FinancePeriod;
   opensUncategorized: boolean;
   /** Reloads the session, which carries the saved choices. */
   onSessionChanged: () => Promise<unknown>;
@@ -42,16 +47,15 @@ export function FinanceStartSetting({
           save={(value) => api.accountSettings.updateFinanceView(value)}
           saved={opensByPayee}
         />
+        <PeriodSetting
+          onSessionChanged={onSessionChanged}
+          saved={opensPeriod}
+        />
       </div>
     </Card>
   );
 }
 
-/**
- * One account switch. It shows the saved choice, or the choice being saved
- * while it saves, through its own save machine (`financeStartState.ts`), so
- * the switches save independently.
- */
 function SettingSwitch({
   label,
   onSessionChanged,
@@ -63,8 +67,72 @@ function SettingSwitch({
   save: (value: boolean) => Promise<unknown>;
   saved: boolean;
 }) {
+  const setting = useSettingSave(save, saved, onSessionChanged);
+  return (
+    <>
+      <label className="check">
+        <input
+          aria-checked={setting.shown}
+          checked={setting.shown}
+          disabled={setting.saving}
+          onChange={(event) => void setting.change(event.target.checked)}
+          role="switch"
+          type="checkbox"
+        />
+        {label}
+      </label>
+      {setting.failure && <Toast tone="danger">{setting.failure}</Toast>}
+    </>
+  );
+}
+
+/** The period Finance's transactions open on, chosen from a list. */
+function PeriodSetting({
+  onSessionChanged,
+  saved,
+}: {
+  onSessionChanged: () => Promise<unknown>;
+  saved: FinancePeriod;
+}) {
+  const setting = useSettingSave(
+    (period: FinancePeriod) => api.accountSettings.updateFinancePeriod(period),
+    saved,
+    onSessionChanged,
+  );
+  return (
+    <>
+      <Field label="Open Finance on transactions from">
+        <Select
+          disabled={setting.saving}
+          onChange={(event) =>
+            void setting.change(financePeriodOf(event.target.value))
+          }
+          value={setting.shown}
+        >
+          {financePeriods.map((period) => (
+            <option key={period} value={period}>
+              {financePeriodLabels[period]}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      {setting.failure && <Toast tone="danger">{setting.failure}</Toast>}
+    </>
+  );
+}
+
+/**
+ * One account choice's save. It shows the saved choice, or the choice being
+ * saved while it saves, through its own save machine (`financeStartState.ts`),
+ * so the choices save independently.
+ */
+function useSettingSave<Value>(
+  save: (value: Value) => Promise<unknown>,
+  saved: Value,
+  onSessionChanged: () => Promise<unknown>,
+) {
   const [state, dispatch] = useReducer(
-    financeStartTransition,
+    financeStartTransition<Value>,
     initialFinanceStart,
   );
   // A save outlived by this page (another account opened) must not reload
@@ -77,7 +145,7 @@ function SettingSwitch({
       active.current = false;
     };
   }, []);
-  async function change(value: boolean) {
+  async function change(value: Value) {
     const request = ++requests.current;
     dispatch({ request, type: "saveStarted", value });
     try {
@@ -93,23 +161,10 @@ function SettingSwitch({
       if (active.current) dispatch({ message, request, type: "saveFailed" });
     }
   }
-  const shown = shownFinanceStart(state, saved);
-  return (
-    <>
-      <label className="check">
-        <input
-          aria-checked={shown}
-          checked={shown}
-          disabled={state.status === "saving"}
-          onChange={(event) => void change(event.target.checked)}
-          role="switch"
-          type="checkbox"
-        />
-        {label}
-      </label>
-      {state.status === "failed" && (
-        <Toast tone="danger">{state.message}</Toast>
-      )}
-    </>
-  );
+  return {
+    change,
+    failure: state.status === "failed" ? state.message : undefined,
+    saving: state.status === "saving",
+    shown: shownFinanceStart(state, saved),
+  };
 }

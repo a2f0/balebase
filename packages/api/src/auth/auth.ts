@@ -42,6 +42,13 @@ const userAdditionalFields = {
     required: false,
     type: "boolean",
   },
+  // Set on the account page; Finance's period filter starts from it.
+  financeOpensPeriod: {
+    defaultValue: "allTime",
+    input: false,
+    required: false,
+    type: "string",
+  },
   // Set on the account page; the app's sidebar reads it from the session.
   financeOpensUncategorized: {
     defaultValue: false,

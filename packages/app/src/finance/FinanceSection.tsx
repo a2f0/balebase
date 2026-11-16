@@ -1,3 +1,4 @@
+import type { FinancePeriod } from "@balebase/validators/rules";
 import { type ReactNode, useCallback } from "react";
 import { KeptPage } from "../workspace/KeptPage";
 import { Finance } from "./Finance";
@@ -13,12 +14,15 @@ import { useCacheScope } from "./useCacheScope";
 export function FinanceSection({
   navigate,
   opensByPayee,
+  opensPeriod,
   pathname,
   record,
   scope: givenScope,
 }: {
   navigate: (path: string) => void;
   opensByPayee: boolean;
+  /** The period the transactions open on (the person's Account choice). */
+  opensPeriod: FinancePeriod;
   pathname: string;
   /** The record page `pathname` names, if it names one. */
   record: ReactNode | undefined;
@@ -41,6 +45,7 @@ export function FinanceSection({
         <Finance
           onNavigate={navigate}
           opensByPayee={opensByPayee}
+          opensPeriod={opensPeriod}
           pathname={path}
           scope={scope}
         />

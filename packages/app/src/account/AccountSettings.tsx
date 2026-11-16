@@ -8,6 +8,7 @@ import {
   Select,
   Toast,
 } from "@balebase/ui/react";
+import type { FinancePeriod } from "@balebase/validators/rules";
 import { type FormEvent, useState } from "react";
 import type { WorkspaceOrganization } from "../organizations/organizationState";
 import { AppLink } from "../shared/AppLink";
@@ -22,6 +23,7 @@ import { ThemeSwitcher } from "./ThemeSwitcher";
 export function AccountSettings({
   defaultOrganizationId,
   financeOpensByPayee,
+  financeOpensPeriod,
   financeOpensUncategorized,
   onNavigate,
   onSessionChanged,
@@ -31,6 +33,7 @@ export function AccountSettings({
 }: {
   defaultOrganizationId: string | null | undefined;
   financeOpensByPayee: boolean;
+  financeOpensPeriod: FinancePeriod;
   financeOpensUncategorized: boolean;
   onNavigate: (pathname: string) => void;
   onSessionChanged: () => Promise<unknown>;
@@ -92,6 +95,7 @@ export function AccountSettings({
             />
             <FinanceStartSetting
               opensByPayee={financeOpensByPayee}
+              opensPeriod={financeOpensPeriod}
               opensUncategorized={financeOpensUncategorized}
               onSessionChanged={onSessionChanged}
             />

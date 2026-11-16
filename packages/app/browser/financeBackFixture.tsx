@@ -20,6 +20,7 @@ function Section() {
     <FinanceSection
       navigate={navigate}
       opensByPayee={false}
+      opensPeriod="allTime"
       pathname={pathname}
       record={id === undefined ? undefined : <p className="record">{id}</p>}
       scope={undefined}

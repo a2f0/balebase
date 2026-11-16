@@ -1,3 +1,8 @@
+import type { FinancePeriod } from "@balebase/validators/rules";
+import { financePeriodLabels, financePeriodYear } from "./financePeriod";
+
+const shown: FinancePeriod[] = ["allTime", "currentYear", "previousYear"];
+
 /**
  * Finance's period choice: every transaction, or those dated in the current
  * or previous calendar year (local time). The overview's transactions and
@@ -10,24 +15,23 @@ export function FinancePeriodFilter({
   onChange: (year: number | null) => void;
   year: number | null;
 }) {
-  const current = new Date().getFullYear();
+  const today = new Date();
   return (
     <fieldset className="segmented">
       <legend className="srOnly">Transaction period</legend>
-      {[
-        { label: "All time", year: null },
-        { label: "Current year", year: current },
-        { label: "Previous year", year: current - 1 },
-      ].map((item) => (
-        <button
-          aria-pressed={year === item.year}
-          key={item.label}
-          onClick={() => onChange(item.year)}
-          type="button"
-        >
-          {item.label}
-        </button>
-      ))}
+      {shown.map((period) => {
+        const value = financePeriodYear(period, today);
+        return (
+          <button
+            aria-pressed={year === value}
+            key={period}
+            onClick={() => onChange(value)}
+            type="button"
+          >
+            {financePeriodLabels[period]}
+          </button>
+        );
+      })}
     </fieldset>
   );
 }

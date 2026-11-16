@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { route } from "./route";
+import { financePeriods } from "./rules";
 
 const OkSchema = z.object({ ok: z.literal(true) });
 
@@ -36,6 +37,13 @@ export const accountSettingsRoutes = {
     path: "/api/account-settings/finance-view",
     body: z.object({ byPayee: z.boolean() }),
     response: z.object({ byPayee: z.boolean() }),
+  }),
+  /** The period Finance's transactions open on. */
+  updateFinancePeriod: route({
+    method: "PATCH",
+    path: "/api/account-settings/finance-period",
+    body: z.object({ period: z.enum(financePeriods) }),
+    response: z.object({ period: z.enum(financePeriods) }),
   }),
   securityEvents: route({
     method: "GET",

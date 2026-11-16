@@ -43,6 +43,7 @@ interface CredentialRow {
   email: string;
   emailVerified: number | boolean;
   financeOpensByPayee: number | boolean;
+  financeOpensPeriod: string;
   financeOpensUncategorized: number | boolean;
   expires_at: string | null;
   id: string;
@@ -163,7 +164,7 @@ export async function authenticateApiKey(
               user.image, user.createdAt, user.updatedAt, user.banned,
               user.banExpires, user.twoFactorEnabled,
               user.defaultOrganizationId, user.financeOpensUncategorized,
-              user.financeOpensByPayee
+              user.financeOpensByPayee, user.financeOpensPeriod
        FROM organization_api_keys AS api_key
        JOIN organization ON organization.id = api_key.organization_id
        JOIN user ON user.id = api_key.created_by
@@ -263,6 +264,7 @@ function apiKeySession(row: CredentialRow, now: Date): AuthSession {
       email: row.email,
       emailVerified: Boolean(row.emailVerified),
       financeOpensByPayee: Boolean(row.financeOpensByPayee),
+      financeOpensPeriod: row.financeOpensPeriod,
       financeOpensUncategorized: Boolean(row.financeOpensUncategorized),
       id: row.user_id,
       image: row.image,
