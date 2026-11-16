@@ -16,6 +16,10 @@
     {
       "label": "agents:check",
       "command": ["bun", "--bun", "run", "agents:check"]
+    },
+    {
+      "label": "push-gate",
+      "command": ["bun", "--bun", "run", "agent-tool", "push-gate", "check"]
     }
   ]
 }

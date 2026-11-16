@@ -16,9 +16,12 @@ preserve unrelated edits, and do not force-push. Ship with the installed
 `agent-tool.json`; the Git hooks and `ship-pr` apply it. Merging does not
 deploy; deploy only when asked.
 
-Validate with `bun run check` and `bun run test`; `bun run verify` runs what CI
-runs. These are run groups that record each step, so run them directly and
-find their evidence with `agent-tool runs list --head <commit>`.
+Before pushing, run the tests that cover the code you changed. The `pre-push`
+hook runs the static checks that `pushGate` in `agent-tool.json` declares, and
+CI runs `bun run verify`, the authority; when a CI job fails, read it with
+`agent-tool pr logs` and push a reviewed fix. `check`, `test`, and `verify` are
+run groups that record each step, so run them directly and find their evidence
+with `agent-tool runs list --head <commit>`.
 
 Run single Bun test suites through
 `bun run agent-tool bun test [--cwd <package>] --log [-- args...]`, for example
