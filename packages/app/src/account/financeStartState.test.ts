@@ -7,14 +7,24 @@ import {
   shownFinanceStart,
 } from "./financeStartState";
 
-const saving = (request: number, value: boolean): FinanceStartState => ({
+const saving = (
+  request: number,
+  value: boolean,
+): FinanceStartState<boolean> => ({
   request,
   status: "saving",
   value,
 });
 
 describe("Finance start state", () => {
-  it.each<[string, FinanceStartState, FinanceStartEvent, FinanceStartState]>([
+  it.each<
+    [
+      string,
+      FinanceStartState<boolean>,
+      FinanceStartEvent<boolean>,
+      FinanceStartState<boolean>,
+    ]
+  >([
     [
       "starts a save",
       initialFinanceStart,

@@ -16,6 +16,17 @@ export type SecurityEventAction = (typeof securityEventActions)[number];
 /** How many of a person's latest security changes the account page lists. */
 export const securityEventLimit = 50;
 
+/**
+ * The period Finance's transactions open on: those dated in the current or
+ * previous calendar year (the person's local time), or every transaction.
+ */
+export const financePeriods = [
+  "currentYear",
+  "previousYear",
+  "allTime",
+] as const;
+export type FinancePeriod = (typeof financePeriods)[number];
+
 export const accountSettingsRoutes = {
   updateDefaultOrganization: route({
     method: "PATCH",
@@ -36,6 +47,13 @@ export const accountSettingsRoutes = {
     path: "/api/account-settings/finance-view",
     body: z.object({ byPayee: z.boolean() }),
     response: z.object({ byPayee: z.boolean() }),
+  }),
+  /** The period Finance's transactions open on. */
+  updateFinancePeriod: route({
+    method: "PATCH",
+    path: "/api/account-settings/finance-period",
+    body: z.object({ period: z.enum(financePeriods) }),
+    response: z.object({ period: z.enum(financePeriods) }),
   }),
   securityEvents: route({
     method: "GET",

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import type { FinancePeriod } from "@balebase/validators/accountSettings";
 import { installDom } from "../testing/dom";
 import { FinanceStartSetting } from "./FinanceStartSetting";
 
-const { click, mount, respond, settle } = installDom({
+const { click, fill, mount, respond, settle } = installDom({
   url: "http://localhost:5173/account",
 });
 
@@ -30,6 +31,7 @@ describe("Finance start setting", () => {
       view.render(
         <FinanceStartSetting
           opensByPayee={false}
+          opensPeriod="allTime"
           opensUncategorized={on}
           onSessionChanged={async () => {
             events.push("session");
@@ -65,6 +67,7 @@ describe("Finance start setting", () => {
     const view = await mount(
       <FinanceStartSetting
         opensByPayee={false}
+        opensPeriod="allTime"
         opensUncategorized={false}
         onSessionChanged={async () => {
           refreshed++;
@@ -87,6 +90,7 @@ describe("Finance start setting", () => {
     const { container } = await mount(
       <FinanceStartSetting
         opensByPayee={false}
+        opensPeriod="allTime"
         opensUncategorized={false}
         onSessionChanged={async () => {
           refreshed = true;
@@ -111,6 +115,7 @@ describe("Finance start setting", () => {
       view.render(
         <FinanceStartSetting
           opensByPayee={byPayee}
+          opensPeriod="allTime"
           opensUncategorized={true}
           onSessionChanged={async () => {
             events.push("session");
@@ -132,5 +137,76 @@ describe("Finance start setting", () => {
     ]);
     expect(payees().checked).toBe(true);
     expect(toggle(view.container).checked).toBe(true);
+  });
+
+  it("saves the period chosen from the list, beside the switches", async () => {
+    const events: string[] = [];
+    const save = Promise.withResolvers<void>();
+    respond(async (url, init) => {
+      events.push(`${init?.method} ${url.pathname} ${init?.body}`);
+      await save.promise;
+      return Response.json({ period: "previousYear" });
+    });
+    let period: FinancePeriod = "allTime";
+    const view = await mount(<span />);
+    const render = () =>
+      view.render(
+        <FinanceStartSetting
+          opensByPayee={false}
+          opensPeriod={period}
+          opensUncategorized={false}
+          onSessionChanged={async () => {
+            events.push("session");
+            period = "previousYear";
+            await render();
+          }}
+        />,
+      );
+    await render();
+    const select = () => {
+      const found = view.container.querySelector("select");
+      if (!found) throw new Error("No period list");
+      return found;
+    };
+    expect(
+      [...select().options].map(({ text, value }) => [value, text]),
+    ).toEqual([
+      ["currentYear", "Current year"],
+      ["previousYear", "Previous year"],
+      ["allTime", "All time"],
+    ]);
+    expect(select().value).toBe("allTime");
+    await fill(select(), "previousYear");
+    // The new choice shows at once, and holds still while it saves.
+    expect(select().value).toBe("previousYear");
+    expect(select().disabled).toBe(true);
+    save.resolve();
+    await settle();
+    expect(events).toEqual([
+      'PATCH /api/account-settings/finance-period {"period":"previousYear"}',
+      "session",
+    ]);
+    expect(select().value).toBe("previousYear");
+    expect(select().disabled).toBe(false);
+    expect(toggle(view.container).checked).toBe(false);
+  });
+
+  it("shows the saved period again when saving it fails", async () => {
+    respond(async () =>
+      Response.json({ error: "Could not save." }, { status: 500 }),
+    );
+    const { container } = await mount(
+      <FinanceStartSetting
+        opensByPayee={false}
+        opensPeriod="currentYear"
+        opensUncategorized={false}
+        onSessionChanged={async () => undefined}
+      />,
+    );
+    const select = container.querySelector("select");
+    if (!select) throw new Error("No period list");
+    await fill(select, "allTime");
+    expect(select.value).toBe("currentYear");
+    expect(container.textContent).toContain("Could not save.");
   });
 });

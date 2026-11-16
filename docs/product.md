@@ -120,7 +120,13 @@ in the same card, **Open Finance on transactions grouped by payee**, makes
 Finance's transactions open in the **By payee** view instead of the list
 (`PATCH /api/account-settings/finance-view`, also returned with the session);
 the two combine, opening uncategorized expenses grouped by payee, and the
-view can still be switched on the page. Like the theme and default
+view can still be switched on the page. A list in the same card, **Open
+Finance on transactions from**, picks the period Finance's filter starts on:
+**Current year**, **Previous year**, or **All time** (the default), by the
+device's local calendar (`PATCH /api/account-settings/finance-period`, also
+returned with the session). It applies to the overview and Categories' counts
+alike and combines with both switches; the period can still be changed on the
+page, and **Clear filters** returns to all time. Like the theme and default
 organization, these are personal choices and record no activity.
 
 Root admins use `/root/jobs` to run platform maintenance and inspect maintenance

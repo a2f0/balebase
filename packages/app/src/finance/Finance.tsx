@@ -8,6 +8,7 @@ import {
   PageHeader,
   Toast,
 } from "@balebase/ui/react";
+import type { FinancePeriod } from "@balebase/validators/accountSettings";
 import type {
   FinanceConnection,
   FinanceData,
@@ -82,11 +83,14 @@ const updateConnectionStorageKey = "balebase.plaid.updateConnection";
 export function Finance({
   onNavigate,
   opensByPayee,
+  opensPeriod = "allTime",
   pathname,
   scope,
 }: {
   onNavigate: (pathname: string) => void;
   opensByPayee?: boolean | undefined;
+  /** The period the filters start on (the person's Account choice). */
+  opensPeriod?: FinancePeriod | undefined;
   pathname: string;
   /** Whose saved transactions this device reads; memory only without it. */
   scope?: CacheScope | undefined;
@@ -96,6 +100,7 @@ export function Finance({
     useFinanceData(
       page === "overview" ? expenseCategoryFiltersFor(pathname) : null,
       scope,
+      opensPeriod,
     );
   const { error, notice, run, setError, setNotice, ...action } = useAction(
     "Could not update finances.",

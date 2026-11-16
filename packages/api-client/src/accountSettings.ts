@@ -1,4 +1,7 @@
-import type { accountSettingsRoutes } from "@balebase/validators/accountSettings";
+import type {
+  accountSettingsRoutes,
+  FinancePeriod,
+} from "@balebase/validators/accountSettings";
 import { endpoint } from "./endpoint";
 import type { Transport } from "./transport";
 
@@ -22,6 +25,14 @@ const endpoints = {
   updateFinanceView: endpoint<typeof accountSettingsRoutes.updateFinanceView>({
     method: "PATCH",
     path: "/api/account-settings/finance-view",
+    body: "json",
+    response: "json",
+  }),
+  updateFinancePeriod: endpoint<
+    typeof accountSettingsRoutes.updateFinancePeriod
+  >({
+    method: "PATCH",
+    path: "/api/account-settings/finance-period",
     body: "json",
     response: "json",
   }),
@@ -66,6 +77,12 @@ export function accountSettingsApi(transport: Transport) {
     updateFinanceView(byPayee: boolean) {
       return transport.call(endpoints.updateFinanceView, {
         body: { byPayee },
+      });
+    },
+    /** Opens Finance's transactions on a period: a calendar year, or all. */
+    updateFinancePeriod(period: FinancePeriod) {
+      return transport.call(endpoints.updateFinancePeriod, {
+        body: { period },
       });
     },
     /** The signed-in person's latest security and profile changes. */

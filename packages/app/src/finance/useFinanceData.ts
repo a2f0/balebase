@@ -1,4 +1,5 @@
 import type { FinanceFilters } from "@balebase/api-client";
+import type { FinancePeriod } from "@balebase/validators/accountSettings";
 import type { FinanceData } from "@balebase/validators/finance";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
@@ -10,6 +11,7 @@ import {
   savedFinance,
 } from "./financeCacheLoad";
 import { syncPending, syncPollMs } from "./financeConnectionActions";
+import { financePeriodYear } from "./financePeriod";
 import {
   type CacheScope,
   clears,
@@ -40,11 +42,13 @@ const transactionPageSize = 250;
  * from the server's change feed on each load, so filters and paging are
  * local and the saved copy stays readable when the server cannot be reached.
  * Other pages show only connections, accounts, and categories, and bring a
- * saved copy up to date so what they change reaches it.
+ * saved copy up to date so what they change reaches it. Every page's period
+ * filter starts on `opensPeriod`.
  */
 export function useFinanceData(
   route: CategoryRoute | null,
   scope: CacheScope | undefined,
+  opensPeriod: FinancePeriod,
 ) {
   const keepTransactions = route !== null;
   const store = useTransactionStore(scope);
@@ -54,7 +58,11 @@ export function useFinanceData(
   useClearedElsewhere(store.scope, () => {
     void loaded.onRefused(new SignedOut(), false);
   });
-  const [filters, setFilters] = useState({ ...initialFilters, ...route });
+  const [filters, setFilters] = useState(() => ({
+    ...initialFilters,
+    year: financePeriodYear(opensPeriod),
+    ...route,
+  }));
   const [visible, setVisible] = useState(transactionPageSize);
   const currentFilters = useRef(filters);
   useSyncPolling(
