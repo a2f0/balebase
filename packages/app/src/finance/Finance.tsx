@@ -8,14 +8,13 @@ import {
   PageHeader,
   Toast,
 } from "@balebase/ui/react";
-import type { FinancePeriod } from "@balebase/validators/accountSettings";
 import type {
   FinanceConnection,
   FinanceData,
   FinanceTransaction,
   FinanceTransactionAnnotation,
 } from "@balebase/validators/finance";
-import { financeLimits } from "@balebase/validators/rules";
+import { type FinancePeriod, financeLimits } from "@balebase/validators/rules";
 import {
   type Dispatch,
   type SetStateAction,

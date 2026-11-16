@@ -1,4 +1,4 @@
-import type { FinancePeriod } from "@balebase/validators/accountSettings";
+import type { FinancePeriod } from "@balebase/validators/rules";
 import { type ReactNode, useCallback } from "react";
 import { KeptPage } from "../workspace/KeptPage";
 import { Finance } from "./Finance";

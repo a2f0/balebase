@@ -1,4 +1,4 @@
-import type { FinancePeriod } from "@balebase/validators/accountSettings";
+import type { FinancePeriod } from "@balebase/validators/rules";
 import { financePeriodLabels, financePeriodYear } from "./financePeriod";
 
 const shown: FinancePeriod[] = ["allTime", "currentYear", "previousYear"];

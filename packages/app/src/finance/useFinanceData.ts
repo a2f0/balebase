@@ -1,6 +1,6 @@
 import type { FinanceFilters } from "@balebase/api-client";
-import type { FinancePeriod } from "@balebase/validators/accountSettings";
 import type { FinanceData } from "@balebase/validators/finance";
+import type { FinancePeriod } from "@balebase/validators/rules";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../shared/apiClient";
 import { errorMessage } from "../shared/errors";

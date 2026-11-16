@@ -1,8 +1,5 @@
 import { Card, Field, Select, Toast } from "@balebase/ui/react";
-import {
-  type FinancePeriod,
-  financePeriods,
-} from "@balebase/validators/accountSettings";
+import { type FinancePeriod, financePeriods } from "@balebase/validators/rules";
 import { useEffect, useReducer, useRef } from "react";
 import { financePeriodLabels, financePeriodOf } from "../finance/financePeriod";
 import { api } from "../shared/apiClient";

@@ -8,7 +8,7 @@ import {
   Select,
   Toast,
 } from "@balebase/ui/react";
-import type { FinancePeriod } from "@balebase/validators/accountSettings";
+import type { FinancePeriod } from "@balebase/validators/rules";
 import { type FormEvent, useState } from "react";
 import type { WorkspaceOrganization } from "../organizations/organizationState";
 import { AppLink } from "../shared/AppLink";

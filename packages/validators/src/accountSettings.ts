@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { route } from "./route";
+import { financePeriods } from "./rules";
 
 const OkSchema = z.object({ ok: z.literal(true) });
 
@@ -15,17 +16,6 @@ const securityEventActions = [
 export type SecurityEventAction = (typeof securityEventActions)[number];
 /** How many of a person's latest security changes the account page lists. */
 export const securityEventLimit = 50;
-
-/**
- * The period Finance's transactions open on: those dated in the current or
- * previous calendar year (the person's local time), or every transaction.
- */
-export const financePeriods = [
-  "currentYear",
-  "previousYear",
-  "allTime",
-] as const;
-export type FinancePeriod = (typeof financePeriods)[number];
 
 export const accountSettingsRoutes = {
   updateDefaultOrganization: route({

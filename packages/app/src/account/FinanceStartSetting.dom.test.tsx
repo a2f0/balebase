@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { FinancePeriod } from "@balebase/validators/accountSettings";
+import type { FinancePeriod } from "@balebase/validators/rules";
 import { installDom } from "../testing/dom";
 import { FinanceStartSetting } from "./FinanceStartSetting";
 

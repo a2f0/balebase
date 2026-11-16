@@ -1,7 +1,5 @@
-import type {
-  accountSettingsRoutes,
-  FinancePeriod,
-} from "@balebase/validators/accountSettings";
+import type { accountSettingsRoutes } from "@balebase/validators/accountSettings";
+import type { FinancePeriod } from "@balebase/validators/rules";
 import { endpoint } from "./endpoint";
 import type { Transport } from "./transport";
 

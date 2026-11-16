@@ -1,7 +1,4 @@
-import {
-  type FinancePeriod,
-  financePeriods,
-} from "@balebase/validators/accountSettings";
+import { type FinancePeriod, financePeriods } from "@balebase/validators/rules";
 
 /** Each period's name, on the period filter and in Account settings alike. */
 export const financePeriodLabels: Record<FinancePeriod, string> = {

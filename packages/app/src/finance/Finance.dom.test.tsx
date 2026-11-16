@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { DialogHost } from "@balebase/ui/react";
-import type { FinancePeriod } from "@balebase/validators/accountSettings";
 import type {
   FinanceData,
   FinanceTransaction,
 } from "@balebase/validators/finance";
+import type { FinancePeriod } from "@balebase/validators/rules";
 import { act } from "react";
 import { apiUrl } from "../shared/config";
 import { holdTimers, installDom } from "../testing/dom";

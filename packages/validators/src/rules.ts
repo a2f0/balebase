@@ -47,6 +47,17 @@ export const financeRuleMatchTypes = [
 ] as const;
 export type FinanceRuleMatchType = (typeof financeRuleMatchTypes)[number];
 
+/**
+ * The period Finance's transactions open on: those dated in the current or
+ * previous calendar year (the person's local time), or every transaction.
+ */
+export const financePeriods = [
+  "currentYear",
+  "previousYear",
+  "allTime",
+] as const;
+export type FinancePeriod = (typeof financePeriods)[number];
+
 export const financeLimits = {
   annotationLabel: 50,
   annotationLabels: 12,
