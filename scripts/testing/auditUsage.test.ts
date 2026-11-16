@@ -9,6 +9,24 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
+
+// Version-manager shims for jq read the operator's own HOME, PATH, and XDG
+// config, so jq runs with those while the script under test stays sandboxed.
+function operatorWrapper(executable: string) {
+  const lines = ["#!/bin/sh"];
+  for (const name of ["HOME", "PATH", "XDG_CONFIG_HOME"]) {
+    const value = process.env[name];
+    lines.push(
+      value === undefined
+        ? `unset ${name}`
+        : `${name}=${quote(value)}; export ${name}`,
+    );
+  }
+  lines.push(`exec ${quote(executable)} "$@"`, "");
+  return lines.join("\n");
+}
+
 const skill = resolve(import.meta.dir, "../../skills/audit-trails");
 const read = (path: string) => readFileSync(join(skill, path), "utf8");
 const issueUrl = "https://github.com/fixture/repo/issues/7";
@@ -42,7 +60,12 @@ function fixture() {
   for (const command of ["cmp", "jq", "mv", "env"]) {
     const executable = Bun.which(command);
     if (!executable) throw new Error(`Fixture requires ${command}`);
-    symlinkSync(executable, join(directory, command));
+    const target = join(directory, command);
+    if (command === "jq") {
+      writeFileSync(target, operatorWrapper(executable), { mode: 0o755 });
+    } else {
+      symlinkSync(executable, target);
+    }
   }
   writeFileSync(join(directory, "report.md"), body);
   writeFileSync(join(directory, "expected.md"), body);
