@@ -271,14 +271,16 @@ when a file's name and environment disagree:
 checks. It needs only the installed JavaScript toolchain. It leaves dependency
 reachability, shell lint, and Terraform checks to `check`.
 
-Before opening a PR, run `bun run verify`. CI runs the same command, so
+CI runs `bun run verify` and is the authority on whether a change works, so
 [`scripts/testing/verify.json`](scripts/testing/verify.json) is the one list
 of its steps: `check`, `test`, every browser suite, `build`, and
 `mobile:sync`. CI also checks the branch name and that the sync leaves the
-committed native projects unchanged. The other plans in `scripts/testing/`
-define `check`, `check:fast`, `lint`, and `test`. These run groups run their
-steps in order and record source-bound receipts; run them directly and find
-the evidence with `agent-tool runs list --head <commit>`.
+committed native projects unchanged. Before pushing, the focused checks above
+are enough; run `verify` locally when you need CI's whole result. The other
+plans in `scripts/testing/` define `check`, `check:fast`, `lint`, and `test`.
+These run groups run their steps in order and record source-bound receipts;
+run them directly and find the evidence with
+`agent-tool runs list --head <commit>`.
 
 The full check needs ShellCheck, Terraform, TFLint, and the Ruby bundle.
 Browser tests need Chrome or Chromium; set `CHROME_PATH` to its executable when
@@ -436,6 +438,20 @@ Use a feature branch and a Conventional Commit subject, such as
 and signature policy in `agent-tool.json` and `commitlint.config.mts`. Run
 `bun run hooks:install` after cloning, after hook changes land, and after a
 merge returns the checkout to `main`; `bun run hooks:check` reports drift.
+
+The `pre-push` hook is agent-tool's push gate; `agent-tool push-gate hook`
+generates it, so do not edit it. It checks the pushed commits' branch,
+signatures, attribution, and binary files, and that the installed hooks,
+skills, and permission rules are current. Then it runs the static checks that
+`pushGate` in `agent-tool.json` lists: Biome, Markdownlint, file names, Knip,
+ShellCheck, RuboCop, Terraform formatting, and type checks. Tests, builds,
+installs, and checks that download providers run in CI only; when a job fails,
+push a fix to the same branch. `bun run check` runs
+`agent-tool push-gate check`, which rejects a gate step that runs tests or
+installs. Keep each step quick enough that the gate stays within its
+`budgetSeconds`, and find each push's step timings with
+`agent-tool runs list`.
+
 After a PR is squash-merged, move a branch stacked on it with
 `git rebase --onto origin/main <old-base>`, where `<old-base>` is the commit
 the stacked branch was built on.
