@@ -513,9 +513,40 @@ it("stops the home page's phone row at both ends on a phone", async () => {
   }
 }, 30_000);
 
+it("updates the phone row's buttons when the page resizes", async () => {
+  const page = await openSite(1440);
+  try {
+    await showHomeRow(page);
+    expect(await carouselSteps(page)).toMatchObject({
+      previous: "true",
+      next: "true",
+    });
+    // Narrowed without scrolling, the row overflows: only Next can move.
+    await page.setViewport({ width: 700, height: 900 });
+    await page.waitForSelector(`${nextStep}:not([aria-disabled])`);
+    expect(await carouselSteps(page)).toMatchObject({
+      previous: "true",
+      next: null,
+      scrollLeft: 0,
+    });
+    // Widened again, every screen fits and neither button can move.
+    await page.setViewport({ width: 1440, height: 900 });
+    await page.waitForSelector(`${nextStep}[aria-disabled='true']`);
+    expect(await carouselSteps(page)).toMatchObject({
+      previous: "true",
+      next: "true",
+      scrollLeft: 0,
+    });
+  } finally {
+    await page.close();
+  }
+}, 30_000);
+
 it("stops a wider phone row at its scroll limit", async () => {
   // Two screens fit, so one press would page past the last one; the row
   // stops where it can scroll no further, with that screen still in view.
+  // Paging a longer row several screens at a time is left to agent-tool's
+  // own carousel tests; three captures are too few to show it here.
   const page = await openSite(700);
   try {
     await showHomeRow(page);
