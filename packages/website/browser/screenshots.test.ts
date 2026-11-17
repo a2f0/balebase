@@ -767,3 +767,53 @@ it("stops at the end when Next is pressed again while the row is moving", async 
     await page.close();
   }
 }, 30_000);
+
+it("counts a Next press made mid-scroll from where the long row has reached", async () => {
+  const page = await openSite(700, longSite);
+  try {
+    await showHomeRow(page, "no-preference");
+    // One press alone rests the row on screen 2 (see longRowPages). Press
+    // again from the page once the row is over half a screen along, so the
+    // second press counts from there instead of being lost.
+    const run = await page.evaluateHandle((selector) => {
+      const track = document.querySelector(".shots-carousel-track");
+      const [first, second] = document.querySelectorAll<HTMLElement>(
+        ".shots-carousel-slide",
+      );
+      const pitch = (second?.offsetLeft ?? 0) - (first?.offsetLeft ?? 0);
+      let pressedAt: number | null = null;
+      track?.addEventListener("scroll", () => {
+        if (pressedAt === null && track.scrollLeft > pitch * 0.6) {
+          pressedAt = Math.round(track.scrollLeft);
+          document.querySelector<HTMLButtonElement>(selector)?.click();
+        }
+      });
+      return { pressedAt: () => pressedAt };
+    }, nextStep);
+    await page.focus(nextStep);
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(
+      (recorded) => recorded.pressedAt() !== null,
+      {
+        polling: "raf",
+        timeout: 5_000,
+      },
+      run,
+    );
+    // Wait until the row has held still for a few frames.
+    await page.evaluate(async () => {
+      const track = document.querySelector(".shots-carousel-track");
+      let [last, still] = [-1, 0];
+      while (still < 3) {
+        await new Promise(requestAnimationFrame);
+        const left = track?.scrollLeft ?? 0;
+        [last, still] = [left, left === last ? still + 1 : 0];
+      }
+    });
+    const row = await carouselSteps(page);
+    expect(row.resting).toBeGreaterThan(2);
+    expect(row).toMatchObject({ previous: null, next: null, focused: "1" });
+  } finally {
+    await page.close();
+  }
+}, 30_000);
