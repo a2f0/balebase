@@ -772,36 +772,50 @@ it("counts a Next press made mid-scroll from where the long row has reached", as
   const page = await openSite(700, longSite);
   try {
     await showHomeRow(page, "no-preference");
-    // Press Next again from the page on the first scroll past 0.6 of a screen,
-    // then wait for that second scroll to end.
+    // On the first scroll of the first press's animation, cut the motion
+    // short exactly one screen along and press Next again from there. The
+    // run is waiting, then pressed, then settled once that second scroll ends,
+    // or timed out; either outcome removes both listeners and the timer.
     const run = await page.evaluateHandle((selector) => {
       const track = document.querySelector(".shots-carousel-track");
       const [first, second] = document.querySelectorAll<HTMLElement>(
         ".shots-carousel-slide",
       );
       const pitch = (second?.offsetLeft ?? 0) - (first?.offsetLeft ?? 0);
+      let state: "waiting" | "pressed" | "settled" | "timed out" = "waiting";
       let pressedAt: number | null = null;
-      let settle = () => {};
-      const settled = new Promise<void>((resolve, reject) => {
-        settle = resolve;
-        setTimeout(
-          () => reject(new Error("The row did not settle within 5 s.")),
-          5_000,
-        );
-      });
+      let finish = (_: "settled" | "timed out") => {};
       const pressAgain = () => {
-        if (!track || track.scrollLeft <= pitch * 0.6) return;
-        track.removeEventListener("scroll", pressAgain);
+        if (state !== "waiting" || !track) return;
+        track.scrollTo({ left: pitch, behavior: "instant" });
         pressedAt = Math.round(track.scrollLeft);
-        track.addEventListener("scrollend", () => settle(), { once: true });
+        state = "pressed";
         document.querySelector<HTMLButtonElement>(selector)?.click();
       };
+      // The cut's own scrollend comes before the second press has moved the row.
+      const settle = () => {
+        const moved = Math.round(track?.scrollLeft ?? 0) !== pressedAt;
+        if (state === "pressed" && moved) finish("settled");
+      };
+      const outcome = new Promise<"settled" | "timed out">((resolve) => {
+        const deadline = setTimeout(() => finish("timed out"), 5_000);
+        finish = (ending) => {
+          clearTimeout(deadline);
+          track?.removeEventListener("scroll", pressAgain);
+          track?.removeEventListener("scrollend", settle);
+          state = ending;
+          resolve(ending);
+        };
+      });
       track?.addEventListener("scroll", pressAgain);
-      return { settled, pitch, pressedAt: () => pressedAt };
+      track?.addEventListener("scrollend", settle);
+      return { outcome, pitch, pressedAt: () => pressedAt };
     }, nextStep);
     await page.focus(nextStep);
     await page.keyboard.press("Enter");
-    await page.evaluate((recorded) => recorded.settled, run);
+    expect(await page.evaluate((recorded) => recorded.outcome, run)).toBe(
+      "settled",
+    );
     // Then hold until the row has stayed still for a few frames.
     await page.evaluate(async () => {
       const track = document.querySelector(".shots-carousel-track");
@@ -813,9 +827,9 @@ it("counts a Next press made mid-scroll from where the long row has reached", as
       }
     });
 
-    // Pressed between 0.6 and 1.4 screens along, Next counts from screen 1, so
+    // Pressed with screen 1 resting at the start, Next counts from there, so
     // two screens on is screen 3. Paging from the first press's pending
-    // destination would rest on screen 4, and a dropped press on screen 2.
+    // destination would rest on screen 4, and a dropped press on screen 1.
     const { pitch, pressedAt } = await page.evaluate(
       (recorded) => ({
         pitch: recorded.pitch,
@@ -823,7 +837,7 @@ it("counts a Next press made mid-scroll from where the long row has reached", as
       }),
       run,
     );
-    expect(pressedAt ?? Number.POSITIVE_INFINITY).toBeLessThan(pitch * 1.4);
+    expect(Math.abs((pressedAt ?? 0) - pitch)).toBeLessThanOrEqual(1);
     expect(await carouselSteps(page)).toMatchObject({
       resting: 3,
       previous: null,
