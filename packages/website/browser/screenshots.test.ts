@@ -317,16 +317,42 @@ function carouselSteps(page: Page) {
 }
 
 /**
- * Opens the home page's phone row with reduced motion, so each step scrolls
- * at once instead of animating.
+ * Opens the home page's phone row. Reduced motion, the default here, makes
+ * each step scroll at once instead of animating.
  */
-async function showHomeRow(page: Page) {
+async function showHomeRow(
+  page: Page,
+  motion: "reduce" | "no-preference" = "reduce",
+) {
   await page.emulateMediaFeatures([
     { name: "prefers-color-scheme", value: "light" },
-    { name: "prefers-reduced-motion", value: "reduce" },
+    { name: "prefers-reduced-motion", value: motion },
   ]);
   await page.goto("https://website.test/");
   await page.waitForSelector(".shots-carousel-step");
+}
+
+/** Presses a step button and waits for the row's animated scroll to end. */
+async function stepAndSettle(page: Page, selector: string) {
+  const scroll = await page.evaluateHandle(() => ({
+    ended: new Promise<void>((resolve) =>
+      document
+        .querySelector(".shots-carousel-track")
+        ?.addEventListener("scrollend", () => resolve(), { once: true }),
+    ),
+  }));
+  await page.focus(selector);
+  await page.keyboard.press("Enter");
+  await page.evaluate((started) => started.ended, scroll);
+}
+
+/** Waits a few frames, long enough for a scroll that a press began to show. */
+function frames(page: Page) {
+  return page.evaluate(async () => {
+    for (let frame = 0; frame < 4; frame += 1) {
+      await new Promise(requestAnimationFrame);
+    }
+  });
 }
 
 /** Scrolls the row directly, as a swipe or trackpad would. */
@@ -495,6 +521,35 @@ it("stops a wider phone row at its scroll limit", async () => {
       next: null,
       scrollLeft: 0,
     });
+  } finally {
+    await page.close();
+  }
+}, 30_000);
+
+it("stops the phone row at each end when steps animate", async () => {
+  const page = await openSite(700);
+  try {
+    await showHomeRow(page, "no-preference");
+    const start = await carouselSteps(page);
+    expect(start).toMatchObject({
+      previous: "true",
+      next: null,
+      scrollLeft: 0,
+    });
+
+    await stepAndSettle(page, nextStep);
+    const end = await carouselSteps(page);
+    expect(end).toMatchObject({ previous: null, next: "true", focused: "1" });
+    expect(end.scrollLeft).toBe(end.scrollEnd);
+    await page.keyboard.press("Enter");
+    await frames(page);
+    expect(await carouselSteps(page)).toEqual(end);
+
+    await stepAndSettle(page, previousStep);
+    expect(await carouselSteps(page)).toEqual({ ...start, focused: "-1" });
+    await page.keyboard.press("Enter");
+    await frames(page);
+    expect(await carouselSteps(page)).toEqual({ ...start, focused: "-1" });
   } finally {
     await page.close();
   }
