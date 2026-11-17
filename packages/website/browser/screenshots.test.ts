@@ -772,51 +772,80 @@ it("counts a Next press made mid-scroll from where the long row has reached", as
   const page = await openSite(700, longSite);
   try {
     await showHomeRow(page, "no-preference");
-    // On the first scroll of the first press's animation, cut the motion
-    // short exactly one screen along and press Next again from there. The
-    // run is waiting, then pressed, then settled once that second scroll ends,
-    // or timed out; either outcome removes both listeners and the timer.
+    // While the first press animates, press Next again from the page on the
+    // first scroll past half a screen, and wait for the scroll that follows.
     const run = await page.evaluateHandle((selector) => {
+      type Run =
+        | { status: "waiting" }
+        | { status: "pressed"; at: number }
+        | { status: "settled"; at: number }
+        | { status: "timed out" };
+      type RunEvent =
+        | { type: "scroll"; left: number }
+        | { type: "scrollend" }
+        | { type: "deadline" };
       const track = document.querySelector(".shots-carousel-track");
       const [first, second] = document.querySelectorAll<HTMLElement>(
         ".shots-carousel-slide",
       );
       const pitch = (second?.offsetLeft ?? 0) - (first?.offsetLeft ?? 0);
-      let state: "waiting" | "pressed" | "settled" | "timed out" = "waiting";
-      let pressedAt: number | null = null;
-      let finish = (_: "settled" | "timed out") => {};
-      const pressAgain = () => {
-        if (state !== "waiting" || !track) return;
-        track.scrollTo({ left: pitch, behavior: "instant" });
-        pressedAt = Math.round(track.scrollLeft);
-        state = "pressed";
-        document.querySelector<HTMLButtonElement>(selector)?.click();
+      // The scroll position that rests the first screen at the start edge.
+      const offset =
+        (first?.offsetLeft ?? 0) -
+        Number.parseFloat(
+          track ? getComputedStyle(track).scrollPaddingLeft : "",
+        );
+      const transition = (run: Run, event: RunEvent): Run => {
+        switch (run.status) {
+          case "waiting":
+            if (event.type === "deadline") return { status: "timed out" };
+            return event.type === "scroll" && event.left > offset + pitch / 2
+              ? { status: "pressed", at: event.left }
+              : run;
+          case "pressed":
+            if (event.type === "deadline") return { status: "timed out" };
+            return event.type === "scrollend"
+              ? { status: "settled", at: run.at }
+              : run;
+          case "settled":
+          case "timed out":
+            return run;
+        }
       };
-      // The cut's own scrollend comes before the second press has moved the row.
-      const settle = () => {
-        const moved = Math.round(track?.scrollLeft ?? 0) !== pressedAt;
-        if (state === "pressed" && moved) finish("settled");
-      };
-      const outcome = new Promise<"settled" | "timed out">((resolve) => {
-        const deadline = setTimeout(() => finish("timed out"), 5_000);
-        finish = (ending) => {
-          clearTimeout(deadline);
-          track?.removeEventListener("scroll", pressAgain);
-          track?.removeEventListener("scrollend", settle);
-          state = ending;
-          resolve(ending);
-        };
+      let run: Run = { status: "waiting" };
+      let finish = (_: Run) => {};
+      const outcome = new Promise<Run>((resolve) => {
+        finish = resolve;
       });
-      track?.addEventListener("scroll", pressAgain);
-      track?.addEventListener("scrollend", settle);
-      return { outcome, pitch, pressedAt: () => pressedAt };
+      const onScroll = () =>
+        dispatch({ type: "scroll", left: track?.scrollLeft ?? 0 });
+      const onScrollEnd = () => dispatch({ type: "scrollend" });
+      const deadline = setTimeout(() => dispatch({ type: "deadline" }), 5_000);
+      // Entering pressed presses Next; settling or timing out removes both
+      // listeners and the timer.
+      function dispatch(event: RunEvent) {
+        const before = run;
+        run = transition(run, event);
+        if (run === before) return;
+        if (run.status === "pressed") {
+          document.querySelector<HTMLButtonElement>(selector)?.click();
+          return;
+        }
+        clearTimeout(deadline);
+        track?.removeEventListener("scroll", onScroll);
+        track?.removeEventListener("scrollend", onScrollEnd);
+        finish(run);
+      }
+      track?.addEventListener("scroll", onScroll);
+      track?.addEventListener("scrollend", onScrollEnd);
+      return { outcome, pitch, offset };
     }, nextStep);
     await page.focus(nextStep);
     await page.keyboard.press("Enter");
-    expect(await page.evaluate((recorded) => recorded.outcome, run)).toBe(
-      "settled",
-    );
-    // Then hold until the row has stayed still for a few frames.
+    const outcome = await page.evaluate((started) => started.outcome, run);
+    expect(outcome.status).toBe("settled");
+    // A scrollend can mark the interrupted first scroll, so also hold until
+    // the row has stayed still for a few frames.
     await page.evaluate(async () => {
       const track = document.querySelector(".shots-carousel-track");
       let [last, still] = [-1, 0];
@@ -827,19 +856,19 @@ it("counts a Next press made mid-scroll from where the long row has reached", as
       }
     });
 
-    // Pressed with screen 1 resting at the start, Next counts from there, so
-    // two screens on is screen 3. Paging from the first press's pending
-    // destination would rest on screen 4, and a dropped press on screen 1.
-    const { pitch, pressedAt } = await page.evaluate(
-      (recorded) => ({
-        pitch: recorded.pitch,
-        pressedAt: recorded.pressedAt(),
-      }),
+    // Next counts two screens on from the screen nearest the start edge when
+    // it was pressed. Past half a screen that is beyond where one press rests
+    // (screen 2), so a dropped or ignored press fails; paging from the first
+    // press's pending destination would rest two screens further still.
+    const { pitch, offset } = await page.evaluate(
+      (started) => ({ pitch: started.pitch, offset: started.offset }),
       run,
     );
-    expect(Math.abs((pressedAt ?? 0) - pitch)).toBeLessThanOrEqual(1);
+    const at = outcome.status === "settled" ? outcome.at : Number.NaN;
+    const expected = Math.round((at - offset) / pitch) + 2;
+    expect(expected).toBeGreaterThan(2);
     expect(await carouselSteps(page)).toMatchObject({
-      resting: 3,
+      resting: expected,
       previous: null,
       next: null,
       focused: "1",
