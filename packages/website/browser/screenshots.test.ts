@@ -40,8 +40,10 @@ const png = Buffer.from(
 );
 const captures = [
   { project: "web", name: "projects", width: 2880, height: 1800 },
+  { project: "web", name: "issues", width: 2880, height: 1800 },
   { project: "web", name: "audit", width: 2880, height: 1800 },
   { project: "mobile", name: "projects", width: 1170, height: 2532 },
+  { project: "mobile", name: "issues", width: 1170, height: 2532 },
   { project: "mobile", name: "audit", width: 1170, height: 2532 },
 ];
 
@@ -68,6 +70,7 @@ function stageFixture() {
     ],
     screens: [
       { name: "projects", label: "Projects", alt: "The project list." },
+      { name: "issues", label: "Issues", alt: "The open issues." },
       { name: "audit", label: "Audit", alt: "An audit in progress." },
     ],
     entries,
@@ -286,13 +289,22 @@ it("opens a deep link on its layout and screen, in a page that fits a phone", as
 const previousStep = ".shots-carousel-step[data-step='-1']";
 const nextStep = ".shots-carousel-step[data-step='1']";
 
-/** The home carousel's step buttons and how far its row has scrolled. */
+/**
+ * The home carousel's step buttons, how far its row has scrolled, and the
+ * first slide whose leading edge is inside the row.
+ */
 function carouselSteps(page: Page) {
   return page.evaluate(() => {
     const step = (delta: string) =>
       document.querySelector(`.shots-carousel-step[data-step='${delta}']`);
     const buttons = [step("-1"), step("1")];
+    const rowLeft =
+      document.querySelector(".shots-carousel-track")?.getBoundingClientRect()
+        .left ?? 0;
     return {
+      firstShown: [
+        ...document.querySelectorAll(".shots-carousel-slide"),
+      ].findIndex((slide) => slide.getBoundingClientRect().left >= rowLeft),
       previous: buttons[0]?.getAttribute("aria-disabled") ?? null,
       next: buttons[1]?.getAttribute("aria-disabled") ?? null,
       focused: document.activeElement?.getAttribute("data-step") ?? null,
@@ -321,9 +333,10 @@ it("rows the phone captures on the home page, linking to the gallery", async () 
     );
     expect(links).toEqual([
       "/screenshots/mobile/projects/",
+      "/screenshots/mobile/issues/",
       "/screenshots/mobile/audit/",
     ]);
-    // Both captures fit this wide, so neither step button has anywhere to go.
+    // Every capture fits this wide, so neither step button has anywhere to go.
     expect(await carouselSteps(page)).toMatchObject({
       previous: "true",
       next: "true",
@@ -366,6 +379,7 @@ it("stops the home page's phone row at both ends on a phone", async () => {
     // An unavailable button stays visible, only dimmed, since it can hold focus.
     const start = await carouselSteps(page);
     expect(start).toMatchObject({
+      firstShown: 0,
       previous: "true",
       next: null,
       opacity: ["0.4", "1"],
@@ -377,23 +391,40 @@ it("stops the home page's phone row at both ends on a phone", async () => {
     await page.keyboard.press("Enter");
     expect(await carouselSteps(page)).toEqual({ ...start, focused: "-1" });
 
+    // One screen fits at a time, so each press moves one screen.
     await page.focus(nextStep);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(`${previousStep}:not([aria-disabled])`);
+    const middle = await carouselSteps(page);
+    expect(middle).toMatchObject({
+      firstShown: 1,
+      previous: null,
+      next: null,
+      focused: "1",
+      opacity: ["1", "1"],
+    });
+
     await page.keyboard.press("Enter");
     await page.waitForSelector(`${nextStep}[aria-disabled='true']`);
     const end = await carouselSteps(page);
     expect(end).toMatchObject({
+      firstShown: 2,
       previous: null,
       next: "true",
       focused: "1",
       opacity: ["1", "0.4"],
     });
-    expect(end.scrollLeft).toBeGreaterThan(0);
+    expect(end.scrollLeft).toBeGreaterThan(middle.scrollLeft);
 
     // Next at the end leaves the row in place and keeps focus.
     await page.keyboard.press("Enter");
     expect(await carouselSteps(page)).toEqual(end);
 
     await page.focus(previousStep);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(`${nextStep}:not([aria-disabled])`);
+    expect(await carouselSteps(page)).toEqual({ ...middle, focused: "-1" });
+
     await page.keyboard.press("Enter");
     await page.waitForSelector(`${previousStep}[aria-disabled='true']`);
     expect(await carouselSteps(page)).toEqual({ ...start, focused: "-1" });
