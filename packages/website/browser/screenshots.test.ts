@@ -381,16 +381,22 @@ async function stepAndSettle(page: Page, selector: string) {
     const record = () => positions.push(Math.round(track?.scrollLeft ?? 0));
     track?.addEventListener("scroll", record);
     return {
-      ended: new Promise<number[]>((resolve) =>
-        track?.addEventListener(
-          "scrollend",
-          () => {
-            track.removeEventListener("scroll", record);
-            resolve(positions);
-          },
-          { once: true },
-        ),
-      ),
+      ended: new Promise<number[]>((resolve, reject) => {
+        const stop = () => {
+          clearTimeout(deadline);
+          track?.removeEventListener("scroll", record);
+          track?.removeEventListener("scrollend", finish);
+        };
+        const finish = () => {
+          stop();
+          resolve(positions);
+        };
+        const deadline = setTimeout(() => {
+          stop();
+          reject(new Error("The row did not finish scrolling within 5 s."));
+        }, 5_000);
+        track?.addEventListener("scrollend", finish);
+      }),
     };
   });
   await page.focus(selector);
@@ -407,15 +413,27 @@ function frames(page: Page) {
   });
 }
 
-/** Scrolls the row directly, as a swipe or trackpad would. */
-function scrollRow(page: Page, to: "start" | "end") {
-  return page.evaluate((edge) => {
-    const track = document.querySelector(".shots-carousel-track");
-    track?.scrollTo({
-      left: edge === "end" ? track.scrollWidth : 0,
-      behavior: "instant",
+/**
+ * Swipes the row toward one end with a touch gesture that Chrome runs
+ * through its input pipeline, so a row that blocked touch scrolling fails.
+ */
+async function swipeRow(page: Page, toward: "start" | "end") {
+  const track = await page.$(".shots-carousel-track");
+  await track?.scrollIntoView();
+  const box = await track?.boundingBox();
+  if (!box) throw new Error("The phone row is not on the page.");
+  const session = await page.createCDPSession();
+  try {
+    // A positive distance drags the content right, toward the start.
+    await session.send("Input.synthesizeScrollGesture", {
+      x: Math.round(box.x + box.width / 2),
+      y: Math.round(box.y + box.height / 2),
+      xDistance: toward === "end" ? -box.width : box.width,
+      gestureSourceType: "touch",
     });
-  }, to);
+  } finally {
+    await session.detach();
+  }
 }
 
 it("rows the phone captures on the home page, linking to the gallery", async () => {
@@ -469,6 +487,7 @@ it("rows the phone captures on the home page, linking to the gallery", async () 
 it("stops the home page's phone row at both ends on a phone", async () => {
   const page = await openSite(375);
   try {
+    await page.setViewport({ width: 375, height: 900, hasTouch: true });
     await showHomeRow(page);
     // An unavailable button stays visible, only dimmed, since it can hold focus.
     const start = await carouselSteps(page);
@@ -527,14 +546,14 @@ it("stops the home page's phone row at both ends on a phone", async () => {
     expect(await carouselSteps(page)).toEqual({ ...start, focused: "-1" });
 
     // Swiping to either end updates the buttons as stepping does.
-    await scrollRow(page, "end");
+    await swipeRow(page, "end");
     await page.waitForSelector(`${nextStep}[aria-disabled='true']`);
     expect(await carouselSteps(page)).toMatchObject({
       previous: null,
       next: "true",
       scrollLeft: end.scrollLeft,
     });
-    await scrollRow(page, "start");
+    await swipeRow(page, "start");
     await page.waitForSelector(`${previousStep}[aria-disabled='true']`);
     expect(await carouselSteps(page)).toMatchObject({
       previous: "true",
