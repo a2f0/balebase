@@ -428,8 +428,22 @@ function frames(page: Page) {
   });
 }
 
-/** Presses the focused step button and reads the row once it has moved. */
-async function pressAndRead(page: Page) {
+/**
+ * Presses the focused step button, waits for the scroll it starts to end, and
+ * reads the row.
+ */
+async function pressAndSettle(page: Page) {
+  const watch = await watchRow(page);
+  await page.keyboard.press("Enter");
+  await page.evaluate((started) => started.ended, watch);
+  return carouselSteps(page);
+}
+
+/**
+ * Presses the focused step button where it should do nothing, and reads the
+ * row a few frames later, when a scroll it began would show.
+ */
+async function pressInPlace(page: Page) {
   await page.keyboard.press("Enter");
   await frames(page);
   return carouselSteps(page);
@@ -627,6 +641,24 @@ it("updates the phone row's buttons when the page resizes", async () => {
       next: "true",
       scrollLeft: 0,
     });
+
+    // Narrowed and stepped to the end, then widened: the row returns to its
+    // start, and both buttons become unavailable.
+    await page.setViewport({ width: 700, height: 900 });
+    await page.waitForSelector(`${nextStep}:not([aria-disabled])`);
+    await page.focus(nextStep);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(`${nextStep}[aria-disabled='true']`);
+    const end = await carouselSteps(page);
+    expect(end).toMatchObject({ previous: null, next: "true" });
+    expect(end.scrollLeft).toBeGreaterThan(0);
+    await page.setViewport({ width: 1440, height: 900 });
+    await page.waitForSelector(`${previousStep}[aria-disabled='true']`);
+    expect(await carouselSteps(page)).toMatchObject({
+      previous: "true",
+      next: "true",
+      scrollLeft: 0,
+    });
   } finally {
     await page.close();
   }
@@ -660,7 +692,7 @@ for (const { width, fit, next, previous } of longRowPages) {
       // Only the last press reaches the end, where Next does nothing.
       await page.focus(nextStep);
       const ahead = [];
-      for (const _ of next) ahead.push(await pressAndRead(page));
+      for (const _ of next) ahead.push(await pressAndSettle(page));
       expect(ahead.map((row) => row.resting)).toEqual(next);
       expect(ahead.map((row) => row.next)).toEqual(
         next.map((_, index) => (index === next.length - 1 ? "true" : null)),
@@ -668,12 +700,12 @@ for (const { width, fit, next, previous } of longRowPages) {
       const end = await carouselSteps(page);
       expect(ahead.at(-1)).toEqual(end);
       expect(end.scrollLeft).toBe(end.scrollEnd);
-      expect(await pressAndRead(page)).toEqual(end);
+      expect(await pressInPlace(page)).toEqual(end);
 
       // Only the last press back reaches the start, where Previous does nothing.
       await page.focus(previousStep);
       const behind = [];
-      for (const _ of previous) behind.push(await pressAndRead(page));
+      for (const _ of previous) behind.push(await pressAndSettle(page));
       expect(behind.map((row) => row.resting)).toEqual(previous);
       expect(behind.map((row) => row.previous)).toEqual(
         previous.map((_, index) =>
@@ -683,7 +715,7 @@ for (const { width, fit, next, previous } of longRowPages) {
       const start = await carouselSteps(page);
       expect(behind.at(-1)).toEqual(start);
       expect(start.scrollLeft).toBe(0);
-      expect(await pressAndRead(page)).toEqual(start);
+      expect(await pressInPlace(page)).toEqual(start);
     } finally {
       await page.close();
     }
