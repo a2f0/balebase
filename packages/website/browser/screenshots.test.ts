@@ -283,17 +283,22 @@ it("opens a deep link on its layout and screen, in a page that fits a phone", as
   }
 }, 30_000);
 
+const previousStep = ".shots-carousel-step[data-step='-1']";
+const nextStep = ".shots-carousel-step[data-step='1']";
+
 /** The home carousel's step buttons and how far its row has scrolled. */
 function carouselSteps(page: Page) {
   return page.evaluate(() => {
     const step = (delta: string) =>
       document.querySelector(`.shots-carousel-step[data-step='${delta}']`);
-    const next = step("1");
+    const buttons = [step("-1"), step("1")];
     return {
-      previous: step("-1")?.getAttribute("aria-disabled") ?? null,
-      next: next?.getAttribute("aria-disabled") ?? null,
-      nextFocused: next !== null && document.activeElement === next,
-      nextOpacity: next ? getComputedStyle(next).opacity : null,
+      previous: buttons[0]?.getAttribute("aria-disabled") ?? null,
+      next: buttons[1]?.getAttribute("aria-disabled") ?? null,
+      focused: document.activeElement?.getAttribute("data-step") ?? null,
+      opacity: buttons.map((button) =>
+        button ? getComputedStyle(button).opacity : null,
+      ),
       scrollLeft: Math.round(
         document.querySelector(".shots-carousel-track")?.scrollLeft ?? 0,
       ),
@@ -358,38 +363,40 @@ it("stops the home page's phone row at both ends on a phone", async () => {
     ]);
     await page.goto("https://website.test/");
     await page.waitForSelector(".shots-carousel-step");
-    expect(await carouselSteps(page)).toMatchObject({
+    // An unavailable button stays visible, only dimmed, since it can hold focus.
+    const start = await carouselSteps(page);
+    expect(start).toMatchObject({
       previous: "true",
       next: null,
+      opacity: ["0.4", "1"],
       scrollLeft: 0,
     });
 
-    await page.focus(".shots-carousel-step[data-step='1']");
+    // Previous at the start leaves the row in place and keeps focus.
+    await page.focus(previousStep);
     await page.keyboard.press("Enter");
-    await page.waitForSelector(
-      ".shots-carousel-step[data-step='1'][aria-disabled='true']",
-    );
+    expect(await carouselSteps(page)).toEqual({ ...start, focused: "-1" });
+
+    await page.focus(nextStep);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(`${nextStep}[aria-disabled='true']`);
     const end = await carouselSteps(page);
-    expect(end).toMatchObject({ previous: null, next: "true" });
+    expect(end).toMatchObject({
+      previous: null,
+      next: "true",
+      focused: "1",
+      opacity: ["1", "0.4"],
+    });
     expect(end.scrollLeft).toBeGreaterThan(0);
 
-    // Next at the end leaves the row in place and keeps focus, and the button
-    // stays visible, only dimmed, because it can still hold focus.
+    // Next at the end leaves the row in place and keeps focus.
     await page.keyboard.press("Enter");
-    expect(await carouselSteps(page)).toEqual({
-      ...end,
-      nextFocused: true,
-      nextOpacity: "0.4",
-    });
+    expect(await carouselSteps(page)).toEqual(end);
 
-    await page.click(".shots-carousel-step[data-step='-1']");
-    await page.waitForSelector(
-      ".shots-carousel-step[data-step='-1'][aria-disabled='true']",
-    );
-    expect(await carouselSteps(page)).toMatchObject({
-      next: null,
-      scrollLeft: 0,
-    });
+    await page.focus(previousStep);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(`${previousStep}[aria-disabled='true']`);
+    expect(await carouselSteps(page)).toEqual({ ...start, focused: "-1" });
   } finally {
     await page.close();
   }
