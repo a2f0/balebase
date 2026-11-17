@@ -450,6 +450,23 @@ async function pressInPlace(page: Page) {
 }
 
 /**
+ * Waits for the row's images to load. The fixture's stand-in image is wider
+ * than the size the manifest reserves, so each one that loads shortens the row
+ * and moves its buttons, and a real click or tap aimed before then can miss.
+ */
+function rowImagesLoaded(page: Page) {
+  return page.waitForFunction(
+    () =>
+      [
+        ...document.querySelectorAll<HTMLImageElement>(
+          ".shots-carousel-slide img",
+        ),
+      ].every((image) => image.complete),
+    { timeout: 5_000 },
+  );
+}
+
+/**
  * Swipes the row toward one end with a touch gesture that Chrome runs
  * through its input pipeline, so a row that blocked touch scrolling fails.
  */
@@ -556,9 +573,10 @@ it("stops the home page's phone row at both ends on a phone", async () => {
     await page.keyboard.press("Enter");
     expect(await carouselSteps(page)).toEqual({ ...start, focused: "-1" });
 
-    // One screen fits at a time, so each press moves one screen.
-    await page.focus(nextStep);
-    await page.keyboard.press("Enter");
+    // One screen fits at a time, so each press moves one screen. The first
+    // is a real mouse click, which also focuses the button.
+    await rowImagesLoaded(page);
+    await page.click(nextStep);
     await page.waitForSelector(`${previousStep}:not([aria-disabled])`);
     const middle = await carouselSteps(page);
     expect(middle).toMatchObject({
@@ -593,20 +611,30 @@ it("stops the home page's phone row at both ends on a phone", async () => {
     await page.waitForSelector(`${nextStep}:not([aria-disabled])`);
     expect(await carouselSteps(page)).toEqual({ ...middle, focused: "-1" });
 
-    await page.keyboard.press("Enter");
+    // The last step back is a real tap.
+    await page.tap(previousStep);
     await page.waitForSelector(`${previousStep}[aria-disabled='true']`);
     expect(await carouselSteps(page)).toEqual({ ...start, focused: "-1" });
 
-    // Swiping to either end updates the buttons as stepping does.
+    // Swiping to either end, from one screen short of it, updates the buttons
+    // as stepping does.
+    await page.focus(nextStep);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(`${previousStep}:not([aria-disabled])`);
+    let swipe = await watchRow(page);
     await swipeRow(page, "end");
-    await page.waitForSelector(`${nextStep}[aria-disabled='true']`);
+    await page.evaluate((started) => started.ended, swipe);
     expect(await carouselSteps(page)).toMatchObject({
       previous: null,
       next: "true",
       scrollLeft: end.scrollLeft,
     });
+    await page.focus(previousStep);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(`${nextStep}:not([aria-disabled])`);
+    swipe = await watchRow(page);
     await swipeRow(page, "start");
-    await page.waitForSelector(`${previousStep}[aria-disabled='true']`);
+    await page.evaluate((started) => started.ended, swipe);
     expect(await carouselSteps(page)).toMatchObject({
       previous: "true",
       next: null,
