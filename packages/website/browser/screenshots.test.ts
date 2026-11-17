@@ -17,13 +17,11 @@ import {
   closeChrome,
 } from "../../../scripts/testing/chrome";
 
-// The gallery and home carousel, built against a fixture gallery of the
+// The gallery and home carousel, built against fixture galleries of the
 // shape `agent-tool screenshots build website` stages: a clean checkout has
 // no capture, so the other browser tests only see the empty gallery.
 const siteRoot = fileURLToPath(new URL("..", import.meta.url));
 const work = mkdtempSync(join(tmpdir(), "website-gallery-"));
-const dist = join(work, "dist");
-const gallery = join(work, "gallery");
 const types: Record<string, string> = {
   ".css": "text/css",
   ".html": "text/html",
@@ -38,16 +36,48 @@ const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAEUlEQVR4nGNgYGD4z8DAwMAAAA0ABQHsHwEAAAAASUVORK5CYII=",
   "base64",
 );
-const captures = [
-  { project: "web", name: "projects", width: 2880, height: 1800 },
-  { project: "web", name: "issues", width: 2880, height: 1800 },
-  { project: "web", name: "audit", width: 2880, height: 1800 },
-  { project: "mobile", name: "projects", width: 1170, height: 2532 },
-  { project: "mobile", name: "issues", width: 1170, height: 2532 },
-  { project: "mobile", name: "audit", width: 1170, height: 2532 },
-];
+const desktop = { project: "web", width: 2880, height: 1800 };
+const phone = { project: "mobile", width: 1170, height: 2532 };
 
-function stageFixture() {
+/** A website build and the fixture gallery it serves. */
+interface Site {
+  dist: string;
+  gallery: string;
+  screens: { name: string; label: string; alt: string }[];
+  captures: { project: string; name: string; width: number; height: number }[];
+}
+
+const screens = [
+  { name: "projects", label: "Projects", alt: "The project list." },
+  { name: "issues", label: "Issues", alt: "The open issues." },
+  { name: "audit", label: "Audit", alt: "An audit in progress." },
+];
+const site: Site = {
+  dist: join(work, "dist"),
+  gallery: join(work, "gallery"),
+  screens,
+  captures: [desktop, phone].flatMap((layout) =>
+    screens.map(({ name }) => ({ ...layout, name })),
+  ),
+};
+// More phone captures than fit at once, like the real gallery's thirteen, so
+// a row that shows several screens still has pages between its ends.
+const longScreens = [
+  "projects",
+  "issues",
+  "audits",
+  "audit",
+  "equipment",
+  "contracts",
+].map((name) => ({ name, label: name, alt: `The ${name} screen.` }));
+const longSite: Site = {
+  dist: join(work, "long-dist"),
+  gallery: join(work, "long-gallery"),
+  screens: longScreens,
+  captures: longScreens.map(({ name }) => ({ ...phone, name })),
+};
+
+function stageFixture({ gallery, screens, captures }: Site) {
   const entries = captures.flatMap((capture) =>
     ["light", "dark"].map((theme) => {
       const path = `img/${capture.project}/${theme}/${capture.name}.png`;
@@ -63,26 +93,19 @@ function stageFixture() {
     projects: [
       { name: "web", label: "Desktop", frame: "none" },
       { name: "mobile", label: "Phone", frame: "phone" },
-    ],
+    ].filter(({ name }) => captures.some(({ project }) => project === name)),
     themes: [
       { name: "light", label: "Light" },
       { name: "dark", label: "Dark" },
     ],
-    screens: [
-      { name: "projects", label: "Projects", alt: "The project list." },
-      { name: "issues", label: "Issues", alt: "The open issues." },
-      { name: "audit", label: "Audit", alt: "An audit in progress." },
-    ],
+    screens,
     entries,
     capture: null,
   };
   writeFileSync(join(gallery, "manifest.json"), JSON.stringify(manifest));
 }
 
-let browser: Browser | undefined;
-
-beforeAll(async () => {
-  stageFixture();
+async function buildSite({ dist, gallery }: Site) {
   const build = Bun.spawn(
     ["bunx", "--bun", "--no-install", "astro", "build", "--outDir", dist],
     {
@@ -101,6 +124,16 @@ beforeAll(async () => {
     new Response(build.stderr).text(),
   ]);
   if (exitCode !== 0) throw new Error(`Website build failed: ${stderr}`);
+}
+
+let browser: Browser | undefined;
+
+beforeAll(async () => {
+  // One build at a time: both write the package's generated Astro files.
+  for (const fixture of [site, longSite]) {
+    stageFixture(fixture);
+    await buildSite(fixture);
+  }
   browser = await launch(chromeLaunchOptions());
 }, 120_000);
 
@@ -109,8 +142,8 @@ afterAll(async () => {
   rmSync(work, { recursive: true, force: true });
 }, 120_000);
 
-/** Serves the build, with the fixture as the staged gallery. */
-async function openSite(width: number) {
+/** Serves a build, with its fixture as the staged gallery. */
+async function openSite(width: number, { dist, gallery }: Site = site) {
   const page = await browser?.newPage();
   if (!page) throw new Error("Chrome did not start.");
   await page.setViewport({ width, height: 900 });
@@ -542,34 +575,44 @@ it("updates the phone row's buttons when the page resizes", async () => {
   }
 }, 30_000);
 
-it("stops a wider phone row at its scroll limit", async () => {
-  // Two screens fit, so one press would page past the last one; the row
-  // stops where it can scroll no further, with that screen still in view.
-  // Paging a longer row several screens at a time is left to agent-tool's
-  // own carousel tests; three captures are too few to show it here.
-  const page = await openSite(700);
+it("pages a long phone row by the screens that fit, stopping at both ends", async () => {
+  // Two of the six screens fit at a time.
+  const page = await openSite(700, longSite);
   try {
     await showHomeRow(page);
     expect(await carouselSteps(page)).toMatchObject({
+      resting: 0,
       previous: "true",
       next: null,
-      scrollLeft: 0,
     });
+
+    // Each press moves past both screens in view.
     await page.focus(nextStep);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(`${previousStep}:not([aria-disabled])`);
+    const second = await carouselSteps(page);
+    expect(second).toMatchObject({ resting: 2, previous: null, next: null });
+
+    // A full page more would start past the end, so the row stops at its
+    // scroll limit, and Next then does nothing.
     await page.keyboard.press("Enter");
     await page.waitForSelector(`${nextStep}[aria-disabled='true']`);
     const end = await carouselSteps(page);
-    expect(end).toMatchObject({ previous: null, next: "true", focused: "1" });
-    expect(end.scrollEnd).toBeGreaterThan(0);
+    expect(end).toMatchObject({ resting: -1, previous: null, next: "true" });
     expect(end.scrollLeft).toBe(end.scrollEnd);
-
     await page.keyboard.press("Enter");
     expect(await carouselSteps(page)).toEqual(end);
 
+    // Back from the end, a page counts from the first screen fully in view.
     await page.focus(previousStep);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(`${nextStep}:not([aria-disabled])`);
+    expect(await carouselSteps(page)).toEqual({ ...second, focused: "-1" });
+
     await page.keyboard.press("Enter");
     await page.waitForSelector(`${previousStep}[aria-disabled='true']`);
     expect(await carouselSteps(page)).toMatchObject({
+      resting: 0,
       next: null,
       scrollLeft: 0,
     });
