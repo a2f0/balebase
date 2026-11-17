@@ -502,26 +502,15 @@ async function pressInPlace(page: Page) {
 }
 
 /**
- * Swipes the row toward one end with a touch gesture that Chrome runs
- * through its input pipeline, so a row that blocked touch scrolling fails.
+ * Scrolls the row straight to one end, as a swipe, trackpad, or arrow key
+ * would, without its buttons. It sets the position rather than calling
+ * `scrollTo`, so the requests the carousel makes stay its own.
  */
-async function swipeRow(page: Page, toward: "start" | "end") {
-  const track = await page.$(".shots-carousel-track");
-  await track?.scrollIntoView();
-  const box = await track?.boundingBox();
-  if (!box) throw new Error("The phone row is not on the page.");
-  const session = await page.createCDPSession();
-  try {
-    // A positive distance drags the content right, toward the start.
-    await session.send("Input.synthesizeScrollGesture", {
-      x: Math.round(box.x + box.width / 2),
-      y: Math.round(box.y + box.height / 2),
-      xDistance: toward === "end" ? -box.width : box.width,
-      gestureSourceType: "touch",
-    });
-  } finally {
-    await session.detach();
-  }
+function scrollRow(page: Page, to: "start" | "end") {
+  return page.evaluate((edge) => {
+    const track = document.querySelector(".shots-carousel-track");
+    if (track) track.scrollLeft = edge === "end" ? track.scrollWidth : 0;
+  }, to);
 }
 
 it("rows the phone captures on the home page, linking to the gallery", async () => {
@@ -641,14 +630,14 @@ it("stops the home page's phone row at both ends on a phone", async () => {
     await page.evaluate((started) => started.ended, tapped);
     expect(await carouselSteps(page)).toEqual({ ...start, focused: "-1" });
 
-    // Swiping to either end, from one screen short of it, updates the buttons
-    // as stepping does. Each step settles first, so the swipe's watcher cannot
-    // take that step's scrollend for its own.
+    // Scrolling the row to either end without its buttons, from one screen
+    // short of it, updates the buttons as stepping does. Each step settles
+    // first, so the scroll's watcher cannot take that step's scrollend.
     await page.focus(nextStep);
     expect(await pressAndSettle(page)).toMatchObject({ resting: 1 });
-    let swipe = await watchRow(page);
-    await swipeRow(page, "end");
-    await page.evaluate((started) => started.ended, swipe);
+    let scrolled = await watchRow(page);
+    await scrollRow(page, "end");
+    await page.evaluate((started) => started.ended, scrolled);
     expect(await carouselSteps(page)).toMatchObject({
       previous: null,
       next: "true",
@@ -656,9 +645,9 @@ it("stops the home page's phone row at both ends on a phone", async () => {
     });
     await page.focus(previousStep);
     expect(await pressAndSettle(page)).toMatchObject({ resting: 1 });
-    swipe = await watchRow(page);
-    await swipeRow(page, "start");
-    await page.evaluate((started) => started.ended, swipe);
+    scrolled = await watchRow(page);
+    await scrollRow(page, "start");
+    await page.evaluate((started) => started.ended, scrolled);
     expect(await carouselSteps(page)).toMatchObject({
       previous: "true",
       next: null,
