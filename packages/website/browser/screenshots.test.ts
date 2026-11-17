@@ -60,15 +60,22 @@ const site: Site = {
     screens.map(({ name }) => ({ ...layout, name })),
   ),
 };
-// More phone captures than fit at once, like the real gallery's thirteen, so
-// a row that shows several screens still has pages between its ends.
+// Every phone screen the real gallery captures, more than fit at once, so a
+// row that shows several screens still has pages between its ends.
 const longScreens = [
   "projects",
   "issues",
   "audits",
   "audit",
   "equipment",
+  "businesses",
   "contracts",
+  "contract",
+  "finance",
+  "library",
+  "activity",
+  "organization",
+  "groups",
 ].map((name) => ({ name, label: name, alt: `The ${name} screen.` }));
 const longSite: Site = {
   dist: join(work, "long-dist"),
@@ -371,11 +378,11 @@ async function showHomeRow(
 }
 
 /**
- * Presses a step button and waits for the row's scroll to end, returning
- * each position the row passed through on the way.
+ * Records the row's scroll positions until its next `scrollend`; `ended`
+ * resolves with them, or rejects if the row is still scrolling after 5 s.
  */
-async function stepAndSettle(page: Page, selector: string) {
-  const scroll = await page.evaluateHandle(() => {
+function watchRow(page: Page) {
+  return page.evaluateHandle(() => {
     const track = document.querySelector(".shots-carousel-track");
     const positions: number[] = [];
     const record = () => positions.push(Math.round(track?.scrollLeft ?? 0));
@@ -399,9 +406,17 @@ async function stepAndSettle(page: Page, selector: string) {
       }),
     };
   });
+}
+
+/**
+ * Presses a step button and waits for the row's scroll to end, returning
+ * each position the row passed through on the way.
+ */
+async function stepAndSettle(page: Page, selector: string) {
+  const watch = await watchRow(page);
   await page.focus(selector);
   await page.keyboard.press("Enter");
-  return page.evaluate((started) => started.ended, scroll);
+  return page.evaluate((started) => started.ended, watch);
 }
 
 /** Waits a few frames, long enough for a scroll that a press began to show. */
@@ -411,6 +426,13 @@ function frames(page: Page) {
       await new Promise(requestAnimationFrame);
     }
   });
+}
+
+/** Presses the focused step button and reads the row once it has moved. */
+async function pressAndRead(page: Page) {
+  await page.keyboard.press("Enter");
+  await frames(page);
+  return carouselSteps(page);
 }
 
 /**
@@ -594,51 +616,63 @@ it("updates the phone row's buttons when the page resizes", async () => {
   }
 }, 30_000);
 
-it("pages a long phone row by the screens that fit, stopping at both ends", async () => {
-  // Two of the six screens fit at a time.
-  const page = await openSite(700, longSite);
-  try {
-    await showHomeRow(page);
-    expect(await carouselSteps(page)).toMatchObject({
-      resting: 0,
-      previous: "true",
-      next: null,
-    });
+// Where each press rests the long row: which screen sits where the first one
+// starts (-1 at the end, which no screen reaches). Next runs from the start
+// until it is unavailable, then Previous back; a page back from the end
+// counts from the first screen fully in view.
+const longRowPages = [
+  {
+    width: 700,
+    fit: 2,
+    next: [2, 4, 6, 8, 10, -1],
+    previous: [9, 7, 5, 3, 1, 0],
+  },
+  { width: 1440, fit: 4, next: [4, 8, -1], previous: [5, 1, 0] },
+];
 
-    // Each press moves past both screens in view.
-    await page.focus(nextStep);
-    await page.keyboard.press("Enter");
-    await page.waitForSelector(`${previousStep}:not([aria-disabled])`);
-    const second = await carouselSteps(page);
-    expect(second).toMatchObject({ resting: 2, previous: null, next: null });
+for (const { width, fit, next, previous } of longRowPages) {
+  it(`pages a long phone row ${fit} screens at a time at ${width}px, stopping at both ends`, async () => {
+    const page = await openSite(width, longSite);
+    try {
+      await showHomeRow(page);
+      expect(await carouselSteps(page)).toMatchObject({
+        resting: 0,
+        previous: "true",
+        next: null,
+      });
 
-    // A full page more would start past the end, so the row stops at its
-    // scroll limit, and Next then does nothing.
-    await page.keyboard.press("Enter");
-    await page.waitForSelector(`${nextStep}[aria-disabled='true']`);
-    const end = await carouselSteps(page);
-    expect(end).toMatchObject({ resting: -1, previous: null, next: "true" });
-    expect(end.scrollLeft).toBe(end.scrollEnd);
-    await page.keyboard.press("Enter");
-    expect(await carouselSteps(page)).toEqual(end);
+      // Only the last press reaches the end, where Next does nothing.
+      await page.focus(nextStep);
+      const ahead = [];
+      for (const _ of next) ahead.push(await pressAndRead(page));
+      expect(ahead.map((row) => row.resting)).toEqual(next);
+      expect(ahead.map((row) => row.next)).toEqual(
+        next.map((_, index) => (index === next.length - 1 ? "true" : null)),
+      );
+      const end = await carouselSteps(page);
+      expect(ahead.at(-1)).toEqual(end);
+      expect(end.scrollLeft).toBe(end.scrollEnd);
+      expect(await pressAndRead(page)).toEqual(end);
 
-    // Back from the end, a page counts from the first screen fully in view.
-    await page.focus(previousStep);
-    await page.keyboard.press("Enter");
-    await page.waitForSelector(`${nextStep}:not([aria-disabled])`);
-    expect(await carouselSteps(page)).toEqual({ ...second, focused: "-1" });
-
-    await page.keyboard.press("Enter");
-    await page.waitForSelector(`${previousStep}[aria-disabled='true']`);
-    expect(await carouselSteps(page)).toMatchObject({
-      resting: 0,
-      next: null,
-      scrollLeft: 0,
-    });
-  } finally {
-    await page.close();
-  }
-}, 30_000);
+      // Only the last press back reaches the start, where Previous does nothing.
+      await page.focus(previousStep);
+      const behind = [];
+      for (const _ of previous) behind.push(await pressAndRead(page));
+      expect(behind.map((row) => row.resting)).toEqual(previous);
+      expect(behind.map((row) => row.previous)).toEqual(
+        previous.map((_, index) =>
+          index === previous.length - 1 ? "true" : null,
+        ),
+      );
+      const start = await carouselSteps(page);
+      expect(behind.at(-1)).toEqual(start);
+      expect(start.scrollLeft).toBe(0);
+      expect(await pressAndRead(page)).toEqual(start);
+    } finally {
+      await page.close();
+    }
+  }, 30_000);
+}
 
 it("stops the phone row at each end when steps animate", async () => {
   const page = await openSite(700);
@@ -668,6 +702,34 @@ it("stops the phone row at each end when steps animate", async () => {
     await page.keyboard.press("Enter");
     await frames(page);
     expect(await carouselSteps(page)).toEqual({ ...start, focused: "-1" });
+  } finally {
+    await page.close();
+  }
+}, 30_000);
+
+it("stops at the end when Next is pressed again while the row is moving", async () => {
+  const page = await openSite(700);
+  try {
+    await showHomeRow(page, "no-preference");
+    const watch = await watchRow(page);
+    await page.focus(nextStep);
+    await page.keyboard.press("Enter");
+    // Press again once the row has started toward the end, before it lands.
+    await page.waitForFunction(
+      () =>
+        (document.querySelector(".shots-carousel-track")?.scrollLeft ?? 0) > 1,
+      { polling: "raf" },
+    );
+    const moving = await carouselSteps(page);
+    await page.keyboard.press("Enter");
+    const path = await page.evaluate((started) => started.ended, watch);
+    expect(moving.scrollLeft).toBeLessThan(moving.scrollEnd);
+
+    // The row moved only toward the end, stopped there, and kept focus.
+    expect(path).toEqual(path.toSorted((a, b) => a - b));
+    const end = await carouselSteps(page);
+    expect(end).toMatchObject({ previous: null, next: "true", focused: "1" });
+    expect(end.scrollLeft).toBe(end.scrollEnd);
   } finally {
     await page.close();
   }
