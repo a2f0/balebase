@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { deflateSync } from "node:zlib";
 import { type Browser, launch, type Page } from "puppeteer-core";
 import {
   chromeLaunchOptions,
@@ -31,13 +32,39 @@ const types: Record<string, string> = {
   ".svg": "image/svg+xml",
   ".woff2": "font/woff2",
 };
-// A 2x1 PNG stands in for every capture; the manifest records the real size.
-const png = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAEUlEQVR4nGNgYGD4z8DAwMAAAA0ABQHsHwEAAAAASUVORK5CYII=",
-  "base64",
-);
+/** A blank grayscale PNG of the given size. */
+function blankPng(width: number, height: number) {
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type, "latin1"), data]);
+    const framed = Buffer.alloc(body.length + 8);
+    framed.writeUInt32BE(data.length, 0);
+    body.copy(framed, 4);
+    framed.writeUInt32BE(Bun.hash.crc32(body) >>> 0, body.length + 4);
+    return framed;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8; // bit depth; color type 0 is grayscale
+  // Each row is a filter byte, then one byte per pixel, all zero.
+  const pixels = Buffer.alloc((width + 1) * height);
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk("IHDR", header),
+    chunk("IDAT", deflateSync(pixels)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+// Small blank PNGs stand in for the captures, at the real captures' aspect
+// ratios, so a loading image never moves the page; the manifest records the
+// real sizes.
 const desktop = { project: "web", width: 2880, height: 1800 };
 const phone = { project: "mobile", width: 1170, height: 2532 };
+const standIns: Record<string, Buffer> = {
+  web: blankPng(288, 180),
+  mobile: blankPng(195, 422),
+};
 
 /** A website build and the fixture gallery it serves. */
 interface Site {
@@ -91,7 +118,9 @@ function stageFixture({ gallery, screens, captures }: Site) {
       mkdirSync(join(gallery, `img/${capture.project}/${theme}`), {
         recursive: true,
       });
-      writeFileSync(join(gallery, path), png);
+      const image = standIns[capture.project];
+      if (!image) throw new Error(`No stand-in image for ${capture.project}.`);
+      writeFileSync(join(gallery, path), image);
       return { ...capture, theme, src: `/screenshot-gallery/${path}?v=0` };
     }),
   );
@@ -378,12 +407,14 @@ async function showHomeRow(
 }
 
 /**
- * Records the row's scroll positions until its next `scrollend`; `ended`
- * resolves with them, or rejects if the row is still scrolling after 5 s.
+ * Records the row's scroll positions until a `scrollend` that finds it moved
+ * from where watching began; `ended` resolves with them, or rejects if that
+ * has not happened after 5 s.
  */
 function watchRow(page: Page) {
   return page.evaluateHandle(() => {
     const track = document.querySelector(".shots-carousel-track");
+    const from = track?.scrollLeft ?? 0;
     const positions: number[] = [];
     const record = () => positions.push(Math.round(track?.scrollLeft ?? 0));
     track?.addEventListener("scroll", record);
@@ -394,7 +425,10 @@ function watchRow(page: Page) {
           track?.removeEventListener("scroll", record);
           track?.removeEventListener("scrollend", finish);
         };
+        // A scrollend that finds the row where watching began is left over
+        // from an earlier scroll.
         const finish = () => {
+          if (Math.abs((track?.scrollLeft ?? 0) - from) <= 1) return;
           stop();
           resolve(positions);
         };
@@ -447,23 +481,6 @@ async function pressInPlace(page: Page) {
   await page.keyboard.press("Enter");
   await frames(page);
   return carouselSteps(page);
-}
-
-/**
- * Waits for the row's images to load. The fixture's stand-in image is wider
- * than the size the manifest reserves, so each one that loads shortens the row
- * and moves its buttons, and a real click or tap aimed before then can miss.
- */
-function rowImagesLoaded(page: Page) {
-  return page.waitForFunction(
-    () =>
-      [
-        ...document.querySelectorAll<HTMLImageElement>(
-          ".shots-carousel-slide img",
-        ),
-      ].every((image) => image.complete),
-    { timeout: 5_000 },
-  );
 }
 
 /**
@@ -575,9 +592,9 @@ it("stops the home page's phone row at both ends on a phone", async () => {
 
     // One screen fits at a time, so each press moves one screen. The first
     // is a real mouse click, which also focuses the button.
-    await rowImagesLoaded(page);
+    const clicked = await watchRow(page);
     await page.click(nextStep);
-    await page.waitForSelector(`${previousStep}:not([aria-disabled])`);
+    await page.evaluate((started) => started.ended, clicked);
     const middle = await carouselSteps(page);
     expect(middle).toMatchObject({
       resting: 1,
@@ -612,8 +629,9 @@ it("stops the home page's phone row at both ends on a phone", async () => {
     expect(await carouselSteps(page)).toEqual({ ...middle, focused: "-1" });
 
     // The last step back is a real tap.
+    const tapped = await watchRow(page);
     await page.tap(previousStep);
-    await page.waitForSelector(`${previousStep}[aria-disabled='true']`);
+    await page.evaluate((started) => started.ended, tapped);
     expect(await carouselSteps(page)).toEqual({ ...start, focused: "-1" });
 
     // Swiping to either end, from one screen short of it, updates the buttons
