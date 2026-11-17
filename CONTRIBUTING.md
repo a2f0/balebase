@@ -447,8 +447,8 @@ skills, and permission rules are current. Then it runs the static checks that
 ShellCheck, RuboCop, Terraform formatting, and type checks. Tests, builds,
 installs, and checks that download providers run in CI only; when a job fails,
 push a fix to the same branch. `bun run check` runs
-`agent-tool push-gate check`, which rejects a gate step that runs tests or
-installs. Keep each step quick enough that the gate stays within its
+`agent-tool push-gate check`, which rejects a gate step that runs tests,
+builds, or installs. Keep each step quick enough that the gate stays within its
 `budgetSeconds`, and find each push's step timings with
 `agent-tool runs list`.
 
