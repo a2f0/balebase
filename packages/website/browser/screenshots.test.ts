@@ -290,17 +290,16 @@ const previousStep = ".shots-carousel-step[data-step='-1']";
 const nextStep = ".shots-carousel-step[data-step='1']";
 
 /**
- * The home carousel's step buttons, how far its row has scrolled, and the
- * first slide whose leading edge is inside the row.
+ * The home carousel's step buttons, how far its row has scrolled and can
+ * scroll, and the first slide whose leading edge is inside the row.
  */
 function carouselSteps(page: Page) {
   return page.evaluate(() => {
     const step = (delta: string) =>
       document.querySelector(`.shots-carousel-step[data-step='${delta}']`);
     const buttons = [step("-1"), step("1")];
-    const rowLeft =
-      document.querySelector(".shots-carousel-track")?.getBoundingClientRect()
-        .left ?? 0;
+    const track = document.querySelector(".shots-carousel-track");
+    const rowLeft = track?.getBoundingClientRect().left ?? 0;
     return {
       firstShown: [
         ...document.querySelectorAll(".shots-carousel-slide"),
@@ -311,11 +310,34 @@ function carouselSteps(page: Page) {
       opacity: buttons.map((button) =>
         button ? getComputedStyle(button).opacity : null,
       ),
-      scrollLeft: Math.round(
-        document.querySelector(".shots-carousel-track")?.scrollLeft ?? 0,
-      ),
+      scrollLeft: Math.round(track?.scrollLeft ?? 0),
+      scrollEnd: Math.round(track ? track.scrollWidth - track.clientWidth : 0),
     };
   });
+}
+
+/**
+ * Opens the home page's phone row with reduced motion, so each step scrolls
+ * at once instead of animating.
+ */
+async function showHomeRow(page: Page) {
+  await page.emulateMediaFeatures([
+    { name: "prefers-color-scheme", value: "light" },
+    { name: "prefers-reduced-motion", value: "reduce" },
+  ]);
+  await page.goto("https://website.test/");
+  await page.waitForSelector(".shots-carousel-step");
+}
+
+/** Scrolls the row directly, as a swipe or trackpad would. */
+function scrollRow(page: Page, to: "start" | "end") {
+  return page.evaluate((edge) => {
+    const track = document.querySelector(".shots-carousel-track");
+    track?.scrollTo({
+      left: edge === "end" ? track.scrollWidth : 0,
+      behavior: "instant",
+    });
+  }, to);
 }
 
 it("rows the phone captures on the home page, linking to the gallery", async () => {
@@ -369,13 +391,7 @@ it("rows the phone captures on the home page, linking to the gallery", async () 
 it("stops the home page's phone row at both ends on a phone", async () => {
   const page = await openSite(375);
   try {
-    // Reduced motion makes each step scroll at once, so no wait for an animation.
-    await page.emulateMediaFeatures([
-      { name: "prefers-color-scheme", value: "light" },
-      { name: "prefers-reduced-motion", value: "reduce" },
-    ]);
-    await page.goto("https://website.test/");
-    await page.waitForSelector(".shots-carousel-step");
+    await showHomeRow(page);
     // An unavailable button stays visible, only dimmed, since it can hold focus.
     const start = await carouselSteps(page);
     expect(start).toMatchObject({
@@ -415,6 +431,7 @@ it("stops the home page's phone row at both ends on a phone", async () => {
       opacity: ["1", "0.4"],
     });
     expect(end.scrollLeft).toBeGreaterThan(middle.scrollLeft);
+    expect(end.scrollLeft).toBe(end.scrollEnd);
 
     // Next at the end leaves the row in place and keeps focus.
     await page.keyboard.press("Enter");
@@ -428,6 +445,56 @@ it("stops the home page's phone row at both ends on a phone", async () => {
     await page.keyboard.press("Enter");
     await page.waitForSelector(`${previousStep}[aria-disabled='true']`);
     expect(await carouselSteps(page)).toEqual({ ...start, focused: "-1" });
+
+    // Swiping to either end updates the buttons as stepping does.
+    await scrollRow(page, "end");
+    await page.waitForSelector(`${nextStep}[aria-disabled='true']`);
+    expect(await carouselSteps(page)).toMatchObject({
+      previous: null,
+      next: "true",
+      scrollLeft: end.scrollLeft,
+    });
+    await scrollRow(page, "start");
+    await page.waitForSelector(`${previousStep}[aria-disabled='true']`);
+    expect(await carouselSteps(page)).toMatchObject({
+      previous: "true",
+      next: null,
+      scrollLeft: 0,
+    });
+  } finally {
+    await page.close();
+  }
+}, 30_000);
+
+it("stops a wider phone row at its scroll limit", async () => {
+  // Two screens fit, so one press would page past the last one; the row
+  // stops where it can scroll no further, with that screen still in view.
+  const page = await openSite(700);
+  try {
+    await showHomeRow(page);
+    expect(await carouselSteps(page)).toMatchObject({
+      previous: "true",
+      next: null,
+      scrollLeft: 0,
+    });
+    await page.focus(nextStep);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(`${nextStep}[aria-disabled='true']`);
+    const end = await carouselSteps(page);
+    expect(end).toMatchObject({ previous: null, next: "true", focused: "1" });
+    expect(end.scrollEnd).toBeGreaterThan(0);
+    expect(end.scrollLeft).toBe(end.scrollEnd);
+
+    await page.keyboard.press("Enter");
+    expect(await carouselSteps(page)).toEqual(end);
+
+    await page.focus(previousStep);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(`${previousStep}[aria-disabled='true']`);
+    expect(await carouselSteps(page)).toMatchObject({
+      next: null,
+      scrollLeft: 0,
+    });
   } finally {
     await page.close();
   }
