@@ -463,18 +463,34 @@ it("rows the phone captures on the home page, linking to the gallery", async () 
   try {
     await page.goto("https://website.test/");
     await page.waitForSelector(".shots-carousel");
-    // Each screen appears once, in manifest order.
-    const links = await page.evaluate(() =>
-      [
-        ...document.querySelectorAll<HTMLAnchorElement>(
-          ".shots-carousel-slide a",
+    // Each screen appears once, in manifest order, with its alt text, and
+    // none is hidden from assistive technology.
+    const slides = await page.evaluate(() =>
+      [...document.querySelectorAll(".shots-carousel-slide")].map((slide) => ({
+        href: slide.querySelector("a")?.getAttribute("href"),
+        alt: slide.querySelector("img")?.getAttribute("alt"),
+        hidden: Boolean(
+          slide.closest("[aria-hidden='true'], [inert]") ??
+            slide.querySelector("[aria-hidden='true'], [inert]"),
         ),
-      ].map((link) => link.getAttribute("href")),
+      })),
     );
-    expect(links).toEqual([
-      "/screenshots/mobile/projects/",
-      "/screenshots/mobile/issues/",
-      "/screenshots/mobile/audit/",
+    expect(slides).toEqual([
+      {
+        href: "/screenshots/mobile/projects/",
+        alt: "The project list.",
+        hidden: false,
+      },
+      {
+        href: "/screenshots/mobile/issues/",
+        alt: "The open issues.",
+        hidden: false,
+      },
+      {
+        href: "/screenshots/mobile/audit/",
+        alt: "An audit in progress.",
+        hidden: false,
+      },
     ]);
     // Every capture fits this wide, so neither step button has anywhere to go.
     expect(await carouselSteps(page)).toMatchObject({
@@ -711,23 +727,40 @@ it("stops at the end when Next is pressed again while the row is moving", async 
   const page = await openSite(700);
   try {
     await showHomeRow(page, "no-preference");
-    const watch = await watchRow(page);
+    // Record every position, and press Next again from the first scroll that
+    // finds the row between its ends, so the second press lands mid-motion.
+    const run = await page.evaluateHandle((selector) => {
+      const track = document.querySelector(".shots-carousel-track");
+      const positions: number[] = [];
+      let pressedAt: number | null = null;
+      track?.addEventListener("scroll", () => {
+        const left = track.scrollLeft;
+        positions.push(Math.round(left));
+        const end = track.scrollWidth - track.clientWidth;
+        if (pressedAt === null && left > 1 && left < end - 1) {
+          pressedAt = Math.round(left);
+          document.querySelector<HTMLButtonElement>(selector)?.click();
+        }
+      });
+      return { positions, pressedAt: () => pressedAt };
+    }, nextStep);
     await page.focus(nextStep);
     await page.keyboard.press("Enter");
-    // Press again once the row has started toward the end, before it lands.
-    await page.waitForFunction(
-      () =>
-        (document.querySelector(".shots-carousel-track")?.scrollLeft ?? 0) > 1,
-      { polling: "raf" },
+    await page.waitForSelector(`${nextStep}[aria-disabled='true']`);
+    await frames(page);
+    const { positions, pressedAt } = await page.evaluate(
+      (recorded) => ({
+        positions: recorded.positions,
+        pressedAt: recorded.pressedAt(),
+      }),
+      run,
     );
-    const moving = await carouselSteps(page);
-    await page.keyboard.press("Enter");
-    const path = await page.evaluate((started) => started.ended, watch);
-    expect(moving.scrollLeft).toBeLessThan(moving.scrollEnd);
+    const end = await carouselSteps(page);
+    expect(pressedAt).toBeGreaterThan(0);
+    expect(pressedAt).toBeLessThan(end.scrollEnd);
 
     // The row moved only toward the end, stopped there, and kept focus.
-    expect(path).toEqual(path.toSorted((a, b) => a - b));
-    const end = await carouselSteps(page);
+    expect(positions).toEqual(positions.toSorted((a, b) => a - b));
     expect(end).toMatchObject({ previous: null, next: "true", focused: "1" });
     expect(end.scrollLeft).toBe(end.scrollEnd);
   } finally {
