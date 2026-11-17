@@ -454,6 +454,23 @@ async function stepAndSettle(page: Page, selector: string) {
 }
 
 /**
+ * Each carousel slide's link, alt text, and whether anything hides it from
+ * assistive technology, in order.
+ */
+function slideSummaries(page: Page) {
+  return page.evaluate(() =>
+    [...document.querySelectorAll(".shots-carousel-slide")].map((slide) => ({
+      href: slide.querySelector("a")?.getAttribute("href"),
+      alt: slide.querySelector("img")?.getAttribute("alt"),
+      hidden: Boolean(
+        slide.closest("[aria-hidden='true'], [inert]") ??
+          slide.querySelector("[aria-hidden='true'], [inert]"),
+      ),
+    })),
+  );
+}
+
+/**
  * Records the behavior of each scroll the carousel asks its row for, which
  * stays observable when Chrome coalesces the scroll events in between.
  */
@@ -535,17 +552,7 @@ it("rows the phone captures on the home page, linking to the gallery", async () 
     await page.waitForSelector(".shots-carousel");
     // Each screen appears once, in manifest order, with its alt text, and
     // none is hidden from assistive technology.
-    const slides = await page.evaluate(() =>
-      [...document.querySelectorAll(".shots-carousel-slide")].map((slide) => ({
-        href: slide.querySelector("a")?.getAttribute("href"),
-        alt: slide.querySelector("img")?.getAttribute("alt"),
-        hidden: Boolean(
-          slide.closest("[aria-hidden='true'], [inert]") ??
-            slide.querySelector("[aria-hidden='true'], [inert]"),
-        ),
-      })),
-    );
-    expect(slides).toEqual([
+    expect(await slideSummaries(page)).toEqual([
       {
         href: "/screenshots/mobile/projects/",
         alt: "The project list.",
@@ -597,6 +604,7 @@ it("stops the home page's phone row at both ends on a phone", async () => {
   try {
     await page.setViewport({ width: 375, height: 900, hasTouch: true });
     await showHomeRow(page);
+    const requests = await recordScrollRequests(page);
     // An unavailable button stays visible, only dimmed, since it can hold focus.
     const start = await carouselSteps(page);
     expect(start).toMatchObject({
@@ -679,6 +687,14 @@ it("stops the home page's phone row at both ends on a phone", async () => {
       next: null,
       scrollLeft: 0,
     });
+
+    // With reduced motion, every step asked for an instant scroll.
+    const behaviors = await page.evaluate(
+      (recorded) => recorded.behaviors,
+      requests,
+    );
+    expect(behaviors).not.toHaveLength(0);
+    expect(behaviors).toEqual(behaviors.map(() => "instant"));
   } finally {
     await page.close();
   }
@@ -755,6 +771,15 @@ for (const { width, fit, next, previous } of longRowPages) {
         previous: "true",
         next: null,
       });
+      // Overflowing, the row still shows each screen once, in order, with its
+      // alt text, none hidden from assistive technology.
+      expect(await slideSummaries(page)).toEqual(
+        longScreens.map(({ name, alt }) => ({
+          href: `/screenshots/mobile/${name}/`,
+          alt,
+          hidden: false,
+        })),
+      );
 
       // The keyboard reaches both buttons in order from the gallery link,
       // Previous included while it is unavailable.
