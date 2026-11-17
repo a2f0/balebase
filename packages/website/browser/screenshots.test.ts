@@ -452,7 +452,11 @@ function slideSummaries(page: Page) {
   );
 }
 
-/** Records the behavior of each scroll the carousel asks its row for. */
+/**
+ * Records the behavior each `scrollTo` call on the row takes effect with, in
+ * either form: the behavior it asks for, or for `auto` and the positional
+ * form, the row's CSS `scroll-behavior`.
+ */
 function recordScrollRequests(page: Page) {
   return page.evaluateHandle(() => {
     const track = document.querySelector<HTMLElement>(".shots-carousel-track");
@@ -460,10 +464,19 @@ function recordScrollRequests(page: Page) {
     if (track) {
       const scrollTo = track.scrollTo;
       track.scrollTo = function (this: HTMLElement, ...args: unknown[]) {
-        const [options] = args;
-        if (options && typeof options === "object") {
-          behaviors.push((options as ScrollToOptions).behavior ?? "auto");
-        }
+        const [first] = args;
+        const asked =
+          first && typeof first === "object"
+            ? (first as ScrollToOptions).behavior
+            : undefined;
+        const css = getComputedStyle(this).scrollBehavior;
+        behaviors.push(
+          asked && asked !== "auto"
+            ? asked
+            : css === "smooth"
+              ? "smooth"
+              : "instant",
+        );
         return Reflect.apply(scrollTo, this, args);
       } as typeof track.scrollTo;
     }
@@ -654,13 +667,11 @@ it("stops the home page's phone row at both ends on a phone", async () => {
       scrollLeft: 0,
     });
 
-    // With reduced motion, every step asked for an instant scroll.
-    const behaviors = await page.evaluate(
-      (recorded) => recorded.behaviors,
-      requests,
-    );
-    expect(behaviors).not.toHaveLength(0);
-    expect(behaviors).toEqual(behaviors.map(() => "instant"));
+    // With reduced motion, each of the six steps that moved the row scrolled
+    // it instantly, and the presses at either end asked for no scroll.
+    expect(
+      await page.evaluate((recorded) => recorded.behaviors, requests),
+    ).toEqual(Array.from({ length: 6 }, () => "instant"));
   } finally {
     await page.close();
   }
