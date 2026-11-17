@@ -734,8 +734,15 @@ for (const { width, fit, next, previous } of longRowPages) {
         next: null,
       });
 
+      // The keyboard reaches both buttons in order from the gallery link,
+      // Previous included while it is unavailable.
+      await page.focus(".shots-carousel-view-all");
+      await page.keyboard.press("Tab");
+      expect(await carouselSteps(page)).toMatchObject({ focused: "-1" });
+      await page.keyboard.press("Tab");
+      expect(await carouselSteps(page)).toMatchObject({ focused: "1" });
+
       // Only the last press reaches the end, where Next does nothing.
-      await page.focus(nextStep);
       const ahead = [];
       for (const _ of next) ahead.push(await pressAndSettle(page));
       expect(ahead.map((row) => row.resting)).toEqual(next);
@@ -748,7 +755,10 @@ for (const { width, fit, next, previous } of longRowPages) {
       expect(await pressInPlace(page)).toEqual(end);
 
       // Only the last press back reaches the start, where Previous does nothing.
-      await page.focus(previousStep);
+      await page.keyboard.down("Shift");
+      await page.keyboard.press("Tab");
+      await page.keyboard.up("Shift");
+      expect(await carouselSteps(page)).toMatchObject({ focused: "-1" });
       const behind = [];
       for (const _ of previous) behind.push(await pressAndSettle(page));
       expect(behind.map((row) => row.resting)).toEqual(previous);
@@ -800,39 +810,61 @@ it("stops the phone row at each end when steps animate", async () => {
   }
 }, 30_000);
 
+/**
+ * Presses Next from the start, and again from the page on the first scroll
+ * that finds the row between its ends, so the second press lands while the
+ * row is still moving. Resolves once Next is unavailable, with every
+ * position the row passed and where the second press came, or null when a
+ * skipped frame took the row straight to its end.
+ */
+async function pressNextAgainWhileMoving(page: Page) {
+  const run = await page.evaluateHandle((selector) => {
+    const track = document.querySelector(".shots-carousel-track");
+    const positions: number[] = [];
+    let pressedAt: number | null = null;
+    const record = () => {
+      if (!track) return;
+      const left = track.scrollLeft;
+      positions.push(Math.round(left));
+      const end = track.scrollWidth - track.clientWidth;
+      if (pressedAt === null && left > 1 && left < end - 1) {
+        pressedAt = Math.round(left);
+        document.querySelector<HTMLButtonElement>(selector)?.click();
+      }
+    };
+    track?.addEventListener("scroll", record);
+    return {
+      result: () => {
+        track?.removeEventListener("scroll", record);
+        return { positions, pressedAt };
+      },
+    };
+  }, nextStep);
+  await page.focus(nextStep);
+  await page.keyboard.press("Enter");
+  await page.waitForSelector(`${nextStep}[aria-disabled='true']`);
+  await frames(page);
+  return page.evaluate((started) => started.result(), run);
+}
+
 it("stops at the end when Next is pressed again while the row is moving", async () => {
   const page = await openSite(700);
   try {
     await showHomeRow(page, "no-preference");
-    // Record every position, and press Next again from the first scroll that
-    // finds the row between its ends, so the second press lands mid-motion.
-    const run = await page.evaluateHandle((selector) => {
-      const track = document.querySelector(".shots-carousel-track");
-      const positions: number[] = [];
-      let pressedAt: number | null = null;
-      track?.addEventListener("scroll", () => {
-        const left = track.scrollLeft;
-        positions.push(Math.round(left));
-        const end = track.scrollWidth - track.clientWidth;
-        if (pressedAt === null && left > 1 && left < end - 1) {
-          pressedAt = Math.round(left);
-          document.querySelector<HTMLButtonElement>(selector)?.click();
-        }
-      });
-      return { positions, pressedAt: () => pressedAt };
-    }, nextStep);
-    await page.focus(nextStep);
-    await page.keyboard.press("Enter");
-    await page.waitForSelector(`${nextStep}[aria-disabled='true']`);
-    await frames(page);
-    const { positions, pressedAt } = await page.evaluate(
-      (recorded) => ({
-        positions: recorded.positions,
-        pressedAt: recorded.pressedAt(),
-      }),
-      run,
-    );
+    // When a skipped frame takes the row straight to its end, return to the
+    // start and try again.
+    let attempt = await pressNextAgainWhileMoving(page);
+    for (let retry = 0; retry < 2 && attempt.pressedAt === null; retry += 1) {
+      await page.evaluate(() =>
+        document
+          .querySelector(".shots-carousel-track")
+          ?.scrollTo({ left: 0, behavior: "instant" }),
+      );
+      await page.waitForSelector(`${previousStep}[aria-disabled='true']`);
+      attempt = await pressNextAgainWhileMoving(page);
+    }
     const end = await carouselSteps(page);
+    const { positions, pressedAt } = attempt;
     expect(pressedAt).toBeGreaterThan(0);
     expect(pressedAt).toBeLessThan(end.scrollEnd);
 
