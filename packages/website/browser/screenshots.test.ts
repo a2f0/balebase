@@ -937,21 +937,30 @@ for (const { button, selector, step, from, to } of endStops) {
   }, 30_000);
 }
 
+/** How a mid-scroll run presses, and when it counts as settled. */
+interface MidScroll {
+  /** The button pressed first, from the keyboard. */
+  first: string;
+  /** The button pressed again from the page while the first press animates. */
+  again: string;
+  /** The second press comes on the first scroll that enters this window,
+   * in screens from the start, exclusive. */
+  low: number;
+  high: number;
+  /** Settled once a scrollend finds the row beyond this many screens from
+   * the start, in the second press's direction. */
+  beyond: number;
+}
+
 /**
- * Presses a step button on the long row, then presses it again from the page
- * while that first press animates: on the first scroll that brings the row
- * inside \`low\` to \`high\` screens from the start. Resolves settled once the
- * second scroll ends beyond \`firstRest\`, the screen the first press alone
- * rests on; missed when a skipped frame carried the row past that window
- * first; or timed out.
+ * Presses \`first\` on the long row, then presses \`again\` from the page while
+ * that first press animates, on the first scroll that brings the row inside
+ * the window. Resolves settled on a scrollend beyond \`beyond\`, missed when a
+ * skipped frame carried the row past the window first, or timed out.
  */
-async function pressMidScroll(
-  page: Page,
-  selector: string,
-  { low, high, firstRest }: { low: number; high: number; firstRest: number },
-) {
-  const run = await page.evaluateHandle(
-    (step, direction, low, high, firstRest) => {
+async function pressMidScroll(page: Page, run: MidScroll) {
+  const started = await page.evaluateHandle(
+    ({ first, again, low, high, beyond }) => {
       type Run =
         | { status: "waiting" }
         | { status: "pressed"; at: number }
@@ -962,46 +971,52 @@ async function pressMidScroll(
         | { type: "scroll"; left: number }
         | { type: "scrollend"; left: number }
         | { type: "deadline" };
+      const next = "[data-step='1']";
+      const motion = first.endsWith(next) ? 1 : -1;
+      const direction = again.endsWith(next) ? 1 : -1;
       const track = document.querySelector(".shots-carousel-track");
-      const [first, second] = document.querySelectorAll<HTMLElement>(
-        ".shots-carousel-slide",
-      );
-      const pitch = (second?.offsetLeft ?? 0) - (first?.offsetLeft ?? 0);
+      const [one, two] = document.querySelectorAll(".shots-carousel-slide");
+      // Scroll coordinates of a slide's leading edge, from bounding boxes.
+      const box = track?.getBoundingClientRect();
+      const at = (slide: Element | undefined) =>
+        (slide?.getBoundingClientRect().left ?? 0) -
+        (box?.left ?? 0) -
+        (track?.clientLeft ?? 0) +
+        (track?.scrollLeft ?? 0);
+      const pitch = at(two) - at(one);
       // The scroll position that rests the first screen at the start edge.
       const offset =
-        (first?.offsetLeft ?? 0) -
+        at(one) -
         Number.parseFloat(
           track ? getComputedStyle(track).scrollPaddingLeft : "",
         );
-      const firstRestLeft = offset + firstRest * pitch;
-      const transition = (run: Run, event: RunEvent): Run => {
-        switch (run.status) {
+      const screens = (left: number) => (left - offset) / pitch;
+      const transition = (current: Run, event: RunEvent): Run => {
+        switch (current.status) {
           case "waiting": {
             if (event.type === "deadline") return { status: "timed out" };
-            if (event.type !== "scroll") return run;
-            const screens = (event.left - offset) / pitch;
-            const entered = direction > 0 ? screens > low : screens < high;
-            if (!entered) return run;
-            return screens > low && screens < high
+            if (event.type !== "scroll") return current;
+            const along = screens(event.left);
+            const entered = motion > 0 ? along > low : along < high;
+            if (!entered) return current;
+            return along > low && along < high
               ? { status: "pressed", at: event.left }
               : { status: "missed", at: event.left };
           }
           case "pressed": {
             if (event.type === "deadline") return { status: "timed out" };
-            if (event.type !== "scrollend") return run;
-            const beyond =
-              direction > 0
-                ? event.left > firstRestLeft + 1
-                : event.left < firstRestLeft - 1;
-            return beyond ? { status: "settled", at: run.at } : run;
+            if (event.type !== "scrollend") return current;
+            const along = screens(event.left);
+            const past = direction > 0 ? along > beyond : along < beyond;
+            return past ? { status: "settled", at: current.at } : current;
           }
           case "settled":
           case "missed":
           case "timed out":
-            return run;
+            return current;
         }
       };
-      let run: Run = { status: "waiting" };
+      let current: Run = { status: "waiting" };
       let finish = (_: Run) => {};
       const outcome = new Promise<Run>((resolve) => {
         finish = resolve;
@@ -1011,95 +1026,105 @@ async function pressMidScroll(
       const onScrollEnd = () =>
         dispatch({ type: "scrollend", left: track?.scrollLeft ?? 0 });
       const deadline = setTimeout(() => dispatch({ type: "deadline" }), 5_000);
-      // Entering pressed presses the button again; every other change ends
+      // Entering pressed presses the second button; every other change ends
       // the run and removes both listeners and the timer.
       function dispatch(event: RunEvent) {
-        const before = run;
-        run = transition(run, event);
-        if (run === before) return;
-        if (run.status === "pressed") {
-          document.querySelector<HTMLButtonElement>(step)?.click();
+        const before = current;
+        current = transition(current, event);
+        if (current === before) return;
+        if (current.status === "pressed") {
+          document.querySelector<HTMLButtonElement>(again)?.click();
           return;
         }
         clearTimeout(deadline);
         track?.removeEventListener("scroll", onScroll);
         track?.removeEventListener("scrollend", onScrollEnd);
-        finish(run);
+        finish(current);
       }
       track?.addEventListener("scroll", onScroll);
       track?.addEventListener("scrollend", onScrollEnd);
       return { outcome };
     },
-    selector,
-    selector === nextStep ? 1 : -1,
-    low,
-    high,
-    firstRest,
+    run,
   );
-  await page.focus(selector);
+  await page.focus(run.first);
   await page.keyboard.press("Enter");
-  return page.evaluate((started) => started.outcome, run);
+  return page.evaluate((handle) => handle.outcome, started);
 }
 
 // A press counts from the screen the row has reached: Next rounds to the
 // nearest screen, and Previous counts back from the first screen fully in
-// view. Each window is where that screen is certain, and each expected rest
-// differs from a dropped press (the first press's rest) and from paging off
-// the first press's pending destination (one screen further).
+// view. Each window is where that screen is certain. Each expected rest
+// differs from a dropped press (where the first press alone rests) and,
+// for repeats, from paging off the first press's pending destination (one
+// screen further).
 const midScrollPresses = [
   {
-    button: "Next",
-    selector: nextStep,
-    step: "1",
+    title:
+      "counts a second Next press made mid-scroll from where the row has reached",
     from: "start",
     // Alone, Next from the start rests on screen 2. Pressed again between
     // 0.5 and 1.5 screens along, it counts from screen 1: screen 3.
-    window: { low: 0.5, high: 1.5, firstRest: 2 },
-    expected: 3,
+    run: { first: nextStep, again: nextStep, low: 0.5, high: 1.5, beyond: 2 },
+    expected: { resting: 3, previous: null, next: null, focused: "1" },
   },
   {
-    button: "Previous",
-    selector: previousStep,
-    step: "-1",
+    title:
+      "counts a second Previous press made mid-scroll from where the row has reached",
     from: "end",
     // Alone, Previous from the end rests on screen 9 (see longRowPages).
     // Pressed again between 9.1 and 10.1 screens along, it counts back from
     // screen 10: screen 8.
-    window: { low: 9.1, high: 10.1, firstRest: 9 },
-    expected: 8,
+    run: {
+      first: previousStep,
+      again: previousStep,
+      low: 9.1,
+      high: 10.1,
+      beyond: 9,
+    },
+    expected: { resting: 8, previous: null, next: null, focused: "-1" },
+  },
+  {
+    title: "returns to the start when Previous is pressed while Next is moving",
+    from: "start",
+    // Pressed between 0.5 and 1.5 screens along, Previous counts back two
+    // screens from screen 1 or 2, past the start, so the row stops there.
+    // Focus stays on Next, which the keyboard pressed.
+    run: {
+      first: nextStep,
+      again: previousStep,
+      low: 0.5,
+      high: 1.5,
+      beyond: 0.5,
+    },
+    expected: {
+      resting: 0,
+      previous: "true",
+      next: null,
+      focused: "1",
+      scrollLeft: 0,
+    },
   },
 ] as const;
 
-for (const {
-  button,
-  selector,
-  step,
-  from,
-  window,
-  expected,
-} of midScrollPresses) {
-  it(`counts a ${button} press made mid-scroll from where the long row has reached`, async () => {
+for (const { title, from, run, expected } of midScrollPresses) {
+  it(`${title} on the long row`, async () => {
     const page = await openSite(700, longSite);
     try {
       await showHomeRow(page, "no-preference");
       await restRowAt(page, from);
       // When a skipped frame carries the row past the window, start over.
-      let outcome = await pressMidScroll(page, selector, window);
+      let outcome = await pressMidScroll(page, run);
       for (
         let retry = 0;
         retry < 2 && outcome.status === "missed";
         retry += 1
       ) {
         await restRowAt(page, from);
-        outcome = await pressMidScroll(page, selector, window);
+        outcome = await pressMidScroll(page, run);
       }
       expect(outcome.status).toBe("settled");
-      expect(await carouselSteps(page)).toMatchObject({
-        resting: expected,
-        previous: null,
-        next: null,
-        focused: step,
-      });
+      expect(await carouselSteps(page)).toMatchObject(expected);
     } finally {
       await page.close();
     }
