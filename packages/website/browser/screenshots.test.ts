@@ -283,15 +283,34 @@ it("opens a deep link on its layout and screen, in a page that fits a phone", as
   }
 }, 30_000);
 
+/** The home carousel's step buttons and how far its row has scrolled. */
+function carouselSteps(page: Page) {
+  return page.evaluate(() => {
+    const step = (delta: string) =>
+      document.querySelector(`.shots-carousel-step[data-step='${delta}']`);
+    const next = step("1");
+    return {
+      previous: step("-1")?.getAttribute("aria-disabled") ?? null,
+      next: next?.getAttribute("aria-disabled") ?? null,
+      nextFocused: next !== null && document.activeElement === next,
+      nextOpacity: next ? getComputedStyle(next).opacity : null,
+      scrollLeft: Math.round(
+        document.querySelector(".shots-carousel-track")?.scrollLeft ?? 0,
+      ),
+    };
+  });
+}
+
 it("rows the phone captures on the home page, linking to the gallery", async () => {
   const page = await openSite(1440);
   try {
     await page.goto("https://website.test/");
     await page.waitForSelector(".shots-carousel");
+    // Each screen appears once, in manifest order.
     const links = await page.evaluate(() =>
       [
         ...document.querySelectorAll<HTMLAnchorElement>(
-          ".shots-carousel-slide:not([aria-hidden='true']) a",
+          ".shots-carousel-slide a",
         ),
       ].map((link) => link.getAttribute("href")),
     );
@@ -299,6 +318,11 @@ it("rows the phone captures on the home page, linking to the gallery", async () 
       "/screenshots/mobile/projects/",
       "/screenshots/mobile/audit/",
     ]);
+    // Both captures fit this wide, so neither step button has anywhere to go.
+    expect(await carouselSteps(page)).toMatchObject({
+      previous: "true",
+      next: "true",
+    });
     // The carousel renders the page's one link to the full gallery.
     const viewAll = await page.evaluate(() =>
       [...document.querySelectorAll<HTMLAnchorElement>("#main a")]
@@ -319,6 +343,53 @@ it("rows the phone captures on the home page, linking to the gallery", async () 
       page.click(".shots-carousel-view-all"),
     ]);
     expect(new URL(page.url()).pathname).toBe("/screenshots/");
+  } finally {
+    await page.close();
+  }
+}, 30_000);
+
+it("stops the home page's phone row at both ends on a phone", async () => {
+  const page = await openSite(375);
+  try {
+    // Reduced motion makes each step scroll at once, so no wait for an animation.
+    await page.emulateMediaFeatures([
+      { name: "prefers-color-scheme", value: "light" },
+      { name: "prefers-reduced-motion", value: "reduce" },
+    ]);
+    await page.goto("https://website.test/");
+    await page.waitForSelector(".shots-carousel-step");
+    expect(await carouselSteps(page)).toMatchObject({
+      previous: "true",
+      next: null,
+      scrollLeft: 0,
+    });
+
+    await page.focus(".shots-carousel-step[data-step='1']");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(
+      ".shots-carousel-step[data-step='1'][aria-disabled='true']",
+    );
+    const end = await carouselSteps(page);
+    expect(end).toMatchObject({ previous: null, next: "true" });
+    expect(end.scrollLeft).toBeGreaterThan(0);
+
+    // Next at the end leaves the row in place and keeps focus, and the button
+    // stays visible, only dimmed, because it can still hold focus.
+    await page.keyboard.press("Enter");
+    expect(await carouselSteps(page)).toEqual({
+      ...end,
+      nextFocused: true,
+      nextOpacity: "0.4",
+    });
+
+    await page.click(".shots-carousel-step[data-step='-1']");
+    await page.waitForSelector(
+      ".shots-carousel-step[data-step='-1'][aria-disabled='true']",
+    );
+    expect(await carouselSteps(page)).toMatchObject({
+      next: null,
+      scrollLeft: 0,
+    });
   } finally {
     await page.close();
   }
