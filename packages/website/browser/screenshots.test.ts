@@ -291,7 +291,8 @@ const nextStep = ".shots-carousel-step[data-step='1']";
 
 /**
  * The home carousel's step buttons, how far its row has scrolled and can
- * scroll, and the first slide whose leading edge is inside the row.
+ * scroll, and which slide rests where the first one starts: at the row's
+ * scroll padding, within a pixel (-1 when none does, as at a mid-slide end).
  */
 function carouselSteps(page: Page) {
   return page.evaluate(() => {
@@ -299,11 +300,15 @@ function carouselSteps(page: Page) {
       document.querySelector(`.shots-carousel-step[data-step='${delta}']`);
     const buttons = [step("-1"), step("1")];
     const track = document.querySelector(".shots-carousel-track");
-    const rowLeft = track?.getBoundingClientRect().left ?? 0;
+    const inset =
+      (track?.getBoundingClientRect().left ?? 0) +
+      Number.parseFloat(track ? getComputedStyle(track).scrollPaddingLeft : "");
     return {
-      firstShown: [
+      resting: [
         ...document.querySelectorAll(".shots-carousel-slide"),
-      ].findIndex((slide) => slide.getBoundingClientRect().left >= rowLeft),
+      ].findIndex(
+        (slide) => Math.abs(slide.getBoundingClientRect().left - inset) <= 1,
+      ),
       previous: buttons[0]?.getAttribute("aria-disabled") ?? null,
       next: buttons[1]?.getAttribute("aria-disabled") ?? null,
       focused: document.activeElement?.getAttribute("data-step") ?? null,
@@ -332,18 +337,32 @@ async function showHomeRow(
   await page.waitForSelector(".shots-carousel-step");
 }
 
-/** Presses a step button and waits for the row's animated scroll to end. */
+/**
+ * Presses a step button and waits for the row's scroll to end, returning
+ * each position the row passed through on the way.
+ */
 async function stepAndSettle(page: Page, selector: string) {
-  const scroll = await page.evaluateHandle(() => ({
-    ended: new Promise<void>((resolve) =>
-      document
-        .querySelector(".shots-carousel-track")
-        ?.addEventListener("scrollend", () => resolve(), { once: true }),
-    ),
-  }));
+  const scroll = await page.evaluateHandle(() => {
+    const track = document.querySelector(".shots-carousel-track");
+    const positions: number[] = [];
+    const record = () => positions.push(Math.round(track?.scrollLeft ?? 0));
+    track?.addEventListener("scroll", record);
+    return {
+      ended: new Promise<number[]>((resolve) =>
+        track?.addEventListener(
+          "scrollend",
+          () => {
+            track.removeEventListener("scroll", record);
+            resolve(positions);
+          },
+          { once: true },
+        ),
+      ),
+    };
+  });
   await page.focus(selector);
   await page.keyboard.press("Enter");
-  await page.evaluate((started) => started.ended, scroll);
+  return page.evaluate((started) => started.ended, scroll);
 }
 
 /** Waits a few frames, long enough for a scroll that a press began to show. */
@@ -421,7 +440,7 @@ it("stops the home page's phone row at both ends on a phone", async () => {
     // An unavailable button stays visible, only dimmed, since it can hold focus.
     const start = await carouselSteps(page);
     expect(start).toMatchObject({
-      firstShown: 0,
+      resting: 0,
       previous: "true",
       next: null,
       opacity: ["0.4", "1"],
@@ -439,7 +458,7 @@ it("stops the home page's phone row at both ends on a phone", async () => {
     await page.waitForSelector(`${previousStep}:not([aria-disabled])`);
     const middle = await carouselSteps(page);
     expect(middle).toMatchObject({
-      firstShown: 1,
+      resting: 1,
       previous: null,
       next: null,
       focused: "1",
@@ -448,9 +467,11 @@ it("stops the home page's phone row at both ends on a phone", async () => {
 
     await page.keyboard.press("Enter");
     await page.waitForSelector(`${nextStep}[aria-disabled='true']`);
+    // The last screen cannot rest where the first one starts, so the row
+    // stops mid-slide, at the limit of its scroll.
     const end = await carouselSteps(page);
     expect(end).toMatchObject({
-      firstShown: 2,
+      resting: -1,
       previous: null,
       next: "true",
       focused: "1",
@@ -537,15 +558,19 @@ it("stops the phone row at each end when steps animate", async () => {
       scrollLeft: 0,
     });
 
-    await stepAndSettle(page, nextStep);
+    const forward = await stepAndSettle(page, nextStep);
     const end = await carouselSteps(page);
     expect(end).toMatchObject({ previous: null, next: "true", focused: "1" });
     expect(end.scrollLeft).toBe(end.scrollEnd);
+    // The row animated there, passing positions between its two ends.
+    const between = (left: number) => left > 0 && left < end.scrollLeft;
+    expect(forward.filter(between)).not.toHaveLength(0);
     await page.keyboard.press("Enter");
     await frames(page);
     expect(await carouselSteps(page)).toEqual(end);
 
-    await stepAndSettle(page, previousStep);
+    const back = await stepAndSettle(page, previousStep);
+    expect(back.filter(between)).not.toHaveLength(0);
     expect(await carouselSteps(page)).toEqual({ ...start, focused: "-1" });
     await page.keyboard.press("Enter");
     await frames(page);
