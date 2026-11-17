@@ -772,9 +772,8 @@ it("counts a Next press made mid-scroll from where the long row has reached", as
   const page = await openSite(700, longSite);
   try {
     await showHomeRow(page, "no-preference");
-    // One press alone rests the row on screen 2 (see longRowPages). Press
-    // again from the page once the row is over half a screen along, so the
-    // second press counts from there instead of being lost.
+    // Press Next again from the page on the first scroll past 0.6 of a screen,
+    // then wait for that second scroll to end.
     const run = await page.evaluateHandle((selector) => {
       const track = document.querySelector(".shots-carousel-track");
       const [first, second] = document.querySelectorAll<HTMLElement>(
@@ -782,25 +781,28 @@ it("counts a Next press made mid-scroll from where the long row has reached", as
       );
       const pitch = (second?.offsetLeft ?? 0) - (first?.offsetLeft ?? 0);
       let pressedAt: number | null = null;
-      track?.addEventListener("scroll", () => {
-        if (pressedAt === null && track.scrollLeft > pitch * 0.6) {
-          pressedAt = Math.round(track.scrollLeft);
-          document.querySelector<HTMLButtonElement>(selector)?.click();
-        }
+      let settle = () => {};
+      const settled = new Promise<void>((resolve, reject) => {
+        settle = resolve;
+        setTimeout(
+          () => reject(new Error("The row did not settle within 5 s.")),
+          5_000,
+        );
       });
-      return { pressedAt: () => pressedAt };
+      const pressAgain = () => {
+        if (!track || track.scrollLeft <= pitch * 0.6) return;
+        track.removeEventListener("scroll", pressAgain);
+        pressedAt = Math.round(track.scrollLeft);
+        track.addEventListener("scrollend", () => settle(), { once: true });
+        document.querySelector<HTMLButtonElement>(selector)?.click();
+      };
+      track?.addEventListener("scroll", pressAgain);
+      return { settled, pitch, pressedAt: () => pressedAt };
     }, nextStep);
     await page.focus(nextStep);
     await page.keyboard.press("Enter");
-    await page.waitForFunction(
-      (recorded) => recorded.pressedAt() !== null,
-      {
-        polling: "raf",
-        timeout: 5_000,
-      },
-      run,
-    );
-    // Wait until the row has held still for a few frames.
+    await page.evaluate((recorded) => recorded.settled, run);
+    // Then hold until the row has stayed still for a few frames.
     await page.evaluate(async () => {
       const track = document.querySelector(".shots-carousel-track");
       let [last, still] = [-1, 0];
@@ -810,9 +812,24 @@ it("counts a Next press made mid-scroll from where the long row has reached", as
         [last, still] = [left, left === last ? still + 1 : 0];
       }
     });
-    const row = await carouselSteps(page);
-    expect(row.resting).toBeGreaterThan(2);
-    expect(row).toMatchObject({ previous: null, next: null, focused: "1" });
+
+    // Pressed between 0.6 and 1.4 screens along, Next counts from screen 1, so
+    // two screens on is screen 3. Paging from the first press's pending
+    // destination would rest on screen 4, and a dropped press on screen 2.
+    const { pitch, pressedAt } = await page.evaluate(
+      (recorded) => ({
+        pitch: recorded.pitch,
+        pressedAt: recorded.pressedAt(),
+      }),
+      run,
+    );
+    expect(pressedAt ?? Number.POSITIVE_INFINITY).toBeLessThan(pitch * 1.4);
+    expect(await carouselSteps(page)).toMatchObject({
+      resting: 3,
+      previous: null,
+      next: null,
+      focused: "1",
+    });
   } finally {
     await page.close();
   }
