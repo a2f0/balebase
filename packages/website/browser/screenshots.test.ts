@@ -617,10 +617,10 @@ it("stops the home page's phone row at both ends on a phone", async () => {
     expect(await carouselSteps(page)).toEqual({ ...start, focused: "-1" });
 
     // Swiping to either end, from one screen short of it, updates the buttons
-    // as stepping does.
+    // as stepping does. Each step settles first, so the swipe's watcher cannot
+    // take that step's scrollend for its own.
     await page.focus(nextStep);
-    await page.keyboard.press("Enter");
-    await page.waitForSelector(`${previousStep}:not([aria-disabled])`);
+    expect(await pressAndSettle(page)).toMatchObject({ resting: 1 });
     let swipe = await watchRow(page);
     await swipeRow(page, "end");
     await page.evaluate((started) => started.ended, swipe);
@@ -630,8 +630,7 @@ it("stops the home page's phone row at both ends on a phone", async () => {
       scrollLeft: end.scrollLeft,
     });
     await page.focus(previousStep);
-    await page.keyboard.press("Enter");
-    await page.waitForSelector(`${nextStep}:not([aria-disabled])`);
+    expect(await pressAndSettle(page)).toMatchObject({ resting: 1 });
     swipe = await watchRow(page);
     await swipeRow(page, "start");
     await page.evaluate((started) => started.ended, swipe);
