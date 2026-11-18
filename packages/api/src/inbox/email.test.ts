@@ -61,7 +61,9 @@ describe("inbound email", () => {
 
     expect(storage.objects.size).toBe(2);
     expect(database.statements).toHaveLength(2);
-    expect(database.statements[1]?.values[4]).toBe("message/rfc822");
+    expect(
+      JSON.parse(String(database.statements[1]?.values[2]))[0].contentType,
+    ).toBe("message/rfc822");
     const attachment = [...storage.objects].find(([key]) =>
       key.includes("/attachments/"),
     );
@@ -106,10 +108,8 @@ describe("inbound email", () => {
       recipient,
       "Test attachment",
     ]);
-    expect(attachmentStatement?.values.slice(3, 6)).toEqual([
-      "notes.txt",
-      "text/plain",
-      16,
+    expect(JSON.parse(String(attachmentStatement?.values[2]))).toMatchObject([
+      { filename: "notes.txt", contentType: "text/plain", size: 16 },
     ]);
   });
 

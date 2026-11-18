@@ -292,52 +292,53 @@ describe("verified inbound domains", () => {
     expect(f.storage.stored.size).toBe(0);
   });
 
-  it("registers cleanup in one D1 query before uploading many small attachments to a legacy inbox", async () => {
-    const partCount = 160;
-    let cleanupQueries = 0;
-    let registeredBeforeFirstPut: number | undefined;
-    const f = fixture("inbox.balebase.com", () => {
-      registeredBeforeFirstPut ??= f.database
-        .query<{ n: number }, []>(
-          "SELECT COUNT(*) AS n FROM deleted_object_cleanup",
-        )
-        .get()?.n;
-    });
-    f.bindings.DB = toD1(f.database, {
-      onQuery(event) {
-        if (event.sql.includes("INSERT INTO deleted_object_cleanup"))
-          cleanupQueries++;
-      },
-    });
-    const parts = Array.from({ length: partCount }, (_, i) =>
-      [
-        "--many",
-        "Content-Type: text/plain",
-        `Content-Disposition: attachment; filename="part-${i}.txt"`,
+  it.each([160, 1100])(
+    "stores %i small attachments in a legacy inbox with bounded D1 writes",
+    async (partCount) => {
+      let attachmentQueries = 0;
+      let cleanupQueries = 0;
+      let registeredBeforeFirstPut: number | undefined;
+      const f = fixture("inbox.balebase.com", () => {
+        registeredBeforeFirstPut ??= f.database
+          .query<{ n: number }, []>(
+            "SELECT COUNT(*) AS n FROM deleted_object_cleanup",
+          )
+          .get()?.n;
+      });
+      f.bindings.DB = toD1(f.database, {
+        onQuery(event) {
+          if (event.sql.includes("INSERT INTO inbound_email_attachments"))
+            attachmentQueries++;
+          if (event.sql.includes("INSERT INTO deleted_object_cleanup"))
+            cleanupQueries++;
+        },
+      });
+      const parts = Array.from({ length: partCount }, () =>
+        ["--many", "Content-Disposition: attachment", "", "a"].join("\r\n"),
+      );
+      const mime = [
+        'Content-Type: multipart/mixed; boundary="many"',
         "",
-        "a",
-      ].join("\r\n"),
-    );
-    const mime = [
-      'Content-Type: multipart/mixed; boundary="many"',
-      "",
-      ...parts,
-      "--many--",
-      "",
-    ].join("\r\n");
-    expect(
-      await f.deliver(`upload+${f.org}@inbox.balebase.com`, mime),
-    ).toBeUndefined();
-    expect(cleanupQueries).toBe(1);
-    expect(registeredBeforeFirstPut).toBe(partCount + 1);
-    expect(
-      f.database.query("SELECT id FROM inbound_email_attachments").all(),
-    ).toHaveLength(partCount);
-    expect(f.storage.stored.size).toBe(partCount + 1);
-    expect(
-      f.database.query("SELECT id FROM deleted_object_cleanup").all(),
-    ).toHaveLength(0);
-  });
+        ...parts,
+        "--many--",
+        "",
+      ].join("\r\n");
+      expect(
+        await f.deliver(`upload+${f.org}@inbox.balebase.com`, mime),
+      ).toBeUndefined();
+      expect(cleanupQueries).toBe(Math.ceil((partCount + 1) / 512));
+      expect(attachmentQueries).toBeGreaterThan(0);
+      expect(attachmentQueries).toBeLessThan(10);
+      expect(registeredBeforeFirstPut).toBe(partCount + 1);
+      expect(
+        f.database.query("SELECT id FROM inbound_email_attachments").all(),
+      ).toHaveLength(partCount);
+      expect(f.storage.stored.size).toBe(partCount + 1);
+      expect(
+        f.database.query("SELECT id FROM deleted_object_cleanup").all(),
+      ).toHaveLength(0);
+    },
+  );
   it("keeps committed R2 bytes when D1 loses its batch response", async () => {
     const f = fixture();
     const bound = await f.bind("privacy@balebase.com", "root");

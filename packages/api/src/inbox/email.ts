@@ -94,26 +94,7 @@ export async function ingestInboundEmail(
       mailboxId,
       organizationId,
     ),
-    ...attachments.map((attachment) =>
-      env.DB.prepare(
-        `INSERT INTO inbound_email_attachments
-           (id, email_id, object_key, filename, content_type, size,
-            disposition, content_id, created_at)
-           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
-           WHERE EXISTS (SELECT 1 FROM inbound_emails WHERE id = ?)`,
-      ).bind(
-        attachment.id,
-        emailId,
-        attachment.objectKey,
-        attachment.filename,
-        attachment.contentType,
-        attachment.size,
-        attachment.disposition,
-        attachment.contentId,
-        createdAt,
-        emailId,
-      ),
-    ),
+    ...attachmentWrites(env.DB, attachments, emailId, createdAt),
   ];
 
   if (deliveryId && mailboxId) {
@@ -140,6 +121,42 @@ export async function ingestInboundEmail(
   }
   message.setReject("Unknown recipient");
   await Promise.allSettled(objects.map((obj) => env.STORAGE.delete(obj.key)));
+}
+
+// Keep bound metadata parameters below D1's per-value limit. Attachment
+// content is already in R2 and never enters these JSON batches.
+function attachmentWrites(
+  db: D1Database,
+  attachments: StoredAttachment[],
+  emailId: string,
+  createdAt: string,
+) {
+  const statements: D1PreparedStatement[] = [];
+  let rows: string[] = [];
+  let bytes = 0;
+  const encoder = new TextEncoder();
+  const flush = () => {
+    statements.push(
+      db
+        .prepare(`INSERT INTO inbound_email_attachments
+      (id,email_id,object_key,filename,content_type,size,disposition,content_id,created_at)
+      SELECT value->>'$.id', ?, value->>'$.objectKey', value->>'$.filename', value->>'$.contentType',
+        value->>'$.size', value->>'$.disposition', value->>'$.contentId', ?
+      FROM json_each(?) WHERE EXISTS (SELECT 1 FROM inbound_emails WHERE id=?)`)
+        .bind(emailId, createdAt, `[${rows.join(",")}]`, emailId),
+    );
+    rows = [];
+    bytes = 0;
+  };
+  for (const { content: _content, ...metadata } of attachments) {
+    const row = JSON.stringify(metadata);
+    const size = encoder.encode(row).length + 1;
+    if (rows.length && bytes + size > 128 * 1024) flush();
+    rows.push(row);
+    bytes += size;
+  }
+  if (rows.length) flush();
+  return statements;
 }
 
 async function storeMessageObjects(

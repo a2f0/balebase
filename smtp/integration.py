@@ -9,7 +9,7 @@ from contextlib import closing
 from pathlib import Path
 
 from receiver import Bridge, Receiver, serve
-from spool import Spool
+from spool import Spool, SpoolUnavailable
 
 
 async def run():
@@ -43,6 +43,14 @@ async def run():
             assert code == 250
     async with server:
         await asyncio.to_thread(submit)
+        spool.quota_bytes = 1
+        def over_quota():
+            with smtplib.SMTP(host, port, timeout=10) as smtp:
+                smtp.ehlo()
+                assert smtp.mail("")[0] == 250
+                assert smtp.rcpt("legal@base.example.org")[0] == 250
+                assert smtp.data("Subject: full\r\n\r\nbody")[0] == 452
+        await asyncio.to_thread(over_quota)
     # Reopen from disk as a restarted receiver does. Lose the first successful
     # HTTP response and then replay all deliveries with their persisted IDs.
     spool = Spool(spool_file)
@@ -66,7 +74,16 @@ async def run():
     assert spool.deliver_one(bridge)
     assert spool.deliver_one(bridge)
     assert spool.counts() == {"held": 2}
-    assert spool.discard_held("purged-org") == 1
+    spool.accept("", b"later", {"x@base.example.org": ("future-retry", "purged-org")})
+    with closing(sqlite3.connect(spool_file)) as db, db:
+        db.execute("UPDATE deliveries SET due=2147483647 WHERE state='queued'")
+    assert spool.purge_organization("purged-org") == 2
+    try:
+        spool.accept("", b"in flight", {"x@base.example.org": ("stale", "purged-org")})
+    except SpoolUnavailable:
+        pass
+    else:
+        raise AssertionError("purged workspace accepted an in-flight delivery")
     assert spool.counts() == {"held": 1}
     with closing(sqlite3.connect(spool_file)) as db:
         assert db.execute("SELECT body FROM messages").fetchone()[0].endswith(b"old")

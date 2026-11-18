@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 from aiosmtpd.smtp import SMTP
-from spool import Spool
+from spool import Spool, SpoolUnavailable
 
 MAX_BYTES = 25 * 1024 * 1024 - 512  # reserve space for the Received trace
 
@@ -92,6 +92,8 @@ class Receiver:
         trace = f"Received: from [{peer}] by {server.hostname} with {protocol}; {formatdate(localtime=False, usegmt=True)}\r\n"
         try:
             await asyncio.to_thread(self.spool.accept, sender, trace.encode("ascii") + envelope.original_content, envelope.bindings)
+        except SpoolUnavailable:
+            return "452 4.2.2 Workspace cannot accept queued mail"
         except (sqlite3.Error, OSError):
             logging.error("SMTP spool write failed")
             return "452 4.3.1 Cannot durably queue message"
@@ -144,11 +146,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command")
     commands.add_parser("status")
-    discard = commands.add_parser("discard-held", help="Permanently discard held recipient copies for one workspace")
+    discard = commands.add_parser("purge-organization", help="Permanently delete all queued and held copies for a purged workspace")
     discard.add_argument("--organization", required=True)
     args = parser.parse_args()
-    if args.command == "discard-held":
-        print(json.dumps({"discarded": spool.discard_held(args.organization)}))
+    if args.command == "purge-organization":
+        print(json.dumps({"discarded": spool.purge_organization(args.organization)}))
     elif args.command == "status":
         print(json.dumps(spool.counts()))
     else:

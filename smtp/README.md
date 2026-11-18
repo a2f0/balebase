@@ -62,6 +62,11 @@ to get queued and held recipient counts. Status does not print message contents.
 Take encrypted filesystem snapshots of the persistent spool for recovery.
 Only restore the spool to the same tier.
 
+The spool allows 256 MiB per workspace (retained body bytes plus 4 KiB per
+recipient), across queued and held deliveries. A full workspace receives
+SMTP 452 at DATA, before acceptance; the sending server can retry. The
+whole SQLite spool has a 4 GiB cap.
+
 Queue retries back off to once per hour. Investigate growing queues,
 especially after Worker deploys or token rotations. After restoring the
 service the queue drains automatically. A permanent failure, such as a
@@ -73,12 +78,12 @@ The receiver never redirects previously accepted mail to that binding.
 Successful deliveries release their local bodies when all recipients finish.
 For held deliveries, arrange recovery with the original workspace's operator.
 After an authorized workspace purge, run the following on this tier's receiver.
-It permanently deletes that organization's held recipients and releases a body
-once every recipient has finished. Queued deliveries and other tenants' held
-recipients remain available.
+It permanently deletes that organization's queued and held recipient copies,
+blocks an in-flight DATA for the retired workspace ID, and releases each
+body once its last recipient is gone. Other tenants' copies remain available.
 
 ```sh
-sudo /opt/balebase-smtp/venv/bin/python -B /opt/balebase-smtp/receiver.py discard-held --organization ORGANIZATION_ID
+sudo /opt/balebase-smtp/venv/bin/python -B /opt/balebase-smtp/receiver.py purge-organization --organization ORGANIZATION_ID
 ```
 
 To retire a receiver, remove its customer MX instructions by disabling
