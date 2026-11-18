@@ -133,12 +133,13 @@ expect_output \
   load_cloudflare_email_env
 
 # Standalone deploys must run the checkout's Wrangler from either directory.
-# Only the stubs run. They record arguments and never read secret values.
+# The stubs record arguments and discard the synthetic secret uploads.
 mkdir "$FIXTURE/deploy-bin"
 for tool in bun bunx; do
   cat > "$FIXTURE/deploy-bin/$tool" <<'EOF'
 #!/usr/bin/env bash
 [[ "$PWD" -ef "$FIXTURE" ]] || exit 1
+if [[ "$*" == "--bun wrangler secret put "* ]]; then cat >/dev/null; fi
 printf '%s %s\n' "${0##*/}" "$*" >> "$MOCK_LOG"
 EOF
   chmod +x "$FIXTURE/deploy-bin/$tool"
