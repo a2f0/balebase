@@ -226,10 +226,20 @@ describe("Inbox, mounted", () => {
       return Response.json({
         address: "upload@example.com",
         emails: emails.filter(({ id }) => !archived.has(id)),
+        mailboxes: [
+          {
+            id: "legal",
+            address: "legal@example.org",
+            name: "Legal",
+            connected: true,
+          },
+        ],
       });
     });
     await render();
     await click("Archive");
+    const selector = container.querySelector<HTMLSelectElement>("select");
+    expect(selector?.disabled).toBe(true);
     // Chosen while the archive of the first message is still on its way.
     const statement = [
       ...container.querySelectorAll<HTMLButtonElement>(".inboxItem"),
@@ -240,6 +250,7 @@ describe("Inbox, mounted", () => {
     expect(container.textContent).toContain("Email archived.");
     const selected = container.querySelector('.inboxItem[aria-pressed="true"]');
     expect(selected?.textContent).toContain("Statement");
+    expect(selector?.disabled).toBe(false);
   });
 
   it("disables Trash for hidden links while allowing Archive", async () => {

@@ -3,7 +3,12 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { ApiEnv } from "../auth/apiEnv";
 import { readBodyWithLimit } from "../shared/storage";
-import { InvalidInboundMime, ingestInboundEmail, maxEmailBytes } from "./email";
+import {
+  InvalidInboundMime,
+  ingestInboundEmail,
+  maxEmailBytes,
+  parseInboundMime,
+} from "./email";
 import { isPlatformDomain } from "./inboundEmailAddress";
 import { hasPublicProof, txtChallenge } from "./routingDomains";
 
@@ -57,6 +62,21 @@ smtpIngress.post("/recipient", async (c) => {
     return c.body(null, 503);
   }
   return c.json({ mailboxId: box.id, organizationId: box.organization_id });
+});
+
+// The MTA checks the exact traced bytes with the same parser as delivery
+// before its durable SMTP acknowledgment. Invalid mail need not enter the spool.
+smtpIngress.post("/validate", async (c) => {
+  if (!c.req.raw.body) return c.body(null, 400);
+  const raw = await readBodyWithLimit(c.req.raw.body, maxEmailBytes, 60_000);
+  if (!raw) return c.body(null, 413);
+  try {
+    await parseInboundMime(raw);
+    return c.body(null, 204);
+  } catch (error) {
+    if (error instanceof InvalidInboundMime) return c.body(null, 422);
+    throw error;
+  }
 });
 
 smtpIngress.post("/deliver", async (c) => {

@@ -161,7 +161,8 @@ by the previous provider, including Google Workspace. Keep the verification
 TXT published for direct MX. The receiver checks it at RCPT time and returns
 a temporary failure if the proof changes or DNS is unavailable. TXT
 verification establishes customer control of the domain. The receiver checks
-that the envelope recipient has an active binding. It performs no SPF, DKIM,
+that the exact envelope address has an active binding. Named Balebase inbox
+addresses are case-insensitive. It performs no SPF, DKIM,
 DMARC, or spam assessment of senders. Treat From, To and other sender-supplied
 headers as untrusted.
 
@@ -177,9 +178,11 @@ platform recipients, connect both addresses in the Balebase organization and
 set `TF_VAR_platform_mailbox_organization_id` to that organization's ID in
 the tier's deployment environment. Keep this value set while routing should
 remain active. Redeploy the API to bind native delivery to this workspace.
-Run `bun run deploy:domains` to finish the production cutover. The Terraform
-wrapper checks both inbox bindings and the deployed Worker against the
-configured organization ID. It checks for existing MX destinations from
+Run `bun run deploy:domains` with the tier environment to finish the production
+cutover. Supplying this setting through Terraform CLI overrides, variable files
+or saved plans bypasses the native email preflight. The supported deployment
+checks both inbox bindings and the deployed Worker against the configured
+organization ID. It checks for existing MX destinations from
 other providers before enabling the rules and publishing the apex MX. Send
 one external message per platform address and confirm each lands in its
 designated inbox before announcing the addresses.

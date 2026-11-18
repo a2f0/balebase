@@ -105,9 +105,15 @@ class Receiver:
         peer = ipaddress.ip_address(session.peer[0])
         protocol = "ESMTPS" if session.ssl else "ESMTP"
         trace = f"Received: from [{peer}] by {server.hostname} with {protocol}; {formatdate(localtime=False, usegmt=True)}\r\n"
+        body = trace.encode("ascii") + envelope.original_content
+        status, _ = await asyncio.to_thread(self.bridge, "validate", "", body)
+        if status in (413, 422):
+            return "554 5.6.0 Message exceeds the supported MIME limits"
+        if status != 204:
+            return "451 4.3.0 Message validation unavailable"
         try:
             async with self.quota_lock:
-                await asyncio.to_thread(self.spool.accept, sender, trace.encode("ascii") + envelope.original_content, envelope.bindings)
+                await asyncio.to_thread(self.spool.accept, sender, body, envelope.bindings)
                 self.reservations.pop(envelope, None)
         except SpoolUnavailable:
             return "452 4.2.2 Workspace cannot accept queued mail"
@@ -117,8 +123,8 @@ class Receiver:
         return "250 2.0.0 Message queued"
 
 
-async def serve(handler, hostname, host, port, tls):
-    active = set()
+async def serve(handler, hostname, host, port, tls, session_seconds=600):
+    active = {}
 
     class LimitedSMTP(SMTP):
         def _set_post_data_state(self):
@@ -127,16 +133,24 @@ async def serve(handler, hostname, host, port, tls):
             super()._set_post_data_state()
 
         def connection_made(self, transport):
-            if self not in active and len(active) >= 8:
-                transport.write(b"421 4.3.2 Server busy\r\n")
-                transport.close()
-                return
-            active.add(self)
+            if self not in active:
+                peer = transport.get_extra_info("peername")[0]
+                if len(active) >= 8 or list(active.values()).count(peer) >= 4:
+                    transport.write(b"421 4.3.2 Server busy\r\n")
+                    transport.close()
+                    return
+                active[self] = peer
+                self.deadline = asyncio.get_running_loop().call_later(session_seconds, self.close_session)
             super().connection_made(transport)
+
+        def close_session(self):
+            if self.transport:
+                self.transport.close()
 
         def connection_lost(self, error):
             if self in active:
-                active.discard(self)
+                del active[self]
+                self.deadline.cancel()
                 handler.reservations.pop(self.envelope, None)
                 super().connection_lost(error)
 

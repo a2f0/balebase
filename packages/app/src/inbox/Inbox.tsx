@@ -269,8 +269,12 @@ function InboxView({
               Mailbox
               <select
                 className="input"
+                disabled={Boolean(actions.workingId)}
                 value={model.mailbox ?? messages.listedMailbox}
-                onChange={(event) => model.setMailbox(event.target.value)}
+                onChange={(event) => {
+                  actions.clear();
+                  model.setMailbox(event.target.value);
+                }}
               >
                 <option value="">Default inbox</option>
                 {messages.mailboxes.map((box) => (

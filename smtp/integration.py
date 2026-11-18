@@ -5,7 +5,7 @@ import smtplib
 import sqlite3
 import ssl
 import sys
-from contextlib import closing
+from contextlib import closing, ExitStack
 from pathlib import Path
 
 from receiver import Bridge, Receiver, serve
@@ -23,7 +23,12 @@ async def run():
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(work / "cert.pem", work / "key.pem")
     host = "localhost"
-    server = await serve(Receiver(spool, bridge), host, "127.0.0.1", 0, ctx)
+    validation_outage = False
+    def validate_or_deliver(route, *args):
+        if route == "validate" and validation_outage:
+            return 503, b""
+        return bridge(route, *args)
+    server = await serve(Receiver(spool, validate_or_deliver), host, "127.0.0.1", 0, ctx)
     port = server.sockets[0].getsockname()[1]
 
     def submit():
@@ -42,7 +47,30 @@ async def run():
                 b'Content-Disposition: attachment; filename="a.txt"\r\n\r\nattachment body\r\n--p--\r\n')
             assert code == 250
     async with server:
+        def connection_limit():
+            with ExitStack() as stack:
+                for _ in range(4):
+                    stack.enter_context(smtplib.SMTP(host, port, timeout=10))
+                try:
+                    smtplib.SMTP(host, port, timeout=10)
+                except smtplib.SMTPConnectError as error:
+                    assert error.smtp_code == 421
+                else:
+                    raise AssertionError("Per-source connection limit was not enforced")
+        await asyncio.to_thread(connection_limit)
         await asyncio.to_thread(submit)
+        def try_data(content):
+            with smtplib.SMTP(host, port, timeout=10) as smtp:
+                smtp.ehlo()
+                assert smtp.mail("")[0] == 250
+                assert smtp.rcpt("legal@base.example.org")[0] == 250
+                return smtp.data(content)[0]
+        invalid = b'Content-Type: multipart/mixed; boundary="p"\r\n\r\n' + b"--p\r\n\r\npart\r\n" * 1200 + b"--p--\r\n"
+        assert await asyncio.to_thread(try_data, invalid) == 554
+        validation_outage = True
+        assert await asyncio.to_thread(try_data, b"Subject: retry\r\n\r\nbody") == 451
+        validation_outage = False
+        assert spool.counts() == {"queued": 2}
         spool.quota_bytes = 25 * 1024 * 1024 + 4096
         def over_quota():
             with smtplib.SMTP(host, port, timeout=10) as smtp:
@@ -62,6 +90,13 @@ async def run():
                 assert smtp.rcpt("legal@other.example.org")[0] == 250
                 assert smtp.data("Subject: other workspace\r\n\r\nbody")[0] == 250
         await asyncio.to_thread(over_quota)
+    deadline_server = await serve(Receiver(spool, bridge), host, "127.0.0.1", 0, ctx, session_seconds=0.2)
+    async with deadline_server:
+        reader, writer = await asyncio.open_connection("127.0.0.1", deadline_server.sockets[0].getsockname()[1])
+        assert (await reader.readline()).startswith(b"220 ")
+        assert await asyncio.wait_for(reader.read(), timeout=5) == b""
+        writer.close()
+        await writer.wait_closed()
     # Reopen from disk as a restarted receiver does. Lose the first successful
     # HTTP response and then replay all deliveries with their persisted IDs.
     spool = Spool(spool_file)

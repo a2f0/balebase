@@ -3,7 +3,8 @@
 This service receives mail on TCP port 25 for verified customer domains.
 Senders may use STARTTLS. The service validates each envelope recipient with
 the Balebase Worker, including recipients omitted from the message headers.
-After DATA, a SQLite transaction persists the original bytes, a Received
+At DATA, the Worker validates the traced message with its delivery parser.
+A SQLite transaction then persists the original bytes, a Received
 trace, and each recipient's accepted mailbox ID before replying 250.
 The queue retries the authenticated HTTPS delivery after a restart or
 temporary failure. Each accepted recipient has its own delivery UUID.
@@ -59,6 +60,8 @@ second SMTP transaction, as with other SMTP receivers.
 disk usage, the public SMTP probe, and queue state. On the host, run
 `sudo /opt/balebase-smtp/venv/bin/python -B /opt/balebase-smtp/receiver.py status`
 to get queued and held recipient counts. Status does not print message contents.
+The listener admits eight concurrent sessions, up to four per source IP, with
+a ten-minute session deadline and a two-minute idle timeout.
 Take encrypted filesystem snapshots of the persistent spool for recovery.
 Only restore the spool to the same tier.
 
@@ -70,8 +73,8 @@ recipient gets SMTP 452; the sender can deliver to its other accepted
 recipients and retry the rest. DATA rechecks storage and retirement before
 acceptance. The whole SQLite spool has a 4 GiB cap. The Worker allows 1,200
 MIME parts including the root, 30 levels of nesting and 128 KiB of aggregate
-MIME headers. Messages that exceed MIME limits after direct SMTP acceptance
-are held with HTTP 422.
+MIME headers. Invalid or over-limit MIME gets SMTP 554 at DATA. If the Worker
+cannot validate the message, DATA returns 451 so the sender can retry.
 
 Queue retries back off to once per hour. Investigate growing queues,
 especially after Worker deploys or token rotations. After restoring the

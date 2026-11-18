@@ -170,6 +170,20 @@ function attachmentWrites(
   return statements;
 }
 
+export function parseInboundMime(raw: ArrayBuffer | Uint8Array) {
+  return PostalMime.parse(raw, {
+    maxHeadersSize: 128 * 1024,
+    maxNestingDepth: 30,
+    maxPartCount: maxMimeParts,
+    maxRfc822NestingDepth: 0,
+  }).catch((cause: unknown) => {
+    throw new InvalidInboundMime(
+      cause instanceof Error ? cause.message : "Invalid MIME message",
+      { cause },
+    );
+  });
+}
+
 async function storeMessageObjects(
   message: Pick<InboundMessage, "raw">,
   env: Pick<Bindings, "DB" | "STORAGE">,
@@ -182,17 +196,7 @@ async function storeMessageObjects(
     message.raw instanceof Uint8Array
       ? message.raw
       : await new Response(message.raw).arrayBuffer();
-  const parsed = await PostalMime.parse(raw, {
-    maxHeadersSize: 128 * 1024,
-    maxNestingDepth: 30,
-    maxPartCount: maxMimeParts,
-    maxRfc822NestingDepth: 0,
-  }).catch((cause: unknown) => {
-    throw new InvalidInboundMime(
-      cause instanceof Error ? cause.message : "Invalid MIME message",
-      { cause },
-    );
-  });
+  const parsed = await parseInboundMime(raw);
   const attachments = parsed.attachments.map((attachment, index) =>
     toStoredAttachment(attachment, index, objectPrefix),
   );
