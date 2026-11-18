@@ -172,8 +172,9 @@ const routes: WorkspaceRoute[] = [
   {
     matches: exactly("/inbox"),
     page: "inbox",
-    render: ({ access, navigate }) => (
+    render: ({ access, navigate, workspace }) => (
       <Inbox
+        key={workspace.activeOrganizationId}
         canManage={canManageOrganization(access.memberRole)}
         canAccessFinance={access.can("finance")}
         onNavigate={navigate}

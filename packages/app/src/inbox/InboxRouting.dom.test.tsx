@@ -89,3 +89,49 @@ it("shows the TXT challenge, verifies the domain, and switches to its connected 
     box.address,
   );
 });
+
+it("refreshes the current mailbox when a routing save settles after a switch", async () => {
+  const save = Promise.withResolvers<Response>();
+  const selected: string[] = [];
+  const box = {
+    id: "legal",
+    name: "Legal",
+    address: "legal@tearleads.com",
+    connected: true,
+  };
+  respond(async (url) => {
+    if (url.pathname.endsWith("/domains")) return save.promise;
+    if (url.pathname.endsWith("/routing"))
+      return Response.json({ domains: [], mailboxes: [] });
+    const mailbox = url.searchParams.get("mailbox") ?? "";
+    selected.push(mailbox);
+    return Response.json({
+      mailboxes: [box],
+      mailboxId: mailbox || null,
+      address: mailbox ? box.address : "upload@example.com",
+      emails: [],
+    });
+  });
+  const { container } = await mount(
+    <Inbox canManage canAccessFinance={false} onNavigate={() => {}} />,
+  );
+  const details = container.querySelector("details");
+  if (!details) throw new Error("Missing inbox settings");
+  await act(async () => {
+    details.open = true;
+    details.dispatchEvent(new dom.Event("toggle") as never);
+  });
+  await settle();
+  await fill(
+    container.querySelector('input[placeholder="example.com"]'),
+    "tearleads.com",
+  );
+  await click("Add domain");
+  await fill(container.querySelector("select"), "legal");
+  await act(async () => save.resolve(Response.json({ id: "d" })));
+  await settle();
+  expect(selected.slice(-2)).toEqual(["legal", "legal"]);
+  expect(container.querySelector(".inboxAddressValue")?.textContent).toBe(
+    box.address,
+  );
+});

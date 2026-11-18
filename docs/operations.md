@@ -159,7 +159,22 @@ the same two local parts at `inbox-staging.balebase.com`, and stage customer
 forwarding to the alias on that host. Apply migration 0105 and deploy the
 Worker before enabling the new routing rules. Review the production Terraform
 plan for apex MX changes and run `bun run deploy:email:verify` after applying.
-Unbound recipients are rejected until a manager creates the corresponding inbox.
+The verifier checks that both platform addresses have connected inboxes in the
+same active organization. Production checks the bindings before applying
+apex MX. On first setup, deploy the Worker and UI, connect both addresses,
+then run `bun run deploy:domains` to finish the cutover. Send
+one external message per platform address and confirm each lands in its
+designated inbox before announcing the addresses.
+
+When a domain changes hands, the previous organization can disconnect its
+addresses and release the domain in **Manage inbox addresses**. If that
+organization is unavailable, have the new owner create a pending claim in
+their own workspace. A support operator should confirm its exact generated
+TXT value in public DNS, confirm the intended organization and domain with
+the parties, then disable the old bindings and release the old claim in one
+D1 transaction. Historical mail stays with its original organization. The
+new owner then chooses **Verify domain**, connects their addresses, and
+updates their mail provider's forwarding destinations.
 
 ## Background jobs and retained output
 

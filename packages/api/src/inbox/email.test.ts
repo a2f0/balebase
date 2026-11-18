@@ -159,7 +159,7 @@ function createBindings(database: D1Database, storage: R2Bucket) {
 function createDatabase() {
   const statements: CapturedStatement[] = [];
   const value = {
-    batch: async () => [],
+    batch: async () => [{ meta: { changes: 1 } }],
     prepare: (query: string) => {
       let values: unknown[] = [];
       const statement = {

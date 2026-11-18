@@ -9,12 +9,12 @@ import { handleEmail } from "./email";
 import { inbox } from "./inbox";
 import { inboxRouting } from "./mailboxes";
 
-function fixture(inboundDomain = "inbox.balebase.com") {
+function fixture(inboundDomain = "inbox.balebase.com", afterPut?: () => void) {
   const database = createTestDatabase();
   const org = seedAccount(database, { id: "owner" }).organizationId;
   seedAccount(database, { id: "other" });
   seedAccount(database, { id: "root", role: "admin" });
-  const storage = memoryStorage();
+  const storage = memoryStorage(new Map(), afterPut ? { afterPut } : {});
   const bindings = testBindings({
     DB: toD1(database),
     STORAGE: storage.bucket,
@@ -215,6 +215,26 @@ describe("verified inbound domains", () => {
       emails: listing.emails,
     });
   });
+  it("rejects a delivery disconnected while its message was being stored", async () => {
+    let disconnect = () => {};
+    const f = fixture("inbox.balebase.com", () => disconnect());
+    const bound = await f.bind("privacy@balebase.com", "root");
+    const { id, forwardingAddress } = (await bound.json()) as {
+      id: string;
+      forwardingAddress: string;
+    };
+    disconnect = () => {
+      f.database
+        .query(
+          "UPDATE inbound_mailboxes SET disconnected_at = 'now' WHERE id = ?",
+        )
+        .run(id);
+    };
+    expect(await f.deliver(forwardingAddress)).toBe("Unknown recipient");
+    expect(f.database.query("SELECT id FROM inbound_emails").all()).toEqual([]);
+    expect(f.storage.stored.size).toBe(0);
+  });
+
   it.each(["inbox.balebase.com", "inbox-staging.balebase.com"])(
     "protects platform and legacy addresses on %s",
     async (domain) => {

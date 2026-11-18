@@ -22,11 +22,34 @@ ZONE_NAME="balebase.com"
 if [[ "$DEPLOY_TIER" == "staging" ]]; then
   INBOUND_DOMAIN="inbox-staging.balebase.com"
   PLATFORM_DOMAIN="$INBOUND_DOMAIN"
+  api_config="wrangler.staging.jsonc"
   WORKER_NAME="balebase-api-staging"
 else
   INBOUND_DOMAIN="inbox.balebase.com"
   PLATFORM_DOMAIN="$ZONE_NAME"
+  api_config="wrangler.jsonc"
   WORKER_NAME="balebase-api"
+fi
+
+# Cloudflare can route both addresses while D1 still rejects their envelopes.
+# Only read aggregate counts so deployment logs contain no mailbox contents.
+check_bindings() {
+  local sql
+  sql="SELECT count(*) AS recipients, count(DISTINCT box.organization_id) AS organizations
+    FROM inbound_mailboxes box JOIN organization org ON org.id = box.organization_id
+    WHERE box.disconnected_at IS NULL AND org.deletedAt IS NULL
+      AND box.address IN ('legal@$PLATFORM_DOMAIN', 'privacy@$PLATFORM_DOMAIN')"
+  if ! (
+    cd "$SCRIPT_DIR/../../packages/api"
+    bunx --bun --no-install wrangler d1 execute DB --remote --config "$api_config" --command "$sql" --json
+  ) | jq -e '.[0].results[0] | .recipients == 2 and .organizations == 1' >/dev/null; then
+    echo "ERROR: Connect both legal@$PLATFORM_DOMAIN and privacy@$PLATFORM_DOMAIN in the Balebase workspace, then rerun email verification." >&2
+    exit 1
+  fi
+}
+if [[ "${1:-}" == "--bindings-only" ]]; then
+  check_bindings
+  exit 0
 fi
 
 cloudflare_get() {
@@ -100,5 +123,8 @@ if ! jq -e \
   exit 1
 fi
 
+check_bindings
+
 echo "PASS: $INBOUND_DOMAIN has its three Cloudflare Email Routing MX records."
 echo "PASS: Uploads, forwarded inboxes, and platform legal addresses route to $WORKER_NAME."
+echo "PASS: Both platform addresses have active inboxes in the same organization."

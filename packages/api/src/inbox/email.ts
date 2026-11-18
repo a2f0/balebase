@@ -87,7 +87,10 @@ async function ingestInboundEmail(
         `INSERT INTO inbound_emails
          (id, organization_id, message_id, envelope_from, envelope_to, subject,
           raw_object_key, raw_size, received_at, mailbox_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+         WHERE EXISTS (SELECT 1 FROM organization WHERE id = ? AND deletedAt IS NULL)
+           AND (? IS NULL OR EXISTS (SELECT 1 FROM inbound_mailboxes
+             WHERE id = ? AND organization_id = ? AND disconnected_at IS NULL))`,
       ).bind(
         emailId,
         organizationId,
@@ -99,13 +102,18 @@ async function ingestInboundEmail(
         message.rawSize,
         createdAt,
         mailboxId,
+        organizationId,
+        mailboxId,
+        mailboxId,
+        organizationId,
       ),
       ...attachments.map((attachment) =>
         env.DB.prepare(
           `INSERT INTO inbound_email_attachments
            (id, email_id, object_key, filename, content_type, size,
             disposition, content_id, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+           WHERE EXISTS (SELECT 1 FROM inbound_emails WHERE id = ?)`,
         ).bind(
           attachment.id,
           emailId,
@@ -116,16 +124,24 @@ async function ingestInboundEmail(
           attachment.disposition,
           attachment.contentId,
           createdAt,
+          emailId,
         ),
       ),
     ];
 
-    await env.DB.batch(statements);
+    const [inserted] = await env.DB.batch(statements);
+    if (inserted?.meta.changes) return;
+    message.setReject("Unknown recipient");
   } catch (error) {
-    await Promise.allSettled(
-      storedObjectKeys.map((objectKey) => env.STORAGE.delete(objectKey)),
-    );
+    await cleanup();
     throw error;
+  }
+  await cleanup();
+
+  function cleanup() {
+    return Promise.allSettled(
+      storedObjectKeys.map((key) => env.STORAGE.delete(key)),
+    );
   }
 }
 

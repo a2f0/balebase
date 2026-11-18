@@ -13,7 +13,7 @@ import {
   findActivity,
   insertActivity,
 } from "../shared/activity";
-import { respond } from "../shared/respond";
+import { readQuery, respond } from "../shared/respond";
 import { storedDownload } from "../shared/storage";
 import { organizationInboxAddress } from "./inboundEmailAddress";
 import {
@@ -60,13 +60,14 @@ interface InboundEmailAttachmentRow {
 }
 
 inbox.get("/", async (context) => {
-  const folder = inboxFolder(context.req.query("folder"));
-  if (!folder) return invalidFolder(context);
+  const query = readQuery(context, inboxRoutes.list, "Invalid inbox query.");
+  if (query instanceof Response) return query;
+  const folder = query.folder ?? "inbox";
   const organizationId = context.get("organizationId");
   const mailboxes = await listMailboxes(context.env.DB, organizationId);
-  const linkedEmail = context.req.query("email");
+  const linkedEmail = query.email;
   const mailboxId =
-    context.req.query("mailbox") ??
+    query.mailbox ??
     (linkedEmail
       ? await context.env.DB.prepare(
           "SELECT mailbox_id FROM inbound_emails WHERE organization_id = ? AND id = ?",

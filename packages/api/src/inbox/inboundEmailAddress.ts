@@ -5,7 +5,7 @@ export function organizationInboxAddress(
   return `upload+${organizationId}@${normalizeDomain(inboundEmailDomain)}`;
 }
 
-export function organizationIdForInboundAddress(
+function organizationIdForInboundAddress(
   address: string,
   inboundEmailDomain: string,
 ) {

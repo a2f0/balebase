@@ -19,12 +19,12 @@ import type {
   InboundEmailLink,
   InboundEmailSummary,
   InboxFolder,
+  Mailbox,
 } from "@balebase/validators/inbox";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityFeed } from "../activity/ActivityFeed";
 import { ApiDownload } from "../shared/ApiDownload";
 import { api } from "../shared/apiClient";
-import { errorMessage } from "../shared/errors";
 import {
   countLabel,
   formatBytes,
@@ -76,52 +76,42 @@ function useInboxModel() {
 }
 
 function useInboxMessages(folder: InboxFolder, mailbox: string | undefined) {
-  const [listing, setListing] =
-    useState<Awaited<ReturnType<typeof api.inbox.list>>>();
+  const { openedByLink, pending } = useLinkedEmailId();
+  const list = useLoad(
+    useCallback(
+      () =>
+        api.inbox.list(
+          folder,
+          mailbox || undefined,
+          mailbox === undefined ? openedByLink : undefined,
+        ),
+      [folder, mailbox, openedByLink],
+    ),
+    "Could not load the inbox.",
+  );
+  const listing = list.data;
+  const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
+  useEffect(() => {
+    if (listing) setMailboxes(listing.mailboxes ?? []);
+  }, [listing]);
   const selectedMailbox = listing?.mailboxes?.find(
     (box) => box.id === listing.mailboxId,
   );
   const [selectedId, setSelectedId] = useState<string>();
-  const [loadingList, setLoadingList] = useState(true);
-  const [error, setError] = useState<string>();
-  const { openedByLink, pending } = useLinkedEmailId();
-  const listRequest = useRef(0);
-
-  const refresh = useCallback(async () => {
-    const request = ++listRequest.current;
-    setLoadingList(true);
-    setError(undefined);
-    try {
-      const listing = await api.inbox.list(
-        folder,
-        mailbox || undefined,
-        mailbox === undefined ? openedByLink : undefined,
-      );
-      if (request !== listRequest.current) return;
-      const nextEmails = listing.emails;
-      const requested = pending.current;
-      pending.current = undefined;
-      setListing(listing);
-      setSelectedId((current) =>
-        selectEmailId(nextEmails, current, requested, openedByLink),
-      );
-    } catch (cause) {
-      if (request === listRequest.current)
-        setError(errorMessage(cause, "Could not load the inbox."));
-    } finally {
-      if (request === listRequest.current) setLoadingList(false);
-    }
-  }, [folder, mailbox, openedByLink, pending]);
-
   useEffect(() => {
-    setListing(undefined);
-    setSelectedId(undefined);
-    void refresh();
-    return () => {
-      listRequest.current += 1;
-    };
-  }, [refresh]);
-
+    if (!listing) {
+      setSelectedId(undefined);
+      return;
+    }
+    const requested = pending.current;
+    pending.current = undefined;
+    setSelectedId((current) =>
+      selectEmailId(listing.emails, current, requested, openedByLink),
+    );
+  }, [listing, pending, openedByLink]);
+  const refresh = useCallback(async () => {
+    await list.reload();
+  }, [list.reload]);
   const message = useLoad(
     useCallback(
       async () => (selectedId ? api.inbox.get(selectedId, folder) : undefined),
@@ -132,12 +122,12 @@ function useInboxMessages(folder: InboxFolder, mailbox: string | undefined) {
   return {
     detail: message.data,
     emails: listing?.emails ?? [],
-    error: error ?? message.error,
+    error: list.error ?? message.error,
     inboundAddress:
       selectedMailbox?.connected === false ? undefined : listing?.address,
-    mailboxes: listing?.mailboxes ?? [],
+    mailboxes,
     listedMailbox: listing?.mailboxId ?? "",
-    loadingList,
+    loadingList: list.loading,
     loadingMessage: Boolean(selectedId) && message.loading,
     refresh,
     selectedId,
