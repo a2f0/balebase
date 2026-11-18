@@ -98,3 +98,23 @@ variable "platform_mailbox_organization_id" {
   type        = string
   default     = ""
 }
+
+variable "smtp_ipv4" {
+  description = "Public IPv4 address of this tier's port-25 SMTP receiver. Empty leaves the address record unpublished."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.smtp_ipv4 == "" || can(cidrnetmask("${var.smtp_ipv4}/32"))
+    error_message = "Set a literal IPv4 address or leave it empty."
+  }
+}
+
+variable "smtp_ipv6" {
+  description = "Public IPv6 address of this tier's port-25 SMTP receiver. Empty leaves the address record unpublished."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.smtp_ipv6 == "" || can(cidrhost("${var.smtp_ipv6}/128", 0))
+    error_message = "Set a literal IPv6 address or leave it empty."
+  }
+}

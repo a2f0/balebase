@@ -76,6 +76,7 @@ function RoutingSettings() {
         <DomainRecord
           key={claim.id}
           claim={claim}
+          mx={settings.data?.directMx ?? null}
           busy={busy}
           verify={() => change(() => api.inbox.verifyDomain(claim.id))}
           release={() =>
@@ -97,8 +98,9 @@ function RoutingSettings() {
         <div className="stack" key={box.id}>
           <strong>{box.name}</strong>
           <p>
-            Route mail for <code>{box.address}</code> to{" "}
-            <code>{box.forwardingAddress}</code> at your mail provider.
+            Forwarding: At your current mail provider, forward only{" "}
+            <code>{box.address}</code> to <code>{box.forwardingAddress}</code>{" "}
+            to keep your existing MX records.
           </p>
           <Button
             disabled={busy}
@@ -154,15 +156,18 @@ function DomainForm({
 
 function DomainRecord({
   claim,
+  mx,
   busy,
   verify,
   release,
 }: {
   claim: DomainClaim;
+  mx: { host: string; priority: number } | null;
   busy: boolean;
   verify: () => Promise<boolean>;
   release: () => Promise<void>;
 }) {
+  const mxCheck = useAction("Could not check public MX records.");
   return (
     <div className="stack">
       <strong>
@@ -189,6 +194,51 @@ function DomainRecord({
           </Button>
         </>
       )}
+      {claim.status === "verified" &&
+        (mx ? (
+          <>
+            <p>
+              <strong>Direct MX</strong> sends all mail for{" "}
+              <code>{claim.domain}</code> here. Connect each recipient first.
+              For a domain with other email users, keep your existing MX and use
+              per-address forwarding below.
+            </p>
+            <dl>
+              <dt>MX record name</dt>
+              <dd>
+                <code>{claim.domain}</code>
+              </dd>
+              <dt>Mail server</dt>
+              <dd>
+                <code>{mx.host}</code>
+              </dd>
+              <dt>Priority</dt>
+              <dd>{mx.priority}</dd>
+            </dl>
+            <Button
+              disabled={busy || mxCheck.busy}
+              onClick={() =>
+                void mxCheck.run(
+                  () => api.inbox.checkMx(claim.id),
+                  ({ ready }) =>
+                    ready
+                      ? "Public MX records match."
+                      : "Public MX records do not yet match the displayed host and priority.",
+                )
+              }
+            >
+              Check public MX
+            </Button>
+            {(mxCheck.notice || mxCheck.error) && (
+              <p role="status">{mxCheck.error ?? mxCheck.notice}</p>
+            )}
+          </>
+        ) : (
+          <p>
+            Direct MX is unavailable in this environment. Use per-address
+            forwarding below.
+          </p>
+        ))}
       <Button disabled={busy} onClick={() => void release()}>
         Release domain
       </Button>

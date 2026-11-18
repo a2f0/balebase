@@ -54,6 +54,8 @@ const packageWorkspaces: Record<string, PackageWorkspace> = {
   "packages/*": defaultPackage,
   "packages/api": {
     ...defaultPackage,
+    // The SMTP test shell wrapper starts the harness, which bundles its Worker fixture.
+    entry: [...defaultPackage.entry, "scripts/smtpIntegration{,Worker}.ts"],
     project: [...defaultPackage.project, "scripts/**/*.ts"],
     production: [...defaultPackage.production, "!src/testing/**"],
   },

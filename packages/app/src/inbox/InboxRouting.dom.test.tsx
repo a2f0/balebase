@@ -24,6 +24,7 @@ it("shows the TXT challenge, verifies the domain, and switches to its connected 
   };
   const lists: string[] = [];
   respond(async (url, init) => {
+    if (url.pathname.endsWith("/mx")) return Response.json({ ready: true });
     if (url.pathname.endsWith("/domains")) {
       expect(JSON.parse(String(init?.body))).toEqual({
         domain: "tearleads.com",
@@ -45,6 +46,7 @@ it("shows the TXT challenge, verifies the domain, and switches to its connected 
     }
     if (url.pathname.endsWith("/routing"))
       return Response.json({
+        directMx: { host: "mx.balebase.com", priority: 10 },
         domains: requested
           ? [{ ...claim, status: verified ? "verified" : "pending" }]
           : [],
@@ -79,6 +81,9 @@ it("shows the TXT challenge, verifies the domain, and switches to its connected 
   expect(container.textContent).toContain(claim.recordValue);
   await click("Verify domain");
   expect(container.textContent).toContain("Verified");
+  expect(container.textContent).toContain("mx.balebase.com");
+  await click("Check public MX");
+  expect(container.textContent).toContain("Public MX records match.");
   await fill(container.querySelector('input[placeholder="Legal"]'), "Legal");
   await fill(container.querySelector('input[type="email"]'), box.address);
   await click("Connect inbox address");

@@ -31,6 +31,7 @@ import { employeeForms } from "./employeeForms/employeeForms";
 import { equipment } from "./equipment/equipment";
 import { finance } from "./finance/finance";
 import { inbox } from "./inbox/inbox";
+import { smtpIngress } from "./inbox/smtpIngress";
 import { issues } from "./issues/issues";
 import { libraryFolders } from "./library/libraryFolders";
 import { objects } from "./library/objects";
@@ -105,6 +106,8 @@ app.all("/api/auth/*", (context) =>
 );
 
 app.get("/", (context) => context.json({ name: "balebase-api" }));
+
+app.route("/internal/inbound-smtp", smtpIngress);
 
 app.get("/health", (context) =>
   context.json({ status: "ok", timestamp: new Date().toISOString() }),

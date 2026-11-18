@@ -7,6 +7,11 @@ import { endpoint } from "./endpoint";
 import type { Transport } from "./transport";
 
 const endpoints = {
+  mx: endpoint<typeof inboxRoutes.mx>({
+    method: "GET",
+    path: "/api/inbox/routing/domains/:id/mx",
+    response: "json",
+  }),
   release: endpoint<typeof inboxRoutes.release>({
     method: "DELETE",
     path: "/api/inbox/routing/domains/:id",
@@ -94,6 +99,7 @@ export function inboxApi(transport: Transport) {
       transport.call(endpoints.claim, { body: { domain } }),
     verifyDomain: (id: string) =>
       transport.call(endpoints.verify, { params: { id } }),
+    checkMx: (id: string) => transport.call(endpoints.mx, { params: { id } }),
     releaseDomain: (id: string) =>
       transport.call(endpoints.release, { params: { id } }),
     bindMailbox: (name: string, address: string) =>

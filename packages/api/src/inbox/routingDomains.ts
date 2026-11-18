@@ -1,4 +1,4 @@
-import { resolveTxt } from "node:dns/promises";
+import { resolveMx, resolveTxt } from "node:dns/promises";
 import { type DomainClaim, inboxRoutes } from "@balebase/validators/inbox";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
@@ -74,12 +74,54 @@ export async function writeRouting(
   return Boolean(result?.meta.changes);
 }
 
+export function directMx(env: {
+  SMTP_MX_HOST?: string;
+  SMTP_INGRESS_TOKEN?: string;
+}) {
+  return env.SMTP_MX_HOST && (env.SMTP_INGRESS_TOKEN?.length ?? 0) >= 32
+    ? { host: env.SMTP_MX_HOST, priority: 10 }
+    : null;
+}
+
 export function domainRoutes(
   lookup: (name: string) => Promise<string[][]> = resolveTxt,
+  lookupMx = resolveMx,
 ) {
   const domains = new Hono<ApiEnv>();
   domains.post("/", claimDomain);
   domains.post("/:id/verify", (c) => verifyDomain(c, lookup));
+  domains.get("/:id/mx", async (c) => {
+    const mx = directMx(c.env);
+    if (!mx)
+      return c.json(
+        { error: "Direct MX is unavailable in this environment." },
+        503,
+      );
+    const row = await c.env.DB.prepare(
+      "SELECT domain FROM inbound_domains WHERE id=? AND organization_id=? AND verified_at IS NOT NULL",
+    )
+      .bind(c.req.param("id"), c.get("organizationId"))
+      .first<{ domain: string }>();
+    if (!row) return c.json({ error: "Verified domain not found." }, 404);
+    try {
+      const records = await lookupMx(row.domain);
+      const first = records[0];
+      return respond(c, inboxRoutes.mx, {
+        ready:
+          records.length === 1 &&
+          first?.exchange.toLowerCase().replace(/\.$/, "") === mx.host &&
+          first.priority === mx.priority,
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        ["ENOTFOUND", "ENODATA"].includes(String(error.code))
+      )
+        return respond(c, inboxRoutes.mx, { ready: false });
+      return c.json({ error: "DNS lookup failed. Try again shortly." }, 503);
+    }
+  });
   domains.delete("/:id", releaseDomain);
   return domains;
 }

@@ -21,7 +21,7 @@ put_api_worker_secrets() {
     PLAID_TOKEN_ENCRYPTION_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET; do
     put_worker_secret "$config" "$secret_name"
   done
-  for secret_name in CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE; do
+  for secret_name in CHECKR_API_KEY CHECKR_BACKGROUND_PACKAGE SMTP_INGRESS_TOKEN; do
     if [[ -n "${!secret_name:-}" ]]; then
       put_worker_secret "$config" "$secret_name"
     fi

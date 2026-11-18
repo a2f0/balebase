@@ -4,7 +4,9 @@ import { normalizeFilename } from "../shared/filenames";
 import type { Bindings } from "../types";
 import { resolveRecipient } from "./inboundEmailAddress";
 
-const maxEmailBytes = 25 * 1024 * 1024;
+export class InvalidInboundMime extends Error {}
+
+export const maxEmailBytes = 25 * 1024 * 1024;
 const maxHeaderTextLength = 1_000;
 
 interface StoredAttachment {
@@ -46,11 +48,19 @@ export async function handleEmail(
   );
 }
 
-async function ingestInboundEmail(
-  message: ForwardableEmailMessage,
+type InboundMessage = Pick<
+  ForwardableEmailMessage,
+  "from" | "to" | "rawSize" | "setReject"
+> & {
+  raw: ForwardableEmailMessage["raw"] | Uint8Array;
+};
+
+export async function ingestInboundEmail(
+  message: InboundMessage,
   organizationId: string,
   mailboxId: string | null,
   env: Pick<Bindings, "DB" | "STORAGE">,
+  deliveryId?: string,
 ) {
   const emailId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
@@ -106,6 +116,14 @@ async function ingestInboundEmail(
     ),
   ];
 
+  if (deliveryId && mailboxId) {
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO inbound_smtp_receipts (delivery_id, mailbox_id)
+       SELECT ?, ? WHERE EXISTS (SELECT 1 FROM inbound_emails WHERE id = ?)`,
+      ).bind(deliveryId, mailboxId, emailId),
+    );
+  }
   try {
     const [inserted] = await env.DB.batch(statements);
     if (inserted?.meta.changes) return;
@@ -125,18 +143,26 @@ async function ingestInboundEmail(
 }
 
 async function storeMessageObjects(
-  message: ForwardableEmailMessage,
+  message: Pick<InboundMessage, "raw">,
   env: Pick<Bindings, "DB" | "STORAGE">,
   organizationId: string,
   emailId: string,
 ) {
   const objectPrefix = `organizations/${organizationId}/inbound-emails/${emailId}`;
   const rawObjectKey = `${objectPrefix}/message.eml`;
-  const raw = await new Response(message.raw).arrayBuffer();
+  const raw =
+    message.raw instanceof Uint8Array
+      ? message.raw
+      : await new Response(message.raw).arrayBuffer();
   const parsed = await PostalMime.parse(raw, {
     maxHeadersSize: 128 * 1024,
     maxNestingDepth: 30,
     maxRfc822NestingDepth: 0,
+  }).catch((cause: unknown) => {
+    throw new InvalidInboundMime(
+      cause instanceof Error ? cause.message : "Invalid MIME message",
+      { cause },
+    );
   });
   const attachments = parsed.attachments.map((attachment, index) =>
     toStoredAttachment(attachment, index, objectPrefix),

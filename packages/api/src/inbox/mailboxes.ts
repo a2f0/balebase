@@ -1,3 +1,4 @@
+import type { resolveMx } from "node:dns/promises";
 import { inboxRoutes, type Mailbox } from "@balebase/validators/inbox";
 import { type Context, Hono } from "hono";
 import type { ApiEnv } from "../auth/apiEnv";
@@ -9,6 +10,7 @@ import {
   platformRecipients,
 } from "./inboundEmailAddress";
 import {
+  directMx,
   domainRoutes,
   listDomains,
   routingActor,
@@ -41,14 +43,17 @@ export async function listMailboxes(db: D1Database, org: string) {
   return boxes.results.map(describeMailbox);
 }
 
-export function inboxRouting(lookup?: (name: string) => Promise<string[][]>) {
+export function inboxRouting(
+  lookup?: (name: string) => Promise<string[][]>,
+  lookupMx?: typeof resolveMx,
+) {
   const routing = new Hono<ApiEnv>();
   routing.use("*", requireManager(), async (c, next) =>
     c.get("apiKey")
       ? c.json({ error: "Sign in to manage inbox routing." }, 403)
       : next(),
   );
-  routing.route("/domains", domainRoutes(lookup));
+  routing.route("/domains", domainRoutes(lookup, lookupMx));
   routing.get("/", async (c) => {
     const org = c.get("organizationId");
     const [domains, boxes] = await Promise.all([
@@ -61,6 +66,7 @@ export function inboxRouting(lookup?: (name: string) => Promise<string[][]>) {
     ]);
     return respond(c, inboxRoutes.routing, {
       domains,
+      directMx: directMx(c.env),
       mailboxes: boxes.results.map((row) => ({
         ...describeMailbox(row),
         forwardingAddress: forwardingAddress(

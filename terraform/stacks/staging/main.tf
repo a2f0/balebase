@@ -107,3 +107,15 @@ resource "cloudflare_queue" "finance_sync" {
   account_id = var.cloudflare_account_id
   queue_name = "${var.api_worker_name}-finance-sync"
 }
+
+# Direct customer MX targets a TCP/25 host. Cloudflare's HTTP proxy cannot
+# proxy public SMTP. Customer domains publish their own MX records.
+resource "cloudflare_dns_record" "smtp_host" {
+  for_each = { for kind, ip in { A = var.smtp_ipv4, AAAA = var.smtp_ipv6 } : kind => ip if ip != "" }
+  zone_id  = data.cloudflare_zone.main.id
+  name     = "mx-staging.${var.domain}"
+  type     = each.key
+  content  = each.value
+  proxied  = false
+  ttl      = 300
+}

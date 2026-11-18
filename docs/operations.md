@@ -152,6 +152,17 @@ Write.
    check its subject and attachment in the named Balebase inbox. To roll back,
    restore the previous mail-provider route before disconnecting the inbox.
 
+For direct delivery, deploy the [Balebase SMTP receiver](../smtp/README.md).
+Once enabled, the inbox screen also provides an MX target and a public DNS
+check for each verified domain. Use a dedicated subdomain when another mail
+provider serves the apex. Each connected recipient can receive direct mail
+and per-address forwarding at the same time. Direct SMTP bypasses filtering
+by the previous provider, including Google Workspace. TXT verification
+establishes customer control of the recipient domain. The receiver checks
+that the envelope recipient has an active binding. It performs no SPF, DKIM,
+DMARC, or spam assessment of senders. Treat From, To and other sender-supplied
+headers as untrusted.
+
 For Balebase's own addresses, a root administrator who manages the Balebase
 workspace connects `privacy@balebase.com` and `legal@balebase.com` to separate
 inboxes. Cloudflare routes their literal envelope addresses directly. Stage

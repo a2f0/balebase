@@ -141,6 +141,10 @@ export const inboxRoutes = {
     path: "/api/inbox/routing",
     response: z.object({
       domains: z.array(DomainClaimSchema),
+      directMx: z
+        .object({ host: z.string(), priority: z.number() })
+        .nullable()
+        .optional(),
       mailboxes: z.array(
         MailboxSchema.extend({ forwardingAddress: z.string() }),
       ),
@@ -156,6 +160,11 @@ export const inboxRoutes = {
     method: "POST",
     path: "/api/inbox/routing/domains/:id/verify",
     response: DomainClaimSchema,
+  }),
+  mx: route({
+    method: "GET",
+    path: "/api/inbox/routing/domains/:id/mx",
+    response: z.object({ ready: z.boolean() }),
   }),
   release: route({
     method: "DELETE",

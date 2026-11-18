@@ -25,12 +25,16 @@ function fixture(inboundDomain = "inbox.balebase.com", afterPut?: () => void) {
   let error: Error | undefined;
   let onLookup: (() => void) | undefined;
   const names: string[] = [];
-  const routing = inboxRouting(async (name) => {
-    names.push(name);
-    onLookup?.();
-    if (error) throw error;
-    return records;
-  });
+  let mxRecords = [{ exchange: "mx.balebase.com.", priority: 10 }];
+  const routing = inboxRouting(
+    async (name) => {
+      names.push(name);
+      onLookup?.();
+      if (error) throw error;
+      return records;
+    },
+    async () => mxRecords,
+  );
   function request(
     path: string,
     method = "GET",
@@ -108,6 +112,9 @@ function fixture(inboundDomain = "inbox.balebase.com", afterPut?: () => void) {
     duringLookup: (callback: () => void) => {
       onLookup = callback;
     },
+    setMx: (next: typeof mxRecords) => {
+      mxRecords = next;
+    },
     publish: (next: string[][]) => {
       records = next;
     },
@@ -159,6 +166,35 @@ describe("verified inbound domains", () => {
     });
     expect((await f.verify(claim.id)).status).toBe(409);
     expect((await f.verify(other.id, "other")).status).toBe(200);
+  });
+  it("checks public MX only for this tenant's verified domain when the tier advertises it", async () => {
+    const f = fixture();
+    const claim = await f.claim();
+    const check = () => f.request(`/routing/domains/${claim.id}/mx`);
+    expect((await check()).status).toBe(503);
+    f.bindings.SMTP_INGRESS_TOKEN = crypto.randomUUID();
+    f.bindings.SMTP_MX_HOST = "mx.balebase.com";
+    expect((await check()).status).toBe(404);
+    f.publish([[claim.recordValue]]);
+    await f.verify(claim.id);
+    expect(await (await check()).json()).toEqual({ ready: true });
+    f.setMx([{ exchange: "mx.balebase.com", priority: 20 }]);
+    expect(await (await check()).json()).toEqual({ ready: false });
+    f.setMx([
+      { exchange: "mx.balebase.com", priority: 10 },
+      { exchange: "mail.example.org", priority: 10 },
+    ]);
+    expect(await (await check()).json()).toEqual({ ready: false });
+    expect(
+      (
+        await f.request(
+          `/routing/domains/${claim.id}/mx`,
+          "GET",
+          undefined,
+          "other",
+        )
+      ).status,
+    ).toBe(404);
   });
   it("distinguishes missing TXT records from DNS outages and leaves the claim pending", async () => {
     const f = fixture();
