@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, rm } from "node:fs/promises";
+import { chmod, cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
@@ -32,11 +32,21 @@ async function runShell(
  * stubbed to log its directory, tier, bundle URLs, and arguments, and with an
  * existing Gradle wrapper in the native project.
  */
-async function runRelease(args: string[], env: Record<string, string> = {}) {
+async function runRelease(
+  args: string[],
+  env: Record<string, string> = {},
+  wrapper?: string,
+) {
   const directory = await mkdtemp(resolve(tmpdir(), "balebase-native-"));
   const log = resolve(directory, "release.log");
   const scriptPath = resolve(directory, "scripts/lib/nativeRelease.sh");
   await Bun.write(scriptPath, Bun.file(nativeReleaseScript));
+  let command = ["sh", scriptPath];
+  if (wrapper) {
+    const path = resolve(directory, wrapper);
+    await cp(resolve(repoRoot, wrapper), path);
+    command = [path];
+  }
   await Bun.write(
     resolve(
       directory,
@@ -60,7 +70,7 @@ async function runRelease(args: string[], env: Record<string, string> = {}) {
     }
   }
   try {
-    const result = await runShell('exec sh "$@"', ["sh", scriptPath, ...args], {
+    const result = await runShell('exec "$@"', ["sh", ...command, ...args], {
       ...environment,
       ...env,
       NATIVE_RELEASE_TEST_LOG: log,
@@ -95,20 +105,23 @@ describe("native release entrypoint", () => {
       releaseTargets.map(({ script }) => script).sort(),
     );
     for (const { action, platform, script, tier } of releaseTargets) {
-      expect(rootScripts[script], script).toBe(
-        `sh scripts/lib/nativeRelease.sh ${platform} ${action} ${tier}`,
-      );
+      const name = platform === "ios" ? "Ios" : "Android";
+      const staging = tier === "staging" ? "Staging" : "";
+      const expected =
+        action === "upload"
+          ? `scripts/release/upload${name}${staging}Release.sh`
+          : `sh scripts/lib/nativeRelease.sh ${platform} build ${tier}`;
+      expect(rootScripts[script], script).toBe(expected);
     }
   });
 
   test("every tier runs its platform's lane the same way", async () => {
-    for (const { action, platform, tier } of releaseTargets) {
-      const { exitCode, stdout, stderr, calls } = await runRelease([
-        platform,
-        action,
-        tier,
-        "build_number:42",
-      ]);
+    for (const { action, platform, script, tier } of releaseTargets) {
+      const result =
+        action === "upload"
+          ? await runRelease(["build_number:42"], {}, rootScripts[script])
+          : await runRelease([platform, action, tier, "build_number:42"]);
+      const { exitCode, stdout, stderr, calls } = result;
       expect(exitCode, stderr).toBe(0);
       // The lanes, not this script, choose and check the bundle's hosts.
       expect(calls).toEqual([

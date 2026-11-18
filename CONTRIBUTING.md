@@ -28,7 +28,7 @@ Every workspace lives under `packages/`, and infrastructure lives in
 | Built-in audit templates and their seed migrations | `packages/api/auditLibrary`, [residential audit library](docs/residential-audit-library.md) |
 | Application screens, in one folder per feature, and the host interface each shell fills in | `packages/app/src` |
 | Web shell and its Worker | `packages/app-web` |
-| Native shell, mobile projects, and Fastlane lanes | [`packages/app-capacitor`](packages/app-capacitor/README.md) (store tiers in `nativeReleaseTargets.json`), `scripts/dev/run*.sh`, `scripts/lib/nativeRelease.sh` |
+| Native shell, mobile projects, and Fastlane lanes | [`packages/app-capacitor`](packages/app-capacitor/README.md) (store tiers in `nativeReleaseTargets.json`), `scripts/dev/run*.sh`, `scripts/release/`, `scripts/lib/nativeRelease.sh` |
 | Error diagnostics, release maps and tiers, click tracking | `packages/diagnostics`, `scripts/deploy/*Sentry*.ts`, `scripts/lib/sentryRelease.ts` |
 | Shared components, icons, styles, and pricing copy | [`packages/ui`](packages/ui/README.md) |
 | Logo and generated images | `assets/brand`, `images` in `agent-tool.json`; see [images](packages/ui/README.md#images) |

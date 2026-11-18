@@ -172,6 +172,14 @@ number unless a number, PR, or date is chosen (see
 default the bundle's `VITE_API_URL` and `VITE_APP_URL` to the tier's hosts and
 refuse any other host or a non-HTTPS URL before building.
 
+The upload commands also run directly from the repository root. Each script
+accepts the same Fastlane options as its Bun command.
+
+| Target | Google Play (internal track by default) | TestFlight |
+| --- | --- | --- |
+| Production | `./scripts/release/uploadAndroidRelease.sh` | `./scripts/release/uploadIosRelease.sh` |
+| Staging | `./scripts/release/uploadAndroidStagingRelease.sh` | `./scripts/release/uploadIosStagingRelease.sh` |
+
 Every other lane but `android test` and `android clean` has a package script
 named `<platform>:<lane in kebab case>`; `store_build_numbers` is
 `store:build-numbers`. The iOS, Android readiness, and store build number

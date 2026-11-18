@@ -566,10 +566,12 @@ bun run mobile:build:ios      # or mobile:build:ios:staging
 
 The Play Console apps `com.balebase.app` and `com.balebase.staging.app` use
 Play App Signing, and each tier has its own upload key in its secrets folder.
-To publish a signed bundle to the tier's internal testing track, run:
+To publish a signed bundle to the internal testing track, choose the script for
+the intended app:
 
 ```sh
-bun run mobile:upload:android           # or mobile:upload:android:staging
+./scripts/release/uploadAndroidRelease.sh
+# For staging, use ./scripts/release/uploadAndroidStagingRelease.sh
 ```
 
 The release rolls out to every internal tester; testers must be on the app's
@@ -586,7 +588,8 @@ The App Store Connect apps `com.balebase.app` and `com.balebase.staging.app`
 take builds from:
 
 ```sh
-bun run mobile:upload:ios               # or mobile:upload:ios:staging
+./scripts/release/uploadIosRelease.sh
+# For staging, use ./scripts/release/uploadIosStagingRelease.sh
 ```
 
 The build signs with the team's Apple Distribution certificate and the tier's
